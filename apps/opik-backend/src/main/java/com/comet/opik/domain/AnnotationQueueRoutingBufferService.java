@@ -31,12 +31,13 @@ import java.util.stream.Collectors;
  * The Redis buffer between score events and the routing stream (OPIK-6303).
  *
  * <p>One ZSET, {@link AnnotationQueueRoutingConfig#PENDING_SET_KEY}. A member is one
- * (workspace, scope, entity), scored by the time of its first write; {@code ZADD NX} makes every later
- * score on the same entity a no-op while it waits, which is the deduplication. The flush takes only members
- * older than {@code bufferMinAge}, so the consumer never reads scores younger than that — the floor that
- * keeps it clear of ClickHouse replica lag — groups them by (workspace, scope) and publishes one stream
- * message per group, then removes them. Publish before remove, so a crash in between costs a duplicate
- * message rather than a lost one; the consumer is idempotent.
+ * (workspace, scope, entity), scored by the time of its latest write: a later score on the same entity
+ * re-scores the member rather than adding one, which is the deduplication, and pushes its due time out, so
+ * an entity is flushed only once {@code debounceDelay} has passed since its last score. The consumer
+ * therefore never reads a score younger than that — the floor that keeps it clear of ClickHouse replica
+ * lag. The flush groups due members by (workspace, scope) and publishes one stream message per group, then
+ * removes them. Publish before remove, so a crash in between costs a duplicate message rather than a lost
+ * one; the consumer is idempotent.
  *
  * <p>Same shape as {@code ExperimentAggregationPublisher} and {@code ProjectLastUpdatedTraceBufferService}.
  * Everything a member needs is in the member, so there is no second key to expire or to go missing, and the
@@ -74,7 +75,7 @@ public class AnnotationQueueRoutingBufferService {
 
         return Mono.defer(() -> {
             var pending = pending();
-            return pending.addAllIfAbsent(members)
+            return pending.addAll(members)
                     .doOnNext(added -> {
                         int folded = members.size() - added;
                         if (folded > 0) {
@@ -90,7 +91,7 @@ public class AnnotationQueueRoutingBufferService {
     }
 
     /**
-     * Publishes every member older than {@code bufferMinAge}, a page at a time, and returns how many stream
+     * Publishes every member whose last write is older than {@code debounceDelay}, a page at a time, and returns how many stream
      * messages that took. Each page is grouped in memory — bounded by {@code jobBatchSize} — and each group
      * is removed as soon as its message is on the stream, so a run cut short by the job's time budget
      * leaves nothing half-done for the next one to redo.
@@ -98,7 +99,7 @@ public class AnnotationQueueRoutingBufferService {
     public Mono<Long> flush() {
         return Mono.defer(() -> {
             var pending = pending();
-            double cutoff = Instant.now().minusMillis(config.getBufferMinAge().toMilliseconds()).toEpochMilli();
+            double cutoff = Instant.now().minusMillis(config.getDebounceDelay().toMilliseconds()).toEpochMilli();
             return drain(pending, cutoff, 0L)
                     .flatMap(published -> pending.expire(config.getBufferTtl().toJavaDuration())
                             .thenReturn(published));

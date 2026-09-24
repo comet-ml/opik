@@ -1204,10 +1204,11 @@ annotationQueueRouting:
   #   webhook, export) that this consumer does not make.
   consumerBatchSize: ${ANNOTATION_QUEUE_ROUTING_CONSUMER_BATCH_SIZE:-100}
   # Default: 15s
-  # Description: How long a score must have sat in the Redis buffer before a flush may take it (100ms-1m). Every
-  #   score written to an entity within this window folds into one buffer member, and the consumer never reads
-  #   scores younger than this, which keeps it clear of ClickHouse replica lag. Latency added to every routed item.
-  bufferMinAge: ${ANNOTATION_QUEUE_ROUTING_BUFFER_MIN_AGE:-15s}
+  # Description: How long an entity must go without a new feedback score before the flush may take it (100ms-1m).
+  #   Every score written to it in the meantime folds into the one buffer member and restarts the wait, so the
+  #   consumer never reads a score younger than this, which keeps it clear of ClickHouse replica lag. Latency
+  #   added to every routed item. Same semantics as the experimentDenormalization debounce.
+  debounceDelay: ${ANNOTATION_QUEUE_ROUTING_DEBOUNCE_DELAY:-15s}
   # Default: 2m
   # Description: TTL of the Redis buffer key (10s-1h). Set when the key is created and renewed by every flush run,
   #   so if nothing drains the buffer it expires this long after the last flush instead of growing without limit.
@@ -1215,12 +1216,13 @@ annotationQueueRouting:
   bufferTtl: ${ANNOTATION_QUEUE_ROUTING_BUFFER_TTL:-2m}
   # Default: 5s
   # Description: Interval at which the flush job publishes due buffer members to the stream (1s-1m). An item is
-  #   routed between bufferMinAge and bufferMinAge + jobInterval after its last score. Same cadence as the
+  #   routed between debounceDelay and debounceDelay + jobInterval after its last score. Same cadence as the
   #   experimentDenormalization flush job.
   jobInterval: ${ANNOTATION_QUEUE_ROUTING_JOB_INTERVAL:-5s}
   # Default: 4s
-  # Description: Time the flush job holds the distributed lock, and the time budget of one run (500ms-1m). Kept
-  #   below jobInterval so the lock releases before the next cycle.
+  # Description: Time the flush job holds the distributed lock (500ms-1m). Kept below jobInterval so the lock
+  #   releases before the next cycle. A lease, not a timeout: a run that outlives it may overlap the next
+  #   replica's, costing at most a duplicate message.
   jobLockTime: ${ANNOTATION_QUEUE_ROUTING_JOB_LOCK_TIME:-4s}
   # Default: 300ms
   # Description: Time the flush job waits to acquire the lock before skipping the run (100ms-5s)

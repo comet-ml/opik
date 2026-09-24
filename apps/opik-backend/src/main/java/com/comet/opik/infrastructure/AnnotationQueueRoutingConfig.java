@@ -23,11 +23,11 @@ import java.util.concurrent.TimeUnit;
  * Annotation queue routing (OPIK-6303): the Redis buffer score events are collected in, the job that
  * flushes it, and the stream the flushed batches travel on to the consumer.
  *
- * <p>The buffer is a single ZSET keyed by (workspace, scope, entity) and scored by the time of the first
- * write, so a burst of scores on one entity is one member, and nothing is flushed before it has sat there
- * for {@code bufferMinAge}. That floor is also what keeps the consumer's ClickHouse read clear of
- * replication lag. The flush job groups due members by (workspace, scope) and publishes one stream message
- * per group; the consumer then processes one message at a time.
+ * <p>The buffer is a single ZSET keyed by (workspace, scope, entity) and scored by the time of the latest
+ * write, so a burst of scores on one entity is one member, and nothing is flushed until {@code debounceDelay}
+ * has passed since the entity's last score. That floor is also what keeps the consumer's ClickHouse read
+ * clear of replication lag. The flush job groups due members by (workspace, scope) and publishes one stream
+ * message per group; the consumer then processes one message at a time.
  *
  * <p>Values live in {@code config.yml} and its test counterpart, which is the single source of truth:
  * no field carries a Java default, so a key missing from the yaml fails validation at boot rather than
@@ -64,13 +64,14 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @Min(1) @Max(100) private int consumerBatchSize;
 
-    // How long a member must have been in the buffer before a flush may take it. Every score written to an
-    // entity within this window folds into the one member, and the consumer never reads scores younger
-    // than this — well past typical ClickHouse replica lag. Latency added to every routed item.
+    // How long an entity must go without a new score before a flush may take it. Every score written to it
+    // in the meantime folds into the one member and restarts the wait, so the consumer never reads a score
+    // younger than this — well past typical ClickHouse replica lag. Latency added to every routed item. Same
+    // semantics and name as experimentDenormalization.
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
-    private Duration bufferMinAge;
+    private Duration debounceDelay;
 
     // Bounds the buffer if nothing drains it. Writers set it only when the key has none, and each flush run
     // renews it, so the key outlives the last flush by this much and then expires with whatever is in it.
@@ -80,16 +81,16 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     @MaxDuration(value = 1, unit = TimeUnit.HOURS)
     private Duration bufferTtl;
 
-    // Members are due bufferMinAge after their write and are picked up on the next run, so an item is
-    // routed between bufferMinAge and bufferMinAge + jobInterval after its last score.
+    // Members are due debounceDelay after their last write and are picked up on the next run, so an item
+    // is routed between debounceDelay and debounceDelay + jobInterval after its last score.
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
     private Duration jobInterval;
 
     // Held until expiry so one replica flushes per cycle; kept below jobInterval so the next cycle is not
-    // skipped. Also the time budget of one run: a run cut short leaves the rest for the next one, since
-    // members are removed only once their batch is on the stream.
+    // skipped. It is a lease, not a timeout: a run that outlives it may overlap the next replica's, which
+    // costs at most a duplicate message, since members are removed only once their batch is on the stream.
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 500, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 1, unit = TimeUnit.MINUTES)

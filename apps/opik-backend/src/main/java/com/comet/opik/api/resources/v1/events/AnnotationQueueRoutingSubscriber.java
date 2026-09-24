@@ -189,7 +189,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
 
         // The scores carry the project id, which the message does not: on the batch score path it is absent
         // because one batch may span several projects. So one read answers both questions. Nothing here is
-        // read younger than bufferMinAge, which is what keeps the read clear of ClickHouse replica lag; an
+        // read younger than debounceDelay, which is what keeps the read clear of ClickHouse replica lag; an
         // entity with no scores visible is simply not routed until its next score.
         return feedbackScoreDAO.getEffectiveScores(entityType, message.entityIds())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())

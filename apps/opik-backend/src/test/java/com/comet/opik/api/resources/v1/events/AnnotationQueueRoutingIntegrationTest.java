@@ -104,13 +104,13 @@ class AnnotationQueueRoutingIntegrationTest {
         wire(IMMEDIATE, 100);
     }
 
-    private void wire(Duration bufferMinAge, int jobBatchSize) {
+    private void wire(Duration debounceDelay, int jobBatchSize) {
         config = AnnotationQueueRoutingConfig.builder()
                 .enabled(true)
                 .streamName("test-stream-%s".formatted(randomString().toLowerCase()))
                 .streamMaxLen(10_000)
                 .streamTrimLimit(100)
-                .bufferMinAge(bufferMinAge)
+                .debounceDelay(debounceDelay)
                 .bufferTtl(Duration.minutes(1))
                 .jobBatchSize(jobBatchSize)
                 .build();
@@ -179,8 +179,8 @@ class AnnotationQueueRoutingIntegrationTest {
     }
 
     @Test
-    @DisplayName("Nothing younger than bufferMinAge is flushed")
-    void nothingYoungerThanMinAgeIsFlushed() {
+    @DisplayName("Nothing scored within debounceDelay is flushed")
+    void nothingScoredWithinDebounceDelayIsFlushed() {
         wire(FAR_AWAY, 100);
         UUID entityId = idGenerator.generateId();
         when(automationService.hasEnabledAutomation(anyString(), any(), any())).thenReturn(true);
@@ -191,6 +191,37 @@ class AnnotationQueueRoutingIntegrationTest {
         assertThat(bufferService.flush().block()).isZero();
         assertThat(readStream()).isEmpty();
         assertThat(bufferSize()).isEqualTo(1);
+    }
+
+    /**
+     * The timer runs from the <em>last</em> score, not the first: the consumer must never read a score
+     * younger than the delay, and only a restarted wait guarantees that for every score in a burst.
+     */
+    @Test
+    @DisplayName("A later score on a buffered entity restarts its wait")
+    void laterScoreRestartsTheWait() {
+        wire(Duration.milliseconds(1_500), 100);
+        UUID entityId = idGenerator.generateId();
+        String workspaceId = randomString();
+
+        bufferService.add(workspaceId, AnnotationScope.TRACE, Set.of(entityId)).block();
+        Awaitility.await().pollDelay(java.time.Duration.ofSeconds(1)).atMost(java.time.Duration.ofSeconds(2))
+                .until(() -> true);
+        bufferService.add(workspaceId, AnnotationScope.TRACE, Set.of(entityId)).block();
+
+        // Had the first write's time stuck, the member would fall due 500ms into this window.
+        Awaitility.await()
+                .during(java.time.Duration.ofMillis(1_000))
+                .atMost(java.time.Duration.ofMillis(1_300))
+                .untilAsserted(() -> {
+                    bufferService.flush().block();
+                    assertThat(readStream()).isEmpty();
+                });
+        assertThat(bufferSize()).isEqualTo(1);
+
+        assertThat(awaitFlushed(1)).singleElement()
+                .extracting(AnnotationQueueRoutingMessage::entityIds)
+                .isEqualTo(Set.of(entityId));
     }
 
     @Test
@@ -237,7 +268,7 @@ class AnnotationQueueRoutingIntegrationTest {
                 randomString(), idGenerator.generateId()));
         awaitBuffered(250);
 
-        long published = awaitMinAge(() -> bufferService.flush().block());
+        long published = awaitDebounce(() -> bufferService.flush().block());
 
         // Three pages of 100, one entry each; the split is a paging artefact and the union is what matters.
         assertThat(published).isEqualTo(3);
@@ -252,7 +283,7 @@ class AnnotationQueueRoutingIntegrationTest {
     void malformedMemberIsDropped() {
         pending().add(Instant.now().minusSeconds(60).toEpochMilli(), "not json at all").block();
 
-        assertThat(awaitMinAge(() -> bufferService.flush().block())).isZero();
+        assertThat(awaitDebounce(() -> bufferService.flush().block())).isZero();
         assertThat(readStream()).isEmpty();
         assertThat(bufferSize()).isZero();
     }
@@ -351,7 +382,7 @@ class AnnotationQueueRoutingIntegrationTest {
 
     /**
      * Flushes until the expected number of entries is on the stream. Members become due only once they are
-     * {@code bufferMinAge} old, so the first attempts may legitimately publish nothing.
+     * {@code debounceDelay} old, so the first attempts may legitimately publish nothing.
      */
     private List<AnnotationQueueRoutingMessage> awaitFlushed(int expectedSize) {
         Awaitility.await()
@@ -364,9 +395,9 @@ class AnnotationQueueRoutingIntegrationTest {
         return readStream();
     }
 
-    private <T> T awaitMinAge(java.util.function.Supplier<T> action) {
+    private <T> T awaitDebounce(java.util.function.Supplier<T> action) {
         Awaitility.await()
-                .pollDelay(java.time.Duration.ofMillis(config.getBufferMinAge().toMilliseconds() + 50))
+                .pollDelay(java.time.Duration.ofMillis(config.getDebounceDelay().toMilliseconds() + 50))
                 .atMost(java.time.Duration.ofSeconds(10))
                 .until(() -> true);
         return action.get();
