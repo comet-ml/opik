@@ -564,26 +564,10 @@ def test_conversation_thread_metric_with_trace_thread_type(client, app):
     assert score['scoring_failed'] is False
 
 
-@pytest.fixture
-def process_client():
-    """Endpoint client pinned to the in-repo ProcessExecutor.
-
-    The Docker executor runs the *published* sandbox image, so it cannot exercise
-    an unreleased change to that image's scoring_runner. Pinning keeps these
-    assertions about this repo's own code; the sandbox runner's equivalent cases
-    are gated by its selftest.sh at image build time.
-    """
-    executor = ProcessExecutor()
-    if hasattr(executor, 'start_services'):
-        executor.start_services()
-    try:
-        from opik_backend import create_app
-        app = create_app(should_init_executor=False)
-        app.executor = executor
-        yield app.test_client()
-    finally:
-        if hasattr(executor, 'cleanup'):
-            executor.cleanup()
+# The Docker executor runs the published sandbox image rather than this repo's runner,
+# so a test asserting on the runner's message text runs on the in-repo executor only.
+# The runner's own copy is gated by its selftest.sh when the image is built.
+process_only = pytest.mark.parametrize("executor", [ProcessExecutor], indirect=True)
 
 
 REQUIRED_METADATA_METRIC = """
@@ -667,8 +651,8 @@ class KeywordOnlyMetadata(base_metric.BaseMetric):
     (KEYWORD_ONLY_METADATA_METRIC, "keyword_only_metadata_metric", 1.0, "metadata=None"),
 ])
 def test_missing_required_argument_is_bound_to_none(
-        process_client, code, expected_name, expected_value, expected_reason):
-    response = process_client.post(EVALUATORS_URL, json={
+        client, code, expected_name, expected_value, expected_reason):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
         "code": code
     })
@@ -685,8 +669,8 @@ def test_missing_required_argument_is_bound_to_none(
 # The counterpart the fill-in must not break: None is a value, so binding it over a
 # parameter that has a default would silently replace the default rather than let it
 # apply.
-def test_missing_optional_argument_keeps_its_default(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
+def test_missing_optional_argument_keeps_its_default(client):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
         "code": OPTIONAL_THRESHOLD_METRIC
     })
@@ -702,8 +686,8 @@ def test_missing_optional_argument_keeps_its_default(process_client):
 
 # A resolvable mapping must reach the metric untouched -- the contrast that shows the
 # fill-in only covers absence.
-def test_present_argument_is_passed_through(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
+def test_present_argument_is_passed_through(client):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc", "metadata": '{"env":"test"}'},
         "code": REQUIRED_METADATA_METRIC
     })
@@ -720,8 +704,9 @@ def test_present_argument_is_passed_through(process_client):
 # Binding absent arguments must not paper over a genuinely wrong call: an argument the
 # signature has no place for is still a reported failure, and the reported cause must
 # name it rather than coming back empty.
-def test_unexpected_argument_still_fails_and_names_the_cause(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
+@process_only
+def test_unexpected_argument_still_fails_and_names_the_cause(client):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc", "metadata": "x"},
         "code": """
 from opik.evaluation.metrics import base_metric, score_result
@@ -826,8 +811,8 @@ class RenamedReceiver(base_metric.BaseMetric):
 
 # `self` is a convention, not a rule. Filling the receiver would make the call pass
 # two values for the same parameter and 400 every trace.
-def test_receiver_is_not_filled_when_it_is_not_named_self(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
+def test_receiver_is_not_filled_when_it_is_not_named_self(client):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
         "code": RENAMED_RECEIVER_METRIC
     })
@@ -839,8 +824,9 @@ def test_receiver_is_not_filled_when_it_is_not_named_self(process_client):
 # The signature read must pick the class the executor will instantiate, or it injects
 # a keyword the real metric rejects. When no class statically resolves to BaseMetric
 # it must fill nothing rather than guess from another class that declares score().
-def test_unresolvable_metric_class_fills_nothing(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
+@process_only
+def test_unresolvable_metric_class_fills_nothing(client):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
         "code": STATICALLY_UNRESOLVABLE_METRIC
     })
@@ -856,8 +842,8 @@ def test_unresolvable_metric_class_fills_nothing(process_client):
 
 # With several metric classes, the statically-read signature must agree with the
 # class runtime actually instantiates, or the fill injects a parameter it rejects.
-def test_multiple_metric_classes_do_not_inject_a_foreign_parameter(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
+def test_multiple_metric_classes_do_not_inject_a_foreign_parameter(client):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
         "code": TWO_METRIC_CLASSES
     })
@@ -875,8 +861,8 @@ def test_multiple_metric_classes_do_not_inject_a_foreign_parameter(process_clien
 # The trace-thread contract: data goes to score() positionally as one conversation
 # argument, so the fill-in must not run. Without this the `payload_type` half of the
 # guard is executed by no test and could be deleted with the suite still green.
-def test_trace_thread_payload_is_not_filled(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
+def test_trace_thread_payload_is_not_filled(client):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
         "type": PayloadType.TRACE_THREAD.value,
         "code": THREAD_KEYS_METRIC
@@ -898,8 +884,9 @@ def test_trace_thread_payload_is_not_filled(process_client):
 # `spans` is injected by the scorer only when the rule declares it, so its absence
 # always means the rule never asked for it -- a configuration error that must keep
 # failing by name rather than being filled with None.
-def test_reserved_spans_builtin_is_not_filled(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
+@process_only
+def test_reserved_spans_builtin_is_not_filled(client):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
         "code": """
 from opik.evaluation.metrics import base_metric, score_result
@@ -916,39 +903,6 @@ class NeedsSpans(base_metric.BaseMetric):
 
     assert response.status_code == 400
     assert "spans" in str(response.json["error"])
-
-
-# The reported cause walks __cause__/__context__ so a wrapped error still names its
-# root. `raise ... from None` opts out of that, and honouring it is the difference
-# between reporting context and exposing what the author deliberately hid.
-@pytest.mark.parametrize("raise_stmt, root_expected", [
-    ("raise RuntimeError('outer') from err", True),    # explicit chain
-    ("raise RuntimeError('outer')", True),             # implicit context
-    ("raise RuntimeError('outer') from None", False),  # suppressed
-])
-def test_cause_chain_honours_suppressed_context(process_client, raise_stmt, root_expected):
-    response = process_client.post(EVALUATORS_URL, json={
-        "data": {"output": "abc"},
-        "code": f"""
-from opik.evaluation.metrics import base_metric, score_result
-
-
-class Chained(base_metric.BaseMetric):
-    def __init__(self, name: str = "chained_metric"):
-        super().__init__(name=name, track=False)
-
-    def score(self, output: str):
-        try:
-            raise ValueError('inner root')
-        except ValueError as err:
-            {raise_stmt}
-"""
-    })
-
-    assert response.status_code == 400
-    error = str(response.json["error"])
-    assert "outer" in error, "the raised exception is always reported"
-    assert ("inner root" in error) is root_expected
 
 
 THREAD_KEYS_METRIC = """
@@ -987,20 +941,30 @@ class ZMetric(base_metric.BaseMetric):
         return score_result.ScoreResult(value=0.0, name=self.name)
 """
 
-INHERITED_SCORE_FROM_SIBLING = """
+# Needs no score() of its own to be the class runtime instantiates, and its base is
+# an expression the parser cannot resolve -- as an imported class would be.
+UNRESOLVED_BASE_WITHOUT_OWN_SCORE = """
 from opik.evaluation.metrics import base_metric, score_result
 
 
-class ZBase(base_metric.BaseMetric):
-    def score(self, output: str, reference):
-        return score_result.ScoreResult(
-            value=1.0, name="inherited_metric", reason=f"reference={reference!r}"
-        )
+def make_base():
+    class Strict(base_metric.BaseMetric):
+        def score(self, output: str):
+            return score_result.ScoreResult(value=1.0, name=self.name)
+    return Strict
 
 
-class AMetric(ZBase):
-    def __init__(self, name: str = "inherited_metric"):
+class AMetric(make_base()):
+    def __init__(self, name: str = "a_metric"):
         super().__init__(name=name, track=False)
+
+
+class ZMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "z_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, bar: str):
+        return score_result.ScoreResult(value=0.0, name=self.name)
 """
 
 
@@ -1008,10 +972,11 @@ class AMetric(ZBase):
 # alphabetically-earlier metric whose base is imported is invisible to the parser but
 # is the one runtime instantiates. Reading the later class's signature would inject a
 # keyword the instantiated one rejects.
-def test_class_selection_ambiguity_fills_nothing(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
+@pytest.mark.parametrize("code", [IMPORTED_BASE_SORTS_FIRST, UNRESOLVED_BASE_WITHOUT_OWN_SCORE])
+def test_class_selection_ambiguity_fills_nothing(client, code):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
-        "code": IMPORTED_BASE_SORTS_FIRST
+        "code": code
     })
 
     assert response.status_code == 200, "no keyword from ZMetric may reach AMetric"
@@ -1020,15 +985,48 @@ def test_class_selection_ambiguity_fills_nothing(process_client):
     assert scores[0]["name"] == "a_metric", "runtime instantiates the name-sorted first"
 
 
-# The selected class need not declare score() itself; an in-file ancestor may. Reading
-# no signature there would leave the original defect in place for that shape.
-def test_score_inherited_from_in_file_base_is_filled(process_client):
-    response = process_client.post(EVALUATORS_URL, json={
-        "data": {"output": "abc"},
-        "code": INHERITED_SCORE_FROM_SIBLING
+# A parameter the rule's argument map never mentions arrives exactly as an unresolved
+# one does -- key absent -- so the evaluator cannot tell them apart and fills it too.
+# Kept apart from the unresolved case because only this one is arguably wrong: once
+# the evaluator is told which parameters the rule declares, it should fail as a
+# configuration error instead, and this is the test that flips.
+def test_undeclared_required_argument_is_also_bound_to_none(client):
+    response = client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},  # the rule maps `output` only
+        "code": REQUIRED_METADATA_METRIC
     })
 
     assert response.status_code == 200
-    scores = response.json["scores"]
-    assert len(scores) == 1
-    assert scores[0]["reason"] == "reference=None"
+    assert response.json["scores"][0]["reason"] == "metadata=None"
+
+
+# The report is formatted inside the handler for the metric's own failure, from an
+# exception object the metric defined. Nothing on that object may make formatting
+# raise, or the metric's 400 becomes a retried 500 and its message is lost.
+@process_only
+@pytest.mark.parametrize("hostile", [
+    "exceptions = 42",
+    "@property\n    def exceptions(self):\n        raise RuntimeError('property')",
+])
+def test_metric_defined_exception_cannot_break_its_own_report(client, hostile):
+    response = client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": f"""
+from opik.evaluation.metrics import base_metric
+
+
+class Hostile(Exception):
+    {hostile}
+
+
+class RaisesHostile(base_metric.BaseMetric):
+    def __init__(self, name: str = "raises_hostile_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str):
+        raise Hostile("my own message")
+"""
+    })
+
+    assert response.status_code == 400
+    assert "Hostile: my own message" in str(response.json["error"])

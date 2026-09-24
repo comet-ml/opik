@@ -76,8 +76,12 @@ def execute_evaluator_python():
     # wants. Deliberately applied here and not in the shared scoring code: the
     # optimization studio runs the same code with a mapped *dataset column* absent
     # and requires the opposite -- score(**data) must raise, so the item is reported
-    # as an explained 0.0 rather than a silent score (OPIK_7172). Same shape, two
+    # as an explained 0.0 rather than a silent score (OPIK-7172). Same shape, two
     # contracts, and only the caller separates them.
+    #
+    # Known gap: a parameter the rule never mapped arrives the same way and is filled
+    # too, where it should fail as a configuration error. Telling the two apart needs
+    # the rule's declared argument names from the caller (OPIK-8526).
     #
     # `spans` is excluded because it is not path-resolved: the scorer injects it only
     # when the rule declares it, so its absence always means the rule never asked for

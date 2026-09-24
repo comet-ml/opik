@@ -48,3 +48,16 @@ OUT=$(python "$RUNNER" "$RAISING_CODE" '{"output": "ok"}' || true)
 printf '%s' "$OUT" | grep -q "invalid Python code"
 printf '%s' "$OUT" | grep -q "ValueError: boom"
 printf '%s' "$OUT" | grep -q 'line 1, in <module>'
+
+# The report is formatted from an exception object the metric defined, inside the
+# handler for that metric's failure, so nothing on it may make formatting raise --
+# that would lose the message and turn the metric's own error into a server error.
+HOSTILE_CODE="from opik.evaluation.metrics import BaseMetric
+class Hostile(Exception):
+    exceptions = 42
+class T(BaseMetric):
+    def score(self, output):
+        raise Hostile('my own message')"
+
+OUT=$(python "$RUNNER" "$HOSTILE_CODE" '{"output": "ok"}' || true)
+printf '%s' "$OUT" | grep -q "Hostile: my own message"

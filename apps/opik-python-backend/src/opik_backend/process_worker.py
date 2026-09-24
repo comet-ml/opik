@@ -267,69 +267,24 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
-# Cap on how many wrapped causes are reported before the frames.
-MAX_CAUSE_CHAIN = 5
-# Cap on how many are visited to find them, so a wide exception group cannot make
-# the walk itself the expensive part.
-MAX_CAUSE_VISITS = 100
-
-
 def user_facing_stacktrace(skip_frames: int = 1) -> str:
-    """Format the current exception, cause first, with this module's own frames dropped.
+    """Format the current exception with this module's own frames dropped.
 
     Walks frames rather than slicing a fixed number of leading lines, so the
     exception line survives however short the traceback is. A failure raised while
     binding the call arguments has no user frame at all, so a fixed slice could
-    remove the message itself and report a cause of "". Returns the exception and any
-    wrapped causes ahead of the frames, since the caller keeps only the first 500
-    characters.
+    remove the message itself and report a cause of "".
     """
     exc_type, exc, tb = sys.exc_info()
     for _ in range(skip_frames):
         if tb is None:
             break
         tb = tb.tb_next
-    # Lead with the causes. The caller truncates this message to its first 500
-    # characters and format_exception puts the exception last, so a failure raised a
-    # few frames deep would have its cause cut off -- the same empty-cause outcome
-    # this helper exists to prevent. Frames follow, and are what gets lost instead.
-    # format_exception_only rather than slicing the formatted list: for a
-    # SyntaxError the first entry is the offending location, not a header, so
-    # dropping it by position would discard the very line the user needs. The
-    # __cause__/__context__ chain is walked so a wrapped error still names its root,
-    # and bounded so a long chain cannot push the frames out on its own.
-    causes = []
-    seen = set()
-    queue = [exc]
-    # Bounded on the way in, not just on the way out: a group can carry arbitrarily
-    # many members, and formatting them all before discarding most is work done on
-    # behalf of whatever the metric raised.
-    while queue and len(causes) < MAX_CAUSE_VISITS:
-        current = queue.pop(0)
-        if current is None or id(current) in seen:
-            continue
-        seen.add(id(current))
-        causes.append("".join(traceback.format_exception_only(type(current), current)).rstrip())
-        # A group renders as "(N sub-exceptions)" on its own, which names nothing
-        # actionable, so its members are reported alongside it.
-        for member in getattr(current, "exceptions", ()) or ():
-            queue.append(member)
-        # `raise X from None` sets __suppress_context__, and reporting the context
-        # anyway would expose what the author explicitly hid. Compared against None
-        # rather than tested for truth: an exception may define __bool__/__len__ as
-        # falsy, and an explicit cause must not be dropped because of it.
-        if current.__cause__ is not None:
-            queue.append(current.__cause__)
-        elif not current.__suppress_context__:
-            queue.append(current.__context__)
-    # Truncated from the middle: the first entry is what was raised and the last is
-    # the root, and dropping the tail would lose the root -- the one this exists to
-    # surface -- on any chain deeper than the budget.
-    if len(causes) > MAX_CAUSE_CHAIN:
-        # Two of the budget go to the marker and the root, so the head keeps the rest.
-        kept = MAX_CAUSE_CHAIN - 2
-        causes = causes[:kept] + [f"... {len(causes) - kept - 1} more", causes[-1]]
-    cause = "\ncaused by: ".join(causes)
+    # The exception leads because the caller truncates this message to its first 500
+    # characters, so frames are what gets lost on a deep traceback, not the cause.
+    # format_exception_only rather than slicing the formatted list: for a SyntaxError
+    # the first entry is the offending location, not a header.
+    cause = "".join(traceback.format_exception_only(exc_type, exc)).rstrip()
     frames = "".join(traceback.format_tb(tb)).rstrip()
     return f"{cause}\n{frames}" if frames else cause
 
@@ -452,31 +407,6 @@ def validate_user_code(code: str) -> dict:
     }
 
 
-def _score_funcdef_with_inheritance(tree: ast.AST, cls: ast.ClassDef):
-    """``score()`` from this class, or the nearest ancestor defined in the file.
-
-    The selected class need not declare ``score()`` itself -- ``class AMetric(ZBase)``
-    with the body on ``ZBase`` is the shape runtime instantiates and calls through.
-    Only in-file ancestors can be followed; an imported base leaves the signature
-    unknown, which the caller treats as "fill nothing".
-    """
-    defined = {node.name: node for node in _top_level_classdefs(tree)}
-    seen = set()
-    queue = [cls]
-    while queue:
-        current = queue.pop(0)
-        if current.name in seen:
-            continue
-        seen.add(current.name)
-        score = _score_funcdef(current)
-        if score is not None:
-            return score
-        for base in _class_base_names(current):
-            if base in defined:
-                queue.append(defined[base])
-    return None
-
-
 def required_score_params(code: str) -> List[str]:
     """``score()`` parameters with no default that can be passed by keyword.
 
@@ -484,13 +414,15 @@ def required_score_params(code: str) -> List[str]:
     the metric object is never constructed here. Returns nothing whenever the class
     this reads cannot be shown to be the one :func:`get_metric_class` will
     instantiate -- filling from a different class injects a keyword the real metric
-    rejects, which is worse than not filling at all.
+    rejects, which is worse than not filling at all. The sandbox runner's selection
+    lacks the ``__module__`` filter, so there an imported metric can still be the one
+    instantiated; the opik SDK's metrics take ``**ignored_kwargs``, which absorbs it.
 
-    That covers two ways of being unsure. No class resolves statically, so there is
-    nothing to read; or one resolves but another class sorts ahead of it and could
-    be a metric through an imported base, in which case runtime picks that one and
-    this cannot see its signature. Runtime selection is name-sorted over runtime subclasses,
-    so any earlier-sorting class that might be a metric makes the choice ambiguous.
+    That covers three ways of being unsure. No class resolves statically, so there
+    is nothing to read; one resolves but another class sorts ahead of it and could
+    be a metric through a base this cannot see, in which case runtime picks that
+    one; or the resolved class inherits ``score()`` rather than declaring it, which
+    would mean reproducing the MRO from source.
 
     The receiver is dropped by position rather than by the name ``self``, which is
     only a convention: filling it would make the call pass two values for the same
@@ -507,24 +439,20 @@ def required_score_params(code: str) -> List[str]:
     metric_class = _find_basemetric_classdef(tree)
     if metric_class is None:
         return []
-    # A class that sorts earlier and declares score() may subclass an imported base,
-    # which is invisible here but makes it the one runtime instantiates. One with no
-    # bases at all cannot be a metric, so it is not a reason to give up.
+    # Any earlier-sorting class with a base may be a metric through it, and would be
+    # the one runtime instantiates. One with no bases at all cannot be a metric.
     for node in _top_level_classdefs(tree):
-        if (
-            node.name < metric_class.name
-            and _class_base_names(node)
-            and _score_funcdef(node) is not None
-        ):
+        if node.name < metric_class.name and node.bases:
             return []
-    score = _score_funcdef_with_inheritance(tree, metric_class)
+    score = _score_funcdef(metric_class)
     if score is None:
         return []
     # posonlyargs precede args; the receiver is the first of the two combined.
     positional = score.args.posonlyargs + score.args.args
     fillable = positional[max(len(score.args.posonlyargs), 1):]
-    defaults = score.args.defaults
-    required = fillable[: len(fillable) - len(defaults)] if defaults else fillable
+    # Defaults align to the tail and may cover the receiver too, so this can go
+    # negative -- which as a slice bound would keep the wrong prefix.
+    required = fillable[: max(0, len(fillable) - len(score.args.defaults))]
     names = [a.arg for a in required]
     names += [
         a.arg
