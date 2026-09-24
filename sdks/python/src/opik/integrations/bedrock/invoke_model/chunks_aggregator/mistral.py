@@ -21,9 +21,6 @@ class MistralAggregator(ChunkAggregator):
     - choices[0].stop_reason: Stop reason
     - usage: Token usage in last chunk (prompt_tokens, completion_tokens, total_tokens)
     - amazon-bedrock-invocationMetrics: Bedrock metrics
-
-    OpenAI models (gpt-oss, GPT-5.x, GPT-6) stream the same format with
-    choices[0].delta instead of message and finish_reason instead of stop_reason.
     """
 
     def aggregate(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -32,7 +29,6 @@ class MistralAggregator(ChunkAggregator):
 
         content = ""
         stop_reason = None
-        stop_reason_key = "stop_reason"
         input_tokens = 0
         output_tokens = 0
         model_id = None
@@ -55,19 +51,16 @@ class MistralAggregator(ChunkAggregator):
                 if "choices" in chunk_data and chunk_data["choices"]:
                     choice = chunk_data["choices"][0]
 
-                    # Extract message content (OpenAI models stream it in `delta`)
-                    message = choice.get("message") or choice.get("delta")
-                    if message:
-                        message_content = message.get("content")
+                    # Extract message content
+                    if "message" in choice and choice["message"]:
+                        message_content = choice["message"].get("content")
                         if message_content:
                             content += message_content
 
-                    # Extract stop reason, keeping the key the chunks use
-                    # (`finish_reason` for OpenAI models)
-                    for key in ("stop_reason", "finish_reason"):
-                        if choice.get(key):
-                            stop_reason_key, stop_reason = key, choice[key]
-                            LOGGER.debug("Mistral %s: %s", key, stop_reason)
+                    # Extract stop reason
+                    if "stop_reason" in choice and choice["stop_reason"]:
+                        stop_reason = choice["stop_reason"]
+                        LOGGER.debug("Mistral stop_reason: %s", stop_reason)
 
                 # Extract usage from last chunk
                 if "usage" in chunk_data and chunk_data["usage"]:
@@ -93,7 +86,7 @@ class MistralAggregator(ChunkAggregator):
                         output_tokens,
                     )
 
-            except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
                 LOGGER.debug("Mistral aggregator error processing chunk: %s", e)
                 continue
 
@@ -118,7 +111,7 @@ class MistralAggregator(ChunkAggregator):
                 {
                     "index": 0,
                     "message": {"role": "assistant", "content": content},
-                    stop_reason_key: stop_reason,
+                    "stop_reason": stop_reason,
                 }
             ],
             "usage": bedrock_usage,

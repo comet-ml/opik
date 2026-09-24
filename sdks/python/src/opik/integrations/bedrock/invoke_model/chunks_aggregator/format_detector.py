@@ -1,13 +1,14 @@
 """Format detection and aggregator registry."""
 
 import json
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from .base import ChunkAggregator
 from . import claude
 from . import llama
 from . import mistral
 from . import nova
+from . import openai
 
 
 # Format detection functions
@@ -29,26 +30,35 @@ def _is_llama_format(chunk_data: Dict[str, Any]) -> bool:
     return "generation" in chunk_data
 
 
-def _is_mistral_format(chunk_data: Dict[str, Any]) -> bool:
-    """Check if chunk is OpenAI-like format (Mistral/Pixtral, OpenAI models).
+def _first_choice(chunk_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """choices[0] of a chat.completion.chunk, if it is an object (a key test on a
+    string choice would be a substring test)."""
+    if (
+        not isinstance(chunk_data, dict)
+        or chunk_data.get("object") != "chat.completion.chunk"
+    ):
+        return None
+    choices = chunk_data.get("choices")
+    choice = choices[0] if isinstance(choices, list) and choices else None
+    return choice if isinstance(choice, dict) else None
 
-    Mistral chunks carry text in choices[0].message, OpenAI models (gpt-oss,
-    GPT-5.x, GPT-6) in choices[0].delta.
-    """
-    return (
-        "object" in chunk_data
-        and chunk_data["object"] == "chat.completion.chunk"
-        and "choices" in chunk_data
-        and chunk_data["choices"]
-        and (
-            "message" in chunk_data["choices"][0] or "delta" in chunk_data["choices"][0]
-        )
-    )
+
+def _is_mistral_format(chunk_data: Dict[str, Any]) -> bool:
+    """Check if chunk is Mistral/Pixtral format (OpenAI-like with choices and object)."""
+    choice = _first_choice(chunk_data)
+    return choice is not None and "message" in choice
+
+
+def _is_openai_format(chunk_data: Dict[str, Any]) -> bool:
+    """Check if chunk is OpenAI chat completion format (text in choices[0].delta)."""
+    choice = _first_choice(chunk_data)
+    return choice is not None and "delta" in choice
 
 
 # Format detectors registry (ordered by specificity - most specific first)
 _DETECTORS: Dict[str, FormatDetector] = {
     "mistral": _is_mistral_format,  # Specific (has object field)
+    "openai": _is_openai_format,  # Specific (has object field)
     "llama": _is_llama_format,  # Specific (has generation field)
     "nova": _is_nova_format,  # Specific (has contentBlockDelta)
     "claude": _is_claude_format,  # Generic (has type field)
@@ -60,6 +70,7 @@ _AGGREGATORS: Dict[str, ChunkAggregator] = {
     "llama": llama.LlamaAggregator(),
     "mistral": mistral.MistralAggregator(),
     "nova": nova.NovaAggregator(),
+    "openai": openai.OpenAIAggregator(),
 }
 
 
