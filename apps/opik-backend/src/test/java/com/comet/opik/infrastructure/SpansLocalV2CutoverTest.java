@@ -14,9 +14,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -36,7 +33,6 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1239,32 +1235,15 @@ class SpansLocalV2CutoverTest {
                 .isEqualTo(ReconciliationCounts.reconciled());
     }
 
-    private static Stream<Arguments> aGapWindowSpanChangedAfterTheSwapIsReportedByTheCompareButIsNotLoss() {
-        return Stream.of(
-                // A delete masks the prior row, so the insert has nothing to merge onto and stamps created_at fresh.
-                Arguments.of("re-created after the swap: created_at is stamped fresh, so it leaves the window", true,
-                        0L),
-                // SpanDAO's merge keeps the existing created_at, so the row stays in the window and counts stay equal.
-                Arguments.of("patched after the swap: created_at is preserved, so it stays in the window", false, 1L));
-    }
-
     /**
-     * Both post-swap WRITE shapes make the compare report a gap-window key while the reconciliation gate stays
-     * clean, and they differ only in whether the live row is still inside the compare window.
-     *
-     * <p>A RE-CREATE has no surviving row to merge onto, so {@code SpanDAO}'s insert stamps a fresh
-     * {@code created_at} and the row leaves the window — the drill-down bounds BOTH sides on {@code created_at},
-     * so it prints as absent there. A PATCH merges onto the live row, and that path PRESERVES {@code created_at},
-     * so the row stays in the window and both sides keep equal row counts; only the fingerprint moves.
-     *
-     * <p>Either way the compare reports the key and the three gating counts stay clean, with the change surfacing
-     * in the informational {@code newer} count. This is why quiescing cannot turn that compare into a PASS: only
-     * the delete shape is quiescable, and neither of these is.
+     * A gap-window span RE-CREATED after the swap: the cascade bridges the delete and masks the row, so the insert
+     * that follows has nothing to merge onto and {@code created_at} is stamped fresh. The compare reports the key —
+     * both sides are bounded on {@code created_at}, so the live row has left the window — while the reconciliation
+     * counts report nothing at all, because {@code verify-forward} drops keys bridged at or after {@code swap_done}
+     * from its parked set BEFORE bucketing. Not even {@code newer_keys}: the key is excluded, not classified.
      */
-    @ParameterizedTest(name = "{0}")
-    @MethodSource
-    void aGapWindowSpanChangedAfterTheSwapIsReportedByTheCompareButIsNotLoss(String description, boolean recreate,
-            long rowsLeftInsideWindow) {
+    @Test
+    void aGapWindowSpanRecreatedAfterTheSwapIsReportedByTheCompareAndExcludedFromTheCounts() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
 
@@ -1288,36 +1267,96 @@ class SpansLocalV2CutoverTest {
                 .as("the sweep reconciles the gap before anything is changed on top of it")
                 .isEqualTo(ReconciliationCounts.reconciled());
 
-        // Derived from swapDone, not from gapInstant: the row must land after the window closes however long the
-        // setup above took.
+        // After the window closes, however long the setup above took.
         var original = gapWritten.getFirst();
         var afterSwap = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(swapDone)).plusSeconds(120);
-        var changed = recreate
-                ? SeededSpan.builder().id(original.id()).traceId(original.traceId()).createdAt(afterSwap).build()
-                : original;
-        insertSuccessorSpanAt(changed, workspaceId, projectId, "changed-after-swap", afterSwap);
+
+        // The cascade that makes it a re-create: bridged at >= swapDone, and the mask is what leaves the insert
+        // with no surviving row to merge onto.
+        var ids = idStrings(gapWritten);
+        recordDeletionEvents(ids, workspaceId, projectId.toString(), "cascade");
+        lightweightDelete(ids, workspaceId);
+        var recreated = SeededSpan.builder().id(original.id()).traceId(original.traceId()).createdAt(afterSwap)
+                .build();
+        insertSuccessorSpanAt(recreated, workspaceId, projectId, "recreated-after-swap", afterSwap);
+
+        assertThat(liveCount("spans", ids, workspaceId))
+                .as("the span is live again under its own id — nothing was lost")
+                .isEqualTo(1L);
+        assertThat(rowsInsideWindow("spans", ids, workspaceId, gapStart, swapDone))
+                .as("but its winning created_at is past the window, which is what makes the drill-down print it as"
+                        + " absent on the live side")
+                .isZero();
+        assertThat(genuinelyDifferingKeys("spans_pre_cutover_backup", "spans", gapStart, swapDone, workspaceId))
+                .as("so the post-swap compare reports it as differing")
+                .isEqualTo(1L);
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("""
+                        while the reconciliation counts report it in NO bucket, newer_keys included: the bridge \
+                        exclusion removes it from the parked set before any bucketing happens""")
+                .isEqualTo(ReconciliationCounts.reconciled());
+    }
+
+    /**
+     * A gap-window span PATCHED after the swap. {@code SpanDAO}'s merge preserves {@code created_at} when a row
+     * survives to merge onto, so the row stays inside the window and both sides keep equal row counts — only the
+     * fingerprint and {@code last_updated_at} move. The compare still reports the key, the three gating counts stay
+     * clean, and the change surfaces in the informational {@code newer} count.
+     *
+     * <p>Together with the re-create case these are why quiescing cannot turn the compare into a PASS: only a delete
+     * is quiescable, and neither of these is.
+     */
+    @Test
+    void aGapWindowSpanPatchedAfterTheSwapIsReportedByTheCompareButIsNotLoss() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var seeded = mintIdsInWeek(0, 3);
+        seedSpans(seeded, workspaceId, projectId);
+        var backfillStart = nowMicros();
+        backfillWeek(0);
+        deltaInsert(backfillStart);
+
+        // The gap: written to the old table after the last delta read it.
+        var gapStart = nowMicros();
+        var gapInstant = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        var gapWritten = mintIdsAt(1, gapInstant);
+        insertRows(gapWritten, workspaceId, projectId, "gap", _ -> gapInstant);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        reconcileForward("spans", gapStart, swapDone);
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("the sweep reconciles the gap before anything is changed on top of it")
+                .isEqualTo(ReconciliationCounts.reconciled());
+
+        // After the window closes, however long the setup above took.
+        var original = gapWritten.getFirst();
+        var afterSwap = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(swapDone)).plusSeconds(120);
+
+        // No delete: the merge path keeps the existing created_at and only advances the version.
+        insertSuccessorSpanAt(original, workspaceId, projectId, "patched-after-swap", afterSwap);
 
         assertThat(liveCount("spans", idStrings(gapWritten), workspaceId))
                 .as("the span is present and current on the live table — nothing was lost")
                 .isEqualTo(1L);
         assertThat(rowsInsideWindow("spans", idStrings(gapWritten), workspaceId, gapStart, swapDone))
-                .as("""
-                        a re-create leaves the window on the live side, which is what makes the drill-down print \
-                        it as absent; a patch preserves created_at and stays inside it""")
-                .isEqualTo(rowsLeftInsideWindow);
-        assertThat(genuinelyDifferingKeys("spans_pre_cutover_backup", "spans", gapStart, swapDone, workspaceId))
-                .as("either way the post-swap compare reports the key as differing")
+                .as("created_at is preserved, so unlike a re-create it stays inside the window")
                 .isEqualTo(1L);
-        var afterChange = forwardCounts(gapStart, swapDone);
-        assertThat(afterChange)
+        assertThat(genuinelyDifferingKeys("spans_pre_cutover_backup", "spans", gapStart, swapDone, workspaceId))
+                .as("the post-swap compare reports it as differing even though the row counts stay equal")
+                .isEqualTo(1L);
+        var afterPatch = forwardCounts(gapStart, swapDone);
+        assertThat(afterPatch)
                 .as("""
                         while the three write-loss counts — the actual gate — stay clean, which is the distinction \
                         an operator has to make at this point""")
                 .extracting(ReconciliationCounts::missing, ReconciliationCounts::stale,
                         ReconciliationCounts::payloadMismatch)
                 .containsExactly(0L, 0L, 0L);
-        assertThat(afterChange.newer())
-                .as("and the change lands in `newer`: the live side is ahead of the frozen backup, which is correct")
+        assertThat(afterPatch.newer())
+                .as("and, unlike a bridged re-create, it IS classified: the live side is ahead of the frozen backup")
                 .isEqualTo(1L);
     }
 

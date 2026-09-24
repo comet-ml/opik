@@ -815,8 +815,13 @@ problem, and OPIK-8382 owns the production execution.
    > | **PATCH** / update | `created_at` PRESERVED by the merge, payload and `last_updated_at` advanced | stays in the window, **row counts stay EQUAL**, only the checksums differ |
    >
    > Both sides are bounded on `created_at` and `created_at` is part of the row fingerprint, which is why a changed
-   > `created_at` reads as absent while a preserved one reads as a payload difference. The last two shapes are what
-   > step 5 reports as `newer_keys`, and neither can be quiesced away — the change has already happened.
+   > `created_at` reads as absent while a preserved one reads as a payload difference. Neither of the last two can be
+   > quiesced away — the change has already happened.
+   >
+   > **Only the PATCH shape reaches `newer_keys`.** A bridged delete is dropped from step 5's parked set *before* any
+   > bucketing — `verify-forward` excludes keys bridged at or after `--swap-done` — so a DELETE and a RE-CREATE are
+   > reported in **no** count at all, not even `newer_keys`. A key the compare flags and the counts say nothing about
+   > is therefore the expected shape of a bridged delete, not a gap in the gate.
    >
    > So **do not treat a PASS as obtainable here**, and do not diagnose on row counts alone: equal counts do not mean
    > the compare agreed. Read the differing keys rather than the verdict — against `deletion_events_local` at/after
