@@ -2591,7 +2591,9 @@ public class SpanDAO {
     }
 
     @WithSpan
-    public Flux<Span> getByIds(@NonNull Set<UUID> ids) {
+    public Flux<Span> getByIds(@NonNull Set<UUID> spanIds) {
+        // One snapshot for every read and bind, so the weeks always cover the ids sent
+        var ids = Set.copyOf(spanIds);
         if (ids.isEmpty()) {
             return Flux.empty();
         }
@@ -3201,15 +3203,17 @@ public class SpanDAO {
             return Mono.just(List.of());
         }
 
-        var template = getSTWithLogComment(SELECT_SPAN_ID_AND_WORKSPACE, "get_span_workspace", "", "", spanIds.size());
-        var idWeeks = idWeeks(spanIds);
+        // One snapshot for both binds: weeks derived from a different set than the ids would drop rows and fail open
+        var ids = Set.copyOf(spanIds);
+        var template = getSTWithLogComment(SELECT_SPAN_ID_AND_WORKSPACE, "get_span_workspace", "", "", ids.size());
+        var idWeeks = idWeeks(ids);
         idWeeks.ifPresent(_ -> template.add("id_weeks", true));
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
 
                     var statement = connection.createStatement(template.render())
-                            .bind("spanIds", spanIds.toArray(UUID[]::new));
+                            .bind("spanIds", ids.toArray(UUID[]::new));
                     idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     return Mono.from(statement.execute());
@@ -3426,7 +3430,9 @@ public class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull SpanUpdate update, boolean mergeTags) {
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> spanIds, @NonNull SpanUpdate update, boolean mergeTags) {
+        // One snapshot for both binds, so the weeks always cover the ids sent
+        var ids = Set.copyOf(spanIds);
         Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
         log.info("Bulk updating '{}' spans", ids.size());
 

@@ -889,10 +889,12 @@ class ExperimentItemDAO {
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
             @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
+        // One snapshot for both binds, so the weeks always cover the ids sent
+        var ids = Set.copyOf(spanIds);
         // Array, not List: the driver renders a Collection as a tuple, and the bound is an IN over a set.
         return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "get_experiment_refs_by_span_ids",
-                "span_ids", spanIds, statuses, projectId,
-                WeeklyPartitions.weeksOf(spanIds).map(weeks -> weeks.toArray(Long[]::new)));
+                "span_ids", ids, statuses, projectId,
+                WeeklyPartitions.weeksOf(ids).map(weeks -> weeks.toArray(Long[]::new)));
     }
 
     private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String queryName,

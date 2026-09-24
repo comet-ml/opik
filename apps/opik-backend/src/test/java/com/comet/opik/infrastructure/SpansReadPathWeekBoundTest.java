@@ -41,6 +41,7 @@ import org.apache.http.HttpStatus;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -346,21 +347,27 @@ class SpansReadPathWeekBoundTest {
         assertThat(actual.startTime()).isEqualTo(span.startTime());
     }
 
-    @Test
-    void batchUpdateReachesFarFutureAndPastCeilingSpans() {
+    private Stream<Arguments> farFutureAndPastCeilingIdAts() {
+        return Stream.of(
+                arguments(Named.of("far future", FAR_FUTURE_ID_AT)),
+                arguments(Named.of("past ceiling", PAST_CEILING_ID_AT)));
+    }
+
+    private Stream<Arguments> recentFarFutureAndPastCeilingIdAts() {
+        return Stream.concat(Stream.of(arguments(Named.of("recent", Instant.now()))), farFutureAndPastCeilingIdAts());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("farFutureAndPastCeilingIdAts")
+    void batchUpdateReachesTheSpan(Instant idAt) {
         // BULK_UPDATE rewrites the rows it reads, so a missed read leaves the tags unchanged.
-        var traceId = ID_GENERATOR.generateId();
-        var farFuture = createSpan(FAR_FUTURE_ID_AT, traceId);
-        var pastCeiling = createSpan(PAST_CEILING_ID_AT, traceId);
+        var span = createSpan(idAt, ID_GENERATOR.generateId());
 
-        batchUpdateTags(farFuture, Set.of(farFuture.id()));
-        batchUpdateTags(pastCeiling, Set.of(pastCeiling.id()));
+        batchUpdateTags(span, Set.of(span.id()));
 
-        for (var span : List.of(farFuture, pastCeiling)) {
-            var actual = spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
-            assertThat(actual.tags()).as("tags of %s", span.id()).containsExactly("week-bound");
-            assertThat(actual.name()).isEqualTo(span.name());
-        }
+        var actual = spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
+        assertThat(actual.tags()).as("tags of %s (id_at %s)", span.id(), idAt).containsExactly("week-bound");
+        assertThat(actual.name()).as("name of %s (id_at %s)", span.id(), idAt).isEqualTo(span.name());
     }
 
     @Test
@@ -396,8 +403,9 @@ class SpansReadPathWeekBoundTest {
         }
     }
 
-    @Test
-    void experimentRefsResolveFarFutureAndPastCeilingSpans() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("recentFarFutureAndPastCeilingIdAts")
+    void experimentRefsResolveTheSpan(Instant idAt) {
         var traceId = ID_GENERATOR.generateId();
         var experiment = experimentResourceClient.createPartialExperiment()
                 .status(ExperimentStatus.COMPLETED)
@@ -408,17 +416,13 @@ class SpansReadPathWeekBoundTest {
                 .experimentId(experiment.id())
                 .traceId(traceId)
                 .build()), API_KEY, WORKSPACE_NAME);
-        var recent = createSpan(Instant.now(), traceId);
-        var farFuture = createSpan(FAR_FUTURE_ID_AT, traceId);
-        var pastCeiling = createSpan(PAST_CEILING_ID_AT, traceId);
+        var span = createSpan(idAt, traceId);
 
         // One id per call: a mixed batch would drop the bound for all of them and prove nothing about the set.
-        for (var span : List.of(recent, farFuture, pastCeiling)) {
-            assertThat(experimentRefsBySpanIds(Set.of(span.id())))
-                    .extracting(ExperimentTraceRef::experimentId)
-                    .as("experiment refs for span %s", span.id())
-                    .containsExactly(experiment.id());
-        }
+        assertThat(experimentRefsBySpanIds(Set.of(span.id())))
+                .extracting(ExperimentTraceRef::experimentId)
+                .as("experiment refs for span %s (id_at %s)", span.id(), idAt)
+                .containsExactly(experiment.id());
     }
 
     @Test
