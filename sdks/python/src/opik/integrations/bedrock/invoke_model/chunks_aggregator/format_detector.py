@@ -30,13 +30,19 @@ def _is_llama_format(chunk_data: Dict[str, Any]) -> bool:
 
 
 def _is_mistral_format(chunk_data: Dict[str, Any]) -> bool:
-    """Check if chunk is Mistral/Pixtral format (OpenAI-like with choices and object)."""
+    """Check if chunk is OpenAI-like format (Mistral/Pixtral, OpenAI models).
+
+    Mistral chunks carry text in choices[0].message, OpenAI models (gpt-oss,
+    GPT-5.x, GPT-6) in choices[0].delta.
+    """
     return (
         "object" in chunk_data
         and chunk_data["object"] == "chat.completion.chunk"
         and "choices" in chunk_data
         and chunk_data["choices"]
-        and "message" in chunk_data["choices"][0]
+        and (
+            "message" in chunk_data["choices"][0] or "delta" in chunk_data["choices"][0]
+        )
     )
 
 

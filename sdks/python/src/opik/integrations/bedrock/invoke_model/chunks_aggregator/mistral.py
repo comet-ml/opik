@@ -51,15 +51,17 @@ class MistralAggregator(ChunkAggregator):
                 if "choices" in chunk_data and chunk_data["choices"]:
                     choice = chunk_data["choices"][0]
 
-                    # Extract message content
-                    if "message" in choice and choice["message"]:
-                        message_content = choice["message"].get("content")
+                    # Extract message content (OpenAI models stream it in `delta`)
+                    message = choice.get("message") or choice.get("delta")
+                    if message:
+                        message_content = message.get("content")
                         if message_content:
                             content += message_content
 
-                    # Extract stop reason
-                    if "stop_reason" in choice and choice["stop_reason"]:
-                        stop_reason = choice["stop_reason"]
+                    # Extract stop reason (`finish_reason` for OpenAI models)
+                    stop = choice.get("stop_reason") or choice.get("finish_reason")
+                    if stop:
+                        stop_reason = stop
                         LOGGER.debug("Mistral stop_reason: %s", stop_reason)
 
                 # Extract usage from last chunk
