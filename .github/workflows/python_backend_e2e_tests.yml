@@ -34,7 +34,7 @@ env:
   # The Anthropic key is stored in the workspace by the tests (model-storage
   # principle); the optimizer reaches the provider only through the backend
   # gateway, never via this directly.
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
   # Keep the optimization short — we only need it to start, iterate, and finish.
   OPTIMIZER_MAX_TRIALS: "1"
   OPTSTUDIO_DATASET_SAMPLES: "4"
@@ -45,6 +45,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # The key reaches the provider only through the backend gateway, so an
+      # unset key surfaces as a confusing downstream gateway error rather than
+      # an auth failure at the point of use.
+      - name: Verify the Anthropic key reached this job
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY}" ]; then
+            echo "::error::ANTHROPIC_API_KEY_E2E_TESTS is unset or empty; the optimization run would fail at the backend gateway instead of here."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v7
 
