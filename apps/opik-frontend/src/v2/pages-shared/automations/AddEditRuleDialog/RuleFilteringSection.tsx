@@ -66,7 +66,7 @@ export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   },
   {
     id: "duration",
-    label: "Duration",
+    label: "Duration (s)",
     type: COLUMN_TYPE.duration,
   },
   {
@@ -126,7 +126,7 @@ export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   // },
   {
     id: "duration",
-    label: "Duration",
+    label: "Duration (s)",
     type: COLUMN_TYPE.duration,
   },
   {
@@ -166,7 +166,7 @@ export const SPAN_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   },
   {
     id: "duration",
-    label: "Duration",
+    label: "Duration (s)",
     type: COLUMN_TYPE.duration,
   },
   {

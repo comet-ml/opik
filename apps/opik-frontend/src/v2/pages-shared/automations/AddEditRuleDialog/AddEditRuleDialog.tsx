@@ -78,6 +78,7 @@ import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  denormalizeFilters,
   getBackendRuleType,
   getUIRuleScope,
   getUIRuleType,
@@ -412,20 +413,22 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     const ruleType = formData.type;
 
-    const validFilters = formData.filters
-      .filter((f) =>
-        isFilterValid(
-          (f.field === "input" || f.field === "output") && !f.key
-            ? { ...f, type: COLUMN_TYPE.string }
-            : f,
-        ),
-      )
-      .map((f) => {
-        if ((f.field === "input" || f.field === "output") && f.key) {
-          return { ...f, field: `${f.field}_json` };
-        }
-        return f;
-      });
+    const validFilters = denormalizeFilters(
+      formData.filters
+        .filter((f) =>
+          isFilterValid(
+            (f.field === "input" || f.field === "output") && !f.key
+              ? { ...f, type: COLUMN_TYPE.string }
+              : f,
+          ),
+        )
+        .map((f) => {
+          if ((f.field === "input" || f.field === "output") && f.key) {
+            return { ...f, field: `${f.field}_json` };
+          }
+          return f;
+        }),
+    );
 
     const ruleData = {
       name: formData.ruleName,
