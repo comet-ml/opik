@@ -777,20 +777,36 @@ No action is needed. When `./opik.sh` (or `opik.ps1` on Windows) hits this, it r
 
 Only ownership changes; the volume's contents are untouched, so attachments stored before the upgrade remain available.
 
-If the repair itself fails — most often because the Docker daemon will not run the helper container — repair the volume manually:
+If the automatic repair does not complete — for example the volume is read-only, or the account running Opik is not allowed to start the helper container — repair the volume manually. Opik prints the exact command for your installation when it gives up; the steps below derive the same values by hand.
 
 <Steps>
   <Step title="Stop the stack">
     ```bash
     ./opik.sh --stop
     ```
+
+    On Windows, use `.\opik.ps1 --stop`. Every `docker` command below is identical on both platforms.
+  </Step>
+  <Step title="Find the volume name">
+    ```bash
+    docker volume ls --filter name=minio-data --format '{{.Name}}'
+    ```
+
+    The Compose project name prefixes the volume, and that name comes from the directory Opik was cloned into — so a default installation in `opik/` gives `opik-opik_minio-data`. The rest of this procedure calls it `<volume>`.
+  </Step>
+  <Step title="Find the UID the MinIO image runs as">
+    ```bash
+    docker inspect -f '{{.Config.User}}' "$(docker inspect -f '{{.Config.Image}}' opik-opik-minio-1)"
+    ```
+
+    This prints something like `1001:1001`. Read it rather than assuming it: the value is a property of the pinned image, and it changes if the image is ever re-based. The rest of this procedure calls it `<uid>:<gid>`.
   </Step>
   <Step title="Re-own the volume">
     ```bash
-    docker run --rm -v opik-opik_minio-data:/data alpine chown -R 1001:1001 /data
+    docker run --rm -v <volume>:/data alpine chown -R <uid>:<gid> /data
     ```
 
-    Substitute your own volume name if it differs — `docker volume ls | grep minio` will show it. The Compose project name prefixes the volume, so it is `opik-opik_minio-data` in a default installation.
+    This changes ownership only. Nothing stored in the volume is modified or removed.
   </Step>
   <Step title="Start Opik again">
     ```bash
@@ -802,7 +818,7 @@ If the repair itself fails — most often because the Docker daemon will not run
     docker ps --filter name=minio --format '{{.Names}}\t{{.Status}}'
     ```
 
-    MinIO reports `status=running` and the stack becomes healthy. Attachments stored before the upgrade remain accessible in the Opik UI.
+    The MinIO container is listed with a status beginning `Up`, and reaching `(healthy)` once its healthcheck passes. Attachments stored before the upgrade remain accessible in the Opik UI.
   </Step>
 </Steps>
 

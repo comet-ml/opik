@@ -406,15 +406,35 @@ function Repair-MinioVolumeOwnership {
     $volume = docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' $Container 2>$null
     if (-not $volume) { return $false }
 
+    $expectedOwner = $expectedUser
+    if ($expectedOwner -notlike "*:*") { $expectedOwner = "${expectedUid}:${expectedUid}" }
+
     # Checking only the mount root misses the case that actually breaks MinIO: a correctly-owned
     # /data whose .minio.sys contents are still root-owned. Look for anything not owned by the
     # expected uid, at any depth, so a partially-repaired volume is still detected.
     # BusyBox find has no -uid; -user accepts a numeric uid and is what the alpine image supports.
     $foreign = docker run --rm -v "${volume}:/data" alpine find /data -not -user $expectedUid -print -quit 2>$null
-    if (-not $foreign) { return $false }
+    $probeExitCode = $LASTEXITCODE
 
-    $expectedOwner = $expectedUser
-    if ($expectedOwner -notlike "*:*") { $expectedOwner = "${expectedUid}:${expectedUid}" }
+    # An empty result means either "ownership is fine" or "the probe itself could not run". Only the
+    # first is a clean no-op; if the helper failed we cannot rule out the mismatch, so say so and
+    # hand over the command rather than leaving the user with MinIO's misleading error alone.
+    if ($probeExitCode -ne 0) {
+        Write-Host ''
+        Write-Host "[WARN] Could not check $volume's ownership (the helper container did not run), so a"
+        Write-Host '       file-ownership mismatch cannot be ruled out. MinIO reports this as a faulty drive,'
+        Write-Host '       but it usually means the volume was created by an older MinIO image that ran as root.'
+        Write-Host ''
+        Write-Host '       If Docker can run a container again, this repairs the volume without losing data:'
+        Write-Host ''
+        Write-Host "         docker run --rm -v ${volume}:/data alpine chown -R ${expectedOwner} /data"
+        Write-Host ''
+        Write-Host "       Otherwise re-own $volume to $expectedOwner by any means available, then start Opik again."
+        Write-Host ''
+        return $false
+    }
+
+    if (-not $foreign) { return $false }
 
     Write-Host ''
     Write-Host "[INFO] MinIO could not write to its data volume: it holds files not owned by uid $expectedUid,"

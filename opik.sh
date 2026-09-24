@@ -397,17 +397,39 @@ repair_minio_volume_ownership() {
   volume=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "$container" 2>/dev/null)
   [[ -n "$volume" ]] || return 1
 
-  # Checking only the mount root misses the case that actually breaks MinIO: a correctly-owned
-  # /data whose .minio.sys contents are still root-owned. Count anything not owned by the expected
-  # uid, at any depth, so a partially-repaired volume is still detected.
-  # BusyBox find has no -uid; -user accepts a numeric uid and is what the alpine image supports.
-  local foreign
-  foreign=$(docker run --rm -v "$volume":/data alpine \
-    find /data -not -user "$expected_uid" -print -quit 2>/dev/null | head -1)
-  [[ -n "$foreign" ]] || return 1
-
   local expected_owner="${expected_user}"
   [[ "$expected_owner" == *:* ]] || expected_owner="${expected_uid}:${expected_uid}"
+
+  # Checking only the mount root misses the case that actually breaks MinIO: a correctly-owned
+  # /data whose .minio.sys contents are still root-owned. Look for anything not owned by the
+  # expected uid, at any depth, so a partially-repaired volume is still detected.
+  # BusyBox find has no -uid; -user accepts a numeric uid and is what the alpine image supports.
+  # No pipe here on purpose: -print -quit already stops at the first match, and piping would make
+  # $? report the pipe's last command instead of whether the probe itself ran.
+  local foreign probe_rc
+  foreign=$(docker run --rm -v "$volume":/data alpine \
+    find /data -not -user "$expected_uid" -print -quit 2>/dev/null)
+  probe_rc=$?
+
+  # An empty result means either "ownership is fine" or "the probe itself could not run". Only the
+  # first is a clean no-op; if the helper failed we cannot rule out the mismatch, so say so and
+  # hand over the command rather than leaving the user with MinIO's misleading error alone.
+  if [[ "$probe_rc" -ne 0 ]]; then
+    echo ""
+    echo "⚠️  Could not check ${volume}'s ownership (the helper container did not run), so a"
+    echo "   file-ownership mismatch cannot be ruled out. MinIO reports this as a faulty drive, but"
+    echo "   it usually means the volume was created by an older MinIO image that ran as root."
+    echo ""
+    echo "   If Docker can run a container again, this repairs the volume without losing data:"
+    echo ""
+    echo "     docker run --rm -v ${volume}:/data alpine chown -R ${expected_owner} /data"
+    echo ""
+    echo "   Otherwise re-own ${volume} to ${expected_owner} by any means available, then start Opik again."
+    echo ""
+    return 1
+  fi
+
+  [[ -n "$foreign" ]] || return 1
 
   echo ""
   echo "🔎 MinIO could not write to its data volume: it holds files not owned by uid $expected_uid, which"
