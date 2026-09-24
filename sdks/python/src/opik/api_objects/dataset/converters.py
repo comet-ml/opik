@@ -78,11 +78,12 @@ def from_pandas(
     result = []
     ignore_keys = [] if ignore_keys is None else ignore_keys
     # iterrows() returns each row as a single Series, so an int column is upcast
-    # to float when the other columns are floats. to_dict keeps the column types.
-    for row in dataframe.to_dict(orient="records"):
+    # to float when the other columns are floats. itertuples keeps the column types.
+    columns = list(dataframe.columns)
+    for values in dataframe.itertuples(index=False, name=None):
         item_kwargs = {
             keys_mapping.get(key, key): value
-            for key, value in row.items()
+            for key, value in zip(columns, values)
             if key not in ignore_keys
         }
         result.append(dataset_item.DatasetItem(**item_kwargs))
