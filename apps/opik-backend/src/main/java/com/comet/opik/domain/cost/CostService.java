@@ -67,6 +67,7 @@ public class CostService {
             Map.entry("replicate", "replicate"),
             Map.entry("watsonx", "watsonx"),
             Map.entry("cohere", "cohere"),
+            Map.entry("cohere_chat", "cohere"),
             Map.entry("novita", "novita"),
             Map.entry("cloudflare", "cloudflare"),
             Map.entry("anyscale", "anyscale"),

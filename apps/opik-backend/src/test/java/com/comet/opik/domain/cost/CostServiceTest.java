@@ -1256,6 +1256,21 @@ class CostServiceTest {
     }
 
     /**
+     * The bundled price file splits Cohere across two `litellm_provider` values: `cohere` (15 rows)
+     * and `cohere_chat` (7 rows, including command-r and command-r-plus). Registering only `cohere`
+     * left the chat rows dropped at load time, so this pins the alias.
+     */
+    @Test
+    void calculateCostHandlesCohereChatModels() {
+        // command-r: input 1.5e-07, output 6e-07
+        // 1000 * 1.5e-07 + 200 * 6e-07 = 0.00027
+        BigDecimal cost = CostService.calculateCost("command-r", "cohere",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00027");
+    }
+
+    /**
      * Covers registering {@code novita} as a canonical provider so that the non-zero-cost entries in
      * {@code model_prices_and_context_window.json} tagged with {@code litellm_provider: "novita"} are
      * no longer silently dropped at load time. No Novita model publishes cache rates today, so all
