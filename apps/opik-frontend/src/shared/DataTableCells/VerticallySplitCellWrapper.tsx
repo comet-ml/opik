@@ -68,6 +68,9 @@ const VerticallySplitCellWrapper = <TData,>({
 
   const lineHeightStyle = calculateLineHeight(rowHeight);
 
+  const subRowHighlightColor =
+    tableMetadata?.subRowHighlightColor ?? "hsl(var(--muted))";
+
   const highlightSubRow = (virtualRowId: string, highlight: boolean) => {
     if (experimentsIds.length > 1) {
       document
@@ -77,7 +80,7 @@ const VerticallySplitCellWrapper = <TData,>({
         .forEach(
           (node) =>
             (node.style.backgroundColor = highlight
-              ? "hsl(var(--muted))"
+              ? subRowHighlightColor
               : "transparent"),
         );
     }
