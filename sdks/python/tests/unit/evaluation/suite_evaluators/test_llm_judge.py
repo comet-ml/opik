@@ -228,6 +228,24 @@ class TestLLMJudgeFromConfig:
         assert evaluator.assertions[0] == "Is accurate"
         assert evaluator.assertions[1] == "Is helpful"
 
+    def test_from_config__rejects_non_boolean_assertion_type(self):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="numeric_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(temperature=0.5),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+
+        with pytest.raises(ValueError, match="BOOLEAN"):
+            llm_judge.LLMJudge.from_config(config, track=False)
+
     def test_from_config__no_model_name__uses_default(self):
         """When config has no model name, from_config uses the default model."""
         config = llm_judge_config.LLMJudgeConfig(
