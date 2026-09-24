@@ -5123,7 +5123,62 @@ class GetTracesByProjectResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            createTraceWithUpdatedSpan(projectName, apiKey, workspaceName);
 
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, List.of(), List.of(), 10, Map.of());
+
+            assertThat(actualPage.content()).hasSize(1);
+            assertLatestSpanVersionAggregates(actualPage.content().getFirst());
+        }
+
+        private Stream<Arguments> searchStreamSpanUpdateFilters() {
+            return Stream.of(
+                    // No aggregate filter: aggregates are keyed on the page ids
+                    arguments(List.of(), true),
+                    // Aggregate filters select the page, so the other spans_deduped branches run
+                    arguments(List.of(costFilter(Operator.GREATER_THAN)), true),
+                    // Only the stale 1.5 version would match
+                    arguments(List.of(costFilter(Operator.LESS_THAN)), false));
+        }
+
+        private TraceFilter costFilter(Operator operator) {
+            return TraceFilter.builder()
+                    .field(TraceField.TOTAL_ESTIMATED_COST)
+                    .operator(operator)
+                    .value("2")
+                    .build();
+        }
+
+        @ParameterizedTest
+        @MethodSource("searchStreamSpanUpdateFilters")
+        void searchTracesStream__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly(
+                List<TraceFilter> filters, boolean expectMatch) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTraceWithUpdatedSpan(projectName, apiKey, workspaceName);
+
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .filters(filters)
+                            .build());
+
+            if (!expectMatch) {
+                assertThat(actualTraces).isEmpty();
+                return;
+            }
+            assertThat(actualTraces).hasSize(1);
+            assertThat(actualTraces.getFirst().id()).isEqualTo(trace.id());
+            assertLatestSpanVersionAggregates(actualTraces.getFirst());
+        }
+
+        private Trace createTraceWithUpdatedSpan(String projectName, String apiKey, String workspaceName) {
             var trace = Trace.builder()
                     .id(idGenerator.generateId())
                     .projectName(projectName)
@@ -5154,11 +5209,10 @@ class GetTracesByProjectResourceTest {
                     .totalEstimatedCost(new BigDecimal("2.5"))
                     .build(), apiKey, workspaceName);
 
-            var actualPage = traceResourceClient.getTraces(
-                    projectName, null, apiKey, workspaceName, List.of(), List.of(), 10, Map.of());
+            return trace;
+        }
 
-            assertThat(actualPage.content()).hasSize(1);
-            var actual = actualPage.content().getFirst();
+        private void assertLatestSpanVersionAggregates(Trace actual) {
             assertThat(actual.usage()).isEqualTo(Map.of("prompt_tokens", 20L));
             assertThat(actual.totalEstimatedCost()).isEqualByComparingTo("2.5");
             assertThat(actual.spanCount()).isEqualTo(1);
