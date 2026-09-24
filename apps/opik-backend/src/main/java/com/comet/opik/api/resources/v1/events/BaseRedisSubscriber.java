@@ -4,6 +4,9 @@ import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.infrastructure.StreamConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
+import com.comet.opik.infrastructure.redis.UndecodablePayloadException;
+import com.comet.opik.infrastructure.redis.UndecodableStreamMessage;
+import com.comet.opik.utils.HttpStatusRetryability;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
@@ -56,14 +59,17 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private static final String NOGROUP = "NOGROUP";
 
     /**
-     * Non-retryable exception types that won't succeed on retry. Checked via {@code instanceof} in
-     * {@link #isRetryableException(Throwable)}, so subclasses are automatically covered.
-     * These are usually programming, validation, client etc. exceptions.
+     * Exception types that mean the code has a bug, so retrying would just rerun the bug. Checked via
+     * {@code instanceof} in {@link #isRetryableException(Throwable)}, so subclasses are covered too.
+     *
+     * <p>{@code ClientErrorException} used to be listed here and no longer is. It is a transport type, not a
+     * bug signal, and matching it by class made the whole 4xx family permanent — including 408, 425 and 429,
+     * which are transient by definition. It is now classified by the status it carries; see
+     * {@link #isRetryableException(Throwable)}.
      */
     private static final Set<Class<? extends RuntimeException>> NON_RETRYABLE_EXCEPTIONS = Set.of(
             ArithmeticException.class,
             ClassCastException.class,
-            ClientErrorException.class,
             IllegalArgumentException.class,
             IllegalStateException.class,
             IndexOutOfBoundsException.class,
@@ -111,6 +117,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongHistogram messageProcessingTime;
     private final LongHistogram messageQueueDelay;
     private final LongCounter messageProcessingErrors;
+    private final LongCounter undecodableMessages;
     private final LongCounter backpressureDropCounter;
     private final LongCounter claimErrors;
     private final LongHistogram claimTime;
@@ -123,6 +130,27 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongCounter listPendingErrors;
     private final LongHistogram listPendingTime;
     private final LongCounter unexpectedErrors;
+
+    /**
+     * Resume point for the next {@code XAUTOCLAIM} scan.
+     *
+     * <p>Redis caps each {@code XAUTOCLAIM} at {@code COUNT * 10} PEL entries <em>examined</em> (not
+     * claimed), so with the default {@code consumerBatchSize} of 10 a single call only ever inspects the
+     * first 100 entries of the pending list. Restarting every scan at {@link StreamMessageId#MIN} —
+     * which this class used to do, discarding the cursor Redis hands back — means anything past that
+     * first window is never examined at all: a backlog above ~100 entries develops a permanently
+     * unreachable tail, whatever the retry or decode behaviour further down. Carrying the returned
+     * cursor forward walks the whole PEL instead, a window at a time.
+     *
+     * <p>Redis returns {@code 0-0} once a pass has covered the entire pending list; that resets this
+     * back to {@link StreamMessageId#MIN} so the next pass starts over from the oldest entry, keeping
+     * the oldest-first bias the original code intended.
+     *
+     * <p>Volatile rather than synchronized: {@code concatMap} in {@link #setupStreamListener()} already
+     * serializes claim calls, so this is only ever written by one claim at a time; volatile just
+     * publishes that write to whichever scheduler thread runs the next one.
+     */
+    private volatile StreamMessageId claimCursor = StreamMessageId.MIN;
 
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription;
@@ -160,6 +188,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         this.messageProcessingErrors = meter
                 .counterBuilder("%s_%s_processing_errors".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Errors when processing messages")
+                .build();
+        this.undecodableMessages = meter
+                .counterBuilder("%s_%s_undecodable_messages_total".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Stream entries whose payload could not be decoded, counted at detection. "
+                        + "Deliberately not a drop count: the failure is retryable, so one entry is counted once "
+                        + "per delivery until maxRetries retires it, and a pod that decodes it on a later claim "
+                        + "never contributes a drop at all. Alert on a sustained increase, which means entries are "
+                        + "cycling; the removal itself is logged by handleMaxRetriesReached.")
                 .build();
         this.backpressureDropCounter = meter
                 .counterBuilder("%s_%s_backpressure_drops_total".formatted(metricNamespace, metricsBaseName))
@@ -387,11 +423,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 consumerId,
                 config.getPendingMessageDuration().toJavaDuration().toMillis(),
                 TimeUnit.MILLISECONDS,
-                StreamMessageId.MIN, // Start from the beginning of pending list
+                claimCursor, // Resume where the previous scan stopped; see claimCursor
                 config.getConsumerBatchSize())
                 .subscribeOn(consumerScheduler)
                 .filter(Objects::nonNull)
-                .map(AutoClaimResult::getMessages)
+                .map(this::advanceCursorAndExtractMessages)
                 .filter(Objects::nonNull)
                 .doOnSuccess(claimedMessages -> {
                     claimedMessages = Objects.requireNonNullElse(claimedMessages, Map.of());
@@ -401,12 +437,44 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .onErrorResume(throwable -> {
                     claimErrors.add(1);
                     log.error("Error claiming pending messages", throwable);
+                    // A failed scan leaves the cursor where it was, so the next attempt retries the same
+                    // window rather than skipping it. The NOGROUP case is different, but recoverFromNoGroup
+                    // resets the cursor itself so both it and the read path get the same treatment.
                     if (isNoGroupError(throwable)) {
                         return recoverFromNoGroup();
                     }
                     return Mono.just(Map.of());
                 })
                 .doFinally(signalType -> claimTime.record(System.currentTimeMillis() - startMillis));
+    }
+
+    /**
+     * Advances {@link #claimCursor} to where Redis says the next scan should resume, then returns the
+     * batch this scan actually claimed.
+     *
+     * <p>A {@code null} or {@code 0-0} next-id means the pass reached the end of the pending list, so the
+     * cursor goes back to {@link StreamMessageId#MIN} and the following pass starts from the oldest entry
+     * again.
+     */
+    private Map<StreamMessageId, Map<String, M>> advanceCursorAndExtractMessages(AutoClaimResult<String, M> result) {
+        claimCursor = nextCursor(result.getNextId());
+        return result.getMessages();
+    }
+
+    /**
+     * The cursor to use for the next scan, given the next-id Redis returned.
+     *
+     * <p>Compared numerically rather than against {@link StreamMessageId#MIN} / {@link StreamMessageId#ALL}:
+     * those are wire sentinels that serialize to {@code -} and {@code 0}, and neither is
+     * {@code equals()} to the {@code StreamMessageId(0, 0)} that Redisson parses Redis's literal
+     * {@code 0-0} end-of-pass reply into. Matching on the constants would therefore never fire, and the
+     * scan would run off the end of the PEL and stay there instead of wrapping.
+     */
+    private static StreamMessageId nextCursor(StreamMessageId nextId) {
+        if (nextId == null || (nextId.getId0() == 0 && nextId.getId1() == 0)) {
+            return StreamMessageId.MIN;
+        }
+        return nextId;
     }
 
     private Mono<Map<StreamMessageId, Map<String, M>>> readMessages() {
@@ -442,6 +510,16 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private Mono<Map<StreamMessageId, Map<String, M>>> recoverFromNoGroup() {
         log.warn("Recreating not found consumer group '{}' for stream '{}'",
                 config.getConsumerGroupName(), config.getStreamName());
+        // The cursor indexes the OLD group's pending list, so it means nothing once the group is
+        // recreated. Reset here rather than at the call sites: NOGROUP surfaces from both readMessages
+        // and claimPendingMessages, and the read path is the likelier of the two to notice it first
+        // (reads run on every tick that is not a claim tick).
+        //
+        // Leaving it stale is not self-correcting on a busy stream. A scan starting above the recreated
+        // PEL's entries only wraps once it exhausts the list, and entries arriving after the stale
+        // position keep giving it work at the high end -- so the wrap can be deferred indefinitely while
+        // the oldest entries, the ones this scan exists to reach, are never examined.
+        claimCursor = StreamMessageId.MIN;
         return createConsumerGroup()
                 .onErrorResume(throwable -> {
                     log.error("Failed to recreate consumer group '{}' for stream '{}'",
@@ -472,9 +550,74 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     .context(MessageContext.UNKNOWN)
                     .build());
         }
+        // A payload the codec could not decode. It arrives as a sentinel rather than an exception
+        // precisely so this point is reachable at all -- the throw used to happen inside Redisson, below
+        // here and before any messageId existed, which is why such an entry could never be acked or
+        // removed and wedged the stream permanently (OPIK-8164). Healthy entries claimed in the same
+        // batch are no longer stranded by it. Retire it through maxRetries rather than deleting it now:
+        // see UndecodablePayloadException for why first-delivery deletion would discard recoverable data.
+        if (message instanceof UndecodableStreamMessage undecodable) {
+            recordUndecodable(messageId, undecodable.cause(), null);
+            // Warn, not error: on its own this is one delivery of one entry, and the retryable path may
+            // still decode it on another pod. handleMaxRetriesReached logs at error when it is finally
+            // removed, which is the event worth waking someone for.
+            log.warn("Undecodable message: messageId '{}', stream '{}', encodedBytes '{}'",
+                    messageId, config.getStreamName(), undecodable.encodedBytes(), undecodable.cause());
+            return Mono.just(ProcessingResult.builder()
+                    .messageId(messageId)
+                    .status(MessageStatus.FAILURE)
+                    // Retryable on purpose: "this pod cannot decode it" is not "nobody can". maxRetries
+                    // bounds the cycling, so it still terminates. See UndecodablePayloadException.
+                    .error(new UndecodablePayloadException(
+                            "Undecodable stream field of %d encoded bytes".formatted(undecodable.encodedBytes()),
+                            undecodable.cause()))
+                    .context(MessageContext.UNKNOWN)
+                    .build());
+        }
+        // Nothing under the expected field. Two different causes hide behind the same symptom, and they
+        // deserve opposite treatment, so tell them apart by looking for a sentinel among the KEYS:
+        //   - the field name itself failed to decode (LZ4/Kryo on this codec), so the lookup missed. That
+        //     can be version skew between pods, so it is retryable -- and the key sentinel carries the
+        //     cause, which would otherwise be lost entirely since nothing else inspects key objects.
+        //   - the entry genuinely carries no such field. No pod can invent it, so retrying only delays
+        //     the inevitable; keep the pre-existing non-retryable, remove-on-first-delivery behaviour
+        //     (it used to arrive as a NullPointerException out of processEvent).
+        if (message == null) {
+            var keyFailure = undecodableKeyCause(entry.getValue());
+            if (keyFailure != null) {
+                recordUndecodable(messageId, keyFailure, "undecodable_field_name");
+                log.warn("Message field name could not be decoded, payload unreachable: messageId '{}', "
+                        + "stream '{}'", messageId, config.getStreamName(), keyFailure);
+                return Mono.just(ProcessingResult.builder()
+                        .messageId(messageId)
+                        .status(MessageStatus.FAILURE)
+                        .error(new UndecodablePayloadException(
+                                "Field name could not be decoded, no payload under '%s'"
+                                        .formatted(payloadField),
+                                keyFailure))
+                        .context(MessageContext.UNKNOWN)
+                        .build());
+            }
+            // Deliberately NOT on *_undecodable_messages_total: nothing failed to decode here, and
+            // mixing a deterministic malformed entry into that counter would make a decoder alert fire
+            // on it. messageProcessingErrors already counts it via postProcessFailureMessages.
+            recordQueueDelay(messageId);
+            log.warn("Message has no payload under field '{}': messageId '{}', stream '{}'",
+                    payloadField, messageId, config.getStreamName());
+            return Mono.just(ProcessingResult.builder()
+                    .messageId(messageId)
+                    .status(MessageStatus.FAILURE)
+                    // IllegalStateException is non-retryable: removed on first delivery, as before.
+                    .error(new IllegalStateException(
+                            "No payload under field '%s'".formatted(payloadField)))
+                    .context(MessageContext.UNKNOWN)
+                    .build());
+        }
         var startMillis = System.currentTimeMillis();
         // Resolve the workspace/user once: the processing-time histogram is tagged with it for every
-        // message (success or failure), and the failure path reuses it for error attribution.
+        // message that reaches processEvent (success or failure), and the failure path reuses it for
+        // error attribution. The undecodable and no-payload branches above return before this -- they
+        // have no decoded message to attribute -- and record queue delay themselves.
         var context = messageContext(message);
         var workspaceAttributes = Attributes.of(
                 ErrorMetricsResolver.WORKSPACE_ID_KEY, context.workspaceId(),
@@ -495,10 +638,55 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .build()))
                 .doFinally(signalType -> {
                     messageProcessingTime.record(System.currentTimeMillis() - startMillis, workspaceAttributes);
-                    extractTimeFromMessageId(messageId)
-                            .ifPresent(messageMillis -> messageQueueDelay
-                                    .record(System.currentTimeMillis() - messageMillis));
+                    recordQueueDelay(messageId);
                 });
+    }
+
+    /**
+     * Counts an entry that could not be decoded and keeps it visible in the queue-delay histogram.
+     * <p>
+     * The histogram matters more here than on the success path: a retryable undecodable entry is
+     * delivered up to {@code maxRetries} times, and its growing age is the signal that shows an entry
+     * cycling in a growing PEL. Returning early without recording it would hide exactly the entries
+     * worth noticing.
+     *
+     * @param cause     the decode failure, or {@code null} when there was simply no payload field
+     * @param errorType overrides the {@code error_type} label; {@code null} derives it from {@code cause}
+     */
+    private void recordUndecodable(StreamMessageId messageId, Throwable cause, String errorType) {
+        undecodableMessages.add(1, Attributes.of(
+                ErrorMetricsResolver.ERROR_TYPE_KEY,
+                errorType != null ? errorType : ErrorMetricsResolver.errorType(cause),
+                ErrorMetricsResolver.STREAM_KEY, config.getStreamName()));
+        recordQueueDelay(messageId);
+    }
+
+    /**
+     * Keeps an entry that returns early visible in the queue-delay histogram. Its growing age is the
+     * signal that shows an entry cycling in a growing PEL, so the paths most worth noticing must not be
+     * the ones that skip it.
+     */
+    private void recordQueueDelay(StreamMessageId messageId) {
+        extractTimeFromMessageId(messageId)
+                .ifPresent(messageMillis -> messageQueueDelay.record(System.currentTimeMillis() - messageMillis));
+    }
+
+    /**
+     * The decode failure behind an entry's field name, if the map-key decoder produced a sentinel.
+     * <p>
+     * Reached by inspecting the key objects, which nothing else does: a sentinel key cannot match
+     * {@code payloadField}, so without this the cause would be discarded and a field-name failure would
+     * be indistinguishable from an entry that never carried the field.
+     */
+    private static Throwable undecodableKeyCause(Map<?, ?> valueMap) {
+        if (valueMap == null) {
+            return null;
+        }
+        return valueMap.keySet().stream()
+                .filter(UndecodableStreamMessage.class::isInstance)
+                .map(key -> ((UndecodableStreamMessage) key).cause())
+                .findFirst()
+                .orElse(null);
     }
 
     private Mono<List<ProcessingResult>> postProcessSuccessMessages(List<ProcessingResult> processingResults) {
@@ -608,8 +796,22 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * Exception handling: see {@link #isRetryableException(Throwable)} for the full non-retryable classification.
      * Non-retryable exceptions are immediately removed from the stream.
      * All other exceptions are retried up to {@code maxRetries} times before being removed.
+     * <p>
+     * {@code message} is never {@code null}. An entry with nothing under the configured payload field,
+     * or one whose field name itself failed to decode, is retired in {@link #processMessage} before
+     * this method is ever called (OPIK-8192) — implementations do not need to guard against it, and
+     * previously did not consistently: {@link com.comet.opik.api.resources.v1.events.OnlineScoringBaseScorer}
+     * dereferences {@code message} unconditionally on the first line of its own {@code processEvent},
+     * which a null used to reach as a live NullPointerException on {@code main}.
+     * <p>
+     * Deliberately <em>not</em> annotated {@code @NonNull}. Lombok injects its check at the start of a
+     * method body, and an abstract method has none, so the annotation would generate nothing here;
+     * parameter annotations are not inherited either, so it would give the implementations nothing.
+     * The invariant is established at exactly one place — the guards in {@link #processMessage} — and
+     * this contract is where it is recorded. Annotating the overrides instead would only add a check
+     * for a condition the caller already excludes.
      *
-     * @param message a Redis message
+     * @param message a Redis message, guaranteed non-null by {@link #processMessage}
      */
     protected abstract Mono<Void> processEvent(M message);
 
@@ -630,13 +832,19 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     /**
-     * Non-retryable exceptions are checked via {@code instanceof} against {@link #NON_RETRYABLE_EXCEPTIONS},
-     * so both exact types and their subclasses are covered.
-     * Non-retryable exceptions are usually programming, validation, client errors that won't succeed on retry.
-     * All other exceptions are considered retryable (transient errors like network issues, timeouts, server errors, etc.)
-     * Unknown exceptions default to retryable for safety.
+     * Whether the entry is worth redelivering. A {@link ClientErrorException} is decided from the status it
+     * carries, so a 408/425/429 is retried and the rest of the 4xx family is retired on first delivery;
+     * everything else is matched by class against {@link #NON_RETRYABLE_EXCEPTIONS}, whose members all mean
+     * the code has a bug. Anything unrecognised is retryable, so an unknown failure is never silently lost.
+     *
+     * <p>Classifying by class alone is what forced {@code ChatCompletionService.scoreTrace} to report every
+     * provider failure as a blanket 500: a truthful 429 would have been dropped here. With the status
+     * consulted, that workaround is gone and the provider's real status is reported.
      */
     private boolean isRetryableException(Throwable exception) {
+        if (exception instanceof ClientErrorException clientError) {
+            return !HttpStatusRetryability.isPermanent(clientError.getResponse().getStatus());
+        }
         return NON_RETRYABLE_EXCEPTIONS.stream()
                 .noneMatch(nonRetryable -> nonRetryable.isInstance(exception));
     }

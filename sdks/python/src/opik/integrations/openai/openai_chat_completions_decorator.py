@@ -10,7 +10,7 @@ from typing import (
 
 import openai
 import openai.lib.streaming.chat
-from openai import _types as _openai_types
+from openai import _legacy_response, _types as _openai_types
 from openai.types.chat import chat_completion
 from typing_extensions import override
 
@@ -95,6 +95,8 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
+        output = _parse_raw_response(output)
+
         assert isinstance(
             output,
             (
@@ -186,6 +188,19 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         NOT_A_STREAM = None
 
         return NOT_A_STREAM
+
+
+def _parse_raw_response(output: Any) -> Any:
+    """
+    Callers like CrewAI and LiteLLM use `chat.completions.with_raw_response.create(...)`
+    to read response headers, which returns the unparsed HTTP response instead of a
+    ChatCompletion. `parse()` caches its result, so the caller still gets the same
+    object from its own `parse()` call.
+    """
+    if isinstance(output, _legacy_response.LegacyAPIResponse):
+        return output.parse()
+
+    return output
 
 
 def _remove_not_given_sentinel_values(dict_: Dict[str, Any]) -> Dict[str, Any]:

@@ -9,12 +9,12 @@ import { ResponseFormatType } from "./ResponseFormatType.js";
 export const ResponseFormat: core.serialization.ObjectSchema<serializers.ResponseFormat.Raw, OpikApi.ResponseFormat> =
     core.serialization.object({
         type: ResponseFormatType.optional(),
-        jsonSchema: core.serialization.property("json_schema", JsonSchema.optional()),
+        jsonSchema: JsonSchema.optional(),
     });
 
 export declare namespace ResponseFormat {
     export interface Raw {
         type?: ResponseFormatType.Raw | null;
-        json_schema?: JsonSchema.Raw | null;
+        jsonSchema?: JsonSchema.Raw | null;
     }
 }

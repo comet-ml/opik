@@ -7,7 +7,6 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemEdit;
-import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.filter.DatasetItemFilter;
@@ -23,10 +22,10 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
 import com.comet.opik.utils.ErrorUtils;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -61,6 +60,9 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.DatasetItemResultMapper.serializeEvaluators;
+import static com.comet.opik.domain.DatasetItemResultMapper.serializeExecutionPolicy;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -413,7 +415,71 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND dataset_item_id IN :itemIds
             """;
 
+    /**
+     * Reads one page of a dataset version.
+     * <p>
+     * Resolved in two phases so the wide {@code data} column never enters a sort. The table's ordering key is
+     * {@code (workspace_id, dataset_id, dataset_version_id, id)}, so ordering by {@code dataset_item_id} cannot
+     * use {@code optimize_read_in_order} and forces a full blocking sort over the whole version. Carrying
+     * {@code data} through that sort makes peak memory scale with the version's total payload rather than with
+     * the page size, so a version whose total payload exceeds the per-query memory cap fails with
+     * MEMORY_LIMIT_EXCEEDED even when a single row is requested (OPIK-8109).
+     * <p>
+     * Phase 1 resolves the page's {@code dataset_item_id}s from narrow columns only; phase 2 fetches the payload
+     * for just those ids, served by the {@code dataset_item_id} skip indexes from migration {@code 000074}.
+     * Truncation stays in phase 2 so the image regex runs over the page instead of the whole version.
+     * <p>
+     * Three invariants hold this together. Each one broke a draft of this query, and each has a regression test
+     * in {@code DatasetItemVersionQueryShapeTest}:
+     * <ol>
+     *   <li>Both phases order by {@code dataset_item_id DESC} first. A mismatch reorders the page.</li>
+     *   <li>The ordering's leading key, {@code dataset_item_id}, is unique per output row after
+     *       {@code LIMIT 1 BY dataset_item_id}, so the page order is fully determined and the trailing
+     *       timestamp only picks a winner among duplicate rows for the same id. If custom sorting is ever
+     *       added here, the sort must still <em>end</em> in {@code dataset_item_id}: with a non-unique sort
+     *       key and no unique tiebreak, the two phases sort different column sets and can order tied rows
+     *       differently.</li>
+     *   <li>Phase 2 repeats {@code dataset_item_filters}. Without it, an id selected in phase 1 via a superseded
+     *       row that matches the filter resolves in phase 2 to the newest row for that id, which may not match,
+     *       returning rows the caller filtered out.</li>
+     *   <li>Phase 1 projects the same aliases as phase 2. ClickHouse binds {@code WHERE} and {@code ORDER BY} to
+     *       {@code SELECT} aliases, and the dataset item filters emit bare {@code id}, {@code created_at},
+     *       {@code last_updated_at}, {@code created_by} and {@code last_updated_by}. Drop the aliases and those
+     *       predicates bind to this table's physical columns instead. Where a version's rows were snapshotted
+     *       well after its items were authored the two clocks diverge, and the filter then selects an entirely
+     *       different set of items.</li>
+     * </ol>
+     * <p>
+     * One caveat for whoever edits this next: alias binding is the default of a ClickHouse setting, not a
+     * language guarantee. Under {@code prefer_column_name_to_alias=1} resolution flips back to the source
+     * columns and every filter below silently returns to the broken behaviour. That setting is off by default
+     * in every version we run and is set nowhere in this repo, which is why these queries filter against the
+     * projection instead of paying for an extra subquery on the read path. The two facts are linked: flipping
+     * it would reintroduce exactly the defect this shape exists to prevent.
+     */
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
+            WITH page AS (
+                SELECT
+                    dataset_item_id,
+                    dataset_item_id AS id,
+                    item_created_at AS created_at,
+                    item_last_updated_at AS last_updated_at,
+                    item_created_by AS created_by,
+                    item_last_updated_by AS last_updated_by
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND workspace_id = :workspace_id
+                <if(lastRetrievedId)>AND dataset_item_id \\< :lastRetrievedId<endif>
+                <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+                ORDER BY dataset_item_id DESC, last_updated_at DESC
+                LIMIT 1 BY dataset_item_id
+                <if(lastRetrievedId)>
+                LIMIT :limit
+                <else>
+                LIMIT :limit OFFSET :offset
+                <endif>
+            )
             SELECT
                 dataset_item_id AS id,
                 dataset_id,
@@ -434,24 +500,45 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
-            <if(lastRetrievedId)>AND dataset_item_id \\< :lastRetrievedId<endif>
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            AND dataset_item_id IN (SELECT dataset_item_id FROM page)
             ORDER BY dataset_item_id DESC, last_updated_at DESC
             LIMIT 1 BY dataset_item_id
-            <if(lastRetrievedId)>
-            LIMIT :limit
-            <else>
-            LIMIT :limit OFFSET :offset
-            <endif>
             """;
 
+    /**
+     * Counts the items a page request would return.
+     * <p>
+     * The subquery exists to put the item-level aliases in scope before the filters are applied. ClickHouse
+     * binds {@code WHERE} to {@code SELECT} aliases, and the dataset item filters emit bare {@code id},
+     * {@code created_at}, {@code last_updated_at}, {@code created_by} and {@code last_updated_by} — all of
+     * which also exist physically on this table with different meanings. Counting against the physical columns
+     * while {@code SELECT_DATASET_ITEM_VERSIONS} selects rows against the item-level ones made the two
+     * disagree, so a filtered page could report a total its own rows could not account for.
+     * <p>
+     * {@code * EXCEPT} keeps every other column in scope so filters on {@code data}, {@code source},
+     * {@code tags}, {@code trace_id} and {@code span_id} still resolve. It costs nothing: ClickHouse prunes
+     * the unread payload through the wrapper, and the read is byte-identical to the unwrapped form.
+     * <p>
+     * Alias binding here is the default of {@code prefer_column_name_to_alias} rather than a language
+     * guarantee; see the note on {@code SELECT_DATASET_ITEM_VERSIONS}.
+     */
     private static final String SELECT_DATASET_ITEM_VERSIONS_COUNT = """
             SELECT count(DISTINCT dataset_item_id) as count
-            FROM dataset_item_versions
-            WHERE dataset_id = :datasetId
-            AND dataset_version_id = :versionId
-            AND workspace_id = :workspace_id
-            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            FROM (
+                SELECT
+                    * EXCEPT (id, created_at, last_updated_at, created_by, last_updated_by),
+                    dataset_item_id AS id,
+                    item_created_at AS created_at,
+                    item_last_updated_at AS last_updated_at,
+                    item_created_by AS created_by,
+                    item_last_updated_by AS last_updated_by
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND workspace_id = :workspace_id
+                <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            )
             """;
 
     private static final String DELETE_ITEMS_FROM_VERSION = """
@@ -515,10 +602,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         tags,
                         evaluators,
                         execution_policy,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by
+                        item_created_at AS created_at,
+                        item_last_updated_at AS last_updated_at,
+                        item_created_by AS created_by,
+                        item_last_updated_by AS last_updated_by
                     FROM dataset_item_versions FINAL
                     WHERE workspace_id = :workspace_id
                       AND dataset_id = :datasetId
@@ -594,6 +681,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
             	LEFT JOIN dataset_item_versions AS lookup_div FINAL
             	    ON lookup_div.workspace_id = ei.workspace_id
+            	    AND lookup_div.dataset_id = :datasetId
             	    AND lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
             	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
@@ -684,10 +772,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.trace_id AS trace_id,
                     div_dedup.span_id AS span_id,
                     div_dedup.tags AS tags,
-                    div_dedup.created_at AS created_at,
-                    div_dedup.last_updated_at AS last_updated_at,
-                    div_dedup.created_by AS created_by,
-                    div_dedup.last_updated_by AS last_updated_by
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
                 FROM (
                     SELECT *
                     FROM dataset_item_versions
@@ -772,10 +860,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.trace_id AS trace_id,
                     div_dedup.span_id AS span_id,
                     div_dedup.tags AS tags,
-                    div_dedup.created_at AS created_at,
-                    div_dedup.last_updated_at AS last_updated_at,
-                    div_dedup.created_by AS created_by,
-                    div_dedup.last_updated_by AS last_updated_by
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
                 FROM (
                     SELECT *
                     FROM dataset_item_versions
@@ -811,6 +899,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM experiment_item_aggregates AS eia FINAL
                 LEFT JOIN dataset_item_versions AS lookup_div FINAL
                     ON lookup_div.workspace_id = eia.workspace_id
+                    AND lookup_div.dataset_id = :datasetId
                     AND lookup_div.id = eia.dataset_item_id
                 WHERE eia.workspace_id = :workspace_id
                 AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
@@ -934,6 +1023,26 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * rows it is already the stable id and the JOIN misses, falling back via
      * {@code if(notEmpty(...))} to the raw value.
      *
+     * <p><b>The {@code lookup_div.dataset_id = :datasetId} predicate is load-bearing, not redundant.</b>
+     * It looks superfluous beside {@code lookup_div.id = ei.dataset_item_id}, but the ordering key is
+     * {@code (workspace_id, dataset_id, dataset_version_id, id)}: constraining only components 1 and 4
+     * leaves no usable prefix, so the join read every row in the workspace to resolve a handful of experiment
+     * items — enough on a large install to exhaust the per-query memory cap. With {@code dataset_id} the
+     * prefix widens to two components and the read is bounded by the dataset. It is still not a full key
+     * match, since {@code dataset_version_id} stays unconstrained and the key cannot reach {@code id}.
+     * <p>Note the predicate is a behaviour narrowing as well as a pruning one: a legacy id pointing at a row
+     * in a different dataset now misses where it previously matched. The {@code LEFT JOIN} plus the
+     * {@code if(notEmpty(...))} fallback absorb that, so no row drops, but the grouping key for such a row
+     * changes. Nothing validates that an experiment item's dataset item belongs to the experiment's dataset
+     * — only that the workspace matches — so this is empirically safe rather than structurally guaranteed.
+     *
+     * <p><b>Each item column is projected twice in the resolved CTEs, under its {@code item_*} name and its
+     * bare name.</b> That is not redundancy: the outer query consumes the {@code item_*} names for the
+     * response, while the dataset item filters resolve the bare ones. Dropping the bare half reintroduces the
+     * filter-binding defect; dropping the {@code item_*} half breaks the response projection. Both halves must
+     * source the {@code item_*} columns — sourcing the snapshot row's columns is what made this view report
+     * snapshot timestamps as authoring times.
+     *
      * <p>The JOIN uses the direct {@code dataset_item_versions} table — NOT a CTE-based lookup.
      * A CTE-based LEFT JOIN drops rows in deletion-cascade scenarios in ClickHouse (known
      * analyzer behavior; direct table reference works correctly).
@@ -1008,6 +1117,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
             	LEFT JOIN dataset_item_versions AS lookup_div FINAL
             	    ON lookup_div.workspace_id = ei.workspace_id
+            	    AND lookup_div.dataset_id = :datasetId
             	    AND lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
             	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
@@ -1055,10 +1165,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.tags AS tags,
                     div_dedup.evaluators AS evaluators,
                     div_dedup.execution_policy AS execution_policy,
-                    div_dedup.created_at AS item_created_at,
-                    div_dedup.last_updated_at AS item_last_updated_at,
-                    div_dedup.created_by AS item_created_by,
-                    div_dedup.last_updated_by AS item_last_updated_by
+                    div_dedup.item_created_at AS item_created_at,
+                    div_dedup.item_last_updated_at AS item_last_updated_at,
+                    div_dedup.item_created_by AS item_created_by,
+                    div_dedup.item_last_updated_by AS item_last_updated_by,
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
                 FROM (
                     SELECT *
                     FROM dataset_item_versions
@@ -1278,10 +1392,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         tags,
                         evaluators,
                         execution_policy,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by
+                        item_created_at AS created_at,
+                        item_last_updated_at AS last_updated_at,
+                        item_created_by AS created_by,
+                        item_last_updated_by AS last_updated_by
                     FROM dataset_item_versions FINAL
                     WHERE workspace_id = :workspace_id
                     AND dataset_id  = :datasetId
@@ -1320,10 +1434,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.tags AS tags,
                     div_dedup.evaluators AS evaluators,
                     div_dedup.execution_policy AS execution_policy,
-                    div_dedup.created_at AS item_created_at,
-                    div_dedup.last_updated_at AS item_last_updated_at,
-                    div_dedup.created_by AS item_created_by,
-                    div_dedup.last_updated_by AS item_last_updated_by
+                    div_dedup.item_created_at AS item_created_at,
+                    div_dedup.item_last_updated_at AS item_last_updated_at,
+                    div_dedup.item_created_by AS item_created_by,
+                    div_dedup.item_last_updated_by AS item_last_updated_by,
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
                 FROM (
                     SELECT *
                     FROM dataset_item_versions
@@ -1468,6 +1586,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     FROM experiment_item_aggregates AS eia FINAL
                     LEFT JOIN dataset_item_versions AS lookup_div FINAL
                         ON lookup_div.workspace_id = eia.workspace_id
+                        AND lookup_div.dataset_id = :datasetId
                         AND lookup_div.id = eia.dataset_item_id
                     WHERE eia.workspace_id = :workspace_id
                     AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
@@ -2193,6 +2312,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
                 LEFT JOIN dataset_item_versions AS lookup_div FINAL
                     ON lookup_div.workspace_id = ei.workspace_id
+                    AND lookup_div.dataset_id = :datasetId
                     AND lookup_div.id = ei.dataset_item_id
                 WHERE ei.workspace_id = :workspace_id
                 <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
@@ -2360,10 +2480,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             div_dedup.trace_id AS trace_id,
                             div_dedup.span_id AS span_id,
                             div_dedup.tags AS tags,
-                            div_dedup.created_at AS created_at,
-                            div_dedup.last_updated_at AS last_updated_at,
-                            div_dedup.created_by AS created_by,
-                            div_dedup.last_updated_by AS last_updated_by,
+                            div_dedup.item_created_at AS created_at,
+                            div_dedup.item_last_updated_at AS last_updated_at,
+                            div_dedup.item_created_by AS created_by,
+                            div_dedup.item_last_updated_by AS last_updated_by,
                             div_dedup.dataset_version_id AS dataset_version_id
                         FROM (
                             SELECT *
@@ -2405,7 +2525,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             div_dedup.source AS source,
                             div_dedup.trace_id AS trace_id,
                             div_dedup.span_id AS span_id,
-                            div_dedup.tags AS tags
+                            div_dedup.tags AS tags,
+                            div_dedup.item_created_at AS created_at,
+                            div_dedup.item_last_updated_at AS last_updated_at,
+                            div_dedup.item_created_by AS created_by,
+                            div_dedup.item_last_updated_by AS last_updated_by
                         FROM (
                             SELECT *
                             FROM dataset_item_versions
@@ -2614,6 +2738,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull OpikConfiguration config;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
     /**
      * v2 ClickHouse client used for {@code INSERT ... SELECT} on {@code dataset_item_versions},
@@ -3561,7 +3686,25 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         // Note: ClickHouse with async inserts returns 0 immediately before commit.
         // We return the count of items we're inserting instead of relying on getRowsUpdated.
-        long itemCount = items.size();
+        //
+        // Count DISTINCT stable ids, not rows handed in (OPIK-7891): reads collapse a repeated
+        // dataset_item_id to one row via LIMIT 1 BY, so counting the raw list inflates every
+        // version total derived from this value. Counting the same field the INSERT binds below
+        // keeps one definition of identity -- every caller normalizes datasetItemId first, and a
+        // null would fail at the bind regardless, so there is nothing to fall back to.
+        long itemCount = items.stream()
+                .map(DatasetItem::datasetItemId)
+                .distinct()
+                .count();
+
+        if (config.getBulkInsert().v2ClientEnabled()) {
+            return insertItemsJsonEachRow(datasetId, newVersionId, items, workspaceId, userName)
+                    // itemCount, not the server's row count: the R2DBC path deliberately returns the
+                    // DISTINCT dataset_item_id count (OPIK-7891) because reads collapse a repeated
+                    // stable id via LIMIT 1 BY, so every version total derived from the raw row count
+                    // would be inflated. Both paths must answer the same number.
+                    .thenReturn(itemCount);
+        }
 
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
@@ -3827,8 +3970,48 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     /**
-     * Formats an Instant for ClickHouse DateTime64(9, 'UTC').
-     * ClickHouse doesn't accept the 'Z' suffix from ISO-8601 format.
+     * Same rows as {@link #BATCH_INSERT_ITEMS}, streamed as JSONEachRow instead of bound as 17 named
+     * parameters per row plus 5 shared ones. See {@link DatasetItemVersionJsonRowMapper} for the
+     * per-column parity notes.
+     *
+     * <p>The R2DBC template carries no {@code log_comment}; one is supplied here because the helper
+     * requires it, which also makes the two paths comparable in {@code system.query_log}.
+     */
+    private Mono<Long> insertItemsJsonEachRow(UUID datasetId, UUID newVersionId, List<DatasetItem> items,
+            String workspaceId, String userName) {
+
+        // Everything here is deferred to subscription. The R2DBC path gets that from
+        // asyncTemplate.nonTransaction's lambda and DatasetItemDAO from makeMonoContextAware's; this
+        // path calls the helper directly, so without the defer both lines below would run at assembly
+        // -- leaking a segment whenever the publisher is assembled and never subscribed, parenting it
+        // to whatever Context.current() happened to be at assembly time, and reusing one Segment
+        // across a resubscription.
+        return Mono.defer(() -> {
+            // One instant for the whole batch, resolved before serialization: the helper re-runs the
+            // mapper on every attempt, so a per-row Instant.now() would give a retried row different
+            // timestamp bytes under the same id. Inside the defer so a resubscription gets its own.
+            Instant nowForBatch = Instant.now();
+            // The R2DBC path opens and closes this segment, so without it a v2 insert vanishes from the
+            // dataset-item instrumentation stream rather than showing as fast.
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
+
+            return jsonBulkInsert.insert(
+                    DATASET_ITEM_VERSIONS,
+                    getLogComment("insert_delta_items", workspaceId, userName, items.size()),
+                    items,
+                    item -> DatasetItemVersionJsonRowMapper.toJsonRow(
+                            item, datasetId, newVersionId, workspaceId, userName, nowForBatch))
+                    .doOnError(e -> log.error("Batch insert items failed for dataset '{}', version '{}'",
+                            datasetId, newVersionId, e))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    /**
+     * Formats an Instant for ClickHouse DateTime64(9, 'UTC'). The R2DBC path renders FORMAT Values, whose
+     * parser rejects the ISO 'Z' suffix -- so it is stripped here. The JSONEachRow path has no such
+     * constraint (its insert sets date_time_input_format=best_effort) and writes Instant.toString()
+     * directly, which is why this stayed private to the binder rather than becoming shared.
      */
     private static String formatTimestamp(Instant timestamp) {
         if (timestamp == null) {
@@ -3839,20 +4022,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static String base64Encode(String value) {
         return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static String serializeEvaluators(List<EvaluatorItem> evaluators) {
-        if (evaluators == null || evaluators.isEmpty()) {
-            return EvaluatorItem.EMPTY_LIST_JSON;
-        }
-        return JsonUtils.writeValueAsString(evaluators);
-    }
-
-    private static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
-        if (executionPolicy == null) {
-            return "";
-        }
-        return JsonUtils.writeValueAsString(executionPolicy);
     }
 
     @Override

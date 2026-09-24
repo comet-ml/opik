@@ -409,6 +409,7 @@ public interface AlertDAO {
             try {
                 Map<String, String> configValue = Optional.ofNullable(configNode.get("config_value"))
                         .map(this::parseConfigValue)
+                        .map(AlertTriggerConfig::withNormalizedWindow)
                         .orElse(null);
 
                 Integer groupIndex = Optional.ofNullable(configNode.get("group_index"))

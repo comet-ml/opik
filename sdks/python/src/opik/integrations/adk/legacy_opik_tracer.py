@@ -265,6 +265,7 @@ class LegacyOpikTracer:
         model = None
         usage = None
         output = None
+        total_cost = None
 
         # Final (non-partial) response for this call: clear any output cached for
         # this invocation up front, so a missing span or failed conversion below
@@ -284,6 +285,9 @@ class LegacyOpikTracer:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
                 self._last_model_output.set(callback_context.invocation_id, output)
 
+                # Before the usage parsing below, which can raise - the cost must not
+                # be lost to a usage problem it has nothing to do with.
+                total_cost = llm_response_wrapper.pop_response_cost(output)
                 usage_data = llm_response_wrapper.pop_llm_usage_data(
                     output, span_data.provider
                 )
@@ -305,6 +309,7 @@ class LegacyOpikTracer:
                     output=output,
                     usage=usage,
                     model=model,
+                    total_cost=total_cost,
                 )
                 self._end_current_span()
                 self._opik_created_spans.discard(span_data.id)

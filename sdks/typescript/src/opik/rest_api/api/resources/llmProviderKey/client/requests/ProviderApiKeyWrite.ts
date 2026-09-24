@@ -17,4 +17,5 @@ export interface ProviderApiKeyWrite {
     headers?: Record<string, string>;
     configuration?: Record<string, string>;
     baseUrl?: string;
+    authConfig?: OpikApi.ProviderAuthConfigWrite;
 }

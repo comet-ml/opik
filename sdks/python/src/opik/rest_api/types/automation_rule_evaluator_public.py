@@ -39,7 +39,11 @@ class Base(UniversalBaseModel):
     """
 
     name: str
-    sampling_rate: typing.Optional[float] = None
+    sampling_rate: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Fraction of production (SDK-logged) items this rule scores, from 0 to 1. Trace rules ignore this value for experiment, playground and optimization traces and score them in full; span and thread rules only ever evaluate SDK-logged data.
+    """
+
     enabled: typing.Optional[bool] = None
     trigger_scope: typing.Optional[AutomationRuleEvaluatorPublicTriggerScope] = pydantic.Field(default=None)
     """

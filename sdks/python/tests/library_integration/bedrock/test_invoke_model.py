@@ -648,3 +648,52 @@ def test_bedrock_invoke_model__mistral___streaming__happyflow(fake_backend):
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
+
+
+def test_bedrock_invoke_model__untracked_client_read_after_tracked_call__payload_returned(
+    fake_backend,
+):
+    """Regression test for `return None` inside `finally`.
+
+    track_bedrock patches `read` on botocore's shared StreamingBody class, so
+    every response body in the process runs through the wrapper once a tracked
+    invoke_model call has been made - including bodies belonging to untracked
+    clients and to other AWS services. A `return` in `finally` overrides the
+    value returned by `try`, so an untracked read used to hand back None
+    instead of the payload.
+    """
+    request_body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 50,
+        "temperature": 0.1,
+        "messages": [{"role": "user", "content": "Hello, how are you?"}],
+    }
+
+    tracked_client = track_bedrock(
+        boto3.client("bedrock-runtime", region_name="us-east-1")
+    )
+    tracked_response = tracked_client.invoke_model(
+        modelId=ANTHROPIC_MODEL,
+        body=json.dumps(request_body),
+        contentType="application/json",
+        accept="application/json",
+    )
+    assert json.loads(tracked_response["body"].read())
+
+    untracked_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+    untracked_response = untracked_client.invoke_model(
+        modelId=ANTHROPIC_MODEL,
+        body=json.dumps(request_body),
+        contentType="application/json",
+        accept="application/json",
+    )
+
+    payload = untracked_response["body"].read()
+
+    assert payload is not None
+    assert json.loads(payload)
+
+    opik.flush_tracker()
+
+    # Only the tracked call is logged; the untracked one must not be.
+    assert len(fake_backend.trace_trees) == 1

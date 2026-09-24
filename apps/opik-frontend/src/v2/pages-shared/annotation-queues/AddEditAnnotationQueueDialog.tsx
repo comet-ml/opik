@@ -57,6 +57,7 @@ const formSchema = z.object({
   project_id: z.string().min(1, "Project is required"),
   name: z
     .string()
+    .trim()
     .min(1, "Name is required")
     .max(255, "Name cannot exceed 255 characters"),
   description: z.string().optional(),
@@ -116,8 +117,11 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     },
   });
 
-  const { mutate: createMutate } = useAnnotationQueueCreateMutation();
-  const { mutate: updateMutate } = useAnnotationQueueUpdateMutation();
+  const { mutate: createMutate, isPending: isCreatePending } =
+    useAnnotationQueueCreateMutation();
+  const { mutate: updateMutate, isPending: isUpdatePending } =
+    useAnnotationQueueUpdateMutation();
+  const isSubmitting = isCreatePending || isUpdatePending;
 
   const isEdit = Boolean(defaultQueue);
   const title = isEdit
@@ -132,6 +136,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     const { lock_timeout_minutes, ...rest } = formData;
     return {
       ...rest,
+      name: formData.name.trim(),
       project_id: formData.project_id,
       lock_timeout_seconds: lock_timeout_minutes * 60,
     };
@@ -151,9 +156,13 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       {
         annotationQueue: getQueue(),
       },
-      { onSuccess: onQueueCreatedEdited },
+      {
+        onSuccess: (queue) => {
+          onQueueCreatedEdited(queue);
+          setOpen(false);
+        },
+      },
     );
-    setOpen(false);
   }, [createMutate, getQueue, onQueueCreatedEdited, setOpen]);
 
   const editQueue = useCallback(() => {
@@ -164,9 +173,13 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
           ...getQueue(),
         },
       },
-      { onSuccess: onQueueCreatedEdited },
+      {
+        onSuccess: (queue) => {
+          onQueueCreatedEdited(queue);
+          setOpen(false);
+        },
+      },
     );
-    setOpen(false);
   }, [updateMutate, defaultQueue?.id, getQueue, onQueueCreatedEdited, setOpen]);
 
   const onSubmit = useCallback(
@@ -370,7 +383,11 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            onClick={form.handleSubmit(onSubmit)}
+          >
             {submitText}
           </Button>
         </DialogFooter>

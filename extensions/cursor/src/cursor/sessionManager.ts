@@ -2,35 +2,63 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 
-import { SessionInfo } from "../interface";
+import { RequestLedger } from "../interface";
 import { findFolder } from '../utils';
 import { captureException } from '../sentry';
 import { executeQuery, executeQueryPaginated } from './sqlite';
+import { orderBubbles } from './bubbleOrder';
+import { buildSpans, buildTurnOutput, DEFAULT_SPAN_OPTIONS, SpanBuildOptions } from './spanBuilder';
+import { prepareTraceForUpload, requestIdForTurn, requestKey, shouldProcessTrace } from './requestIdentity';
+import { composerIdFromKey, resolveCanonicalBubbleOwners } from './composerIdentity';
 
 import { TraceData } from "../interface";
 
+function readSpanOptions(): SpanBuildOptions | null {
+    const config = vscode.workspace.getConfiguration();
+    if (!config.get<boolean>('opik.detailedSpans.enabled', true)) {
+        return null;
+    }
+    return {
+        maxPayloadChars: config.get<number>(
+            'opik.detailedSpans.maxPayloadChars',
+            DEFAULT_SPAN_OPTIONS.maxPayloadChars
+        ),
+        maxSpansPerTurn: config.get<number>(
+            'opik.detailedSpans.maxSpansPerTurn',
+            DEFAULT_SPAN_OPTIONS.maxSpansPerTurn
+        ),
+    };
+}
+
 /**
- * Convert cursor conversations to Opik traces with per-session tracking.
- * Each composer session maintains its own progress tracking to avoid duplicate uploads.
- * 
- * Strategy:
- *   - Never synced conversations: Upload entire conversation
- *   - Already synced, no new messages: Skip (avoid duplicates)
- *   - Already synced, has new messages: Upload new messages only
+ * Convert Cursor conversations to Opik traces using requestId as the durable
+ * identity. Normal polling excludes previously unseen turns from before the
+ * automatic tracking cutoff; the manual import command includes them.
  * 
  * @param conversations Array of conversation objects from cursor database
  * @param opikProjectName Project name for Opik
- * @param sessionInfo Existing session info with per-composer tracking
  * @returns Object containing traces and updated session info
  */
-async function convertConversationsToTraces(conversations: any[], opikProjectName: string, sessionInfo: Record<string, SessionInfo>) {
+async function convertConversationsToTraces(
+    conversations: any[],
+    opikProjectName: string,
+    requestLedger: RequestLedger,
+    includeHistorical: boolean,
+    automaticCutoffAt: number
+) {
     const tracesData: TraceData[] = [];
     const updatedSessionInfo: Record<string, { lastMessageId?: string; lastMessageTime?: number }> = {};
 
     // Get git info once for all traces (performance optimization)
     const gitInfo = await getGitInfo();
+    // A fork is created after its source composer. Processing oldest composers
+    // first makes the original request the canonical cost owner when both are
+    // first discovered in the same polling cycle.
+    const orderedConversations = [...conversations].sort((left, right) =>
+        Number(left.createdAt ?? 0) - Number(right.createdAt ?? 0)
+    );
 
-    for (const conversation of conversations) {
+    for (const conversation of orderedConversations) {
         if (!conversation.bubbles || !Array.isArray(conversation.bubbles) || conversation.bubbles.length === 0) {
             console.log(`⏭️  Skipping composer ${conversation.composerId} - no bubbles`);
             continue;
@@ -38,36 +66,15 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
 
         const composerId = conversation.composerId;
         const sessionId = `cursor-composer-${composerId}`;
-        const lastUploadId = sessionInfo[sessionId]?.lastUploadId;
-        
-        // Check if there are new messages
-        const latestMessage = conversation.bubbles[conversation.bubbles.length - 1];
-        const neverSynced = !lastUploadId;
-        const hasNewMessagesSinceSync = lastUploadId && latestMessage && latestMessage.id !== lastUploadId;
-        
-        // Skip if already synced and no new messages
-        if (!neverSynced && !hasNewMessagesSinceSync) {
-            console.log(`⏭️  Skipping composer ${composerId} - no new messages (latest: ${latestMessage?.id}, last uploaded: ${lastUploadId})`);
-            continue; // Skip - no new messages and already synced
-        }
-
-        // Determine processing strategy:
-        // - If never synced (no lastUploadId): upload entire conversation
-        // - If previously synced: upload only new messages after lastUploadId
-        const uploadEntireConversation = lastUploadId === undefined;
-        
-        if (uploadEntireConversation) {
-            console.log(`📤 Processing entire conversation for composer ${composerId} (never synced)`);
-        } else {
-            console.log(`📤 Processing new messages for composer ${composerId} after message ${lastUploadId}`);
-        }
+        console.log(`📤 Reconciling composer ${composerId} against the request ledger`);
         
         const conversationTraces = processConversationBubbles(
             conversation, 
             opikProjectName, 
-            uploadEntireConversation,
-            lastUploadId,
-            gitInfo // Pass git info to bubble processing
+            gitInfo,
+            requestLedger,
+            includeHistorical,
+            automaticCutoffAt
         );
         
         tracesData.push(...conversationTraces.traces);
@@ -89,14 +96,14 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
 function processConversationBubbles(
     conversation: any, 
     opikProjectName: string, 
-    uploadEntireConversation: boolean, 
-    lastUploadId: string | undefined,
-    gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null
+    gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null,
+    requestLedger: RequestLedger,
+    includeHistorical: boolean,
+    automaticCutoffAt: number
 ) {
     const traces: TraceData[] = [];
     let lastMessageId: string | undefined = undefined;
     let lastMessageTime: number | undefined = undefined;
-    let shouldAppend = uploadEntireConversation;
 
     // Initialize sequential timestamp starting from conversation createdAt
     let currentTimestamp = conversation.createdAt || Date.now();
@@ -129,7 +136,9 @@ function processConversationBubbles(
     });
 
     const bubbleGroups = groupBubblesByType(bubblesWithTimestamps);
-
+    const turnStartsMs = bubbleGroups
+        .filter(group => group.userMessages.length > 0)
+        .map(group => group.userMessages[0].resolvedTimestamp as number);
     for (const group of bubbleGroups) {
         // Always update lastMessageId to track our processing position
         const lastMessage = group.aiMessages.length > 0 
@@ -139,28 +148,23 @@ function processConversationBubbles(
         lastMessageId = lastMessage.id;
         lastMessageTime = lastMessage.resolvedTimestamp;
 
-        // If we're uploading the entire conversation, process all groups
-        // If we're uploading incrementally, find where to start from lastUploadId
-        if (!shouldAppend) {
-            // Check both user and AI messages for the lastUploadId
-            const hasTargetMessage = [...group.userMessages, ...group.aiMessages]
-                .some(msg => msg.id === lastUploadId);
-            
-            if (hasTargetMessage) {
-                shouldAppend = true;
-                continue; // Skip this group since it was already processed
-            }
-        }
-
-        if (!shouldAppend) {
-            continue; // Still haven't reached the point where we left off
-        }
-
         // Only upload complete conversations (both user and AI messages)
         if (group.userMessages.length > 0 && group.aiMessages.length > 0) {
-            const trace = createTraceFromBubbleGroup(group, conversation, opikProjectName, gitInfo);
+            const trace = createTraceFromBubbleGroup(
+                group,
+                conversation,
+                opikProjectName,
+                gitInfo,
+                turnStartsMs
+            );
             if (trace) {
-                traces.push(trace);
+                if (!shouldProcessTrace(trace, requestLedger, includeHistorical, automaticCutoffAt)) {
+                    continue;
+                }
+                const prepared = prepareTraceForUpload(trace, requestLedger);
+                if (prepared) {
+                    traces.push(prepared);
+                }
             }
         }
         // Note: We still track incomplete conversations but don't upload them
@@ -173,7 +177,12 @@ function processConversationBubbles(
 /**
  * Read cursor chat data from SQLite database (asynchronous version)
  */
-async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number, currentSyncTime: number): Promise<any> {
+async function readCursorChatDataAsync(
+    stateDbPath: string,
+    lastSyncedAt: number,
+    currentSyncTime: number,
+    includeHistorical: boolean
+): Promise<any> {
     // Use the database directly with -readonly flag (no expensive copy operation)
     // The sqlite3 binary with -readonly flag is safe and handles locks gracefully
     
@@ -189,10 +198,13 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         // Prefix ranges instead of LIKE: LIKE is case-insensitive so SQLite cannot
         // use the index on key and scans the whole table, including the hundreds of
         // megabytes of agentKv and bubble rows.
+        const timeFilter = includeHistorical
+            ? ''
+            : `AND json_extract(value, '$.lastUpdatedAt') > ${lastSyncedAtWithBuffer}
+                AND json_extract(value, '$.lastUpdatedAt') <= ${currentSyncTime}`;
         const composerQuery = `SELECT key, value FROM cursorDiskKV 
                 WHERE key >= 'composerData' AND key < 'composerDatb'
-                AND json_extract(value, '$.lastUpdatedAt') > ${lastSyncedAtWithBuffer}
-                AND json_extract(value, '$.lastUpdatedAt') <= ${currentSyncTime}
+                ${timeFilter}
                 AND (json_extract(value, '$.status') = 'completed' 
                      OR (json_extract(value, '$.status') != 'completed' 
                          AND json_extract(value, '$.lastUpdatedAt') < ${fiveMinutesAgo}))`;
@@ -210,7 +222,10 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         composerRows.forEach((row: any) => {
             try {
                 const composerData = JSON.parse(row.value);
-                const composerId = row.key.split(':')[1];
+                const composerId = composerIdFromKey(row.key);
+                if (!composerId) {
+                    return;
+                }
                 console.log(`  → Composer ${composerId}: updated at ${composerData.lastUpdatedAt}, status: ${composerData.status}`);
             } catch (e) {
                 // Ignore parse errors
@@ -220,10 +235,7 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         // Extract composer IDs from the keys (format: composerData:<composerId>)
         const composerIds = composerRows
             .map((row: any) => {
-                if (typeof row.key === 'string') {
-                    return row.key.split(':')[1];
-                }
-                return null;
+                return composerIdFromKey(row.key) ?? null;
             })
             .filter((id: string | null) => id !== null);
         
@@ -233,6 +245,37 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         }
         
         console.log(`🔍 Fetching bubbles for ${composerIds.length} active composer(s)`);
+
+        // Resolve fork ownership from Cursor's durable conversation headers,
+        // not from whichever composer happened to be updated in this poll.
+        // Only the compact header projection is read for inactive composers.
+        const identityRows = await executeQuery(dbPath, `
+            SELECT key,
+                   json_extract(value, '$.createdAt') AS createdAt,
+                   json_extract(value, '$.fullConversationHeadersOnly') AS headers
+            FROM cursorDiskKV
+            WHERE key >= 'composerData' AND key < 'composerDatb'
+        `);
+        const canonicalOwners = resolveCanonicalBubbleOwners(identityRows.flatMap((row: any) => {
+            const composerId = composerIdFromKey(row.key);
+            if (!composerId) {
+                return [];
+            }
+            try {
+                const headers = JSON.parse(row.headers || '[]');
+                const numericCreatedAt = Number(row.createdAt);
+                const parsedCreatedAt = Date.parse(row.createdAt ?? '');
+                return [{
+                    composerId,
+                    composerCreatedAt: Number.isFinite(numericCreatedAt)
+                        ? numericCreatedAt
+                        : (Number.isNaN(parsedCreatedAt) ? 0 : parsedCreatedAt),
+                    headers: Array.isArray(headers) ? headers : [],
+                }];
+            } catch {
+                return [];
+            }
+        }));
         
         // Build optimized query to only fetch bubbles for relevant composers
         // Bubble key format: bubbleId:<composerId>:<bubbleId>
@@ -249,17 +292,33 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         const bubblesByComposer: Record<string, any[]> = {};
         
         allBubbleRows.forEach((bubbleRow: any) => {
-            if (!bubbleRow.value) return;
+            if (!bubbleRow.value) {
+                return;
+            }
             
             try {
                 const key = bubbleRow.key;
-                if (typeof key !== 'string') return;
-                const composerId = key.split(':')[1];
+                if (typeof key !== 'string') {
+                    return;
+                }
+                const keyParts = key.split(':');
+                const composerId = keyParts[1];
+                if (!composerIds.includes(composerId)) {
+                    return;
+                }
+                const bubbleId = keyParts[2];
+                if (!bubbleId) {
+                    return;
+                }
                 const value = bubbleRow.value;
-                if (typeof value !== 'string') return;
+                if (typeof value !== 'string') {
+                    return;
+                }
                 const chatData = JSON.parse(value);
                 
-                if (!chatData) return;
+                if (!chatData) {
+                    return;
+                }
                 
                 if (!bubblesByComposer[composerId]) {
                     bubblesByComposer[composerId] = [];
@@ -268,7 +327,9 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
                 // Structure the bubble data
                 const bubble = {
                     ...chatData,
-                    id: key.split(':')[2], // Extract bubble ID
+                    id: bubbleId,
+                    canonicalComposerId: canonicalOwners.get(bubbleId)?.composerId,
+                    canonicalTurnStartMs: canonicalOwners.get(bubbleId)?.turnStartMs,
                     type: chatData.type === 1 ? 'user' : chatData.type === 2 ? 'ai' : 'unknown',
                     text: chatData.text || chatData.content || '',
                     content: chatData.text || chatData.content || '',
@@ -287,7 +348,9 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         composerRows.forEach((composerRow: any, index: number) => {
             try {
                 const value = composerRow.value;
-                if (typeof value !== 'string') return;
+                if (typeof value !== 'string') {
+                    return;
+                }
                 const composerData = JSON.parse(value);
                 
                 // Handle null composerData
@@ -297,39 +360,36 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
                 }
                 
                 const key = composerRow.key;
-                if (typeof key !== 'string') return;
-                const threadId = key.split(':')[1];
+                if (typeof key !== 'string') {
+                    return;
+                }
+                const threadId = composerIdFromKey(key);
+                if (!threadId) {
+                    return;
+                }
                 
                 // Get bubbles for this composer
                 const bubbles = bubblesByComposer[threadId] || [];
                 
-                // Sort bubbles using fullConversationHeadersOnly order
-                if (composerData.fullConversationHeadersOnly && Array.isArray(composerData.fullConversationHeadersOnly)) {
-                    // Create a map of bubbleId to order index
-                    const orderMap = new Map();
-                    composerData.fullConversationHeadersOnly.forEach((header: any, index: number) => {
-                        if (header.bubbleId) {
-                            orderMap.set(header.bubbleId, index);
-                        }
-                    });
-                    
-                    // Sort bubbles according to the order in fullConversationHeadersOnly
-                    bubbles.sort((a, b) => {
-                        const aOrder = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-                        const bOrder = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-                        return aOrder - bOrder;
-                    });
-                }
-                
+                const orderedBubbles = orderBubbles(bubbles, composerData.fullConversationHeadersOnly);
+
                 // Add conversation
                 conversations.push({
                     chatTitle: composerData.name || `Composer Session ${index + 1}`,
-                    bubbles: bubbles,
+                    bubbles: orderedBubbles,
                     lastSendTime: composerData.lastUpdatedAt || composerData.createdAt,
                     composerId: threadId,
                     createdAt: composerData.createdAt,
                     model: composerData.modelConfig?.modelName,
-                    bubbleCount: bubbles.length
+                    bubbleCount: orderedBubbles.length,
+                    unifiedMode: composerData.unifiedMode,
+                    isAgentic: composerData.isAgentic,
+                    createdOnBranch: composerData.createdOnBranch,
+                    contextTokensUsed: composerData.contextTokensUsed,
+                    contextTokenLimit: composerData.contextTokenLimit,
+                    filesChangedCount: composerData.filesChangedCount,
+                    totalLinesAdded: composerData.totalLinesAdded,
+                    totalLinesRemoved: composerData.totalLinesRemoved
                 });
             } catch (parseErr) {
                 captureException(parseErr);
@@ -355,13 +415,13 @@ export function resolveStateDbPath(VSInstallationPath: string): string | null {
     if (globalStoragePaths.length > 1) {
         const error = new Error(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`);
         captureException(error);
-        console.warn(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`)
+        console.warn(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`);
     }
 
     if (globalStoragePaths.length === 0) {
         const error = new Error("Could not find global SQLite state DB.");
         captureException(error);
-        console.warn("Could not find global SQLite state DB.")
+        console.warn("Could not find global SQLite state DB.");
         return null;
     }
 
@@ -371,9 +431,11 @@ export function resolveStateDbPath(VSInstallationPath: string): string | null {
 export async function findAndReturnNewTraces(
     context: vscode.ExtensionContext, 
     VSInstallationPath: string, 
-    sessionInfo: Record<string, SessionInfo>,
+    requestLedger: RequestLedger,
     lastSyncedAt: number,
-    currentSyncTime: number
+    currentSyncTime: number,
+    includeHistorical: boolean,
+    automaticCutoffAt: number
 ) {
     const opikProjectName: string = vscode.workspace.getConfiguration().get('opik.projectName') || 'default';
 
@@ -385,15 +447,26 @@ export async function findAndReturnNewTraces(
     if (!fs.existsSync(stateDbPath)) {
         const error = new Error(`Could not find global SQLite state DB at path: ${stateDbPath}`);
         captureException(error);
-        console.warn("Could not find global SQLite state DB.")
+        console.warn("Could not find global SQLite state DB.");
         return null;
     } else {
         try {
-            const conversations = await readCursorChatDataAsync(stateDbPath, lastSyncedAt, currentSyncTime);
+            const conversations = await readCursorChatDataAsync(
+                stateDbPath,
+                lastSyncedAt,
+                currentSyncTime,
+                includeHistorical
+            );
             
             if (conversations && Array.isArray(conversations) && conversations.length > 0) {
                 // Convert conversations to Opik traces with per-session tracking
-                const result = await convertConversationsToTraces(conversations, opikProjectName, sessionInfo);
+                const result = await convertConversationsToTraces(
+                    conversations,
+                    opikProjectName,
+                    requestLedger,
+                    includeHistorical,
+                    automaticCutoffAt
+                );
                 
                 return {
                     tracesData: result.tracesData,
@@ -416,7 +489,7 @@ export async function findAndReturnNewTraces(
 }
 
 // Helper function to group bubbles by conversation turns
-function groupBubblesByType(bubbles: any[]) {
+export function groupBubblesByType(bubbles: any[]) {
     const groups: { userMessages: any[], aiMessages: any[] }[] = [];
     let currentGroup: { userMessages: any[], aiMessages: any[] } | null = null;
 
@@ -453,7 +526,8 @@ function createTraceFromBubbleGroup(
     group: { userMessages: any[], aiMessages: any[] },
     conversation: any,
     opikProjectName: string,
-    gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null
+    gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null,
+    turnStartsMs: number[]
 ): TraceData | null {
     const { userMessages, aiMessages } = group;
     
@@ -463,21 +537,13 @@ function createTraceFromBubbleGroup(
         .filter(content => content.trim())
         .join('\n\n');
     
-    // Extract and clean AI content inline
-    const assistantContent = aiMessages
-        .map(msg => {
-            let content = msg.text || msg.content || msg.rawText || '';
-            // Clean cursor-specific markup
-            return content
-                .replace(/⛢Thought☤[\s\S]*?⛢\/Thought☤/g, '')
-                .replace(/⛢Action☤[\s\S]*?⛢\/Action☤/g, '')
-                .replace(/⛢RawAction☤[\s\S]*?⛢\/RawAction☤/g, '')
-                .trim();
-        })
-        .filter(content => content)
-        .join('\n\n');
-    
-    // Filter out traces without proper input or output
+    // The messages the assistant wrote, with the name of every tool call in
+    // between. A turn that is only tool calls still produces an output.
+    const assistantContent = buildTurnOutput(aiMessages);
+
+    const spanOptions = readSpanOptions();
+    const spans = spanOptions ? buildSpans(group, conversation, spanOptions) : [];
+
     if (!userContent || !assistantContent) {
         return null;
     }
@@ -489,21 +555,21 @@ function createTraceFromBubbleGroup(
     const startTime = firstUserMessage.resolvedTimestamp || conversation.createdAt || Date.now();
     const endTime = lastAiMessage.resolvedTimestamp || startTime + 1000; // Add 1 second if no end time
 
-    // Create metadata inline
-    const cleanMessages = (messages: any[]) => 
-        messages.map(msg => {
-            const cleanMsg = { ...msg };
-            delete cleanMsg.delegate;
-            return cleanMsg;
-        });
-
+    // The raw bubbles used to be copied here. The child spans now hold that
+    // data in a readable form, and the copy was the largest part of the payload.
     const metadata = {
         conversationTitle: conversation.chatTitle,
         composerId: conversation.composerId,
-        userMessages: cleanMessages(userMessages),
-        aiMessages: cleanMessages(aiMessages),
         totalBubbles: conversation.bubbleCount,
         conversationCreatedAt: conversation.createdAt,
+        mode: conversation.unifiedMode,
+        isAgentic: conversation.isAgentic,
+        createdOnBranch: conversation.createdOnBranch,
+        contextTokensUsed: conversation.contextTokensUsed,
+        contextTokenLimit: conversation.contextTokenLimit,
+        filesChangedCount: conversation.filesChangedCount,
+        totalLinesAdded: conversation.totalLinesAdded,
+        totalLinesRemoved: conversation.totalLinesRemoved,
         gitInfo: gitInfo
     };
 
@@ -530,18 +596,31 @@ function createTraceFromBubbleGroup(
         tags.push("historical");
     }
 
+    const requestId = requestIdForTurn(group);
     return {
+        id: '',
+        root_span_id: '',
+        request_id: requestId,
+        request_key: requestKey(opikProjectName, requestId),
+        upload_kind: 'canonical',
+        revision: 1,
+        usage_key: '',
+        cost_owner: true,
         name: "cursor-chat",
         project_name: opikProjectName,
         start_time: new Date(startTime).toISOString(),
         end_time: new Date(endTime).toISOString(),
         turn_start_ms: startTime,
+        turn_starts_ms: turnStartsMs,
+        canonical_thread_id: firstUserMessage.canonicalComposerId,
+        canonical_turn_start_ms: firstUserMessage.canonicalTurnStartMs,
         model: conversation.model,
         input: { input: userContent },
         output: { output: assistantContent },
         thread_id: conversation.composerId,
         tags: tags,
-        metadata: metadata
+        metadata: metadata,
+        spans: spans
     };
 }
 

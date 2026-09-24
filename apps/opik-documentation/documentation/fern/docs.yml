@@ -24,6 +24,10 @@ favicon: img/logo.svg
 js:
   - path: ./add_cookbook_banner.js
     strategy: afterInteractive
+  - path: ./page_actions_install_tools.js
+    strategy: afterInteractive
+  - path: ./mcp_prompt_copy.js
+    strategy: afterInteractive
 css: ./styles.css
 
 analytics:
@@ -34,6 +38,10 @@ analytics:
   posthog:
     api-key: ${POSTHOG_API_KEY}
     endpoint: ${POSTHOG_API_HOST}
+theme:
+  page-actions: toolbar
+
+
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -94,10 +102,26 @@ navigation:
             path: ./docs-v2/quickstart.mdx
             slug: /quickstart
             icon: fa-regular fa-bolt
-          - page: MCP Server
-            path: ./docs-v2/prompt_engineering/mcp-server.mdx
-            slug: mcp-server
+          - section: MCP Server
+            skip-slug: true
+            collapsed: true
             icon: fa-regular fa-network-wired
+            contents:
+              - page: Overview
+                path: ./docs-v2/prompt_engineering/mcp-server.mdx
+                slug: mcp-server
+              - page: Use cases
+                path: ./docs-v2/prompt_engineering/mcp-server/use-cases.mdx
+                slug: mcp-server/use-cases
+              - page: MCP tools reference
+                path: ./docs-v2/prompt_engineering/mcp-server/tools.mdx
+                slug: mcp-server/tools
+              - page: Advanced setup
+                path: ./docs-v2/prompt_engineering/mcp-server/advanced-setup.mdx
+                slug: mcp-server/advanced-setup
+              - page: FAQ & troubleshooting
+                path: ./docs-v2/prompt_engineering/mcp-server/faq.mdx
+                slug: mcp-server/faq
           - page: Ollie Agent
             path: ./docs-v2/ollie.mdx
             slug: ollie
@@ -402,6 +426,9 @@ navigation:
               - page: Manually logging experiments
                 path: ./docs-v2/evaluation/advanced/log_experiments_with_rest_api.mdx
                 slug: log_experiments_with_rest_api
+              - page: Exporting experiment results
+                path: ./docs-v2/evaluation/advanced/export_experiment_results.mdx
+                slug: export_experiment_results
           - section: Metrics
             slug: /metrics
             contents:
@@ -661,9 +688,40 @@ navigation:
         skip-slug: true
         icon: fa-regular fa-robot
         contents:
-          - page: MCP Server
-            path: ./docs-v2/prompt_engineering/mcp-server.mdx
-            slug: mcp-server
+          - page: Overview
+            path: ./docs-v2/integrations/coding-agents.mdx
+            slug: coding-agents
+          - section: MCP Server
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: Overview
+                path: ./docs-v2/prompt_engineering/mcp-server.mdx
+                slug: mcp-server
+              - page: Use cases
+                path: ./docs-v2/prompt_engineering/mcp-server/use-cases.mdx
+                slug: mcp-server/use-cases
+              - page: MCP tools reference
+                path: ./docs-v2/prompt_engineering/mcp-server/tools.mdx
+                slug: mcp-server/tools
+              - page: Advanced setup
+                path: ./docs-v2/prompt_engineering/mcp-server/advanced-setup.mdx
+                slug: mcp-server/advanced-setup
+              - page: FAQ & troubleshooting
+                path: ./docs-v2/prompt_engineering/mcp-server/faq.mdx
+                slug: mcp-server/faq
+          - page: Claude Code
+            path: ./docs-v2/integrations/claude-code.mdx
+            slug: claude-code
+          - page: Cursor
+            path: ./docs-v2/integrations/cursor.mdx
+            slug: cursor
+          - page: GitHub Copilot
+            path: ./docs-v2/integrations/github-copilot.mdx
+            slug: github-copilot
+          - page: OpenAI Codex
+            path: ./docs-v2/integrations/openai-codex.mdx
+            slug: openai-codex
       - section: TypeScript
         skip-slug: true
         icon: fa-brands fa-js
@@ -813,6 +871,9 @@ navigation:
               - page: Groq
                 path: ./docs-v2/integrations/groq.mdx
                 slug: groq
+              - page: TypeSafe AI
+                path: ./docs-v2/integrations/typesafe.mdx
+                slug: typesafe
               - page: MiniMax
                 path: ./docs-v2/integrations/minimax.mdx
                 slug: minimax
@@ -928,9 +989,6 @@ navigation:
         skip-slug: true
         icon: fa-solid fa-wand-magic-sparkles
         contents:
-          - page: Cursor
-            path: ./docs-v2/integrations/cursor.mdx
-            slug: cursor
           - page: Dify
             path: ./docs-v2/integrations/dify.mdx
             slug: dify
@@ -949,9 +1007,6 @@ navigation:
           - page: OpenClaw
             path: ./docs-v2/integrations/openclaw.mdx
             slug: openclaw
-          - page: OpenAI Codex
-            path: ./docs-v2/integrations/openai-codex.mdx
-            slug: openai-codex
           - page: OpenWebUI
             path: ./docs-v2/integrations/openwebui.mdx
             slug: openwebui
@@ -1011,6 +1066,9 @@ navigation:
       - page: Helm chart migration
         path: ./docs-v2/self-host/helm.mdx
         slug: helm
+      - page: ClickHouse cold-tier migration
+        path: ./docs-v2/self-host/clickhouse-cold-tier-migration.mdx
+        slug: clickhouse-cold-tier-migration
       - page: Platform Architecture
         path: ./docs-v2/self-host/architecture.mdx
         slug: architecture
@@ -1041,6 +1099,12 @@ navigation:
           - page: LLM model registry
             path: ./docs-v2/self-host/configure/llm-model-registry.mdx
             slug: llm-model-registry
+          - page: UUIDv7 ingestion validation
+            path: ./docs-v2/self-host/configure/uuid_validation.mdx
+            slug: uuid_validation
+          - page: MCP OAuth
+            path: ./docs-v2/self-host/configure/mcp-oauth.mdx
+            slug: mcp-oauth
   - tab: reference
     layout:
       - page: Overview

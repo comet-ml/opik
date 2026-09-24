@@ -17,7 +17,7 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 
 _SDK_MODULE_PREFIXES = ("opik.", "_opik")
 
-Component = Literal["client", "evaluation", "integration"]
+Component = Literal["client", "configuration", "evaluation", "integration"]
 """
 The root of an event's path - which part of the SDK it came from.
 
@@ -27,6 +27,8 @@ only a human can tell apart. Deeper levels of the path are free-form; this one i
 not. Add a value here rather than passing a new string.
 
 - `client`: `Opik` methods - `create_dataset()`, `search_traces()`, ...
+- `configuration`: `opik configure` and `opik mcp configure` - the onboarding
+  flow, including which deployment, which AI clients, and where it stops
 - `evaluation`: `evaluate()`, `run_tests()`, and which metrics get instantiated
 - `integration`: the `track_<library>()` entry point of each integration
 """
@@ -196,6 +198,30 @@ def _reset_after_fork() -> None:
 
 if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset_after_fork)
+
+
+def reporting_allowed() -> bool:
+    """
+    Whether an event reported from this process would be sent anywhere.
+
+    For a call site that has to do work to enrich an event - a lookup, a round-trip
+    - and must not do that work when nothing will be reported. Asking here keeps
+    `OPIK_ANALYTICS_ENABLE` the single switch that governs analytics, the work done
+    to produce it included.
+
+    Every reason `_start_worker` refuses to report has to be a reason here too, or
+    an enrichment pays for an event that is then dropped - which is why a missing
+    destination counts, not just the opt-out.
+    """
+    if _DISABLED:
+        return False
+
+    try:
+        config_ = config.OpikConfig()
+        return rules.reporting_allowed(config_) and bool(config_.analytics_url)
+    except Exception:
+        LOGGER.debug("Failed to decide whether analytics may report", exc_info=True)
+        return False
 
 
 def _disable_after_rejection() -> None:

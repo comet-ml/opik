@@ -1,4 +1,4 @@
-<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_ES.md">Español</a> | <a href="readme_FR.md">Français</a> | <a href="readme_DE.md">Deutsch</a></b></div>
+<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_ES.md">Español</a> | <a href="readme_FR.md">Français</a> | <a href="readme_DE.md">Deutsch</a> | <a href="readme_JA.md">日本語</a></b></div>
 
 > 注意：此文件使用AI进行机器翻译。欢迎对翻译进行改进！
 
@@ -109,6 +109,19 @@ def my_function(input: str) -> str:
 ```
 
 现在，每次对 `my_function` 的调用都会被记录到 Opik，包括嵌套调用，因此它适用于完整的智能体和流水线追踪，而不仅仅是单次 LLM 调用。有关 TypeScript SDK 和其他设置选项，请参阅[快速开始指南](https://www.comet.com/docs/opik/quickstart?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_hero_link&utm_campaign=opik)。
+
+### 连接你的编码智能体
+
+让 Claude Code、Cursor、VS Code Copilot、Codex 或 opencode 直接在聊天中读取你的追踪、为输出打分并运行评估。一条命令即可完成设置，只需要 [`uv`](https://docs.astral.sh/uv/)，无需安装 SDK：
+
+```bash
+uvx opik mcp configure
+```
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D)
+
+上面的徽章和下方的 `add-mcp` 备用命令面向 Opik Cloud；上面的命令同样适用于自托管部署。Opik Cloud 上的其他 MCP 客户端：`npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`。详细说明、故障排除和常见问题请参阅 [MCP 服务器指南](https://www.comet.com/docs/opik/mcp-server?utm_source=opik&utm_medium=github&utm_content=mcp_quickstart_link&utm_campaign=opik)。
 
 <br>
 
@@ -333,6 +346,8 @@ opik configure
 | Spring AI             | 记录 Spring AI 框架调用的追踪                | [文档](https://www.comet.com/docs/opik/integrations/spring-ai?utm_source=opik&utm_medium=github&utm_content=spring_ai_link&utm_campaign=opik)                         |
 | Strands Agents        | 记录 Strands agents 调用的追踪                     | [文档](https://www.comet.com/docs/opik/integrations/strands-agents?utm_source=opik&utm_medium=github&utm_content=strands_agents_link&utm_campaign=opik)               |
 | Together AI           | 记录 Together AI LLM 调用的追踪                    | [文档](https://www.comet.com/docs/opik/integrations/together-ai?utm_source=opik&utm_medium=github&utm_content=together_ai_link&utm_campaign=opik)                     |
+| TrueFoundry           | 记录 TrueFoundry AI Gateway LLM 调用的追踪         | [文档](https://www.comet.com/docs/opik/integrations/truefoundry?utm_source=opik&utm_medium=github&utm_content=truefoundry_link&utm_campaign=opik)                     |
+| TypeSafe AI           | 记录 TypeSafe AI (Jev) System One 调用的追踪       | [文档](https://www.comet.com/docs/opik/integrations/typesafe?utm_source=opik&utm_medium=github&utm_content=typesafe_link&utm_campaign=opik)                 |
 | Vercel AI SDK         | 记录 Vercel AI SDK 调用的追踪                      | [文档](https://www.comet.com/docs/opik/integrations/vercel-ai-sdk?utm_source=opik&utm_medium=github&utm_content=vercel_ai_sdk_link&utm_campaign=opik)                 |
 | VoltAgent             | 记录 VoltAgent 智能体框架调用的追踪          | [文档](https://www.comet.com/docs/opik/integrations/voltagent?utm_source=opik&utm_medium=github&utm_content=voltagent_link&utm_campaign=opik)                         |
 | WatsonX               | 记录 IBM watsonx LLM 调用的追踪                    | [文档](https://www.comet.com/docs/opik/integrations/watsonx?utm_source=opik&utm_medium=github&utm_content=watsonx_link&utm_campaign=opik)                             |
@@ -389,7 +404,12 @@ Opik 允许你在开发阶段通过[数据集](https://www.comet.com/docs/opik/e
 
 如果你觉得 Opik 有用，请考虑给我们点个 star！你的支持将帮助我们壮大社区并持续改进产品。
 
-[![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+<a href="https://github.com/comet-ml/opik">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://cdn.comet.com/opik/star-history/star-history-dark.svg" />
+    <img alt="Star History Chart" src="https://cdn.comet.com/opik/star-history/star-history-light.svg" />
+  </picture>
+</a>
 
 <a id="-contributing"></a>
 ## 🤝 参与贡献

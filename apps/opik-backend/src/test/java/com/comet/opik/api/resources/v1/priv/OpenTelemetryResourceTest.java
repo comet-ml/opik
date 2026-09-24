@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.OpenTelemetryResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.OpenTelemetryMapper;
@@ -63,6 +64,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -128,6 +130,7 @@ class OpenTelemetryResourceTest {
     private String baseURI;
     private ClientSupport client;
     private TraceResourceClient traceResourceClient;
+    private OpenTelemetryResourceClient otelResourceClient;
     private SpanResourceClient spanResourceClient;
 
     @BeforeAll
@@ -142,6 +145,7 @@ class OpenTelemetryResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE);
 
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        this.otelResourceClient = new OpenTelemetryResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
 
@@ -153,6 +157,95 @@ class OpenTelemetryResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+    }
+
+    /**
+     * How the endpoints answer a request carrying nothing to store. Neither case here is a malformed
+     * request — both are accepted — so the group is named for what they have in common rather than for an
+     * error. Its own nested class rather than more methods in {@code ApiKey}: adding cases there reorders
+     * that class's tests, and one of them then failed on state a sibling had seeded, which has nothing to do
+     * with what these assert.
+     *
+     * <p>The null request production sends is not covered here. This harness gives the resource an empty
+     * message for a bodiless POST rather than a null, so there is no request it can send that reaches the
+     * {@code @NotNull} on the endpoints — and asserting the annotations by reflection would test the
+     * implementation rather than the API.
+     */
+    @Nested
+    @DisplayName("Requests with nothing to store:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class NothingToStore {
+
+        private final String okApikey = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("do not answer 500 when the request carries no body at all")
+        void testOtelRequestWithoutABody() {
+            // The shape production sends: a POST with a content type but no entity. It used to answer 500 —
+            // the reader produced an empty request, which reached SpanService's non-empty precondition.
+            // Answered as an empty export here.
+            //
+            // Production also reaches this endpoint with a null request, which is what raised the NPE
+            // parseAndStoreSpans' @NonNull threw. This harness never produces that null — Jersey hands the
+            // resource an empty message instead — so the guard for it is not asserted here.
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            otelResourceClient.exportWithoutBody("application/x-protobuf", workspaceName, okApikey,
+                    HttpStatus.SC_OK);
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("batchesWithoutSpans")
+        @DisplayName("accept a batch that carries no spans, whichever way it is empty")
+        void testOtelRequestWithEmptyBatch(String shape, String mediaType, Entity<?> payload) {
+            // OTLP treats an export with no spans as valid. It used to reach SpanService, whose non-empty
+            // precondition surfaced it to the exporter as a 500.
+            //
+            // The three shapes matter: a batch can be empty at the request, at a ResourceSpans, or at a
+            // ScopeSpans, and only the last two distinguish the check that walks into the batch from one
+            // that just asks whether the resource-spans list is empty.
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+            otelResourceClient.exportTraces(payload, mediaType, projectName, workspaceName, okApikey,
+                    HttpStatus.SC_OK);
+
+            // What the empty export must NOT do — create the project — is not asserted here, and it is
+            // worth saying why rather than leaving a silent gap. Reading the project store needs
+            // PROJECT_DATA_VIEW, which this class's auth mock does not grant, and reading traces by project
+            // name answers 400 when the project is absent, so neither reads cleanly as "nothing was
+            // created". The short-circuit sits before getOrCreate for that reason; it wants an assertion
+            // from a class whose auth mock can see projects.
+        }
+
+        Stream<Arguments> batchesWithoutSpans() {
+            var noScopeSpans = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder().build())
+                    .build();
+            var noSpans = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder().build())
+                            .build())
+                    .build();
+
+            // The protobuf encoding of an entirely empty request is zero bytes, and a zero-length entity
+            // leaves the shared test client's connection in a state that makes Jetty reject the *next*
+            // request with "400 No URI". That shape is what testOtelRequestWithoutABody covers instead, so
+            // it is left to that test rather than sent from here; json carries it as "{}".
+            return Stream.of(
+                    arguments("protobuf, resource spans with no scope spans", "application/x-protobuf",
+                            Entity.entity(noScopeSpans.toByteArray(), "application/x-protobuf")),
+                    arguments("protobuf, scope spans with no spans", "application/x-protobuf",
+                            Entity.entity(noSpans.toByteArray(), "application/x-protobuf")),
+                    arguments("json, no resource spans", MediaType.APPLICATION_JSON, Entity.json("{}")),
+                    arguments("json, resource spans with no scope spans", MediaType.APPLICATION_JSON,
+                            Entity.json("{\"resourceSpans\":[{}]}")),
+                    arguments("json, scope spans with no spans", MediaType.APPLICATION_JSON,
+                            Entity.json("{\"resourceSpans\":[{\"scopeSpans\":[{}]}]}")));
+        }
+
     }
 
     @Nested
@@ -425,6 +518,89 @@ class OpenTelemetryResourceTest {
             assertThat(span.metadata()).isNotEmpty();
             assertThat(span.metadata().get("foo").asText()).isEqualTo("bar");
             assertThat(span.metadata().get("inline").asText()).isEqualTo("inline_value");
+        }
+
+        Stream<Arguments> testProviderVocabularyIsAliasedAndPriced() {
+            return Stream.of(
+                    // The OPIK-7717 report: stored verbatim, 'vertex_ai' matched no price row and cost 0.
+                    arguments("vertex_ai", "gen_ai.system", "vertex_ai", "gemini-3.1-flash-lite", null,
+                            "google_vertexai"),
+                    arguments("gcp.gemini", "gen_ai.system", "gcp.gemini", "gemini-2.5-flash", null, "google_ai"),
+                    arguments("aws.bedrock", "gen_ai.system", "aws.bedrock",
+                            "anthropic.claude-3-5-sonnet-20241022-v2:0", null, "bedrock"),
+                    arguments("az.ai.openai", "gen_ai.system", "az.ai.openai", "gpt-4o", null, "azure"),
+                    arguments("mistral_ai", "gen_ai.system", "mistral_ai", "mistral-large-latest", null, "mistral"),
+                    arguments("x_ai", "gen_ai.system", "x_ai", "grok-3", null, "xai"),
+                    // gen_ai.provider.name replaced gen_ai.system and was previously not read at all.
+                    arguments("gen_ai.provider.name", "gen_ai.provider.name", "gcp.vertex_ai",
+                            "gemini-3.1-flash-lite", null, "google_vertexai"),
+                    // Names no backend on its own, so it is resolved from the endpoint host instead.
+                    arguments("google + vertex host", "gen_ai.system", "google", "gemini-2.5-flash-lite",
+                            "us-east1-aiplatform.googleapis.com", "google_vertexai"),
+                    // Vertex also serves Claude, which Opik prices under a different provider than
+                    // the Gemini rows — so the Vertex alias alone would still leave this span at $0.
+                    arguments("vertex_ai + claude", "gen_ai.system", "vertex_ai", "claude-haiku-4-5", null,
+                            "anthropic_vertexai"));
+        }
+
+        @ParameterizedTest(name = "OTel provider {0} is stored as {5} and priced")
+        @MethodSource
+        @DisplayName("test OTel provider vocabulary is aliased and priced on ingestion")
+        void testProviderVocabularyIsAliasedAndPriced(String testName, String providerAttribute,
+                String reportedProvider, String model, String serverAddress, String expectedProvider) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+
+            var otelSpanBuilder = Span.newBuilder()
+                    .setName("llm call")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(stringAttribute(providerAttribute, reportedProvider))
+                    .addAttributes(stringAttribute("gen_ai.request.model", model))
+                    .addAttributes(intAttribute("gen_ai.usage.input_tokens", 1_000))
+                    .addAttributes(intAttribute("gen_ai.usage.output_tokens", 500));
+
+            if (serverAddress != null) {
+                otelSpanBuilder.addAttributes(stringAttribute("server.address", serverAddress));
+            }
+
+            var otelSpans = List.of(otelSpanBuilder.build());
+
+            var minTimestampMs = Duration.ofNanos(otelSpans.getFirst().getStartTimeUnixNano()).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            var spanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId, "Test Project",
+                    workspaceName, okApikey);
+            assertThat(spanPage.content()).hasSize(1);
+
+            var persistedSpan = spanPage.content().getFirst();
+
+            assertThat(persistedSpan.provider())
+                    .as("provider stored for %s=%s", providerAttribute, reportedProvider)
+                    .isEqualTo(expectedProvider);
+
+            // Cost is computed once at ingestion from the stored provider, so an unmapped provider
+            // persists as a $0 span rather than failing loudly.
+            assertThat(persistedSpan.totalEstimatedCost())
+                    .as("cost stored for model %s under provider %s", model, expectedProvider)
+                    .isNotNull()
+                    .isGreaterThan(BigDecimal.ZERO);
+        }
+
+        private KeyValue stringAttribute(String key, String value) {
+            return KeyValue.newBuilder().setKey(key)
+                    .setValue(AnyValue.newBuilder().setStringValue(value)).build();
+        }
+
+        private KeyValue intAttribute(String key, long value) {
+            return KeyValue.newBuilder().setKey(key)
+                    .setValue(AnyValue.newBuilder().setIntValue(value)).build();
         }
 
         @Test

@@ -22,8 +22,9 @@ public class McpOAuthScrubService {
     private final @NonNull OpikConfiguration opikConfig;
 
     /**
-     * Revoked tokens within the rotation grace window must remain queryable, so a duplicate refresh
-     * request (RFC 6749 §6 token rotation grace) returns invalid_grant instead of triggering reuse detection.
+     * Revoked tokens within the rotation grace window must remain queryable: a refresh token rotated moments ago is
+     * what a host re-presents from a parallel tool call, and {@code McpOAuthService.refresh} serves that retry a
+     * fresh pair (up to the configured cap) instead of treating it as reuse.
      */
     public Mono<Void> scrub() {
         return Mono.fromRunnable(() -> {

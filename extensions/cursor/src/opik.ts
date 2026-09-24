@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { PendingUsage, TraceData, TurnUsage } from './interface';
 import { captureException } from './sentry';
-
-type LoggedTurn = Omit<PendingUsage, 'attempt' | 'nextAttemptAt'>;
+import { latestUsageModel } from './cursor/usageAggregation';
+import { deliverTracesWithClient, LoggedTurn } from './cursor/traceDelivery';
 
 async function createClient(apiKey: string) {
     const config = vscode.workspace.getConfiguration();
@@ -21,60 +21,10 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
     }
 
     console.log(`📦 Processing ${traces.length} traces using Opik SDK`);
-    const loggedTurns: LoggedTurn[] = [];
-
     try {
         const client = await createClient(apiKey);
-
-        for (const traceData of traces) {
-            const metadata = {
-                ...(traceData.metadata || {}),
-                created_from: "cursor-extension"
-            };
-
-            const trace = client.trace({
-                name: traceData.name,
-                projectName: traceData.project_name,
-                input: traceData.input,
-                output: traceData.output,
-                startTime: new Date(traceData.start_time),
-                endTime: traceData.end_time ? new Date(traceData.end_time) : undefined,
-                tags: traceData.tags,
-                metadata: metadata,
-                threadId: traceData.thread_id
-            });
-
-            // The span is created without usage. Cursor only exposes token counts
-            // a few seconds later over its usage API, so UsageEnricher patches it.
-            const span = trace.span({
-                name: traceData.name,
-                type: 'llm',
-                model: traceData.model,
-                provider: 'cursor',
-                input: traceData.input,
-                output: traceData.output,
-                startTime: new Date(traceData.start_time),
-                endTime: traceData.end_time ? new Date(traceData.end_time) : undefined,
-                tags: traceData.tags,
-                metadata: traceData.metadata
-            });
-            // Deliberately not calling span.end()/trace.end(): both overwrite
-            // endTime with the current time, which would replace the real Cursor
-            // turn end with the upload time.
-
-            if (traceData.thread_id) {
-                loggedTurns.push({
-                    composerId: traceData.thread_id,
-                    turnStartMs: traceData.turn_start_ms,
-                    traceId: trace.data.id,
-                    spanId: span.data.id,
-                    projectName: traceData.project_name ?? 'default',
-                });
-            }
-        }
-
         console.log(`📤 Flushing ${traces.length} traces to Opik`);
-        await client.flush();
+        const loggedTurns = await deliverTracesWithClient(client, traces);
         console.log(`🎉 All ${traces.length} traces processed successfully using Opik SDK!`);
 
         return loggedTurns;
@@ -85,6 +35,27 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
     }
 }
 
+/**
+ * Cursor reports inputTokens excluding cache, the same way Anthropic does, so
+ * prompt_tokens has to add the cache tokens back in. See the equivalent in the
+ * Python SDK, llm_usage/anthropic_usage.py get_billable_tokens(). Reporting the
+ * cache figures separately as well is the house convention, not double counting.
+ *
+ * Exported so that scripts/verify-usage.js asserts this exact mapping rather
+ * than a copy of it.
+ */
+export function toSpanUsage(usage: TurnUsage): Record<string, number> {
+    const promptTokens = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+
+    return {
+        prompt_tokens: promptTokens,
+        completion_tokens: usage.outputTokens,
+        total_tokens: promptTokens + usage.outputTokens,
+        cache_read_input_tokens: usage.cacheReadTokens,
+        cache_creation_input_tokens: usage.cacheWriteTokens,
+    };
+}
+
 export async function applyTurnUsage(
     apiKey: string,
     pending: PendingUsage,
@@ -92,26 +63,23 @@ export async function applyTurnUsage(
 ): Promise<void> {
     const client = await createClient(apiKey);
 
+    const spanUsage = toSpanUsage(usage);
+
     await client.api.spans.updateSpan(pending.spanId, {
         body: {
             traceId: pending.traceId,
             projectName: pending.projectName,
-            model: usage.models[0],
+            model: latestUsageModel(usage),
             provider: 'cursor',
-            usage: {
-                prompt_tokens: usage.inputTokens,
-                completion_tokens: usage.outputTokens,
-                total_tokens: usage.inputTokens + usage.outputTokens,
-                cache_read_input_tokens: usage.cacheReadTokens,
-                cache_creation_input_tokens: usage.cacheWriteTokens,
-            },
+            usage: spanUsage,
             totalEstimatedCost: usage.chargedCents / 100,
         },
     });
 
     console.log(
-        `💰 Patched span ${pending.spanId}: ${usage.inputTokens} in / ${usage.outputTokens} out ` +
-        `/ ${usage.cacheReadTokens} cache read, ${usage.chargedCents.toFixed(4)}c ` +
+        `💰 Patched span ${pending.spanId}: ${spanUsage.prompt_tokens} prompt ` +
+        `(${usage.inputTokens} fresh + ${usage.cacheReadTokens} cache read + ${usage.cacheWriteTokens} cache write) ` +
+        `/ ${usage.outputTokens} completion, ${usage.chargedCents.toFixed(4)}c ` +
         `across ${usage.requestCount} request(s)`
     );
 }

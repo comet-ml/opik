@@ -311,24 +311,20 @@ export const parseChatTemplateToLLMMessages = (
  * trace scope and {{span}} on span scope work without the user picking a path);
  * otherwise empty. Centralized so the rule-detail editors stay in sync.
  *
- * <p>{@code reservedVariables} defaults to the shared {@code spans}-only set; the
- * LLM-judge editors pass the scope-appropriate set —
+ * <p>{@code reservedVariables} defaults to the shared {@code spans}-only set, but every
+ * caller passes the set matching its rule type AND scope, because a name reserved in one
+ * combination is an invalid mapping in another. LLM judges pass
  * {@link RESERVED_TRACE_LLM_JUDGE_VARIABLES} (adds {@code trace}) on trace scope and
- * {@link RESERVED_SPAN_LLM_JUDGE_VARIABLES} ({@code span}) on span scope. The
- * Python-metric editors keep the default, because the Python scorer backend only
- * injects `spans`.
- *
- * <p>The auto-fill is gated by {@code agenticToolsEnabled} (FT
- * {@code agentic_tools_enabled}). When the feature is off, reserved names behave
- * like any other variable — no sentinel is filled in, leaving the user free to map
- * to a real path. Mirrors the BE: `shouldFetchSpans` and the `{{spans}}` /
- * `{{trace}}` substitution are also gated by the same toggle.
+ * {@link RESERVED_SPAN_LLM_JUDGE_VARIABLES} ({@code span}) on span scope. Python metrics
+ * pass {@link RESERVED_TRACE_EVALUATOR_VARIABLES} on trace scope — the scorer backend
+ * only injects {@code spans}, so {@code trace} is deliberately absent — and the empty
+ * {@link RESERVED_SPAN_EVALUATOR_VARIABLES} on span scope, where a span has no sub-spans
+ * and the form schema rejects the {@code spans} sentinel outright.
  */
 export const resolveTraceEvaluatorVariableDefault = (
   variableName: string,
   currentMapping: string | undefined,
   scope: EVALUATORS_RULE_SCOPE,
-  agenticToolsEnabled: boolean,
   reservedVariables: Readonly<
     Record<string, string>
   > = RESERVED_TRACE_EVALUATOR_VARIABLES,
@@ -341,9 +337,8 @@ export const resolveTraceEvaluatorVariableDefault = (
     return currentMapping;
   }
   if (
-    agenticToolsEnabled &&
-    (scope === EVALUATORS_RULE_SCOPE.trace ||
-      scope === EVALUATORS_RULE_SCOPE.span)
+    scope === EVALUATORS_RULE_SCOPE.trace ||
+    scope === EVALUATORS_RULE_SCOPE.span
   ) {
     return reservedVariables[variableName] ?? "";
   }

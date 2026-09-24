@@ -5,12 +5,15 @@ import com.comet.opik.domain.RemoteWorkspacePermissionsService;
 import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.RetriableHttpClient;
+import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
@@ -18,6 +21,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Objects;
 
+@Slf4j
 public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
 
     @Provides
@@ -25,10 +29,23 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
     public AuthService authService(
             @Config("authentication") AuthenticationConfig config,
             @NonNull Provider<RequestContext> requestContext,
-            @NonNull RedissonReactiveClient redissonClient,
-            @NonNull Client client) {
+            @NonNull Client client,
+            @NonNull RetriableHttpClient retriableHttpClient,
+            @NonNull RedactionService redactionService,
+            @NonNull WorkspacePermissionsService workspacePermissionsService,
+            @NonNull CacheService cacheService) {
 
         if (!config.isEnabled()) {
+            if (redactionService.isEnabled()) {
+                // original_data_view is resolved from the workspace permissions API and nothing else
+                // sets it, so with authentication off no caller can hold it and every response is masked for
+                // everybody, with no way to grant an exemption. Said out loud because the configuration reads
+                // as if it were a per-caller control here, and it is not.
+                log.warn("Read-time redaction is enabled while authentication is disabled: no caller can hold "
+                        + "'{}', so every response will be redacted for every caller",
+                        WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue());
+            }
+
             return new AuthServiceImpl(requestContext);
         }
 
@@ -38,11 +55,30 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         Preconditions.checkArgument(StringUtils.isNotBlank(config.getReactService().url()),
                 "The property authentication.reactService.url must not be blank when authentication is enabled");
 
-        var cacheService = config.getApiKeyResolutionCacheTTLInSec() > 0
+        // Asking RedactionService rather than the raw config so the request and the thing that acts on the
+        // answer cannot disagree: a deployment with the flag on but no rules redacts nothing, and must not pay
+        // for permissions it will not use.
+        return new RemoteAuthService(client, retriableHttpClient, config.getReactService(),
+                requestContext, cacheService,
+                config.getRequestTimeout().toJavaDuration(), config.getRequestMaxRetries(),
+                config.getRequestRetryMinBackoff().toJavaDuration(),
+                config.getRequestRetryMaxBackoff().toJavaDuration(),
+                workspacePermissionsService, redactionService.isEnabled());
+    }
+
+    /**
+     * Shared by API-key authentication and CIPX device-token validation, so both honour the same TTL and a
+     * deployment has one place to tune it.
+     */
+    @Provides
+    @Singleton
+    public CacheService cacheService(
+            @Config("authentication") AuthenticationConfig config,
+            @NonNull RedissonReactiveClient redissonClient) {
+
+        return config.getApiKeyResolutionCacheTTLInSec() > 0
                 ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
                 : new NoopCacheService();
-
-        return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService);
     }
 
     @Provides
@@ -63,4 +99,5 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
 
         return new RemoteWorkspacePermissionsService(client, config.getReactService());
     }
+
 }

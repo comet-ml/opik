@@ -177,50 +177,34 @@ class OnlineScoringLlmAsJudgeScorerTest {
     class ShouldFetchSpansTests {
 
         // Truth table for the spans-fetch gate. Spans are fetched when EITHER:
-        //   (a) the agentic-tools path is possible (provider supports tools AND (experimentId
-        //       OR isAgenticToolsEnabled)), OR
-        //   (b) the inline {{spans}} template path applies — AND ALSO gated by
-        //       isAgenticToolsEnabled, so both pathways ship as one feature behind one toggle.
-        // Goal of the gate: skip the SpanService.getByTraceIds I/O on rules that don't need
-        // spans, and let ops kill the spans-in-prompts feature org-wide via a single flip.
-        @ParameterizedTest(name = "expId={0}, toggle={1}, provider={2}, sentinelInVars={3}, templateHasSpans={4} → expected={5}")
+        //   (a) the provider supports tool-calling, so the agentic-tools path is possible, OR
+        //   (b) the inline {{spans}} / {{trace}} template path applies.
+        // Goal of the gate: skip the SpanService.getByTraceIds I/O on rules that don't need spans.
+        // experimentId is inert for THIS gate — it no longer widens the agentic-tools branch (it
+        // still drives shouldUseAgenticTools); both values are exercised to lock that in.
+        @ParameterizedTest(name = "expId={0}, provider={1}, sentinelInVars={2}, templateHasSpans={3} → expected={4}")
         @CsvSource({
-                // Agentic-tools branch: provider supports tools AND (experimentId OR toggle).
-                "true,  false, OPEN_AI, false, false, true",
-                "false, true,  OPEN_AI, false, false, true",
-                // Provider doesn't support tools → agentic-tools branch off; with the new
-                // gating the template path also requires the toggle, so toggle=false means no
-                // fetch regardless of variables/template content.
-                "true,  true,  OLLAMA,  false, false, false",
-                "false, true,  OLLAMA,  false, false, false",
-                // Toggle off + no experimentId + no template → no fetch.
-                "false, false, OPEN_AI, false, false, false",
-                // Toggle off + template-only — feature gated, no fetch (regression test for the
-                // new isAgenticToolsEnabled gate on the template path).
-                "false, false, OPEN_AI, false, true,  false",
-                "false, false, OLLAMA,  false, true,  false",
-                // Toggle off + sentinel-in-variables — same gating applies: no fetch.
-                "false, false, OPEN_AI, true,  false, false",
-                // Toggle on + template-only on a non-tool-calling provider → fetch via template path.
-                "false, true,  OLLAMA,  false, true,  true",
-                // Toggle on + sentinel-in-variables on a non-tool-calling provider → fetch.
-                "false, true,  OLLAMA,  true,  false, true",
-                // Toggle off + experimentId path → spans fetched for the agentic-tools cache
-                // seed; the template substitution piggy-backs on the already-fetched data.
-                "true,  false, OPEN_AI, false, true,  true",
+                // Tool-calling provider → agentic-tools path possible → fetch to seed the read-tool
+                // cache, whatever the template says.
+                "true,  OPEN_AI, false, false, true",
+                "false, OPEN_AI, false, false, true",
+                "false, OPEN_AI, true,  true,  true",
+                // Non-tool-calling provider → only the template path can trigger a fetch.
+                "true,  OLLAMA,  false, false, false",
+                "false, OLLAMA,  false, false, false",
+                // Template references {{spans}} implicitly → fetch via the template path.
+                "false, OLLAMA,  false, true,  true",
+                // Sentinel-mapped variable → fetch via the template path.
+                "false, OLLAMA,  true,  false, true",
                 // Both branches on → still just one fetch (idempotent OR).
-                "true,  true,  OPEN_AI, true,  true,  true",
+                "true,  OPEN_AI, true,  true,  true",
         })
         void gateMatchesTruthTable(
-                boolean hasExperimentId, boolean toggleEnabled, LlmProvider provider,
+                boolean hasExperimentId, LlmProvider provider,
                 boolean sentinelInVariables, boolean templateHasSpans, boolean expected) {
             String modelName = "gpt-test";
             TraceToScoreLlmAsJudge message = buildSpansFetchMessage(
                     hasExperimentId, sentinelInVariables, templateHasSpans);
-            // Both lenient: the agenticToolsPathPossible expression short-circuits, so
-            // !supportsToolCalling AND experimentIdPath both skip the toggle check; the
-            // provider lookup is also skipped when the agentic-tools branch isn't probed.
-            lenient().when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
             lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
 
             assertThat(scorer.shouldFetchSpans(message)).isEqualTo(expected);
@@ -265,47 +249,42 @@ class OnlineScoringLlmAsJudgeScorerTest {
     @Nested
     class RoutingGateTests {
 
-        // Truth table: experimentId × toggle × tokens >= threshold × provider supports tools → useTools.
-        // Tools fire when EITHER (a) the experimentId branch is on OR (b) the size branch is on,
-        // AND the provider supports tool-calling. Without the provider check, a non-tool-calling
-        // model selected via test_suite_model metadata would crash inside the chat call when the
-        // request carries tool specs (Logical bug surfaced by review of the experimentId path).
-        @ParameterizedTest(name = "expId={0}, toggle={1}, tokens={2}, threshold={3}, provider={4}, attachments={5} → expected useTools={6}")
+        // Truth table: experimentId × tokens >= threshold × {{trace}} × provider supports tools → useTools.
+        // Tools fire when ANY of (a) the experimentId branch, (b) the size branch, or (c) the {{trace}}
+        // branch is on, AND the provider supports tool-calling. Without the provider check, a
+        // non-tool-calling model selected via test_suite_model metadata would crash inside the chat call
+        // when the request carries tool specs (Logical bug surfaced by review of the experimentId path).
+        @ParameterizedTest(name = "expId={0}, tokens={1}, threshold={2}, provider={3}, attachments={4} → expected useTools={5}")
         @CsvSource({
                 // experimentId path → tools when provider supports them
-                "true,  false, 0,     50000, OPEN_AI, false, true",
-                "true,  true,  60000, 50000, OPEN_AI, false, true",
+                "true,  0,     50000, OPEN_AI, false, true",
+                "true,  60000, 50000, OPEN_AI, false, true",
                 // experimentId set BUT provider doesn't support tools → fall back to inline with a warn
                 // (assertions that depend on tool-driven span inspection won't be reliable for this model;
                 // we surface the misconfig loudly rather than crash inside the chat call).
-                "true,  true,  60000, 50000, OLLAMA,  false, false",
-                // size-based path — all three preconditions must hold
-                "false, true,  60000, 50000, OPEN_AI, false, true",
-                "false, true,  50000, 50000, OPEN_AI, false, true",
+                "true,  60000, 50000, OLLAMA,  false, false",
+                // size-based path — both preconditions must hold
+                "false, 60000, 50000, OPEN_AI, false, true",
+                "false, 50000, 50000, OPEN_AI, false, true",
                 // below threshold → inline
-                "false, true,  49999, 50000, OPEN_AI, false, false",
-                // toggle off → inline even on huge contexts
-                "false, false, 60000, 50000, OPEN_AI, false, false",
+                "false, 49999, 50000, OPEN_AI, false, false",
                 // provider doesn't support tool calling → inline (operator must pick a different model)
-                "false, true,  60000, 50000, OLLAMA,  false, false",
+                "false, 60000, 50000, OLLAMA,  false, false",
                 // no preconditions met
-                "false, false, 0,     50000, OPEN_AI, false, false",
-                // {{trace}}-driven path: toggle on + provider supports tools + below size
-                // threshold → tools fire so the judge can call get_attachment
-                "false, true,  0,     50000, OPEN_AI, true,  true",
-                // references {{trace}} but toggle off → inline (whole agentic feature is gated by the toggle)
-                "false, false, 0,     50000, OPEN_AI, true,  false",
+                "false, 0,     50000, OPEN_AI, false, false",
+                // {{trace}}-driven path: provider supports tools + below size threshold → tools fire so
+                // the judge can call get_attachment
+                "false, 0,     50000, OPEN_AI, true,  true",
                 // references {{trace}} but provider can't do tools → inline (internal warn)
-                "false, true,  0,     50000, OLLAMA,  true,  false",
+                "false, 0,     50000, OLLAMA,  true,  false",
         })
         void gateMatchesTruthTable(
-                boolean hasExperimentId, boolean toggleEnabled, int estimatedTokens,
+                boolean hasExperimentId, int estimatedTokens,
                 int thresholdTokens, LlmProvider provider, boolean referencesTrace, boolean expectedUseTools) {
             String modelName = "gpt-test";
             TraceToScoreLlmAsJudge message = hasExperimentId
                     ? newMessage(UUID.randomUUID())
                     : newMessageWithoutExperimentId(UUID.randomUUID());
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(thresholdTokens);
             lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
 
@@ -633,24 +612,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 """;
 
         @Test
-        void skipsAttachmentFetchWhenToggleIsOff() {
-            var code = JsonUtils.readValue(EVALUATOR_JSON, LlmAsJudgeCode.class);
-            var message = buildScoringMessage(code);
-
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
-            lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
-            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
-                    .thenReturn(new ToolCallingStrategy());
-            when(aiProxyService.scoreTrace(any(), any(), any()))
-                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
-            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
-
-            scorer.score(message).block();
-
-            verifyNoInteractions(attachmentService);
-        }
-
-        @Test
         void traceVariableInjectsStructureWithTraceAndSpanAttachments() {
             var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_TRACE, LlmAsJudgeCode.class);
             var message = buildScoringMessage(code);
@@ -680,7 +641,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .fileName(spanFileName)
                     .build();
 
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
             when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
@@ -740,7 +700,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .fileName("diagram.png")
                     .build();
 
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
             when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
@@ -781,7 +740,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .input(JsonUtils.getJsonNodeFromString("{\"messages\":\"hi\"}"))
                     .build();
 
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
             when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
@@ -832,7 +790,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .fileName(fileName)
                     .build();
 
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
             when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
@@ -881,7 +838,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .fileName(spanFileName)
                     .build();
 
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
             when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))

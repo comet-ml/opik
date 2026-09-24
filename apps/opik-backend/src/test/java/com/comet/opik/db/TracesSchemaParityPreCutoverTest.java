@@ -2,9 +2,9 @@ package com.comet.opik.db;
 
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import lombok.Builder;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -23,14 +23,12 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.db.TracesSchemaParity.SHADOW;
-import static com.comet.opik.db.TracesSchemaParity.TRACES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The pre-cutover half of the trace DDL topology guard: applies the real changelog the way a fresh install does, then
- * asserts the {@link TracesSchemaParity} invariant across {@code traces}, the {@code traces_local_v2} shadow, and the
+ * asserts the {@link CutoverSchemaParity} invariant across {@code traces}, the {@code traces_local_v2} shadow, and the
  * shipped cutover backfill's column list.
  *
  * <p><b>This is the branch that catches a forgotten shadow alter.</b> A migration that alters {@code traces} alone
@@ -49,8 +47,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@DisplayName("Traces Schema Parity - Pre-cutover")
 class TracesSchemaParityPreCutoverTest {
+
+    private static final CutoverSchemaParity PARITY = CutoverSchemaParity.TRACES;
+    private static final CutoverDdlReferenceFixture FIXTURE = CutoverDdlReferenceFixture.TRACES;
+
+    private static final String TRACES = PARITY.getLive();
+    private static final String SHADOW = PARITY.getShadow();
 
     private final Network network = Network.newNetwork();
     private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer(false, network);
@@ -83,26 +86,24 @@ class TracesSchemaParityPreCutoverTest {
 
     @Test
     @Order(1)
-    @DisplayName("a fresh changelog apply leaves the pre-cutover topology")
     void freshApplyLeavesPreCutoverTopology() throws Exception {
         assertThat(tableExists(TRACES)).as("`%s` must exist", TRACES).isTrue();
         assertThat(tableExists(SHADOW)).as("the `%s` shadow must exist", SHADOW).isTrue();
 
         // A fresh install has never run the runbook, so neither post-cutover table may be present. If one is, the
         // post-cutover assertions below would be measuring the wrong topology.
-        assertThat(tableExists(TracesSchemaParity.SHARD))
-                .as("`%s` is created by the cutover runbook, never by the changelog", TracesSchemaParity.SHARD)
+        assertThat(tableExists(PARITY.getShard()))
+                .as("`%s` is created by the cutover runbook, never by the changelog", PARITY.getShard())
                 .isFalse();
-        assertThat(tableExists(TracesSchemaParity.BACKUP))
-                .as("`%s` is created by the cutover runbook, never by the changelog", TracesSchemaParity.BACKUP)
+        assertThat(tableExists(PARITY.getBackup()))
+                .as("`%s` is created by the cutover runbook, never by the changelog", PARITY.getBackup())
                 .isFalse();
     }
 
     @Test
     @Order(2)
-    @DisplayName("traces, the shadow, and the cutover backfill column list all agree")
     void tracesShadowAndBackfillAgree() throws Exception {
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        PARITY.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -113,19 +114,18 @@ class TracesSchemaParityPreCutoverTest {
      */
     @Test
     @Order(5)
-    @DisplayName("the reference migration takes its pre-cutover branch and records the other as MARK_RAN")
-    void referenceMigrationTakesThePreCutoverBranch() throws Exception {
-        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+    void referenceMigrationTakesThePreCutoverBranchAndMarksTheOtherRan() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, FIXTURE.getChangelog());
 
-        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.PRE_CUTOVER_CHANGESET))
+        assertThat(FIXTURE.execType(connection, FIXTURE.getPreCutoverChangeSet()))
                 .as("on a pre-cutover install the pre-cutover branch must run")
-                .isEqualTo(TracesDdlReferenceFixture.EXECUTED);
-        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.POST_CUTOVER_CHANGESET))
+                .isEqualTo(CutoverDdlReferenceFixture.EXECUTED);
+        assertThat(FIXTURE.execType(connection, FIXTURE.getPostCutoverChangeSet()))
                 .as("""
                         the post-cutover branch must be recorded MARK_RAN, not left unrun: it is marked applied without \
                         executing, so a later startup never retries it against the wrong topology\
                         """)
-                .isEqualTo(TracesDdlReferenceFixture.MARK_RAN);
+                .isEqualTo(CutoverDdlReferenceFixture.MARK_RAN);
 
         // The read-facing field and the storage-only index both reach both tables pre-cutover.
         var traces = TableSchema.read(connection, DATABASE_NAME, TRACES);
@@ -135,7 +135,7 @@ class TracesSchemaParityPreCutoverTest {
         assertReferenceIndexContract(traces);
         assertReferenceIndexContract(shadow);
 
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        PARITY.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -144,15 +144,14 @@ class TracesSchemaParityPreCutoverTest {
      */
     @Test
     @Order(6)
-    @DisplayName("re-applying the reference migration is a no-op")
     void reApplyingTheReferenceMigrationIsANoOp() throws Exception {
-        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+        MigrationUtils.runClickhouseChangelog(clickHouse, FIXTURE.getChangelog());
 
-        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse, TracesDdlReferenceFixture.CHANGELOG))
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse, FIXTURE.getChangelog()))
                 .as("both branches stay recorded as applied, so nothing is left to run")
                 .isEmpty();
 
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        PARITY.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -162,24 +161,23 @@ class TracesSchemaParityPreCutoverTest {
      */
     @Test
     @Order(7)
-    @DisplayName("an unguarded traces migration applies cleanly and leaves shadow drift the gate rejects")
-    void unguardedMigrationIsRejected() throws Exception {
-        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
+    void unguardedMigrationAppliesCleanlyAndIsRejected() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, FIXTURE.getUnguardedChangelog());
 
         assertThat(TableSchema.read(connection, DATABASE_NAME, TRACES).columnNames())
                 .as("the unguarded ALTER does reach the live table — it fails silently, which is the problem")
-                .contains(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+                .contains(CutoverDdlReferenceFixture.UNGUARDED_COLUMN);
         assertThat(TableSchema.read(connection, DATABASE_NAME, SHADOW).columnNames())
                 .as("...and never reaches the shadow the cutover will promote")
-                .doesNotContain(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+                .doesNotContain(CutoverDdlReferenceFixture.UNGUARDED_COLUMN);
 
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+        assertThatThrownBy(() -> PARITY.assertPreCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
-                .hasMessageContaining(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+                .hasMessageContaining(CutoverDdlReferenceFixture.UNGUARDED_COLUMN);
 
         execute("ALTER TABLE %s.%s DROP COLUMN %s"
-                .formatted(DATABASE_NAME, TRACES, TracesDdlReferenceFixture.UNGUARDED_COLUMN));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+                .formatted(DATABASE_NAME, TRACES, CutoverDdlReferenceFixture.UNGUARDED_COLUMN));
+        PARITY.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -189,7 +187,6 @@ class TracesSchemaParityPreCutoverTest {
      */
     @Test
     @Order(8)
-    @DisplayName("applying the fixtures leaves the shipped changelog intact")
     void applyingTheFixturesLeavesTheShippedChangelogIntact() {
         assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse))
                 .as("the shipped changelog must remain fully applied, with nothing pending or invalidated")
@@ -197,113 +194,145 @@ class TracesSchemaParityPreCutoverTest {
     }
 
     /**
-     * Both directions of the same mistake — a column that reached one table and not the other — parameterized because
-     * the arrange/act/assert is identical and only the target differs. Both directions are covered deliberately: a
-     * migration writer is far likelier to forget the shadow, but a shadow-only change is equally broken.
-     */
-    static Stream<Arguments> oneSidedColumns() {
-        return Stream.of(
-                Arguments.of(TRACES, "drift_on_traces"),
-                Arguments.of(SHADOW, "drift_on_shadow"));
-    }
-
-    @ParameterizedTest(name = "added to {0} alone")
-    @MethodSource("oneSidedColumns")
-    @Order(10)
-    @DisplayName("drift is caught: a column added to one table but not the other")
-    void oneSidedColumnIsCaught(String table, String column) throws Exception {
-        assertDriftIsCaught(
-                List.of("ALTER TABLE %s.%s ADD COLUMN %s String".formatted(DATABASE_NAME, table, column)),
-                List.of("ALTER TABLE %s.%s DROP COLUMN %s".formatted(DATABASE_NAME, table, column)),
-                column);
-    }
-
-    /**
-     * Projections are compared by definition, not just by name, so a projection present on both tables under the same
-     * name but computing something different is drift too — the successor would keep the name and lose the meaning. A
-     * projection missing from one table entirely is caught by the same comparison; this pins the harder case.
+     * Every way a careless migration leaves the two tables inconsistent, as one table: each row injects the drift, the
+     * shared body asserts the guard rejects it naming the given fragments, and the schema is restored either way. One
+     * parameterized test rather than seven near-identical ones, so adding a scenario is a row rather than a method.
      *
-     * <p>Both trace tables are {@code ReplacingMergeTree}, which refuses {@code ADD PROJECTION} outright while
-     * {@code deduplicate_merge_projection_mode} is at its default {@code throw} (ClickHouse code 344) — so a projection
-     * cannot in fact be added to these tables today without a deliberate per-table setting change. The setting is
-     * relaxed here only to make the guard's projection leg reachable, and restored afterwards; that a real projection
-     * would need the same decision is itself worth knowing.
+     * <p>Injection SQL is deliberately raw rather than routed through a migration. These assert what the guard does
+     * with a drifted <i>schema</i>, whatever produced it; that a non-conforming <i>migration</i> produces such a schema
+     * is what {@link #unguardedMigrationAppliesCleanlyAndIsRejected} covers. The backfill leg is the one scenario left
+     * on its own, because it asserts something extra — see {@link #columnMissingFromBackfillListIsCaught}.
      */
-    @Test
-    @Order(14)
-    @DisplayName("drift is caught: same-named projections with different queries")
-    void projectionQueryDriftIsCaught() throws Exception {
-        allowProjections(TRACES);
-        allowProjections(SHADOW);
+    Stream<Arguments> schemaDrift() {
+        return Stream.of(
+                // Both directions deliberately: a migration writer is likelier to forget the shadow, but a shadow-only
+                // change is equally broken.
+                Arguments.of("a column added to `traces` alone",
+                        SchemaDrift.builder()
+                                .inject(addColumn(TRACES, "drift_on_traces"))
+                                .restore(dropColumn(TRACES, "drift_on_traces"))
+                                .expectedInMessage(List.of("drift_on_traces"))
+                                .build()),
+                Arguments.of("a column added to the shadow alone",
+                        SchemaDrift.builder()
+                                .inject(addColumn(SHADOW, "drift_on_shadow"))
+                                .restore(dropColumn(SHADOW, "drift_on_shadow"))
+                                .expectedInMessage(List.of("drift_on_shadow"))
+                                .build()),
 
-        assertDriftIsCaught(
-                List.of("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, name ORDER BY name)"
-                        .formatted(DATABASE_NAME, TRACES),
-                        "ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, thread_id ORDER BY thread_id)"
-                                .formatted(DATABASE_NAME, SHADOW)),
-                List.of("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, TRACES),
-                        "ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, SHADOW),
-                        "ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode"
-                                .formatted(DATABASE_NAME, TRACES),
-                        "ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode"
-                                .formatted(DATABASE_NAME, SHADOW)),
-                "proj_drift");
+                Arguments.of("a skip index added to `traces` but not to the shadow",
+                        SchemaDrift.builder()
+                                .inject(List
+                                        .of("ALTER TABLE %s.%s ADD INDEX idx_drift_name name TYPE set(0) GRANULARITY 1"
+                                                .formatted(DATABASE_NAME, TRACES)))
+                                .restore(List.of(
+                                        "ALTER TABLE %s.%s DROP INDEX idx_drift_name".formatted(DATABASE_NAME, TRACES)))
+                                .expectedInMessage(List.of("idx_drift_name"))
+                                .build()),
+
+                // Present on both under one name but not the same index. Every name-set comparison passes, and the
+                // successor silently keeps a differently-tuned index — granularity alone is the subtlest form.
+                Arguments.of("a skip index defined differently on each table",
+                        SchemaDrift.builder()
+                                .inject(List.of(
+                                        "ALTER TABLE %s.%s ADD INDEX idx_drift_def name TYPE set(0) GRANULARITY 1"
+                                                .formatted(DATABASE_NAME, TRACES),
+                                        "ALTER TABLE %s.%s ADD INDEX idx_drift_def name TYPE set(0) GRANULARITY 4"
+                                                .formatted(DATABASE_NAME, SHADOW)))
+                                .restore(List.of(
+                                        "ALTER TABLE %s.%s DROP INDEX idx_drift_def".formatted(DATABASE_NAME, TRACES),
+                                        "ALTER TABLE %s.%s DROP INDEX idx_drift_def"
+                                                .formatted(DATABASE_NAME, SHADOW)))
+                                .expectedInMessage(List.of("defined identically", "idx_drift_def"))
+                                .build()),
+
+                // Projections are compared by definition, so same name + different query is drift: the successor would
+                // keep the name and lose the meaning. Both trace tables are ReplacingMergeTree, which refuses
+                // ADD PROJECTION while deduplicate_merge_projection_mode is at its default `throw` (code 344) — the
+                // setting is relaxed only to make this leg reachable, and reset afterwards. That a real projection
+                // would need the same decision is itself worth knowing.
+                Arguments.of("same-named projections with different queries",
+                        SchemaDrift.builder()
+                                .inject(List.of(
+                                        "ALTER TABLE %s.%s MODIFY SETTING deduplicate_merge_projection_mode = 'rebuild'"
+                                                .formatted(DATABASE_NAME, TRACES),
+                                        "ALTER TABLE %s.%s MODIFY SETTING deduplicate_merge_projection_mode = 'rebuild'"
+                                                .formatted(DATABASE_NAME, SHADOW),
+                                        "ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, name ORDER BY name)"
+                                                .formatted(DATABASE_NAME, TRACES),
+                                        "ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, thread_id ORDER BY thread_id)"
+                                                .formatted(DATABASE_NAME, SHADOW)))
+                                .restore(List.of("ALTER TABLE %s.%s DROP PROJECTION proj_drift"
+                                        .formatted(DATABASE_NAME, TRACES),
+                                        "ALTER TABLE %s.%s DROP PROJECTION proj_drift"
+                                                .formatted(DATABASE_NAME, SHADOW),
+                                        "ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode"
+                                                .formatted(DATABASE_NAME, TRACES),
+                                        "ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode"
+                                                .formatted(DATABASE_NAME, SHADOW)))
+                                .expectedInMessage(List.of("proj_drift"))
+                                .build()),
+
+                // Both tables still list `name`, so every column-name comparison passes while the cutover would convert
+                // String to LowCardinality(String) on the way across. This is the leg the documented allowlist
+                // deliberately does not cover.
+                Arguments.of("a shared column whose type changed on one table only",
+                        SchemaDrift.builder()
+                                .inject(List.of("ALTER TABLE %s.%s MODIFY COLUMN name LowCardinality(String)"
+                                        .formatted(DATABASE_NAME, SHADOW)))
+                                .restore(List.of(
+                                        "ALTER TABLE %s.%s MODIFY COLUMN name String".formatted(DATABASE_NAME, SHADOW)))
+                                .expectedInMessage(List.of("name", "LowCardinality"))
+                                .build()),
+
+                // The allowlist is pinned on both sides, so an allowlisted column that leaves its documented type fails
+                // even though it still "differs" from its counterpart. Making the shadow's ttft Nullable again
+                // exercises both halves: the entry no longer describes reality, and the difference it excused has gone.
+                Arguments.of("an allowlisted column that left its documented type on the shadow",
+                        SchemaDrift.builder()
+                                .inject(List.of("ALTER TABLE %s.%s MODIFY COLUMN ttft Nullable(Float64)"
+                                        .formatted(DATABASE_NAME, SHADOW)))
+                                .restore(List.of("ALTER TABLE %s.%s MODIFY COLUMN ttft Float64 DEFAULT toFloat64('nan')"
+                                        .formatted(DATABASE_NAME, SHADOW)))
+                                .expectedInMessage(List.of("allowlisted column", "ttft"))
+                                .build()),
+                Arguments.of("an allowlisted column that changed on `traces`",
+                        SchemaDrift.builder()
+                                .inject(List.of("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(3, 'UTC')"
+                                        .formatted(DATABASE_NAME, TRACES)))
+                                .restore(List.of(
+                                        "ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(9, 'UTC') DEFAULT now64(9)"
+                                                .formatted(DATABASE_NAME, TRACES)))
+                                .expectedInMessage(List.of("allowlisted column", "start_time"))
+                                .build()),
+
+                // The one column the type comparison structurally cannot reach — it exists on the shadow with no
+                // counterpart on `traces` — and the one where the default is the whole contract. The backfill omits
+                // is_deleted so it takes its default; flip that to 1 and every copied row materialises as a
+                // ReplacingMergeTree tombstone, which is silent, total data loss at swap time.
+                Arguments.of("the shadow's is_deleted default flipped to 1",
+                        SchemaDrift.builder()
+                                .inject(List.of("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 1"
+                                        .formatted(DATABASE_NAME, SHADOW)))
+                                .restore(List.of("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 0"
+                                        .formatted(DATABASE_NAME, SHADOW)))
+                                .expectedInMessage(List.of("is_deleted"))
+                                .build()));
     }
 
-    private void allowProjections(String table) throws Exception {
-        execute("ALTER TABLE %s.%s MODIFY SETTING deduplicate_merge_projection_mode = 'rebuild'"
-                .formatted(DATABASE_NAME, table));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("schemaDrift")
+    @Order(10)
+    void driftIsCaught(String description, SchemaDrift scenario) throws Exception {
+        assertDriftIsCaught(scenario);
     }
 
-    private void restoreProjectionMode(String table) throws Exception {
-        execute("ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode".formatted(DATABASE_NAME, table));
+    private List<String> addColumn(String table, String column) {
+        return List.of("ALTER TABLE %s.%s ADD COLUMN %s String".formatted(DATABASE_NAME, table, column));
     }
 
-    /**
-     * Type drift on a shared column: both tables still list `name`, so every column-name comparison passes, and the
-     * cutover would then convert `String` to `LowCardinality(String)` on the way across. This is the leg the documented
-     * BASELINE_TYPE_DIFFERENCES allowlist deliberately does not cover.
-     */
-    @Test
-    @Order(15)
-    @DisplayName("drift is caught: a shared column whose type changed on one table only")
-    void oneSidedTypeChangeIsCaught() throws Exception {
-        assertDriftIsCaught(
-                List.of("ALTER TABLE %s.%s MODIFY COLUMN name LowCardinality(String)".formatted(DATABASE_NAME, SHADOW)),
-                List.of("ALTER TABLE %s.%s MODIFY COLUMN name String".formatted(DATABASE_NAME, SHADOW)),
-                "name", "LowCardinality");
-    }
-
-    /**
-     * The allowlist is pinned on both sides, so an allowlisted column drifting away from its documented type fails even
-     * though it still "differs" from its counterpart. Making the shadow's `ttft` Nullable again exercises both halves at
-     * once: the entry no longer describes reality, and the difference it excused has gone.
-     */
-    @Test
-    @Order(16)
-    @DisplayName("drift is caught: an allowlisted column that left its documented type")
-    void allowlistedColumnLeavingItsDocumentedTypeIsCaught() throws Exception {
-        assertDriftIsCaught(
-                List.of("ALTER TABLE %s.%s MODIFY COLUMN ttft Nullable(Float64)".formatted(DATABASE_NAME, SHADOW)),
-                List.of("ALTER TABLE %s.%s MODIFY COLUMN ttft Float64 DEFAULT toFloat64('nan')"
-                        .formatted(DATABASE_NAME, SHADOW)),
-                "allowlisted column", "ttft");
-    }
-
-    /**
-     * The other side of the same pin: an allowlisted column drifting on `traces` rather than on the shadow. The two
-     * types still differ, so a "they must differ" check would pass this.
-     */
-    @Test
-    @Order(17)
-    @DisplayName("drift is caught: an allowlisted column that changed on traces")
-    void allowlistedColumnDriftingOnTracesIsCaught() throws Exception {
-        assertDriftIsCaught(
-                List.of("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(3, 'UTC')"
-                        .formatted(DATABASE_NAME, TRACES)),
-                List.of("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(9, 'UTC') DEFAULT now64(9)"
-                        .formatted(DATABASE_NAME, TRACES)),
-                "allowlisted column", "start_time");
+    private List<String> dropColumn(String table, String column) {
+        return List.of("ALTER TABLE %s.%s DROP COLUMN %s".formatted(DATABASE_NAME, table, column));
     }
 
     /**
@@ -313,50 +342,22 @@ class TracesSchemaParityPreCutoverTest {
      */
     @Test
     @Order(12)
-    @DisplayName("drift is caught: a preserved column added to both tables but not to the backfill column list")
     void columnMissingFromBackfillListIsCaught() throws Exception {
         execute("ALTER TABLE %s.%s ADD COLUMN drift_unbackfilled String".formatted(DATABASE_NAME, TRACES));
         execute("ALTER TABLE %s.%s ADD COLUMN drift_unbackfilled String".formatted(DATABASE_NAME, SHADOW));
 
-        assertThat(TracesSchemaParity.backfillColumnList())
+        assertThat(PARITY.backfillColumnList())
                 .as("the injected column is deliberately absent from the shipped backfill list")
                 .doesNotContain("drift_unbackfilled");
 
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+        assertThatThrownBy(() -> PARITY.assertPreCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("backfill")
                 .hasMessageContaining("drift_unbackfilled");
 
         execute("ALTER TABLE %s.%s DROP COLUMN drift_unbackfilled".formatted(DATABASE_NAME, TRACES));
         execute("ALTER TABLE %s.%s DROP COLUMN drift_unbackfilled".formatted(DATABASE_NAME, SHADOW));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
-    }
-
-    @Test
-    @Order(13)
-    @DisplayName("drift is caught: a skip index added to traces but not to the shadow")
-    void skipIndexAddedToTracesAloneIsCaught() throws Exception {
-        assertDriftIsCaught(
-                List.of("ALTER TABLE %s.%s ADD INDEX idx_drift_name name TYPE set(0) GRANULARITY 1"
-                        .formatted(DATABASE_NAME, TRACES)),
-                List.of("ALTER TABLE %s.%s DROP INDEX idx_drift_name".formatted(DATABASE_NAME, TRACES)),
-                "idx_drift_name");
-    }
-
-    /**
-     * The one column the type comparison structurally cannot reach — it exists on the shadow and has no counterpart on
-     * {@code traces} — and the one where the <i>default</i> is the whole contract. The cutover backfill deliberately
-     * omits {@code is_deleted} so it takes its default; flip that default to 1 and every row the cutover copies
-     * materialises as a {@code ReplacingMergeTree} tombstone, which is a silent, total data loss at swap time.
-     */
-    @Test
-    @Order(18)
-    @DisplayName("drift is caught: the shadow's is_deleted default flipped to 1")
-    void shadowOnlyColumnDefaultDriftIsCaught() throws Exception {
-        assertDriftIsCaught(
-                List.of("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 1".formatted(DATABASE_NAME, SHADOW)),
-                List.of("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 0".formatted(DATABASE_NAME, SHADOW)),
-                "is_deleted");
+        PARITY.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -365,28 +366,28 @@ class TracesSchemaParityPreCutoverTest {
      * read contract while passing a name check.
      */
     private void assertReferenceFieldContract(TableSchema schema) {
-        var column = schema.columnsByName().get(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        var column = schema.columnsByName().get(CutoverDdlReferenceFixture.DERIVED_COLUMN);
         assertThat(column)
-                .as("`%s` must carry the reference field on `%s`", TracesDdlReferenceFixture.DERIVED_COLUMN,
+                .as("`%s` must carry the reference field on `%s`", CutoverDdlReferenceFixture.DERIVED_COLUMN,
                         schema.table())
                 .isNotNull();
         assertThat(column.type()).as("reference field type on `%s`", schema.table())
-                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_TYPE);
+                .isEqualTo(CutoverDdlReferenceFixture.DERIVED_COLUMN_TYPE);
         assertThat(column.defaultKind()).as("reference field default kind on `%s`", schema.table())
-                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
+                .isEqualTo(CutoverDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
         assertThat(column.defaultExpression()).as("reference field expression on `%s`", schema.table())
-                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_EXPRESSION);
+                .isEqualTo(CutoverDdlReferenceFixture.DERIVED_COLUMN_EXPRESSION);
     }
 
     /** Likewise the index: the same name with a different type, expression or granularity is a different index. */
     private void assertReferenceIndexContract(TableSchema schema) {
-        assertThat(schema.skipIndicesByName().get(TracesDdlReferenceFixture.STORAGE_INDEX))
+        assertThat(schema.skipIndicesByName().get(CutoverDdlReferenceFixture.STORAGE_INDEX))
                 .as("`%s` must carry the reference index, defined as declared", schema.table())
-                .isEqualTo(TracesDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
+                .isEqualTo(CutoverDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
     }
 
     /**
-     * Injects drift, asserts the guard rejects it naming {@code expectedInMessage}, and restores the schema
+     * Injects the drift, asserts the guard rejects it naming the scenario's fragments, and restores the schema
      * <b>whether or not the assertion held</b>.
      * <p>
      * The finally is the point. These negative tests share one container with every later {@code @Order}ed test, so a
@@ -394,24 +395,67 @@ class TracesSchemaParityPreCutoverTest {
      * they assert, and the real failure is buried. Restoring first, then re-asserting parity, also proves the cleanup
      * actually worked rather than assuming it.
      */
-    private void assertDriftIsCaught(List<String> inject, List<String> restore, String... expectedInMessage)
-            throws Exception {
-        for (var sql : inject) {
-            execute(sql);
-        }
+    private void assertDriftIsCaught(SchemaDrift scenario) throws Exception {
+        // Injection sits inside the protected region: a multi-statement injection that fails partway used to skip
+        // cleanup entirely, leaving the statements that did apply behind — the exact contamination this helper exists
+        // to prevent, reintroduced by where the loop sat.
+        Throwable primary = null;
         try {
-            var thrown = assertThatThrownBy(
-                    () -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                    .isInstanceOf(AssertionError.class);
-            for (var expected : expectedInMessage) {
-                thrown.hasMessageContaining(expected);
-            }
-        } finally {
-            for (var sql : restore) {
+            for (var sql : scenario.inject()) {
                 execute(sql);
             }
+            var thrown = assertThatThrownBy(
+                    () -> PARITY.assertPreCutoverParity(connection, DATABASE_NAME))
+                    .isInstanceOf(AssertionError.class);
+            for (var expected : scenario.expectedInMessage()) {
+                thrown.hasMessageContaining(expected);
+            }
+        } catch (Throwable t) {
+            primary = t;
         }
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+
+        try {
+            restoreAll(scenario.restore());
+        } catch (Exception e) {
+            // Never let a cleanup failure replace the real one: the assertion result is what the reader needs.
+            if (primary == null) {
+                primary = e;
+            } else {
+                primary.addSuppressed(e);
+            }
+        }
+
+        if (primary instanceof Error error) {
+            throw error;
+        }
+        if (primary != null) {
+            throw (Exception) primary;
+        }
+
+        PARITY.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * Runs every restore even if an earlier one fails, so a partially applied injection is undone as far as it can be —
+     * a statement that never applied simply has nothing to undo. Failures are collected and rethrown rather than
+     * swallowed: a cleanup that quietly did not happen is how the next test fails for the wrong reason.
+     */
+    private void restoreAll(List<String> restore) throws Exception {
+        Exception failure = null;
+        for (var sql : restore) {
+            try {
+                execute(sql);
+            } catch (Exception e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
     }
 
     private boolean tableExists(String table) throws Exception {
@@ -427,5 +471,13 @@ class TracesSchemaParityPreCutoverTest {
         try (var statement = connection.createStatement()) {
             statement.execute(sql);
         }
+    }
+
+    /**
+     * One row of the drift table: the statements that introduce the inconsistency, the statements that undo it, and the
+     * fragments the guard's rejection must name so a case cannot pass on an unrelated failure.
+     */
+    @Builder(toBuilder = true)
+    private record SchemaDrift(List<String> inject, List<String> restore, List<String> expectedInMessage) {
     }
 }

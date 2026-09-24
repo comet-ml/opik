@@ -10,6 +10,8 @@ import {
 } from "@/constants/llm";
 import {
   getDefaultTemperatureForModel,
+  getDefaultThinkingLevel,
+  isClaudeModel,
   supportsAnthropicThinkingEffort,
   supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
@@ -35,6 +37,72 @@ import {
 } from "@/hooks/useLLMProviderModelsData";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import { parseComposedProviderType } from "@/lib/provider";
+
+/**
+ * Fills in config parameters a stored prompt has no value for, from the provider defaults.
+ *
+ * Two ways a prompt ends up short of one. It was persisted before the parameter existed, or an
+ * earlier model change cleared it: the reconciler used to overwrite a parameter the newly picked
+ * model rejected, and the panels render one control per parameter the config carries, so the
+ * control stayed gone for good (a playground reset was the only way back).
+ *
+ * Only absent parameters are filled; a value the user chose is never overwritten. The
+ * temperature/topP pair is skipped where the provider takes one or the other — restoring
+ * temperature next to a live Top P would make the request drop the Top P. resolveSamplingParams
+ * settles which half is live for those.
+ */
+export const restoreMissingConfigKeys = (
+  prompt: PlaygroundPromptType,
+): PlaygroundPromptType => {
+  // Runs over every stored prompt during hydration, so anything this touches has to tolerate a
+  // corrupted entry: throwing costs every sibling prompt's state, not just this one's. The
+  // parameter type is a claim about persisted JSON, not a guarantee, so the shape is checked
+  // rather than trusted — an entry it cannot read is returned untouched.
+  if (!prompt || typeof prompt !== "object") {
+    return prompt;
+  }
+
+  // parseComposedProviderType calls provider.startsWith.
+  if (!prompt.provider || typeof prompt.provider !== "string") {
+    return prompt;
+  }
+
+  const defaults = getDefaultConfigByProvider(prompt.provider, prompt.model) as
+    | Record<string, unknown>
+    | undefined;
+
+  if (!defaults) {
+    return prompt;
+  }
+
+  // Claude rejects temperature and top_p together whoever serves it, so a stored config carrying
+  // neither is a deliberate choice — restoring the provider's defaults would silently turn it back
+  // into temperature-at-default on the next reload.
+  const exclusiveSamplingPair =
+    parseComposedProviderType(prompt.provider) === PROVIDER_TYPE.ANTHROPIC ||
+    (typeof prompt.model === "string" && isClaudeModel(prompt.model));
+  const stored = prompt.configs as Record<string, unknown> | undefined | null;
+  const configs = stored ?? {};
+  const restored: Record<string, unknown> = { ...configs };
+  let changed = stored == null;
+
+  for (const [key, value] of Object.entries(defaults)) {
+    // A stored null is as absent as a missing key, and a default that is itself nullish (Custom's
+    // custom_parameters) has nothing to restore.
+    if (value == null || configs[key] != null) {
+      continue;
+    }
+    if (exclusiveSamplingPair && (key === "temperature" || key === "topP")) {
+      continue;
+    }
+    restored[key] = value;
+    changed = true;
+  }
+
+  return changed
+    ? { ...prompt, configs: restored as unknown as LLMPromptConfigsType }
+    : prompt;
+};
 
 export const getDefaultConfigByProvider = (
   provider: COMPOSED_PROVIDER_TYPE,
@@ -105,9 +173,8 @@ export const getDefaultConfigByProvider = (
       maxConcurrentRequests: DEFAULT_GEMINI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     };
 
-    // Add thinkingLevel default for Gemini 3 models
     if (supportsGeminiThinkingLevel(model)) {
-      config.thinkingLevel = "high";
+      config.thinkingLevel = getDefaultThinkingLevel(model);
     }
 
     return config;
@@ -122,9 +189,8 @@ export const getDefaultConfigByProvider = (
       maxConcurrentRequests: DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     };
 
-    // Add thinkingLevel default for Vertex AI Gemini 3 Pro model
     if (supportsVertexAIThinkingLevel(model)) {
-      config.thinkingLevel = "low";
+      config.thinkingLevel = getDefaultThinkingLevel(model);
     }
 
     return config;
@@ -183,4 +249,43 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
     run.pythonProxyError ||
     "The AI provider returned an empty response. Please, try again."
   );
+};
+
+export const parseCompletionError = (run: RunStreamingReturn) => {
+  if (run.opikError) {
+    return { exceptionType: "OpikError", message: run.opikError };
+  }
+  if (run.providerError) {
+    return { exceptionType: "ProviderError", message: run.providerError };
+  }
+  if (run.pythonProxyError) {
+    return { exceptionType: "PythonProxyError", message: run.pythonProxyError };
+  }
+  return null;
+};
+
+export const createCompletionAnnouncer = (
+  expected: number,
+  announce: () => void,
+) => {
+  let registered = 0;
+  let hasFinishedLogging = false;
+  let hasAnnounced = false;
+
+  const fire = () => {
+    if (!hasFinishedLogging || registered < expected || hasAnnounced) return;
+    hasAnnounced = true;
+    announce();
+  };
+
+  return {
+    experimentsRegistered: (count: number) => {
+      registered = count;
+      fire();
+    },
+    loggingFinished: () => {
+      hasFinishedLogging = true;
+      fire();
+    },
+  };
 };

@@ -41,9 +41,11 @@ import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.GuardrailResult;
@@ -57,6 +59,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
@@ -2389,6 +2392,65 @@ class ProjectsResourceTest {
                     .build();
         }
 
+        /**
+         * The project-stats arm buckets errors by each trace's own event time, derived from its UUIDv7 id. That
+         * derivation was {@code toDateTime(UUIDv7ToDateTime(toUUID(t.id)))}, which narrows to a 32-bit
+         * {@code DateTime} and wraps modulo 2<sup>32</sup> seconds, so a trace dated circa 2162 read as circa 2026 and
+         * was counted in {@code recent_error_count} — inflating a project's recent-error stat, and its deviation, with
+         * an error that has not happened.
+         * <p>
+         * Pinned through the stats API rather than at the DAO, since {@code recent_error_count} is folded into
+         * {@link ErrorCountWithDeviation} by {@code StatsMapper} before anything else can observe it. The far-future
+         * trace is inserted straight into ClickHouse because ingestion validates a UUIDv7's embedded timestamp against
+         * a 24h window (OPIK-6888) and would reject it.
+         * <p>
+         * The expectation covers the whole summary, over every seeded trace: a far-future trace is still a trace, so
+         * it belongs in {@code traceCount} and in the duration quantiles, and only its error bucketing is special. The
+         * shared oracle already derives that correctly — it classifies by the id's own instant, which falls in neither
+         * window — so passing it the full list states the property rather than restating the arithmetic. The two
+         * follow-up assertions name it independently of the oracle, so the two cannot drift into agreement.
+         */
+        @Test
+        @DisplayName("when a trace's id carries a far-future timestamp, then it is counted in neither error period")
+        void getProjectStats__whenTraceIdIsFarFuture__thenItCountsAsNeitherRecentNorPastError(
+                TransactionTemplateAsync templateAsync) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+
+            var ordinaryTraces = createTracesWithSpecificErrors(project.name(), workspaceName, apiKey,
+                    PodamUtils.getIntegerInRange(1, 5), PodamUtils.getIntegerInRange(1, 5));
+
+            // 2162-10-08 sits in the band toDateTime folds into the current week — the whole point of the case.
+            var farFutureTrace = createTraceWithError(project.name(), Instant.now())
+                    .toBuilder()
+                    .id(idGenerator.generateId(Instant.parse("2162-10-08T23:40:56Z")))
+                    .projectId(projectId)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+            TraceDBUtils.createTraceViaDB(farFutureTrace, workspaceId, templateAsync);
+
+            var allTraces = Stream.concat(ordinaryTraces.stream(), Stream.of(farFutureTrace)).toList();
+            var expectedProjectsSummary = List.of(
+                    mapFromProjectToSummary(
+                            createProjectSummary(project.toBuilder().id(projectId).build(), allTraces), allTraces));
+
+            var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(project.name(), apiKey,
+                    workspaceName);
+
+            assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
+
+            var actualItem = actualProjectsSummary.content().getFirst();
+            assertThat(actualItem.traceCount()).isEqualTo(allTraces.size());
+            assertThat(actualItem.errorCount().count()).isEqualTo(ordinaryTraces.size());
+        }
+
         private void assertSummaryResponse(ProjectStatsSummary actualProjectsSummary,
                 List<ProjectStatsSummaryItem> expectedProjectsSummary) {
             assertThat(actualProjectsSummary.content()).hasSize(expectedProjectsSummary.size());
@@ -3149,6 +3211,46 @@ class ProjectsResourceTest {
             var actualEntity = projectResourceClient.findTokenUsageNames(
                     nonExistentProjectId, apiKey, workspaceName, HttpStatus.SC_NOT_FOUND);
             assertThat(actualEntity).isNull();
+        }
+    }
+
+    /**
+     * The bounded demo-project lookup behind the daily usage counts. The scope is the point of it: without one the
+     * caller loads every demo project in the installation, which is what put a query literal large enough to time
+     * the usage queries out into the ClickHouse query text. Asserted here rather than against a mocked DAO because
+     * only the real query can show that the scope filters — a lookup that ignored it would return a superset, and
+     * the folds that consume it would still produce the right counts.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetDemoProjectIdsInWorkspaces {
+
+        @Test
+        void getDemoProjectIdsInWorkspaces__whenWorkspacesAreGiven__thenReturnsOnlyTheirDemoProjects() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var demoProjectId = projectResourceClient.createProject(DemoData.PROJECTS.getFirst(), apiKey,
+                    workspaceName);
+            var regularProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            var otherApiKey = UUID.randomUUID().toString();
+            var otherWorkspaceId = UUID.randomUUID().toString();
+            var otherWorkspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(otherApiKey, otherWorkspaceName, otherWorkspaceId);
+            var demoProjectOutOfScopeId = projectResourceClient.createProject(DemoData.PROJECTS.getFirst(),
+                    otherApiKey, otherWorkspaceName);
+
+            var actualIds = projectService.getDemoProjectIdsInWorkspaces(Set.of(workspaceId)).block();
+
+            assertThat(actualIds)
+                    .as("only the demo projects of the given workspaces: '%s' is not a demo project, and demo "
+                            + "project '%s' belongs to a workspace that was not asked for", regularProjectId,
+                            demoProjectOutOfScopeId)
+                    .containsExactly(demoProjectId);
         }
     }
 

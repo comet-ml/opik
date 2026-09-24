@@ -80,7 +80,7 @@ class BaseTrackedGenerator(Generic[YieldType]):
 
     def _handle_generator_exception_before_raising(self, exception: Exception) -> None:
         LOGGER.debug(
-            "Exception raised from tracked generator",
+            "Exception raised from tracked generator: %s",
             str(exception),
             exc_info=True,
         )

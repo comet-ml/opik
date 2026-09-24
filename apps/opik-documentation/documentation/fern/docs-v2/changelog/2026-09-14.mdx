@@ -1,0 +1,39 @@
+## Map Trace and Span Fields onto Dataset Item Columns
+
+Adding traces or spans to a dataset always used a fixed shape — `input` from the trace's input, `expected_output` from its output, nothing else. Getting any other field into the dataset meant exporting and reshaping the data by hand.
+
+The "Add to dataset" dialog now has an **Advanced mapping** toggle. With it on, you can re-point `input` and `expected_output` at a different field, add extra columns from a path explorer over the sampled traces/spans, and use **Quick add** chips to pull in common enrichment fields (feedback scores, metadata, tags) or columns the target dataset already has. A coverage badge on each mapped field and a preview table show what will actually land in the dataset before you commit.
+
+👉 [Adding traces to a dataset](/evaluation/advanced/manage_datasets#adding-traces-to-a-dataset)
+
+## Name Experiments from the Playground
+
+Playground experiments were always given a random `adjective_noun_number` name, with no way to set one — making it harder to find a specific run later in the Experiments list.
+
+The Playground's output toolbar now has an optional experiment name field. Each output column derives its own name from it by appending a letter (`concise` → `concise_a`, `concise_b`, ...), and a preview shows what a run will produce before you start it. The field is optional: leave it empty and Opik generates a name exactly as before, so nothing changes if you don't use it. A completion toast reports the experiments created and links straight to the comparison view.
+
+## Bug Fixes & Improvements
+
+- **Exporting experiment results from the browser now covers the full result set** — The comparison table's export button only ever covered the rows selected on screen, and was disabled with nothing selected. With no selection, it now exports the whole result set behind the current filters (capped at 2000 rows, since a browser export holds everything in memory); past that cap, it points you to the [SDK export script](/evaluation/advanced/export_experiment_results), which has no such limit.
+- **Claude models no longer 400 when routed through Bedrock, OpenRouter, or a custom provider** — Claude rejects a request that sets both `temperature` and `top_p`. Opik already enforced that, but only for the Anthropic provider directly; the same Claude model called through Bedrock, OpenRouter, or an OpenAI-compatible custom provider sent both and was rejected. The either/or choice now applies to every provider on the backend, and the Playground's model panels all show the same either/or control for any Claude model instead of only some of them.
+- **Copy actions are now one click away on trace, thread, and span panels** — Copy-ID and copy-link used to live inside an overflow menu; they now render as icon buttons right next to the panel title, with the overflow menu reduced to Export and Delete.
+- **A setup hint now appears on expanded trace errors** — Expanding an error in a trace now offers to connect an AI coding assistant (Claude Code, Cursor, VS Code, and others) via MCP, with install instructions and a ready-to-use prompt for investigating that specific error.
+- **`opik configure` and `opik mcp configure` now ask the same questions the same way** — The two commands used to ask about registering an MCP server differently, and a bare Enter could silently decline or silently accept depending on which one you ran. Both now show the same explanation and client picker, which gained an "All" option and a manual-setup fallback (with a docs link) for AI clients Opik doesn't auto-detect.
+- **Threshold alerts no longer silently stop firing** — An alert whose threshold trigger was missing a `window` (including some created before this fix) failed internally on every evaluation and was skipped without notifying anyone. Alerts in this state now evaluate using their configured or default window instead of failing silently, and creating or editing one with an invalid threshold or window is now rejected up front with a clear error.
+- **Bulk-deleting alerts now requires the same permission as editing them** — `deleteAlertBatch` was missing the permission check its create/update siblings already had.
+- **Webhook destinations are now checked before Opik connects to them** — Webhook deliveries and the "test connection" action now validate the destination URL first; on Comet-managed workspaces this blocks destinations that only Opik's own network can reach, and a failed test no longer echoes the destination's response body back to the caller.
+- **LLM-as-judge evaluations (hallucination, G-Eval) can no longer have their verdict overridden by the content being judged** — A judge prompt whose evaluated input, context, or output happened to contain something that looked like a closing delimiter could break out of its section and forge a verdict. The judged content is now clearly namespaced from the rest of the prompt.
+- **G-Eval scores are now accurate for two-digit scores and more tokenizers** — The logprob-based scorer assumed a score is always a single digit at a fixed token position. A two-digit score (e.g. 10) or a tokenizer that folds whitespace into the score token produced a badly wrong score instead of the intended one; both are now located and parsed correctly.
+- **LangChain streaming integrations no longer drop token usage** — A streaming run with an empty `generations` list (seen on the Anthropic-Vertex AI path) raised internally and discarded token usage for that call instead of reporting `None`.
+- **Playground dataset runs are now scored by the rules you actually selected** — An online evaluation rule scoped to "Production traces" was scoring (or failing to score) Playground dataset runs regardless of the rules picked in the Playground's own metric selector. Playground dataset runs are now scored only by the selected rules plus any rule explicitly scoped to experiments, and a Playground run with no dataset is no longer treated as production traffic.
+
+## Performance Improvements
+
+- **Dataset and experiment transfers now default to 8 threads** — The Python SDK's bulk paths shipped with inconsistent worker counts: dataset reads (`get_items()`, `stream_items()`) and `Dataset.insert()` ran on 4 threads, while `Experiment.batch_upload_items()` uploaded batches sequentially unless you passed `num_threads` yourself. All three now default to **8**, the setting we benchmark against — the experiment upload path benefits most, since it went from sequential to parallel. Every call still takes `num_threads` if you want to push harder or ease off; see [Tuning SDK throughput](/evaluation/advanced/manage_datasets#tuning-sdk-throughput). Note that raising it much further does not help: on a 119,903-item upload, 16 threads measured slightly slower than 8, because the SDK saturates a CPU core serializing and compressing payloads before thread count becomes the limit. Parallel dataset upload still requires an Opik backend of 2.2.8 or newer, and falls back to a sequential upload against anything older.
+- **Dataset and experiment uploads encode payloads up to 5x faster** — The Python SDK now uses `orjson` to encode request bodies and compute content-deduplication hashes where it's available, instead of the standard library's `json` module. On a 30,000-item upload over 8 threads, end-to-end time dropped from 148.7s to 78.2s. This is automatic and requires no changes to your code; installs without an available `orjson` wheel fall back to the standard library unchanged.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.52...2.2.71)
+
+_Releases_: `2.2.53`, `2.2.54`, `2.2.55`, `2.2.56`, `2.2.57`, `2.2.58`, `2.2.59`, `2.2.60`, `2.2.61`, `2.2.62`, `2.2.63`, `2.2.64`, `2.2.65`, `2.2.66`, `2.2.67`, `2.2.68`, `2.2.69`, `2.2.70`, `2.2.71`

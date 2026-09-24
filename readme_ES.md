@@ -1,4 +1,4 @@
-<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_ES.md">Español</a> | <a href="readme_FR.md">Français</a> | <a href="readme_DE.md">Deutsch</a></b></div>
+<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_ES.md">Español</a> | <a href="readme_FR.md">Français</a> | <a href="readme_DE.md">Deutsch</a> | <a href="readme_JA.md">日本語</a></b></div>
 
 > Nota: Este archivo fue traducido automáticamente. ¡Las mejoras de traducción son bienvenidas!
 
@@ -108,6 +108,19 @@ def my_function(input: str) -> str:
 ```
 
 Cada llamada a `my_function` ahora se registra en Opik, incluidas las llamadas anidadas, por lo que esto funciona para trazas completas de agentes y canalizaciones, no solo para llamadas individuales a LLM. Consulta la [guía de inicio rápido](https://www.comet.com/docs/opik/quickstart?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_hero_link&utm_campaign=opik) para el SDK de TypeScript y otras opciones de configuración.
+
+### Conecta tu agente de programación
+
+Permite que Claude Code, Cursor, VS Code Copilot, Codex u opencode lean tus trazas, puntúen las salidas y ejecuten evaluaciones desde el chat. Un solo comando lo configura. Solo necesita [`uv`](https://docs.astral.sh/uv/), sin SDK:
+
+```bash
+uvx opik mcp configure
+```
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D)
+
+Las insignias y el comando alternativo `add-mcp` apuntan a Opik Cloud; el comando anterior también cubre despliegues autoalojados. Otros clientes MCP en Opik Cloud: `npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`. Los detalles, la resolución de problemas y las preguntas frecuentes están en la [guía del servidor MCP](https://www.comet.com/docs/opik/mcp-server?utm_source=opik&utm_medium=github&utm_content=mcp_quickstart_link&utm_campaign=opik).
 
 <br>
 
@@ -332,6 +345,8 @@ La forma más sencilla de registrar trazas es usar una de nuestras integraciones
 | Spring AI             | Registra trazas para llamadas del framework Spring AI                | [Documentación](https://www.comet.com/docs/opik/integrations/spring-ai?utm_source=opik&utm_medium=github&utm_content=spring_ai_link&utm_campaign=opik)                         |
 | Strands Agents        | Registra trazas para llamadas de Strands agents                     | [Documentación](https://www.comet.com/docs/opik/integrations/strands-agents?utm_source=opik&utm_medium=github&utm_content=strands_agents_link&utm_campaign=opik)               |
 | Together AI           | Registra trazas para llamadas a LLM de Together AI                    | [Documentación](https://www.comet.com/docs/opik/integrations/together-ai?utm_source=opik&utm_medium=github&utm_content=together_ai_link&utm_campaign=opik)                     |
+| TrueFoundry           | Registra trazas para llamadas a LLM de TrueFoundry AI Gateway         | [Documentación](https://www.comet.com/docs/opik/integrations/truefoundry?utm_source=opik&utm_medium=github&utm_content=truefoundry_link&utm_campaign=opik)                     |
+| TypeSafe AI           | Registra trazas para llamadas a System One de TypeSafe AI (Jev)      | [Documentación](https://www.comet.com/docs/opik/integrations/typesafe?utm_source=opik&utm_medium=github&utm_content=typesafe_link&utm_campaign=opik)                 |
 | Vercel AI SDK         | Registra trazas para llamadas del Vercel AI SDK                      | [Documentación](https://www.comet.com/docs/opik/integrations/vercel-ai-sdk?utm_source=opik&utm_medium=github&utm_content=vercel_ai_sdk_link&utm_campaign=opik)                 |
 | VoltAgent             | Registra trazas para llamadas del framework de agentes VoltAgent          | [Documentación](https://www.comet.com/docs/opik/integrations/voltagent?utm_source=opik&utm_medium=github&utm_content=voltagent_link&utm_campaign=opik)                         |
 | WatsonX               | Registra trazas para llamadas a LLM de IBM watsonx                    | [Documentación](https://www.comet.com/docs/opik/integrations/watsonx?utm_source=opik&utm_medium=github&utm_content=watsonx_link&utm_campaign=opik)                             |
@@ -388,7 +403,12 @@ Opik te permite evaluar tu aplicación de LLM durante el desarrollo a través de
 
 Si Opik te resulta útil, ¡considera darnos una estrella! Tu apoyo nos ayuda a hacer crecer nuestra comunidad y a seguir mejorando el producto.
 
-[![Gráfico del historial de estrellas](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+<a href="https://github.com/comet-ml/opik">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://cdn.comet.com/opik/star-history/star-history-dark.svg" />
+    <img alt="Gráfico del historial de estrellas" src="https://cdn.comet.com/opik/star-history/star-history-light.svg" />
+  </picture>
+</a>
 
 <a id="-contributing"></a>
 ## 🤝 Contribuir

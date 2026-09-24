@@ -73,7 +73,7 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts/jc-sync
           persist-credentials: false

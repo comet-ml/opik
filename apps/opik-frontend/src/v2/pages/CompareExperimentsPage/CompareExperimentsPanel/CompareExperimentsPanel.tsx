@@ -83,7 +83,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
 
   const experimentItems = useMemo(() => {
     return sortBy(activeExperimentsCompare?.experiment_items || [], (e) =>
-      findIndex(experimentsIds, (id) => e.id === id),
+      findIndex(experimentsIds, (id) => e.experiment_id === id),
     );
   }, [activeExperimentsCompare?.experiment_items, experimentsIds]);
 

@@ -7,9 +7,20 @@ fact, and this job refreshes the cache. Nobody edits those flags by hand.
 
   covered:   derived — does any spec tag this capability
   tier:      derived — the shallowest tier among the tagging tests
+  specs:     derived — every spec carrying that area's `@area:` tag, sorted
   (everything else)  authored — areas, capability keys, notes, cloud_only,
                      state, axes. Never touched here. Those change via the
                      discovery job (OPIK-7632) or a human PR.
+
+`specs:` became derived because maintaining it by hand made this the
+most-conflicted file in the QA queue: every generated spec PR appended to the
+same list, so 4 of 4 open ones collided here at once. Every entry was already
+knowable from the `@area:` tags, and the only consumer that reads the list
+(bug_discovery's "Already covered by" line) wants exactly what the tags say.
+Generated PRs no longer write it.
+
+A `specs:` block containing a comment or a blank line is left alone: something is
+annotated there, and replacing the block would drop the annotation silently.
 
 Run nightly after merges land.
 
@@ -60,7 +71,12 @@ TIER_ORDER = ("t1-smoke", "t2-cuj", "t3-nightly")
 
 # `  key:   { covered: true,  tier: t1-smoke }` — captures indent, key, and the
 # inside of the braces so we can rewrite values without touching alignment.
-FLOW_ENTRY = re.compile(r"^(?P<indent>\s+)(?P<key>[\w.-]+):(?P<pad>\s*)\{(?P<body>[^}]*)\}\s*$")
+# Greedy body, anchored on the LAST closing brace: a `note:` legitimately
+# contains one, e.g. "PATCH /traces/{id} merges ...". With `[^}]*` the match
+# stopped at that inner brace and failed the `\}\s*$` anchor, so the whole
+# entry was skipped -- the capability never entered `seen`, was reported as
+# "tagged in a spec but absent from the taxonomy", and the nightly exited 1.
+FLOW_ENTRY = re.compile(r"^(?P<indent>\s+)(?P<key>[\w.-]+):(?P<pad>\s*)\{(?P<body>.*)\}\s*$")
 SECTION = re.compile(r"^(?P<indent>\s+)(?P<name>[\w.-]+):\s*$")
 
 
@@ -68,8 +84,10 @@ SECTION = re.compile(r"^(?P<indent>\s+)(?P<name>[\w.-]+):\s*$")
 # read the estate
 # --------------------------------------------------------------------------- #
 
-def scan_estate(estate: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
-    """-> (functional cap -> tiers covering it, visual cap -> tiers).
+def scan_estate(
+    estate: Path,
+) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, set[str]]]:
+    """-> (functional cap -> tiers, visual cap -> tiers, area -> spec paths).
 
     Asks Playwright, not a regex. Tags union from describe to test, so the tier
     that applies to a given `@cap:` is only knowable after describe-inheritance
@@ -82,6 +100,8 @@ def scan_estate(estate: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]
     """
     caps: dict[str, set[str]] = {}
     vcaps: dict[str, set[str]] = {}
+    # area -> spec paths, derived from the @area: tags rather than authored.
+    area_specs: dict[str, set[str]] = {}
 
     for sub, sink, prefix in (
         ("e2e", caps, "@cap:"),
@@ -99,16 +119,18 @@ def scan_estate(estate: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]
                 "reconcile refuses to run against an incomplete estate — it would "
                 "mark every capability in this dimension as uncovered."
             )
-        for tags in playwright_test_tags(root):
+        for tags, path in playwright_test_tags(root):
             tiers = {t.lstrip("@") for t in tags if t.lstrip("@") in TIER_ORDER}
             for t in tags:
                 if t.startswith(prefix):
                     sink.setdefault(t.split(":", 1)[1], set()).update(tiers)
-    return caps, vcaps
+                if t.startswith("@area:") and path:
+                    area_specs.setdefault(t.split(":", 1)[1], set()).add(path)
+    return caps, vcaps, area_specs
 
 
-def playwright_test_tags(project_root: Path) -> list[set[str]]:
-    """Every test's fully-resolved tag set, via `playwright test --list`.
+def playwright_test_tags(project_root: Path) -> list[tuple[set[str], str]]:
+    """Every test's (fully-resolved tag set, spec path), via `--list`.
 
     Raises rather than returning a partial list. This matters more than it looks:
     a single spec with a syntax error makes `--list` exit 1 while still printing
@@ -167,16 +189,22 @@ def playwright_test_tags(project_root: Path) -> list[set[str]]:
     if report.get("errors"):
         raise fail(f"playwright --list reported {len(report['errors'])} collection error(s)")
 
-    out: list[set[str]] = []
+    out: list[tuple[set[str], str]] = []
 
     def walk(suite: dict) -> None:
         for spec in suite.get("specs") or []:
+            # Relative to the project's `tests/` dir, which is the form the
+            # taxonomy's `specs:` entries use.
+            path = spec.get("file") or ""
             for test in spec.get("tests") or []:
                 tags = set(test.get("tags") or [])
                 # Older reporter shapes hang tags off the spec, not the test.
                 tags.update(spec.get("tags") or [])
                 # Normalise: the reporter may or may not keep the leading '@'.
-                out.append({t if t.startswith("@") else f"@{t}" for t in tags})
+                out.append((
+                    {t if t.startswith("@") else f"@{t}" for t in tags},
+                    path,
+                ))
         for child in suite.get("suites") or []:
             walk(child)
 
@@ -275,7 +303,7 @@ def reconcile(taxonomy: Path, estate: Path) -> tuple[list[str], list[Change], li
         raise RuntimeError(f"{taxonomy} is not valid YAML: {e}") from None
     if not isinstance(tax, dict):
         raise RuntimeError(f"{taxonomy} did not parse to a mapping (got {type(tax).__name__})")
-    caps, vcaps = scan_estate(estate)
+    caps, vcaps, area_specs = scan_estate(estate)
 
     # The load dimension is `status: planned` and reports to JUnit, not Allure.
     # Its specs are also outside the agreed estate, so it has no tags to read —
@@ -362,7 +390,75 @@ def reconcile(taxonomy: Path, estate: Path) -> tuple[list[str], list[Change], li
     for fq in sorted(set(vcaps) - seen["visual"]):
         warnings.append(f"@vcap:{fq} is tagged in a spec but absent from the taxonomy")
 
+    lines, spec_changes = rewrite_spec_lists(lines, known_areas, area_specs)
+    changes += spec_changes
+
     return lines, changes, warnings
+
+
+def rewrite_spec_lists(
+    lines: list[str], known_areas: set[str], area_specs: dict[str, set[str]]
+) -> tuple[list[str], list[Change]]:
+    """Replace each area's `specs:` list with the one derived from @area: tags.
+
+    The list is a cache, like `covered:` and `tier:` — every entry is knowable
+    from the tags, and the only consumer that reads it (bug_discovery's
+    "Already covered by" line) wants exactly what the tags say. Maintaining it by
+    hand made it the most-conflicted file in the QA queue: 4 of 4 open spec PRs
+    touched it, because every one appended to the same list.
+
+    So generated PRs no longer write it and this job owns it, the same way it
+    owns the derived flags.
+
+    Sorted, to match tag_lint's rule 4. Splices whole lines rather than
+    round-tripping the YAML, for the reason in this module's header: a load/dump
+    would flatten 175 comments and 242 aligned flow mappings into an
+    unreviewable diff.
+    """
+    out: list[str] = []
+    changes: list[Change] = []
+    i = 0
+    area: str | None = None
+
+    while i < len(lines):
+        m_sec = SECTION.match(lines[i])
+        if m_sec and m_sec.group("name") in known_areas and len(m_sec.group("indent")) <= 4:
+            area = m_sec.group("name")
+            out.append(lines[i]); i += 1
+            continue
+
+        if m_sec and m_sec.group("name") == "specs" and area:
+            indent = m_sec.group("indent")
+            out.append(lines[i])
+            j = i + 1
+            existing: list[str] = []
+            # Only a contiguous run of plain list items. A comment or a blank
+            # line inside it means something is annotated here, so leave the
+            # whole block alone rather than silently dropping the annotation.
+            annotated = False
+            while j < len(lines):
+                stripped = lines[j].strip()
+                if lines[j].startswith(indent + "  - "):
+                    existing.append(stripped[2:]); j += 1
+                elif stripped.startswith("#") or not stripped:
+                    annotated = True; break
+                else:
+                    break
+            derived = sorted(area_specs.get(area) or [])
+            if annotated or not derived:
+                out.extend(lines[i + 1:j])
+            else:
+                out.extend(f"{indent}  - {sp}" for sp in derived)
+                if derived != existing:
+                    changes.append(Change(i + 1, area, "specs", "list",
+                                          f"{len(existing)} entries",
+                                          f"{len(derived)} entries"))
+            i = j
+            continue
+
+        out.append(lines[i]); i += 1
+
+    return out, changes
 
 
 def main() -> int:

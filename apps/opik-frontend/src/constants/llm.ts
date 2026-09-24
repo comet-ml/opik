@@ -60,6 +60,19 @@ export const RESERVED_TRACE_EVALUATOR_VARIABLES: Readonly<
 });
 
 /**
+ * Python-metric span-scope reserved variables: there are none. `spans` is
+ * trace-scope only (a span has no sub-spans to inject), and
+ * `PythonCodeDetailsSpanFormSchema` accepts only `input`/`output`/`metadata`
+ * paths. Auto-filling `spans → spans` here would produce a mapping the user
+ * cannot see — `LLMPromptMessagesVariables` hides a variable whose value equals
+ * its sentinel — and cannot submit, because the schema rejects it. An explicit
+ * empty set keeps that pairing visible at the call site.
+ */
+export const RESERVED_SPAN_EVALUATOR_VARIABLES: Readonly<
+  Record<string, string>
+> = Object.freeze({});
+
+/**
  * LLM-as-judge trace-scope reserved variables. Superset of
  * {@link RESERVED_TRACE_EVALUATOR_VARIABLES}: adds `{{trace}}`, which injects the
  * trace skeleton (trace id, span ids, attachment file_names) into the prompt and
@@ -147,8 +160,14 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
-// Per-model Anthropic quirks. Add a row when a model deviates from defaults
-// (sampling params allowed, no thinking-effort UI).
+// Per-model Anthropic capabilities.
+//
+// `supportsSamplingParams` names the models that DO take temperature/top_p, so a Claude we recognise
+// without a row is assumed to take none. It was the inverse and that rotted twice: opus-5 and
+// fable-5 were classified here but never on the backend, and fable-5-1 was missed on both sides.
+// Newer Claude models increasingly take none, so this way a newly added model omits a parameter
+// rather than having the provider reject the request outright. A model id we cannot place at all
+// stays permissive — see supportsSamplingParams in lib/modelUtils.
 export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
@@ -159,30 +178,37 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   >
 > = {
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
+    supportsSamplingParams: true,
     thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
+    supportsSamplingParams: true,
     thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5_20250929]: {
+    supportsSamplingParams: true,
   },
 };
 
@@ -306,32 +332,6 @@ export const REASONING_MODELS = [
   PROVIDER_MODEL_TYPE.GPT_O3_MINI,
   PROVIDER_MODEL_TYPE.GPT_O4_MINI,
 ] as const;
-
-// Thinking level options for Gemini 3 Pro models (low, high)
-export const THINKING_LEVEL_OPTIONS_PRO: Array<{
-  label: string;
-  value: "low" | "high";
-}> = [
-  { label: "Low", value: "low" },
-  { label: "High (Default)", value: "high" },
-];
-
-// Thinking level options for Gemini 3 Flash models (all 4 levels)
-// Flash supports: minimal, low, medium, high
-export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
-  label: string;
-  value: "minimal" | "low" | "medium" | "high";
-}> = [
-  { label: "Minimal", value: "minimal" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High (Default)", value: "high" },
-];
-
-// Legacy export for backwards compatibility.
-// Prefer using model-specific constants instead: THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH.
-/** @deprecated Use THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH instead. */
-export const THINKING_LEVEL_OPTIONS = THINKING_LEVEL_OPTIONS_PRO;
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",

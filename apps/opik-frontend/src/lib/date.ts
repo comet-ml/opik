@@ -158,7 +158,10 @@ export const formatDuration = (value?: number | null, onlySeconds = true) => {
     }
     if (seconds >= 60) {
       minutes = Math.floor(seconds / 60);
-      seconds = round(seconds % 60, 1);
+      seconds %= 60;
+    }
+    if (seconds !== totalSeconds) {
+      seconds = round(seconds, 1);
     }
 
     const result = `${years ? years + "y " : ""}${

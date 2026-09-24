@@ -1,13 +1,180 @@
 import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
+import { loadEnvConfig } from '../config/env.config';
 
 export class PromptDetailPage {
   constructor(private readonly page: Page) {}
+
+  /**
+   * Open a prompt's detail page directly, optionally deep-linked to one of its
+   * versions via `activeVersionId` — the query param the page resolves
+   * independently of whichever versions its paginated timeline has loaded.
+   *
+   * `tab=prompt` is set explicitly rather than left to the page's own effect,
+   * which replaces the URL a render later; navigating straight to the final URL
+   * keeps `waitForReady` from racing that replacement.
+   */
+  async goto(
+    projectId: string,
+    promptId: string,
+    opts: { activeVersionId?: string } = {},
+  ): Promise<void> {
+    return test.step(`open prompt ${promptId}${opts.activeVersionId ? ` at version ${opts.activeVersionId}` : ''}`, async () => {
+      const env = loadEnvConfig();
+      const query = new URLSearchParams({ tab: 'prompt' });
+      if (opts.activeVersionId) query.set('activeVersionId', opts.activeVersionId);
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/prompts/${promptId}?${query}`,
+      );
+    });
+  }
 
   async waitForReady(): Promise<void> {
     return test.step('wait for prompt detail to load', async () => {
       // Edit button renders only after the loading skeleton is replaced with real content
       await this.page.getByRole('button', { name: 'Edit' }).waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Open the prompt's Experiments tab directly, at a chosen page size.
+   *
+   * `size` is a real query param (`useTablePageSize` prefers a valid `?size=`
+   * over the stored value and over the deployment default), so a pagination
+   * spec can pin the page size without touching localStorage or driving the
+   * rows-per-page menu — and without inheriting whatever size the last spec in
+   * this worker happened to leave behind.
+   */
+  async gotoExperimentsTab(
+    projectId: string,
+    promptId: string,
+    opts: { size?: number } = {},
+  ): Promise<void> {
+    return test.step(`open prompt ${promptId} Experiments tab`, async () => {
+      const env = loadEnvConfig();
+      const query = new URLSearchParams({ tab: 'experiments' });
+      if (opts.size !== undefined) query.set('size', String(opts.size));
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/prompts/${promptId}?${query}`,
+      );
+    });
+  }
+
+  /** Wait until the Experiments tab has rendered `expected` rows. */
+  async waitForExperimentRows(expected: number, timeoutMs = 30_000): Promise<void> {
+    return test.step(`wait for ${expected} experiment row(s)`, async () => {
+      await expect(this.experimentRows()).toHaveCount(expected, { timeout: timeoutMs });
+    });
+  }
+
+  /**
+   * Every experiment row currently rendered, in DOM order.
+   *
+   * `data-row-id` is the experiment id here (`getExperimentRowId` returns the
+   * bare id while no grouping is active), so this is both the ORDER the tab
+   * presents and the identity of each row — which is what a pinning assertion
+   * needs: "first" and "exactly once" are claims about this list.
+   */
+  experimentRows(): Locator {
+    return this.page.locator('tbody tr[data-row-id]');
+  }
+
+  /** One experiment's row, by id. Never `.first()` — callers assert the count. */
+  experimentRow(experimentId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${experimentId}"]`);
+  }
+
+  async experimentRowIds(): Promise<string[]> {
+    return test.step('read the rendered experiment row ids', async () => {
+      return this.experimentRows().evaluateAll((rows) =>
+        rows
+          .map((row) => row.getAttribute('data-row-id'))
+          .filter((id): id is string => Boolean(id)),
+      );
+    });
+  }
+
+  /**
+   * Pin or unpin an experiment from its row.
+   *
+   * The pin button is `hidden group-hover/row:inline-flex` while unpinned — it
+   * is not in the layout at all until the row is hovered — so the hover is a
+   * precondition, not a flake workaround. Once pinned it renders
+   * unconditionally, which is what makes the confirmations below reliable.
+   *
+   * The two directions confirm differently, because they do not leave the page
+   * in the same shape. Pinning keeps the row and flips its control to "Unpin".
+   * UNPINNING a row that was on this page only BECAUSE it was pinned takes the
+   * row away with it — so the row itself may vanish, and asserting a flipped
+   * control on it would fail on a correct app. What holds either way is that
+   * no "Unpin" control remains for this experiment on this page.
+   */
+  async setExperimentPinned(experimentId: string, pinned: boolean): Promise<void> {
+    return test.step(`${pinned ? 'pin' : 'unpin'} experiment ${experimentId}`, async () => {
+      const row = this.experimentRow(experimentId);
+      await expect(row, 'exactly one row for the experiment being pinned').toHaveCount(1);
+      await row.hover();
+      await row.getByRole('button', { name: pinned ? 'Pin to the top' : 'Unpin' }).click();
+      await expect(
+        row.getByRole('button', { name: 'Unpin' }),
+        pinned
+          ? 'the row now offers Unpin, so the pin registered'
+          : 'no Unpin control remains, so the unpin registered',
+      ).toHaveCount(pinned ? 1 : 0);
+    });
+  }
+
+  /** The experiments table's "Showing 1-10 of 12" pagination label. */
+  private paginationSummary(): Locator {
+    return this.page.getByText(/^Showing [\d,]+-[\d,]+ of [\d,]+$/);
+  }
+
+  /**
+   * Page the experiments table forward or back.
+   *
+   * The pager buttons are icon-only with no accessible name, so the rendered
+   * lucide icon is the only handle — and the first/last buttons render
+   * `chevron-first`/`chevron-last`, which these class names do not match. A
+   * `data-testid` would be better, but these specs run against a deployed
+   * Opik, so one added alongside them would not exist in the version under
+   * test.
+   *
+   * Scoped to the element holding the "Showing …" label, the same way
+   * `LogsPage.nextPageButton` is: a page-wide chevron lookup matches any other
+   * chevron button the page happens to render and fails on strict mode rather
+   * than on behaviour.
+   */
+  async goToPage(direction: 'next' | 'previous'): Promise<void> {
+    return test.step(`go to the ${direction} page`, async () => {
+      const icon = direction === 'next' ? 'lucide-chevron-right' : 'lucide-chevron-left';
+      await this.paginationSummary()
+        .locator('xpath=..')
+        .locator(`button:has(svg.${icon})`)
+        .click();
+    });
+  }
+
+  /**
+   * The experiment ids a localStorage pinning key currently holds.
+   *
+   * Read directly because the key is the whole point of the per-prompt half of
+   * this behaviour: pins on this tab are stored under the PROMPT id, and pins
+   * on the project Experiments page under the PROJECT id. A wrong key still
+   * looks correct on the surface that wrote it, and only shows up as a
+   * stranger's row on top of the other one.
+   *
+   * Returns `null` when the key is absent, which is a different fact from an
+   * empty array: never written and written-then-emptied are both legitimate,
+   * and a caller asserting "no longer pinned" should accept either explicitly
+   * rather than have this collapse them.
+   */
+  async pinnedIdsInStorage(key: string): Promise<string[] | null> {
+    return test.step(`read localStorage["${key}"]`, async () => {
+      return this.page.evaluate((storageKey) => {
+        const raw = window.localStorage.getItem(storageKey);
+        if (raw === null) return null;
+        return JSON.parse(raw) as string[];
+      }, key);
     });
   }
 
@@ -56,6 +223,78 @@ export class PromptDetailPage {
       await sheet.getByRole('button', { name: 'Create new version' }).click();
       await sheet.waitFor({ state: 'hidden' });
     });
+  }
+
+  /** The version-history timeline in the right sidebar (xl breakpoint only). */
+  versionTimeline(): Locator {
+    return this.page.getByTestId('version-history-timeline');
+  }
+
+  /** Every version currently rendered in the timeline — one entry per loaded version. */
+  versionTimelineItems(): Locator {
+    return this.versionTimeline().locator('[data-testid^="version-history-item-"]');
+  }
+
+  /**
+   * The timeline's version labels, top to bottom.
+   *
+   * Read off each item's own `data-testid` rather than its rendered text: the
+   * item also renders a change description and a relative timestamp, so its
+   * text is not the label. Order is the assertion here, which is why this reads
+   * positionally at all — the labels themselves are still identities, not
+   * indices.
+   */
+  async readVersionTimelineLabels(): Promise<string[]> {
+    return test.step('read version timeline labels in order', async () => {
+      const testIds = await this.versionTimelineItems().evaluateAll((els) =>
+        els.map((el) => el.getAttribute('data-testid') ?? ''),
+      );
+      return testIds.map((id) => id.replace('version-history-item-', ''));
+    });
+  }
+
+  /**
+   * Scroll the timeline's last rendered version into view, which is what brings
+   * its load-more sentinel into the viewport and triggers the next page.
+   */
+  async scrollVersionTimelineToEnd(): Promise<void> {
+    return test.step('scroll the version timeline to its end', async () => {
+      await this.versionTimelineItems().last().scrollIntoViewIfNeeded();
+    });
+  }
+
+  /**
+   * Open the "Diff" menu and return its content.
+   *
+   * The menu lists every version except the active one, and keeps paging the
+   * version list for as long as it is open — so callers must assert on its
+   * contents with a retrying assertion rather than reading it once.
+   */
+  async openDiffMenu(): Promise<Locator> {
+    return test.step('open the Diff (compare against) menu', async () => {
+      await this.page.getByRole('button', { name: 'Diff' }).click();
+      const menu = this.page.getByRole('menu');
+      await menu.waitFor({ state: 'visible' });
+      return menu;
+    });
+  }
+
+  /** The entries offered by an open Diff menu. */
+  diffMenuItems(menu: Locator): Locator {
+    return menu.getByRole('menuitem');
+  }
+
+  /**
+   * The label element of one Diff menu entry, matched whole.
+   *
+   * Anchored and exact because these labels are prefixes of one another: a
+   * substring match on `v1` also matches `v10` through `v19`, which would make
+   * "the page-2 versions are listed" pass on a menu that only ever loaded page
+   * 1. The label sits in its own element, so an exact match on element text
+   * addresses it without depending on its position among the entry's parts.
+   */
+  diffMenuVersionLabel(menu: Locator, label: string): Locator {
+    return menu.getByText(label, { exact: true });
   }
 
   async selectVersion(label: string): Promise<void> {
