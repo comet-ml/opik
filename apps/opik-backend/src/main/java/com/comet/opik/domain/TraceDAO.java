@@ -28,6 +28,7 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.ErrorUtils;
@@ -127,6 +128,16 @@ public interface TraceDAO {
     Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
 
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
+
+    /**
+     * Batch insert without a caller-supplied connection.
+     *
+     * <p>Exists so the write-path choice happens BEFORE a connection is allocated: the JSONEachRow path
+     * uses the v2 client's own HTTP pool and needs no R2DBC connection at all, and
+     * {@code TransactionTemplateAsync#nonTransaction} does not close what it hands out. Allocating one
+     * per batch and never using it is pure waste on a path whose point is removing per-batch overhead.
+     */
+    Mono<Long> batchInsert(List<Trace> traces);
 
     /**
      * Previous-day trace counts per workspace and project. Callers drop demo projects and re-aggregate via
@@ -3394,6 +3405,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull WorkspacesService workspacesService;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     /**
      * Sort mapping applied under {@code traceColumnsNonNullable}: {@code nullIf} restores an absent (epoch)
@@ -4486,6 +4498,39 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMapMany(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
 
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> batchInsert(List<Trace> traces) {
+
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(traces), "traces must not be empty");
+
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(traces);
+        }
+
+        return asyncTemplate.nonTransaction(connection -> batchInsert(traces, connection));
+    }
+
+    /**
+     * The {@link #BATCH_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as
+     * 20 named parameters per row. See {@link TraceJsonRowMapper} for the per-column parity notes.
+     */
+    private Mono<Long> insertJsonEachRow(List<Trace> traces) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // One value for the whole batch, rendered once rather than per row. makeMonoContextAware is
+            // deferContextual, so this already runs on subscription and again on a resubscription.
+            String nowForBatch = Instant.now().toString();
+
+            return jsonBulkInsert.insert(
+                    TRACES_TABLE,
+                    getLogComment("batch_insert_traces", workspaceId, userName, traces.size()),
+                    traces,
+                    trace -> TraceJsonRowMapper.toJsonRow(trace, userName, workspaceId, nowForBatch,
+                            traceColumnsNonNullable(),
+                            configuration.getResponseFormatting().getTruncationSize()));
+        });
     }
 
     private Publisher<? extends Result> insert(List<Trace> traces, Connection connection) {

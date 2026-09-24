@@ -229,8 +229,10 @@ class TraceServiceImpl implements TraceService {
                             .collectList();
 
                     return resolveProjects
-                            .flatMap(traces -> template
-                                    .nonTransaction(connection -> dao.batchInsert(traces, connection))
+                            // No nonTransaction here: the DAO picks the write path and allocates a
+                            // connection only if it needs one. The JSONEachRow path uses the v2 client's
+                            // own pool, and nonTransaction does not close what it hands out.
+                            .flatMap(traces -> dao.batchInsert(traces)
                                     .doOnSuccess(__ -> {
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName,
                                                 workspaceName, cipxDeviceId));
