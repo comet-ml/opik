@@ -70,7 +70,8 @@ def apply_model_specific_filters(
     if _is_bedrock_openai_gpt_model(model_name):
         _apply_gpt5_filters(params, already_warned, warn)
         # Bedrock Converse rejects the temperature field for these models at any
-        # value, 1 included. Omitting it gives the model's default (1).
+        # value, 1 included; the OpenAI-format routes (e.g. bedrock_mantle/) accept
+        # only the default while reasoning is on. Omitting it gives the default (1).
         params.pop("temperature", None)
         return
 
