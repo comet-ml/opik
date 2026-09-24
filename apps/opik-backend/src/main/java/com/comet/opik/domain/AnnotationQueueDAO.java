@@ -75,7 +75,7 @@ public interface AnnotationQueueDAO {
 
     Flux<AnnotationQueueItem> findItemsByIds(UUID queueId, UUID projectId, Set<UUID> itemIds);
 
-    Mono<Long> countAutomatedItems(UUID queueId, UUID projectId);
+    Mono<Long> countItems(UUID queueId, UUID projectId);
 
     Mono<Integer> getDistinctAnnotatorCount(UUID itemId, UUID projectId, String entityType,
             UUID queueId,
@@ -221,20 +221,12 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
      * room again. DISTINCT because the table is a ReplacingMergeTree and an unmerged part can still hold
      * more than one row per item.
      */
-    // Automated items only: the ceiling bounds what automation adds, so what a person adds by hand must
-    // neither consume it nor be blocked by it. The latest row per item decides its source: the table is a
-    // ReplacingMergeTree, and an item re-added by hand keeps its older automated row until the parts merge.
-    private static final String COUNT_AUTOMATED_ITEMS = """
-            SELECT count() AS count
-            FROM (
-                SELECT item_id, argMax(source, last_updated_at) AS source
-                FROM annotation_queue_items
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND queue_id = :queue_id
-                GROUP BY item_id
-            )
-            WHERE source = :source
+    private static final String COUNT_ITEMS = """
+            SELECT count(DISTINCT item_id) AS count
+            FROM annotation_queue_items
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND queue_id = :queue_id
             """;
 
     /**
@@ -596,13 +588,12 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     @Override
-    public Mono<Long> countAutomatedItems(@NonNull UUID queueId, @NonNull UUID projectId) {
+    public Mono<Long> countItems(@NonNull UUID queueId, @NonNull UUID projectId) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(COUNT_AUTOMATED_ITEMS)
+                    var statement = connection.createStatement(COUNT_ITEMS)
                             .bind("project_id", projectId.toString())
-                            .bind("queue_id", queueId.toString())
-                            .bind("source", AnnotationQueueItemSource.AUTOMATED.getValue());
+                            .bind("queue_id", queueId.toString());
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
