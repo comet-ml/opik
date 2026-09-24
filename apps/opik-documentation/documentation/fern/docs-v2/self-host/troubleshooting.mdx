@@ -769,37 +769,46 @@ MinIO's own `HINT` suggests `sudo chown -R minio. <path>`, which does not apply 
 No action is needed. When `./opik.sh` (or `opik.ps1` on Windows) hits this, it reports the cause, re-owns the volume to the uid the current image runs as, and restarts MinIO:
 
 ```
-[INFO] MinIO could not write to its data volume: the volume is owned by uid 0,
-       but the MinIO image runs as 1001:1001. ...
+[INFO] MinIO could not write to its data volume: it holds files not owned by uid 1001,
+       which is the user the MinIO image runs as. ...
 [INFO] Re-owning opik-opik_minio-data to 1001:1001 (contents are preserved)...
 [OK] MinIO is running and healthy; its stored data was preserved.
 ```
 
 Only ownership changes; the volume's contents are untouched, so attachments stored before the upgrade remain available.
 
-If the repair itself fails — most often because the Docker daemon will not run the helper container — the command is printed so you can run it yourself:
+If the repair itself fails — most often because the Docker daemon will not run the helper container — repair the volume manually:
 
-```bash
-./opik.sh --stop
-docker run --rm -v opik-opik_minio-data:/data alpine chown -R 1001:1001 /data
-./opik.sh
-```
+<Steps>
+  <Step title="Stop the stack">
+    ```bash
+    ./opik.sh --stop
+    ```
+  </Step>
+  <Step title="Re-own the volume">
+    ```bash
+    docker run --rm -v opik-opik_minio-data:/data alpine chown -R 1001:1001 /data
+    ```
 
-Substitute your own volume name if it differs — `docker volume ls | grep minio` will show it. The Compose project name prefixes the volume, so it is `opik-opik_minio-data` in a default installation.
+    Substitute your own volume name if it differs — `docker volume ls | grep minio` will show it. The Compose project name prefixes the volume, so it is `opik-opik_minio-data` in a default installation.
+  </Step>
+  <Step title="Start Opik again">
+    ```bash
+    ./opik.sh
+    ```
+  </Step>
+  <Step title="Verify MinIO is running">
+    ```bash
+    docker ps --filter name=minio --format '{{.Names}}\t{{.Status}}'
+    ```
 
-<Warning>
-Do not delete the volume to get past this error. Removing `minio-data` discards every attachment stored in it, and `./opik.sh --clean` goes further still — it removes **all** Opik data volumes, including ClickHouse and MySQL. The chown above resolves the problem without data loss.
-</Warning>
+    MinIO reports `status=running` and the stack becomes healthy. Attachments stored before the upgrade remain accessible in the Opik UI.
+  </Step>
+</Steps>
 
-#### Verification
-
-MinIO reports `status=running` and the stack becomes healthy:
-
-```bash
-docker ps --filter name=minio --format '{{.Names}}\t{{.Status}}'
-```
-
-Attachments stored before the upgrade remain accessible in the Opik UI.
+<Callout intent="warning">
+Do not delete the volume to get past this error. Removing `minio-data` discards every attachment stored in it, and `./opik.sh --clean` goes further still — it removes **all** Opik data volumes, including ClickHouse and MySQL. Re-owning the volume resolves the problem without data loss.
+</Callout>
 
 ## Getting Help
 
