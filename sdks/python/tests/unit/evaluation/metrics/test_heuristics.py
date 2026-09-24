@@ -522,6 +522,48 @@ def test_meteor_rejects_empty_inputs():
         metric.score(output="hyp", reference="   ")
 
 
+def test_meteor_metric__default_nltk_backend__scores_plain_strings():
+    # The default backend must tokenize before calling NLTK: meteor_score expects
+    # an iterable of token lists and a token list, so passing the raw strings
+    # raised `TypeError: "hypothesis" expects pre-tokenized hypothesis`. Both other
+    # METEOR tests inject `meteor_fn`, so the real NLTK path was never exercised.
+    nltk = pytest.importorskip("nltk")
+
+    # Check for the corpus without letting the metric's constructor fetch it:
+    # `nltk.data.find` only looks locally, while `METEOR()` downloads on a miss,
+    # which would put a network call in a unit test. Skip only that case, so a
+    # genuine failure to construct the metric still fails the test.
+    try:
+        nltk.data.find("corpora/wordnet.zip")
+    except LookupError:
+        try:
+            nltk.data.find("corpora/wordnet")
+        except LookupError:
+            pytest.skip("METEOR needs the NLTK WordNet corpus, which is not installed")
+
+    metric = METEOR(track=False)
+
+    identical = metric.score(
+        output="the cat sat on the mat", reference="the cat sat on the mat"
+    ).value
+    partial = metric.score(
+        output="the cat sat on the mat", reference="a cat was sitting on the mat"
+    ).value
+    unrelated = metric.score(
+        output="completely different words here", reference="the cat sat on the mat"
+    ).value
+
+    assert identical == pytest.approx(0.9977, abs=1e-3)
+    assert unrelated == 0.0
+    assert unrelated < partial < identical
+
+    # A sequence of references scores against the best-matching one.
+    best_of_many = metric.score(
+        output="the cat sat", reference=["a dog ran away", "the cat sat"]
+    ).value
+    assert best_of_many > 0.9
+
+
 def test_gleu_metric_with_custom_fn():
     def gleu_fn(references, hypothesis):
         return 0.5
