@@ -62,6 +62,7 @@ import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
+import useExperimentsPinning from "@/v2/pages-shared/experiments/useExperimentsPinning";
 import {
   FILTER_AND_GROUP_COLUMNS,
   useExperimentsGroupsAndFilters,
@@ -179,6 +180,10 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [pinnedIds, setPinnedIds] = useLocalStorageState<string[]>(
+    `${STORAGE_KEY_PREFIX}-pinned-experiments-${activeProjectId}`,
+    { defaultValue: [] },
+  );
 
   const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
     COLUMNS_SORT_KEY,
@@ -393,7 +398,20 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       polling: true,
     });
 
-  const experiments = useMemo(() => data?.content ?? [], [data?.content]);
+  const loadedExperiments = useMemo(() => data?.content ?? [], [data?.content]);
+  const {
+    experiments,
+    pinningConfig,
+    refetch: refetchPinned,
+  } = useExperimentsPinning({
+    rows: loadedExperiments,
+    workspaceName,
+    projectId: activeProjectId ?? undefined,
+    pinnedIds,
+    setPinnedIds,
+    enabled: groups.length === 0,
+    polling: true,
+  });
 
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
@@ -709,7 +727,10 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           <RefreshButton
             tooltip="Refresh experiments list"
             isFetching={isFetching}
-            onRefresh={() => refetch()}
+            onRefresh={() => {
+              refetch();
+              refetchPinned();
+            }}
           />
           <ColumnsButton
             columns={availableColumns}
@@ -735,6 +756,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           rowSelection,
           setRowSelection,
         }}
+        pinningConfig={pinningConfig}
         expandingConfig={expandingConfig}
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}

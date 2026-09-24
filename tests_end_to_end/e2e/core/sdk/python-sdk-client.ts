@@ -17,6 +17,16 @@ export type SpanSeedUsage = {
   total_tokens: number;
 } & Record<string, number>;
 
+/**
+ * One dataset-item field, named by the Python type the bridge must build it as
+ * before `Dataset.insert` sees it. `value` is the JSON form the object is built
+ * FROM — never what it has to store as, which is the caller's assertion.
+ */
+export type TypedValueSpec = {
+  kind: 'float' | 'uuid' | 'enum' | 'datetime' | 'set' | 'tuple';
+  value: unknown;
+};
+
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
   createTrace(args: {
@@ -126,6 +136,32 @@ export interface PythonSdkClient {
     workspace?: string;
   }): Promise<{ dataset_id: string; inserted: number[] }>;
   /**
+   * One `Dataset.insert([item])` whose content carries non-JSON-native Python
+   * types — a `uuid.UUID`, an `enum.Enum` member, a tz-aware `datetime`, a
+   * `set`, a `tuple`.
+   *
+   * `insertDatasetItems` cannot express this and never will: its items are JSON
+   * by the time the bridge reads them, so a UUID has already become a string
+   * and a set a list. That normalisation is precisely what the content-hash
+   * path performs, so sending it pre-normalised tests nothing. Here the field
+   * carries the *kind* to build and the JSON value to build it FROM, and the
+   * bridge materialises the object before `Dataset.insert` sees it.
+   *
+   * One insert per call, so posting twice compares the second digest against
+   * what the backend stored rather than against an in-process cache.
+   *
+   * `accelerated` reports whether `orjson` answered in the bridge process. It
+   * is diagnostic — the round trip must hold under either encoder — but a
+   * failure is unreadable without knowing which one produced it.
+   */
+  insertTypedDatasetItem(args: {
+    dataset_name: string;
+    project_name: string;
+    typed_content: Record<string, TypedValueSpec>;
+    deduplication?: boolean;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; inserted: number; accelerated: boolean }>;
+  /**
    * One `Dataset.get_items(...)`, reduced to the item ids it returned **in the
    * order it returned them** — the property a concurrent paged read has to
    * preserve, and the one a set comparison would not notice losing.
@@ -215,6 +251,30 @@ export interface PythonSdkClient {
         score_name: string;
         score_value: number;
       }>;
+    }>;
+  }>;
+  /**
+   * `Experiment.get_items()` — the SDK read the estate has never driven.
+   *
+   * Every knob is optional so an omitted one exercises the SDK's own default
+   * rather than a copy of it pinned in the suite. `idx` is the monotonic index
+   * the caller wrote onto each dataset item, echoed back so a read can be
+   * checked for order, gaps and duplicates without transferring whole rows.
+   */
+  readExperimentItems(args: {
+    experiment_id: string;
+    max_results?: number;
+    page_size?: number;
+    num_threads?: number;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    count: number;
+    items: Array<{
+      id: string;
+      dataset_item_id: string;
+      trace_id: string;
+      idx: number | null;
     }>;
   }>;
   createTextPrompt(args: {
@@ -483,6 +543,17 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         { timeoutMs: 180_000 },
       );
     },
+    async insertTypedDatasetItem(args) {
+      // One item, but the same cloud rate-limiting exposure as the other insert
+      // routes — and an abort here would leave the dataset half-written, which
+      // is the state this spec's dedup assertion cannot tell apart from a bug.
+      return request<{ dataset_id: string; inserted: number; accelerated: boolean }>(
+        'POST',
+        '/datasets/insert-typed-item',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
     async readDatasetItems(args) {
       // A multi-page read of a few thousand items is well inside the default
       // budget, but a `num_threads=1` pass over small chunks is not.
@@ -520,6 +591,23 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           }>;
         }>;
       }>('POST', '/experiments/compare-seed', args);
+    },
+    async readExperimentItems(args) {
+      return request<{
+        experiment_id: string;
+        count: number;
+        items: Array<{
+          id: string;
+          dataset_item_id: string;
+          trace_id: string;
+          idx: number | null;
+        }>;
+      }>('POST', '/experiments/read-items', args, {
+        // A full read of a multi-page experiment against a cloud backend is
+        // several round trips deep, and the sequential arms (num_threads=1 at
+        // a small page size) are deliberately the slowest way to do it.
+        timeoutMs: 300_000,
+      });
     },
     async createTextPrompt(args) {
       return request<{ id: string; name: string }>('POST', '/prompts/text', args);

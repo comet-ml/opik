@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.bi;
 
+import com.comet.opik.api.resources.v1.jobs.AgentInsightsAutoFirstRunJob;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
 import com.comet.opik.api.resources.v1.jobs.AnnotationQueueRoutingFlushJob;
 import com.comet.opik.api.resources.v1.jobs.ClickHousePartitionMetricsJob;
@@ -64,7 +65,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setupDailyJob();
                 setTraceThreadsClosingJob();
                 setMetricsAlertJob();
-                setAgentInsightsReportJob();
+                setAgentInsightsJobs();
                 setExperimentDenormalizationJob();
                 setProjectLastUpdatedFlushJob();
                 setAnnotationQueueRoutingFlushJob();
@@ -241,16 +242,17 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 partitionMetricsConfig.getInterval().toJavaDuration(), null);
     }
 
-    private void setAgentInsightsReportJob() {
+    private void setAgentInsightsJobs() {
         var serviceToggles = injector.get().getInstance(OpikConfiguration.class).getServiceToggles();
 
         if (!serviceToggles.isOllieEnabled()) {
-            log.info("Agent Insights is disabled, skipping report job setup");
+            log.info("Agent Insights is disabled, skipping report and auto-first-run job setup");
             return;
         }
 
         var reportConfig = injector.get().getInstance(OpikConfiguration.class).getAgentInsightsReport();
         scheduleCronJob(AgentInsightsReportJob.class, reportConfig.getSchedule());
+        scheduleCronJob(AgentInsightsAutoFirstRunJob.class, reportConfig.getAutoFirstRunSchedule());
     }
 
     private void scheduleCronJob(Class<? extends org.quartz.Job> jobClass, String cronExpression) {
