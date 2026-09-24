@@ -23,7 +23,7 @@ def _chunk(choices: List[Any], **extra: Any) -> Dict[str, Any]:
     ],
     ids=["openai-delta", "malformed-choice-skipped", "mistral-message"],
 )
-def test_aggregate_chunks__openai_like_chunks__text_stop_reason_and_usage_kept(
+def test_aggregate_chunks__openai_or_mistral_chunks__text_stop_key_and_usage_kept(
     choices: List[Any], stop_key: str
 ) -> None:
     chunks = [_chunk([choice]) for choice in choices]
@@ -37,3 +37,22 @@ def test_aggregate_chunks__openai_like_chunks__text_stop_reason_and_usage_kept(
     assert choice["message"]["content"] == "pong"
     assert choice[stop_key] == "stop"
     assert response.usage == {"inputTokens": 8, "outputTokens": 5, "totalTokens": 13}
+
+
+def test_aggregate_chunks__usage_and_invocation_metrics__metrics_win() -> None:
+    # The last chunk of a us.openai.gpt-6-sol stream repeats usage and adds
+    # amazon-bedrock-invocationMetrics. The counts differ here only to show that
+    # the metrics take precedence.
+    metrics = {"inputTokenCount": 9, "outputTokenCount": 6}
+    chunks = [
+        _chunk([{"delta": {"content": "pong"}, "finish_reason": "stop"}]),
+        _chunk(
+            [],
+            usage={"prompt_tokens": 8, "completion_tokens": 5},
+            **{"amazon-bedrock-invocationMetrics": metrics},
+        ),
+    ]
+
+    usage = chunks_aggregator.aggregate_chunks_to_dataclass(chunks).usage
+
+    assert usage == {"inputTokens": 9, "outputTokens": 6, "totalTokens": 15}
