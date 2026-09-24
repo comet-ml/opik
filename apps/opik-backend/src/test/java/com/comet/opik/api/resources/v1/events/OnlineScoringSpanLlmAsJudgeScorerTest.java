@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.attachment.AttachmentInfo;
@@ -21,6 +22,11 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -45,6 +51,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -84,6 +91,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     private AttachmentService attachmentService;
     @Mock
     private OnlineEvaluationRecorder onlineEvaluationRecorder;
+    @Mock
+    private OpenRouterDecisionsClient decisionsClient;
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -93,6 +102,17 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
 
     // Evaluator whose prompt references {{span}} — the declarative agentic trigger for span scope. No
     // variable binds it, so the backend's implicit detection injects the span structure.
+    private static final String JEV_MODEL = "~typesafe/jev-latest";
+
+    private static final String JEV_EVALUATOR_JSON = """
+            {
+              "model": { "name": "~typesafe/jev-latest" },
+              "messages": [ { "role": "USER", "content": "Reply: {{reply}}" } ],
+              "schema": [ { "name": "greets", "type": "BOOLEAN", "description": "Does the reply greet the user?" } ],
+              "variables": { "reply": "output.reply" }
+            }
+            """;
+
     private static final String EVALUATOR_JSON_WITH_SPAN = """
             {
               "model": { "name": "gpt-test", "temperature": 0.3 },
@@ -169,7 +189,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 llmProviderFactory,
                 agenticScoringService,
                 attachmentService,
-                onlineEvaluationRecorder);
+                onlineEvaluationRecorder,
+                new DecisionScoringService(decisionsClient, llmProviderFactory, onlineScoringConfig));
     }
 
     @AfterEach
@@ -428,6 +449,55 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         // No {{span}} → inline path: no tool specs, no attachment lookup.
         assertThat(requestCaptor.getValue().toolSpecifications()).isNullOrEmpty();
         verifyNoInteractions(attachmentService);
+    }
+
+    @Test
+    void decisionModelScoresEveryBooleanScoreWithOneDecisionsCall() {
+        var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
+        var span = createSpan();
+        var message = buildMessage(span, code);
+        var clientConfig = LlmProviderClientApiConfig.builder()
+                .apiKey(RandomStringUtils.secure().nextAlphanumeric(16))
+                .build();
+
+        when(serviceTogglesConfig.isJevOnlineEvaluationEnabled()).thenReturn(true);
+        when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
+        when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL)).thenReturn(clientConfig);
+        var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+        when(decisionsClient.decide(requestCaptor.capture(), eq(clientConfig))).thenReturn(Mono.just(
+                DecisionsResponse.builder()
+                        .model("typesafe/jev-1.13-20260917")
+                        .answers(Map.of("greets", DecisionsResponse.Answer.builder()
+                                .type(DecisionsQuestion.NOUL_TYPE).noul(0.97).build()))
+                        .build()));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+        when(feedbackScoreService.scoreBatchOfSpans(scoresCaptor.capture())).thenReturn(Mono.empty());
+
+        scorer.score(message).block();
+
+        assertThat(requestCaptor.getValue().state()).isEqualTo("Reply: hello");
+        assertThat(requestCaptor.getValue().questions())
+                .containsExactly(Map.entry("greets", DecisionsQuestion.noul("Does the reply greet the user?")));
+        var score = scoresCaptor.getValue().getFirst();
+        assertThat(score.name()).isEqualTo("greets");
+        assertThat(score.id()).isEqualTo(span.id());
+        assertThat(score.value()).isEqualByComparingTo("1");
+        assertThat(score.reason()).isEqualTo("Probability: 0.97");
+        verifyNoInteractions(aiProxyService);
+    }
+
+    @Test
+    void decisionModelWithDisabledToggleSkipsWithoutCallingTheModel() {
+        var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
+        var message = buildMessage(createSpan(), code);
+        when(serviceTogglesConfig.isJevOnlineEvaluationEnabled()).thenReturn(false);
+        when(feedbackScoreService.scoreBatchOfSpans(List.of())).thenReturn(Mono.empty());
+
+        scorer.score(message).block();
+
+        verifyNoInteractions(decisionsClient);
+        verifyNoInteractions(aiProxyService);
     }
 
     // Podam manufactures a fully-populated Span; toBuilder then pins only the fields these tests assert on

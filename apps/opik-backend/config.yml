@@ -1415,6 +1415,10 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: ${LLM_PROVIDER_OPENROUTER_URL:-https://openrouter.ai/api/v1}
+  # Default: https://openrouter.ai/api/alpha/decisions
+  # Description: OpenRouter Decisions API URL, used by decisions models such as TypeSafe Jev. It lives outside
+  #   /api/v1, so it can't be derived from openRouterUrl
+  openRouterDecisionsUrl: ${LLM_PROVIDER_OPENROUTER_DECISIONS_URL:-https://openrouter.ai/api/alpha/decisions}
 
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
@@ -1655,6 +1659,10 @@ serviceToggles:
   #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
   #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
   onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether decisions models (TypeSafe Jev via OpenRouter) can be used in LLM-as-a-Judge online
+  #   evaluation rules. The OpenRouter Decisions API is in alpha.
+  jevOnlineEvaluationEnabled: ${TOGGLE_JEV_ONLINE_EVALUATION_ENABLED:-"false"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.

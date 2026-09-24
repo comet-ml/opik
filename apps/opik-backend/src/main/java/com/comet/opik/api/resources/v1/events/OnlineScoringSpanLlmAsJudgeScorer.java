@@ -21,6 +21,8 @@ import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -69,6 +71,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
     private final AgenticScoringService agenticScoringService;
     private final AttachmentService attachmentService;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
+    private final DecisionScoringService decisionScoringService;
 
     @Inject
     public OnlineScoringSpanLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -81,7 +84,8 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             @NonNull LlmProviderFactory llmProviderFactory,
             @NonNull AgenticScoringService agenticScoringService,
             @NonNull AttachmentService attachmentService,
-            @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder) {
+            @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder,
+            @NonNull DecisionScoringService decisionScoringService) {
         super(config, redisson, feedbackScoreService, traceService, spanService, SPAN_LLM_AS_JUDGE,
                 Constants.SPAN_LLM_AS_JUDGE);
         this.serviceTogglesConfig = serviceTogglesConfig;
@@ -91,6 +95,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         this.agenticScoringService = agenticScoringService;
         this.attachmentService = attachmentService;
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;
+        this.decisionScoringService = decisionScoringService;
     }
 
     @Override
@@ -120,14 +125,6 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 UserLog.SPAN_ID, span.id().toString(),
                 UserLog.RULE_ID, message.ruleId().toString());
 
-        // The {{span}} variable is the declarative agentic trigger: it builds the real span structure
-        // (span id + attachment file_names) and, when the provider supports tools, runs the agentic loop
-        // so the judge can call get_attachment.
-        boolean referencesSpan = OnlineScoringEngine.templateReferencesSpanStructure(
-                message.llmAsJudgeCode().messages(),
-                message.llmAsJudgeCode().variables(),
-                PromptType.MUSTACHE);
-
         // Monitoring recorder (OPIK-6994): one hidden source=evaluator trace per span evaluation with an
         // llm span for the scoring call. NOOP when the toggle is off — no extra writes.
         EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
@@ -135,10 +132,12 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                         message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
                 : EvaluationRecorder.NOOP;
 
-        Mono<List<FeedbackScoreBatchItem>> scoresMono = referencesSpan
-                ? buildSpanStructure(span, message)
-                        .flatMap(structure -> evaluate(message, structure, true, mdc, recorder))
-                : evaluate(message, null, false, mdc, recorder);
+        // Decisions models (Jev) have no chat, tools or structured output: one Decisions API call answers every
+        // score. Rule validation keeps {{span}} out of their prompts.
+        Mono<List<FeedbackScoreBatchItem>> scoresMono = OpenRouterDecisionModel.isDecisionModel(
+                message.llmAsJudgeCode().model().name())
+                        ? evaluateWithDecisionModel(message, mdc, recorder)
+                        : evaluateWithChatModel(message, mdc, recorder);
 
         return recorder.monitor(scoresMono)
                 .flatMap(scores -> storeSpanScores(scores, span, message.userName(), message.workspaceId()))
@@ -150,6 +149,24 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                                 Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
                                         .orElse(error.getMessage()))))
                 .then();
+    }
+
+    /**
+     * Scores with a chat judge. The {@code {{span}}} variable is the declarative agentic trigger: it builds the real
+     * span structure (span id + attachment file_names) and, when the provider supports tools, runs the agentic loop
+     * so the judge can call get_attachment.
+     */
+    private Mono<List<FeedbackScoreBatchItem>> evaluateWithChatModel(SpanToScoreLlmAsJudge message,
+            Map<String, String> mdc, EvaluationRecorder recorder) {
+        boolean referencesSpan = OnlineScoringEngine.templateReferencesSpanStructure(
+                message.llmAsJudgeCode().messages(),
+                message.llmAsJudgeCode().variables(),
+                PromptType.MUSTACHE);
+        if (!referencesSpan) {
+            return evaluate(message, null, false, mdc, recorder);
+        }
+        return buildSpanStructure(message.span(), message)
+                .flatMap(structure -> evaluate(message, structure, true, mdc, recorder));
     }
 
     /**
@@ -218,15 +235,71 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                                 message.llmAsJudgeCode().schema());
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "spanId", span.id());
                         OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "spanId", span.id());
-                        return parsed.scores().stream()
-                                .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
-                                        .id(span.id())
-                                        .projectId(span.projectId())
-                                        .projectName(span.projectName())
-                                        .build())
-                                .toList();
+                        return toSpanScores(parsed, span);
                     }
                 });
+    }
+
+    /**
+     * Scores with a decisions model: the rendered prompt is the state, and each score is a yes/no question,
+     * all answered by one call (see {@link DecisionScoringService}). Skipped with a user-facing warning when the
+     * feature is off or the span doesn't fit the model's context.
+     */
+    private Mono<List<FeedbackScoreBatchItem>> evaluateWithDecisionModel(SpanToScoreLlmAsJudge message,
+            Map<String, String> mdc, EvaluationRecorder recorder) {
+        var span = message.span();
+        var code = message.llmAsJudgeCode();
+        // A null from the callable (skipped evaluation) completes empty and stores no scores.
+        return Mono.<DecisionsRequest>fromCallable(() -> {
+            try (var _ = wrapWithMdc(mdc)) {
+                if (!serviceTogglesConfig.isJevOnlineEvaluationEnabled()) {
+                    userFacingLogger.warn("Skipped spanId '{}': decisions models are disabled, model '{}'",
+                            span.id(), code.model().name());
+                    return null;
+                }
+                userFacingLogger.info("Evaluating with decision model spanId '{}' sampled by rule '{}'", span.id(),
+                        message.ruleName());
+                var request = decisionScoringService.buildRequest(code.model().name(),
+                        OnlineScoringEngine.renderMessages(code.messages(), code.variables(), span),
+                        code.schema());
+                int estimatedTokens = decisionScoringService.estimateTokens(request);
+                recorder.recordPreparation(0, estimatedTokens, false);
+                if (decisionScoringService.exceedsContext(request)) {
+                    userFacingLogger.warn("Skipped spanId '{}': the prompt is too large for decision model '{}',"
+                            + " estimated tokens '{}', limit '{}'", span.id(), code.model().name(),
+                            estimatedTokens, DecisionScoringService.MAX_CONTEXT_TOKENS);
+                    return null;
+                }
+                userFacingLogger.info("Sending spanId '{}' to decision model '{}' with '{}' questions", span.id(),
+                        code.model().name(), request.questions().size());
+                return request;
+            }
+        })
+                .subscribeOn(Schedulers.parallel())
+                .flatMap(request -> decisionScoringService
+                        .decide(request, message.workspaceId(), recorder)
+                        .map(response -> {
+                            try (var _ = wrapWithMdc(mdc)) {
+                                userFacingLogger.info("Received response from decision model for spanId '{}': '{}'",
+                                        span.id(), response.answers());
+                                var parsed = DecisionScoringService.toFeedbackScores(response, code.schema());
+                                OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "spanId",
+                                        span.id());
+                                return toSpanScores(parsed, span);
+                            }
+                        }))
+                .defaultIfEmpty(List.of());
+    }
+
+    private static List<FeedbackScoreBatchItem> toSpanScores(OnlineScoringEngine.ParsedFeedbackScores parsed,
+            Span span) {
+        return parsed.scores().stream()
+                .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
+                        .id(span.id())
+                        .projectId(span.projectId())
+                        .projectName(span.projectName())
+                        .build())
+                .toList();
     }
 
     private PreparedEvaluation prepareEvaluation(SpanToScoreLlmAsJudge message, String spanStructureJson,

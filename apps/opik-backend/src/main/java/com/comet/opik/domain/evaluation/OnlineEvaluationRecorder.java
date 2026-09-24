@@ -9,6 +9,8 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.observability.ObservabilityContext;
 import com.comet.opik.domain.observability.ObservabilityTraceRecorder;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
@@ -62,6 +64,16 @@ public class OnlineEvaluationRecorder {
                 return observabilityRecorder.recordSpan(call, eval.observabilityContext(),
                         response -> entityFactory.llmSpan(eval, request, response, null, start),
                         error -> entityFactory.llmSpan(eval, request, null, error, start));
+            });
+        }
+
+        @Override
+        public Mono<DecisionsResponse> recordDecisionCall(DecisionsRequest request, Mono<DecisionsResponse> call) {
+            return Mono.defer(() -> {
+                var start = Instant.now();
+                return observabilityRecorder.recordSpan(call, eval.observabilityContext(),
+                        response -> entityFactory.decisionSpan(eval, request, response, null, start),
+                        error -> entityFactory.decisionSpan(eval, request, null, error, start));
             });
         }
 
