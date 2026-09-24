@@ -253,14 +253,6 @@ public class ChatCompletionService {
     }
 
     /**
-     * langchain4j raises {@link UnsupportedFeatureException} when the request asks for a capability the selected
-     * provider does not implement — e.g. {@code ToolChoice.REQUIRED} against Vertex AI Gemini. The provider is never
-     * reached, so {@code getLlmProviderError} has nothing to map and the call used to surface as a 500. That is
-     * misleading on two counts: nothing failed server-side, and no amount of retrying can make it succeed. Report it
-     * as a 400 so clients get an actionable error and the online-scoring consumers treat it as terminal instead of
-     * burning their retry budget on it.
-     */
-    /**
      * Decisions models (TypeSafe Jev) resolve to OpenRouter so online scoring finds the workspace key, but they
      * only answer through the Decisions API: OpenRouter rejects them on chat completions. Fail here with a 400
      * instead of spending a provider round trip on a call that can't succeed.
@@ -272,6 +264,14 @@ public class ChatCompletionService {
         }
     }
 
+    /**
+     * langchain4j raises {@link UnsupportedFeatureException} when the request asks for a capability the selected
+     * provider does not implement — e.g. {@code ToolChoice.REQUIRED} against Vertex AI Gemini. The provider is never
+     * reached, so {@code getLlmProviderError} has nothing to map and the call used to surface as a 500. That is
+     * misleading on two counts: nothing failed server-side, and no amount of retrying can make it succeed. Report it
+     * as a 400 so clients get an actionable error and the online-scoring consumers treat it as terminal instead of
+     * burning their retry budget on it.
+     */
     private void failIfUnsupportedFeature(RuntimeException runtimeException) {
         var unsupportedFeature = findUnsupportedFeature(runtimeException);
         if (unsupportedFeature.isEmpty()) {

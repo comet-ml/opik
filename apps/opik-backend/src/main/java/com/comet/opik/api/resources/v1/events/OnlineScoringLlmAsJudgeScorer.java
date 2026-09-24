@@ -408,7 +408,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         return Mono.fromCallable(() -> {
             try (var _ = wrapWithMdc(mdc)) {
                 if (!serviceTogglesConfig.isJevOnlineEvaluationEnabled()) {
-                    userFacingLogger.warn("Skipped traceId '{}': decisions models are disabled, model '{}'",
+                    userFacingLogger.warn("Skipped evaluation, decisions models are disabled, traceId '{}', model '{}'",
                             trace.id(), code.model().name());
                     return null;
                 }
@@ -422,8 +422,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         .map(name -> message.scoreNameMapping().getOrDefault(name, name))
                         .toList();
                 if (!unsupported.isEmpty()) {
-                    userFacingLogger.warn("Skipped non-Boolean scores for traceId '{}': decisions models only answer"
-                            + " yes/no questions, scores '{}'", trace.id(), unsupported);
+                    userFacingLogger.warn("Skipped non-Boolean scores, decisions models only answer yes/no questions,"
+                            + " traceId '{}', scores '{}'", trace.id(), unsupported);
                 }
                 if (request.questions().isEmpty()) {
                     return null;
@@ -431,8 +431,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 int estimatedTokens = decisionScoringService.estimateTokens(request);
                 recorder.recordPreparation(spans.size(), estimatedTokens, false);
                 if (decisionScoringService.exceedsContext(request)) {
-                    userFacingLogger.warn("Skipped traceId '{}': the prompt is too large for decision model '{}',"
-                            + " estimated tokens '{}', limit '{}'", trace.id(), code.model().name(),
+                    userFacingLogger.warn("Skipped evaluation, the prompt is too large for the decision model,"
+                            + " traceId '{}', model '{}', estimated tokens '{}', limit '{}'", trace.id(),
+                            code.model().name(),
                             estimatedTokens, DecisionScoringService.MAX_CONTEXT_TOKENS);
                     return null;
                 }

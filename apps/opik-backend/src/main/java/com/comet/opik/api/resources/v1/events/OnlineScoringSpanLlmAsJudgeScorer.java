@@ -253,7 +253,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         return Mono.<DecisionsRequest>fromCallable(() -> {
             try (var _ = wrapWithMdc(mdc)) {
                 if (!serviceTogglesConfig.isJevOnlineEvaluationEnabled()) {
-                    userFacingLogger.warn("Skipped spanId '{}': decisions models are disabled, model '{}'",
+                    userFacingLogger.warn("Skipped evaluation, decisions models are disabled, spanId '{}', model '{}'",
                             span.id(), code.model().name());
                     return null;
                 }
@@ -264,8 +264,8 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                         code.schema());
                 var unsupported = DecisionScoringService.unsupportedScoreNames(code.schema());
                 if (!unsupported.isEmpty()) {
-                    userFacingLogger.warn("Skipped non-Boolean scores for spanId '{}': decisions models only answer"
-                            + " yes/no questions, scores '{}'", span.id(), unsupported);
+                    userFacingLogger.warn("Skipped non-Boolean scores, decisions models only answer yes/no questions,"
+                            + " spanId '{}', scores '{}'", span.id(), unsupported);
                 }
                 if (request.questions().isEmpty()) {
                     return null;
@@ -273,8 +273,9 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 int estimatedTokens = decisionScoringService.estimateTokens(request);
                 recorder.recordPreparation(0, estimatedTokens, false);
                 if (decisionScoringService.exceedsContext(request)) {
-                    userFacingLogger.warn("Skipped spanId '{}': the prompt is too large for decision model '{}',"
-                            + " estimated tokens '{}', limit '{}'", span.id(), code.model().name(),
+                    userFacingLogger.warn("Skipped evaluation, the prompt is too large for the decision model,"
+                            + " spanId '{}', model '{}', estimated tokens '{}', limit '{}'", span.id(),
+                            code.model().name(),
                             estimatedTokens, DecisionScoringService.MAX_CONTEXT_TOKENS);
                     return null;
                 }
