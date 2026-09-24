@@ -670,7 +670,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                                   dimension="xs"
                                   disabled={!capEnabled}
                                   aria-label="Cap automatically added items at"
-                                  className="w-[68px] text-right"
+                                  className="w-[87px] text-right"
                                 />
                               </FormControl>
                             </FormItem>
