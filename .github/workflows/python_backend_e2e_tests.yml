@@ -31,10 +31,16 @@ env:
   # Not required for pass/fail (log flushing is best-effort), but without it the
   # collector hits localhost:6379 unauthenticated and the log path goes dead.
   REDIS_URL: redis://:opik@localhost:6379/0
-  # The Anthropic key is stored in the workspace by the tests (model-storage
+  # The provider key is stored in the workspace by the tests (model-storage
   # principle); the optimizer reaches the provider only through the backend
   # gateway, never via this directly.
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  #
+  # Anthropic is preferred and OpenAI is the fallback: the suite probes the
+  # Anthropic key up front and runs against OpenAI when it is absent or
+  # rejected, so a dead Anthropic credential costs a provider rather than all
+  # coverage (see resolve_e2e_model in tests/e2e/conftest.py).
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   # Keep the optimization short — we only need it to start, iterate, and finish.
   OPTIMIZER_MAX_TRIALS: "1"
   OPTSTUDIO_DATASET_SAMPLES: "4"
@@ -45,6 +51,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # A provider key reaches the LLM only through the backend gateway, so with
+      # none at all the suite skips every test and reports green — the silent
+      # pass this guard exists to prevent. Either provider satisfies it; which
+      # one actually runs is decided by the preflight in tests/e2e/conftest.py.
+      #
+      # Fork PRs get no repository secrets, so the keys are legitimately absent
+      # there and the suite falls back to skipping (see the
+      # workspace_provider_key fixture). Only enforce where keys are expected.
+      - name: Verify a provider key reached this job
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY}" ] && [ -z "${OPENAI_API_KEY}" ]; then
+            echo "::error::Neither ANTHROPIC_API_KEY_E2E_TESTS nor OPENAI_API_KEY reached this job; every e2e test would skip and the suite would pass without running."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v7
 

@@ -8,7 +8,6 @@ can render the real stop cause instead of a heuristic. Before this, a run that
 produced no candidates was indistinguishable from a metric failure.
 """
 
-import os
 from typing import Any
 
 import pytest
@@ -16,7 +15,7 @@ import pytest
 import opik
 from opik import synchronization
 
-from llm_constants import ANTHROPIC_CLAUDE_HAIKU
+from conftest import resolve_e2e_model
 from opik_backend.studio.types import KNOWN_FINISH_REASONS
 
 pytestmark = pytest.mark.e2e
@@ -39,9 +38,12 @@ if not hasattr(_gepa_module, "MIN_EXPECTED_REFLECTION_ITERATIONS"):
         ),
     ]
 
-# CI uses the workspace Anthropic key; overridable for local stacks whose
-# workspace has a different provider configured.
-_MODEL = os.getenv("OPTSTUDIO_E2E_MODEL", ANTHROPIC_CLAUDE_HAIKU)
+def _model() -> str:
+    """CI prefers the workspace Anthropic key and falls back to OpenAI when it
+    is unusable; ``OPTSTUDIO_E2E_MODEL`` overrides both. Resolved per call rather
+    than at import so the preflight probe runs under the test session."""
+    return resolve_e2e_model()
+
 
 def _metadata_field(optimization: Any, name: str) -> Any:
     """Read a metadata key off the fetched optimization, tolerating both the
@@ -107,7 +109,7 @@ def test_finish_reason_is_returned_and_persisted(
                 }
             ]
         },
-        "llm_model": {"model": _MODEL, "parameters": {}},
+        "llm_model": {"model": _model(), "parameters": {}},
         "evaluation": {
             "metrics": [
                 {
