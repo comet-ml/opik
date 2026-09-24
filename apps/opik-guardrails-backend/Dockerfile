@@ -22,9 +22,21 @@ ENV PYTHONUNBUFFERED=1 \
 # DL3008: Ubuntu apt packages track a rolling security channel; pinning exact
 # versions here would rot as the base image's repos are updated.
 # hadolint ignore=DL3008
-RUN for attempt in 1 2 3 4 5; do \
-        apt-get update && apt-get install -y --no-install-recommends \
+#
+# Every attempt is bounded so a stalled mirror cannot consume the calling CI job's
+# 15-minute budget. apt's built-in acquire timeout is 120s and is not applied to the
+# operation as a whole, so it is lowered here and each apt call is additionally
+# wrapped in `timeout`. DEADLINE caps the loop overall: retries stop once the budget
+# is spent, rather than letting worst-case attempts multiply past the job limit.
+RUN DEADLINE=$(( $(date +%s) + 480 )); \
+    for attempt in 1 2 3 4 5; do \
+        timeout 120 apt-get update \
+            -o Acquire::http::Timeout=20 \
+            -o Acquire::https::Timeout=20 \
+        && timeout 240 apt-get install -y --no-install-recommends \
             -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=20 \
+            -o Acquire::https::Timeout=20 \
             python3.10 \
             python3-pip \
             python3-dev \
@@ -32,7 +44,10 @@ RUN for attempt in 1 2 3 4 5; do \
             wget \
         && break; \
         if [ "$attempt" = "5" ]; then echo "apt-get failed after $attempt attempts" >&2; exit 1; fi; \
-        echo "apt-get attempt $attempt failed; retrying against a re-resolved mirror" >&2; \
+        if [ "$(date +%s)" -ge "$DEADLINE" ]; then \
+            echo "apt-get retry budget exhausted after $attempt attempts" >&2; exit 1; \
+        fi; \
+        echo "apt-get attempt $attempt failed; retrying" >&2; \
         rm -rf /var/lib/apt/lists/*; \
         sleep "$((attempt * 5))"; \
     done \
