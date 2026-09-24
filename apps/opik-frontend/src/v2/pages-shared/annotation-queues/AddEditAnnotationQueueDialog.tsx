@@ -678,8 +678,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         />
                       </div>
                       <p className="comet-body-xs pl-[22px] text-light-slate">
-                        Only counts items added by this automation. Adding by
-                        hand is unaffected.
+                        Automation stops adding once the queue holds this many
+                        items. Adding by hand is unaffected.
                       </p>
                       {capError && (
                         <p className="comet-body-xs pl-[26px] text-destructive">
