@@ -1,9 +1,13 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -15,6 +19,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.domain.ExperimentItemService;
@@ -64,6 +69,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -74,11 +80,12 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /**
  * The six span-id reads OPIK-8361 gave a week bound: {@code get_spans_by_ids} and the
  * {@code get_target_project_ids_for_spans} it runs first, {@code get_partial_span_by_id}, {@code get_only_span_by_id},
- * {@code get_project_id_from_span} and {@code get_experiment_refs_by_span_ids} — the
- * spans counterpart of {@link TracesReadPathWeekBoundTest}.
+ * {@code get_project_id_from_span}, {@code get_experiment_refs_by_span_ids}, and the reads inside the write and
+ * validation paths ({@code insert_span}, {@code update_span}, {@code partial_insert_span}, {@code bulk_update_spans},
+ * {@code get_span_workspace}) — the spans counterpart of {@link TracesReadPathWeekBoundTest}.
  *
  * <p>Driven through the endpoints that reach them ({@code POST /spans}, {@code GET} / {@code PATCH /spans/{id}},
- * {@code POST /spans/{id}/comments}); the experiment-refs read is called directly, its only caller being an event
+ * {@code POST /spans/{id}/comments}, {@code PATCH /spans/batch}, {@code POST /datasets/items}); the experiment-refs read is called directly, its only caller being an event
  * listener. Every span is ingested with the timestamp-window check off (the production default), so far-future ids
  * are the ones a client can still send today.
  *
@@ -105,9 +112,27 @@ class SpansReadPathWeekBoundTest {
     private static final String GET_ONLY_SPAN_BY_ID = "get_only_span_by_id";
     private static final String GET_PROJECT_ID_FROM_SPAN = "get_project_id_from_span";
     private static final String GET_EXPERIMENT_REFS_BY_SPAN_IDS = "get_experiment_refs_by_span_ids";
+    private static final String INSERT_SPAN = "insert_span";
+    private static final String UPDATE_SPAN = "update_span";
+    private static final String PARTIAL_INSERT_SPAN = "partial_insert_span";
+    private static final String BULK_UPDATE_SPANS = "bulk_update_spans";
+    private static final String GET_SPAN_WORKSPACE = "get_span_workspace";
+
+    /** A second workspace, so a cross-workspace span reference has something to be rejected by. */
+    private static final String OTHER_API_KEY = "apiKey-" + UUID.randomUUID();
+    private static final String OTHER_WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+    private static final String OTHER_WORKSPACE_ID = UUID.randomUUID().toString();
 
     /** Past 2106, the only era whose two {@code id_at} representations differ. */
     private static final Instant FAR_FUTURE_ID_AT = Instant.parse("2200-01-01T00:00:00Z");
+
+    /**
+     * {@link #FAR_FUTURE_ID_AT}'s week as the legacy 32-bit {@code id_at} stores it (wrapped mod 2^32 seconds) and as
+     * {@code spans_local_v2} does. Computed once in ClickHouse 26.3 via
+     * {@code toYYYYMMDD(toDate32(d) - toIntervalDay(toDayOfWeek(d, 1)))} over the honest and the wrapped instant.
+     */
+    private static final String FAR_FUTURE_LEGACY_WEEK = "20631119";
+    private static final String FAR_FUTURE_HONEST_WEEK = "21991230";
 
     /** Where {@code id_at} saturates on the successor, so the bound cannot be derived and must be absent. */
     private static final Instant PAST_CEILING_ID_AT = LocalDate.of(2300, 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC);
@@ -131,6 +156,10 @@ class SpansReadPathWeekBoundTest {
     /** The experiment-refs spans read is an {@code IN} subquery, which EXPLAIN evaluates as a set, not plans. */
     private static final Pattern SPANS_SUBQUERY = Pattern.compile(
             "(?s)IN \\(\\s*(SELECT DISTINCT trace_id FROM spans_local_v2.*?)\\)\\s*AND ea\\.status");
+
+    /** The {@code INSERT INTO spans (...)} head of a write site, leaving its {@code SELECT}. */
+    private static final Pattern INSERT_PREFIX = Pattern
+            .compile("(?s)^\\s*INSERT INTO \\w+\\s*\\(.*?\\)\\s*(?=SELECT)");
 
     private static final String FAST_LOG_FLUSH_CONFIG = "clickhouse-fast-log-flush.xml";
 
@@ -170,6 +199,7 @@ class SpansReadPathWeekBoundTest {
     }
 
     private SpanResourceClient spanResourceClient;
+    private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private TransactionTemplateAsync template;
     private ExperimentItemService experimentItemService;
@@ -180,6 +210,8 @@ class SpansReadPathWeekBoundTest {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
+        mockTargetWorkspace(wireMock.server(), OTHER_API_KEY, OTHER_WORKSPACE_NAME, OTHER_WORKSPACE_ID, USER);
+        this.datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
         this.spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
         this.experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
         this.template = template;
@@ -195,40 +227,65 @@ class SpansReadPathWeekBoundTest {
         network.close();
     }
 
+    /** Each trigger reaches its site for a span already ingested, and returns the id its statement mentions. */
     private Stream<Arguments> sites() {
         // Read at call time: @MethodSource runs before @BeforeAll wires the clients in.
-        Consumer<Span> getById = span -> spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
+        Function<Span, UUID> getById = span -> {
+            spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
+            return span.id();
+        };
+        // Span creation itself runs the partial lookup and the insert.
+        Function<Span, UUID> created = Span::id;
+        Function<Span, UUID> update = span -> {
+            updateTags(span);
+            return span.id();
+        };
 
         return Stream.of(
                 // A get-by-id runs the target-projects read first, so one trigger covers both query names.
                 arguments(GET_SPANS_BY_IDS, getById),
                 arguments(GET_TARGET_PROJECT_IDS, getById),
-                // Span creation itself runs the partial lookup.
-                arguments(GET_PARTIAL_SPAN_BY_ID, (Consumer<Span>) _ -> {
-                }),
-                arguments(GET_ONLY_SPAN_BY_ID, (Consumer<Span>) this::updateTags),
-                arguments(GET_PROJECT_ID_FROM_SPAN, (Consumer<Span>) span -> {
+                arguments(GET_PARTIAL_SPAN_BY_ID, created),
+                arguments(GET_ONLY_SPAN_BY_ID, update),
+                arguments(GET_PROJECT_ID_FROM_SPAN, (Function<Span, UUID>) span -> {
                     try (var response = spanResourceClient.callAddSpanComment(span.id(),
                             Comment.builder().text("week-bound").build(), API_KEY, WORKSPACE_NAME)) {
                         assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
                     }
+                    return span.id();
                 }),
-                arguments(GET_EXPERIMENT_REFS_BY_SPAN_IDS,
-                        (Consumer<Span>) span -> experimentRefsBySpanIds(Set.of(span.id()))));
+                arguments(GET_EXPERIMENT_REFS_BY_SPAN_IDS, (Function<Span, UUID>) span -> {
+                    experimentRefsBySpanIds(Set.of(span.id()));
+                    return span.id();
+                }),
+                arguments(INSERT_SPAN, created),
+                arguments(UPDATE_SPAN, update),
+                // A PATCH of an id nobody created yet, minted in the same week as the given span.
+                arguments(PARTIAL_INSERT_SPAN, (Function<Span, UUID>) span -> {
+                    var id = ID_GENERATOR.getTimeOrderedEpoch(span.id().getMostSignificantBits() >>> 16);
+                    updateTags(span.toBuilder().id(id).build());
+                    return id;
+                }),
+                arguments(BULK_UPDATE_SPANS, (Function<Span, UUID>) span -> {
+                    batchUpdateTags(span, Set.of(span.id()));
+                    return span.id();
+                }),
+                arguments(GET_SPAN_WORKSPACE, (Function<Span, UUID>) span -> {
+                    datasetResourceClient.createDatasetItems(datasetItemReferencing(span), WORKSPACE_NAME,
+                            API_KEY);
+                    return span.id();
+                }));
     }
 
     /** A site that bound {@code :id_weeks} unconditionally fails the underivable half; one that lost it, the other. */
     @ParameterizedTest(name = "{0}")
     @MethodSource("sites")
-    void everySiteBoundsWhatItCanDeriveAndFallsBackOtherwise(String queryName, Consumer<Span> trigger) {
-        var derivable = createSpan(Instant.now(), ID_GENERATOR.generateId());
-        var underivable = createSpan(PAST_CEILING_ID_AT, ID_GENERATOR.generateId());
+    void everySiteBoundsWhatItCanDeriveAndFallsBackOtherwise(String queryName, Function<Span, UUID> trigger) {
+        var derivable = trigger.apply(createSpan(Instant.now(), ID_GENERATOR.generateId()));
+        var underivable = trigger.apply(createSpan(PAST_CEILING_ID_AT, ID_GENERATOR.generateId()));
 
-        trigger.accept(derivable);
-        trigger.accept(underivable);
-
-        assertThat(statementFor(queryName, derivable.id())).contains(WEEK_BOUND_MARKER);
-        assertThat(statementFor(queryName, underivable.id())).doesNotContain(WEEK_BOUND_MARKER);
+        assertThat(statementFor(queryName, derivable)).contains(WEEK_BOUND_MARKER);
+        assertThat(statementFor(queryName, underivable)).doesNotContain(WEEK_BOUND_MARKER);
     }
 
     /**
@@ -237,12 +294,12 @@ class SpansReadPathWeekBoundTest {
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource("sites")
-    void everySiteStatementPrunesPartitionsOnTheWeeklyPartitionedTable(String queryName, Consumer<Span> trigger) {
-        var span = createSpan(Instant.now(), ID_GENERATOR.generateId());
+    void everySiteStatementPrunesPartitionsOnTheWeeklyPartitionedTable(String queryName,
+            Function<Span, UUID> trigger) {
+        var id = trigger.apply(createSpan(Instant.now(), ID_GENERATOR.generateId()));
 
-        trigger.accept(span);
-
-        var statement = statementFor(queryName, span.id())
+        // The write sites are INSERT ... SELECT; EXPLAIN the SELECT, which is where the spans read is.
+        var statement = INSERT_PREFIX.matcher(statementFor(queryName, id)).replaceFirst("")
                 .replaceAll("\\bFROM spans\\b(?!_)", "FROM spans_local_v2")
                 .replaceAll(";\\s*$", "");
         var subquery = SPANS_SUBQUERY.matcher(statement);
@@ -262,6 +319,59 @@ class SpansReadPathWeekBoundTest {
         assertThat(spanResourceClient.getById(farFuture.id(), WORKSPACE_NAME, API_KEY).id()).isEqualTo(farFuture.id());
         assertThat(spanResourceClient.getById(pastCeiling.id(), WORKSPACE_NAME, API_KEY).id())
                 .isEqualTo(pastCeiling.id());
+        // Both weeks written out, not derived: the wrapped one is where this estate holds the row.
+        assertThat(statementFor(GET_SPANS_BY_IDS, farFuture.id()))
+                .contains(FAR_FUTURE_LEGACY_WEEK)
+                .contains(FAR_FUTURE_HONEST_WEEK);
+    }
+
+    @Test
+    void createAfterPatchKeepsThePatchedValuesOfAFarFutureSpan() {
+        // PATCH first takes the partial-insert path; the later POST merges over it through INSERT's old_span read,
+        // which prefers the stored name, so a missed read would surface the POSTed name instead.
+        var span = newSpan(FAR_FUTURE_ID_AT, ID_GENERATOR.generateId());
+        spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                .projectName(span.projectName())
+                .traceId(span.traceId())
+                .name("patched-name")
+                .tags(Set.of("week-bound"))
+                .build(), API_KEY, WORKSPACE_NAME);
+        assertThat(spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY).tags())
+                .containsExactly("week-bound");
+
+        spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
+
+        var actual = spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
+        assertThat(actual.name()).isEqualTo("patched-name");
+        assertThat(actual.startTime()).isEqualTo(span.startTime());
+    }
+
+    @Test
+    void batchUpdateReachesFarFutureAndPastCeilingSpans() {
+        // BULK_UPDATE rewrites the rows it reads, so a missed read leaves the tags unchanged.
+        var traceId = ID_GENERATOR.generateId();
+        var farFuture = createSpan(FAR_FUTURE_ID_AT, traceId);
+        var pastCeiling = createSpan(PAST_CEILING_ID_AT, traceId);
+
+        batchUpdateTags(farFuture, Set.of(farFuture.id()));
+        batchUpdateTags(pastCeiling, Set.of(pastCeiling.id()));
+
+        for (var span : List.of(farFuture, pastCeiling)) {
+            var actual = spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
+            assertThat(actual.tags()).as("tags of %s", span.id()).containsExactly("week-bound");
+            assertThat(actual.name()).isEqualTo(span.name());
+        }
+    }
+
+    @Test
+    void datasetItemCreationRejectsAFarFutureSpanFromAnotherWorkspace() {
+        // The caller reduces with allMatch, which is true over an empty result, so a missed read would accept this.
+        var farFuture = createSpan(FAR_FUTURE_ID_AT, ID_GENERATOR.generateId());
+
+        try (var response = datasetResourceClient.callCreateDatasetItems(
+                datasetItemReferencing(farFuture), OTHER_WORKSPACE_NAME, OTHER_API_KEY)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+        }
     }
 
     @Test
@@ -330,6 +440,27 @@ class SpansReadPathWeekBoundTest {
                 .block();
     }
 
+    private void batchUpdateTags(Span span, Set<UUID> ids) {
+        spanResourceClient.batchUpdateSpans(SpanBatchUpdate.builder()
+                .ids(ids)
+                .update(SpanUpdate.builder().traceId(span.traceId()).tags(Set.of("week-bound")).build())
+                .build(), API_KEY, WORKSPACE_NAME);
+    }
+
+    /** A one-item batch into a fresh dataset, referencing {@code span} - the shape that reaches the check. */
+    private DatasetItemBatch datasetItemReferencing(Span span) {
+        var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .source(DatasetItemSource.SPAN)
+                .spanId(span.id())
+                .traceId(span.traceId())
+                .experimentItems(null)
+                .build();
+        return DatasetItemBatch.builder()
+                .datasetName("dataset-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32)))
+                .items(List.of(item))
+                .build();
+    }
+
     private void updateTags(Span span) {
         spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
                 .projectName(span.projectName())
@@ -340,7 +471,13 @@ class SpansReadPathWeekBoundTest {
 
     /** A span through the real ingestion path whose {@code id} carries {@code idAt}; {@code startTime} stays today. */
     private Span createSpan(Instant idAt, UUID traceId) {
-        var span = factory.manufacturePojo(Span.class).toBuilder()
+        var span = newSpan(idAt, traceId);
+        spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
+        return span;
+    }
+
+    private Span newSpan(Instant idAt, UUID traceId) {
+        return factory.manufacturePojo(Span.class).toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(idAt.toEpochMilli()))
                 .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(16))
                 .traceId(traceId)
@@ -349,8 +486,6 @@ class SpansReadPathWeekBoundTest {
                 .endTime(null)
                 .feedbackScores(null)
                 .build();
-        spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
-        return span;
     }
 
     /** Three historical weeks in one INSERT, so {@code spans_local_v2} holds parts a bounded read can exclude. */

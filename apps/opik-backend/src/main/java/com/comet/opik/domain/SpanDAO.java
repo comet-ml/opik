@@ -184,6 +184,7 @@ public class SpanDAO {
      * 1. When the span does not exist in the database.
      * 2. When the span exists in the database but the provided span has different values for the fields such as end_time, input, output, metadata and tags.
      **/
+    // The old_span read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
     private static final String INSERT = """
             INSERT INTO spans (
                 id,
@@ -356,6 +357,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND id = :id
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
@@ -368,6 +370,7 @@ public class SpanDAO {
      * Handles the update of a span when the span already exists in the database.
      ***/
     //TODO: refactor to implement proper conflict resolution
+    // The spans read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
     private static final String UPDATE = """
             INSERT INTO spans (
             	id,
@@ -431,6 +434,7 @@ public class SpanDAO {
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
@@ -447,6 +451,7 @@ public class SpanDAO {
      * The remaining fields will be updated/inserted once the POST arrives with the all mandatory fields to create the trace.
      */
     //TODO: refactor to implement proper conflict resolution
+    // The old_span read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
     private static final String PARTIAL_INSERT = """
             INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
@@ -610,6 +615,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE id = :id
                 AND workspace_id = :workspace_id
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
@@ -1475,11 +1481,13 @@ public class SpanDAO {
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String SELECT_SPAN_ID_AND_WORKSPACE = """
             SELECT
                 DISTINCT id, workspace_id
             FROM spans
             WHERE id IN :spanIds
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1890,6 +1898,7 @@ public class SpanDAO {
             ;
             """;
 
+    /** The {@code spans} read carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String BULK_UPDATE = """
             INSERT INTO spans (
                 id,
@@ -1955,6 +1964,7 @@ public class SpanDAO {
                         <if(environment)> :environment <else> s.environment <endif> as environment
                     FROM spans s
                     WHERE s.id IN :ids AND s.workspace_id = :workspace_id
+                    <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
                     ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.id) DESC, s.last_updated_at DESC
                     LIMIT 1 BY s.id
                     SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
@@ -2085,6 +2095,8 @@ public class SpanDAO {
     private Publisher<? extends Result> insert(Span span, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newInsertTemplate(workspaceId, userName);
+            var idWeeks = idWeeks(Set.of(span.id()));
+            idWeeks.ifPresent(_ -> template.add("id_weeks", true));
             String inputValue = TruncationUtils.toJsonString(span.input());
             String outputValue = TruncationUtils.toJsonString(span.output());
             var statement = connection.createStatement(template.render())
@@ -2106,6 +2118,7 @@ public class SpanDAO {
             } else {
                 statement.bind("parent_span_id", "");
             }
+            idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
             bindEpochSentinel(statement, "end_time", span.endTime());
 
             if (span.tags() != null) {
@@ -2264,10 +2277,13 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false, "partial_insert_span",
                             workspaceId, userName);
+                    var idWeeks = idWeeks(Set.of(id));
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
 
                     var statement = connection.createStatement(template.render());
 
                     statement.bind("id", id);
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
                     statement.bind("project_id", projectId);
                     statement.bind("trace_id", spanUpdate.traceId());
 
@@ -2315,8 +2331,11 @@ public class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newUpdateTemplate(finalUpdate, UPDATE, isManualCost(existingSpan), "update_span",
                     workspaceId, userName);
+            var idWeeks = idWeeks(Set.of(id));
+            idWeeks.ifPresent(_ -> template.add("id_weeks", true));
             var statement = connection.createStatement(template.render());
             statement.bind("id", id);
+            idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
             bindUpdateParams(finalUpdate, statement, isManualCost(existingSpan));
 
@@ -3183,12 +3202,15 @@ public class SpanDAO {
         }
 
         var template = getSTWithLogComment(SELECT_SPAN_ID_AND_WORKSPACE, "get_span_workspace", "", "", spanIds.size());
+        var idWeeks = idWeeks(spanIds);
+        idWeeks.ifPresent(_ -> template.add("id_weeks", true));
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
 
                     var statement = connection.createStatement(template.render())
                             .bind("spanIds", spanIds.toArray(UUID[]::new));
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     return Mono.from(statement.execute());
                 })
@@ -3411,10 +3433,13 @@ public class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags, workspaceId, userName);
+                    var idWeeks = idWeeks(ids);
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
                     var query = template.render();
 
                     var statement = connection.createStatement(query)
                             .bind("ids", ids);
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     bindUserNameAndWorkspace(statement, userName, workspaceId);
                     bindBulkUpdateParams(update, statement);
