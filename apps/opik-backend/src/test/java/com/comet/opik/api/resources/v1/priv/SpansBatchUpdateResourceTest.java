@@ -270,6 +270,31 @@ class SpansBatchUpdateResourceTest {
         }
 
         @Test
+        @DisplayName("when batch update with a null ID, then return 422")
+        void batchUpdate__whenNullId__thenReturn422() {
+            var ids = new HashSet<UUID>();
+            ids.add(generator.generate());
+            ids.add(null);
+
+            var batchUpdate = SpanBatchUpdate.builder()
+                    .ids(ids)
+                    .update(SpanUpdate.builder()
+                            .projectName(DEFAULT_PROJECT)
+                            .traceId(traceId)
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = spanResourceClient.callBatchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var error = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).anySatisfy(msg -> assertThat(msg).contains("ids"));
+            }
+        }
+
+        @Test
         @DisplayName("when batch update with null update, then return 400")
         void batchUpdate__whenNullUpdate__thenReturn400() {
             var span = podamFactory.manufacturePojo(Span.class).toBuilder()
