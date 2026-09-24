@@ -127,12 +127,23 @@ run_start() { # run_start <max_retries> <container>...
 	# own arithmetic is the only thing advancing it.
 	unset SECONDS
 	SECONDS=0
-	OPIK_MAX_STARTUP_RETRIES="$retries" start_missing_containers 2>&1
+	# Let a caller-supplied value through untouched, so the validation tests can pass junk.
+	OPIK_MAX_STARTUP_RETRIES="${OPIK_MAX_STARTUP_RETRIES-$retries}" start_missing_containers 2>&1
+	echo "all_running=$all_running"
+}
+
+run_start_default() { # run_start_default <container>...  — no override; exercises the shipped default
+	rm -f "$state_dir"/*
+	CONTAINERS=("$@")
+	unset SECONDS
+	SECONDS=0
+	unset OPIK_MAX_STARTUP_RETRIES
+	start_missing_containers 2>&1
 	echo "all_running=$all_running"
 }
 
 echo "retry budget:"
-# be never becomes healthy: must time out at the configured budget and say so.
+# The `be` container never becomes healthy: must time out at the configured budget and say so.
 export HEALTH_PLAN="be:starting"
 out=$(run_start 90 be)
 check "times out at the configured budget" "still not healthy after 90s" "$out"
@@ -141,6 +152,24 @@ check "run is marked failed"               "all_running=false"           "$out"
 # Read from the real code path, so a changed budget is visible here rather than assumed.
 out=$(run_start 5 be)
 check "budget is the retry count, not a hardcoded 90" "still not healthy after 5s" "$out"
+
+echo "override validation:"
+# The override is test-only, but it still must not turn a typo into an instant timeout:
+# unvalidated, "abc"/"0"/"-5" all make the first [[ retries -ge max_retries ]] true.
+export HEALTH_PLAN="be:healthy"
+for bad in abc 0 -5 " " 12x; do
+	out=$(OPIK_MAX_STARTUP_RETRIES="$bad" run_start 90 be)
+	check "rejects '$bad' and falls back to 90" "Ignoring OPIK_MAX_STARTUP_RETRIES" "$out"
+	check_absent "'$bad' does not cause a spurious timeout" "TIMED OUT" "$out"
+done
+out=$(OPIK_MAX_STARTUP_RETRIES=7 run_start 90 be)
+check_absent "a valid override is accepted silently" "Ignoring OPIK_MAX_STARTUP_RETRIES" "$out"
+
+# Assert the shipped DEFAULT, with no override in play — otherwise every test here pins its
+# own budget and a change to the default itself would go unnoticed.
+export HEALTH_PLAN="be:starting"
+out=$(OPIK_MAX_STARTUP_RETRIES= run_start_default be)
+check "default budget is 90 retries" "still not healthy after 90s" "$out"
 
 echo "per-container attribution (the regression the table exists to catch):"
 # The case the pre-sleep scan exists for: gr sits AFTER the slow be and is NOT healthy at
@@ -157,8 +186,8 @@ check "later container is credited when it actually went healthy" "gr           
 check "run succeeded"                           "all_running=true"  "$out"
 
 echo "healthy-then-exited race:"
-# gr reports running+healthy while the loop is still on be, so the pre-sleep scan banks a
-# duration for it. gr then exits, and the loop's Status probe finds it dead on arrival.
+# `gr` reports running+healthy while the loop is still on `be`, so the pre-sleep scan banks a
+# duration for it. `gr` then exits, and the loop's Status probe finds it dead on arrival.
 # The table must show the failure rather than the banked duration.
 export HEALTH_PLAN="be:starting,starting,starting,starting,healthy gr:healthy!"
 out=$(run_start 90 be gr)

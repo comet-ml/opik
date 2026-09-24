@@ -414,8 +414,16 @@ start_missing_containers() {
 
   echo "⏳ Waiting for all containers to be running and healthy..."
   # Each retry is one poll plus a 1s sleep, so this is roughly a 90s budget per container.
-  # Overridable only so the tests can drive the timeout path; not a documented knob.
-  max_retries="${OPIK_MAX_STARTUP_RETRIES:-90}"
+  # The override exists so the tests can drive the timeout path without waiting 90s; it is
+  # not a supported user-facing knob. Anything that isn't a positive integer falls back to
+  # the default rather than reaching the arithmetic below, where "abc", "0" and "-5" would
+  # all make the very first comparison true and time out instantly.
+  max_retries=90
+  if [[ "${OPIK_MAX_STARTUP_RETRIES:-}" =~ ^[1-9][0-9]*$ ]]; then
+    max_retries="$OPIK_MAX_STARTUP_RETRIES"
+  elif [[ -n "${OPIK_MAX_STARTUP_RETRIES:-}" ]]; then
+    echo "⚠️  Ignoring OPIK_MAX_STARTUP_RETRIES='${OPIK_MAX_STARTUP_RETRIES}' (not a positive integer); using ${max_retries}"
+  fi
   interval=1
   all_running=true
 
