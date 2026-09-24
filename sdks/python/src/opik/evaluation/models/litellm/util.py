@@ -58,12 +58,20 @@ def apply_model_specific_filters(
 
     Currently handles:
     - GPT-5: only honours temperature=1 and does not return log probabilities.
+    - Bedrock GPT-5.x / GPT-6: same as GPT-5, and temperature is dropped even at 1
     - DashScope Qwen: enforces constraints for logprobs / top_logprobs
     """
     normalized_model_name = _normalize_model_name(model_name)
 
     if normalized_model_name.startswith("gpt-5"):
         _apply_gpt5_filters(params, already_warned, warn)
+        return
+
+    if _is_bedrock_openai_gpt_model(model_name):
+        _apply_gpt5_filters(params, already_warned, warn)
+        # Bedrock Converse rejects the temperature field for these models at any
+        # value, 1 included. Omitting it gives the model's default (1).
+        params.pop("temperature", None)
         return
 
     if normalized_model_name.startswith("dashscope/"):
@@ -81,6 +89,19 @@ def _normalize_model_name(model_name: str) -> str:
         return model_without_provider
 
     return model_name
+
+
+def _is_bedrock_openai_gpt_model(model_name: str) -> bool:
+    """Match Bedrock OpenAI GPT-5.x / GPT-6 names on LiteLLM's Bedrock providers.
+
+    e.g. bedrock/us.openai.gpt-5.6-sol, bedrock/converse/global.openai.gpt-6-sol,
+    bedrock_mantle/openai.gpt-6-sol.
+    gpt-oss (openai.gpt-oss-...) is not matched; it accepts temperature.
+    """
+    if not model_name.startswith(("bedrock/", "bedrock_mantle/")):
+        return False
+    base_model_name = model_name.rpartition("openai.")[2]
+    return base_model_name.startswith(("gpt-5", "gpt-6"))
 
 
 def _apply_gpt5_filters(
