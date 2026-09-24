@@ -745,6 +745,10 @@ To avoid Zookeeper metadata loss issues:
 
 ### MinIO Fails to Start After Upgrading: Root-Owned Data Volume
 
+<Callout intent="info">
+This section applies to **Docker Compose** deployments, which run MinIO from a hardened image with a non-root user. Helm and Kubernetes deployments use a different MinIO image and store data in a PVC rather than a Docker volume, so neither the symptom below nor the `docker volume` commands apply to them.
+</Callout>
+
 #### Problem Description
 
 After upgrading Opik, the MinIO container fails to start and exits immediately. Its logs report a write failure against `/data`, annotated as a possible hardware fault:

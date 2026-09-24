@@ -412,12 +412,16 @@ repair_minio_volume_ownership() {
   probe_rc=$?
 
   # An empty result means either "ownership is fine" or "the probe itself could not run". Only the
-  # first is a clean no-op; if the helper failed we cannot rule out the mismatch, so say so and
+  # first is a clean no-op; if the probe failed we cannot rule out the mismatch, so say so and
   # hand over the command rather than leaving the user with MinIO's misleading error alone.
+  # docker reserves 125 for its own failures and passes the command's status through otherwise, so
+  # the two causes are worth naming separately: they send the reader to different places.
   if [[ "$probe_rc" -ne 0 ]]; then
+    local probe_failure="the ownership check exited with status ${probe_rc}"
+    [[ "$probe_rc" -eq 125 ]] && probe_failure="the helper container could not be started"
     echo ""
-    echo "⚠️  Could not check ${volume}'s ownership (the helper container did not run), so a"
-    echo "   file-ownership mismatch cannot be ruled out. MinIO reports this as a faulty drive, but"
+    echo "⚠️  Could not check ${volume}'s ownership (${probe_failure}), so a file-ownership"
+    echo "   mismatch cannot be ruled out. MinIO reports this as a faulty drive, but"
     echo "   it usually means the volume was created by an older MinIO image that ran as root."
     echo ""
     echo "   If Docker can run a container again, this repairs the volume without losing data:"
