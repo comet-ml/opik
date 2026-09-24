@@ -77,7 +77,9 @@ def from_pandas(
 
     result = []
     ignore_keys = [] if ignore_keys is None else ignore_keys
-    for _, row in dataframe.iterrows():
+    # iterrows() returns each row as a single Series, so an int column is upcast
+    # to float when the other columns are floats. to_dict keeps the column types.
+    for row in dataframe.to_dict(orient="records"):
         item_kwargs = {
             keys_mapping.get(key, key): value
             for key, value in row.items()
