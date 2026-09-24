@@ -89,7 +89,7 @@ const FeedbackScoreCellContent = ({
             </div>
           </FeedbackScoreReasonTooltip>
         ) : (
-          <span className="w-full min-w-0 overflow-y-auto break-words text-xs text-muted-foreground">
+          <span className="w-full min-w-0 overflow-y-auto whitespace-pre-line break-words text-xs text-muted-foreground">
             {reasons.map((r) => r.reason).join(", ")}
           </span>
         ))}
