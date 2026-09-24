@@ -92,6 +92,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.Assertions;
@@ -122,6 +123,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -6090,29 +6092,42 @@ class TracesResourceTest {
                     .projectName(projectName)
                     .traceId(trace.id())
                     .parentSpanId(null)
-                    .provider("openai")
-                    .usage(Map.of("prompt_tokens", 10))
-                    .totalEstimatedCost(new BigDecimal("1.5"))
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(0.01, 1))
+                            .setScale(6, RoundingMode.HALF_UP))
                     .comments(null)
                     .feedbackScores(null)
                     .build();
             spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
 
             // The update writes a second row version; the aggregates must dedup it without FINAL
+            var latestSpan = span.toBuilder()
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(1, 2))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .build();
             spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
                     .projectName(projectName)
                     .traceId(trace.id())
-                    .provider("anthropic")
-                    .usage(Map.of("prompt_tokens", 20))
-                    .totalEstimatedCost(new BigDecimal("2.5"))
+                    .provider(latestSpan.provider())
+                    .usage(latestSpan.usage())
+                    .totalEstimatedCost(latestSpan.totalEstimatedCost())
                     .build(), API_KEY, TEST_WORKSPACE);
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
 
             var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualThread.usage()).isEqualTo(Map.of("prompt_tokens", 20L));
-            assertThat(actualThread.totalEstimatedCost()).isEqualByComparingTo("2.5");
+            var expectedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(latestSpan),
+                    TraceThreadStatus.ACTIVE);
+            TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
+            assertThat(actualThread.usage()).isEqualTo(Map.of(latestSpan.usage().keySet().iterator().next(),
+                    latestSpan.usage().values().iterator().next().longValue()));
+            assertThat(actualThread.totalEstimatedCost()).isEqualByComparingTo(latestSpan.totalEstimatedCost());
         }
 
         @Test
