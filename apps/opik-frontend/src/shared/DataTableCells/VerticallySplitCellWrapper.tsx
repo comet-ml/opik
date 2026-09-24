@@ -68,6 +68,9 @@ const VerticallySplitCellWrapper = <TData,>({
 
   const lineHeightStyle = calculateLineHeight(rowHeight);
 
+  const subRowHighlightColor =
+    tableMetadata?.subRowHighlightColor ?? "hsl(var(--muted))";
+
   const highlightSubRow = (virtualRowId: string, highlight: boolean) => {
     if (experimentsIds.length > 1) {
       document
@@ -77,18 +80,9 @@ const VerticallySplitCellWrapper = <TData,>({
         .forEach(
           (node) =>
             (node.style.backgroundColor = highlight
-              ? "hsl(var(--muted))"
+              ? subRowHighlightColor
               : "transparent"),
         );
-
-      // DataTable sets data-cell-id to TanStack's cell.id, `${row.id}_${column.id}`
-      document
-        .querySelectorAll<HTMLElement>(`td[data-cell-id^="${rowId}_"]`)
-        .forEach((cell) => {
-          if (!cell.querySelector("[data-virtual-row-id]")) {
-            cell.style.backgroundColor = highlight ? "hsl(var(--muted))" : "";
-          }
-        });
     }
   };
 

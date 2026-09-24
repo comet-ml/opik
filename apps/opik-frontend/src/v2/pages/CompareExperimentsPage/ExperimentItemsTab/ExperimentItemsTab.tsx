@@ -641,6 +641,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         setExpandedCommentSections([String(idx)]);
       },
       columnsStatistic,
+      subRowHighlightColor: "var(--tag-lavender-bg)",
     }),
     [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
