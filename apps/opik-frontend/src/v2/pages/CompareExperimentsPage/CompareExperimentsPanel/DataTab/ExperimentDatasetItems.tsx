@@ -11,12 +11,10 @@ import React, { useMemo } from "react";
 import { DatasetItem } from "@/types/datasets";
 import { pick } from "lodash";
 import { useProcessedInputData } from "@/hooks/useProcessedInputData";
-import {
-  MediaProvider,
-  mapAndCombineMessages,
-} from "@/shared/PrettyLLMMessage/llmMessages";
+import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
 import { useExperimentItemMedia } from "@/hooks/useExperimentItemMedia";
 import ExperimentMessagesViewer from "@/v2/pages-shared/experiments/ExperimentMessagesViewer/ExperimentMessagesViewer";
+import { partitionMessageFields } from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/partitionMessageFields";
 
 interface ExperimentDatasetItemsProps {
   data: DatasetItem["data"] | undefined;
@@ -44,29 +42,37 @@ const ExperimentDatasetItems = ({
   const { media: unifiedMedia, transformedOutput: transformedData } =
     useExperimentItemMedia({ output: selectedData });
 
-  // Dataset columns hold arbitrary values, so only the ones that actually carry
-  // a recognised LLM message format get the role-by-role treatment.
-  const hasMessages = useMemo(
-    () => mapAndCombineMessages(transformedData, undefined).messages.length > 0,
+  const { messageData, remainingData } = useMemo(
+    () => partitionMessageFields(transformedData),
     [transformedData],
   );
+
+  const hasMessages = Object.keys(messageData).length > 0;
+  const hasRemaining = Object.keys(remainingData).length > 0;
 
   // Media must not bypass the messages check: a multimodal conversation is still
   // a conversation, and rendering it as JSON was the gap this replaces.
   const messagesViewer = (
-    <ExperimentMessagesViewer
-      input={transformedData}
-      preserveKey="compare-experiment-input-messages"
-    />
+    <MediaProvider media={unifiedMedia}>
+      <div className="flex flex-col gap-2">
+        <ExperimentMessagesViewer
+          input={messageData}
+          preserveKey="compare-experiment-input-messages"
+        />
+        {hasRemaining && (
+          <SyntaxHighlighter
+            data={remainingData}
+            prettifyConfig={{ fieldType: "input" }}
+            preserveKey="syntax-highlighter-compare-experiment-input-remaining"
+          />
+        )}
+      </div>
+    </MediaProvider>
   );
 
   if (!showMedia) {
     if (data && hasMessages) {
-      return unifiedMedia.length ? (
-        <MediaProvider media={unifiedMedia}>{messagesViewer}</MediaProvider>
-      ) : (
-        messagesViewer
-      );
+      return messagesViewer;
     }
 
     return data ? (
@@ -99,7 +105,7 @@ const ExperimentDatasetItems = ({
         <AccordionTrigger>Selected data</AccordionTrigger>
         <AccordionContent>
           {hasMessages ? (
-            <MediaProvider media={unifiedMedia}>{messagesViewer}</MediaProvider>
+            messagesViewer
           ) : formattedData ? (
             <SyntaxHighlighter
               data={formattedData ?? {}}
