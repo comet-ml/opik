@@ -64,7 +64,7 @@ describe("partitionMessageFields", () => {
       });
     });
 
-    it("treats null and empty values as remaining data", () => {
+    it("treats null, empty string, and zero as remaining data", () => {
       const data = { a: null, b: "", c: 0 };
       const { messageData, remainingData } = partitionMessageFields(data);
 
