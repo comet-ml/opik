@@ -32,6 +32,15 @@ import { CompareExperimentsPage } from '@e2e/pom/compare-experiments.page';
  */
 
 test.describe('Experiment compare — inline image output', { tag: ['@t2-cuj', '@area:experiments'] }, () => {
+  /**
+   * The fixture waits up to 120s for the seeded experiment to become queryable on
+   * the compare API, which does not fit the 90s default budget — a comparison that
+   * landed at, say, 100s would fail on a bare timeout before the fixture could say
+   * what it was still waiting for. Same reason and same 120s budget as
+   * `compare-export-all-rows.spec.ts`.
+   */
+  test.slow();
+
   test(
     'each placeholder in a mixed-format output resolves to its own picture',
     { tag: ['@cap:experiments.compare-row-detail'] },

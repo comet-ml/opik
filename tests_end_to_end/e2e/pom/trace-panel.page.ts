@@ -208,9 +208,18 @@ export class TracePanelPage {
     return this.root.locator(`img[alt="${fileName}"]`);
   }
 
-  /** Every attachment preview the panel rendered as an image. */
+  /**
+   * Every attachment preview the panel rendered as an image.
+   *
+   * A DIRECT child of the tile, which is what makes this "classified as IMAGE"
+   * rather than "has a picture in it somewhere": the IMAGE branch renders its
+   * `<img>` straight into the tile, while the VIDEO branch renders a
+   * `VideoThumbnail` whose poster `<img>` sits one container deeper. A
+   * descendant selector would count a video's poster as an image and quietly
+   * satisfy a count that is meant to exclude it.
+   */
   get attachmentImages(): Locator {
-    return this.root.locator('div.group img');
+    return this.root.locator('div.group > img');
   }
 
   /**

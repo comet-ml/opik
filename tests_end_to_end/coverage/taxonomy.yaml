@@ -294,7 +294,7 @@ areas:
       messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details. Not covered from the traces side; the playground-written shape is covered under playground.trace-messages-tab, which does not generalise to SDK-logged traces." }
       agent-graph-tab:        { covered: false }
       prompts-tab:            { covered: false, note: "PromptsTab — conditional on opik_prompts metadata + canViewPrompts, like agent-graph-tab" }
-      attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel" }
+      attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel; also the mirror-image path where the caller DOES declare a mime_type — sent on both upload-start and upload-complete, since only the latter reaches the stored row — asserted stored verbatim (case included) against file names whose extensions resolve to nothing, so a type dropped on the wire fails loudly instead of being re-derived; and the two classifier fall-throughs underneath the lookup table, a well-formed type outside it taken by its top-level type (image/avif) and the RFC 2045 case-insensitive match (IMAGE/PNG), against an application/octet-stream control asserted NOT to render as an image" }
       set-guardrail:          { covered: false, note: "SetGuardrailDialog — GUARDRAILS_ENABLED flag" }
       guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
       delete-traces:          { covered: true,  tier: t2-cuj, note: "Logs bulk delete; also the span cascade behind it — a 5-deep span chain, asserted gone project-wide rather than only through a filter on the deleted trace_id, against a bystander trace that keeps its own spans, scores and comments" }
@@ -698,7 +698,7 @@ areas:
       compare-side-by-side:    { covered: true,  tier: t2-cuj }
       compare-sort-search:     { covered: true,  tier: t2-cuj }
       compare-feedback-tab:    { covered: true,  tier: t2-cuj }
-      compare-row-detail:      { covered: true,  tier: t2-cuj }
+      compare-row-detail:      { covered: true,  tier: t2-cuj, note: "the row-detail panel off the compare grid; also inline images in an item's output, where what is asserted is the MAPPING rather than the render — each [image_N] placeholder in the rendered text resolved to the exact data URL it names, on a mixed png/gif seed whose document order and placeholder order deliberately disagree, plus the panel showing those thumbnails and no others, and a repeated image numbered twice but deduplicated to one tile" }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
       # Reading an experiment's items back through the Python SDK

@@ -81,6 +81,17 @@ export interface ExperimentImageOutputFixtures {
 const QUERYABLE_TIMEOUT_MS = 120_000;
 const QUERYABLE_POLL_MS = 2_000;
 
+/**
+ * How long a REST-written trace may take to become readable by id.
+ *
+ * Same budget and same reason as `idAgedTraces`: `createTracesBatch` is an
+ * asynchronous ingest, so `GET /traces/{id}` answers 404 — which
+ * `getTracePayload` reports as `null` — for a while after the write returns.
+ * Reading once and failing on that first answer turns a healthy seed into a
+ * spurious "did not store its output verbatim".
+ */
+const READABLE_TIMEOUT_MS = 30_000;
+
 const MIXED_OUTPUT = `A:${RED_PNG_BASE64} B:${GREEN_GIF_BASE64} C:${BLUE_PNG_BASE64}`;
 const REPEATED_OUTPUT = `first:${RED_PNG_BASE64} second:${RED_PNG_BASE64}`;
 
@@ -164,15 +175,7 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
         ['mixed', mixedTraceId, MIXED_OUTPUT],
         ['repeated', repeatedTraceId, REPEATED_OUTPUT],
       ] as const) {
-        const payload = await backendClient.getTracePayload(traceId);
-        const stored = (payload?.output as { output?: unknown } | null)?.output;
-        if (stored !== expected) {
-          throw new Error(
-            `[experimentImageOutput fixture] the ${label} trace ${traceId} did not store its ` +
-              `output verbatim: expected ${expected.length} chars, got ` +
-              `${typeof stored === 'string' ? `${stored.length} chars` : typeof stored}`,
-          );
-        }
+        await waitForStoredOutput(backendClient, label, traceId, expected);
       }
 
       await waitForRows(backendClient, dataset.id, experimentId, 2);
@@ -239,6 +242,45 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
     }
   },
 });
+
+/**
+ * Block until one trace reads back with its output byte-for-byte as written.
+ *
+ * Polls rather than reads once, so the ingestion window is not mistaken for a
+ * corrupt seed. The distinction is kept in the failure message: "never became
+ * readable" is an environment that is too slow, while a trace that answered with
+ * the wrong number of characters is the truncation this check exists to catch,
+ * and the two want different responses from whoever reads the report.
+ */
+async function waitForStoredOutput(
+  backendClient: {
+    getTracePayload: (traceId: string) => Promise<{ output: unknown } | null>;
+  },
+  label: string,
+  traceId: string,
+  expected: string,
+): Promise<void> {
+  const start = Date.now();
+  let stored: unknown;
+  let seen = false;
+  while (Date.now() - start < READABLE_TIMEOUT_MS) {
+    const payload = await backendClient.getTracePayload(traceId);
+    if (payload !== null) {
+      seen = true;
+      stored = (payload.output as { output?: unknown } | null)?.output;
+      if (stored === expected) return;
+    }
+    await new Promise((r) => setTimeout(r, QUERYABLE_POLL_MS));
+  }
+  throw new Error(
+    `[experimentImageOutput fixture] the ${label} trace ${traceId} ` +
+      (seen
+        ? `did not store its output verbatim: expected ${expected.length} chars, got ` +
+          `${typeof stored === 'string' ? `${stored.length} chars` : typeof stored}`
+        : 'never became readable') +
+      ` after ${Date.now() - start}ms`,
+  );
+}
 
 /**
  * Block until the experiment reports exactly `expected` rows.

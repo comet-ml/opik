@@ -95,65 +95,79 @@ const FILES: MimeTypedFileSeed[] = [
 export const test = baseTest.extend<AttachmentMimeTypesFixtures>({
   attachmentMimeTypes: async ({ backendClient, opikTrace, project, testNamespace }, use, testInfo) => {
     const files = FILES.map((f) => ({ ...f, fileName: `${testNamespace}-${f.fileName}` }));
-
-    for (const file of files) {
-      await backendClient.uploadAttachment({
-        projectName: project.name,
-        entityType: 'trace',
-        entityId: opikTrace.id,
-        fileName: file.fileName,
-        content: PNG_1X1,
-        mimeType: file.sentMimeType,
-      });
-    }
-
-    const ref: AttachmentMimeTypesRef = {
-      traceId: opikTrace.id,
-      projectId: project.id,
-      files,
-    };
-
-    // Prove the declared types actually reached storage before the browser opens.
+    // Populated as each upload lands, and swept in `finally`.
     //
-    // This is the discriminating check: it is the difference between "the UI
-    // classifies IMAGE/PNG as an image" and "the UI classifies whatever tika
-    // guessed from a meaningless extension". Without it a regression that
-    // dropped mime_type on the wire would leave four octet-stream rows, three
-    // generic icons, and a failure that looked like a rendering bug.
-    const listed = await backendClient.listAttachments({
-      projectId: project.id,
-      entityType: 'trace',
-      entityId: opikTrace.id,
-    });
-    const storedByName = new Map(listed.map((a) => [a.fileName, a.mimeType]));
-    const wrong = files
-      .filter((f) => storedByName.get(f.fileName) !== f.sentMimeType)
-      .map((f) => `${f.fileName}: sent ${f.sentMimeType}, stored ${storedByName.get(f.fileName) ?? '<absent>'}`);
-    if (listed.length !== files.length || wrong.length > 0) {
-      throw new Error(
-        `[attachmentMimeTypes fixture] the seed did not store what it declared on trace ` +
-          `${opikTrace.id} (${listed.length} of ${files.length} attachments listed)` +
-          (wrong.length > 0 ? `: ${wrong.join('; ')}` : ''),
-      );
-    }
+    // The uploads and the verification below both run BEFORE `use()`, and
+    // nothing else deletes what they leave: `opikTrace` has no teardown of its
+    // own, and the project delete it defers to removes only the project row
+    // (`ProjectService.delete`), not the trace or its attachments. So a failure
+    // on the second upload, or on the storage check, would otherwise orphan
+    // every file already written.
+    const uploaded: string[] = [];
 
-    await testInfo.attach('opik.attachmentMimeTypes', {
-      body: JSON.stringify({ ...ref, namespace: testNamespace }, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteAttachments({
-          projectId: project.id,
+    try {
+      for (const file of files) {
+        await backendClient.uploadAttachment({
+          projectName: project.name,
           entityType: 'trace',
           entityId: opikTrace.id,
-          fileNames: files.map((f) => f.fileName),
+          fileName: file.fileName,
+          content: PNG_1X1,
+          mimeType: file.sentMimeType,
         });
-      } catch (err) {
-        console.warn(`[attachmentMimeTypes fixture] delete warning for trace ${opikTrace.id}:`, err);
+        uploaded.push(file.fileName);
+      }
+
+      const ref: AttachmentMimeTypesRef = {
+        traceId: opikTrace.id,
+        projectId: project.id,
+        files,
+      };
+
+      // Prove the declared types actually reached storage before the browser opens.
+      //
+      // This is the discriminating check: it is the difference between "the UI
+      // classifies IMAGE/PNG as an image" and "the UI classifies whatever tika
+      // guessed from a meaningless extension". Without it a regression that
+      // dropped mime_type on the wire would leave four octet-stream rows, three
+      // generic icons, and a failure that looked like a rendering bug.
+      const listed = await backendClient.listAttachments({
+        projectId: project.id,
+        entityType: 'trace',
+        entityId: opikTrace.id,
+      });
+      const storedByName = new Map(listed.map((a) => [a.fileName, a.mimeType]));
+      const wrong = files
+        .filter((f) => storedByName.get(f.fileName) !== f.sentMimeType)
+        .map((f) => `${f.fileName}: sent ${f.sentMimeType}, stored ${storedByName.get(f.fileName) ?? '<absent>'}`);
+      if (listed.length !== files.length || wrong.length > 0) {
+        throw new Error(
+          `[attachmentMimeTypes fixture] the seed did not store what it declared on trace ` +
+            `${opikTrace.id} (${listed.length} of ${files.length} attachments listed)` +
+            (wrong.length > 0 ? `: ${wrong.join('; ')}` : ''),
+        );
+      }
+
+      await testInfo.attach('opik.attachmentMimeTypes', {
+        body: JSON.stringify({ ...ref, namespace: testNamespace }, null, 2),
+        contentType: 'application/json',
+      });
+
+      await use(ref);
+    } finally {
+      // Only what actually reached storage: naming a file the failed upload
+      // never created would turn the sweep itself into the warning.
+      if (!shouldLeaveArtifacts(testInfo) && uploaded.length > 0) {
+        try {
+          await backendClient.deleteAttachments({
+            projectId: project.id,
+            entityType: 'trace',
+            entityId: opikTrace.id,
+            fileNames: uploaded,
+          });
+        } catch (err) {
+          console.warn(`[attachmentMimeTypes fixture] delete warning for trace ${opikTrace.id}:`, err);
+        }
       }
     }
   },
