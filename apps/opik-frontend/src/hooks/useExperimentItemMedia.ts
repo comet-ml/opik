@@ -2,9 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { ParsedMediaData } from "@/types/attachments";
 import { getAttachmentTypeByMimeType } from "@/constants/attachments";
 import useAttachmentsList from "@/api/attachments/useAttachmentsList";
-import { processInputData } from "@/lib/images";
+import { processInputDataInternal } from "@/lib/images";
 import { detectAdditionalMedia } from "@/lib/media";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
+
+const PLACEHOLDER_TOKEN_REGEX = /\[(?:image|video|audio)_\d+\]/;
+
+/** Reads the placeholder the extractor recorded in the media item's name. */
+const extractPlaceholderToken = (name: string): string | undefined =>
+  name.match(PLACEHOLDER_TOKEN_REGEX)?.[0];
 
 type UseExperimentItemMediaParams = {
   output: object | undefined;
@@ -31,8 +37,12 @@ export const useExperimentItemMedia = ({
   traceId,
   projectId,
 }: UseExperimentItemMediaParams): UseExperimentItemMediaReturn => {
+  // Deliberately the non-deduplicating extractor: the placeholders written into
+  // the text are numbered by position, so collapsing repeated URLs here would
+  // shift every later index and make [image_n] resolve to the wrong picture.
+  // Consumers (AttachmentsList) deduplicate for display instead.
   const { media: inlineMedia, formattedData } = useMemo(
-    () => processInputData(output),
+    () => processInputDataInternal(output),
     [output],
   );
 
@@ -103,8 +113,11 @@ export const useExperimentItemMedia = ({
       name: item.name,
       type: item.type,
       source: "inline" as const,
+      // The extractor groups media by format, so array position does not track
+      // the number written into the text. It records the real placeholder in
+      // `name` ("Base64: [image_0]"), which is the only reliable source.
       ...(item.hasPlaceholder && {
-        placeholder: `[${item.type}_${index}]`,
+        placeholder: extractPlaceholderToken(item.name),
       }),
     }));
 

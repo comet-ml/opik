@@ -17,6 +17,8 @@ vi.mock("@/lib/media", () => ({
 
 const PNG_BASE64 =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const GIF_BASE64 =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
 beforeEach(() => {
   attachmentsListMock.mockReset();
@@ -238,6 +240,34 @@ describe("useExperimentItemMedia", () => {
 
     expect(renders).toBe(settledRenders);
     expect(renders).toBeLessThan(10);
+  });
+
+  it("keeps placeholder numbering aligned when an image repeats", async () => {
+    // The text is numbered by position, so a repeated image must still occupy
+    // its own slot — otherwise every later [image_n] resolves to the wrong URL.
+    const { result } = renderHook(() =>
+      useExperimentItemMedia({
+        output: { a: PNG_BASE64, b: GIF_BASE64, c: PNG_BASE64 },
+        traceId: "trace-1",
+        projectId: "project-1",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.media).toHaveLength(3));
+
+    const byPlaceholder = Object.fromEntries(
+      result.current.media.map((m) => [m.placeholder, m.url]),
+    );
+
+    expect(byPlaceholder["[image_0]"]).toBe(PNG_BASE64);
+    expect(byPlaceholder["[image_1]"]).toBe(GIF_BASE64);
+    expect(byPlaceholder["[image_2]"]).toBe(PNG_BASE64);
+
+    // Every placeholder present in the rendered text has a matching media entry.
+    const text = JSON.stringify(result.current.transformedOutput);
+    for (const token of text.match(/\[image_\d+\]/g) ?? []) {
+      expect(byPlaceholder[token]).toBeDefined();
+    }
   });
 
   it("falls back to the raw output when nothing is extracted", async () => {
