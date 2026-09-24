@@ -15,13 +15,25 @@ type StepperFieldProps = React.ComponentProps<typeof Input> & {
  * and dark mode are the Input's own.
  */
 const StepperField = React.forwardRef<HTMLInputElement, StepperFieldProps>(
-  ({ suffix, className, ...props }, ref) => (
+  ({ suffix, className, onFocus, ...props }, ref) => (
     <div className="relative">
       <Input
         ref={ref}
         type="number"
         dimension="sm"
-        className={cn("text-right", suffix && "pr-12", className)}
+        className={cn(
+          "text-right [&::-webkit-inner-spin-button]:ml-2",
+          suffix && "pr-12",
+          className,
+        )}
+        onFocus={(event) => {
+          // A number input has no setSelectionRange; re-assigning the value moves the caret after the digits,
+          // where typing continues the number instead of prepending to it.
+          const { value } = event.target;
+          event.target.value = "";
+          event.target.value = value;
+          onFocus?.(event);
+        }}
         {...props}
       />
       {suffix && (
