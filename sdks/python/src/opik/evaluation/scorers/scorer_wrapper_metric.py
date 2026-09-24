@@ -1,3 +1,4 @@
+import functools
 from typing import Any, Callable, Dict, Optional, List, Union
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -107,7 +108,10 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
 
 
 def _scorer_name(scorer: Callable) -> str:
-    return scorer.__name__
+    # functools.partial objects and callable class instances have no __name__.
+    if isinstance(scorer, functools.partial):
+        return _scorer_name(scorer.func)
+    return getattr(scorer, "__name__", type(scorer).__name__)
 
 
 def wrap_scorer_functions(
