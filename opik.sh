@@ -422,7 +422,9 @@ start_missing_containers() {
   if [[ "${OPIK_MAX_STARTUP_RETRIES:-}" =~ ^[1-9][0-9]*$ ]]; then
     max_retries="$OPIK_MAX_STARTUP_RETRIES"
   elif [[ -n "${OPIK_MAX_STARTUP_RETRIES:-}" ]]; then
-    echo "⚠️  Ignoring OPIK_MAX_STARTUP_RETRIES='${OPIK_MAX_STARTUP_RETRIES}' (not a positive integer); using ${max_retries}"
+    # Don't echo the value back: it would put arbitrary text on CI stdout, where newlines or
+    # ::workflow:: sequences could forge log annotations. The name is enough to act on.
+    echo "⚠️  Ignoring OPIK_MAX_STARTUP_RETRIES (not a positive integer); using ${max_retries}"
   fi
   interval=1
   all_running=true

@@ -156,14 +156,25 @@ check "budget is the retry count, not a hardcoded 90" "still not healthy after 5
 echo "override validation:"
 # The override is test-only, but it still must not turn a typo into an instant timeout:
 # unvalidated, "abc"/"0"/"-5" all make the first [[ retries -ge max_retries ]] true.
-export HEALTH_PLAN="be:healthy"
+# Keep the container `starting` so the retry budget is actually reached. With a healthy
+# container the loop exits before max_retries is ever compared, and these would pass even
+# if the fallback value were wrong.
+export HEALTH_PLAN="be:starting"
 for bad in abc 0 -5 " " 12x; do
 	out=$(OPIK_MAX_STARTUP_RETRIES="$bad" run_start 90 be)
-	check "rejects '$bad' and falls back to 90" "Ignoring OPIK_MAX_STARTUP_RETRIES" "$out"
-	check_absent "'$bad' does not cause a spurious timeout" "TIMED OUT" "$out"
+	check "rejects '$bad'" "Ignoring OPIK_MAX_STARTUP_RETRIES" "$out"
+	check "'$bad' falls back to the 90-retry budget" "still not healthy after 90s" "$out"
 done
 out=$(OPIK_MAX_STARTUP_RETRIES=7 run_start 90 be)
 check_absent "a valid override is accepted silently" "Ignoring OPIK_MAX_STARTUP_RETRIES" "$out"
+check "a valid override is actually applied" "still not healthy after 7s" "$out"
+
+# The warning must not echo the value back — it would put attacker-controlled text on CI
+# stdout, where ::workflow:: sequences or newlines can forge log annotations.
+out=$(OPIK_MAX_STARTUP_RETRIES='x
+::error::forged' run_start 90 be)
+check_absent "the rejected value is not echoed into the log" "::error::forged" "$out"
+check "the warning still names the variable" "Ignoring OPIK_MAX_STARTUP_RETRIES" "$out"
 
 # Assert the shipped DEFAULT, with no override in play — otherwise every test here pins its
 # own budget and a change to the default itself would go unnoticed.
