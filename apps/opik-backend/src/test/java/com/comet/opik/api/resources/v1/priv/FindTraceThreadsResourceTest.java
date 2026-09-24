@@ -50,6 +50,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -86,6 +87,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -774,8 +776,13 @@ class FindTraceThreadsResourceTest {
                     .toList();
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // Wait for threads to be created
-            Mono.delay(Duration.ofMillis(250)).block();
+            // Thread rows are created asynchronously from the trace batch; the retrieve call asserts 200
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> threadIds.forEach(
+                            threadId -> traceResourceClient.getTraceThread(threadId, projectId, apiKey,
+                                    workspaceName)));
 
             var inBoth = traceResourceClient.getTraceThread(threadIds.get(0), projectId, apiKey, workspaceName);
             var inOne = traceResourceClient.getTraceThread(threadIds.get(1), projectId, apiKey, workspaceName);

@@ -100,6 +100,8 @@ public class TraceAssertions {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.VISIBILITY_MODE, it -> it.toBuilder().visibilityMode(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.PROVIDERS, it -> it.toBuilder().providers(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.EXPERIMENT, it -> it.toBuilder().experiment(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.ANNOTATION_QUEUES,
+                it -> it.toBuilder().annotationQueues(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.TTFT, it -> it.toBuilder().ttft(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.SOURCE, it -> it.toBuilder().source(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.ENVIRONMENT, it -> it.toBuilder().environment(null).build());
