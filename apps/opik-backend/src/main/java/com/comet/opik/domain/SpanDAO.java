@@ -1976,21 +1976,14 @@ public class SpanDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(spans), "Spans list must not be empty");
 
-        // See TraceDAO#batchInsert: the segment spans the whole call, including the serialization or
-        // parameter binding that the transport change actually affects. The inner segment this replaces
-        // opened after the binding loop, so it measured the execute alone.
-        return Mono.defer(() -> {
-            Segment segment = startSegment("spans", "Clickhouse", "batch_insert");
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(spans);
+        }
 
-            Mono<Long> insert = configuration.getBulkInsert().v2ClientEnabled()
-                    ? insertJsonEachRow(spans)
-                    : Mono.from(connectionFactory.create())
-                            .flatMapMany(connection -> insert(spans, connection))
-                            .flatMap(Result::getRowsUpdated)
-                            .reduce(0L, Long::sum);
-
-            return insert.doFinally(signalType -> endSegment(segment));
-        });
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> insert(spans, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
     }
 
     /**
@@ -2103,7 +2096,10 @@ public class SpanDAO {
 
             statement.bind("workspace_id", workspaceId);
 
-            return Mono.from(statement.execute());
+            Segment segment = startSegment("spans", "Clickhouse", "batch_insert");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
         });
     }
 

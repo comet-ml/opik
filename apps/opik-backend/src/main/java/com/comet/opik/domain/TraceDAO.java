@@ -4522,23 +4522,11 @@ class TraceDAOImpl implements TraceDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(traces), "traces must not be empty");
 
-        // Instrumented HERE rather than around the execute, which is what the batch write paths measured
-        // before and why the JSONEachRow change was invisible in telemetry. The cost it removes is
-        // client-side -- R2DBC resolves one named parameter per column per row by linear scan -- so a
-        // segment that starts after the binding, or a ClickHouse query_log duration, both measure only
-        // the part that did not change. This spans the whole call, so the two transports are comparable.
-        //
-        // Mono.defer because there is no deferContextual at this level: without it the segment would open
-        // at assembly and leak on a publisher that is never subscribed.
-        return Mono.defer(() -> {
-            Segment segment = startSegment("traces", "Clickhouse", "batch_insert");
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(traces);
+        }
 
-            Mono<Long> insert = configuration.getBulkInsert().v2ClientEnabled()
-                    ? insertJsonEachRow(traces)
-                    : asyncTemplate.nonTransaction(connection -> batchInsert(traces, connection));
-
-            return insert.doFinally(signalType -> endSegment(segment));
-        });
+        return asyncTemplate.nonTransaction(connection -> batchInsert(traces, connection));
     }
 
     /**
