@@ -77,13 +77,9 @@ public class AnnotationQueueRoutingBufferService {
 
         return Mono.defer(() -> {
             var pending = pending();
-            return pending.addAll(members)
-                    .doOnNext(added -> {
-                        int folded = members.size() - added;
-                        if (folded > 0) {
-                            AnnotationQueueRoutingMetrics.SCORES_DEDUPLICATED.add(folded);
-                        }
-                    })
+            // GT: a member's timestamp only ever moves forward, so a write that lands out of order — or from a
+            // replica with a slower clock — cannot pull a fresher entity back within reach of the next flush.
+            return pending.addAllIfGreater(members)
                     .then(pending.expireIfNotSet(config.getBufferTtl().toJavaDuration()))
                     .doOnError(error -> log.error(
                             "Failed to buffer '{}' entities for annotation queue routing, scope '{}', workspace '{}'",
@@ -93,8 +89,8 @@ public class AnnotationQueueRoutingBufferService {
     }
 
     /**
-     * Publishes every member whose last write is older than {@code debounceDelay}, a page at a time, and returns how many stream
-     * messages that took. Each page is grouped in memory — bounded by {@code jobBatchSize} — and each group
+     * Publishes every member whose last write is older than {@code debounceDelay}, a page at a time, and
+     * returns how many stream messages it published. Each page is grouped in memory — bounded by {@code jobBatchSize} — and each group
      * is removed as soon as its message is on the stream, so a run cut short by the job's time budget
      * leaves nothing half-done for the next one to redo.
      */

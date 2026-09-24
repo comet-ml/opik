@@ -222,14 +222,19 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
      * more than one row per item.
      */
     // Automated items only: the ceiling bounds what automation adds, so what a person adds by hand must
-    // neither consume it nor be blocked by it.
+    // neither consume it nor be blocked by it. The latest row per item decides its source: the table is a
+    // ReplacingMergeTree, and an item re-added by hand keeps its older automated row until the parts merge.
     private static final String COUNT_AUTOMATED_ITEMS = """
-            SELECT count(DISTINCT item_id) AS count
-            FROM annotation_queue_items
-            WHERE workspace_id = :workspace_id
-            AND project_id = :project_id
-            AND queue_id = :queue_id
-            AND source = :source
+            SELECT count() AS count
+            FROM (
+                SELECT item_id, argMax(source, last_updated_at) AS source
+                FROM annotation_queue_items
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND queue_id = :queue_id
+                GROUP BY item_id
+            )
+            WHERE source = :source
             """;
 
     /**
