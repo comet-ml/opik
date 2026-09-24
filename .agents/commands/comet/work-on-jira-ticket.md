@@ -68,38 +68,21 @@ This workflow will:
 
 ### 3b. Normalize the Ticket to WHY / WHAT / HOW
 
-Tickets filed before the convention — or filed in a hurry — often arrive as a one-line summary, a pasted Slack thread, or a description with no structure at all. Restructuring the ticket **before** planning is itself the first pass of planning: it forces the short version of *why we are doing this* and *what changes* to exist in writing, where the reviewer and QA can see it, instead of only in the plan.
+Tickets filed before the convention — or filed in a hurry — often arrive as a one-line summary, a pasted Slack thread, or a description with no structure at all. Adding the WHY and WHAT **before** planning is itself the first pass of planning: it forces the short version of *why we are doing this* and *what changes* to exist in writing, where the reviewer and QA can see it, instead of only in the plan.
+
+`/comet:create-jira-ticket` is the single source of truth for this format. It defines the description template, what belongs in WHY vs. WHAT, the rule that the title and the WHAT must agree, and everything about the HOW comment — when one is worth posting, how to post it, and the edit-don't-pile-up rule for re-runs. **Read `.agents/commands/comet/create-jira-ticket.md` and follow it.** Do not restate its rules here; when it changes, this step should inherit the change rather than drift from it.
+
+This step adds exactly one thing on top: the ticket already exists and already has content, so normalizing must not destroy it.
 
 #### When to normalize
 
-Assess the fetched ticket:
-
-- **Description already has both `## WHY` and `## WHAT` sections** → it conforms. Skip to step 4, no edit.
-- **Description is missing one or both sections** (unstructured prose, empty, bullet dump, pasted thread) → normalize it.
-
-The HOW is never part of the description. If the ticket's description contains implementation detail under a `HOW` heading or equivalent, move it into the HOW comment as part of normalizing.
+- **Description already has both a WHY and a WHAT section** → it conforms. Skip to step 4, no edit.
+- **Description is missing one or both** (unstructured prose, empty, bullet dump, pasted thread) → normalize it.
 
 #### How to normalize
 
-1. **Derive, don't invent.** Build WHY and WHAT from what the ticket already contains — summary, description, comments, parent epic, linked issues. Where the existing text is genuinely ambiguous about scope or motivation, say so rather than inventing a rationale: a WHY nobody actually holds is worse than a thin one. Ask the user when the gap blocks planning.
-2. **Draft the description** using the same structure `/comet:create-jira-ticket` produces:
-
-   ```
-   ## WHY
-
-   [Why this ticket needs to exist — the motivation and context. 2-6 sentences.]
-
-   ## WHAT
-
-   [High-level description of the changes, phrased so QA can derive test cases.]
-
-   ### Acceptance Criteria
-
-   - [ ] [Observable behavior or outcome]
-   ```
-
-   Keep the reporter's own words where they're already clear.
-3. **Never destroy the original description.** When the ticket had any description text, the normalized version is *prepended*, not substituted: WHY and WHAT go on top, and everything that was there before is retained **verbatim** underneath, under its own heading:
+1. **Derive, don't invent.** Build WHY and WHAT from what the ticket already carries — summary, description, comments, parent epic, linked issues. Where the existing text is genuinely ambiguous about motivation or scope, say so rather than inventing a rationale: a WHY nobody actually holds is worse than a thin one. Ask the user when the gap blocks planning.
+2. **Add the sections above, keep the original below.** Normalizing is additive. Write the WHY and WHAT — in the shape `/comet:create-jira-ticket` defines — at the top of the description, and leave everything that was already there underneath, verbatim, under its own heading:
 
    ```
    ## WHY
@@ -109,24 +92,18 @@ The HOW is never part of the description. If the ticket's description contains i
    ## WHAT
 
    ...
-
-   ### Acceptance Criteria
-
-   - [ ] ...
 
    ---
 
    ## Original Description
 
-   [The ticket's previous description, copied verbatim — same text, same formatting, same media, same links.]
+   [The ticket's previous description, exactly as it was.]
    ```
 
-   This is a strict rule, not a fallback. WHY and WHAT are a reading aid added on top; they are an agent's interpretation of the ticket, and the reporter's own account stays available to anyone who scrolls down. Do not summarize, reword, re-order, or trim the original block, and do not drop content on the grounds that WHY/WHAT already covers it — that judgment is exactly what the preserved copy exists to let a human re-check. Retain media (screenshots, embeds, tables, links) as-is.
+   The original block is never summarized, reworded, re-ordered or trimmed, and nothing is dropped on the grounds that WHY/WHAT already covers it — that judgment is what the preserved copy exists to let a human re-check. WHY and WHAT are an agent's reading of the ticket; the reporter's own account stays available to anyone who scrolls down. Keep media, tables and links intact.
 
-   If the ticket had **no** description at all, there is nothing to preserve — omit the `## Original Description` section entirely rather than emitting an empty one. On a **re-run** against a ticket that already carries an `## Original Description` block, keep that existing block as the original and regenerate only WHY / WHAT above it, so the oldest text survives repeated passes instead of each run preserving the previous run's output.
-4. **Check the title against the WHAT.** The summary is the one-line version of the WHAT. If they disagree on scope, flag the mismatch to the user and propose a corrected title — but don't silently rewrite the summary.
-5. **Write the description back** with `mcp__Jira__home___jira_update_issue`.
-6. **Post the HOW as a comment**, not in the description — the same rules `/comet:create-jira-ticket` uses: only when there's real substance (stable landmarks, an existing pattern worth mirroring, a non-obvious constraint, open questions). A missing HOW is better than a filler one. Follow the same edit-don't-pile-up rule: fetch comments, find the most recent whose body matches `^#\s*HOW\b` (case-insensitive) **and** whose `author.email` matches the authenticated user, `jira_edit_comment` if found, `jira_add_comment` otherwise.
+   If the ticket had **no** description, there is nothing to preserve — omit the section rather than emitting an empty one. On a **re-run** against a ticket that already has an `## Original Description` block, keep that block as the original and regenerate only the sections above it, so the oldest text survives repeated passes instead of each run preserving the previous run's output.
+3. **Write the description back** with `mcp__Jira__home___jira_update_issue`, then handle the HOW comment per `/comet:create-jira-ticket`'s "Post-Creation: HOW Comment" section.
 
 #### Guardrails
 
@@ -298,9 +275,10 @@ Then use `AskUserQuestion` with these options:
 
 1. **Looks right — proceed** — WHY and WHAT match the plan; continue to implementation.
 2. **Adjust the scope** — something is off. The user's free-text answer says what.
-3. **Don't ask me again** — proceed, and offer to persist the skip preference to the user's memory so the prompt doesn't appear on future runs. Persist it only if the user agrees; don't write to memory silently.
 
-`AskUserQuestion` always offers a free-text "Other" option, so the user can correct the WHY / WHAT in their own words instead of picking one of the above — treat any free-text answer as option 2.
+`AskUserQuestion` always offers a free-text "Other" option, so the user can correct the WHY / WHAT in their own words instead of picking either — treat any free-text answer as option 2.
+
+Never write the skip preference to the user's memory, and don't offer to. Opting out is the user's own edit to their memory file; this step only reads it.
 
 **If the user adjusts** (option 2 or free text): update the plan to match the corrected WHY / WHAT, and if the correction reveals the ticket description itself is wrong, offer to update the ticket via the step 3b flow. Re-present the revised plan before proceeding — a scope correction invalidates the approval the user hasn't given yet.
 
