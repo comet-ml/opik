@@ -3103,14 +3103,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     /**
      * Attach a feedback score to a trace, so a delete has a dependent row to
      * cascade to. `source: 'sdk'` matches how a logged score arrives.
+     *
+     * `reason` is the free-text justification an LLM-judge metric uploads
+     * beside its value — the same field the annotate textarea writes, but from
+     * the other author. Omitted entirely when not given, rather than sent as
+     * null: the two are distinguishable downstream, and every caller that
+     * predates this argument means "no reason", not "reason cleared".
      */
     async addTraceFeedbackScore(args: {
       traceId: string;
       name: string;
       value: number;
+      reason?: string;
     }): Promise<void> {
       await opik.api.traces.addTraceFeedbackScore(args.traceId, {
-        body: { name: args.name, value: args.value, source: 'sdk' },
+        body: {
+          name: args.name,
+          value: args.value,
+          source: 'sdk',
+          ...(args.reason === undefined ? {} : { reason: args.reason }),
+        },
       });
     },
 

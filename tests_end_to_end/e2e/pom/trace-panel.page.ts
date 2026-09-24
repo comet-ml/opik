@@ -1,5 +1,15 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 
+/**
+ * Where to send the pointer to get it off a hover target inside the panel.
+ *
+ * Hard left of the viewport: the trace panel is a right-hand sheet, so nothing
+ * it renders — including a tooltip anchored to one of its cells — reaches this
+ * far, whatever side Radix chose to open on. Deliberately not (0, 0), which is
+ * the corner of the app nav and raises a tooltip of its own.
+ */
+const PANEL_POINTER_PARK = { x: 4, y: 300 } as const;
+
 export class TracePanelPage {
   constructor(
     private readonly page: Page,
@@ -650,6 +660,99 @@ export class TracePanelPage {
     return this.feedbackScoresTabPanel.locator(
       `td[data-cell-id="${scoreName}_value"]`,
     );
+  }
+
+  /**
+   * The Reason cell of one row — `<rowId>_reason`, the sibling of
+   * {@link feedbackScoreValueCell}. `reason` is the column id
+   * `FeedbackScoreTableColumns.REASON` declares, so this is stable against the
+   * column reordering the Reason/Score/Author columns are configurable for.
+   *
+   * The cell itself only ever shows ONE line: its `<span>` carries `truncate`,
+   * which is `white-space: nowrap` plus an ellipsis. The full reason lives in
+   * the hover tooltip — see {@link feedbackScoreReasonTooltipText}.
+   */
+  feedbackScoreReasonCell(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.locator(
+      `td[data-cell-id="${scoreName}_reason"]`,
+    );
+  }
+
+  /**
+   * Hover a score's Reason cell and read back the tooltip's RENDERED text.
+   *
+   * `innerText` rather than `textContent` is the whole point of this method.
+   * `textContent` returns the source string, so it reports a `\n` the browser
+   * may have collapsed to a space and a caller asserting on it would pass
+   * whatever the CSS did. `innerText` is defined over the rendered text and
+   * applies white-space processing, so the line breaks it returns are the line
+   * breaks a reader sees — which is the only way to tell
+   * `whitespace-pre-line` from `white-space: normal` without reaching into the
+   * class attribute of the element under test.
+   *
+   * The returned string is the WHOLE tooltip, header included: it opens with an
+   * `author (value) <time ago>` row whose parts are separate block-level boxes,
+   * so how many `innerText` lines they occupy is a layout detail no caller
+   * should depend on. The reason is always the tail, so assert on it from the
+   * END of the string rather than by dropping a fixed number of leading lines.
+   *
+   * Radix portals the content out of the panel, so the tooltip cannot be found
+   * by descending from the cell. It is resolved through `aria-describedby`
+   * instead of by a page-scoped `getByRole('tooltip')`, which is what
+   * `PlaygroundPage.outputErrorTooltipText` does: that page has one tooltip at a
+   * time, this table has one per row, and reading whichever is open the instant
+   * a second cell is hovered is a race — the previous row's tooltip is still
+   * closing, and taking `.first()` would read the wrong reason and still pass
+   * shape checks. Radix stamps the open content's id on its own trigger, so
+   * this always reads the tooltip belonging to the cell just hovered.
+   *
+   * The span, not the cell, is what gets hovered: the span is the trigger Radix
+   * wrapped, and for a short reason it covers only part of a wide cell, so
+   * hovering the cell's centre can miss it entirely.
+   */
+  async feedbackScoreReasonTooltipText(scoreName: string): Promise<string> {
+    return test.step(`hover the reason for "${scoreName}" and read its tooltip`, async () => {
+      // Park the pointer and let any previous row's tooltip close first. This
+      // is not tidiness: the open content is a real box laid out next to its
+      // own cell, it keeps its pointer events, and it covers the neighbouring
+      // rows — so hovering a second reason without closing the first fails as
+      // "subtree intercepts pointer events", not as a wrong read.
+      //
+      // `steps` is load-bearing, and this is the whole reason the parking move
+      // exists as its own line rather than a bare `mouse.move`. Radix keeps
+      // hoverable tooltip content open across a "grace area" between trigger
+      // and content, and it only reconsiders on a pointermove it actually
+      // observes. A default single-step move teleports the cursor and the
+      // tooltip stays open (`data-state="delayed-open"`) indefinitely, however
+      // far away it lands — so the wait below would never resolve.
+      //
+      // The wait is scoped to THIS table's reason cells rather than to
+      // `getByRole('tooltip')` at page scope: the parking position is over the
+      // app nav, which raises a tooltip of its own, and waiting for zero
+      // tooltips anywhere would never resolve.
+      await this.page.mouse.move(PANEL_POINTER_PARK.x, PANEL_POINTER_PARK.y, { steps: 12 });
+      await expect(
+        this.feedbackScoresTabPanel.locator('td[data-cell-id$="_reason"] [aria-describedby]'),
+        'no reason tooltip left open by a previous hover',
+      ).toHaveCount(0);
+
+      const trigger = this.feedbackScoreReasonCell(scoreName).locator('span').first();
+      await trigger.hover();
+
+      // `aria-describedby` is present only while the content is open, so this
+      // is also the wait for the tooltip's open timer.
+      await expect(trigger, 'the reason cell raised its tooltip').toHaveAttribute(
+        'aria-describedby',
+        /.+/,
+        { timeout: 10_000 },
+      );
+      const contentId = await trigger.getAttribute('aria-describedby');
+      // Attribute-matched rather than `#id`: Radix ids look like `radix-:r7:`,
+      // and the colons are not valid in a CSS id selector.
+      const tooltip = this.page.locator(`[id="${contentId}"]`);
+      await expect(tooltip).toBeVisible({ timeout: 10_000 });
+      return (await tooltip.innerText()).trim();
+    });
   }
 
   /**

@@ -1,4 +1,4 @@
-export { test, expect } from './attachment-mime-types.fixture';
+export { test, expect } from './feedback-score-reasons.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -219,4 +219,15 @@ export type {
   AttachmentMimeTypesRef,
   AttachmentMimeTypesFixtures,
 } from './attachment-mime-types.fixture';
+export type {
+  ScoredReasonSeed,
+  FeedbackScoreReasonsRef,
+  FeedbackScoreReasonsFixtures,
+} from './feedback-score-reasons.fixture';
+export {
+  JUDGE_REASON_ITEMS,
+  MULTILINE_JUDGE_REASON,
+  COLLAPSED_JUDGE_REASON,
+  EMPTY_LIST_JUDGE_REASON,
+} from './feedback-score-reasons.fixture';
 export type { ProjectRef } from '../core/backend';
