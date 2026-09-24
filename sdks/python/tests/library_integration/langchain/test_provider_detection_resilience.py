@@ -135,8 +135,10 @@ def test_try_extract_provider_usage_data__string_and_url_object__report_the_same
 
 def test_try_extract_provider_usage_data__unparseable_base_url__reports_no_host(
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An unreadable host must not be reported as OpenAI, which prices the run."""
+    monkeypatch.setattr("opik._logging.LOG_ONCE_CACHE", set())
     caplog.set_level(
         logging.WARNING,
         logger="opik.integrations.langchain.provider_usage_extractors.openai_usage_extractor",
@@ -169,7 +171,10 @@ def test_try_extract_provider_usage_data__non_text_host__reports_unknown_provide
 
 def test_try_extract_provider_usage_data__raising_host_accessor__reports_unknown_provider(
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("opik._logging.LOG_ONCE_CACHE", set())
+
     class BaseURLWithRaisingHost:
         @property
         def host(self) -> str:
