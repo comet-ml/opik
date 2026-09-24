@@ -1187,6 +1187,10 @@ class SpansLocalV2CutoverTest {
      * The sweep must not resurrect a gap-window span the user deleted AFTER the swap. Such a span is still live in the
      * frozen backup (it was live when the backup froze), so without the {@code NOT IN} exclusion the sweep would insert
      * a fresh version and undo the delete.
+     *
+     * <p>It also pins the first of the two shapes that make the post-swap compare mismatch on a healthy cutover: the
+     * key is masked on the live side and live in the backup, so the compare reports it while the gate stays clean.
+     * Quiescing user deletes removes this shape; the rewrite shape, covered separately, it cannot.
      */
     @Test
     void sweepDoesNotResurrectAGapWindowSpanDeletedAfterTheSwap() {
@@ -1220,6 +1224,87 @@ class SpansLocalV2CutoverTest {
         assertThat(liveCount("spans", idStrings(gapWritten), workspaceId))
                 .as("while the other gap-window spans still are")
                 .isEqualTo(gapWritten.size() - 1);
+        assertThat(genuinelyDifferingKeys("spans_pre_cutover_backup", "spans", gapStart, swapDone, workspaceId))
+                .as("""
+                        and the post-swap compare reports that key as differing — masked on the live side, still \
+                        live in the frozen backup — which is a mismatch on a healthy cutover""")
+                .isEqualTo(1L);
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("while the reconciliation gate, which excludes keys bridged at or after the swap, stays clean")
+                .isEqualTo(ReconciliationCounts.reconciled());
+    }
+
+    /**
+     * A gap-window span REWRITTEN after the swap is reported by the post-swap windowed compare, and is not loss. The
+     * later {@code created_at} bites twice: the drill-down bounds BOTH sides on {@code created_at}, so the live row
+     * falls outside the window and prints as absent; and {@code created_at} is part of the row fingerprint, so the
+     * unwindowed confirm-keys re-read hashes it differently even though it found the row.
+     *
+     * <p>This is why quiescing traffic cannot turn that compare into a PASS — a rewrite already made has moved the row
+     * out of the window for good. The write-loss gate is the three gating counts, which stay clean here; the rewrite
+     * surfaces in the informational {@code newer} count, which is where the driver already says to expect it.
+     */
+    @Test
+    void aGapWindowSpanRewrittenAfterTheSwapIsReportedByTheCompareButIsNotLoss() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var seeded = mintIdsInWeek(0, 3);
+        seedSpans(seeded, workspaceId, projectId);
+        var backfillStart = nowMicros();
+        backfillWeek(0);
+        deltaInsert(backfillStart);
+
+        // A gap-window write: to the old table, after the last delta read it.
+        var gapStart = nowMicros();
+        var gapInstant = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        var gapWritten = mintIdsAt(1, gapInstant);
+        insertRows(gapWritten, workspaceId, projectId, "gap", _ -> gapInstant);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        reconcileForward("spans", gapStart, swapDone);
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("the sweep reconciles the gap: the write-loss gate is clean")
+                .isEqualTo(ReconciliationCounts.reconciled());
+
+        // The app rewrites that span AFTER the swap — same key, a NEW created_at past --swap-done.
+        var original = gapWritten.getFirst();
+        var afterSwap = gapInstant.plusSeconds(120);
+        var rewritten = SeededSpan.builder()
+                .id(original.id())
+                .traceId(original.traceId())
+                .createdAt(afterSwap)
+                .build();
+        insertSuccessorSpanAt(rewritten, workspaceId, projectId, "rewritten-after-swap", afterSwap);
+
+        assertThat(liveCount("spans", idStrings(gapWritten), workspaceId))
+                .as("the span is present and current on the live table — nothing was lost")
+                .isEqualTo(1L);
+        assertThat(rowsInsideWindow("spans", idStrings(gapWritten), workspaceId, gapStart, swapDone))
+                .as("""
+                        but it no longer falls inside the compare window on the live side, which is what makes \
+                        the drill-down print it as absent there""")
+                .isZero();
+        assertThat(genuinelyDifferingKeys("spans_pre_cutover_backup", "spans", gapStart, swapDone, workspaceId))
+                .as("""
+                        yet the post-swap windowed compare counts it as differing: its live created_at now sits \
+                        outside the window, and created_at is part of the fingerprint""")
+                .isEqualTo(1L);
+        var afterRewrite = forwardCounts(gapStart, swapDone);
+        assertThat(afterRewrite)
+                .as("""
+                        while the three write-loss counts — the actual gate — stay clean, which is the distinction \
+                        an operator has to make at this point""")
+                .extracting(ReconciliationCounts::missing, ReconciliationCounts::stale,
+                        ReconciliationCounts::payloadMismatch)
+                .containsExactly(0L, 0L, 0L);
+        assertThat(afterRewrite.newer())
+                .as("""
+                        and the rewrite lands in `newer`, which is informational and deliberately left alone by the \
+                        sweep: the live side is ahead of the frozen backup, which is correct, not loss""")
+                .isEqualTo(1L);
     }
 
     /**
@@ -2856,6 +2941,15 @@ class SpansLocalV2CutoverTest {
      * artifact; above 0 means a real fidelity failure.
      */
     private long genuinelyDifferingKeys(String windowLo, String windowHi, String workspaceId) {
+        return genuinelyDifferingKeys("spans", "spans_local_v2", windowLo, windowHi, workspaceId);
+    }
+
+    /**
+     * The same compare across an arbitrary old/new pair, so it can be run in the POST-SWAP orientation
+     * ({@code spans_pre_cutover_backup} vs the live {@code spans}) as well as the pre-swap one.
+     */
+    private long genuinelyDifferingKeys(String oldTable, String newTable, String windowLo, String windowHi,
+            String workspaceId) {
         return scalar("""
                 WITH
                     diff_keys AS (
@@ -2863,7 +2957,7 @@ class SpansLocalV2CutoverTest {
                         FROM (
                             SELECT (workspace_id, project_id, trace_id, id) AS key,
                                    argMax(%1$s, last_updated_at) AS src_hash
-                            FROM spans FINAL
+                            FROM %3$s FINAL
                             WHERE workspace_id = :workspace_id
                               AND created_at >= toDateTime64(:window_lo, 9, 'UTC')
                               AND created_at <  toDateTime64(:window_hi, 9, 'UTC')
@@ -2871,7 +2965,7 @@ class SpansLocalV2CutoverTest {
                         ) AS s
                         FULL OUTER JOIN (
                             SELECT (workspace_id, project_id, trace_id, id) AS key, %2$s AS dst_hash
-                            FROM spans_local_v2 FINAL
+                            FROM %4$s FINAL
                             WHERE workspace_id = :workspace_id
                               AND created_at >= toDateTime64(:window_lo, 6, 'UTC')
                               AND created_at <  toDateTime64(:window_hi, 6, 'UTC')
@@ -2881,13 +2975,13 @@ class SpansLocalV2CutoverTest {
                     src_live AS (
                         SELECT (workspace_id, project_id, trace_id, id) AS key,
                                argMax(%1$s, last_updated_at) AS src_hash
-                        FROM spans FINAL
+                        FROM %3$s FINAL
                         WHERE (workspace_id, project_id, trace_id, id) IN (SELECT key FROM diff_keys)
                         GROUP BY key
                     ),
                     dst_live AS (
                         SELECT (workspace_id, project_id, trace_id, id) AS key, %2$s AS dst_hash
-                        FROM spans_local_v2 FINAL
+                        FROM %4$s FINAL
                         WHERE (workspace_id, project_id, trace_id, id) IN (SELECT key FROM diff_keys)
                     )
                 SELECT count() AS c
@@ -2895,7 +2989,7 @@ class SpansLocalV2CutoverTest {
                 FULL OUTER JOIN dst_live AS d USING (key)
                 WHERE src_hash != dst_hash OR src_hash IS NULL OR dst_hash IS NULL
                 SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1
-                """.formatted(rowHash(OLD_HASH_OVERRIDES), rowHash(NEW_HASH_OVERRIDES)),
+                """.formatted(rowHash(OLD_HASH_OVERRIDES), rowHash(NEW_HASH_OVERRIDES), oldTable, newTable),
                 statement -> statement
                         .bind("workspace_id", workspaceId)
                         .bind("window_lo", windowLo)
@@ -2969,6 +3063,28 @@ class SpansLocalV2CutoverTest {
     }
 
     /** Distinct live (mask-honored) ids from {@code table} within {@code ids}. */
+    /**
+     * Rows for these ids whose {@code created_at} lands INSIDE a compare window. The drill-down bounds both sides on
+     * {@code created_at}, so this is the count that goes to zero — and makes the row print as absent — when a rewrite
+     * moves it past the window's upper bound.
+     */
+    private long rowsInsideWindow(String table, Set<String> ids, String workspaceId, String windowLo,
+            String windowHi) {
+        if (ids.isEmpty()) {
+            return 0L;
+        }
+        return scalar("""
+                SELECT uniqExact(id) AS c
+                FROM %s FINAL
+                WHERE workspace_id = :workspace_id
+                  AND id IN :ids
+                  AND created_at >= toDateTime64(:window_lo, 6, 'UTC')
+                  AND created_at <  toDateTime64(:window_hi, 6, 'UTC')
+                """.formatted(table),
+                statement -> statement.bind("workspace_id", workspaceId).bind("ids", ids)
+                        .bind("window_lo", windowLo).bind("window_hi", windowHi));
+    }
+
     private long liveCount(String table, Set<String> ids, String workspaceId) {
         if (ids.isEmpty()) {
             return 0L;
