@@ -101,8 +101,8 @@ class AnnotationQueuesResourceTest {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private static final String[] QUEUE_IGNORED_FIELDS = new String[]{
-            "reviewers", "feedbackScores", "itemsCount", "automatedItemsCount", "createdAt", "lastUpdatedAt",
-            "createdBy", "lastUpdatedBy"};
+            "reviewers", "feedbackScores", "itemsCount", "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -1238,8 +1238,6 @@ class AnnotationQueuesResourceTest {
                     .isEqualTo(annotationQueue);
 
             assertThat(retrievedQueue.itemsCount()).isEqualTo(2L);
-            // Added through the API, so by hand: none of them count against an automation ceiling.
-            assertThat(retrievedQueue.automatedItemsCount()).isZero();
 
             // Verify aggregated feedback scores only include scores from threads in the queue
             // and only for feedbackDefinitionNames specified in the queue
