@@ -9,12 +9,16 @@ on:
         paths:
           - 'sdks/opik_optimizer/**'
           - '.github/workflows/opik-optimizer-e2e-tests.yaml'
+          - 'opik.sh'
+          - 'opik.ps1'
     push:
         branches:
           - 'main'
         paths:
           - 'sdks/opik_optimizer/**'
           - '.github/workflows/opik-optimizer-e2e-tests.yaml'
+          - 'opik.sh'
+          - 'opik.ps1'
 
 permissions:
   contents: read
