@@ -54,6 +54,13 @@ public record AnnotationQueue(
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> feedbackScores,
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long itemsCount,
+        /**
+         * How many of the items automation added, by each item's latest row. What
+         * {@code automation.maxItemsInQueue} is compared against, so a client can tell "cap reached" apart
+         * from a queue that simply holds many items.
+         */
+        @JsonView({
+                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long automatedItemsCount,
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({
