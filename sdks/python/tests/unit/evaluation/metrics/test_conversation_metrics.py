@@ -74,7 +74,7 @@ def test_conversation_degeneration_scores_wordless_turn_as_degenerate(empty_repl
     per_turn = result.metadata["per_turn"]
     assert len(per_turn) == 3
     assert per_turn[1]["degeneration_score"] == 1.0
-    assert per_turn[1]["no_word_tokens"] == 1.0
+    assert [turn["is_wordless"] for turn in per_turn] == [0.0, 1.0, 0.0]
     # The reply after the wordless turn is compared with it, not with the first
     # reply, so it has no overlap with the previous turn.
     assert per_turn[2]["overlap_previous"] == 0.0

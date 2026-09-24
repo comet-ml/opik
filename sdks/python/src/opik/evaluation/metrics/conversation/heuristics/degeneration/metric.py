@@ -31,11 +31,15 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
     The metric inspects each assistant turn, measuring repeated n-grams, overlap with
     the previous reply, low lexical diversity, and presence of known fallback
     phrases (for example, "as an AI language model..."). Each turn receives a
-    degeneration score between `0.0` and `1.0` (a turn with no words, such as
-    ``"..."``, scores `1.0`); the overall metric reports the peak
+    degeneration score between `0.0` and `1.0`; the overall metric reports the peak
     risk observed so you can quickly flag sections where the assistant got stuck or
     stopped being helpful. Detailed per-turn diagnostics are returned in the
     ``ScoreResult.metadata`` payload.
+
+    An assistant turn with no words (for example ``"..."`` or only whitespace)
+    scores `1.0` and is marked with ``is_wordless: 1.0`` in its per-turn metadata,
+    so a conversation made only of such turns scores `1.0`. A conversation with no
+    assistant turns that have content raises ``MetricComputationError``.
 
     Args:
         name: Display name for the metric result. Defaults to
@@ -111,7 +115,7 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
                         "overlap_previous": 0.0,
                         "fallback_hit": 0.0,
                         "normalized_entropy": 0.0,
-                        "no_word_tokens": 1.0,
+                        "is_wordless": 1.0,
                         "degeneration_score": 1.0,
                     }
                 )
@@ -139,6 +143,7 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
                     "overlap_previous": prev_overlap,
                     "fallback_hit": fallback_score,
                     "normalized_entropy": normalized_entropy,
+                    "is_wordless": 0.0,
                     "degeneration_score": deg_score,
                 }
             )
