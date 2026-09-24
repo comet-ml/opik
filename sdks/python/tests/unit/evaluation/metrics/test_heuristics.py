@@ -265,17 +265,46 @@ def test_sentence_bleu_score(candidate, reference, expected_min, expected_max):
 
 
 @pytest.mark.parametrize(
-    "candidate,reference",
+    "candidate,reference,expected_message",
     [
-        ("", "The quick brown fox"),
-        ("The quick brown fox", ""),
+        ("", "The quick brown fox", "Candidate is empty (single-sentence BLEU)."),
+        ("The quick brown fox", "", "Reference is empty (single-sentence BLEU)."),
     ],
 )
-def test_sentence_bleu_score_empty_inputs(candidate, reference):
+def test_sentence_bleu_score_empty_inputs(candidate, reference, expected_message):
+    # Which side was empty is the useful part of the diagnostic, so pin the
+    # whole message: a substring check would pass on either one.
     metric = SentenceBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(candidate, reference)
-    assert "empty" in str(exc_info.value).lower()
+    assert str(exc_info.value) == expected_message
+
+
+def test_sentence_bleu__empty_reference_list__raises_metric_error():
+    # An empty list of references reached NLTK with no references at all and
+    # surfaced as `KeyError: ('the',)`, unlike the empty-string cases above.
+    metric = SentenceBLEU(track=False)
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output="The quick brown fox", reference=[])
+    assert str(exc_info.value) == "Reference is empty (single-sentence BLEU)."
+
+
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
+@pytest.mark.parametrize("n_grams", [None, "3", 2.5, 3.0, True, False])
+def test_bleu__non_integer_or_boolean_n_grams__raises_value_error(metric_cls, n_grams):
+    # `n_grams < 1` raised TypeError for None and str, and `bool` is a subclass
+    # of int, so `True` silently meant 1.
+    with pytest.raises(ValueError, match="n_grams must be an integer"):
+        metric_cls(n_grams=n_grams, track=False)
+
+
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
+@pytest.mark.parametrize("n_grams", [0, -1])
+def test_bleu__non_positive_n_grams__raises_value_error(metric_cls, n_grams):
+    # n_grams=0 divided by zero while building the uniform weights, and a
+    # negative order produced an empty weight list that quietly scored 0.0.
+    with pytest.raises(ValueError, match="n_grams must be at least 1"):
+        metric_cls(n_grams=n_grams, track=False)
 
 
 @pytest.mark.parametrize(
@@ -343,12 +372,13 @@ def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
 
 
 @pytest.mark.parametrize(
-    "outputs,references",
+    "outputs,references,expected_message",
     [
         # Candidate is empty
         (
             ["", "Some text here"],
             [["non-empty reference"], ["this is fine"]],
+            "Candidate is empty (corpus BLEU).",
         ),
         # Reference is empty
         (
@@ -357,14 +387,38 @@ def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
                 ["The quick brown fox jumps over the lazy dog"],
                 [""],
             ],
+            # A list holding an empty string, not an empty list of references,
+            # so this is the per-reference check rather than the missing one.
+            "Encountered empty reference (corpus BLEU).",
         ),
     ],
 )
-def test_corpus_bleu_score_empty_inputs(outputs, references):
+def test_corpus_bleu_score_empty_inputs(outputs, references, expected_message):
+    # Same reasoning as the single-sentence case: the message names the side
+    # that was empty, and that is what the test is here to protect.
     metric = CorpusBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=outputs, reference=references)
-    assert "empty" in str(exc_info.value).lower()
+    assert str(exc_info.value) == expected_message
+
+
+@pytest.mark.parametrize(
+    "outputs,references,expected_message",
+    [
+        # No candidates at all: passed the length check, then `max()` on an
+        # empty sequence raised `ValueError: max() iterable argument is empty`.
+        ([], [], "Candidate list is empty (corpus BLEU)."),
+        # A candidate with an empty list of references raised `KeyError`.
+        (["The quick brown fox"], [[]], "Reference is empty (corpus BLEU)."),
+    ],
+)
+def test_corpus_bleu__empty_sequences__raise_metric_error(
+    outputs, references, expected_message
+):
+    metric = CorpusBLEU(track=False)
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output=outputs, reference=references)
+    assert str(exc_info.value) == expected_message
 
 
 def test_js_divergence_identical_text():
