@@ -45,7 +45,7 @@ test.describe(
         // deliberately sequential, is well past the 90s default.
         test.setTimeout(600_000);
 
-        const { experimentId, itemCount } = experimentItemRead;
+        const { experimentId, itemCount, seeded } = experimentItemRead;
 
         const baseline = await test.step('Read at the SDK defaults', async () => {
           const read = await sdkClient.python.readExperimentItems({ experiment_id: experimentId });
@@ -85,6 +85,25 @@ test.describe(
             new Set(baseline.map((item) => item.dataset_item_id)).size,
             'every returned item names a distinct dataset item',
           ).toBe(itemCount);
+
+          // Then the pairing, which is the half the two counts above cannot
+          // see. Completeness and uniqueness are both satisfied by ANY
+          // permutation of the seed: a read that handed idx 5's row idx 7's
+          // trace_id still returns 250 distinct traces and the indices 0..249
+          // once each. Assembling pages concurrently is exactly how a row's
+          // fields get mispaired, so the seeded mapping is compared directly —
+          // keyed by idx and compared whole, so the diff on failure names the
+          // indices that moved rather than only saying a set differed.
+          expect(
+            [...baseline]
+              .sort((a, b) => a.idx! - b.idx!)
+              .map((item) => ({
+                idx: item.idx,
+                datasetItemId: item.dataset_item_id,
+                traceId: item.trace_id,
+              })),
+            'each returned item pairs the dataset item and the trace its idx was seeded with',
+          ).toEqual(seeded);
         });
 
         // Each arm varies one thing against the defaults, so a disagreement

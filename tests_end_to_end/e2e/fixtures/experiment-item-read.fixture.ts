@@ -10,6 +10,20 @@ export interface ExperimentItemReadRef {
   projectName: string;
   /** How many dataset items — and so how many experiment items — were written. */
   itemCount: number;
+  /**
+   * What the seed actually wrote, indexed by the `idx` it put on each dataset
+   * item: `seeded[i]` is the dataset item and the trace that index i was
+   * paired with.
+   *
+   * Exposed so a read can be checked against the mapping rather than only
+   * against its own shape. Completeness and uniqueness on their own are
+   * satisfied by any permutation of the pairing — a reader that returned idx
+   * 5's row carrying idx 7's `trace_id` still yields 250 distinct traces and
+   * the indices 0..249 exactly once. The join between an experiment item, its
+   * dataset item and its trace is precisely what a paged, concurrent assembly
+   * can scramble, so the spec has to hold the expected pairing to see it.
+   */
+  seeded: Array<{ idx: number; datasetItemId: string; traceId: string }>;
 }
 
 export interface ExperimentItemReadFixtures {
@@ -101,7 +115,9 @@ async function waitForExperimentRows(
  *
  * Every dataset item carries a monotonic `idx`, which is what lets a reader be
  * checked for gaps, duplicates and reordering without the spec having to hold
- * every row's expected content.
+ * every row's expected content. The `idx -> (dataset item, trace)` pairing the
+ * seed wrote comes back out on `seeded`, because completeness and uniqueness
+ * are both blind to a permutation of that pairing.
  *
  * Teardown deletes the experiment and then the dataset — neither cascades with
  * the project — and the traces explicitly, because deleting a project does not
@@ -172,10 +188,21 @@ export const test = baseTest.extend<ExperimentItemReadFixtures>({
         experimentName,
         projectName: project.name,
         itemCount: ITEM_COUNT,
+        // The same index that was written into `data.idx` above, so the spec
+        // reads the pairing off the seed rather than re-deriving it.
+        seeded: itemIds.map((datasetItemId, i) => ({
+          idx: i,
+          datasetItemId,
+          traceId: traceIds[i],
+        })),
       };
 
+      // Without `seeded`: 250 id triples are what the failure message prints
+      // when the mapping assertion fails, and repeating them in every run's
+      // attachment makes the useful fields harder to find.
+      const { seeded: _seeded, ...summary } = ref;
       await testInfo.attach('opik.experimentItemRead', {
-        body: JSON.stringify(ref, null, 2),
+        body: JSON.stringify(summary, null, 2),
         contentType: 'application/json',
       });
 
