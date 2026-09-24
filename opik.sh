@@ -425,9 +425,11 @@ start_missing_containers() {
     done
   done
 
-  # Times are measured from when `compose up -d` returns. Services that the dependency graph
-  # already gates on `service_healthy` are healthy by then and report ~0s; the meaningful numbers
-  # are the ones that keep starting after compose returns, which is where the timeouts happen.
+  # Times are measured from when `compose up -d` returns, so they are a lower bound: without
+  # `--wait`, `depends_on: service_healthy` only gates when a dependent starts, and a service can
+  # still be starting when compose returns. In practice services whose health another service
+  # waits on are usually healthy by then and report ~0s, while the ones still coming up afterwards
+  # — the backend especially — carry the time that matters here.
   # Strip the compose project prefix so the table stays readable; worktree-derived project names
   # can be long enough to push every value out of its column.
   echo "⏱  Container startup times (since compose up returned):"

@@ -478,9 +478,11 @@ function Start-MissingContainers {
         }
     }
 
-    # Times are measured from when `compose up -d` returns. Services that the dependency graph
-    # already gates on `service_healthy` are healthy by then and report ~0s; the meaningful numbers
-    # are the ones that keep starting after compose returns, which is where the timeouts happen.
+    # Times are measured from when `compose up -d` returns, so they are a lower bound: without
+    # `--wait`, `depends_on: service_healthy` only gates when a dependent starts, and a service can
+    # still be starting when compose returns. In practice services whose health another service
+    # waits on are usually healthy by then and report ~0s, while the ones still coming up afterwards
+    # — the backend especially — carry the time that matters here.
     Write-Host '[INFO] Container startup times (since compose up returned):'
     foreach ($entry in $timings.GetEnumerator()) {
         Write-Host ('     {0,-32} {1}' -f $entry.Key, $entry.Value)
