@@ -51,6 +51,7 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -617,16 +618,27 @@ public class SpanDAO {
             ;
             """;
 
-    // Query to get target project_ids from spans (executed separately to reduce table scans)
+    /**
+     * Query to get target project_ids from spans (executed separately to reduce table scans).
+     * <p>
+     * <b>The {@code <id_weeks>} slot is the week bound the span-id reads carry (OPIK-8361); the others point here.</b>
+     * The same bound {@code TraceDAO.SELECT_TARGET_PROJECTS_FOR_TRACES} documents (OPIK-8332), for the same reason:
+     * the {@code spans_local_v2} partition key verbatim, since an id predicate alone prunes no weekly partition.
+     * Single-id reads use it too, rather than a week-start equality: {@link WeeklyPartitions#weeksOf} also names the
+     * wrapped week the legacy 32-bit {@code id_at} files a far-future id under, where an equality on the honest week
+     * matches nothing. Absent when the ids cannot be derived exactly (at or past 2300), leaving the read unbounded.
+     */
     private static final String SELECT_TARGET_PROJECTS_FOR_SPANS = """
             SELECT DISTINCT project_id
             FROM spans
             WHERE workspace_id = :workspace_id
             AND id IN :ids
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
+    /** The {@code spans} access carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String SELECT_BY_IDS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -733,6 +745,7 @@ public class SpanDAO {
                 WHERE id IN :ids
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
             ) AS s
@@ -779,6 +792,7 @@ public class SpanDAO {
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String SELECT_ONLY_SPAN_BY_ID = """
             SELECT
                 *,
@@ -787,18 +801,21 @@ public class SpanDAO {
             WHERE id = :id
             AND project_id = :project_id
             AND workspace_id = :workspace_id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String SELECT_PARTIAL_BY_ID = """
             SELECT
                 start_time
             FROM spans
             WHERE workspace_id = :workspace_id
             AND id = :id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
@@ -1467,12 +1484,14 @@ public class SpanDAO {
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     public static final String SELECT_PROJECT_ID_FROM_SPAN = """
             SELECT
                   DISTINCT project_id
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2428,10 +2447,13 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_ONLY_SPAN_BY_ID, "get_only_span_by_id", workspaceId,
                             userName, "");
+                    var idWeeks = idWeeks(Set.of(id));
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
                     var statement = connection.createStatement(template.render())
                             .bind("id", id)
                             .bind("project_id", projectId)
                             .bind("workspace_id", workspaceId);
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     Segment segment = startSegment("spans", "Clickhouse", "select_only_span_by_id");
 
@@ -2455,9 +2477,12 @@ public class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_PARTIAL_BY_ID, "get_partial_span_by_id", workspaceId, userName,
                     "");
+            var idWeeks = idWeeks(Set.of(id));
+            idWeeks.ifPresent(_ -> template.add("id_weeks", true));
             var statement = connection.createStatement(template.render())
                     .bind("id", id)
                     .bind("workspace_id", workspaceId);
+            idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
             var segment = startSegment("spans", "Clickhouse", "get_partial_by_id");
             return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));
@@ -2531,8 +2556,13 @@ public class SpanDAO {
                         var template = getSTWithLogComment(SELECT_TARGET_PROJECTS_FOR_SPANS,
                                 "get_target_project_ids_for_spans", workspaceId, userName, ids.size());
 
+                        var idWeeks = idWeeks(ids);
+                        idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                         var statement = connection.createStatement(template.render())
                                 .bind("ids", ids.toArray(UUID[]::new));
+
+                        idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
                     })
@@ -2564,12 +2594,17 @@ public class SpanDAO {
                                     template.add("has_target_projects", true);
                                 }
 
+                                var idWeeks = idWeeks(ids);
+                                idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                                 var statement = connection.createStatement(template.render())
                                         .bind("ids", ids.toArray(new UUID[0]));
 
                                 if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                                     statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
                                 }
+
+                                idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                                 Segment segment = startSegment("spans", "Clickhouse", "get_by_ids");
 
@@ -3163,6 +3198,14 @@ public class SpanDAO {
                 .collectList();
     }
 
+    /**
+     * The values for the {@code <id_weeks>} bound, or empty when the query must run unbounded. An array because the
+     * driver renders a {@code Collection} as a tuple, and the bound is an {@code IN} over a set.
+     */
+    private Optional<Long[]> idWeeks(Collection<UUID> ids) {
+        return WeeklyPartitions.weeksOf(ids).map(weeks -> weeks.toArray(Long[]::new));
+    }
+
     @WithSpan
     public Mono<UUID> getProjectIdFromSpan(@NonNull UUID spanId) {
 
@@ -3172,9 +3215,14 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_PROJECT_ID_FROM_SPAN, "get_project_id_from_span",
                             workspaceId, userName, "");
 
+                    var idWeeks = idWeeks(Set.of(spanId));
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                     var statement = connection.createStatement(template.render())
                             .bind("id", spanId)
                             .bind("workspace_id", workspaceId);
+
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     return Flux.from(statement.execute());
                 }))

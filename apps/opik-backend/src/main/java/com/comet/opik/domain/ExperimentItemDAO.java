@@ -7,6 +7,7 @@ import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCri
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
+import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -28,6 +29,7 @@ import reactor.core.publisher.SignalType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -571,6 +573,7 @@ class ExperimentItemDAO {
             ;
             """;
 
+    /** The {@code spans} subquery carries the {@code <id_weeks>} bound; see {@code SpanDAO}. */
     private static final String GET_EXPERIMENT_REFS_BY_SPAN_IDS = """
             SELECT ei.experiment_id, ei.trace_id
             FROM experiment_items AS ei FINAL
@@ -583,6 +586,7 @@ class ExperimentItemDAO {
                 SELECT DISTINCT trace_id FROM spans
                 WHERE id IN :span_ids AND workspace_id = :workspace_id
                 <if(project_id)> AND project_id = :project_id <endif>
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             )
             AND ea.status IN :statuses
             SETTINGS log_comment = '<log_comment>'
@@ -854,14 +858,14 @@ class ExperimentItemDAO {
     public Flux<ExperimentTraceRef> getExperimentRefsByTraceIds(@NonNull Set<UUID> traceIds,
             @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
         return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_TRACE_IDS, "get_experiment_refs_by_trace_ids",
-                "trace_ids", traceIds, statuses, projectId);
+                "trace_ids", traceIds, statuses, projectId, Optional.empty());
     }
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
             @NonNull Set<ExperimentStatus> statuses) {
         return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "get_experiment_refs_by_item_ids",
-                "item_ids", itemIds, statuses, null);
+                "item_ids", itemIds, statuses, null, Optional.empty());
     }
 
     @WithSpan
@@ -885,13 +889,15 @@ class ExperimentItemDAO {
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
             @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
+        // Array, not List: the driver renders a Collection as a tuple, and the bound is an IN over a set.
         return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "get_experiment_refs_by_span_ids",
-                "span_ids", spanIds, statuses, projectId);
+                "span_ids", spanIds, statuses, projectId,
+                WeeklyPartitions.weeksOf(spanIds).map(weeks -> weeks.toArray(Long[]::new)));
     }
 
     private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String queryName,
             @NonNull String idParamName, @NonNull Set<UUID> ids, @NonNull Set<ExperimentStatus> statuses,
-            UUID projectId) {
+            UUID projectId, @NonNull Optional<Long[]> idWeeks) {
         if (ids.isEmpty() || statuses.isEmpty()) {
             return Flux.empty();
         }
@@ -904,6 +910,8 @@ class ExperimentItemDAO {
                         template.add("project_id", projectId.toString());
                     }
 
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                     Statement statement = connection.createStatement(template.render())
                             .bind(idParamName, ids.stream().map(UUID::toString).toArray(String[]::new))
                             .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
@@ -911,6 +919,8 @@ class ExperimentItemDAO {
                     if (projectId != null) {
                         statement.bind("project_id", projectId.toString());
                     }
+
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     statement.bind("workspace_id", workspaceId);
 
