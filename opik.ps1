@@ -425,10 +425,16 @@ function Start-MissingContainers {
 
     docker @dockerArgs | Where-Object { $_.Trim() -ne '' }
 
+    # Anchor every container's startup time to the moment compose returns. The loop below is
+    # sequential while the containers start in parallel, so timing from when the loop reaches a
+    # container would under-report everything after the first one.
+    $waitStartedAt = [System.Diagnostics.Stopwatch]::StartNew()
+
     Write-Host '[INFO] Waiting for all containers to be running and healthy...'
-    $maxRetries = 60
+    $maxRetries = 90
     $interval = 1
     $allRunning = $true
+    $timings = [ordered]@{}
 
     foreach ($container in $containers) {
         $retries = 0
@@ -445,11 +451,13 @@ function Start-MissingContainers {
             if ($status -ne 'running') {
                 Write-Host "[ERROR] $container failed to start (status: $status)"
                 $allRunning = $false
+                $timings[$container] = 'failed to start'
                 break
             }
 
             if ($health -eq 'healthy') {
                 Write-DebugLog "[OK] $container is now running and healthy!"
+                $timings[$container] = "$([int]$waitStartedAt.Elapsed.TotalSeconds)s"
                 break
             } elseif ($health -eq 'starting') {
                 Write-DebugLog "[INFO] $container is starting... retrying (${retries}s)"
@@ -458,15 +466,26 @@ function Start-MissingContainers {
                 if ($retries -ge $maxRetries) {
                     Write-Host "[WARN] $container is still not healthy after ${maxRetries}s"
                     $allRunning = $false
+                    $timings[$container] = "TIMED OUT after ${maxRetries}s"
                     break
                 }
             } else {
                 Write-Host "[INFO] $container health state is '$health'"
                 $allRunning = $false
+                $timings[$container] = "unhealthy: $health"
                 break
             }
         }
     }
+
+    # Times are measured from when `compose up -d` returns. Services that the dependency graph
+    # already gates on `service_healthy` are healthy by then and report ~0s; the meaningful numbers
+    # are the ones that keep starting after compose returns, which is where the timeouts happen.
+    Write-Host '[INFO] Container startup times (since compose up returned):'
+    foreach ($entry in $timings.GetEnumerator()) {
+        Write-Host ('     {0,-32} {1}' -f $entry.Key, $entry.Value)
+    }
+    Write-Host "   Total wall clock: $([int]$waitStartedAt.Elapsed.TotalSeconds)s"
 
     if ($allRunning) {
         Send-InstallReport -Uuid $uuid -EventCompleted "true" -StartTime $startTime

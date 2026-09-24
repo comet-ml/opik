@@ -370,10 +370,19 @@ start_missing_containers() {
   cmd=$(get_docker_compose_cmd)
   $cmd up -d ${BUILD_MODE:+--build}
 
+  # Anchor every container's startup time to the moment compose returns. The loop below is
+  # sequential while the containers start in parallel, so timing from when the loop reaches a
+  # container would under-report everything after the first one.
+  local wait_started_at=$SECONDS
+
   echo "⏳ Waiting for all containers to be running and healthy..."
-  max_retries=60
+  max_retries=90
   interval=1
   all_running=true
+
+  # bash 3.2 (macOS) has no associative arrays, so timings are kept index-aligned with containers.
+  local timing_labels=()
+  local timing_values=()
 
   for container in "${containers[@]}"; do
     retries=0
@@ -385,11 +394,15 @@ start_missing_containers() {
 
       if [[ "$status" != "running" ]]; then
         echo "❌ $container failed to start (status: $status)"
+        timing_labels+=("$container")
+        timing_values+=("failed to start")
         break
       fi
 
       if [[ "$health" == "healthy" ]]; then
         debugLog "✅ $container is now running and healthy!"
+        timing_labels+=("$container")
+        timing_values+=("$((SECONDS - wait_started_at))s")
         break
       elif [[ "$health" == "starting" ]]; then
         debugLog "⏳ $container is starting... retrying (${retries}s)"
@@ -398,15 +411,31 @@ start_missing_containers() {
         if [[ $retries -ge $max_retries ]]; then
           echo "⚠️  $container is still not healthy after ${max_retries}s"
           all_running=false
+          timing_labels+=("$container")
+          timing_values+=("TIMED OUT after ${max_retries}s")
           break
         fi
       else
         echo "❌ $container health state is '$health'"
         all_running=false
+        timing_labels+=("$container")
+        timing_values+=("unhealthy: $health")
         break
       fi
     done
   done
+
+  # Times are measured from when `compose up -d` returns. Services that the dependency graph
+  # already gates on `service_healthy` are healthy by then and report ~0s; the meaningful numbers
+  # are the ones that keep starting after compose returns, which is where the timeouts happen.
+  # Strip the compose project prefix so the table stays readable; worktree-derived project names
+  # can be long enough to push every value out of its column.
+  echo "⏱  Container startup times (since compose up returned):"
+  local i
+  for i in "${!timing_labels[@]}"; do
+    printf '     %-20s %s\n' "${timing_labels[$i]#"${COMPOSE_PROJECT_NAME}"-}" "${timing_values[$i]}"
+  done
+  echo "   Total wall clock: $((SECONDS - wait_started_at))s"
 
   if $all_running; then
     send_install_report "$uuid" "true" "$start_time"
