@@ -112,12 +112,17 @@ debugLog() {
 timing_labels=()
 timing_values=()
 
-# First write wins, so a time banked by record_healthy_containers is never overwritten by the
-# later moment the sequential loop happens to reach that container.
+# Record a container's timing. A healthy duration is kept only once, so the moment the sequential
+# loop reaches a container can't overwrite the earlier moment it actually went healthy. Terminal
+# states are passed with overwrite=true and always win: a container can go healthy and then die,
+# and the table must show the failure rather than a reassuring duration.
 record_timing() {
-  local name="$1" value="$2" i
+  local name="$1" value="$2" overwrite="${3:-false}" i
   for i in "${!timing_labels[@]}"; do
-    [[ "${timing_labels[$i]}" == "$name" ]] && return 0
+    if [[ "${timing_labels[$i]}" == "$name" ]]; then
+      [[ "$overwrite" == true ]] && timing_values[$i]="$value"
+      return 0
+    fi
   done
   timing_labels+=("$name")
   timing_values+=("$value")
@@ -127,8 +132,13 @@ record_timing() {
 # that goes healthy while the loop is blocked on an earlier one gets its own time, rather than
 # inheriting the earlier container's wait.
 record_healthy_containers() {
-  local c
+  local c i recorded
   for c in "${containers[@]}"; do
+    recorded=false
+    for i in "${!timing_labels[@]}"; do
+      [[ "${timing_labels[$i]}" == "$c" ]] && { recorded=true; break; }
+    done
+    [[ "$recorded" == true ]] && continue
     if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" == "healthy" ]]; then
       record_timing "$c" "$((SECONDS - wait_started_at))s"
     fi
@@ -421,7 +431,7 @@ start_missing_containers() {
       if [[ "$status" != "running" ]]; then
         echo "❌ $container failed to start (status: $status)"
         all_running=false
-        record_timing "$container" "failed to start"
+        record_timing "$container" "failed to start" true
         break
       fi
 
@@ -440,13 +450,13 @@ start_missing_containers() {
         if [[ $retries -ge $max_retries ]]; then
           echo "⚠️  $container is still not healthy after ${max_retries}s"
           all_running=false
-          record_timing "$container" "TIMED OUT after ${max_retries}s"
+          record_timing "$container" "TIMED OUT after ${max_retries}s" true
           break
         fi
       else
         echo "❌ $container health state is '$health'"
         all_running=false
-        record_timing "$container" "unhealthy: $health"
+        record_timing "$container" "unhealthy: $health" true
         break
       fi
     done

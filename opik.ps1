@@ -457,6 +457,10 @@ function Start-MissingContainers {
 
             if ($health -eq 'healthy') {
                 Write-DebugLog "[OK] $container is now running and healthy!"
+                # Only the healthy duration is write-once, so the moment the loop reaches a
+                # container can't overwrite the earlier moment it went healthy. The terminal
+                # branches below assign unconditionally and win, so a container that goes healthy
+                # and then dies shows the failure rather than a reassuring duration.
                 if (-not $timings.Contains($container)) {
                     $timings[$container] = "$([int]$waitStartedAt.Elapsed.TotalSeconds)s"
                 }
@@ -466,8 +470,8 @@ function Start-MissingContainers {
                 # a container polled after a slow one just echoes that one's wait, because the loop
                 # only reaches it once the slow container finishes.
                 foreach ($c in $containers) {
-                    if (-not $timings.Contains($c) -and
-                        (docker inspect -f '{{.State.Health.Status}}' $c 2>$null) -eq 'healthy') {
+                    if ($timings.Contains($c)) { continue }
+                    if ((docker inspect -f '{{.State.Health.Status}}' $c 2>$null) -eq 'healthy') {
                         $timings[$c] = "$([int]$waitStartedAt.Elapsed.TotalSeconds)s"
                     }
                 }
