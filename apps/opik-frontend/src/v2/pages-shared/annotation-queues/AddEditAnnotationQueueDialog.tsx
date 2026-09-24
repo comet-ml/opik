@@ -660,17 +660,17 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                           control={form.control}
                           name="automation_max_items"
                           render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="flex-1">
                               <FormControl>
                                 <Input
                                   {...field}
                                   type="number"
                                   min={1}
                                   step={1}
-                                  dimension="xs"
+                                  dimension="sm"
                                   disabled={!capEnabled}
                                   aria-label="Cap automatically added items at"
-                                  className="w-[87px] text-right"
+                                  className="text-right"
                                 />
                               </FormControl>
                             </FormItem>
