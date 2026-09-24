@@ -5133,6 +5133,56 @@ class GetTracesByProjectResourceTest {
             assertLatestSpanVersionAggregates(actualPage.content().getFirst(), scenario.latestSpan());
         }
 
+        @Test
+        void getTracesByProject__whenSpanReinsertedWithDifferentParent__thenAggregatesCountItOnce() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Batch create skips the parent-mismatch check, so both versions land. The live sorting key still
+            // holds parent_span_id: FINAL keeps both rows and sums them, the id dedup keeps only the latest.
+            var staleSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(idGenerator.generateId())
+                    .type(SpanType.llm)
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(randomCost(0, 1))
+                    .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.MINUTES))
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
+            var latestSpan = staleSpan.toBuilder()
+                    .parentSpanId(idGenerator.generateId())
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(randomCost(1, 2))
+                    .lastUpdatedAt(Instant.now())
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(staleSpan), apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(List.of(latestSpan), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, List.of(), List.of(), 10, Map.of());
+
+            var expectedTrace = trace.toBuilder()
+                    .usage(toLongUsage(latestSpan.usage()))
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                            trace.endTime()))
+                    .build();
+            TraceAssertions.assertTraces(actualPage.content(), List.of(expectedTrace), USER);
+            assertLatestSpanVersionAggregates(actualPage.content().getFirst(), latestSpan);
+        }
+
         private Stream<Arguments> searchStreamSpanUpdateFilters() {
             return Stream.of(
                     // No aggregate filter: aggregates are keyed on the page ids

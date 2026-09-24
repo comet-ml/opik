@@ -6131,6 +6131,55 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("when a span is re-inserted with a different parent, then the thread aggregates count it once")
+        void getTraceThread__whenSpanReinsertedWithDifferentParent__thenAggregatesCountItOnce() {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            // Batch create skips the parent-mismatch check, so both versions land. The live sorting key still
+            // holds parent_span_id: FINAL keeps both rows and sums them, the id dedup keeps only the latest.
+            var staleSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(generator.generate())
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(0.01, 1))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.MINUTES))
+                    .comments(null)
+                    .feedbackScores(null)
+                    .build();
+            var latestSpan = staleSpan.toBuilder()
+                    .parentSpanId(generator.generate())
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(1, 2))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .lastUpdatedAt(Instant.now())
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(staleSpan), API_KEY, TEST_WORKSPACE);
+            spanResourceClient.batchCreateSpans(List.of(latestSpan), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+
+            var expectedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(latestSpan),
+                    TraceThreadStatus.ACTIVE);
+            TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
+            assertThat(actualThread.totalEstimatedCost()).isEqualByComparingTo(latestSpan.totalEstimatedCost());
+        }
+
+        @Test
         @DisplayName("when trace thread is retrieved with truncate parameter, then messages are truncated accordingly")
         void getTraceThread__whenTruncateParameter__thenMessagesAreTruncatedAccordingly() {
 
