@@ -59,8 +59,6 @@ export interface AnnotationQueue {
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];
   items_count: number;
-  /** Items automation added, by each item's latest row; what max_items_in_queue is compared against. */
-  automated_items_count?: number;
   created_at: string;
   created_by: string;
   last_updated_at: string;

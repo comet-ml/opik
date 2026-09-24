@@ -20,9 +20,9 @@ const AutomationCell: React.FC<CellContext<AnnotationQueue, unknown>> = (
   const queue = context.row.original;
   const enabled = Boolean(queue.automation?.enabled);
   const cap = queue.automation?.max_items_in_queue;
-  // Only automated items count against the cap; manual additions never fill it.
-  const capReached =
-    enabled && cap != null && (queue.automated_items_count ?? 0) >= cap;
+  // Approximate: the cap counts automated items only, but the payload carries the total, so a queue
+  // whose manual additions push it past the cap shows as reached while automation still has room.
+  const capReached = enabled && cap != null && queue.items_count >= cap;
 
   return (
     <CellWrapper
