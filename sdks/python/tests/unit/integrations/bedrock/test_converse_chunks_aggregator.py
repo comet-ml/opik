@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
+import opik
+from opik.integrations.bedrock import track_bedrock
 from opik.integrations.bedrock.converse import chunks_aggregator
 
 # Tool input fragments as us.openai.gpt-6-sol streams them.
@@ -93,9 +95,29 @@ def test_aggregate_converse_stream_chunks__cut_off_tool_input__logs_block_not_in
 ):
     caplog.set_level(logging.DEBUG, logger=chunks_aggregator.LOGGER.name)
 
-    chunks_aggregator.aggregate_converse_stream_chunks(
+    result = chunks_aggregator.aggregate_converse_stream_chunks(
         _call("call_1", ['{"city":"Pa'], index=2)
     )
 
+    [block] = result["output"]["message"]["content"]
+    assert block["toolUse"]["input"] == '{"city":"Pa'
     assert "content block 2" in caplog.text
     assert '{"city":"Pa' not in caplog.text
+
+
+def test_track_bedrock__converse_stream_tool_calls__trace_and_span_get_converse_layout(
+    fake_backend,
+):
+    class _Client:
+        def converse_stream(self, **kwargs: Any) -> Dict[str, Any]:
+            events = _call("call_2", TOKYO, index=1) + _call("call_1", PARIS)
+            return {"stream": iter(events), "ResponseMetadata": {}}
+
+    client = track_bedrock(_Client())
+    for _ in client.converse_stream(modelId="model", messages=[])["stream"]:
+        pass
+    opik.flush_tracker()
+
+    [trace_tree] = fake_backend.trace_trees
+    for logged in (trace_tree, trace_tree.spans[0]):
+        assert logged.output["output"]["message"]["content"] == [PARIS_CALL, TOKYO_CALL]
