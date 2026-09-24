@@ -111,7 +111,8 @@ def _scorer_name(scorer: Callable) -> str:
     # functools.partial objects and callable class instances have no __name__.
     if isinstance(scorer, functools.partial):
         return _scorer_name(scorer.func)
-    return getattr(scorer, "__name__", type(scorer).__name__)
+    name = getattr(scorer, "__name__", None)
+    return name if isinstance(name, str) and name else type(scorer).__name__
 
 
 def wrap_scorer_functions(

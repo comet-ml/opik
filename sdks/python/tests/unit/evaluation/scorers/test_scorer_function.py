@@ -187,3 +187,19 @@ def test_wrap_scorer_functions__partial_and_callable_object__named_and_scored():
     for metric in metrics:
         result = metric.score(dataset_item={}, task_outputs={"output": "x"})
         assert result.value == 1.0
+
+
+def test_wrap_scorer_functions__non_string_name_attribute__falls_back_to_class_name():
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    class OddlyNamed:
+        __name__ = 123
+
+        def __call__(
+            self, dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]
+        ) -> score_result.ScoreResult:
+            return score_result.ScoreResult(name="odd", value=1.0)
+
+    [metric] = wrap_scorer_functions([OddlyNamed()], project_name=None)
+
+    assert metric.name == "OddlyNamed"
