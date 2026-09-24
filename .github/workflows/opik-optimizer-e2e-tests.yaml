@@ -33,6 +33,9 @@ env:
 
 jobs:
     build-opik:
+        # Fork PRs get a read-only GITHUB_TOKEN, so the GHCR push below always
+        # 403s. Skip rather than fail; delete once fork PRs can run E2E.
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
         # The reusable build workflow pushes images to GHCR; pass down the
         # packages: write grant here rather than at the workflow level (a
         # called workflow's permissions can only be maintained or reduced from
@@ -46,6 +49,9 @@ jobs:
 
     run-e2e-tests:
         name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
+        # No explicit if: needed here -- the default success() check skips this
+        # whenever build-opik is skipped, and dataset-source-check in turn
+        # skips on this.
         needs: build-opik
         runs-on: ubuntu-latest
         timeout-minutes: 40
@@ -87,7 +93,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.1.0
 
         - name: Run latest Opik server
           env:
@@ -177,7 +183,7 @@ jobs:
             python-version: "3.12"
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.1.0
 
         - name: Cache HuggingFace datasets
           uses: actions/cache@v6

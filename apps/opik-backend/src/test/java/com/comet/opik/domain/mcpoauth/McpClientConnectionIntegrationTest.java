@@ -119,6 +119,36 @@ class McpClientConnectionIntegrationTest {
                 .clientId();
     }
 
+    @Test
+    @DisplayName("a connection row written before the filters existed is cleaned on the way out")
+    void legacyConnectionRowIsCleanedOnRead() {
+        // 000098 created this table a migration ahead of the sanitisers, and a host that never comes back never
+        // gets its row refreshed by the upsert, so the read has to filter what it finds.
+        String userName = "u-" + RandomStringUtils.secure().nextAlphanumeric(8);
+        String workspaceId = "ws-" + RandomStringUtils.secure().nextAlphanumeric(8);
+        String clientId = UUID.randomUUID().toString();
+
+        transactionTemplate.inTransaction(WRITE, handle -> handle.attach(McpClientConnectionDAO.class)
+                .upsert(McpClientConnection.builder()
+                        .id(UUID.randomUUID().toString())
+                        .userName(userName)
+                        .workspaceName("ws-name")
+                        .workspaceId(workspaceId)
+                        .clientId(clientId)
+                        .clientName("Legacy Host\r\nFAKE LOG LINE")
+                        .logoUri("javascript:alert(1)")
+                        .clientUri("data:text/html;base64,PHNjcmlwdD4=")
+                        .resource(RESOURCE_URI)
+                        .redirectUri(REDIRECT_URI)
+                        .build()));
+
+        var row = connection(workspaceId, userName, clientId).orElseThrow();
+
+        assertThat(row.clientName()).isEqualTo("Legacy Host  FAKE LOG LINE");
+        assertThat(row.logoUri()).as("script-scheme logo dropped on read").isNull();
+        assertThat(row.clientUri()).as("data: URL dropped on read").isNull();
+    }
+
     /** The silent disconnect: the host stops coming back and its tokens age out, but its row stays. */
     private void expireTokensOf(String clientId) {
         transactionTemplate.inTransaction(WRITE, handle -> handle
@@ -174,6 +204,7 @@ class McpClientConnectionIntegrationTest {
                 .clientId(authorized.clientId())
                 .clientName(host)
                 .logoUri(null) // registration sent no logo
+                .clientUri(null)
                 .resource(RESOURCE_URI)
                 .redirectUri(REDIRECT_URI)
                 .build();

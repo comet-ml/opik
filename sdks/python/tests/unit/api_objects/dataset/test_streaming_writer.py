@@ -5,7 +5,9 @@ import decimal
 import enum
 import gzip
 import json
+import logging
 import threading
+import time
 import uuid
 import zlib
 
@@ -13,6 +15,7 @@ import pydantic
 import pytest
 
 from opik import config
+from opik.api_objects import streaming_upload
 from opik.api_objects.dataset import streaming_writer
 from opik.rest_api.types.dataset_item_write import DatasetItemWrite
 from opik.rest_api.core.jsonable_encoder import jsonable_encoder
@@ -35,6 +38,16 @@ def _collect():
     return bodies, flush_callback
 
 
+def _parse_body(body: bytes) -> dict:
+    """The request body a flush produced, as the backend would read it."""
+    return json.loads(body.decode("utf-8"))
+
+
+def _ids_in_order(bodies) -> list:
+    """Every item id across every body, in the order they were emitted."""
+    return [item["id"] for body, _ in bodies for item in _parse_body(body)["items"]]
+
+
 @pytest.fixture
 def tiny_batch_bytes(monkeypatch):
     """Shrink the batch cap so a bound test costs kilobytes instead of tens of MB.
@@ -51,8 +64,8 @@ def make_pool():
     """A closed-on-teardown pool. A failed assertion must not leak parked workers."""
     pools = []
 
-    def build(**kwargs) -> streaming_writer.BoundedSendPool:
-        pool = streaming_writer.BoundedSendPool(**kwargs)
+    def build(**kwargs) -> streaming_upload.BoundedSendPool:
+        pool = streaming_upload.BoundedSendPool(**kwargs)
         pools.append(pool)
         return pool
 
@@ -73,6 +86,19 @@ _MARKER = 16
 def _submit(pool, chunks, item_count: int = 1) -> None:
     """`submit` takes the size the writer measured; here we measure it the same way."""
     pool.submit(chunks, item_count, sum(len(chunk) for chunk in chunks))
+
+
+def _collecting_send(sink):
+    """A send that keeps the bodies it is given.
+
+    The pool hands a send the body and whatever `submit` carried alongside it; a dataset
+    upload carries nothing, and neither do these tests.
+    """
+
+    def send(body: bytes, _payload=None) -> None:
+        sink.append(body)
+
+    return send
 
 
 def _writer(flush_callback, **kwargs):
@@ -118,7 +144,7 @@ def test_flush__no_items__does_nothing():
 
 def test_body__matches_a_one_shot_serialisation_of_the_same_rows():
     """Row-at-a-time assembly must produce the bytes one pass over the rows would."""
-    dumps = streaming_writer.dumps
+    dumps = streaming_upload.dumps
     bodies, flush_callback = _collect()
     writer = _writer(flush_callback)
 
@@ -229,7 +255,7 @@ def test_add__unknown_object__still_raises_rather_than_being_encoded_as_empty():
 # --------------------------------------------------------------------------- #
 def test_pool__compression_enabled__body_is_one_gzip_stream_of_the_batch(make_pool):
     sent = []
-    pool = make_pool(send=sent.append, num_threads=2, gzip_level=6)
+    pool = make_pool(send=_collecting_send(sent), num_threads=2, gzip_level=6)
 
     chunks = [b'{"items":[', b'{"id": "a"}', b"]}"]
     expected = b"".join(chunks)  # snapshot: submit takes ownership and empties the list
@@ -249,19 +275,19 @@ def test_pool__compression_enabled__body_is_one_gzip_stream_of_the_batch(make_po
     "n_chunks",
     [
         pytest.param(
-            streaming_writer.BoundedSendPool._COMPRESS_BLOCK_CHUNKS - 1,
+            streaming_upload._COMPRESS_BLOCK_CHUNKS - 1,
             id="one-short-block",
         ),
         pytest.param(
-            streaming_writer.BoundedSendPool._COMPRESS_BLOCK_CHUNKS,
+            streaming_upload._COMPRESS_BLOCK_CHUNKS,
             id="exactly-one-block",
         ),
         pytest.param(
-            streaming_writer.BoundedSendPool._COMPRESS_BLOCK_CHUNKS + 1,
+            streaming_upload._COMPRESS_BLOCK_CHUNKS + 1,
             id="block-plus-a-tail",
         ),
         pytest.param(
-            streaming_writer.BoundedSendPool._COMPRESS_BLOCK_CHUNKS * 3 + 7,
+            streaming_upload._COMPRESS_BLOCK_CHUNKS * 3 + 7,
             id="several-blocks",
         ),
     ],
@@ -276,7 +302,7 @@ def test_pool__body_spanning_several_compression_blocks__round_trips(
     order, would pass all of them. The real writer emits ~2000 chunks per batch.
     """
     sent = []
-    pool = make_pool(send=sent.append, num_threads=2, gzip_level=6)
+    pool = make_pool(send=_collecting_send(sent), num_threads=2, gzip_level=6)
 
     chunks = [f"<{index}>".encode() for index in range(n_chunks)]
     expected = b"".join(chunks)
@@ -290,14 +316,14 @@ def test_pool__body_spanning_several_compression_blocks__round_trips(
     # `gzip.decompress` joins a multi-member stream silently, so decoding cleanly does
     # not prove the slices went through one compressor. The class promises one stream
     # per body, and a per-slice `compressobj` would satisfy every assertion above.
-    decompressor = zlib.decompressobj(streaming_writer._GZIP_WBITS)
+    decompressor = zlib.decompressobj(streaming_upload._GZIP_WBITS)
     decompressor.decompress(sent[0])
     assert decompressor.unused_data == b"", "A body must be exactly one gzip member"
 
 
 def test_pool__compression_disabled__body_is_plain_json(make_pool):
     sent = []
-    pool = make_pool(send=sent.append, num_threads=2, gzip_level=None)
+    pool = make_pool(send=_collecting_send(sent), num_threads=2, gzip_level=None)
 
     _submit(pool, [b'{"items":[', b'{"id": "a"}', b"]}"])
     pool.close()
@@ -310,7 +336,7 @@ def test_pool__compression_disabled__body_is_plain_json(make_pool):
 # BoundedSendPool shutdown
 # --------------------------------------------------------------------------- #
 def test_pool__worker_error__is_reraised_to_the_producer(make_pool):
-    def send(body: bytes) -> None:
+    def send(body: bytes, _payload=None) -> None:
         raise ValueError("rejected")
 
     pool = make_pool(send=send, num_threads=2, gzip_level=None)
@@ -318,6 +344,74 @@ def test_pool__worker_error__is_reraised_to_the_producer(make_pool):
 
     with pytest.raises(ValueError):
         pool.close()
+
+
+def test_pool__abort__stops_and_waits_only_a_bounded_time_for_started_sends(
+    make_pool, monkeypatch, caplog
+):
+    monkeypatch.setattr(streaming_upload, "ABORT_WAIT_SECONDS", 0.2)
+    stop = threading.Event()
+    release = threading.Event()
+    started = []
+    entered = threading.Semaphore(0)
+    returned = threading.Semaphore(0)
+
+    def send(body: bytes, _payload=None) -> None:
+        started.append(body)
+        entered.release()
+        # Ignores the stop signal, as a request already on the wire does.
+        release.wait(10)
+        returned.release()
+
+    pool = make_pool(
+        send=send, num_threads=2, gzip_level=None, fail_fast=True, stop_event=stop
+    )
+    try:
+        for index in range(4):
+            _submit(pool, [f"body-{index}".encode()])
+        assert entered.acquire(timeout=5)
+        assert entered.acquire(timeout=5)
+
+        started_at = time.monotonic()
+        with caplog.at_level(logging.WARNING, logger=streaming_upload.LOGGER.name):
+            pool.abort()
+
+        assert stop.is_set()
+        assert time.monotonic() - started_at < 2
+        assert "2 upload request(s) still running" in caplog.text
+    finally:
+        release.set()
+    assert returned.acquire(timeout=5)
+    assert returned.acquire(timeout=5)
+    assert len(started) == 2, "No queued body may start after abort"
+
+
+def test_pool__close_after_abort__returns_instead_of_waiting_on_cancelled_work(
+    make_pool, monkeypatch
+):
+    """`abort` leaves futures that `shutdown` cancelled without notifying their waiters."""
+    monkeypatch.setattr(streaming_upload, "ABORT_WAIT_SECONDS", 0.2)
+    release = threading.Event()
+    started = threading.Semaphore(0)
+
+    def send(body: bytes, _payload=None) -> None:
+        started.release()
+        release.wait(10)
+
+    pool = make_pool(send=send, num_threads=2, gzip_level=None, fail_fast=True)
+    try:
+        for index in range(4):
+            _submit(pool, [f"body-{index}".encode()])
+        assert started.acquire(timeout=5)
+        assert started.acquire(timeout=5)
+        pool.abort()
+
+        started_at = time.monotonic()
+        pool.close()
+        assert time.monotonic() - started_at < 2, "close must not wait on aborted work"
+        pool.close()  # and stays safe to repeat
+    finally:
+        release.set()
 
 
 def _executor_threads(pool) -> int:
@@ -333,7 +427,7 @@ def _executor_threads(pool) -> int:
 def test_pool__workers_follow_the_upload_not_the_ceiling(make_pool):
     """`num_threads` is a ceiling. A three-body upload must not start sixty-four threads."""
     sent = []
-    pool = make_pool(send=sent.append, num_threads=64, gzip_level=None)
+    pool = make_pool(send=_collecting_send(sent), num_threads=64, gzip_level=None)
 
     assert _executor_threads(pool) == 0, "No worker before there is a body to send"
 
@@ -355,7 +449,7 @@ def test_pool__sustained_load__grows_to_the_ceiling_and_no_further(make_pool):
     started = threading.Semaphore(0)
     sent = []
 
-    def blocked_send(body: bytes) -> None:
+    def blocked_send(body: bytes, _payload=None) -> None:
         sent.append(body)
         started.release()
         release.wait(5)
@@ -384,7 +478,7 @@ def test_pool__saturated__submit_blocks_until_a_body_lands(make_pool):
     """The back-pressure that keeps memory bounded: the producer cannot run ahead."""
     release = threading.Event()
 
-    def blocked_send(body: bytes) -> None:
+    def blocked_send(body: bytes, _payload=None) -> None:
         release.wait(5)
 
     # num_threads=2 bounds the outstanding bodies at 4.
@@ -422,7 +516,7 @@ def test_pool__oversized_bodies__submit_blocks_on_bytes_before_the_count(
     """
     release = threading.Event()
 
-    def blocked_send(body: bytes) -> None:
+    def blocked_send(body: bytes, _payload=None) -> None:
         release.wait(5)
 
     # num_threads=2: four bodies allowed, four batches of bytes allowed.
@@ -471,7 +565,7 @@ def test_pool__body_larger_than_the_whole_budget__is_admitted_anyway(
     test rather than failing it, which is the shape of the bug it guards against.
     """
     sent = []
-    pool = make_pool(send=sent.append, num_threads=2, gzip_level=None)
+    pool = make_pool(send=_collecting_send(sent), num_threads=2, gzip_level=None)
 
     _submit(pool, [b"x" * (10 * tiny_batch_bytes)])
     pool.close()
@@ -482,7 +576,7 @@ def test_pool__body_larger_than_the_whole_budget__is_admitted_anyway(
 def test_pool__send_raising_a_base_exception__reaches_the_producer(make_pool):
     """`SystemExit` from a send must surface, not be swallowed or left hanging."""
 
-    def send(body: bytes) -> None:
+    def send(body: bytes, _payload=None) -> None:
         raise SystemExit("interrupted")
 
     pool = make_pool(send=send, num_threads=2, gzip_level=None)
@@ -516,8 +610,6 @@ def test_add__item_at_the_cap__gets_its_own_request():
 def test_add__batch_never_exceeds_the_payload_cap():
     """Closing the batch before the item that would overflow it, not after."""
     bodies, flush_callback = _collect()
-    # On the standard library, so the size the assertion recomputes below is the one the
-    # writer measured; the cap arithmetic itself does not depend on the serialiser.
     writer = _writer(flush_callback, max_payload_bytes=300)
 
     for i in range(10):
@@ -526,7 +618,10 @@ def test_add__batch_never_exceeds_the_payload_cap():
 
     for body, _ in bodies:
         payload = json.loads(body)
-        assert len(json.dumps(payload["items"]).encode("utf-8")) <= 300 or (
+        # Re-encoded through the writer's own encoder rather than the standard library:
+        # the cap arithmetic does not depend on the serialiser, but the size does, and
+        # measuring it a second way would test the second way instead.
+        assert len(streaming_upload.dumps(payload["items"])) <= 300 or (
             len(payload["items"]) == 1
         ), "Only a single oversized item may fill a request past the cap"
 
@@ -652,7 +747,7 @@ def test_pool__a_failure_collected__does_not_strand_the_budget(
     delivered = []
     accepted = []
 
-    def send(body: bytes) -> None:
+    def send(body: bytes, _payload=None) -> None:
         with lock:
             delivered.append(body[:_MARKER])
         # Keyed on the body, not on which worker arrives first: with two workers racing,
@@ -715,7 +810,7 @@ def test_pool__a_body_fails__surfaces_to_the_producer_at_the_bound(make_pool):
     """
     failed = threading.Event()
 
-    def send(body: bytes) -> None:
+    def send(body: bytes, _payload=None) -> None:
         if body == b"body-0":
             failed.set()
             raise ValueError("body-0 was rejected")
@@ -833,13 +928,13 @@ def test_encode_flexible__set__ordered_canonically_not_by_iteration():
     set: within one process those agree whatever the rule is, so that comparison would
     hold even for the iteration order this replaced.
     """
-    assert streaming_writer.encode_flexible({"gamma", "alpha", "delta", "beta"}) == [
+    assert streaming_upload.encode_flexible({"gamma", "alpha", "delta", "beta"}) == [
         "alpha",
         "beta",
         "delta",
         "gamma",
     ]
-    assert streaming_writer.encode_flexible(frozenset({"b", "a"})) == ["a", "b"]
+    assert streaming_upload.encode_flexible(frozenset({"b", "a"})) == ["a", "b"]
 
 
 def test_encode_flexible__set_of_one_comparable_type__natural_order():
@@ -848,8 +943,8 @@ def test_encode_flexible__set_of_one_comparable_type__natural_order():
     Pinned because the two disagree -- by repr `10` precedes `2` -- so this is what
     fixes which of them is the identity a stored row is matched against.
     """
-    assert streaming_writer.encode_flexible({10, 1, 2}) == [1, 2, 10]
-    assert streaming_writer.encode_flexible({"b", "a", "c"}) == ["a", "b", "c"]
+    assert streaming_upload.encode_flexible({10, 1, 2}) == [1, 2, 10]
+    assert streaming_upload.encode_flexible({"b", "a", "c"}) == ["a", "b", "c"]
 
 
 def test_encode_flexible__set_of_mixed_types__ordered_by_type_then_repr():
@@ -862,9 +957,70 @@ def test_encode_flexible__set_of_mixed_types__ordered_by_type_then_repr():
     `NoneType` < `float` < `int` < `str` is the type name deciding, before the repr ever
     comes into it, which is why `2.5` precedes `1`.
     """
-    assert streaming_writer.encode_flexible({1, "a", None, 2.5}) == [None, 2.5, 1, "a"]
+    assert streaming_upload.encode_flexible({1, "a", None, 2.5}) == [None, 2.5, 1, "a"]
 
 
 def test_encode_flexible__tuple__keeps_the_order_it_was_given():
     """A tuple is ordered by the caller, unlike a set, so canonicalising it would lose data."""
-    assert streaming_writer.encode_flexible(("z", "a", "m")) == ["z", "a", "m"]
+    assert streaming_upload.encode_flexible(("z", "a", "m")) == ["z", "a", "m"]
+
+
+def test_flush__body_never_exceeds_the_cap():
+    """`max_payload_bytes` caps the request body, envelope included.
+
+    Only the items were counted against it, so every emitted body ran over by
+    `len(prefix) + len(suffix)` -- which grows with the dataset and project names,
+    the parts of the envelope a caller controls.
+    """
+    bodies, flush_callback = _collect()
+    cap = 400
+    writer = _writer(
+        flush_callback,
+        envelope={
+            "dataset_name": "a-fairly-long-dataset-name-as-users-often-have",
+            "project_name": "some-project-name",
+            "batch_group_id": "b" * 36,
+        },
+        max_payload_bytes=cap,
+    )
+
+    for i in range(12):
+        writer.add({"id": f"item-{i:03d}", "data": {"text": "x" * 20}})
+    writer.flush()
+
+    assert bodies, "the items should have produced at least one request"
+    assert all(len(body) <= cap for body, _ in bodies), [
+        len(body) for body, _ in bodies
+    ]
+    # Identity, not just arithmetic: a count check alone passes when one item is
+    # dropped and another duplicated.
+    assert _ids_in_order(bodies) == [f"item-{i:03d}" for i in range(12)]
+    assert [count for _, count in bodies] == [
+        len(_parse_body(body)["items"]) for body, _ in bodies
+    ], "the reported count must match the items actually in that body"
+
+
+def test_flush__envelope_alone_over_the_cap__still_sends_every_item():
+    """A cap below the envelope cannot be honoured, so send one item per request.
+
+    The point is that nothing is dropped and nothing loops: an item that cannot fit
+    under the cap on its own still goes out, which is the existing oversized-item
+    contract applied to a degenerate cap.
+    """
+    bodies, flush_callback = _collect()
+    writer = _writer(
+        flush_callback,
+        envelope={
+            "dataset_name": "a-fairly-long-dataset-name-as-users-often-have",
+            "project_name": "some-project-name",
+            "batch_group_id": "b" * 36,
+        },
+        max_payload_bytes=10,
+    )
+
+    for i in range(3):
+        writer.add({"id": f"item-{i}"})
+    writer.flush()
+
+    assert [count for _, count in bodies] == [1, 1, 1]
+    assert _ids_in_order(bodies) == ["item-0", "item-1", "item-2"]

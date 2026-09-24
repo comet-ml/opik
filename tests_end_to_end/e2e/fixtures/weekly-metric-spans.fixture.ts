@@ -1,6 +1,7 @@
 import { test as baseTest } from './far-future-error-traces.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7, type SpanBatchSeed } from '../core/backend';
+import { skipUnlessBackdatedIdsAccepted } from './uuid-window-guard';
 
 /** One seeded week of the window: how far back it sits and what it carries. */
 export interface WeeklyMetricDaySeed {
@@ -79,6 +80,16 @@ export const test = baseTest.extend<WeeklyMetricSpansFixtures>({
     const spans: SpanBatchSeed[] = [];
 
     try {
+      // WEEKLY bucketing only engages past 30 days, so the oldest seed here sits
+      // at 52 days — wider than the 45d ceiling a bypass window can be raised
+      // to. On a reject-mode env these specs cannot run at any configuration,
+      // so skip rather than fail.
+      await skipUnlessBackdatedIdsAccepted(
+        backendClient,
+        project.name,
+        Math.max(...WEEK_AGE_DAYS) * DAY_MS,
+      );
+
       for (const [i, ageDays] of WEEK_AGE_DAYS.entries()) {
         const moment = new Date(Date.now() - ageDays * DAY_MS);
         const traceId = uuid7(moment);
