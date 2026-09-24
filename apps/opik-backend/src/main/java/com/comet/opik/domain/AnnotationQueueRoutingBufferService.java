@@ -2,10 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
-import com.comet.opik.utils.JsonUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
@@ -48,6 +46,11 @@ import java.util.stream.Collectors;
 @Singleton
 public class AnnotationQueueRoutingBufferService {
 
+    // workspaceId:scope:entityId, as the other Redis buffers key their members. Parsed from the right,
+    // since the entity id is a UUID and the scope a fixed enum value, neither of which contains the separator.
+    private static final String MEMBER_FORMAT = "%s:%s:%s";
+    private static final String MEMBER_SEPARATOR = ":";
+
     private final @NonNull RedissonReactiveClient redisson;
     private final @NonNull AnnotationQueueRoutingPublisher publisher;
     private final @NonNull AnnotationQueueRoutingConfig config;
@@ -70,8 +73,7 @@ public class AnnotationQueueRoutingBufferService {
 
         double now = Instant.now().toEpochMilli();
         Map<String, Double> members = entityIds.stream()
-                .collect(Collectors.toMap(entityId -> encode(new PendingEntity(workspaceId, scope, entityId)),
-                        __ -> now));
+                .collect(Collectors.toMap(entityId -> member(workspaceId, scope, entityId), __ -> now));
 
         return Mono.defer(() -> {
             var pending = pending();
@@ -160,24 +162,29 @@ public class AnnotationQueueRoutingBufferService {
         return redisson.getScoredSortedSet(AnnotationQueueRoutingConfig.PENDING_SET_KEY, StringCodec.INSTANCE);
     }
 
-    private static String encode(PendingEntity entity) {
-        return JsonUtils.valueToTree(entity).toString();
+    private static String member(String workspaceId, AnnotationQueue.AnnotationScope scope, UUID entityId) {
+        return MEMBER_FORMAT.formatted(workspaceId, scope.getValue(), entityId);
     }
 
     private static PendingEntity decode(String member) {
+        int entityAt = member.lastIndexOf(MEMBER_SEPARATOR);
+        int scopeAt = entityAt > 0 ? member.lastIndexOf(MEMBER_SEPARATOR, entityAt - 1) : -1;
+        if (scopeAt <= 0) {
+            log.warn("Malformed annotation queue routing buffer member: '{}'", member);
+            return null;
+        }
         try {
-            return JsonUtils.treeToValue(JsonUtils.getJsonNodeFromString(member), PendingEntity.class);
-        } catch (RuntimeException e) {
+            return new PendingEntity(
+                    member.substring(0, scopeAt),
+                    AnnotationQueue.AnnotationScope.fromString(member.substring(scopeAt + 1, entityAt)),
+                    UUID.fromString(member.substring(entityAt + 1)));
+        } catch (IllegalArgumentException e) {
             log.warn("Malformed annotation queue routing buffer member: '{}'", member, e);
             return null;
         }
     }
 
-    @Builder(toBuilder = true)
-    record PendingEntity(
-            @NonNull String workspaceId,
-            @NonNull AnnotationQueue.AnnotationScope scope,
-            @NonNull UUID entityId) {
+    private record PendingEntity(String workspaceId, AnnotationQueue.AnnotationScope scope, UUID entityId) {
     }
 
     private record GroupKey(String workspaceId, AnnotationQueue.AnnotationScope scope) {
