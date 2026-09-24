@@ -1,6 +1,17 @@
 import json
 import logging
-from typing import Any, Callable, Iterable, Type, List, Optional, Tuple, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+)
 
 import httpx
 
@@ -14,10 +25,6 @@ MAX_ENDPOINT_BATCH_SIZE = 2_000
 # fails with a connection/timeout error, shrinking further won't help (the
 # failure isn't size-correlated), so we re-raise instead of looping forever.
 MIN_ENDPOINT_BATCH_SIZE = 50
-
-# Distinguishes "no request made yet" from a first request that legitimately pages
-# from `None`, which is how a read of the first page starts.
-_NO_CURSOR_YET = object()
 
 # Connection/timeout errors whose likelihood scales with response size. A
 # large page drives a heavy backend read (see the migrate cascade, OPIK-7152:
@@ -38,20 +45,35 @@ _SIZE_CORRELATED_ERRORS: Tuple[Type[Exception], ...] = (
 T = TypeVar("T")
 
 
+class StreamReadResult(List[T]):
+    """The items read, plus what was lost on the way.
+
+    Still a plain list for existing callers. ``dropped_records`` counts records the
+    backend sent that could not be parsed, and ``truncated`` is True when the read
+    stopped because the pagination cursor could not move on, so the backend may
+    have had more.
+    """
+
+    dropped_records: int = 0
+    truncated: bool = False
+
+
 def read_and_parse_full_stream(
     read_source: Callable[[int, Optional[str]], Iterable[bytes]],
     parsed_item_class: Type[T],
     max_results: Optional[int],
     max_endpoint_batch_size: int = MAX_ENDPOINT_BATCH_SIZE,
-) -> List[T]:
-    result: List[T] = []
+) -> StreamReadResult[T]:
+    result: StreamReadResult[T] = StreamReadResult()
     # Per-page page size, adaptively halved on size-correlated failures and
     # held at the shrunk value for the rest of the read (a backend that
     # couldn't serve N items is unlikely to serve N again later).
     batch_size = max_endpoint_batch_size
-    # The id the previous request paged from. Paging can only continue while this
-    # advances; see the guard below.
-    previous_cursor: Any = _NO_CURSOR_YET
+    # Each request pages from the id of the last record the backend sent, parsed or
+    # not. Paging only continues while that cursor reaches a value not requested
+    # before, see the guard below.
+    cursor: Optional[str] = None
+    requested_cursors: Set[Optional[str]] = set()
     while True:
         if max_results is None:
             current_batch_size = batch_size
@@ -63,29 +85,18 @@ def read_and_parse_full_stream(
             # no more data to request
             break
 
-        last_retrieved_id = result[-1].id if len(result) > 0 else None  # type: ignore
-
-        # Every request pages from the id of the last item read, so the read can only
-        # continue while that id moves. It does not move when no record on the page
-        # parsed, and it does not move when the items parsed without an id -- in both
-        # cases the next request would re-read the same page, forever, appending
-        # duplicates as it went. Checked before the request so none of that is fetched.
-        if (
-            previous_cursor is not _NO_CURSOR_YET
-            and last_retrieved_id == previous_cursor
-        ):
-            LOGGER.error(
-                "Pagination cursor did not advance past %r while reading %s; "
-                "stopping with %d item(s).",
-                last_retrieved_id,
-                parsed_item_class.__name__,
-                len(result),
-            )
+        # A cursor that was already requested would re-read a page we have, forever,
+        # appending duplicates. That happens when records come back without an id,
+        # and it can alternate ('004' -> None -> '004'), so compare against every
+        # cursor used so far, not just the last one. Checked before the request so
+        # none of that is fetched.
+        if cursor in requested_cursors:
+            result.truncated = True
             break
 
         try:
-            results_stream = read_source(current_batch_size, last_retrieved_id)
-            parsed_items, received_records = _read_and_parse_stream(
+            results_stream = read_source(current_batch_size, cursor)
+            page = _read_and_parse_stream(
                 stream=results_stream, item_class=parsed_item_class
             )
         except _SIZE_CORRELATED_ERRORS as exc:
@@ -103,15 +114,31 @@ def read_and_parse_full_stream(
 
         # Only after a page actually came back: a size-correlated retry deliberately
         # re-uses the same cursor, and must not look like a stalled one.
-        previous_cursor = last_retrieved_id
-        result.extend(parsed_items)
+        requested_cursors.add(cursor)
+        result.extend(page.items)
+        result.dropped_records += page.received_records - len(page.items)
+        cursor = page.last_record_id
 
         # Compare against what the backend sent, not what parsed. A record the
         # client cannot parse is dropped by `_parse_stream_line`, and counting the
         # survivors made a short page look like the last one: a single unparseable
         # record ended the read and silently returned a fraction of the results.
-        if current_batch_size > received_records:
+        if current_batch_size > page.received_records:
             break
+
+    if result.dropped_records or result.truncated:
+        LOGGER.warning(
+            "Incomplete read of %s: returning %d item(s), %d record(s) could not be "
+            "parsed%s.",
+            parsed_item_class.__name__,
+            len(result),
+            result.dropped_records,
+            (
+                ", and pagination stopped because the cursor did not advance"
+                if result.truncated
+                else ""
+            ),
+        )
 
     return result
 
@@ -121,23 +148,38 @@ def read_and_parse_stream(
     item_class: Type[T],
     nb_samples: Optional[int] = None,
 ) -> List[T]:
-    items, _ = _read_and_parse_stream(stream, item_class, nb_samples)
-    return items
+    return _read_and_parse_stream(stream, item_class, nb_samples).items
+
+
+class _ParsedPage(NamedTuple):
+    items: List[Any]
+    # Records the backend sent, including ones that failed to parse. Only this says
+    # whether the backend had more to send.
+    received_records: int
+    # Id of the last record sent, read from the raw record so that a page ending in
+    # an unparseable record still moves the cursor past it.
+    last_record_id: Optional[str]
 
 
 def _read_and_parse_stream(
     stream: Iterable[bytes],
     item_class: Type[T],
     nb_samples: Optional[int] = None,
-) -> Tuple[List[T], int]:
-    """Parse the stream, also reporting how many records it held.
-
-    Pagination needs the record count rather than the item count: the two differ
-    whenever a record fails to parse, and only the former says whether the backend
-    had more to send.
-    """
+) -> _ParsedPage:
     result: List[T] = []
     received_records = 0
+    last_record_id: Optional[str] = None
+
+    def handle(line: bytes) -> None:
+        nonlocal received_records, last_record_id
+        received_records += 1
+        item_dict = _decode_stream_line(line, item_class)
+        if item_dict is None:
+            return
+        last_record_id = item_dict.get("id") if isinstance(item_dict, dict) else None
+        item = _build_item(item_dict, item_class)
+        if item is not None:
+            result.append(item)
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
     buffer = b""
@@ -150,41 +192,41 @@ def _read_and_parse_stream(
         for line in lines[:-1]:
             if not line.strip():
                 continue
-            received_records += 1
-            item = _parse_stream_line(line=line, item_class=item_class)
-            if item is not None:
-                result.append(item)
-
-                if nb_samples is not None and len(result) == nb_samples:
-                    return result, received_records
+            handle(line)
+            if nb_samples is not None and len(result) == nb_samples:
+                return _ParsedPage(result, received_records, last_record_id)
 
         # Keep the last potentially incomplete line in buffer
         buffer = lines[-1]
 
     # Process any remaining data in the buffer after the stream ends
     if buffer.strip():
-        received_records += 1
-        item = _parse_stream_line(line=buffer, item_class=item_class)
-        if item is not None:
-            result.append(item)
+        handle(buffer)
 
-    return result, received_records
+    return _ParsedPage(result, received_records, last_record_id)
 
 
 def _parse_stream_line(
     line: bytes,
     item_class: Type[T],
 ) -> Optional[T]:
-    try:
-        item_dict = json.loads(line.decode("utf-8"))
-        item_obj = item_class(**item_dict)
-        return item_obj
+    item_dict = _decode_stream_line(line, item_class)
+    return None if item_dict is None else _build_item(item_dict, item_class)
 
-    except json.JSONDecodeError as e:
+
+def _decode_stream_line(line: bytes, item_class: Type[T]) -> Any:
+    try:
+        return json.loads(line.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
         LOGGER.error(f"Error decoding {item_class.__name__}, reason: {e}")
+        return None
+
+
+def _build_item(item_dict: Any, item_class: Type[T]) -> Optional[T]:
+    try:
+        return item_class(**item_dict)
     except (TypeError, ValueError) as e:
         LOGGER.error(f"Error parsing {item_class.__name__}, reason: {e}")
     except Exception as e:
         LOGGER.error(f"Error decoding or parsing {item_class.__name__}, reason: {e}")
-
     return None
