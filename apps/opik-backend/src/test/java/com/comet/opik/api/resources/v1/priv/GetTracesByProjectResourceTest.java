@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueReference;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ExperimentItem;
@@ -1088,6 +1089,82 @@ class GetTracesByProjectResourceTest {
                     .projectId(projectId)
                     .scope(AnnotationQueue.AnnotationScope.TRACE)
                     .build();
+        }
+
+        @Test
+        @DisplayName("When traces are items of annotation queues, should return the queues sorted by name, omit them when excluded, and drop them once removed")
+        void findTraces__whenTracesAreAnnotationQueueItems__thenReturnAnnotationQueues() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(project.name())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var inBoth = traces.get(0);
+            var inOne = traces.get(1);
+            var inNone = traces.get(2);
+
+            var queueA = prepareAnnotationQueue(projectId).toBuilder().name("Queue-A").build();
+            var queueB = prepareAnnotationQueue(projectId).toBuilder().name("Queue-B").build();
+            var threadQueue = prepareAnnotationQueue(projectId).toBuilder()
+                    .scope(AnnotationQueue.AnnotationScope.THREAD)
+                    .build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queueA, queueB, threadQueue)), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueB.id(), Set.of(inBoth.id(), inOne.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueA.id(), Set.of(inBoth.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            // Thread-scoped queues must never surface on traces, even if they hold the same id
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    threadQueue.id(), Set.of(inBoth.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var refA = new AnnotationQueueReference(queueA.id(), queueA.name());
+            var refB = new AnnotationQueueReference(queueB.id(), queueB.name());
+
+            var actualById = getTracesById(project.name(), apiKey, workspaceName, traces.size(), Map.of());
+            assertThat(actualById.get(inBoth.id()).annotationQueues()).containsExactly(refA, refB);
+            assertThat(actualById.get(inOne.id()).annotationQueues()).containsExactly(refB);
+            assertThat(actualById.get(inNone.id()).annotationQueues()).isNull();
+
+            var excluded = getTracesById(project.name(), apiKey, workspaceName, traces.size(),
+                    Map.of("exclude", toURLEncodedQueryParam(List.of(Trace.TraceField.ANNOTATION_QUEUES))));
+            assertThat(excluded.values()).allSatisfy(trace -> assertThat(trace.annotationQueues()).isNull());
+
+            annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
+                    queueB.id(), Set.of(inOne.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var afterRemoval = getTracesById(project.name(), apiKey, workspaceName, traces.size(), Map.of());
+            assertThat(afterRemoval.get(inBoth.id()).annotationQueues()).containsExactly(refA, refB);
+            assertThat(afterRemoval.get(inOne.id()).annotationQueues()).isNull();
+
+            // Deleting a queue leaves its item rows behind; they must not resurface as a nameless queue
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(Set.of(queueA.id()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            var afterQueueDeletion = getTracesById(project.name(), apiKey, workspaceName, traces.size(), Map.of());
+            assertThat(afterQueueDeletion.get(inBoth.id()).annotationQueues()).containsExactly(refB);
+        }
+
+        private Map<UUID, Trace> getTracesById(String projectName, String apiKey, String workspaceName, int size,
+                Map<String, String> queryParams) {
+            var page = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName, List.of(), null,
+                    size, queryParams);
+            assertThat(page.content()).hasSize(size);
+            return page.content().stream().collect(toMap(Trace::id, Function.identity()));
         }
 
         @ParameterizedTest

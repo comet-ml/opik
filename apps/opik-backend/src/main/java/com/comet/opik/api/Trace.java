@@ -79,6 +79,8 @@ public record Trace(
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "List of unique provider names from all spans in this trace, sorted alphabetically") List<String> providers,
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Experiment associated with this trace") ExperimentItemReference experiment,
+        @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Annotation queues this trace is currently an item of") List<AnnotationQueueReference> annotationQueues,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) Source source,
         @JsonView({Trace.View.Public.class,
                 Trace.View.Write.class}) @Size(max = 150, message = "cannot exceed 150 characters") String environment) {
@@ -126,6 +128,7 @@ public record Trace(
         VISIBILITY_MODE("visibility_mode"),
         PROVIDERS("providers"),
         EXPERIMENT("experiment"),
+        ANNOTATION_QUEUES("annotation_queues"),
         SOURCE("source"),
         ENVIRONMENT("environment"),
         ;

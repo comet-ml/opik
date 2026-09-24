@@ -27,13 +27,13 @@ public class TraceAssertions {
     public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "spanFeedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost",
             "spanCount", "llmSpanCount", "hasToolSpans", "duration", "comments", "threadId", "guardrailsValidations",
-            "providers", "experiment"};
+            "providers", "experiment", "annotationQueues"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "valueByAuthor", "sourceQueueId"};
 
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
-            "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
+            "threadModelId", "annotationQueues", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
             "feedbackScores.valueByAuthor", "feedbackScores.sourceQueueId"};
 
     /**
