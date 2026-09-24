@@ -25,6 +25,18 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
 
     @override
     def format(self, **kwargs: Any) -> str:
+        """Render the template with the given values.
+
+        For mustache templates, every ``{{key}}`` is replaced in one pass, so a
+        value that itself contains ``{{...}}`` is inserted as-is. Whitespace inside
+        the braces is ignored (``{{ name }}`` is ``name``), a ``None`` value renders
+        as an empty string, and a placeholder with no matching argument is left
+        unchanged when ``validate_placeholders`` is False.
+
+        Raises:
+            PromptPlaceholdersDontMatchFormatArguments: If ``validate_placeholders``
+                is True and the arguments don't match the placeholders.
+        """
         if self._type == prompt_types.PromptType.MUSTACHE:
             template = self._template
             placeholders = _extract_mustache_placeholder_keys(self._template)
