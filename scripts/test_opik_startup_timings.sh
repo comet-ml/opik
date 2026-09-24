@@ -220,5 +220,31 @@ check "header names the anchor"     "Container startup times (since compose up r
 check "total wall clock is printed" "Total wall clock:" "$out"
 check "run succeeded"               "all_running=true"  "$out"
 
+echo "MinIO volume-ownership repair:"
+# A container that exits is normally a failed run. MinIO is the exception: if the exit was a
+# root-owned data volume, repair_minio_volume_ownership fixes it and the container is back,
+# so the run must NOT be marked failed. The repair itself talks to a real daemon, so stub it
+# here and assert only the wait loop's contract -- that it believes the repair's verdict.
+minio_container="${COMPOSE_PROJECT_NAME:-opik}-minio-1"
+export HEALTH_PLAN="$minio_container:exited"
+
+repair_minio_volume_ownership() { echo "[stub] repaired $1"; return 0; }
+out=$(run_start 90 "$minio_container")
+check "repair is attempted when minio exits"  "[stub] repaired $minio_container" "$out"
+check "a repaired minio is not a failed run"  "all_running=true"                 "$out"
+# The "failed to start" error line is printed before the repair runs, so it is expected in
+# the output; what must not happen is the timing table recording the container as failed.
+check_absent "a repaired minio is not timed as a failure" "minio-1                    failed to start" "$out"
+
+repair_minio_volume_ownership() { return 1; }
+out=$(run_start 90 "$minio_container")
+check "an unrepaired minio still fails the run" "all_running=false" "$out"
+check "an unrepaired minio is timed as failed"  "failed to start"   "$out"
+
+# Any other container that exits must keep failing the run -- the repair is minio-only, and
+# the real function returns non-zero for everything else.
+out=$(HEALTH_PLAN="be:exited" run_start 90 be)
+check "a non-minio exit still fails the run" "all_running=false" "$out"
+
 echo ""
 if [ "$fails" -eq 0 ]; then echo "All startup timing tests passed."; else echo "$fails test(s) FAILED."; exit 1; fi
