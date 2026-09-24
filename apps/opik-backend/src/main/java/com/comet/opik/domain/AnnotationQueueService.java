@@ -339,9 +339,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
      * reason: both are limits on what automation may do, and neither should depend on a caller remembering
      * to apply it.
      *
-     * <p>The ceiling counts automated items only. It bounds what automation adds; an item a person added by
-     * hand neither consumes the room nor is ever refused because of it, which is what the form promises
-     * ("Only counts items added by this automation. Adding by hand is unaffected.").
+     * <p>The ceiling is a queue size: every item counts towards it, however it got there, and automation
+     * stops adding once the queue holds that many. A person adding by hand is never refused.
      *
      * <p>A queue over its ceiling is filled to the ceiling rather than skipped wholesale — dropping a batch
      * of 500 because there is room for 3 would waste the 3. The remainder is not held anywhere; automation
@@ -363,7 +362,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                         .map(AnnotationQueueAutomation::maxItemsInQueue)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(maxItemsInQueue -> maxItemsInQueue
-                        .map(max -> annotationQueueDAO.countAutomatedItems(queueId, projectId)
+                        .map(max -> annotationQueueDAO.countItems(queueId, projectId)
                                 .map(held -> fillToMaxItems(queueId, eligible, max, held)))
                         .orElseGet(() -> Mono.just(eligible)));
     }
