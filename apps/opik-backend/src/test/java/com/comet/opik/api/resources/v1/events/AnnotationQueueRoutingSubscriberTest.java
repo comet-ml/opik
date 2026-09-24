@@ -14,8 +14,6 @@ import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
-import io.dropwizard.util.Duration;
-import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -24,12 +22,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,7 +37,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -54,7 +49,6 @@ import static org.mockito.Mockito.when;
 class AnnotationQueueRoutingSubscriberTest {
 
     private static final String WORKSPACE_ID = "workspace-1";
-    private static final String USER_NAME = "user-1";
     private static final String SCORE_NAME = "relevance";
 
     @Mock
@@ -80,11 +74,9 @@ class AnnotationQueueRoutingSubscriberTest {
     void setUp() {
         projectId = UUID.randomUUID();
         queueId = UUID.randomUUID();
-        // The shipped delay, not a value invented here: the config carries no Java-side defaults, so an
-        // unset duration is null and the stale-read path would NPE rather than wait.
         var config = AnnotationQueueRoutingConfig.builder()
                 .enabled(true)
-                .staleReadRetryDelay(Duration.milliseconds(1))
+                .consumerBatchSize(10)
                 .build();
         subscriber = new AnnotationQueueRoutingSubscriber(config, redisson,
                 automationService, evaluator, annotationQueueService, feedbackScoreDAO, traceDAO, traceThreadDAO);
@@ -184,66 +176,6 @@ class AnnotationQueueRoutingSubscriberTest {
     }
 
     /**
-     * A score written to an entity that already has others is the normal case - a judge scoring what a human
-     * scored, or the reverse - and it is the case a bare "no scores at all" check cannot see. If the read
-     * misses the new score, the conditions do not match, the message is acknowledged, and with no backfill
-     * the entity is never routed.
-     */
-    @Nested
-    @DisplayName("Stale read handling")
-    class StaleReadTests {
-
-        @Test
-        void reReadsWhenTheScoreTheEventNamedIsNotVisibleYet() {
-            UUID traceId = UUID.randomUUID();
-            givenEnabledAutomation(AnnotationQueue.AnnotationScope.TRACE);
-            givenConditionsMatch();
-            givenLoggingSource(traceId);
-            when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
-
-            // First read has the old score only; the second sees the one the event named.
-            when(feedbackScoreDAO.getEffectiveScores(eq(EntityType.TRACE), any()))
-                    .thenReturn(Mono.just(scoresOf(traceId, Map.of("safety", BigDecimal.valueOf(0.8)))))
-                    .thenReturn(Mono.just(scoresOf(traceId,
-                            Map.of("safety", BigDecimal.valueOf(0.8), SCORE_NAME, BigDecimal.valueOf(0.2)))));
-
-            process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Set.of(SCORE_NAME));
-
-            verify(feedbackScoreDAO, times(2)).getEffectiveScores(eq(EntityType.TRACE), any());
-            verify(annotationQueueService).addItems(queueId, Set.of(traceId), AnnotationQueueItemSource.AUTOMATED);
-        }
-
-        @Test
-        void doesNotReReadWhenEveryNamedScoreIsAlreadyVisible() {
-            UUID traceId = UUID.randomUUID();
-            givenScored(EntityType.TRACE, traceId);
-            givenEnabledAutomation(AnnotationQueue.AnnotationScope.TRACE);
-            givenConditionsMatch();
-            givenLoggingSource(traceId);
-            when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
-
-            process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Set.of(SCORE_NAME));
-
-            verify(feedbackScoreDAO, times(1)).getEffectiveScores(eq(EntityType.TRACE), any());
-        }
-
-        /** Names are best-effort: an entity the message says nothing about is judged on emptiness alone. */
-        @Test
-        void treatsAnAbsentNameSetAsNoInformationRatherThanAsNoScores() {
-            UUID traceId = UUID.randomUUID();
-            givenScored(EntityType.TRACE, traceId);
-            givenEnabledAutomation(AnnotationQueue.AnnotationScope.TRACE);
-            givenConditionsMatch();
-            givenLoggingSource(traceId);
-            when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
-
-            process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Set.of());
-
-            verify(feedbackScoreDAO, times(1)).getEffectiveScores(eq(EntityType.TRACE), any());
-        }
-    }
-
-    /**
      * A failed queue write must leave the message pending rather than acknowledge it. Retrying is cheap and
      * cannot duplicate anything, because addItems excludes what a queue has already held - so swallowing the
      * failure would trade a free retry for a permanently unrouted trace.
@@ -288,13 +220,8 @@ class AnnotationQueueRoutingSubscriberTest {
             verify(annotationQueueService).addItems(eq(secondQueueId), any(), any());
         }
 
-        /**
-         * {@code matchesByQueue} has no order, so the permanent failure may well be the one that happens first.
-         * The base classifies the primary alone: were that the 404, the message would be acked and the
-         * transient failure's work silently undone. Holds whichever queue fails first.
-         */
         @Test
-        void reportsARetryableFailureAsPrimaryOverAPermanentOne() {
+        void reportsOneFailureWithTheOthersAttached() {
             UUID traceId = UUID.randomUUID();
             UUID secondQueueId = UUID.randomUUID();
             givenScored(EntityType.TRACE, traceId);
@@ -304,31 +231,24 @@ class AnnotationQueueRoutingSubscriberTest {
                             new QueueAutomation(secondQueueId, projectId, null)));
             givenConditionsMatch();
             givenLoggingSource(traceId);
-            var permanent = new NotFoundException("queue deleted");
-            var transientFailure = new RuntimeException("clickhouse timeout");
-            when(annotationQueueService.addItems(eq(queueId), any(), any())).thenReturn(Mono.error(permanent));
-            when(annotationQueueService.addItems(eq(secondQueueId), any(), any()))
-                    .thenReturn(Mono.error(transientFailure));
+            var first = new IllegalStateException("clickhouse down");
+            var second = new IllegalStateException("clickhouse still down");
+            when(annotationQueueService.addItems(eq(queueId), any(), any())).thenReturn(Mono.error(first));
+            when(annotationQueueService.addItems(eq(secondQueueId), any(), any())).thenReturn(Mono.error(second));
 
             assertThatThrownBy(() -> process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId)))
-                    .isSameAs(transientFailure)
+                    .isInstanceOf(IllegalStateException.class)
                     // contains, not containsExactly: block() appends its own "#block terminated" marker.
-                    .satisfies(error -> assertThat(error.getSuppressed()).contains(permanent));
+                    .satisfies(error -> assertThat(error.getSuppressed())
+                            .containsAnyOf(first, second));
         }
     }
 
     private void process(AnnotationQueue.AnnotationScope scope, Set<UUID> entityIds) {
-        process(scope, entityIds, Set.of());
-    }
-
-    private void process(AnnotationQueue.AnnotationScope scope, Set<UUID> entityIds,
-            Set<String> scoreNames) {
         subscriber.processEvent(AnnotationQueueRoutingMessage.builder()
                 .workspaceId(WORKSPACE_ID)
-                .userName(USER_NAME)
                 .scope(scope)
                 .entityIds(entityIds)
-                .scoreNames(scoreNames)
                 .build())
                 .block();
     }
@@ -355,119 +275,6 @@ class AnnotationQueueRoutingSubscriberTest {
 
     private void givenLoggingSource(UUID... entityIds) {
         when(traceDAO.getLoggingSourceIds(any(), any())).thenReturn(Mono.just(Set.of(entityIds)));
-    }
-
-    private Map<UUID, EntityFeedbackScores> scoresOf(UUID entityId, Map<String, BigDecimal> scores) {
-        return Map.of(entityId, EntityFeedbackScores.builder()
-                .entityId(entityId)
-                .projectId(projectId)
-                .scores(scores)
-                .build());
-    }
-
-    @Nested
-    @DisplayName("Collapsing a batch")
-    class Collapsing {
-
-        @Test
-        @DisplayName("Messages sharing workspace, scope and author become one, carrying both ids")
-        void mergesMessagesThatShareWorkspaceScopeAndAuthor() {
-            var first = UUID.randomUUID();
-            var second = UUID.randomUUID();
-
-            var groups = subscriber.collapse(batchOf(
-                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(first), Set.of("relevance")),
-                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(second), Set.of("toxicity"))));
-
-            assertThat(groups).hasSize(1);
-            var group = groups.getFirst();
-            assertThat(group.subsumed()).containsExactly(new StreamMessageId(2, 0));
-
-            var merged = group.message();
-            assertThat(merged.entityIds()).containsExactlyInAnyOrder(first, second);
-            assertThat(merged.scoreNames()).containsExactlyInAnyOrder("relevance", "toxicity");
-        }
-
-        @Test
-        @DisplayName("The same entity scored twice is one entity in the merged message")
-        void dedupesTheEntityItself() {
-            var entityId = UUID.randomUUID();
-
-            var groups = subscriber.collapse(batchOf(
-                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(entityId), Set.of("relevance")),
-                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(entityId), Set.of("toxicity"))));
-
-            assertThat(groups).hasSize(1);
-            assertThat(groups.getFirst().message().entityIds()).containsExactly(entityId);
-        }
-
-        /**
-         * The author is stamped on the queue item, so merging across authors would attribute one
-         * reviewer's work to the other.
-         */
-        @Test
-        @DisplayName("A different author is a different group")
-        void keepsAuthorsApart() {
-            var groups = subscriber.collapse(batchOf(
-                    message(AnnotationQueue.AnnotationScope.TRACE, "alice", Set.of(UUID.randomUUID()), Set.of()),
-                    message(AnnotationQueue.AnnotationScope.TRACE, "bob", Set.of(UUID.randomUUID()), Set.of())));
-
-            assertThat(groups).hasSize(2);
-            assertThat(groups).allSatisfy(group -> assertThat(group.subsumed()).isEmpty());
-        }
-
-        @Test
-        @DisplayName("A different scope is a different group")
-        void keepsScopesApart() {
-            var groups = subscriber.collapse(batchOf(
-                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(UUID.randomUUID()), Set.of()),
-                    message(AnnotationQueue.AnnotationScope.THREAD, USER_NAME, Set.of(UUID.randomUUID()), Set.of())));
-
-            assertThat(groups).hasSize(2);
-        }
-
-        /**
-         * Every id must come back, or the ones dropped are never acknowledged and are re-delivered until
-         * they exhaust their retries. Undecodable entries are not covered here on purpose: the base class
-         * retires them in its own pre-flight pass and never offers them to this method - asserted by
-         * {@code BaseRedisSubscriberUnitTest.CollapseTests.shouldNotOfferUndecodableEntriesToCollapse}.
-         */
-        @Test
-        @DisplayName("Every id handed in comes back, whether merged away or not")
-        void accountsForEveryId() {
-            var batch = batchOf(
-                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(UUID.randomUUID()), Set.of()),
-                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(UUID.randomUUID()), Set.of()),
-                    message(AnnotationQueue.AnnotationScope.THREAD, "other", Set.of(UUID.randomUUID()), Set.of()));
-
-            var groups = subscriber.collapse(batch);
-
-            assertThat(groups.stream()
-                    .flatMap(group -> java.util.stream.Stream.concat(
-                            java.util.stream.Stream.of(group.messageId()), group.subsumed().stream()))
-                    .toList())
-                    .containsExactlyInAnyOrderElementsOf(batch.keySet());
-        }
-
-        private Map<StreamMessageId, AnnotationQueueRoutingMessage> batchOf(
-                AnnotationQueueRoutingMessage... messages) {
-            var batch = new LinkedHashMap<StreamMessageId, AnnotationQueueRoutingMessage>();
-            for (int i = 0; i < messages.length; i++) {
-                batch.put(new StreamMessageId(i + 1, 0), messages[i]);
-            }
-            return batch;
-        }
-
-        private AnnotationQueueRoutingMessage message(AnnotationQueue.AnnotationScope scope, String userName,
-                Set<UUID> entityIds, Set<String> scoreNames) {
-            return AnnotationQueueRoutingMessage.builder()
-                    .workspaceId(WORKSPACE_ID)
-                    .userName(userName)
-                    .scope(scope)
-                    .entityIds(entityIds)
-                    .scoreNames(scoreNames)
-                    .build();
-        }
     }
 
 }

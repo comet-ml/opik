@@ -1184,8 +1184,12 @@ agentInsightsReport:
 # in the listener and the routing work is done by a stream consumer, so it survives a replica restart.
 annotationQueueRouting:
   # Default: false
-  # Description: When false, score events are never published and nothing is routed automatically
+  # Description: When false, score events are never buffered or published and nothing is routed automatically
   enabled: ${ANNOTATION_QUEUE_ROUTING_ENABLED:-false}
+  # Default: true
+  # Description: When enabled (and the feature above is on), schedule the periodic flush job. Set false to buffer
+  #   in Redis without a scheduler (e.g. tests that invoke the job manually).
+  jobEnabled: ${ANNOTATION_QUEUE_ROUTING_JOB_ENABLED:-true}
   # Default: annotation-queue-routing
   # Description: Redis stream name for queued annotation queue routing work
   streamName: ${ANNOTATION_QUEUE_ROUTING_STREAM_NAME:-'annotation-queue-routing'}
@@ -1193,12 +1197,38 @@ annotationQueueRouting:
   # Description: Consumer group name for annotation queue routing
   consumerGroupName: ${ANNOTATION_QUEUE_ROUTING_CONSUMER_GROUP_NAME:-'annotation-queue-routing-consumers'}
   # Default: 100
-  # Description: Messages read per tick, and the cap on groups processed concurrently. The consumer folds a
-  #   batch to one unit of work per (workspace, scope, author) before processing, and each unit is a few bulk
-  #   database queries, so a large batch costs little more than a small one. 100 matches the other
-  #   database-only consumers (experimentDenormalization, traceThreadConfig); the 5-10 used elsewhere caps
-  #   slow external calls (LLM, webhook, export) that this consumer does not make.
+  # Description: Messages read per tick and the number processed concurrently. A message is one (workspace,
+  #   scope) batch flushed from the buffer, and processing it is a few bulk database queries, so this bounds
+  #   concurrent database work by batch. 100 matches the other database-only consumers
+  #   (experimentDenormalization, traceThreadConfig); the 5-10 used elsewhere caps slow external calls (LLM,
+  #   webhook, export) that this consumer does not make.
   consumerBatchSize: ${ANNOTATION_QUEUE_ROUTING_CONSUMER_BATCH_SIZE:-100}
+  # Default: 15s
+  # Description: How long a score must have sat in the Redis buffer before a flush may take it (100ms-1m). Every
+  #   score written to an entity within this window folds into one buffer member, and the consumer never reads
+  #   scores younger than this, which keeps it clear of ClickHouse replica lag. Latency added to every routed item.
+  bufferMinAge: ${ANNOTATION_QUEUE_ROUTING_BUFFER_MIN_AGE:-15s}
+  # Default: 2m
+  # Description: TTL of the Redis buffer key (10s-1h). Set when the key is created and renewed by every flush run,
+  #   so if nothing drains the buffer it expires this long after the last flush instead of growing without limit.
+  #   Matches experimentDenormalization, whose buckets expire at twice their debounce delay.
+  bufferTtl: ${ANNOTATION_QUEUE_ROUTING_BUFFER_TTL:-2m}
+  # Default: 5s
+  # Description: Interval at which the flush job publishes due buffer members to the stream (1s-1m). An item is
+  #   routed between bufferMinAge and bufferMinAge + jobInterval after its last score. Same cadence as the
+  #   experimentDenormalization flush job.
+  jobInterval: ${ANNOTATION_QUEUE_ROUTING_JOB_INTERVAL:-5s}
+  # Default: 4s
+  # Description: Time the flush job holds the distributed lock, and the time budget of one run (500ms-1m). Kept
+  #   below jobInterval so the lock releases before the next cycle.
+  jobLockTime: ${ANNOTATION_QUEUE_ROUTING_JOB_LOCK_TIME:-4s}
+  # Default: 300ms
+  # Description: Time the flush job waits to acquire the lock before skipping the run (100ms-5s)
+  jobLockWaitTime: ${ANNOTATION_QUEUE_ROUTING_JOB_LOCK_WAIT_TIME:-300ms}
+  # Default: 1000
+  # Description: Maximum number of buffer members read per page when flushing, and therefore the most entities one
+  #   stream message can carry (100-5000)
+  jobBatchSize: ${ANNOTATION_QUEUE_ROUTING_JOB_BATCH_SIZE:-1000}
   # Default: 1s
   # Description: How often to poll Redis for new routing work. Together with consumerBatchSize and
   #   claimIntervalRatio this sets the throughput ceiling: new messages per second per replica is about
@@ -1207,11 +1237,6 @@ annotationQueueRouting:
   #   values that is about 90/s per replica. Raise it and the backlog grows until streamMaxLen trimming
   #   silently discards the oldest messages; consumerBatchSize is the lever to raise alongside it.
   poolingInterval: ${ANNOTATION_QUEUE_ROUTING_POOLING_INTERVAL:-1s}
-  # Default: 500ms
-  # Description: Delay before re-reading scores for the entities an event named, when the first read looks
-  #   stale: no scores at all for an entity, or none of the score names the event said it wrote. Covers
-  #   ClickHouse replication lag and the async-insert buffer window. Only paid when a stale read is detected.
-  staleReadRetryDelay: ${ANNOTATION_QUEUE_ROUTING_STALE_READ_RETRY_DELAY:-500ms}
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling)
   longPollingDuration: ${ANNOTATION_QUEUE_ROUTING_LONG_POLLING_DURATION:-5s}

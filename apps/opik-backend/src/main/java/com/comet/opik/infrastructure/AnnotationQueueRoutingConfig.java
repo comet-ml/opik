@@ -20,17 +20,14 @@ import org.redisson.client.codec.Codec;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Stream carrying annotation queue routing work (OPIK-6303).
+ * Annotation queue routing (OPIK-6303): the Redis buffer score events are collected in, the job that
+ * flushes it, and the stream the flushed batches travel on to the consumer.
  *
- * <p>The producer's half only. The event listener guards and publishes; everything that reads, decides or
- * writes happens in the consumer, which is a separate change — and so are its settings (consumer group,
- * batch size, poll and claim intervals, retries, the stale-read delay). They arrive with the code that
- * reads them, so that a reviewer sees each value next to the loop it tunes rather than ahead of it.
- *
- * <p>The stream is what makes that work survive a replica restart — there is no backfill or manual re-run
- * to recover a dropped event, so an in-memory handoff would lose a trace from a review queue permanently
- * and silently. {@code streamMaxLen} and {@code streamTrimLimit} are here because trimming happens at
- * XADD time, on this side.
+ * <p>The buffer is a single ZSET keyed by (workspace, scope, entity) and scored by the time of the first
+ * write, so a burst of scores on one entity is one member, and nothing is flushed before it has sat there
+ * for {@code bufferMinAge}. That floor is also what keeps the consumer's ClickHouse read clear of
+ * replication lag. The flush job groups due members by (workspace, scope) and publishes one stream message
+ * per group; the consumer then processes one message at a time.
  *
  * <p>Values live in {@code config.yml} and its test counterpart, which is the single source of truth:
  * no field carries a Java default, so a key missing from the yaml fails validation at boot rather than
@@ -45,9 +42,14 @@ import java.util.concurrent.TimeUnit;
 public class AnnotationQueueRoutingConfig implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
+    public static final String PENDING_SET_KEY = "annotation-queue:routing:pending";
 
     @Valid @JsonProperty
     private boolean enabled;
+
+    // Off in tests that drive the flush job by hand; the buffer still fills either way.
+    @Valid @JsonProperty
+    private boolean jobEnabled;
 
     @Valid @NotBlank @JsonProperty
     private String streamName;
@@ -55,33 +57,64 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     @Valid @NotBlank @JsonProperty
     private String consumerGroupName;
 
-    // A batch is folded to one unit of work per (workspace, scope, author) before processing, and each unit
-    // is one MySQL read, two ClickHouse reads and up to one write per matching queue, so this caps concurrent
-    // database work by distinct groups rather than by message. 100 is what the other database-only consumers
-    // use; the 5-10 elsewhere caps slow external calls this consumer does not make.
+    // Also the number of messages processed concurrently. A message is one (workspace, scope) batch, and
+    // processing it is one MySQL read, two ClickHouse reads and up to one write per matching
+    // queue, so this bounds concurrent database work by batch. 100 is what the other database-only
+    // consumers use; the 5-10 elsewhere caps slow external calls this consumer does not make.
     @Valid @JsonProperty
     @Min(1) @Max(100) private int consumerBatchSize;
 
-    // These three set the throughput ceiling together, and it is easy to under-provision by accident:
-    // new messages per second per replica is roughly
+    // How long a member must have been in the buffer before a flush may take it. Every score written to an
+    // entity within this window folds into the one member, and the consumer never reads scores younger
+    // than this — well past typical ClickHouse replica lag. Latency added to every routed item.
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration bufferMinAge;
+
+    // Bounds the buffer if nothing drains it. Writers set it only when the key has none, and each flush run
+    // renews it, so the key outlives the last flush by this much and then expires with whatever is in it.
+    // Members are small, but at a high score rate a dead flusher would otherwise grow the key without limit.
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 10, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+    private Duration bufferTtl;
+
+    // Members are due bufferMinAge after their write and are picked up on the next run, so an item is
+    // routed between bufferMinAge and bufferMinAge + jobInterval after its last score.
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration jobInterval;
+
+    // Held until expiry so one replica flushes per cycle; kept below jobInterval so the next cycle is not
+    // skipped. Also the time budget of one run: a run cut short leaves the rest for the next one, since
+    // members are removed only once their batch is on the stream.
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 500, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration jobLockTime;
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
+    private Duration jobLockWaitTime;
+
+    // Members read per page while flushing, and therefore the most entities one stream message can carry.
+    @Valid @JsonProperty
+    @Min(100) @Max(5000) private int jobBatchSize;
+
+    // These three set the consumer's throughput ceiling together, and it is easy to under-provision by
+    // accident: new messages per second per replica is roughly
     //     (consumerBatchSize / poolingInterval) x (1 - 1 / claimIntervalRatio)
     // because the read loop is driven by a fixed interval and every claimIntervalRatio-th tick spends its
-    // turn on autoClaim, which fetches only already-pending work. At the shipped 100 per tick, one tick a
-    // second and nine ticks in ten reading, that is about 90/s per replica. Under-provisioning here is not
-    // merely slow: the backlog grows until streamMaxLen trimming starts discarding the oldest messages,
-    // which is silent. Raise consumerBatchSize before lowering poolingInterval.
+    // turn on autoClaim, which fetches only already-pending work. Under-provisioning here is not merely
+    // slow: the backlog grows until streamMaxLen trimming starts discarding the oldest messages, which is
+    // silent. Raise consumerBatchSize before lowering poolingInterval.
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
     private Duration poolingInterval;
-
-    // How long to wait before re-reading scores for entities the event named but the first read found
-    // none for. Covers ClickHouse replication lag and the async-insert buffer window
-    // (async_insert_busy_timeout_max_ms defaults to 250ms), both of which resolve well inside this.
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 50, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
-    private Duration staleReadRetryDelay;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)

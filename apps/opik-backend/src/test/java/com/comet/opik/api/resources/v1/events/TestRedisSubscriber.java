@@ -5,11 +5,8 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Mono;
 
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
@@ -30,29 +27,12 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
 
     private final Function<String, Mono<Void>> processor;
 
-    /** Null keeps the base class default, which is what every subscriber but one does. */
-    private final Function<Map<StreamMessageId, String>, List<MessageGroup<String>>> collapser;
-
     public TestRedisSubscriber(
             @NonNull StreamConfiguration config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull Function<String, Mono<Void>> processor) {
-        this(config, redisson, processor, null);
-    }
-
-    public TestRedisSubscriber(
-            @NonNull StreamConfiguration config,
-            @NonNull RedissonReactiveClient redisson,
-            @NonNull Function<String, Mono<Void>> processor,
-            Function<Map<StreamMessageId, String>, List<MessageGroup<String>>> collapser) {
         super(config, redisson, TestStreamConfiguration.PAYLOAD_FIELD, METRIC_NAMESPACE, METRICS_BASE_NAME);
         this.processor = processor;
-        this.collapser = collapser;
-    }
-
-    @Override
-    protected List<MessageGroup<String>> collapse(Map<StreamMessageId, String> batch) {
-        return collapser == null ? super.collapse(batch) : collapser.apply(batch);
     }
 
     @Override
@@ -104,18 +84,5 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
             RedissonReactiveClient redisson,
             Function<String, Mono<Void>> processor) {
         return new TestRedisSubscriber(config, redisson, processor);
-    }
-
-    /**
-     * Factory method for a subscriber that overrides the collapse hook.
-     */
-    public static TestRedisSubscriber collapsingSubscriber(
-            StreamConfiguration config,
-            RedissonReactiveClient redisson,
-            Function<Map<StreamMessageId, String>, List<MessageGroup<String>>> collapser) {
-        return new TestRedisSubscriber(config, redisson, msg -> {
-            log.info("Received message: '{}'", msg);
-            return Mono.empty();
-        }, collapser);
     }
 }
