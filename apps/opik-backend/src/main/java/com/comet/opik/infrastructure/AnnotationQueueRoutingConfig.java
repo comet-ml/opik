@@ -7,6 +7,7 @@ import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -138,6 +139,26 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
 
     @JsonProperty
     @Min(1) @Max(10_000) private int streamTrimLimit;
+
+    /**
+     * The lock is held until it expires, so one at or above the interval would make every other tick find it
+     * still held and silently halve the flush cadence.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "annotationQueueRouting.jobLockTime must be less than jobInterval") public boolean isJobLockTimeBelowJobInterval() {
+        return jobLockTime == null || jobInterval == null
+                || jobLockTime.toMilliseconds() < jobInterval.toMilliseconds();
+    }
+
+    /**
+     * The TTL is renewed by each flush run, so it only has to outlive the gap between two of them — but if it
+     * does not, the buffer expires between runs and routing work is lost while everything looks healthy.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "annotationQueueRouting.bufferTtl must be greater than jobInterval") public boolean isBufferTtlAboveJobInterval() {
+        return bufferTtl == null || jobInterval == null
+                || bufferTtl.toMilliseconds() > jobInterval.toMilliseconds();
+    }
 
     // Lazy codec creation so it picks up the configured JsonUtils mapper.
     @Override

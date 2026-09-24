@@ -195,33 +195,34 @@ class AnnotationQueueRoutingIntegrationTest {
 
     /**
      * The timer runs from the <em>last</em> score, not the first: the consumer must never read a score
-     * younger than the delay, and only a restarted wait guarantees that for every score in a burst.
+     * younger than the delay, and only a restarted wait guarantees that for every score in a burst. Driven
+     * by writing timestamps straight into the sorted set rather than by sleeping, so nothing here depends
+     * on scheduler or Redis latency.
      */
     @Test
-    @DisplayName("A later score on a buffered entity restarts its wait")
-    void laterScoreRestartsTheWait() {
-        wire(Duration.milliseconds(1_500), 100);
+    @DisplayName("A later score moves a buffered entity's timestamp forward, never back")
+    void laterScoreMovesTheTimestampForwardOnly() {
+        wire(FAR_AWAY, 100);
         UUID entityId = idGenerator.generateId();
         String workspaceId = randomString();
+        String member = "%s:trace:%s".formatted(workspaceId, entityId);
+        long aMinuteAgo = Instant.now().minusSeconds(60).toEpochMilli();
+        pending().add(aMinuteAgo, member).block();
 
-        bufferService.add(workspaceId, AnnotationScope.TRACE, Set.of(entityId)).block();
-        Awaitility.await().pollDelay(java.time.Duration.ofSeconds(1)).atMost(java.time.Duration.ofSeconds(2))
-                .until(() -> true);
+        // Re-scored now: the wait restarts, so a member that was due is due no longer.
         bufferService.add(workspaceId, AnnotationScope.TRACE, Set.of(entityId)).block();
 
-        // Had the first write's time stuck, the member would fall due 500ms into this window.
-        Awaitility.await()
-                .during(java.time.Duration.ofMillis(1_000))
-                .atMost(java.time.Duration.ofMillis(1_300))
-                .untilAsserted(() -> {
-                    bufferService.flush().block();
-                    assertThat(readStream()).isEmpty();
-                });
+        assertThat(pending().getScore(member).block()).isGreaterThan(aMinuteAgo);
         assertThat(bufferSize()).isEqualTo(1);
+        assertThat(bufferService.flush().block()).isZero();
+        assertThat(readStream()).isEmpty();
 
-        assertThat(awaitFlushed(1)).singleElement()
-                .extracting(AnnotationQueueRoutingMessage::entityIds)
-                .isEqualTo(Set.of(entityId));
+        // A write that arrives late, carrying an older timestamp, must not pull the member back.
+        double ahead = Instant.now().plusSeconds(5).toEpochMilli();
+        pending().add(ahead, member).block();
+        bufferService.add(workspaceId, AnnotationScope.TRACE, Set.of(entityId)).block();
+
+        assertThat(pending().getScore(member).block()).isEqualTo(ahead);
     }
 
     @Test

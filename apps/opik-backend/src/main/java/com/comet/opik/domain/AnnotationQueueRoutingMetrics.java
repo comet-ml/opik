@@ -27,12 +27,6 @@ public class AnnotationQueueRoutingMetrics {
                     + "retries it, and this counts how often that happens")
             .build();
 
-    public static final LongCounter SCORES_DEDUPLICATED = METER
-            .counterBuilder("scores_deduplicated_total")
-            .setDescription("Score writes that found their entity already waiting in the Redis buffer and "
-                    + "folded into it - the evaluations saved")
-            .build();
-
     public static final LongCounter MESSAGES_FLUSHED = METER
             .counterBuilder("messages_flushed_total")
             .setDescription("Stream messages published by the buffer flush, one per (workspace, scope) batch "
