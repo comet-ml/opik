@@ -48,7 +48,12 @@ jobs:
       # The key reaches the provider only through the backend gateway, so an
       # unset key surfaces as a confusing downstream gateway error rather than
       # an auth failure at the point of use.
+      #
+      # Fork PRs get no repository secrets, so the key is legitimately absent
+      # there and the suite falls back to skipping the Anthropic cases (see the
+      # workspace_provider_key fixture). Only enforce where a key is expected.
       - name: Verify the Anthropic key reached this job
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
         run: |
           if [ -z "${ANTHROPIC_API_KEY}" ]; then
             echo "::error::ANTHROPIC_API_KEY_E2E_TESTS is unset or empty; the optimization run would fail at the backend gateway instead of here."
