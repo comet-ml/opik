@@ -8,7 +8,9 @@ the span is logged with no usage, no model and no cost even though the tokens
 were extractable.
 """
 
+import logging
 import uuid
+from types import SimpleNamespace
 from typing import Any, Dict
 
 import httpx
@@ -140,10 +142,52 @@ def test_try_extract_provider_usage_data__string_and_url_object__report_the_same
     ],
 )
 def test_try_extract_provider_usage_data__unparseable_base_url__reports_no_host(
-    base_url: str,
+    base_url: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     """An unreadable host must not be reported as OpenAI, which prices the run."""
+    caplog.set_level(
+        logging.WARNING,
+        logger="opik.integrations.langchain.provider_usage_extractors.openai_usage_extractor",
+    )
+
     assert _provider(base_url) == ""
+    assert "Could not parse base_url" in caplog.text
+    assert "secret" not in caplog.text
+
+
+@pytest.mark.parametrize("host", [None, 42], ids=["none", "integer"])
+def test_try_extract_provider_usage_data__non_text_host__reports_unknown_provider(
+    host: Any,
+) -> None:
+    info = usage_extractor.try_extract_provider_usage_data(
+        _openai_run(SimpleNamespace(host=host))
+    )
+
+    _assert_usage_survived(info)
+    assert info.provider == ""
+
+
+def test_try_extract_provider_usage_data__raising_host_accessor__reports_unknown_provider(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class BaseURLWithRaisingHost:
+        @property
+        def host(self) -> str:
+            raise ValueError("private base URL details")
+
+    caplog.set_level(
+        logging.WARNING,
+        logger="opik.integrations.langchain.provider_usage_extractors.openai_usage_extractor",
+    )
+
+    info = usage_extractor.try_extract_provider_usage_data(
+        _openai_run(BaseURLWithRaisingHost())
+    )
+
+    _assert_usage_survived(info)
+    assert info.provider == ""
+    assert "Could not read base_url.host" in caplog.text
+    assert "private base URL details" not in caplog.text
 
 
 @pytest.mark.parametrize(

@@ -135,28 +135,33 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
 
 def _try_get_base_url_host(base_url: Any) -> Optional[str]:
     """
-    The host `base_url.host` reports, whichever shape the serialised run carries.
-
-    LangChain passes this value either as a URL object or as the plain string the
-    user configured. Reading `.host` off a string raises, and that exception escapes
-    `get_llm_usage_info`, so the orchestrator discards usage that was already
-    extracted and the span is logged without tokens, model or cost. Parsing the
-    string reports what `httpx.URL` reports for the same text, the empty string for
-    a text carrying no host included, so both shapes name the same provider. None is
-    returned only for a value that is not URL-shaped at all, which leaves the
-    provider at its default.
+    Return the host when available, an empty string when it is unreadable, or None
+    when the value has no host signal. An empty string keeps an unreadable value
+    from being attributed to OpenAI by default.
     """
-    host = getattr(base_url, "host", None)
-    if isinstance(host, str):
-        return host
+    if isinstance(base_url, str):
+        try:
+            parsed_host = urlsplit(base_url).hostname
+        except ValueError as exc:
+            LOGGER.warning(
+                "Could not parse base_url for LangChain OpenAI provider detection "
+                "(%s); leaving the provider unknown.",
+                type(exc).__name__,
+            )
+            return ""
 
-    if not isinstance(base_url, str):
-        return None
+        return "" if parsed_host is None else parsed_host
 
     try:
-        parsed_host = urlsplit(base_url).hostname
-    except ValueError:
-        # Not a parseable URL, an unbalanced IPv6 literal for instance.
-        parsed_host = None
+        host = base_url.host
+    except AttributeError:
+        return None
+    except Exception as exc:
+        LOGGER.warning(
+            "Could not read base_url.host for LangChain OpenAI provider detection "
+            "(%s); leaving the provider unknown.",
+            type(exc).__name__,
+        )
+        return ""
 
-    return "" if parsed_host is None else parsed_host
+    return host if isinstance(host, str) else ""
