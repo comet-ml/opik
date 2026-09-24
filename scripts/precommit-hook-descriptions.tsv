@@ -37,3 +37,4 @@ non-public FE plugins	Block non-public FE plugins
 wrapper smoke tests	Self-test the wrapper scripts
 rebaseline script tests	Self-test the changelog re-baseline script
 startup wait tests	Self-test opik.sh's container startup wait
+powershell	Parse + lint PowerShell scripts

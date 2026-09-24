@@ -1,0 +1,72 @@
+name: "🪟 PowerShell Checks"
+run-name: "🪟 PowerShell Checks ${{ github.ref_name }} by @${{ github.actor }}"
+
+# Static validation for the repo's PowerShell scripts (opik.ps1, the Windows
+# launcher, and scripts/dev-runner.ps1) on a Windows runner.
+#
+# Two checks, both in scripts/precommit-powershell-check.ps1:
+#   parse    — Parser::ParseFile over every discovered file. Catches syntax errors
+#              outright, independent of lint config, and not suppressible via
+#              PSScriptAnalyzerSettings.psd1.
+#   analyze  — PSScriptAnalyzer at Error+Warning against that settings file.
+#
+# The same script backs the `powershell-check` pre-commit hook, which runs these
+# on ubuntu (PowerShell Core) as part of Code Quality and locally on commit. This
+# job is the authoritative gate: it is the only place the checks see the native
+# Windows PowerShell the scripts actually run under.
+#
+# This validates the scripts statically; it does NOT execute them. Running the
+# launcher needs Linux containers on a Windows host, which GitHub-hosted Windows
+# runners cannot provide — tracked separately.
+on:
+  pull_request:
+    paths:
+      - "**/*.ps1"
+      - "**/*.psm1"
+      - "**/*.psd1"
+      - ".github/workflows/powershell_checks.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.ps1"
+      - "**/*.psm1"
+      - "**/*.psd1"
+      - ".github/workflows/powershell_checks.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  powershell-checks:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Checks read the worktree at HEAD, not history.
+          fetch-depth: 1
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          # Preinstalled on windows-latest, but pin explicitly so a runner image
+          # change can't silently move the rule set under us.
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 `
+              -Force -Scope CurrentUser -Repository PSGallery
+          Import-Module PSScriptAnalyzer
+          Write-Host "PSScriptAnalyzer $((Get-Module PSScriptAnalyzer).Version)"
+
+      # No file arguments: the script discovers every PowerShell file itself, so a
+      # file added later is covered without editing this workflow. -Annotate emits
+      # ::error/::warning so findings land inline on the PR diff.
+      - name: Parse check + PSScriptAnalyzer
+        shell: pwsh
+        run: ./scripts/precommit-powershell-check.ps1 -Annotate

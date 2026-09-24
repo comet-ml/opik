@@ -240,6 +240,25 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
+  # PowerShell — parse check + PSScriptAnalyzer on the Windows launcher scripts
+  # (opik.ps1, scripts/dev-runner.ps1). language: system, delegating to the same
+  # .ps1 implementation the windows-latest CI job runs, so local and CI can't
+  # drift. The wrapper no-ops when pwsh isn't installed — a Linux/macOS
+  # contributor shouldn't need PowerShell to commit; .github/workflows/
+  # powershell_checks.yml is the authoritative gate on native Windows.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: powershell-check
+        name: 🪟 powershell — parse + analyzer
+        entry: scripts/precommit-powershell-check.sh
+        language: system
+        # Explicit files: regex (rather than relying on pre-commit's type
+        # detection) so the CI matrix builder in scripts/precommit-detect-hooks.py
+        # can route a changed PowerShell file to this leg by path.
+        files: \.(ps1|psm1|psd1)$
+
+  # ---------------------------------------------------------------------------
   # Backend (Java) — Spotless, on changed files only (language: system → uses
   # the repo's own Maven/JDK; only triggers for commits that touch .java).
   # ---------------------------------------------------------------------------
