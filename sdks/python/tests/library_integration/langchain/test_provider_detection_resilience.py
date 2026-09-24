@@ -133,16 +133,8 @@ def test_try_extract_provider_usage_data__string_and_url_object__report_the_same
     assert _provider(httpx.URL(base_url)) == expected_provider
 
 
-@pytest.mark.parametrize(
-    "base_url",
-    [
-        # urlsplit raises ValueError on these two, measured rather than assumed
-        pytest.param("http://[::1", id="unbalanced_ipv6"),
-        pytest.param("https://user:pw@[::1", id="unbalanced_ipv6_with_credentials"),
-    ],
-)
 def test_try_extract_provider_usage_data__unparseable_base_url__reports_no_host(
-    base_url: str, caplog: pytest.LogCaptureFixture
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """An unreadable host must not be reported as OpenAI, which prices the run."""
     caplog.set_level(
@@ -150,8 +142,16 @@ def test_try_extract_provider_usage_data__unparseable_base_url__reports_no_host(
         logger="opik.integrations.langchain.provider_usage_extractors.openai_usage_extractor",
     )
 
-    assert _provider(base_url) == ""
-    assert "Could not parse base_url" in caplog.text
+    for base_url in ("http://[::1", "https://user:secret@[::1"):
+        assert _provider(base_url) == ""
+
+    warnings = [
+        record
+        for record in caplog.records
+        if "Could not parse base_url" in record.message
+    ]
+    assert len(warnings) == 1
+    assert "ValueError" in warnings[0].message
     assert "secret" not in caplog.text
 
 

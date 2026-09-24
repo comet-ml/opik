@@ -143,10 +143,11 @@ def _try_get_base_url_host(base_url: Any) -> Optional[str]:
         try:
             parsed_host = urlsplit(base_url).hostname
         except ValueError as exc:
-            LOGGER.warning(
+            opik_logging.log_once_at_level(
+                logging.WARNING,
                 "Could not parse base_url for LangChain OpenAI provider detection "
-                "(%s); leaving the provider unknown.",
-                type(exc).__name__,
+                f"({type(exc).__name__}); leaving the provider unknown.",
+                LOGGER,
             )
             return ""
 
@@ -157,10 +158,11 @@ def _try_get_base_url_host(base_url: Any) -> Optional[str]:
     except AttributeError:
         return None
     except Exception as exc:
-        LOGGER.warning(
+        opik_logging.log_once_at_level(
+            logging.WARNING,
             "Could not read base_url.host for LangChain OpenAI provider detection "
-            "(%s); leaving the provider unknown.",
-            type(exc).__name__,
+            f"({type(exc).__name__}); leaving the provider unknown.",
+            LOGGER,
         )
         return ""
 
