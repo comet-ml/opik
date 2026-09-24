@@ -145,6 +145,11 @@ _NEAR_MISS_NEGATIVES = [
     "Override the default context settings in the config.",
     "Remove the rate limits from the staging config.",
     "Ignore the protocol version header for now.",
+    # Demonstratives and "my" point at the user's own things, not the model's.
+    "Remove these limits from the staging config before release.",
+    "Override those protocols with the new TLS config.",
+    "Please remove my limits on the API key.",
+    "Disable these controls for the demo.",
     "Long exposure photography can expose sensor dust.",
 ]
 
