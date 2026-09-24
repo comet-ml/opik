@@ -194,6 +194,17 @@ class InitFalseDefault:
 
 
 @dataclasses.dataclass(slots=True)
+class SlotsInitFalseDefault:
+    a: int
+    b: int = dataclasses.field(default=7, init=False)
+
+
+@dataclasses.dataclass(slots=True, frozen=True)
+class FrozenSlotsKey:
+    x: int
+
+
+@dataclasses.dataclass(slots=True)
 class SlotsWithUnsetField:
     x: int
     y: int = dataclasses.field(init=False)
@@ -245,6 +256,28 @@ def test_jsonable_encoder__dataclass_init_false_field_with_default__class_defaul
 
 def test_jsonable_encoder__slots_dataclass_unset_field__unset_field_omitted():
     assert jsonable_encoder.encode(SlotsWithUnsetField(x=1)) == {"x": 1}
+
+
+def test_jsonable_encoder__slots_dataclass_init_false_field_with_default__encoded_like_plain_dataclass():
+    assert jsonable_encoder.encode(
+        SlotsInitFalseDefault(a=1)
+    ) == jsonable_encoder.encode(InitFalseDefault(a=1))
+
+
+def test_jsonable_encoder__init_false_field_reassigned__encoded_for_plain_and_slots_dataclass():
+    plain = InitFalseDefault(a=1)
+    plain.b = 9
+    slots = SlotsInitFalseDefault(a=1)
+    slots.b = 9
+
+    assert jsonable_encoder.encode(plain) == {"a": 1, "b": 9}
+    assert jsonable_encoder.encode(slots) == {"a": 1, "b": 9}
+
+
+def test_jsonable_encoder__slots_dataclass_as_dict_key__key_stringified_and_siblings_kept():
+    encoded = jsonable_encoder.encode({FrozenSlotsKey(x=1): "a", "other": "b"})
+
+    assert encoded == {"FrozenSlotsKey(x=1)": "a", "other": "b"}
 
 
 def test_jsonable_encoder__non_serializable_to_text__bytes():

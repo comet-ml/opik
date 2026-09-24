@@ -1,11 +1,12 @@
 import base64
 import dataclasses
 import datetime as dt
+import functools
 import logging
 from enum import Enum
 from pathlib import PurePath
 from types import GeneratorType
-from typing import Any, Callable, Optional, Set, Tuple, Type
+from typing import Any, Callable, Dict, Optional, Set, Tuple, Type
 
 import pydantic
 
@@ -17,17 +18,6 @@ except ImportError:
     np = None
 
 LOGGER = logging.getLogger(__name__)
-
-_UNSET = object()
-
-
-def _collect_slot_names(cls: type) -> Set[str]:
-    names: Set[str] = set()
-    for klass in cls.__mro__:
-        slots = klass.__dict__.get("__slots__", ())
-        names.update([slots] if isinstance(slots, str) else slots)
-    return names
-
 
 _ENCODER_EXTENSIONS: Set[Tuple[Type, Callable[[Any], Any]]] = set()
 
@@ -45,8 +35,10 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
     if seen is None:
         seen = set()
 
-    # slots=True dataclass instances have a missing or partial __dict__ but are encoded recursively.
-    track_cycles = hasattr(obj, "__dict__") or dataclasses.is_dataclass(obj)
+    is_dataclass = dataclasses.is_dataclass(obj)
+    # slots=True dataclass instances have no __dict__, or only a partial one
+    # inherited from a non-slots base, but are still encoded recursively.
+    track_cycles = is_dataclass or hasattr(obj, "__dict__")
     if track_cycles:
         obj_id = id(obj)
         if obj_id in seen:
@@ -59,22 +51,12 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             if isinstance(obj, type_):
                 return encode(encoder(obj), seen)
 
-        if dataclasses.is_dataclass(obj):
+        if is_dataclass:
             obj_dict = getattr(obj, "__dict__", {})
             if not isinstance(obj, type):
-                # Fields declared through __slots__ are not stored in __dict__,
-                # which is missing or partial for slots=True dataclasses. Only
-                # slot-backed fields are added so plain dataclasses encode as before.
-                slot_names = _collect_slot_names(type(obj))
-                slot_values = {
-                    field.name: getattr(obj, field.name, _UNSET)
-                    for field in dataclasses.fields(obj)
-                    if field.name in slot_names
-                }
-                obj_dict = {
-                    **{k: v for k, v in slot_values.items() if v is not _UNSET},
-                    **obj_dict,
-                }
+                slot_values = _slot_field_values(obj)
+                if slot_values:
+                    obj_dict = {**slot_values, **obj_dict}
             return encode(obj_dict, seen)
 
         if isinstance(obj, pydantic.BaseModel):
@@ -104,6 +86,9 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             for key, value in obj.items():
                 if key in allowed_keys:
                     encoded_key = encode(key, seen)
+                    if isinstance(encoded_key, dict):
+                        # Hashable dataclass keys encode to a dict, which cannot be a key.
+                        encoded_key = str(key)
                     encoded_value = encode(value, seen)
                     encoded_dict[encoded_key] = encoded_value
             return encoded_dict
@@ -145,3 +130,30 @@ def _is_pydantic_iterator_validator(obj: Any) -> bool:
         return True
 
     return False
+
+
+@functools.lru_cache
+def _slot_backed_fields(cls: type) -> Tuple[dataclasses.Field, ...]:
+    slot_names: Set[str] = set()
+    for klass in cls.__mro__:
+        slots = klass.__dict__.get("__slots__", ())
+        slot_names.update([slots] if isinstance(slots, str) else slots)
+    return tuple(field for field in dataclasses.fields(cls) if field.name in slot_names)
+
+
+def _slot_field_values(obj: Any) -> Dict[str, Any]:
+    # Slot-backed fields are not stored in __dict__, so they are read one by one.
+    values = {}
+    obj_type: type = type(obj)
+    for field in _slot_backed_fields(obj_type):
+        try:
+            value = getattr(obj, field.name)
+        except AttributeError:
+            continue
+        # A plain dataclass keeps an init=False default on the class, so it is
+        # absent from the instance __dict__ until reassigned; slots=True stores
+        # it per instance. Skipping it keeps both variants encoding the same.
+        if not field.init and value is field.default:
+            continue
+        values[field.name] = value
+    return values
