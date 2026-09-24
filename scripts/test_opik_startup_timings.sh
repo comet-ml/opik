@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 # Tests for opik.sh's container startup wait: the retry budget and the timing table.
-# Stubs `docker` on PATH so health transitions are scripted and deterministic — no daemon,
-# no containers, no sleeping for 90 real seconds. Run from the repo root:
-#   scripts/test_opik_startup_timings.sh
-set -euo pipefail
+#
+# These drive the REAL start_missing_containers. opik.sh is sourced with
+# OPIK_SOURCE_ONLY=1 so it defines its functions and stops before parsing arguments,
+# then the few things that would reach outside the wait loop are stubbed: docker, the
+# compose command, the install report, and the docker/buildx preflight. Everything under
+# test — the retry loop, record_timing, record_healthy_containers and the printed table —
+# is the shipped implementation, so a production change that breaks the contract turns
+# these red instead of leaving a parallel copy green.
+#
+# The stubbed docker scripts each container's transitions, so the timeout path runs in
+# about a second with no daemon and no real waiting.
+#
+# Run from the repo root:  scripts/test_opik_startup_timings.sh
+set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 fails=0
@@ -27,37 +37,30 @@ check_absent() { # check_absent <name> <unexpected-substring> <actual>
 	fi
 }
 
-# ---------------------------------------------------------------------------
-# record_timing — the write-once/overwrite contract the table depends on.
-# Lifted by sourcing opik.sh's definitions rather than re-implementing them.
-# ---------------------------------------------------------------------------
-# shellcheck disable=SC1090
-eval "$(sed -n '/^record_timing()/,/^}/p' opik.sh)"
-
-echo "record_timing:"
-timing_labels=()
-timing_values=()
-record_timing be 12s
-record_timing be 99s
-check "healthy time is write-once" "12s" "${timing_values[0]}"
-record_timing be "unhealthy: exited" true
-check "terminal state overwrites a banked time" "unhealthy: exited" "${timing_values[0]}"
-record_timing fe 5s
-check "distinct containers get their own row" "5s" "${timing_values[1]}"
-
-# ---------------------------------------------------------------------------
-# The wait loop, driven by a stubbed docker.
-#
-# The stub reads a per-container script from $HEALTH_PLAN: "name:a,b,c" means that
-# container reports a, then b, then c on successive inspects. The last value repeats.
-# ---------------------------------------------------------------------------
 stub_dir=$(mktemp -d)
 state_dir=$(mktemp -d)
 trap 'rm -rf "$stub_dir" "$state_dir"' EXIT
 
+# ---------------------------------------------------------------------------
+# Stubbed docker. Only `docker inspect -f <fmt> <name>` matters to the wait loop.
+#
+# $HEALTH_PLAN holds one entry per container: "name:s1,s2,s3" — the state it reports on
+# successive iterations, with the last repeating forever. A state is a health value
+# (starting/healthy/unhealthy) or "exited", which reports a non-running Status and empty
+# Health, as the real CLI does for a dead container.
+#
+# The loop probes Status then Health each iteration; record_healthy_containers probes
+# Health alone. Only the Status probe advances the plan, so one plan step is exactly one
+# loop iteration and a bare Health probe observes the current state without consuming it.
+# That is what lets a fixture express "healthy when the scan looks, gone when the loop
+# arrives" — the interleaving the race test needs.
+#
+# Note start_missing_containers runs a pre-check pass over every container before the wait
+# loop starts, and that pass does one Status probe each. So step 0 of every plan is
+# consumed by the pre-check, and the wait loop sees the plan from step 1 onward.
+# ---------------------------------------------------------------------------
 cat >"$stub_dir/docker" <<'STUB'
 #!/usr/bin/env bash
-# Only `docker inspect -f <fmt> <container>` is used by the wait loop.
 [ "${1:-}" = "inspect" ] || exit 0
 fmt="$3"; name="$4"
 plan=""
@@ -67,27 +70,26 @@ done
 [ -n "$plan" ] || exit 1   # unknown container: absent, as the real CLI would be
 counter="$STATE_DIR/$name"
 n=$(cat "$counter" 2>/dev/null || echo 0)
-# The wait loop inspects Status then Health per iteration, and record_healthy_containers
-# inspects Health alone. Advance only on Status so one plan step == one loop iteration;
-# a bare Health probe reads the current step without consuming it.
-case "$fmt" in *State.Status*) echo $((n + 1)) >"$counter" ;; esac
 IFS=',' read -r -a steps <<<"$plan"
+# Status and Health must describe the SAME step, or a container can appear running with an
+# empty health (the unhealthy branch) when the fixture meant "exited". So resolve the value
+# first, then let the Status probe advance the plan for the next iteration.
 idx=$n
+case "$fmt" in *State.Status*) echo $((n + 1)) >"$counter" ;; esac
 [ "$idx" -ge "${#steps[@]}" ] && idx=$(( ${#steps[@]} - 1 ))
 value="${steps[$idx]}"
-# healthy_then_exited models the race the timing table has to report correctly: the
-# container is healthy when the pre-sleep scan probes Health, but has exited by the time
-# the loop reaches it and probes Status.
+# "healthy!" is the race: healthy to a Health-only probe (what the pre-sleep scan sees),
+# already exited to a Status probe (what the loop sees when it finally arrives).
 case "$fmt" in
 	*State.Status*)
 		case "$value" in
-			exited|healthy_then_exited) echo "exited" ;;
+			exited|"healthy!") echo "exited" ;;
 			*) echo "running" ;;
 		esac ;;
 	*State.Health.Status*)
 		case "$value" in
 			exited) echo "" ;;
-			healthy_then_exited) echo "healthy" ;;
+			"healthy!") echo "healthy" ;;
 			*) echo "$value" ;;
 		esac ;;
 esac
@@ -95,107 +97,88 @@ STUB
 chmod +x "$stub_dir/docker"
 export PATH="$stub_dir:$PATH" STATE_DIR="$state_dir"
 
-# Minimal harness: the wait loop and table lifted out of start_missing_containers, with
-# the real record_timing/record_healthy_containers. sleep is stubbed to a no-op so a
-# 90-retry timeout runs instantly; SECONDS still advances via a counter we control.
-run_wait() { # run_wait <max_retries> <container>...
-	local max_retries="$1"; shift
-	local containers=("$@")
+# Load opik.sh's functions without running its CLI dispatch.
+export OPIK_SOURCE_ONLY=1
+# shellcheck disable=SC1091
+source ./opik.sh
+unset OPIK_SOURCE_ONLY
+
+# Defaults normally set by the argument parser we skipped.
+DEBUG_MODE=false
+BUILD_MODE=
+PROFILE_COUNT=0
+
+# Neutralise only what reaches outside the wait loop.
+check_docker_status() { :; }
+send_install_report() { :; }
+setup_buildx_bake() { :; }
+create_opik_config_if_missing() { :; }
+get_docker_compose_cmd() { echo true; }   # `$cmd up -d` becomes a no-op `true up -d`
+# Don't actually wait, but do advance the clock the way a real sleep would — the loop
+# derives every printed duration from SECONDS, so a no-op sleep would make the whole table
+# read 0s and the attribution assertions would be vacuous.
+sleep() { SECONDS=$((SECONDS + ${1:-1})); }
+
+run_start() { # run_start <max_retries> <container>...
+	local retries="$1"; shift
 	rm -f "$state_dir"/*
-	timing_labels=()
-	timing_values=()
-	local wait_started_at=0 all_running=true container retries status health
-	sleep() { :; }   # no real waiting
-	# SECONDS is a live bash counter; unset it so it becomes a plain variable and the fake
-	# clock below is the only thing advancing it. Otherwise real elapsed time is added on
-	# top of our increments and the wall-clock assertion drifts.
+	CONTAINERS=("$@")
+	# SECONDS is a live counter; unset it so it becomes a plain variable and the loop's
+	# own arithmetic is the only thing advancing it.
 	unset SECONDS
 	SECONDS=0
-
-	# shellcheck disable=SC1090
-	eval "$(sed -n '/^record_healthy_containers()/,/^}/p' opik.sh)"
-
-	for container in "${containers[@]}"; do
-		retries=0
-		while true; do
-			status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
-			health=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)
-			if [[ "$status" != "running" ]]; then
-				echo "❌ $container failed to start (status: $status)"
-				all_running=false
-				record_timing "$container" "failed to start" true
-				break
-			fi
-			if [[ "$health" == "healthy" ]]; then
-				record_timing "$container" "$((SECONDS - wait_started_at))s"
-				break
-			elif [[ "$health" == "starting" ]]; then
-				record_healthy_containers
-				sleep 1
-				SECONDS=$((SECONDS + 1))
-				retries=$((retries + 1))
-				if [[ $retries -ge $max_retries ]]; then
-					echo "⚠️  $container is still not healthy after ${max_retries}s"
-					all_running=false
-					record_timing "$container" "TIMED OUT after ${max_retries}s" true
-					break
-				fi
-			else
-				echo "❌ $container health state is '$health'"
-				all_running=false
-				record_timing "$container" "unhealthy: $health" true
-				break
-			fi
-		done
-	done
-
-	echo "⏱  Container startup times (since compose up returned):"
-	local i
-	for i in "${!timing_labels[@]}"; do
-		printf '     %-26s %s\n' "${timing_labels[$i]}" "${timing_values[$i]}"
-	done
-	echo "   Total wall clock: $((SECONDS - wait_started_at))s"
+	OPIK_MAX_STARTUP_RETRIES="$retries" start_missing_containers 2>&1
 	echo "all_running=$all_running"
-	unset -f sleep
 }
 
-echo "timeout contract:"
-# backend never goes healthy; with max_retries=90 it must time out on the 90th retry.
+echo "retry budget:"
+# be never becomes healthy: must time out at the configured budget and say so.
 export HEALTH_PLAN="be:starting"
-out=$(run_wait 90 be)
+out=$(run_start 90 be)
 check "times out at the configured budget" "still not healthy after 90s" "$out"
-check "table shows the terminal value"     "TIMED OUT after 90s"         "$out"
-check "marks the run as failed"            "all_running=false"           "$out"
-check "wall clock reflects 90 polls"       "Total wall clock: 90s"       "$out"
+check "table carries the terminal value"   "TIMED OUT after 90s"         "$out"
+check "run is marked failed"               "all_running=false"           "$out"
+# Read from the real code path, so a changed budget is visible here rather than assumed.
+out=$(run_start 5 be)
+check "budget is the retry count, not a hardcoded 90" "still not healthy after 5s" "$out"
 
-echo "per-container attribution (the regression this table exists to catch):"
-# be is slow; gr is healthy from the start but sits AFTER be in the list. Before the
-# pre-sleep scan, gr inherited be's wait; now it must carry its own near-zero time.
-export HEALTH_PLAN="infra:healthy be:starting,starting,starting,starting,healthy gr:healthy"
-out=$(run_wait 90 infra be gr)
-check "fast container recorded at 0s"   "infra                      0s" "$out"
-check "slow container carries its wait" "be                         3s" "$out"
-check_absent "later container does not echo the slow one's time" "gr                         3s" "$out"
-check "later container gets its own early time" "gr                         0s" "$out"
+echo "per-container attribution (the regression the table exists to catch):"
+# The case the pre-sleep scan exists for: gr sits AFTER the slow be and is NOT healthy at
+# the start — it becomes healthy on step 1, while the loop is still blocked on be. Only the
+# scan can observe that moment; without it, gr is first probed when the loop arrives at
+# step 4 and is credited with be's wait instead of its own. Note gr must not be healthy at
+# step 0, or the loop's own probe would record the right answer by accident and the test
+# would pass even with the scan removed.
+export HEALTH_PLAN="infra:healthy be:starting,starting,starting,starting,healthy gr:starting,healthy"
+out=$(run_start 90 infra be gr)
+check "slow container carries its own wait"     "be                         2s" "$out"
+check_absent "later container does not echo the slow one's wait" "gr                         2s" "$out"
+check "later container is credited when it actually went healthy" "gr                         0s" "$out"
+check "run succeeded"                           "all_running=true"  "$out"
 
-echo "terminal states:"
-# gr is healthy while the loop waits on be, so the pre-sleep scan banks a duration for it.
-# gr then exits, and by the time the loop reaches it the status is no longer running. The
-# table must surface that failure instead of the reassuring banked duration — this is the
-# regression fixed in 7c250033cc, where first-write-wins discarded the terminal value.
-# be consumes 2 steps before going healthy; gr's plan is only advanced by those same
-# Status probes, so it must stay healthy for 2 steps and then exit.
-export HEALTH_PLAN="be:starting,starting,healthy gr:healthy_then_exited"
-out=$(run_wait 90 be gr)
-check "a container that dies after going healthy is reported" "failed to start" "$out"
-check "the terminal value replaces the banked duration" "gr                         failed to start" "$out"
-check "and the run is marked failed"                    "all_running=false"       "$out"
+echo "healthy-then-exited race:"
+# gr reports running+healthy while the loop is still on be, so the pre-sleep scan banks a
+# duration for it. gr then exits, and the loop's Status probe finds it dead on arrival.
+# The table must show the failure rather than the banked duration.
+export HEALTH_PLAN="be:starting,starting,starting,starting,healthy gr:healthy!"
+out=$(run_start 90 be gr)
+check "the dead container is reported"          "failed to start" "$out"
+check "terminal value replaces the banked one"  "gr                         failed to start" "$out"
+check_absent "banked duration does not survive" "gr                         0s" "$out"
+check "run is marked failed"                    "all_running=false" "$out"
 
-echo "an unhealthy container is not silently timed:"
+echo "unhealthy state:"
 export HEALTH_PLAN="be:unhealthy"
-out=$(run_wait 90 be)
-check "unhealthy state is surfaced" "unhealthy" "$out"
-check "run marked failed"           "all_running=false" "$out"
+out=$(run_start 90 be)
+check "unhealthy is surfaced, not silently timed" "unhealthy"         "$out"
+check "run is marked failed"                      "all_running=false" "$out"
+
+echo "table shape:"
+export HEALTH_PLAN="infra:healthy be:healthy"
+out=$(run_start 90 infra be)
+check "header names the anchor"     "Container startup times (since compose up returned)" "$out"
+check "total wall clock is printed" "Total wall clock:" "$out"
+check "run succeeded"               "all_running=true"  "$out"
 
 echo ""
 if [ "$fails" -eq 0 ]; then echo "All startup timing tests passed."; else echo "$fails test(s) FAILED."; exit 1; fi

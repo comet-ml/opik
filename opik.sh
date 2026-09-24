@@ -413,7 +413,9 @@ start_missing_containers() {
   local wait_started_at=$SECONDS
 
   echo "⏳ Waiting for all containers to be running and healthy..."
-  max_retries=90
+  # Each retry is one poll plus a 1s sleep, so this is roughly a 90s budget per container.
+  # Overridable only so the tests can drive the timeout path; not a documented knob.
+  max_retries="${OPIK_MAX_STARTUP_RETRIES:-90}"
   interval=1
   all_running=true
 
@@ -693,6 +695,12 @@ EOF
     debugLog "[DEBUG] Install started report sent successfully."
   fi
 }
+
+# Everything above is function definitions; everything below parses arguments and
+# dispatches. Sourcing with OPIK_SOURCE_ONLY=1 stops here, so the startup-wait tests
+# (scripts/test_opik_startup_timings.sh) can exercise the real functions rather than a
+# reimplementation of them.
+[[ -n "${OPIK_SOURCE_ONLY:-}" ]] && return 0
 
 # Default: no build
 BUILD_MODE=
