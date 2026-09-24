@@ -5135,11 +5135,9 @@ class GetTracesByProjectResourceTest {
         private Stream<Arguments> searchStreamSpanUpdateFilters() {
             return Stream.of(
                     // No aggregate filter: aggregates are keyed on the page ids
-                    arguments(List.of(), true),
+                    arguments(List.of()),
                     // Aggregate filters select the page, so the other spans_deduped branches run
-                    arguments(List.of(costFilter(Operator.GREATER_THAN)), true),
-                    // Only the stale 1.5 version would match
-                    arguments(List.of(costFilter(Operator.LESS_THAN)), false));
+                    arguments(List.of(costFilter(Operator.GREATER_THAN))));
         }
 
         private TraceFilter costFilter(Operator operator) {
@@ -5152,8 +5150,7 @@ class GetTracesByProjectResourceTest {
 
         @ParameterizedTest
         @MethodSource("searchStreamSpanUpdateFilters")
-        void searchTracesStream__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly(
-                List<TraceFilter> filters, boolean expectMatch) {
+        void searchTracesStream__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly(List<TraceFilter> filters) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -5169,13 +5166,30 @@ class GetTracesByProjectResourceTest {
                             .filters(filters)
                             .build());
 
-            if (!expectMatch) {
-                assertThat(actualTraces).isEmpty();
-                return;
-            }
             assertThat(actualTraces).hasSize(1);
             assertThat(actualTraces.getFirst().id()).isEqualTo(trace.id());
             assertLatestSpanVersionAggregates(actualTraces.getFirst());
+        }
+
+        @Test
+        void searchTracesStream__whenFilterMatchesStaleSpanVersionOnly__thenReturnNoTraces() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            createTraceWithUpdatedSpan(projectName, apiKey, workspaceName);
+
+            // Cost is 1.5 before the update and 2.5 after it, so only the stale version is below 2
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .filters(List.of(costFilter(Operator.LESS_THAN)))
+                            .build());
+
+            assertThat(actualTraces).isEmpty();
         }
 
         private Trace createTraceWithUpdatedSpan(String projectName, String apiKey, String workspaceName) {
