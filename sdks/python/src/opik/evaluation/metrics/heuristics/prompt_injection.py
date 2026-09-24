@@ -23,12 +23,12 @@ _GAP = r"(?:[^\s.,!?;:]+\s+){0,4}?"
 # override method updates the context controls"), so they only count as a target
 # right after a word that points them at the model: "ignore your controls",
 # "forget all earlier context".
-_OWNER = r"(?:your|all|any|previous|prior|earlier|above|original|initial|system|safety)"
+_TARGET_QUALIFIER = r"(?:your|my|these|those|all|any|previous|prior|earlier|above|original|initial|system|safety)"
 _INSTRUCTION_TARGET = (
     r"(?:(?:instructions?|prompts?|guidelines?|guidance|policies|policy|rules?|measures"
     r"|restrictions?|messages?|constraints?|directives?|safeguards?|filters?|safety"
     r"|moderation|guardrails?)"
-    rf"|{_OWNER}\s+(?:limits?|limitations?|boundaries|boundary|programming"
+    rf"|{_TARGET_QUALIFIER}\s+(?:limits?|limitations?|boundaries|boundary|programming"
     r"|alignment|protocols?|controls?|context))\b"
 )
 
