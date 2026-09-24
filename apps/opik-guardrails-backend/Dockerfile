@@ -7,15 +7,35 @@ ENV PYTHONUNBUFFERED=1 \
     OPIK_GUARDRAILS_DEVICE=cuda:0
 
 # Install Python and other dependencies
+#
+# security.ubuntu.com is a pool of independently-syncing mirrors behind one name.
+# While a security update is publishing, a mirror can advertise the new version in
+# its index before it holds the matching .deb, so `apt-get update` plans an install
+# of a version that the following download then 404s on. jammy-security supplying a
+# newer libexpat1 than jammy-updates is what drags this package into a plain
+# python3.10 install. It is a transient publication race, not a stale index: the
+# base image's index is discarded by `apt-get update` above, and the mirrors
+# converge within hours. Bumping the base image does NOT prevent it.
+# Retrying is the fix: the pool is re-entered on each attempt, and the window
+# where any given mirror is inconsistent is short.
+#
 # DL3008: Ubuntu apt packages track a rolling security channel; pinning exact
 # versions here would rot as the base image's repos are updated.
 # hadolint ignore=DL3008
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3-pip \
-    python3-dev \
-    tini \
-    wget \
+RUN for attempt in 1 2 3 4 5; do \
+        apt-get update && apt-get install -y --no-install-recommends \
+            -o Acquire::Retries=3 \
+            python3.10 \
+            python3-pip \
+            python3-dev \
+            tini \
+            wget \
+        && break; \
+        if [ "$attempt" = "5" ]; then echo "apt-get failed after $attempt attempts" >&2; exit 1; fi; \
+        echo "apt-get attempt $attempt failed; retrying against a re-resolved mirror" >&2; \
+        rm -rf /var/lib/apt/lists/*; \
+        sleep "$((attempt * 5))"; \
+    done \
     && rm -rf /var/lib/apt/lists/* && apt-get clean
 
 # Set Python aliases
