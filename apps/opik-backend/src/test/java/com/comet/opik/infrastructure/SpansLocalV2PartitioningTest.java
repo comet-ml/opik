@@ -102,6 +102,17 @@ class SpansLocalV2PartitioningTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
+    /** Mondays of weekInstant(1) and weekInstant(2), written out rather than derived so a derivation bug can't hide. */
+    private static final Long[] WEEKS_1_AND_2 = {20250310L, 20250317L};
+
+    /**
+     * {@code weekInstant(0)}'s Monday, then {@link #FAR_FUTURE_INSTANT}'s week as the legacy 32-bit {@code id_at} stores
+     * it (wrapped mod 2^32 seconds) and as this table stores it (honest). Computed once in ClickHouse 26.3 via
+     * {@code toYYYYMMDD(toDate32(d) - toIntervalDay(toDayOfWeek(d, 1)))} over {@code d} and
+     * {@code toDateTime(toUnixTimestamp64Second(d) % 4294967296, 'UTC')}.
+     */
+    private static final Long[] PRESENT_AND_FAR_FUTURE_WEEKS = {20250303L, 20650420L, 22010601L};
+
     /** The predicate the span-id reads emit (OPIK-8361); run both through EXPLAIN and executed, so it is one value. */
     private static final String SELECT_BY_ID_LIST_AND_WEEK_SET = """
             SELECT id
@@ -278,19 +289,22 @@ class SpansLocalV2PartitioningTest {
         var actualParts = prunedParts(SELECT_BY_ID_LIST_AND_WEEK_SET, statement -> statement
                 .bind("workspace_id", seed.workspaceId())
                 .bind("ids", ids)
-                .bind("id_weeks", derivedWeeksOf(ids)));
+                .bind("id_weeks", WEEKS_1_AND_2));
         var actualIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, seed.workspaceId(), statement -> statement
                 .bind("ids", ids)
-                .bind("id_weeks", derivedWeeksOf(ids)));
+                .bind("id_weeks", WEEKS_1_AND_2));
 
         // Weeks 0 and 3 prune away; the rows asserted too, since a set naming the wrong weeks would also prune.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
         assertThat(actualIds).containsExactlyInAnyOrder(ids[0].toString(), ids[1].toString());
+        // The DAOs bind weeksOf's output, so it has to name exactly the weeks this table holds the rows in.
+        assertThat(WeeklyPartitions.weeksOf(List.of(ids))).contains(List.of(WEEKS_1_AND_2));
     }
 
     /**
-     * Where the production derivation meets the partitioned table: a far-future id resolves to two weeks and this
-     * schema files it under the honest one, so a derivation naming only the legacy wrapped week would return nothing.
+     * A far-future id resolves to two weeks and this schema files it under the honest one, so a set naming only the
+     * legacy wrapped week would return nothing; the literal set is bound, and {@link WeeklyPartitions#weeksOf} must
+     * produce exactly it.
      */
     @Test
     void weekInSetKeepsFarFutureRowsThatTheIdListAdmits() {
@@ -298,9 +312,11 @@ class SpansLocalV2PartitioningTest {
 
         var actualIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, seed.workspaceId(), statement -> statement
                 .bind("ids", new UUID[]{seed.present(), seed.farFuture()})
-                .bind("id_weeks", derivedWeeksOf(seed.present(), seed.farFuture())));
+                .bind("id_weeks", PRESENT_AND_FAR_FUTURE_WEEKS));
 
         assertThat(actualIds).containsExactlyInAnyOrder(seed.present().toString(), seed.farFuture().toString());
+        assertThat(WeeklyPartitions.weeksOf(List.of(seed.present(), seed.farFuture())))
+                .contains(List.of(PRESENT_AND_FAR_FUTURE_WEEKS));
     }
 
     /**
@@ -730,11 +746,6 @@ class SpansLocalV2PartitioningTest {
 
     private Instant weekInstant(int weekOffset) {
         return ANCHOR_MONDAY.plusWeeks(weekOffset).atTime(12, 0).toInstant(ZoneOffset.UTC);
-    }
-
-    /** The week set the DAO binds for these ids — {@link WeeklyPartitions#weeksOf}, not a value computed here. */
-    private Long[] derivedWeeksOf(UUID... ids) {
-        return WeeklyPartitions.weeksOf(List.of(ids)).orElseThrow().toArray(Long[]::new);
     }
 
     @Builder(toBuilder = true)
