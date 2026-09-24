@@ -701,6 +701,13 @@ areas:
       compare-row-detail:      { covered: true,  tier: t2-cuj }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
+      # Reading an experiment's items back through the Python SDK
+      # (`Experiment.get_items()`), as opposed to writing them or reading them
+      # through the compare grid. Its own capability rather than part of
+      # per-item-scores: the read carries no scores, and OPIK-8274 rewrote it
+      # into concurrent paged waves, which is a correctness surface — dropped,
+      # duplicated or reordered rows — that no score assertion would reach.
+      experiment-item-read:    { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: true,  tier: t2-cuj, note: "browser export off the compare Results tab, asserted on the downloaded file: an unscoped export covers the whole result set untruncated and carries both compared experiments' outputs, filter/search/sort scope and order it, a row selection narrows it and clearing restores it. NOT covered: the over-the-cap disabled state (EXPORT_ROW_LIMIT is 2,000, and seeding past it costs far more than the assertion is worth), and the CSV format — only JSON is read back" }
       delete-experiment:       { covered: true,  tier: t2-cuj }
@@ -912,10 +919,18 @@ areas:
       # against the project's real alerts) is where the bugs are.
       suggest-alert-name:  { covered: true,  tier: t2-cuj }
       # "Test connection" / "Test trigger" POST the draft alert to the endpoint
-      # in the form. Asserting a *success* needs a receiver the suite controls;
-      # against example.com the mutation answers failure, so a passing test
-      # would only be pinning the error toast. Left uncovered until a receiver
-      # exists rather than covered by asserting the sad path.
+      # in the form. Asserting a *success* still needs a receiver the suite
+      # controls and the backend can reach, which managed cloud staging does
+      # not give us — so the success toast remains UNCOVERED and stays on the
+      # release's manual list.
+      #
+      # What alert-webhook-test-connection.spec.ts does cover is the two halves
+      # that are deterministic without a receiver: the client-side URL guard,
+      # which answers before any request is issued (asserted by counting the
+      # POSTs, not just by reading the toast), and a host under the reserved
+      # .invalid TLD, which can never resolve — so the failure response and the
+      # reason it puts in front of the user are pinned without depending on
+      # anything being down. Partial by construction, not by omission.
       test-alert:          { covered: false }
 
     visual:
