@@ -162,13 +162,15 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     }
 
     private void setAnnotationQueueRoutingFlushJob() {
-        AnnotationQueueRoutingConfig routingConfig = injector.get().getInstance(OpikConfiguration.class)
-                .getAnnotationQueueRouting();
+        var serviceToggles = injector.get().getInstance(OpikConfiguration.class).getServiceToggles();
 
-        if (!routingConfig.isEnabled() || !routingConfig.isJobEnabled()) {
-            log.info("Annotation queue routing flush job is disabled, skipping job setup");
+        if (!serviceToggles.isAnnotationQueueAutomationEnabled()) {
+            log.info("Annotation queue automation is disabled, skipping flush job setup");
             return;
         }
+
+        AnnotationQueueRoutingConfig routingConfig = injector.get().getInstance(OpikConfiguration.class)
+                .getAnnotationQueueRouting();
 
         scheduleRepeatingJob(AnnotationQueueRoutingFlushJob.class,
                 routingConfig.getJobInterval().toJavaDuration(), null);

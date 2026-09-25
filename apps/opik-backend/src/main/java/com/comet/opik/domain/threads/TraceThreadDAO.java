@@ -330,6 +330,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             ;
             """;
 
+    /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
+    private static final String[] LOGGING_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
+
     // A thread's source is carried forward by every write that follows the first, so the latest row is
     // the authoritative one — taken with argMax, as the other thread reads here do.
     private static final String SELECT_LOGGING_SOURCE_IDS = """
@@ -340,9 +343,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND id IN :ids
-                GROUP BY id
+                GROUP BY workspace_id, project_id, id
             )
-            WHERE source IN (:source, :source_legacy)
+            WHERE source IN :sources
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -737,8 +740,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Mono<Set<UUID>> getLoggingSourceIds(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> threadModelIds) {
-        if (projectIds.isEmpty() || threadModelIds.isEmpty()) {
+    public Mono<Set<UUID>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> threadModelIds) {
+        if (CollectionUtils.isEmpty(projectIds) || CollectionUtils.isEmpty(threadModelIds)) {
             return Mono.just(Set.of());
         }
 
@@ -750,8 +753,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", projectIds.toArray(UUID[]::new))
                     .bind("ids", threadModelIds.toArray(UUID[]::new))
-                    .bind("source", Source.SDK.getValue())
-                    .bind("source_legacy", Source.UNKNOWN_VALUE);
+                    .bind("sources", LOGGING_SOURCES);
 
             Segment segment = startSegment("trace_threads", "Clickhouse", "get_logging_source_ids");
 
