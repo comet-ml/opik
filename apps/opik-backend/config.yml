@@ -1189,13 +1189,7 @@ agentInsightsReport:
 # Configuration for automatic annotation queue population (OPIK-6303). A feedback-score event is guarded
 # in the listener and the routing work is done by a stream consumer, so it survives a replica restart.
 annotationQueueRouting:
-  # Default: false
-  # Description: When false, score events are never buffered or published and nothing is routed automatically
-  enabled: ${ANNOTATION_QUEUE_ROUTING_ENABLED:-false}
-  # Default: true
-  # Description: When enabled (and the feature above is on), schedule the periodic flush job. Set false to buffer
-  #   in Redis without a scheduler (e.g. tests that invoke the job manually).
-  jobEnabled: ${ANNOTATION_QUEUE_ROUTING_JOB_ENABLED:-true}
+  # Mechanics only. Whether the feature runs at all is serviceToggles.annotationQueueAutomationEnabled.
   # Default: annotation-queue-routing
   # Description: Redis stream name for queued annotation queue routing work
   streamName: ${ANNOTATION_QUEUE_ROUTING_STREAM_NAME:-'annotation-queue-routing'}
@@ -1216,7 +1210,7 @@ annotationQueueRouting:
   #   added to every routed item. Same semantics as the experimentDenormalization debounce.
   debounceDelay: ${ANNOTATION_QUEUE_ROUTING_DEBOUNCE_DELAY:-15s}
   # Default: 2m
-  # Description: TTL of the Redis buffer key (10s-1h). Set when the key is created and renewed by every flush run,
+  # Description: TTL of the Redis buffer key (10s-10m). Set when the key is created and renewed by every flush run,
   #   so if nothing drains the buffer it expires this long after the last flush instead of growing without limit.
   #   Matches experimentDenormalization, whose buckets expire at twice their debounce delay.
   bufferTtl: ${ANNOTATION_QUEUE_ROUTING_BUFFER_TTL:-2m}
@@ -1724,6 +1718,11 @@ serviceToggles:
   #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
   #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
   onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not automatic annotation queue population is enabled. When false the score
+  #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
+  #   automation controls on annotation queues.
+  annotationQueueAutomationEnabled: ${TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED:-"false"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.

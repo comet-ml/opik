@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -34,6 +36,9 @@ class AnnotationQueueRoutingFlushJobTest {
     private static final Duration LOCK_WAIT_TIME = Duration.milliseconds(200);
 
     @Mock
+    private FeatureFlags featureFlags;
+
+    @Mock
     private AnnotationQueueRoutingBufferService bufferService;
 
     @Mock
@@ -46,13 +51,14 @@ class AnnotationQueueRoutingFlushJobTest {
 
     @BeforeEach
     void setUp() {
-        job = new AnnotationQueueRoutingFlushJob(config(true), bufferService, lockService);
+        job = new AnnotationQueueRoutingFlushJob(config(), featureFlags, bufferService, lockService);
+        lenient().when(featureFlags.isAnnotationQueueAutomationEnabled()).thenReturn(true);
     }
 
     @Test
     @DisplayName("A disabled feature never takes the lock")
     void disabledFeatureNeverTakesTheLock() {
-        job = new AnnotationQueueRoutingFlushJob(config(false), bufferService, lockService);
+        when(featureFlags.isAnnotationQueueAutomationEnabled()).thenReturn(false);
 
         job.doJob(null);
 
@@ -107,9 +113,8 @@ class AnnotationQueueRoutingFlushJobTest {
                 .thenAnswer(invocation -> invocation.<Mono<Void>>getArgument(1));
     }
 
-    private static AnnotationQueueRoutingConfig config(boolean enabled) {
+    private static AnnotationQueueRoutingConfig config() {
         return AnnotationQueueRoutingConfig.builder()
-                .enabled(enabled)
                 .jobLockTime(LOCK_TIME)
                 .jobLockWaitTime(LOCK_WAIT_TIME)
                 .build();
