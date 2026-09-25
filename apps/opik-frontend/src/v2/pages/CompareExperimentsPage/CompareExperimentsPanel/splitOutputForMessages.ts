@@ -1,5 +1,8 @@
 import omit from "lodash/omit";
-import { detectLLMMessages } from "@/shared/PrettyLLMMessage/llmMessages";
+import {
+  detectLLMMessages,
+  mapAndCombineMessages,
+} from "@/shared/PrettyLLMMessage/llmMessages";
 
 export type OutputMessagesSplit = {
   rendersAsMessages: boolean;
@@ -30,7 +33,14 @@ export const splitOutputForMessages = (
 ): OutputMessagesSplit => {
   const detection = detectLLMMessages(output, { fieldType: "output" });
 
-  if (!detection.supported || !output || typeof output !== "object") {
+  // A detected shape can still map to no messages, e.g. `{ output: "" }`,
+  // which would leave the panel with an empty messages view.
+  if (
+    !detection.supported ||
+    !output ||
+    typeof output !== "object" ||
+    mapAndCombineMessages(undefined, output).messages.length === 0
+  ) {
     return NOT_MESSAGES;
   }
 

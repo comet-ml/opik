@@ -20,6 +20,17 @@ describe("splitOutputForMessages", () => {
       expect(splitOutputForMessages({}).rendersAsMessages).toBe(false);
       expect(splitOutputForMessages(undefined).rendersAsMessages).toBe(false);
     });
+
+    it("falls back when a recognised shape maps to no messages", () => {
+      expect(splitOutputForMessages({ output: "" })).toEqual({
+        rendersAsMessages: false,
+        remainingOutput: {},
+      });
+      expect(
+        splitOutputForMessages({ output: "", context: ["policy.md"] })
+          .rendersAsMessages,
+      ).toBe(false);
+    });
   });
 
   describe("single-key output shapes", () => {
