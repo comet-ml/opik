@@ -1,0 +1,105 @@
+---
+description: Track Cheaper Inference model calls with Opik through the
+  OpenAI-compatible or Anthropic-compatible API.
+headline: Cheaper Inference
+og:description: Configure Opik tracing for the Cheaper Inference LLM gateway with
+  the OpenAI or Anthropic Python SDK.
+og:site_name: Opik Documentation
+og:title: Integrate Cheaper Inference with Opik
+title: Observability for Cheaper Inference with Opik
+---
+
+[Cheaper Inference](https://cheaperinference.com) is an LLM gateway with OpenAI-compatible and Anthropic-compatible APIs. Each model costs 15–60% less than the list price of its lab. Opik can trace either protocol by wrapping the corresponding Python SDK client.
+
+## Install the dependencies
+
+Install Opik and the SDK for the protocol you plan to use:
+
+```bash
+pip install opik openai anthropic
+```
+
+Configure Opik for your deployment:
+
+```bash
+opik configure
+```
+
+Set your Cheaper Inference API key. You can create one after you [sign up](https://cheaperinference.com/signup):
+
+```bash
+export CHEAPER_INFERENCE_API_KEY="<CHEAPER_INFERENCE_API_KEY>"
+```
+
+## Choose an endpoint
+
+Use the base URL for your SDK protocol:
+
+| Protocol | Base URL |
+| --- | --- |
+| OpenAI-compatible | `https://api.cheaperinference.com/v1` |
+| Anthropic-compatible | `https://api.cheaperinference.com` |
+
+You can find additional API details in the [Cheaper Inference documentation](https://cheaperinference.com/docs).
+
+## Track OpenAI-compatible calls
+
+Wrap the OpenAI client with `track_openai` and pass the Cheaper Inference base URL:
+
+```python
+import os
+
+from openai import OpenAI
+from opik.integrations.openai import track_openai
+
+client = OpenAI(
+    api_key=os.environ["CHEAPER_INFERENCE_API_KEY"],
+    base_url="https://api.cheaperinference.com/v1",
+)
+client = track_openai(client, project_name="cheaper-inference-demo")
+
+response = client.chat.completions.create(
+    model="gpt-5.4-mini",
+    messages=[{"role": "user", "content": "Explain observability in one sentence."}],
+)
+
+print(response.choices[0].message.content)
+```
+
+## Track Anthropic-compatible calls
+
+Wrap the Anthropic client with `track_anthropic` and pass the Cheaper Inference base URL:
+
+```python
+import os
+
+import anthropic
+from opik.integrations.anthropic import track_anthropic
+
+client = anthropic.Anthropic(
+    api_key=os.environ["CHEAPER_INFERENCE_API_KEY"],
+    base_url="https://api.cheaperinference.com",
+)
+client = track_anthropic(client, project_name="cheaper-inference-demo")
+
+response = client.messages.create(
+    model="claude-sonnet-5",
+    max_tokens=512,
+    messages=[{"role": "user", "content": "Explain observability in one sentence."}],
+)
+
+print(response.content[0].text)
+```
+
+## Model identifiers
+
+Model identifiers do not have a provider prefix. Current text model identifiers include:
+
+- `gpt-5.4-mini`
+- `gpt-5.4`
+- `claude-sonnet-5`
+- `gemini-3.1-pro`
+
+See the [model list](https://cheaperinference.com/#models) for all models.
+
+The wrapped clients preserve the normal SDK response objects while Opik records the request, response, token usage, and model metadata.
