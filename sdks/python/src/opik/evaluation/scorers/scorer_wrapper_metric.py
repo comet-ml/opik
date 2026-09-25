@@ -1,3 +1,4 @@
+import functools
 from typing import Any, Callable, Dict, Optional, List, Union
 
 from opik import exceptions
@@ -121,7 +122,11 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
 
 
 def _scorer_name(scorer: Callable) -> str:
-    return scorer.__name__
+    # functools.partial objects and callable class instances have no __name__.
+    if isinstance(scorer, functools.partial):
+        return _scorer_name(scorer.func)
+    name = getattr(scorer, "__name__", None)
+    return name if isinstance(name, str) and name else type(scorer).__name__
 
 
 def wrap_scorer_functions(

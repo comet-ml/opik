@@ -78,8 +78,13 @@ import lombok.Builder;
  * inserts continue through the Distributed {@code spans}. The same split by kind applies as for traces: row mutations
  * ({@code DELETE}) and {@code MATERIALIZE COLUMN} / {@code ADD INDEX} / {@code MODIFY TTL} target {@code spans_local}
  * only, while {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must be applied to <b>both</b> {@code spans_local} and
- * the {@code Distributed} {@code spans}. Independent of the trace flag so the two cutovers can flip separately, and
- * <b>not</b> covered by the {@code clickhouse-traces-topology} readiness probe, which asserts the trace flag only.</p>
+ * the {@code Distributed} {@code spans}. Independent of the trace flag so the two cutovers can flip separately.</p>
+ *
+ * <p>It is asserted against the live topology at readiness by {@code ClickHouseSpansTopologyHealthCheck}: either
+ * direction of mismatch fails the {@code clickhouse-spans-topology} probe with a message naming the flag and the
+ * observed engine. A separate probe from the traces one — they share an implementation — because the two cutovers flip
+ * independently, so an operator has to see which of the two disagrees with its table. The same source-of-truth rule
+ * holds: the probe only reports, it never re-routes.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(

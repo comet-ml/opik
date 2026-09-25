@@ -6,7 +6,7 @@ import json
 import threading
 import time
 from typing import Any, List, Optional, Tuple
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import httpx
 import pytest
@@ -471,7 +471,7 @@ class TestBulkUploadItemsSerialization:
             experiments_client=Mock(),
         )
 
-        with patch("opik.api_objects.rest_helpers._sleep"):
+        with patch("opik.api_objects.rest_helpers._wait"):
             experiment.batch_upload_items(
                 [
                     _record(
@@ -593,7 +593,7 @@ class TestBulkUploadItemsConcurrency:
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
     def test_batch_upload_items__batch_stuck_when_another_fails__returns_without_waiting(
-        self,
+        self, monkeypatch: Any
     ) -> None:
         """The failure path must not join batches that are still running.
 
@@ -621,6 +621,10 @@ class TestBulkUploadItemsConcurrency:
             raise ApiError(status_code=400, headers={}, body="bad request")
 
         mock_rest_client.experiments.experiment_items_bulk.side_effect = upload
+        # The stub ignores the stop signal, so abort's bounded wait is what ends the call.
+        monkeypatch.setattr(
+            experiment_module.streaming_upload, "ABORT_WAIT_SECONDS", 0.2
+        )
 
         records = [
             _record(dataset_item_id=f"item-{i}")
@@ -639,6 +643,43 @@ class TestBulkUploadItemsConcurrency:
             assert elapsed < 10
         finally:
             release_stuck_batch.set()
+
+    def test_batch_upload_items__batch_parked_on_rate_limit_when_another_fails__stops_it(
+        self,
+    ) -> None:
+        """Abort ends a rate-limit wait instead of leaving it to retry after the call."""
+        experiment, mock_rest_client = _create_experiment()
+        parked_attempts: List[int] = []
+        parked = threading.Event()
+
+        def upload(**kwargs: Any) -> None:
+            batch_ids = {item.dataset_item_id for item in kwargs["items"]}
+            if "item-0" in batch_ids:
+                parked_attempts.append(1)
+                parked.set()
+                raise ApiError(
+                    status_code=429, headers={"RateLimit-Reset": "60"}, body="limited"
+                )
+            # Fail only once the other batch is parked, so the abort has something to stop.
+            assert parked.wait(10)
+            raise ApiError(status_code=400, headers={}, body="bad request")
+
+        mock_rest_client.experiments.experiment_items_bulk.side_effect = upload
+
+        records = [
+            _record(dataset_item_id=f"item-{i}")
+            for i in range(constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE * 3)
+        ]
+
+        started_at = time.monotonic()
+        with pytest.raises(ApiError) as exc_info:
+            experiment.batch_upload_items(records, num_threads=3)
+        elapsed = time.monotonic() - started_at
+
+        assert exc_info.value.status_code == 400
+        # Under the abort timeout: the parked worker stopped, it was not abandoned.
+        assert elapsed < experiment_module.streaming_upload.ABORT_WAIT_SECONDS
+        assert parked_attempts == [1]
 
     def test_batch_upload_items__multiple_threads__batch_failure_propagates(
         self,
@@ -1077,9 +1118,9 @@ class TestBulkUploadItemsStreamingSource:
 
 
 class TestBulkUploadItemsRateLimitRetry:
-    @patch("opik.api_objects.rest_helpers._sleep")
+    @patch("opik.api_objects.rest_helpers._wait")
     def test_batch_upload_items__429_with_retry_after_header__retries_with_correct_delay(
-        self, mock_sleep: Mock
+        self, mock_wait: Mock
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
         mock_rest_client.experiments.experiment_items_bulk.side_effect = [
@@ -1090,11 +1131,11 @@ class TestBulkUploadItemsRateLimitRetry:
         experiment.batch_upload_items([_record()])
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 2
-        mock_sleep.assert_called_once_with(5.0)
+        mock_wait.assert_called_once_with(5.0, ANY)
 
-    @patch("opik.api_objects.rest_helpers._sleep")
+    @patch("opik.api_objects.rest_helpers._wait")
     def test_batch_upload_items__429_without_header__uses_fallback_delay(
-        self, mock_sleep: Mock
+        self, mock_wait: Mock
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
         mock_rest_client.experiments.experiment_items_bulk.side_effect = [
@@ -1105,11 +1146,11 @@ class TestBulkUploadItemsRateLimitRetry:
         experiment.batch_upload_items([_record()])
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 2
-        mock_sleep.assert_called_once_with(1)
+        mock_wait.assert_called_once_with(1, ANY)
 
-    @patch("opik.api_objects.rest_helpers._sleep")
+    @patch("opik.api_objects.rest_helpers._wait")
     def test_batch_upload_items__non_429_error__raises_without_retrying(
-        self, mock_sleep: Mock
+        self, mock_wait: Mock
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
         mock_rest_client.experiments.experiment_items_bulk.side_effect = ApiError(
@@ -1120,11 +1161,11 @@ class TestBulkUploadItemsRateLimitRetry:
             experiment.batch_upload_items([_record()])
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1
-        mock_sleep.assert_not_called()
+        mock_wait.assert_not_called()
 
-    @patch("opik.api_objects.rest_helpers._sleep")
+    @patch("opik.api_objects.rest_helpers._wait")
     def test_batch_upload_items__batch_fails__remaining_batches_are_not_sent(
-        self, mock_sleep: Mock
+        self, mock_wait: Mock
     ) -> None:
         """Fail-fast, matching Dataset.insert: the caller retries the whole call.
 
@@ -1539,9 +1580,9 @@ class TestBulkUploadItemsRestRetry:
 
             return run
 
-        def spy_rate_limit(call: Any, operation_name: Any = None) -> Any:
+        def spy_rate_limit(call: Any, operation_name: Any = None, **kwargs: Any) -> Any:
             order.append("rate-limit-entered")
-            return real_rate_limit(call, operation_name)
+            return real_rate_limit(call, operation_name, **kwargs)
 
         monkeypatch.setattr(
             experiment_module.retry_decorator, "opik_rest_retry", spy_retry
