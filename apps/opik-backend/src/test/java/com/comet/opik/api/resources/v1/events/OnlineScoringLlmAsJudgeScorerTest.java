@@ -172,7 +172,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 opikConfiguration,
                 onlineEvaluationRecorder,
                 attachmentService,
-                new DecisionScoringService(decisionsClient, llmProviderFactory, onlineScoringConfig));
+                new DecisionScoringService(decisionsClient, llmProviderFactory));
     }
 
     @AfterEach

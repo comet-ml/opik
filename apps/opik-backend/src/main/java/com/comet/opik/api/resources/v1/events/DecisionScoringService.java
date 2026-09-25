@@ -7,11 +7,11 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.resources.v1.events.OnlineScoringEngine.ParsedFeedbackScores;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
+import com.google.common.base.Preconditions;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
@@ -19,10 +19,10 @@ import dev.langchain4j.data.message.UserMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -43,6 +43,7 @@ import java.util.stream.Collectors;
  * becomes {@code 1} at {@link #TRUE_THRESHOLD} or above and {@code 0} below, with the probability in the reason.
  */
 @Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class DecisionScoringService {
 
     /** OpenRouter's context length for Jev, covering state and questions together. */
@@ -53,20 +54,8 @@ public class DecisionScoringService {
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
     private static final int MAX_SUMMARY_CHARS = 1_000;
 
-    private final OpenRouterDecisionsClient decisionsClient;
-    private final LlmProviderFactory llmProviderFactory;
-    private final OnlineScoringConfig onlineScoringConfig;
-
-    // Hand-written so @Config sits on the parameter itself: the Docker build compiles without lombok.config, and
-    // Lombok then drops the qualifier from a generated constructor, leaving Guice to inject an empty config.
-    @Inject
-    public DecisionScoringService(@NonNull OpenRouterDecisionsClient decisionsClient,
-            @NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull @Config("onlineScoring") OnlineScoringConfig onlineScoringConfig) {
-        this.decisionsClient = decisionsClient;
-        this.llmProviderFactory = llmProviderFactory;
-        this.onlineScoringConfig = onlineScoringConfig;
-    }
+    private final @NonNull OpenRouterDecisionsClient decisionsClient;
+    private final @NonNull LlmProviderFactory llmProviderFactory;
 
     /**
      * Builds the request from the rendered rule messages: their text, in order, is the {@code state}.
@@ -89,16 +78,20 @@ public class DecisionScoringService {
                 .build();
     }
 
-    /** Rough token count of the request, with the same chars-per-token ratio the chat path uses. */
-    public int estimateTokens(@NonNull DecisionsRequest request) {
+    /**
+     * Rough token count of the request. {@code charsPerToken} is the online-scoring ratio the chat path uses too;
+     * the scorers pass it in, so this service needs no configuration of its own.
+     */
+    public static int estimateTokens(@NonNull DecisionsRequest request, int charsPerToken) {
+        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got '%s'", charsPerToken);
         long chars = request.state().length() + request.questions().entrySet().stream()
                 .mapToLong(entry -> entry.getKey().length() + entry.getValue().instructions().length())
                 .sum();
-        return (int) Math.min(Integer.MAX_VALUE, chars / onlineScoringConfig.getAgenticToolsCharsPerToken());
+        return (int) Math.min(Integer.MAX_VALUE, chars / charsPerToken);
     }
 
-    public boolean exceedsContext(@NonNull DecisionsRequest request) {
-        return estimateTokens(request) > MAX_CONTEXT_TOKENS;
+    public static boolean exceedsContext(@NonNull DecisionsRequest request, int charsPerToken) {
+        return estimateTokens(request, charsPerToken) > MAX_CONTEXT_TOKENS;
     }
 
     /**

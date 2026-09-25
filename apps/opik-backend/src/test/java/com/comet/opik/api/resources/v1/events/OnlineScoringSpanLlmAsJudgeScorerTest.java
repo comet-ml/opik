@@ -190,7 +190,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 agenticScoringService,
                 attachmentService,
                 onlineEvaluationRecorder,
-                new DecisionScoringService(decisionsClient, llmProviderFactory, onlineScoringConfig));
+                new DecisionScoringService(decisionsClient, llmProviderFactory));
     }
 
     @AfterEach

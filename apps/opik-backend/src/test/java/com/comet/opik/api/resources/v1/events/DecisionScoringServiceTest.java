@@ -4,7 +4,6 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
@@ -15,22 +14,21 @@ import dev.langchain4j.data.message.UserMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class DecisionScoringServiceTest {
 
-    private final OnlineScoringConfig onlineScoringConfig = mock(OnlineScoringConfig.class);
+    private static final int CHARS_PER_TOKEN = 4;
+
     private final DecisionScoringService service = new DecisionScoringService(
-            mock(OpenRouterDecisionsClient.class), mock(LlmProviderFactory.class), onlineScoringConfig);
+            mock(OpenRouterDecisionsClient.class), mock(LlmProviderFactory.class));
 
     @Test
     void buildRequestJoinsMessageTextInOrderAndKeepsScoreOrder() {
@@ -49,16 +47,28 @@ class DecisionScoringServiceTest {
 
     @Test
     void exceedsContextAboveTheModelLimit() {
-        when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         var schema = List.of(score("q", "?"));
         // Question key and instructions add 2 chars on top of the state.
         var atLimit = service.buildRequest("m",
-                List.of(UserMessage.from("a".repeat(DecisionScoringService.MAX_CONTEXT_TOKENS * 4 - 2))), schema);
+                List.of(UserMessage.from(
+                        "a".repeat(DecisionScoringService.MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN - 2))),
+                schema);
         var overLimit = service.buildRequest("m",
-                List.of(UserMessage.from("a".repeat(DecisionScoringService.MAX_CONTEXT_TOKENS * 4 + 4))), schema);
+                List.of(UserMessage.from(
+                        "a".repeat(DecisionScoringService.MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN + 4))),
+                schema);
 
-        assertThat(service.exceedsContext(atLimit)).isFalse();
-        assertThat(service.exceedsContext(overLimit)).isTrue();
+        assertThat(DecisionScoringService.exceedsContext(atLimit, CHARS_PER_TOKEN)).isFalse();
+        assertThat(DecisionScoringService.exceedsContext(overLimit, CHARS_PER_TOKEN)).isTrue();
+    }
+
+    @Test
+    void estimateTokensRejectsANonPositiveRatio() {
+        var request = service.buildRequest("m", List.of(UserMessage.from("hi")), List.of(score("q", "?")));
+
+        assertThatThrownBy(() -> DecisionScoringService.estimateTokens(request, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("charsPerToken must be >= 1");
     }
 
     @ParameterizedTest(name = "probability={0}")
@@ -123,25 +133,6 @@ class DecisionScoringServiceTest {
                 .build());
 
         assertThat(summary).isEqualTo("forged?INFO line=0.93");
-    }
-
-    @Test
-    void injectedConstructorQualifiesTheOnlineScoringConfig() {
-        // The Docker build compiles without lombok.config, so the qualifier must be on a hand-written parameter:
-        // without it Guice injects an empty OnlineScoringConfig instead of the loaded one.
-        var constructor = Arrays.stream(DecisionScoringService.class.getConstructors())
-                .filter(c -> c.isAnnotationPresent(jakarta.inject.Inject.class))
-                .findFirst()
-                .orElseThrow();
-        var configParameter = Arrays.stream(constructor.getParameters())
-                .filter(parameter -> parameter.getType() == OnlineScoringConfig.class)
-                .findFirst()
-                .orElseThrow();
-
-        var qualifier = configParameter.getAnnotation(Config.class);
-
-        assertThat(qualifier).isNotNull();
-        assertThat(qualifier.value()).isEqualTo("onlineScoring");
     }
 
     private static DecisionsResponse.Answer noul(Double probability) {
