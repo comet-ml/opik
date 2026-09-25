@@ -610,3 +610,35 @@ def test_chat_prompt_template__format__multimodal_video_url_placeholders__valida
     assert exc_info.value.format_arguments == set(["object"])
     assert exc_info.value.prompt_placeholders == set(["object", "video_url"])
     assert exc_info.value.symmetric_difference == set(["video_url"])
+
+
+def test_chat_prompt_template__format__whitespace_inside_placeholder__validated_and_substituted():
+    messages = [
+        {"role": "system", "content": "You help with {{ topic }}."},
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "Explain {{topic}} to {{ name }}."}],
+        },
+    ]
+
+    tested = ChatPromptTemplate(messages, validate_placeholders=True)
+
+    result = tested.format({"topic": "tides", "name": "Harry"})
+
+    assert result == [
+        {"role": "system", "content": "You help with tides."},
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "Explain tides to Harry."}],
+        },
+    ]
+
+
+def test_chat_prompt_template__format__placeholder_without_variable__left_unchanged():
+    messages = [{"role": "user", "content": "Hi {{name}}, welcome to {{ city }}."}]
+
+    tested = ChatPromptTemplate(messages, validate_placeholders=False)
+
+    result = tested.format({"name": "Harry"})
+
+    assert result == [{"role": "user", "content": "Hi Harry, welcome to {{ city }}."}]
