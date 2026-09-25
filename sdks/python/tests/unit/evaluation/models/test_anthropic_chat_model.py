@@ -13,6 +13,8 @@ from opik.evaluation.models import base_model
 from opik.evaluation.models.anthropic import anthropic_chat_model
 from opik.evaluation.models.anthropic import message_adapter, response_parser
 
+from ....testlib import patch_submodule
+
 
 class SampleFormat(pydantic.BaseModel):
     score: int
@@ -941,8 +943,8 @@ class TestFactoryRouting:
 
         litellm_integration_stub = types.ModuleType("opik.integrations.litellm")
         litellm_integration_stub.track_completion = lambda **kw: (lambda f: f)
-        monkeypatch.setitem(
-            sys.modules, "opik.integrations.litellm", litellm_integration_stub
+        patch_submodule(
+            monkeypatch, "opik.integrations.litellm", litellm_integration_stub
         )
 
         model = models_factory.get("gpt-4o", track=False)
