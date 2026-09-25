@@ -39,8 +39,6 @@ import {
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
-import { COLUMN_TYPE } from "@/types/shared";
-import { isFilterValid } from "@/lib/filters";
 import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
@@ -78,6 +76,7 @@ import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  buildRuleFilters,
   getBackendRuleType,
   getUIRuleScope,
   getUIRuleType,
@@ -412,20 +411,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     const ruleType = formData.type;
 
-    const validFilters = formData.filters
-      .filter((f) =>
-        isFilterValid(
-          (f.field === "input" || f.field === "output") && !f.key
-            ? { ...f, type: COLUMN_TYPE.string }
-            : f,
-        ),
-      )
-      .map((f) => {
-        if ((f.field === "input" || f.field === "output") && f.key) {
-          return { ...f, field: `${f.field}_json` };
-        }
-        return f;
-      });
+    const validFilters = buildRuleFilters(formData.filters);
 
     const ruleData = {
       name: formData.ruleName,
