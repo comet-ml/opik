@@ -12,6 +12,8 @@ class AgentInsightsJob(UniversalBaseModel):
     id: typing.Optional[str] = None
     project_id: typing.Optional[str] = None
     status: typing.Optional[AgentInsightsJobStatus] = None
+    auto_first_run_enrolled: typing.Optional[bool] = None
+    auto_first_run_at: typing.Optional[dt.datetime] = None
     last_scan_at: typing.Optional[dt.datetime] = None
     last_failure_reason: typing.Optional[str] = None
     last_failure_detail: typing.Optional[str] = None
