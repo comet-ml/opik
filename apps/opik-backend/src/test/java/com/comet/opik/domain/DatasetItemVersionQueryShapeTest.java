@@ -257,24 +257,6 @@ class DatasetItemVersionQueryShapeTest {
     }
 
     @Test
-    @DisplayName("no query ships an unreplaced legacy-aliases placeholder")
-    void legacyAliasesCte__isAlwaysSpliced() {
-        // The CTE lives in one constant and is spliced into each query with String.replace, so a new query
-        // that carries the placeholder but not the .replace() call would reach ClickHouse verbatim and fail
-        // at runtime. Scanning every String constant, not just the ones mentioning dataset_item_versions,
-        // is deliberate: an unreplaced query does not mention that table at all.
-        var offenders = allConstants.entrySet().stream()
-                .filter(entry -> entry.getValue().contains("%LEGACY_DATASET_ITEM_ALIASES_CTE%"))
-                .map(Map.Entry::getKey)
-                .toList();
-
-        assertThat(offenders)
-                .as("each of these still holds the placeholder; add .replace(\"%LEGACY_DATASET_ITEM_ALIASES_CTE%\", "
-                        + "LEGACY_DATASET_ITEM_ALIASES_CTE) to the constant")
-                .isEmpty();
-    }
-
-    @Test
     @DisplayName("every query that joins the legacy aliases also defines them")
     void legacyAliasesCte__isDefinedWhereverItIsJoined() {
         var offenders = allConstants.entrySet().stream()

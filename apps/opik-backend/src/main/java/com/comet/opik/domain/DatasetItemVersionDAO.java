@@ -596,27 +596,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     /**
-     * Dataset items whose stable id differs from their row id: the only rows that can change what a
-     * legacy {@code experiment_items.dataset_item_id} resolves to. Deduplicated with
-     * {@code LIMIT 1 BY id} instead of {@code FINAL}, so the scan stays on the aliases.
-     *
-     * <p>Held as one constant and spliced into each query that needs it, because the join sites span
-     * several query constants that cannot share SQL text directly, and the resolution must not drift
-     * between them. Splicing happens before StringTemplate sees the query, so the rendered SQL is the
-     * same as writing the CTE out in place.
-     */
-    private static final String LEGACY_DATASET_ITEM_ALIASES_CTE = """
-            legacy_dataset_item_aliases AS (
-                SELECT id, dataset_item_id
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND id != dataset_item_id
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            )""";
-
-    /**
      * Counts dataset items with experiment items. The {@code slim_count} branch routes the count
      * through {@code experiment_item_aggregates}; the legacy branch keeps the full CTE chain for
      * search and raw-only inputs. OPIK-6177 stable-id resolution shape is preserved in both.
@@ -685,7 +664,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <if(dataset_item_filters)>AND eia.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_filtered_ids)<endif>
             SETTINGS log_comment = '<log_comment>'
             <else>
-            WITH %LEGACY_DATASET_ITEM_ALIASES_CTE%, experiment_aggregated_scope_ids AS (
+            WITH legacy_dataset_item_aliases AS (
+                SELECT id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id != dataset_item_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
                     COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
@@ -985,8 +972,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
             )
             <endif>
-            """
-            .replace("%LEGACY_DATASET_ITEM_ALIASES_CTE%", LEGACY_DATASET_ITEM_ALIASES_CTE);
+            """;
 
     // Query to extract columns from trace output for experiment items view
     private static final String SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS = """
@@ -1127,7 +1113,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * ({@code dataset_items_(aggr_)resolved} orders by {@code dataset_version_id} DESC).
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
-            WITH %LEGACY_DATASET_ITEM_ALIASES_CTE%, experiment_aggregated_scope_ids AS (
+            WITH legacy_dataset_item_aliases AS (
+                SELECT id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id != dataset_item_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
                     COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
@@ -1949,8 +1943,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <if(!push_top_limit && !push_top_limit_raw)>OFFSET :offset<endif>
             SETTINGS output_format_json_named_tuples_as_objects = 1
             ;
-            """
-            .replace("%LEGACY_DATASET_ITEM_ALIASES_CTE%", LEGACY_DATASET_ITEM_ALIASES_CTE);
+            """;
 
     // Batch insert items
     private static final String BATCH_INSERT_ITEMS = """
@@ -2355,7 +2348,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS = """
-            WITH %LEGACY_DATASET_ITEM_ALIASES_CTE%, experiment_aggregated_scope_ids AS (
+            WITH legacy_dataset_item_aliases AS (
+                SELECT id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id != dataset_item_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
                     COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
@@ -2743,8 +2744,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
             ) ei
             ;
-            """
-            .replace("%LEGACY_DATASET_ITEM_ALIASES_CTE%", LEGACY_DATASET_ITEM_ALIASES_CTE);
+            """;
 
     // Migration queries
     private static final String DELETE_ITEMS_FROM_VERSION_MIGRATION = """
