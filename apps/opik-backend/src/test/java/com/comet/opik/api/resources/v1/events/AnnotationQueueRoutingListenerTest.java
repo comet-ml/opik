@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
-import com.comet.opik.domain.AnnotationQueueRoutingPublisher;
+import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -37,12 +37,12 @@ import static org.mockito.Mockito.when;
 
 /**
  * Covers the guards, and above all what they let through: the listener is the feature's only volume
- * control, so a guard that stops working means every score event in the deployment reaches the stream.
+ * control, so a guard that stops working means every score event in the deployment reaches the buffer.
  *
  * <p>Unit rather than black box because the listener's entry point is the Guava event bus, and the router
  * rule it reads has no REST surface on this PR — there is nothing to drive it through from outside. What
  * can be covered end to end is, in {@link AnnotationQueueRoutingIntegrationTest}, which runs this same
- * listener against a real publisher and a real Redis stream.
+ * listener against a real buffer, a real flush and a real Redis stream.
  *
  * <p>The listener subscribes and returns, so anything past the guards happens on another thread. Every
  * assertion here is timed for that reason: one that should see work waits for it, and one that should see
@@ -59,7 +59,7 @@ class AnnotationQueueRoutingListenerTest {
     private AnnotationQueueAutomationService automationService;
 
     @Mock
-    private AnnotationQueueRoutingPublisher publisher;
+    private AnnotationQueueRoutingBufferService bufferService;
 
     @Mock
     private AnnotationQueueRoutingConfig config;
@@ -74,17 +74,16 @@ class AnnotationQueueRoutingListenerTest {
         workspaceId = randomString();
         userName = randomString();
         when(config.isEnabled()).thenReturn(true);
-        when(publisher.enqueue(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
-        listener = new AnnotationQueueRoutingListener(automationService, publisher, config);
+        when(bufferService.add(anyString(), any(), any())).thenReturn(Mono.empty());
+        listener = new AnnotationQueueRoutingListener(automationService, bufferService, config);
     }
 
     private static String randomString() {
         return RandomStringUtils.secure().nextAlphanumeric(20);
     }
 
-    private FeedbackScoresCreated event(EntityType entityType, UUID projectId, Set<UUID> entityIds,
-            Set<String> scoreNames) {
-        return new FeedbackScoresCreated(entityIds, entityType, workspaceId, userName, projectId, scoreNames);
+    private FeedbackScoresCreated event(EntityType entityType, UUID projectId, Set<UUID> entityIds) {
+        return new FeedbackScoresCreated(entityIds, entityType, workspaceId, userName, projectId);
     }
 
     @Nested
@@ -106,15 +105,14 @@ class AnnotationQueueRoutingListenerTest {
 
         @ParameterizedTest
         @MethodSource("published")
-        void publishesWhateverTheGuardAdmits(EntityType entityType, AnnotationScope scope, boolean hasProjectId) {
+        void buffersWhateverTheGuardAdmits(EntityType entityType, AnnotationScope scope, boolean hasProjectId) {
             UUID projectId = hasProjectId ? ID_GENERATOR.generateId() : null;
             Set<UUID> entityIds = Set.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
-            Set<String> scoreNames = Set.of(randomString(), randomString());
             when(automationService.hasEnabledAutomation(workspaceId, projectId, scope)).thenReturn(true);
 
-            listener.onFeedbackScoresCreated(event(entityType, projectId, entityIds, scoreNames));
+            listener.onFeedbackScoresCreated(event(entityType, projectId, entityIds));
 
-            verify(publisher, timeout(2_000)).enqueue(workspaceId, userName, scope, entityIds, scoreNames);
+            verify(bufferService, timeout(2_000)).add(workspaceId, scope, entityIds);
         }
     }
 
@@ -129,7 +127,7 @@ class AnnotationQueueRoutingListenerTest {
             when(config.isEnabled()).thenReturn(false);
 
             listener.onFeedbackScoresCreated(event(EntityType.TRACE, ID_GENERATOR.generateId(),
-                    Set.of(ID_GENERATOR.generateId()), Set.of()));
+                    Set.of(ID_GENERATOR.generateId())));
 
             assertNothingRouted();
         }
@@ -137,7 +135,7 @@ class AnnotationQueueRoutingListenerTest {
         @Test
         void publishesNothingForSpans() {
             listener.onFeedbackScoresCreated(event(EntityType.SPAN, ID_GENERATOR.generateId(),
-                    Set.of(ID_GENERATOR.generateId()), Set.of()));
+                    Set.of(ID_GENERATOR.generateId())));
 
             assertNothingRouted();
         }
@@ -145,7 +143,7 @@ class AnnotationQueueRoutingListenerTest {
         @Test
         void publishesNothingWhenTheEventCarriesNoEntities() {
             listener.onFeedbackScoresCreated(
-                    event(EntityType.TRACE, ID_GENERATOR.generateId(), Set.of(), Set.of()));
+                    event(EntityType.TRACE, ID_GENERATOR.generateId(), Set.of()));
 
             assertNothingRouted();
         }
@@ -157,21 +155,21 @@ class AnnotationQueueRoutingListenerTest {
                     .thenReturn(false);
 
             listener.onFeedbackScoresCreated(
-                    event(EntityType.TRACE, projectId, Set.of(ID_GENERATOR.generateId()), Set.of()));
+                    event(EntityType.TRACE, projectId, Set.of(ID_GENERATOR.generateId())));
 
             // Wait for the lookup itself, so "never published" is a real assertion rather than a race won.
             verify(automationService, timeout(2_000)).hasEnabledAutomation(workspaceId, projectId,
                     AnnotationScope.TRACE);
-            verify(publisher, never()).enqueue(anyString(), anyString(), any(), any(), any());
+            verify(bufferService, never()).add(anyString(), any(), any());
         }
 
         /**
-         * Neither the lookup nor the publisher is reached. Timed rather than immediate: a deleted guard
+         * Neither the lookup nor the buffer is reached. Timed rather than immediate: a deleted guard
          * makes the lookup asynchronous, and an immediate assertion would simply run first and pass.
          */
         private void assertNothingRouted() {
             verify(automationService, after(400).never()).hasEnabledAutomation(anyString(), any(), any());
-            verify(publisher, never()).enqueue(anyString(), anyString(), any(), any(), any());
+            verify(bufferService, never()).add(anyString(), any(), any());
         }
     }
 }

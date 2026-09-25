@@ -807,17 +807,27 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND id IN (SELECT id FROM traces_ids)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+            ), spans_deduped AS (
+                SELECT
+                    trace_id,
+                    id,
+                    usage,
+                    total_estimated_cost,
+                    provider
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), spans_agg AS (
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
-                GROUP BY workspace_id, project_id, trace_id
+                FROM spans_deduped
+                GROUP BY trace_id
             ), trace_threads_ids AS (
                 SELECT
                     id as thread_model_id
