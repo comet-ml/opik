@@ -4,11 +4,13 @@ import com.clickhouse.client.api.ServerException;
 import com.clickhouse.client.api.metadata.NoSuchColumnException;
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.error.ErrorMessage;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Throwables;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongHistogram;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -18,6 +20,8 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.UncheckedIOException;
 import java.util.List;
@@ -28,7 +32,7 @@ import java.util.concurrent.CompletableFuture;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * Orchestrates caller-supplied, read-only free-form SQL bounded to a single workspace/project. First consumer is the
+ * Orchestrates caller-supplied, read-only free-form SQL bounded to a single workspace/project. First account is the
  * Agent Insights subagent, but the service is intentionally feature-agnostic.
  *
  * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}); if any node is a
@@ -84,14 +88,17 @@ public class FreeFormSqlQueryService {
             CH_TOO_MANY_ROWS, CH_TIMEOUT_EXCEEDED, CH_MEMORY_LIMIT_EXCEEDED, CH_TOO_MANY_ROWS_OR_BYTES);
 
     private final FreeFormSqlQueryDAO freeFormSqlQueryDAO;
+    private final FreeFormSqlEntityNameEnricher entityNameEnricher;
 
     private final LongHistogram duration;
     private final LongHistogram resultRows;
     private final LongHistogram bytesRead;
 
     @Inject
-    public FreeFormSqlQueryService(@NonNull FreeFormSqlQueryDAO freeFormSqlQueryDAO) {
+    public FreeFormSqlQueryService(@NonNull FreeFormSqlQueryDAO freeFormSqlQueryDAO,
+            @NonNull FreeFormSqlEntityNameEnricher entityNameEnricher) {
         this.freeFormSqlQueryDAO = freeFormSqlQueryDAO;
+        this.entityNameEnricher = entityNameEnricher;
 
         var meter = GlobalOpenTelemetry.get().getMeter(METRIC_NAMESPACE);
         this.duration = meter
@@ -113,13 +120,19 @@ public class FreeFormSqlQueryService {
                 .build();
     }
 
-    public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull String query) {
+    /**
+     * Runs {@code query} for {@code account}, bounded to {@code workspaceId}. A null {@code projectId} means every
+     * project in that workspace; callers pass the id they have rather than the sentinel the row policies read,
+     * which stays inside this layer.
+     */
+    public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull FreeFormSqlAccount account,
+            @NonNull String workspaceId, @Nullable UUID projectId, @NonNull String query) {
         long startMillis = System.currentTimeMillis();
+        String projectScope = projectId == null ? FreeFormSqlQueryDAO.PROJECT_ID_ALL : projectId.toString();
 
-        return freeFormSqlQueryDAO.explainAst(query)
+        return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> runQuery(workspaceId, projectId, query, startMillis));
+                .thenCompose(nodeLabels -> runQuery(account, workspaceId, projectScope, query, startMillis));
     }
 
     /**
@@ -141,16 +154,48 @@ public class FreeFormSqlQueryService {
         return nodeLabels;
     }
 
-    private CompletableFuture<AnalyticsQueryResponse> runQuery(String workspaceId, UUID projectId, String query,
-            long startMillis) {
-        return freeFormSqlQueryDAO.execute(workspaceId, projectId, query)
+    private CompletableFuture<AnalyticsQueryResponse> runQuery(FreeFormSqlAccount account, String workspaceId,
+            String projectScope, String query, long startMillis) {
+        return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query)
                 .handle((result, error) -> {
                     if (error != null) {
                         throw mapExecutionError(error, startMillis);
                     }
                     recordSuccess(result, startMillis);
-                    return AnalyticsQueryResponse.builder().results(result.rows()).build();
-                });
+                    return result;
+                })
+                .thenCompose(result -> resolveEntityNames(account, result, workspaceId));
+    }
+
+    /**
+     * Resolves names by ids for datasets and projects.
+     *
+     * <p>Runs on {@code boundedElastic} rather than inline. The enclosing callback executes on a ClickHouse client
+     * completion thread, and this step is a blocking MySQL round trip — leaving it there would let a slow lookup
+     * hold a thread that other queries' completions are waiting on.
+     */
+    private CompletableFuture<AnalyticsQueryResponse> resolveEntityNames(FreeFormSqlAccount account,
+            FreeFormSqlResult result, String workspaceId) {
+        if (account != FreeFormSqlAccount.EXTENDED) {
+            return CompletableFuture.completedFuture(toResponse(result.rows()));
+        }
+        return Mono.fromCallable(() -> toResponse(enrichOrKeepIds(result, workspaceId)))
+                .subscribeOn(Schedulers.boundedElastic())
+                .toFuture();
+    }
+
+    /** Enrichment is presentation: a failure leaves the ids in place rather than losing a result ClickHouse returned. */
+    private List<JsonNode> enrichOrKeepIds(FreeFormSqlResult result, String workspaceId) {
+        try {
+            return entityNameEnricher.enrich(result.rows(), workspaceId);
+        } catch (Exception e) {
+            log.warn("Name enrichment failed for workspace '{}'; returning unresolved ids", workspaceId, e);
+            return result.rows();
+        }
+    }
+
+    private static AnalyticsQueryResponse toResponse(List<JsonNode> rows) {
+        return AnalyticsQueryResponse.builder().results(rows).build();
     }
 
     private static boolean containsSetNode(List<String> nodeLabels) {

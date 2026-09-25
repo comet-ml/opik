@@ -76,7 +76,8 @@ class HealthCheckIntegrationTest {
     /**
      * Default test-config: {@code serviceToggles.ollieEnabled} off. Covers the standard
      * health check HTTP surface (per-check + aggregate {@code all}). Opik-owned checks
-     * (clickhouse, mysql, redis, clickhouse-readonly-freeform-sql) are asserted individually;
+     * (clickhouse, mysql, redis, clickhouse-readonly-freeform-sql, clickhouse-readonly-freeform-extended-sql)
+     * are asserted individually;
      * Dropwizard-provided checks (db, deadlocks) only appear in the aggregate row.
      */
     @Nested
@@ -104,6 +105,11 @@ class HealthCheckIntegrationTest {
             // freeform-SQL issue never gates overall readiness.
             var clickhouseFreeformSqlResponse = HealthCheckResponse.builder()
                     .name("clickhouse-readonly-freeform-sql").healthy(true).critical(false).type(READY).build();
+            // Same shape as the probe above, and healthy here for the same reason: config-test leaves
+            // customCharts.enabledWorkspaces empty, so it reports healthy without touching ClickHouse.
+            var clickhouseFreeformExtendedSqlResponse = HealthCheckResponse.builder()
+                    .name("clickhouse-readonly-freeform-extended-sql").healthy(true).critical(false).type(READY)
+                    .build();
             // Toggle off in config-test (databaseAnalytics.clusterHealthCheckEnabled / coldStorageDiskHealthCheckEnabled)
             // → healthy without touching ClickHouse. Critical when enabled, so listed critical here.
             var clickhouseClusterResponse = HealthCheckResponse.builder()
@@ -137,6 +143,7 @@ class HealthCheckIntegrationTest {
             var all = List.of(
                     clickHouseResponse,
                     clickhouseFreeformSqlResponse,
+                    clickhouseFreeformExtendedSqlResponse,
                     clickhouseClusterResponse,
                     clickhouseColdStorageDiskResponse,
                     clickhouseTracesTopologyResponse,
@@ -151,6 +158,8 @@ class HealthCheckIntegrationTest {
                     arguments("mysql", List.of(mysqlResponse)),
                     arguments("redis", List.of(redisResponse)),
                     arguments("clickhouse-readonly-freeform-sql", List.of(clickhouseFreeformSqlResponse)),
+                    arguments("clickhouse-readonly-freeform-extended-sql",
+                            List.of(clickhouseFreeformExtendedSqlResponse)),
                     arguments("clickhouse-cluster", List.of(clickhouseClusterResponse)),
                     arguments("clickhouse-cold-storage-disk", List.of(clickhouseColdStorageDiskResponse)),
                     arguments("clickhouse-traces-topology", List.of(clickhouseTracesTopologyResponse)),

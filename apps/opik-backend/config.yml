@@ -234,6 +234,33 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #   above the read-only profile's max_execution_time (180s) so the server-side cap fires first.
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
+# Description: credentials for the extended free-form SQL read-only ClickHouse user.
+# Only used for workspaces in customCharts.enabledWorkspaces.
+databaseAnalyticsReadOnlyFreeFormExtendedSql:
+  #  Default: comet_readonly_freeform_extended_sql_user
+  #  Description: The read-only username used to connect to the server
+  username: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}
+  #  Default: opik
+  #  Description: The read-only user password used to connect to the server
+  password: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}
+  #  Default: 200s
+  #  Description: Socket read timeout, kept above the profile's max_execution_time (180s) so the server cap fires first
+  socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_SOCKET_TIMEOUT:-200s}
+
+# Custom Charts. The ClickHouse credentials it runs as are in databaseAnalyticsReadOnlyFreeFormExtendedSql instead:
+# those describe a database connection and keep the same shape as the account Agent Insights uses.
+customCharts:
+  #  Default: empty (feature off everywhere)
+  #  Description: Comma-separated workspace ids allowed to use Custom Charts. Membership also routes the
+  #   workspace's free-form SQL to the wider ClickHouse account. Requires serviceToggles.ollieEnabled, which
+  #   gates the endpoint, and the account to be provisioned first (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
+  enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
+  #  Default: 5000
+  #  Description: Cap on distinct ids resolved to names in one result. Above it every row keeps its raw id rather
+  #   than labelling some and not others. Production p99 is 2 datasets / 11 projects per workspace, worst case
+  #   4120, so this guards a pathological result set rather than limiting anyone.
+  maxNameLookupIds: ${CUSTOM_CHARTS_MAX_NAME_LOOKUP_IDS:-5000}
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
@@ -265,6 +292,11 @@ health:
     # provisioning issue or transient CH rejection on the read-only user must degrade only that feature, not pull
     # the whole backend out of readiness/traffic.
     - name: clickhouse-readonly-freeform-sql
+      critical: false
+      type: ready
+    # Non-critical for the same reason as the check above: Custom Charts is opt-in per workspace, and when no
+    # workspace is allowlisted the probe reports healthy without querying ClickHouse.
+    - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
     # Toggle-gated (databaseAnalytics.clusterHealthCheckEnabled). When the toggle is off the probe reports healthy
