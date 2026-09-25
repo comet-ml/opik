@@ -28,10 +28,10 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
         """Render the template with the given values.
 
         For mustache templates, every ``{{key}}`` is replaced in one pass, so a
-        value that itself contains ``{{...}}`` is inserted as-is. Whitespace inside
-        the braces is ignored (``{{ name }}`` is ``name``), a ``None`` value renders
-        as an empty string, and a placeholder with no matching argument is left
-        unchanged when ``validate_placeholders`` is False.
+        value that itself contains ``{{...}}`` is inserted as-is. Surrounding
+        whitespace is ignored in both placeholder and argument names, so
+        ``{{ name }}`` matches ``name``. A ``None`` value renders as an empty
+        string, and a placeholder with no matching argument is left unchanged.
 
         Raises:
             PromptPlaceholdersDontMatchFormatArguments: If ``validate_placeholders``
@@ -39,8 +39,9 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
         """
         if self._type == prompt_types.PromptType.MUSTACHE:
             template = self._template
-            placeholders = _extract_mustache_placeholder_keys(self._template)
-            kwargs_keys: Set[str] = set(kwargs.keys())
+            placeholders = extract_mustache_placeholder_keys(self._template)
+            values = {key.strip(): value for key, value in kwargs.items()}
+            kwargs_keys: Set[str] = set(values.keys())
 
             if kwargs_keys != placeholders and self._validate_placeholders:
                 raise exceptions.PromptPlaceholdersDontMatchFormatArguments(
@@ -51,9 +52,9 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
             # as-is instead of being substituted by a later key.
             def _replace(match: "re.Match[str]") -> str:
                 key = match.group(1).strip()
-                if key not in kwargs:
+                if key not in values:
                     return match.group(0)
-                value = kwargs[key]
+                value = values[key]
                 return "" if value is None else str(value)
 
             template = _MUSTACHE_PLACEHOLDER.sub(_replace, template)
@@ -72,5 +73,6 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
 _MUSTACHE_PLACEHOLDER = re.compile(r"\{\{(.*?)\}\}")
 
 
-def _extract_mustache_placeholder_keys(prompt_template: str) -> Set[str]:
+def extract_mustache_placeholder_keys(prompt_template: str) -> Set[str]:
+    """Return the ``{{key}}`` names in a mustache template, whitespace stripped."""
     return {key.strip() for key in _MUSTACHE_PLACEHOLDER.findall(prompt_template)}

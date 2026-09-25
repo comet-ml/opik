@@ -154,3 +154,21 @@ def test_prompt__format__whitespace_inside_placeholder__substituted():
     result = tested.format(name="Harry", city="London")
 
     assert result == "Hi Harry, welcome to London."
+
+
+def test_prompt__format__whitespace_in_argument_name__substituted():
+    tested = PromptTemplate("Hi {{ name }}, welcome to {{city}}.")
+
+    result = tested.format(**{" name ": "Harry", "city": "London"})
+
+    assert result == "Hi Harry, welcome to London."
+
+
+def test_prompt__format__placeholder_without_argument__left_unchanged():
+    tested = PromptTemplate(
+        "Hi {{name}}, welcome to {{ city }}.", validate_placeholders=False
+    )
+
+    result = tested.format(name="Harry")
+
+    assert result == "Hi Harry, welcome to {{ city }}."
