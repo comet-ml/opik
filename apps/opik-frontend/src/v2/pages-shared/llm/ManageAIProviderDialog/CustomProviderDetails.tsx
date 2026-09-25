@@ -86,7 +86,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <FormMessage />
               <Description>
                 {
-                  "Use `{model}` as a placeholder in the URL if your gateway expects the model name in the path — Opik substitutes the selected model at request time. The model name is interpolated raw, so values containing `/` (e.g. HuggingFace-style names) will become extra path segments."
+                  "Base URL for the OpenAI-compatible Chat Completions API. Must end with /v1 (e.g. https://api.pzero.studio/v1). Do not include /chat/completions. Origin without /v1 will 404. Use `{model}` as a placeholder if your gateway expects the model name in the path."
                 }
               </Description>
             </FormItem>
@@ -116,8 +116,10 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               </FormControl>
               <FormMessage />
               <Description>
-                Comma-separated list of available models. Example:{" "}
-                {`"gpt-4o, gpt-4o-mini, llama-3.1-70b"`}
+                Comma-separated bare catalog ids (e.g. deepseek-v4-flash). Opik
+                stores them as custom-llm/&lt;provider&gt;/&lt;model&gt; and
+                routes via that prefix; bare or openai/ prefixed ids will not
+                route to this provider.
               </Description>
             </FormItem>
           );
