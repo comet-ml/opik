@@ -18,6 +18,7 @@ import {
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMAnthropicConfigsType,
+  LLMOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -1106,5 +1107,27 @@ describe("restorePromptVariableFormat", () => {
         { role: "user", content: "{user.name} and {user-input}" },
       ]),
     ).toEqual([{ role: "user", content: "{{user.name}} and {{user-input}}" }]);
+  });
+});
+
+// Requesty is served by the OpenAI client on the backend, so it takes the OpenAI defaults, with
+// the `requesty/openai/*` ids following the reasoning rules of the OpenAI model they wrap.
+describe("getOptimizationDefaultConfigByProvider - Requesty", () => {
+  it("seeds temperature 0 for a non-reasoning Requesty model", () => {
+    const config = getOptimizationDefaultConfigByProvider(
+      PROVIDER_TYPE.REQUESTY as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O,
+    ) as LLMOpenAIConfigsType;
+
+    expect(config.temperature).toBe(0);
+  });
+
+  it("seeds temperature 1 for requesty/openai/gpt-5, a reasoning model", () => {
+    const config = getOptimizationDefaultConfigByProvider(
+      PROVIDER_TYPE.REQUESTY as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
+    ) as LLMOpenAIConfigsType;
+
+    expect(config.temperature).toBe(1);
   });
 });

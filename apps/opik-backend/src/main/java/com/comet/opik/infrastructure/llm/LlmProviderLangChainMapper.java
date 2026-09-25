@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage;
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
 import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
+import com.comet.opik.infrastructure.llm.requesty.RequestyErrorMessage;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.AudioContent;
@@ -15,6 +16,7 @@ import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.data.video.Video;
+import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.ChatResponseMetadata;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
@@ -275,5 +277,39 @@ public interface LlmProviderLangChainMapper {
         }
 
         return getErrorMessage(throwable, log, OpenAiErrorMessage.class);
+    }
+
+    /**
+     * Requesty shares the {@code {"error":{"message":...}}} envelope with OpenRouter and OpenAI, so it
+     * cannot be told apart from them by payload shape alone. Only {@code LlmProviderRequesty} calls this,
+     * which makes the request's provider the discriminator instead. Errors raised by the router itself
+     * carry no {@code code}: the HTTP status of the response, when langchain4j kept it in the chain as an
+     * {@link HttpException}, is used so a 403 or 404 from the router is not flattened to 500. Errors
+     * forwarded from the upstream vendor in OpenAI's string-code format fall back to
+     * {@link OpenAiErrorMessage}.
+     */
+    default Optional<ErrorMessage> getRequestyErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
+        Optional<String> errorJson = extractErrorJson(throwable);
+
+        if (errorJson.isEmpty()) {
+            log.warn("failed to parse RequestyErrorMessage message", throwable);
+            return Optional.empty();
+        }
+
+        Integer responseStatus = findHttpStatus(throwable).orElse(null);
+        Optional<ErrorMessage> requestyError = parseError(log, errorJson.get(), RequestyErrorMessage.class)
+                .map(error -> error.toErrorMessage(responseStatus));
+
+        if (requestyError.isPresent()) {
+            return requestyError;
+        }
+
+        return getErrorMessage(throwable, log, OpenAiErrorMessage.class);
+    }
+
+    private Optional<Integer> findHttpStatus(Throwable throwable) {
+        return Throwables.findThrowableInChain(HttpException.class::isInstance, throwable)
+                .map(HttpException.class::cast)
+                .map(HttpException::statusCode);
     }
 }

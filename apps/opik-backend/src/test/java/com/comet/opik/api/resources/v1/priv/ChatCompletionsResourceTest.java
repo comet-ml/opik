@@ -21,6 +21,7 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
+import com.comet.opik.infrastructure.llm.requesty.RequestyModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -60,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
@@ -82,6 +84,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /// - **Anthropic**: set `ANTHROPIC_API_KEY` to your anthropic api key
 /// - **Gemini**: set `GEMINI_API_KEY` to your gemini api key
 /// - **OpenRouter**: set `OPENROUTER_API_KEY` to your OpenRouter api key
+/// - **Requesty**: set `REQUESTY_API_KEY` to your Requesty api key
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 // Disabled because the tests require an API key to run and this seems to be failing in the CI pipeline
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -254,6 +257,11 @@ class ChatCompletionsResourceTest {
                     .containsIgnoringCase(expected);
             BiConsumer<String, String> expectedContainsActualEval = (actual, expected) -> assertThat(expected)
                     .containsIgnoringCase(actual);
+            // Requesty answers with the upstream model id (gpt-4o-mini-2024-07-18): the prefixes must be gone and the
+            // id must be the bare model or a dated snapshot of it
+            BiConsumer<String, String> actualIsBareModelEval = (actual, expected) -> assertThat(actual)
+                    .matches(Pattern.quote(expected.substring(expected.lastIndexOf('/') + 1))
+                            + "(-\\d{4}-\\d{2}-\\d{2})?");
 
             return Stream.of(
                     arguments(OpenaiModelName.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
@@ -264,7 +272,9 @@ class ChatCompletionsResourceTest {
                             System.getenv("GEMINI_API_KEY"), actualContainsExpectedEval),
                     arguments(OpenRouterModelName.GOOGLE_GEMINI_2_5_FLASH_LITE_PREVIEW_09_2025.toString(),
                             LlmProvider.OPEN_ROUTER, System.getenv("OPENROUTER_API_KEY"),
-                            expectedContainsActualEval));
+                            expectedContainsActualEval),
+                    arguments(RequestyModelName.OPENAI_GPT_4O_MINI.toString(), LlmProvider.REQUESTY,
+                            System.getenv("REQUESTY_API_KEY"), actualIsBareModelEval));
         }
 
         @Test
