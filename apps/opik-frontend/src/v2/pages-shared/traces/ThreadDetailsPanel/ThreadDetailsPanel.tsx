@@ -45,6 +45,7 @@ import { Skeleton } from "@/ui/skeleton";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
+import AnnotationQueuesNavigation from "@/v2/pages-shared/traces/AnnotationQueuesNavigation/AnnotationQueuesNavigation";
 import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import { Button } from "@/ui/button";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
@@ -727,6 +728,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <ArrowUpRight className="ml-1 size-3.5" />
           </Button>
         </TooltipWrapper>
+
+        <AnnotationQueuesNavigation queues={thread?.annotation_queues} />
       </ResizableSidePanelTopBar>
     );
   };

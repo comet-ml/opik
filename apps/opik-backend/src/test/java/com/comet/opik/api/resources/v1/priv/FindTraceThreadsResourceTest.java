@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueReference;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Project;
@@ -49,6 +50,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -85,6 +87,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -748,6 +751,117 @@ class FindTraceThreadsResourceTest {
             assertThreadPage(null, projectId, expectedThreads, List.of(statusFilter), Map.of(), apiKey,
                     workspaceName);
             assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
+        }
+
+        @Test
+        @DisplayName("When threads are items of annotation queues, should return the queues sorted by name and drop them once removed")
+        void findThreads__whenThreadsAreAnnotationQueueItems__thenReturnAnnotationQueues() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var threadIds = List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                    UUID.randomUUID().toString());
+            var traces = threadIds.stream()
+                    .map(threadId -> createTrace().toBuilder()
+                            .projectName(project.name())
+                            .usage(null)
+                            .threadId(threadId)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Thread rows are created asynchronously from the trace batch; the retrieve call asserts 200
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> threadIds.forEach(
+                            threadId -> traceResourceClient.getTraceThread(threadId, projectId, apiKey,
+                                    workspaceName)));
+
+            var inBoth = traceResourceClient.getTraceThread(threadIds.get(0), projectId, apiKey, workspaceName);
+            var inOne = traceResourceClient.getTraceThread(threadIds.get(1), projectId, apiKey, workspaceName);
+            var inNone = traceResourceClient.getTraceThread(threadIds.get(2), projectId, apiKey, workspaceName);
+
+            var queueA = prepareThreadQueue(projectId).toBuilder().name("Queue-A").build();
+            var queueB = prepareThreadQueue(projectId).toBuilder().name("Queue-B").build();
+            var traceQueue = prepareThreadQueue(projectId).toBuilder()
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queueA, queueB, traceQueue)), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueB.id(), Set.of(inBoth.threadModelId(), inOne.threadModelId()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueA.id(), Set.of(inBoth.threadModelId()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            // Trace-scoped queues must never surface on threads, even if they hold the same id
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    traceQueue.id(), Set.of(inBoth.threadModelId()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            var refA = new AnnotationQueueReference(queueA.id(), queueA.name());
+            var refB = new AnnotationQueueReference(queueB.id(), queueB.name());
+
+            var actualById = getThreadsById(projectId, apiKey, workspaceName, threadIds.size(), List.of(), Map.of());
+            assertThat(actualById.get(inBoth.id()).annotationQueues()).containsExactly(refA, refB);
+            assertThat(actualById.get(inOne.id()).annotationQueues()).containsExactly(refB);
+            assertThat(actualById.get(inNone.id()).annotationQueues()).isNull();
+
+            assertThat(traceResourceClient.getTraceThread(inBoth.id(), projectId, apiKey, workspaceName)
+                    .annotationQueues()).containsExactly(refA, refB);
+            assertThat(traceResourceClient.getTraceThread(inNone.id(), projectId, apiKey, workspaceName)
+                    .annotationQueues()).isNull();
+
+            // sort x exclude: the excluded join must not disturb an explicitly sorted page
+            var sortByStartTime = List.of(SortingField.builder().field("start_time").direction(Direction.DESC).build());
+            var excludeParam = Map.of("exclude",
+                    TestUtils.toURLEncodedQueryParam(List.of(TraceThread.TraceThreadField.ANNOTATION_QUEUES)));
+            var excludedPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName, List.of(),
+                    sortByStartTime, excludeParam);
+            assertThat(excludedPage.content()).hasSize(threadIds.size());
+            assertThat(excludedPage.content()).allSatisfy(thread -> assertThat(thread.annotationQueues()).isNull());
+            assertThat(excludedPage.content()).extracting(TraceThread::id)
+                    .containsExactly(inNone.id(), inOne.id(), inBoth.id());
+
+            annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
+                    queueB.id(), Set.of(inOne.threadModelId()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var afterRemoval = getThreadsById(projectId, apiKey, workspaceName, threadIds.size(), List.of(),
+                    Map.of());
+            assertThat(afterRemoval.get(inBoth.id()).annotationQueues()).containsExactly(refA, refB);
+            assertThat(afterRemoval.get(inOne.id()).annotationQueues()).isNull();
+
+            // Deleting a queue leaves its item rows behind; they must not resurface as a nameless queue
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(Set.of(queueA.id()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            var afterQueueDeletion = getThreadsById(projectId, apiKey, workspaceName, threadIds.size(), List.of(),
+                    Map.of());
+            assertThat(afterQueueDeletion.get(inBoth.id()).annotationQueues()).containsExactly(refB);
+        }
+
+        private AnnotationQueue prepareThreadQueue(UUID projectId) {
+            return factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.THREAD)
+                    .build();
+        }
+
+        private Map<String, TraceThread> getThreadsById(UUID projectId, String apiKey, String workspaceName,
+                int size, List<SortingField> sortingFields, Map<String, String> queryParams) {
+            var page = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName, List.of(),
+                    sortingFields, queryParams);
+            assertThat(page.content()).hasSize(size);
+            return page.content().stream().collect(Collectors.toMap(TraceThread::id, Function.identity()));
         }
 
         @Test
