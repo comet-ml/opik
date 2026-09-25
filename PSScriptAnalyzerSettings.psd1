@@ -13,6 +13,15 @@
 # below), leaving 24 excluded. The gate starts green, so any new finding is a real
 # regression. Each exclusion is here because the rule does not fit what these
 # scripts are -- prefer fixing a finding over adding to this list.
+#
+# Note on form: .agents/skills/add-code-quality-hook/SKILL.md prefers inline,
+# per-occurrence suppression over a config-level ignore, because a config ignore
+# fails open on files nobody has reviewed yet. That concern is real and applies
+# here. It is a config ignore anyway because the dominant rule accounts for 23
+# findings across 23 functions in two files: inline attributes would mean 23
+# annotations for a rule whose removal is already tracked as a follow-up
+# (OPIK_8534), and the triage there may drop the exclusion entirely. Revisit the
+# form as part of that ticket rather than churning both launchers twice.
 @{
     Severity = @('Error', 'Warning')
 

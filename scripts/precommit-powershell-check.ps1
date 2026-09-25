@@ -16,7 +16,12 @@ param(
 
     # Emit ::error/::warning workflow commands so findings land as inline
     # annotations on the PR diff. Off for local runs, where they'd be noise.
-    [switch]$Annotate
+    [switch]$Annotate,
+
+    # Print the required PSScriptAnalyzer version and exit. Lets the workflow
+    # install exactly the version this script enforces, instead of repeating the
+    # literal in two places that can drift.
+    [switch]$PrintRequiredAnalyzerVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,8 +38,26 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $settingsFile = Join-Path $repoRoot 'PSScriptAnalyzerSettings.psd1'
 $settingsName = 'PSScriptAnalyzerSettings.psd1'
 
+# The one place this version is declared. The workflow installs it by reading
+# this value, so CI and local runs cannot drift onto different rule sets, and
+# bumping the analyzer is a one-line change here.
+$RequiredAnalyzerVersion = '1.25.0'
+
+if ($PrintRequiredAnalyzerVersion) {
+    Write-Output $RequiredAnalyzerVersion
+    exit 0
+}
+
 if ($Paths.Count -gt 0) {
-    $targets = @($Paths | Where-Object { Test-Path $_ } | ForEach-Object { (Resolve-Path $_).Path })
+    # Reject missing paths rather than filtering them out: a typo or a stale path
+    # would otherwise fall through to "no files to check" and report success
+    # without having validated anything.
+    $missing = @($Paths | Where-Object { -not (Test-Path $_) })
+    if ($missing.Count -gt 0) {
+        foreach ($m in $missing) { Write-Host "Path not found: $m" }
+        exit 2
+    }
+    $targets = @($Paths | ForEach-Object { (Resolve-Path $_).Path })
 }
 else {
     $targets = @(
@@ -92,13 +115,32 @@ if ($parseFailures -gt 0) {
 }
 
 # --- PSScriptAnalyzer -------------------------------------------------------
+# Hard failure, not a skip: this hook advertises parse + analyzer, so exiting 0
+# with only the parse check done would pass a file the analyzer might reject.
+# The .sh wrapper is what tolerates a machine with no PowerShell at all; once
+# pwsh is present, the analyzer is required.
 if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
-    Write-Host 'PSScriptAnalyzer is not installed - skipping lint (parse check passed).'
-    Write-Host 'Install it with: pwsh -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"'
-    exit 0
+    Write-Host 'PSScriptAnalyzer is not installed, so the analyzer half of this check cannot run.'
+    Write-Host "Install it with: pwsh -Command `"Install-Module PSScriptAnalyzer -RequiredVersion $RequiredAnalyzerVersion -Scope CurrentUser`""
+    exit 2
 }
 
-Import-Module PSScriptAnalyzer
+# Pin the version here as well as in the workflow: an unpinned import lets a
+# local run (or a changed runner image) lint against a different rule set than
+# the baseline in PSScriptAnalyzerSettings.psd1 was measured against.
+$analyzerModule = Get-Module -ListAvailable -Name PSScriptAnalyzer |
+    Where-Object { $_.Version -eq [version]$RequiredAnalyzerVersion } |
+    Select-Object -First 1
+
+if (-not $analyzerModule) {
+    $found = (Get-Module -ListAvailable -Name PSScriptAnalyzer |
+        ForEach-Object { $_.Version.ToString() }) -join ', '
+    Write-Host "PSScriptAnalyzer $RequiredAnalyzerVersion is required; found: $found"
+    Write-Host "Install it with: pwsh -Command `"Install-Module PSScriptAnalyzer -RequiredVersion $RequiredAnalyzerVersion -Scope CurrentUser`""
+    exit 2
+}
+
+Import-Module PSScriptAnalyzer -RequiredVersion $RequiredAnalyzerVersion
 
 # The settings file is itself a .psd1, so it is matched by the same glob. Parse-
 # checking it above is wanted; analyzing it is not, as it is pure data.

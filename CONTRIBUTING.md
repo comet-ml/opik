@@ -68,6 +68,13 @@ A maintainer can run the E2E suite against your branch before merging. The skip 
 ## Dockerfiles
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
 
+## PowerShell scripts
+PowerShell (`opik.ps1`, `scripts/dev-runner.ps1`) is checked two ways: a **parse check**, which rejects a file that does not compile, and **[PSScriptAnalyzer](https://github.com/PowerShell/PSScriptAnalyzer)** linting at `Error` + `Warning` severity against the root [`PSScriptAnalyzerSettings.psd1`](PSScriptAnalyzerSettings.psd1). Both run as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed `.ps1` / `.psm1` / `.psd1` files. Run `make hooks` once per clone to enable it locally.
+
+Unlike the other linters here, this one needs a local dependency that pre-commit does **not** provision: [PowerShell](https://aka.ms/powershell) (`brew install powershell`, or your platform's package) plus the analyzer module, `pwsh -Command "Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser"`. Without `pwsh` the hook prints a note and skips, so you can still commit — the `🪟 PowerShell Checks` workflow is the authoritative gate and runs on a Windows runner regardless. With `pwsh` present but the analyzer missing, the hook fails rather than half-running.
+
+Rules suppressed in the settings file each carry a written reason; prefer fixing a finding over adding to that list. Note these scripts must stay **UTF-8 with a BOM**: the documented Windows launch path is `powershell` (Windows PowerShell 5.1), which reads a BOM-less file as ANSI and would mangle their non-ASCII output.
+
 ## SQL query construction (Java backend)
 Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
 
