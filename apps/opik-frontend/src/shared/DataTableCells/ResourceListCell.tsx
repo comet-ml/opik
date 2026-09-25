@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { ROW_HEIGHT } from "@/types/shared";
 import { ROW_HEIGHT_MAP } from "@/constants/shared";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import ChildrenWidthMeasurer from "@/shared/ChildrenWidthMeasurer/ChildrenWidthMeasurer";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
@@ -143,27 +143,31 @@ const ResourceListCell = (context: CellContext<unknown, unknown>) => {
             </div>
           ))}
           {hiddenCount > 0 && (
-            <TooltipWrapper
-              content={
-                <div className="flex max-w-[300px] flex-wrap gap-1">
-                  {hiddenItems.map((item) => (
-                    <div key={String(get(item, idKey))}>{renderTag(item)}</div>
-                  ))}
-                </div>
-              }
-              stopClickPropagation
-            >
-              <div
-                className={cn(
-                  "flex shrink-0 items-center rounded-sm text-muted-slate",
-                  isSmall
-                    ? "comet-body-xs h-6 px-1.5"
-                    : "comet-body-s h-6 rounded-md px-1.5",
-                )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(event) => event.stopPropagation()}
+                  className={cn(
+                    "flex shrink-0 items-center rounded-sm text-muted-slate hover:bg-primary-foreground hover:text-foreground",
+                    isSmall
+                      ? "comet-body-xs h-6 px-1.5"
+                      : "comet-body-s h-6 rounded-md px-1.5",
+                  )}
+                >
+                  +{hiddenCount}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="flex w-auto max-w-[320px] flex-wrap gap-1 p-2"
+                onClick={(event) => event.stopPropagation()}
               >
-                +{hiddenCount}
-              </div>
-            </TooltipWrapper>
+                {hiddenItems.map((item) => (
+                  <div key={String(get(item, idKey))}>{renderTag(item)}</div>
+                ))}
+              </PopoverContent>
+            </Popover>
           )}
         </div>
       </div>

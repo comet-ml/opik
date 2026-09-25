@@ -11,7 +11,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 type AnnotationQueuesNavigationProps = {
   queues?: AnnotationQueueReference[];
@@ -42,18 +41,6 @@ const AnnotationQueuesNavigation: React.FC<AnnotationQueuesNavigationProps> = ({
         annotationQueueId: queue.id,
       },
     });
-
-  if (sortedQueues.length === 1) {
-    const queue = sortedQueues[0];
-    return (
-      <TooltipWrapper content={`Go to annotation queue: ${queue.name}`}>
-        <Button variant="outline" size="2xs" onClick={() => goToQueue(queue)}>
-          Queue
-          <ArrowUpRight className="ml-1 size-3.5" />
-        </Button>
-      </TooltipWrapper>
-    );
-  }
 
   return (
     <DropdownMenu>
