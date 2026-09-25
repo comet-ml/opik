@@ -108,6 +108,43 @@ debugLog() {
   [[ "$DEBUG_MODE" == true ]] && echo "$@"
 }
 
+# Startup timings, index-aligned (bash 3.2 has no associative arrays).
+timing_labels=()
+timing_values=()
+
+# Record a container's timing. A healthy duration is kept only once, so the moment the sequential
+# loop reaches a container can't overwrite the earlier moment it actually went healthy. Terminal
+# states are passed with overwrite=true and always win: a container can go healthy and then die,
+# and the table must show the failure rather than a reassuring duration.
+record_timing() {
+  local name="$1" value="$2" overwrite="${3:-false}" i
+  for i in "${!timing_labels[@]}"; do
+    if [[ "${timing_labels[$i]}" == "$name" ]]; then
+      [[ "$overwrite" == true ]] && timing_values[$i]="$value"
+      return 0
+    fi
+  done
+  timing_labels+=("$name")
+  timing_values+=("$value")
+}
+
+# Bank elapsed time for every container already healthy. Called before each sleep so a container
+# that goes healthy while the loop is blocked on an earlier one gets its own time, rather than
+# inheriting the earlier container's wait.
+record_healthy_containers() {
+  local c i recorded
+  for c in "${containers[@]}"; do
+    recorded=false
+    for i in "${!timing_labels[@]}"; do
+      [[ "${timing_labels[$i]}" == "$c" ]] && { recorded=true; break; }
+    done
+    [[ "$recorded" == true ]] && continue
+    if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" == "healthy" ]]; then
+      record_timing "$c" "$((SECONDS - wait_started_at))s"
+    fi
+  done
+}
+
 # Log worktree configuration (called after DEBUG_MODE is set)
 log_worktree_config() {
   debugLog "[DEBUG] Worktree Configuration:"
@@ -370,10 +407,30 @@ start_missing_containers() {
   cmd=$(get_docker_compose_cmd)
   $cmd up -d ${BUILD_MODE:+--build}
 
+  # Anchor every container's startup time to the moment compose returns. The loop below is
+  # sequential while the containers start in parallel, so timing from when the loop reaches a
+  # container would under-report everything after the first one.
+  local wait_started_at=$SECONDS
+
   echo "⏳ Waiting for all containers to be running and healthy..."
-  max_retries=60
+  # Each retry is one poll plus a 1s sleep, so this is roughly a 90s budget per container.
+  # The override exists so the tests can drive the timeout path without waiting 90s; it is
+  # not a supported user-facing knob. Anything that isn't a positive integer falls back to
+  # the default rather than reaching the arithmetic below, where "abc", "0" and "-5" would
+  # all make the very first comparison true and time out instantly.
+  max_retries=90
+  if [[ "${OPIK_MAX_STARTUP_RETRIES:-}" =~ ^[1-9][0-9]*$ ]]; then
+    max_retries="$OPIK_MAX_STARTUP_RETRIES"
+  elif [[ -n "${OPIK_MAX_STARTUP_RETRIES:-}" ]]; then
+    # Don't echo the value back: it would put arbitrary text on CI stdout, where newlines or
+    # ::workflow:: sequences could forge log annotations. The name is enough to act on.
+    echo "⚠️  Ignoring OPIK_MAX_STARTUP_RETRIES (not a positive integer); using ${max_retries}"
+  fi
   interval=1
   all_running=true
+
+  timing_labels=()
+  timing_values=()
 
   for container in "${containers[@]}"; do
     retries=0
@@ -385,28 +442,50 @@ start_missing_containers() {
 
       if [[ "$status" != "running" ]]; then
         echo "❌ $container failed to start (status: $status)"
+        all_running=false
+        record_timing "$container" "failed to start" true
         break
       fi
 
       if [[ "$health" == "healthy" ]]; then
         debugLog "✅ $container is now running and healthy!"
+        record_timing "$container" "$((SECONDS - wait_started_at))s"
         break
       elif [[ "$health" == "starting" ]]; then
+        # Before blocking, bank the elapsed time for anything already healthy. Without this a
+        # container polled after a slow one just echoes that one's wait, because the loop only
+        # reaches it once the slow container finishes.
+        record_healthy_containers
         debugLog "⏳ $container is starting... retrying (${retries}s)"
         sleep "$interval"
         retries=$((retries + 1))
         if [[ $retries -ge $max_retries ]]; then
           echo "⚠️  $container is still not healthy after ${max_retries}s"
           all_running=false
+          record_timing "$container" "TIMED OUT after ${max_retries}s" true
           break
         fi
       else
         echo "❌ $container health state is '$health'"
         all_running=false
+        record_timing "$container" "unhealthy: $health" true
         break
       fi
     done
   done
+
+  # Each value is the elapsed time from when `compose up -d` returned to when that container was
+  # first observed healthy. It is a lower bound on true startup: without `--wait`, compose can
+  # return while a service is still starting, and the poll only catches it on the next pass.
+  # Width fits the longest container name (guardrails-backend-cpu-1, 24 chars). Strip the compose
+  # project prefix so worktree-derived project names don't push every value out of its column.
+
+  echo "⏱  Container startup times (since compose up returned):"
+  local i
+  for i in "${!timing_labels[@]}"; do
+    printf '     %-26s %s\n' "${timing_labels[$i]#"${COMPOSE_PROJECT_NAME}"-}" "${timing_values[$i]}"
+  done
+  echo "   Total wall clock: $((SECONDS - wait_started_at))s"
 
   if $all_running; then
     send_install_report "$uuid" "true" "$start_time"
@@ -626,6 +705,12 @@ EOF
     debugLog "[DEBUG] Install started report sent successfully."
   fi
 }
+
+# Everything above is function definitions; everything below parses arguments and
+# dispatches. Sourcing with OPIK_SOURCE_ONLY=1 stops here, so the startup-wait tests
+# (scripts/test_opik_startup_timings.sh) can exercise the real functions rather than a
+# reimplementation of them.
+[[ -n "${OPIK_SOURCE_ONLY:-}" ]] && return 0
 
 # Default: no build
 BUILD_MODE=
