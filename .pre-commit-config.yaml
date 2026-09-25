@@ -240,6 +240,40 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
+  # PowerShell — parse check + PSScriptAnalyzer on the Windows launcher scripts
+  # (opik.ps1, scripts/dev-runner.ps1). language: system, delegating to the same
+  # .ps1 implementation the windows-latest CI job runs, so local and CI can't
+  # drift. The wrapper no-ops when pwsh isn't installed — a Linux/macOS
+  # contributor shouldn't need PowerShell to commit; .github/workflows/
+  # powershell_checks.yml is the authoritative gate on native Windows.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: powershell-check
+        name: 🪟 powershell — parse + analyzer
+        entry: scripts/precommit-powershell-check.sh
+        language: system
+        # Explicit files: regex (rather than relying on pre-commit's type
+        # detection) so the CI matrix builder in scripts/precommit-detect-hooks.py
+        # can route a changed PowerShell file to this leg by path. (?i) because
+        # Windows treats Tool.PS1 and tool.ps1 as the same file; without it a
+        # mixed-case extension would slip past both the hook and the CI leg.
+        files: (?i)\.(ps1|psm1|psd1)$
+      - id: powershell-check-tests
+        name: 🧪 powershell check tests
+        entry: scripts/test_precommit_powershell.sh
+        language: system
+        # Self-check: the checker is a gate, so its failure paths (parse error,
+        # analyzer violation, missing path, absent pwsh) are exercised whenever
+        # the checker or its settings change. `.pre-commit-config.yaml` is in the
+        # list because this hook's own `files:` regex is the routing contract:
+        # editing it (or the powershell-check entry above) must run the tests
+        # that assert routing, otherwise a config-only change could silently
+        # stop matching PowerShell and nothing would notice.
+        files: ^scripts/(precommit-powershell-check\.(sh|ps1)|test_precommit_powershell\.sh)$|^PSScriptAnalyzerSettings\.psd1$|^\.pre-commit-config\.yaml$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
   # Backend (Java) — Spotless, on changed files only (language: system → uses
   # the repo's own Maven/JDK; only triggers for commits that touch .java).
   # ---------------------------------------------------------------------------

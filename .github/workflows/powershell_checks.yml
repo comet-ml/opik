@@ -1,0 +1,93 @@
+name: "🪟 PowerShell Checks"
+run-name: "🪟 PowerShell Checks ${{ github.ref_name }} by @${{ github.actor }}"
+
+# Static validation for the repo's PowerShell scripts (opik.ps1, the Windows
+# launcher, and scripts/dev-runner.ps1) on a Windows runner.
+#
+# Two checks, both in scripts/precommit-powershell-check.ps1:
+#   parse    — Parser::ParseFile over every discovered file. Catches syntax errors
+#              outright, independent of lint config, and not suppressible via
+#              PSScriptAnalyzerSettings.psd1.
+#   analyze  — PSScriptAnalyzer at Error+Warning against that settings file.
+#
+# The same script backs the `powershell-check` pre-commit hook, which runs these
+# on ubuntu as part of Code Quality and locally on commit. This job is the
+# authoritative gate: it is the only place the checks run on Windows, so
+# path-separator and filesystem behaviour match what the scripts actually meet.
+#
+# Caveat worth knowing: this runs PowerShell 7 (`shell: pwsh`), whereas README
+# tells Windows users to launch opik.ps1 via `powershell`, i.e. Windows
+# PowerShell 5.1. So 5.1-only incompatibilities are NOT covered here. Switching
+# this job to `shell: powershell` would not be an improvement -- PSScriptAnalyzer
+# and the parse API are both better supported under 7, and 5.1 would narrow what
+# the gate can check. Closing that gap properly means adding a 5.1 leg, not
+# moving this one.
+#
+# This validates the scripts statically; it does NOT execute them. Running the
+# launcher needs Linux containers on a Windows host, which GitHub-hosted Windows
+# runners cannot provide — tracked separately.
+on:
+  pull_request:
+    paths:
+      - "**/*.ps1"
+      - "**/*.psm1"
+      - "**/*.psd1"
+      - ".github/workflows/powershell_checks.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.ps1"
+      - "**/*.psm1"
+      - "**/*.psd1"
+      - ".github/workflows/powershell_checks.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Declared HERE, in the workflow, not read out of the PR's worktree: this file
+  # is branch-protected, so the version the gate installs is always the reviewed
+  # one. Reading it from the checked-out checker would let a PR nominate its own
+  # PSGallery release and have the gate validate against that. The checker holds
+  # a matching constant and is passed this value to assert the two agree, so a
+  # bump still cannot land in only one of the two places.
+  ANALYZER_VERSION: "1.25.0"
+
+jobs:
+  powershell-checks:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Checks read the worktree at HEAD, not history.
+          fetch-depth: 1
+          # This job executes a script from the PR's own worktree, so a PR could
+          # otherwise replace that script and reach the persisted token.
+          persist-credentials: false
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          # Preinstalled on windows-latest, but pinned explicitly so a runner
+          # image change can't silently move the rule set under us.
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion $env:ANALYZER_VERSION `
+              -Force -Scope CurrentUser -Repository PSGallery
+          Write-Host "Installed PSScriptAnalyzer $env:ANALYZER_VERSION"
+
+      # No file arguments: the script discovers every PowerShell file itself, so a
+      # file added later is covered without editing this workflow. -Annotate emits
+      # ::error/::warning so findings land inline on the PR diff.
+      # -ExpectedAnalyzerVersion passes the version actually installed above, so
+      # the checker fails loudly if a PR moved its own constant out of step.
+      - name: Parse check + PSScriptAnalyzer
+        shell: pwsh
+        run: ./scripts/precommit-powershell-check.ps1 -Annotate -ExpectedAnalyzerVersion $env:ANALYZER_VERSION

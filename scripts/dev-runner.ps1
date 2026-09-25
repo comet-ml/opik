@@ -1,4 +1,4 @@
-# Opik Development Runner Script
+﻿# Opik Development Runner Script
 
 [CmdletBinding()]
 param (
