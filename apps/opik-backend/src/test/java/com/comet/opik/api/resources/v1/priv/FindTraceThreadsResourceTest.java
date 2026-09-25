@@ -96,6 +96,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @DisplayName("Find Trace Threads  Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1618,6 +1619,66 @@ class FindTraceThreadsResourceTest {
 
             assertThat(actualPage.total()).isEqualTo(0);
             assertThat(actualPage.content()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("When streaming with a cursor, should return the threads after the cursor")
+        void searchThreadsStream__whenCursorProvided__thenReturnThreadsAfterCursor() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            int threadCount = 5;
+            var baseTime = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+            // one single-trace thread per distinct threadId, with distinct start times
+            var traces = IntStream.range(0, threadCount)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .projectName(projectName)
+                            .threadId("thread-" + UUID.randomUUID())
+                            .startTime(baseTime.minusSeconds(i + 1L))
+                            .endTime(baseTime.minusSeconds(i + 1L).plusMillis(500))
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            // trace_threads rows are written asynchronously by TraceThreadListener (AsyncEventBus):
+            // poll until every row carries a non-null thread_model_id before streaming, otherwise
+            // the LEFT JOIN leaves thread_model_id NULL and ORDER BY thread_model_id DESC is
+            // unstable across the all-NULL rows
+            await()
+                    .atMost(Duration.ofSeconds(30))
+                    .pollInterval(Duration.ofMillis(200))
+                    .until(() -> {
+                        var threads = traceResourceClient
+                                .searchTraceThreadsStream(projectName, projectId, apiKey, workspaceName,
+                                        List.of(), null, threadCount + 5);
+                        return threads.size() == threadCount
+                                && threads.stream().allMatch(thread -> thread.threadModelId() != null);
+                    });
+
+            // authoritative full stream (single request, limit above threadCount)
+            var fullStream = traceResourceClient.searchTraceThreadsStream(
+                    projectName, projectId, apiKey, workspaceName, List.of(), null, threadCount + 5);
+            assertThat(fullStream).hasSize(threadCount);
+
+            // page 1: first 2 threads of the stream; page 2 sends the last
+            // thread_model_id of page 1 as the cursor and must return the rest,
+            // with no overlap and no gaps
+            var page1 = traceResourceClient.searchTraceThreadsStream(
+                    projectName, projectId, apiKey, workspaceName, List.of(), null, 2);
+            assertThat(page1).hasSize(2);
+
+            var page2 = traceResourceClient.searchTraceThreadsStream(
+                    projectName, projectId, apiKey, workspaceName, List.of(), page1.getLast().threadModelId(),
+                    threadCount);
+
+            TraceAssertions.assertThreads(fullStream, Stream.concat(page1.stream(), page2.stream()).toList());
         }
     }
 
