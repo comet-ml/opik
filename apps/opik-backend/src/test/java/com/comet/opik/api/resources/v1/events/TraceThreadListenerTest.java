@@ -3,7 +3,9 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.ThreadTimestamps;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.threads.TraceThreadService;
@@ -31,6 +33,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -408,6 +411,79 @@ class TraceThreadListenerTest {
 
             var captured = captureThreadInfo(projectId);
             assertThat(captured.get(threadId).firstTraceEnvironment()).isNull();
+        }
+    }
+
+    @Nested
+    class TracesUpdatedTests {
+
+        @Test
+        void registersThreadWhenUpdateSetsThreadId() {
+            var threadId = randomThreadId();
+            var traceId = idGenerator.generateId();
+            var event = updatedEvent(threadId, Map.of(traceId, projectId));
+
+            when(traceThreadService.registerThreadsIfMissing(eq(projectId), eq(Set.of(threadId))))
+                    .thenReturn(Mono.empty());
+
+            listener.onTracesUpdated(event);
+
+            verify(traceThreadService).registerThreadsIfMissing(projectId, Set.of(threadId));
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {" "})
+        void doesNotRegisterWhenThreadIdIsBlank(String threadId) {
+            var traceId = idGenerator.generateId();
+
+            listener.onTracesUpdated(updatedEvent(threadId, Map.of(traceId, projectId)));
+
+            verifyNoInteractions(traceThreadService);
+        }
+
+        @Test
+        void registersThreadPerProjectOnBatchUpdate() {
+            var threadId = randomThreadId();
+            var otherProjectId = idGenerator.generateId();
+            var traceIdToProjectId = Map.of(
+                    idGenerator.generateId(), projectId,
+                    idGenerator.generateId(), otherProjectId);
+            var event = updatedEvent(threadId, traceIdToProjectId);
+
+            when(traceThreadService.registerThreadsIfMissing(any(), eq(Set.of(threadId))))
+                    .thenReturn(Mono.empty());
+
+            listener.onTracesUpdated(event);
+
+            verify(traceThreadService).registerThreadsIfMissing(projectId, Set.of(threadId));
+            verify(traceThreadService).registerThreadsIfMissing(otherProjectId, Set.of(threadId));
+        }
+
+        @Test
+        void fallsBackToProjectIdsWhenTraceMappingIsAbsent() {
+            var threadId = randomThreadId();
+            var traceUpdate = podamFactory.manufacturePojo(TraceUpdate.class).toBuilder()
+                    .threadId(threadId)
+                    .build();
+            var event = new TracesUpdated(Set.of(projectId), Set.of(idGenerator.generateId()), workspaceId, userName,
+                    traceUpdate);
+
+            when(traceThreadService.registerThreadsIfMissing(eq(projectId), eq(Set.of(threadId))))
+                    .thenReturn(Mono.empty());
+
+            listener.onTracesUpdated(event);
+
+            verify(traceThreadService).registerThreadsIfMissing(projectId, Set.of(threadId));
+        }
+
+        private TracesUpdated updatedEvent(String threadId, Map<UUID, UUID> traceIdToProjectId) {
+            var traceUpdate = podamFactory.manufacturePojo(TraceUpdate.class).toBuilder()
+                    .threadId(threadId)
+                    .build();
+
+            return new TracesUpdated(Set.copyOf(traceIdToProjectId.values()), traceIdToProjectId.keySet(),
+                    workspaceId, userName, traceUpdate, null, traceIdToProjectId);
         }
     }
 
