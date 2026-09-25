@@ -21,6 +21,7 @@ vi.mock("@/store/AppStore", () => ({
       activeProjectId: "test-project-id",
     }),
   ),
+  useActiveProjectId: () => "test-project-id",
 }));
 
 vi.mock("@/api/traces/useThreadById", () => ({

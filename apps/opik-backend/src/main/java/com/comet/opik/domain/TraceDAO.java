@@ -815,6 +815,30 @@ class TraceDAOImpl implements TraceDAO {
                 ) e ON ei.experiment_id = e.id
                 ORDER BY trace_id, experiment_id DESC
                 LIMIT 1 BY trace_id
+            ), trace_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                AND scope = 'trace'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), trace_annotation_queues AS (
+                SELECT trace_id,
+                       groupArray(tuple(id, name)) AS annotation_queues
+                FROM (
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as trace_id
+                    FROM (
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                        <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                        AND queue_id IN (SELECT id FROM trace_scope_queues)
+                        AND item_id IN :ids
+                    ) AS aqi
+                    JOIN trace_scope_queues AS aq ON aq.id = aqi.queue_id
+                ) AS queues_with_trace_id
+                GROUP BY trace_id
             )
             SELECT
                 t.*,
@@ -833,7 +857,8 @@ class TraceDAOImpl implements TraceDAO {
                 eaag.experiment_id as experiment_id,
                 eaag.experiment_name as experiment_name,
                 eaag.experiment_dataset_id as experiment_dataset_id,
-                eaag.experiment_dataset_item_id as experiment_dataset_item_id
+                eaag.experiment_dataset_item_id as experiment_dataset_item_id,
+                taq.annotation_queues as annotation_queues
             FROM (
                 SELECT
                     *,
@@ -848,6 +873,7 @@ class TraceDAOImpl implements TraceDAO {
             ) AS t
             LEFT JOIN spans_agg s ON t.id = s.trace_id
             LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
+            LEFT JOIN trace_annotation_queues taq ON taq.trace_id = t.id
             LEFT JOIN (
                 SELECT
                     entity_id,
@@ -1380,22 +1406,37 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY id
                 )
                 GROUP BY workspace_id, project_id, entity_id
+            ), trace_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND scope = 'trace'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), trace_annotation_queue_ids AS (
                  SELECT trace_id,
-                        groupArray(id) AS annotation_queue_ids
+                        groupArray(id) AS annotation_queue_ids,
+                        groupArray(tuple(id, name)) AS annotation_queues
                  FROM (
-                    SELECT DISTINCT aq.id as id, aqi.item_id as trace_id
-                    FROM annotation_queue_items aqi
-                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
-                    WHERE aq.scope = 'trace'
-                      AND workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      <if(page_keyed_aggregates)> AND aqi.item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
-                      <elseif(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
-                      <else>
-                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
-                      <endif>
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as trace_id
+                    FROM (
+                        -- annotation_queue_items is keyed (workspace_id, project_id, queue_id, item_id): binding
+                        -- queue_id to the project's trace-scope queues is what lets the item_id lookup use the
+                        -- full primary key instead of a generic scan of the project's items (OPIK-5592).
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND queue_id IN (SELECT id FROM trace_scope_queues)
+                          <if(page_keyed_aggregates)> AND item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                          <elseif(trace_id_prefilter)> AND item_id IN (SELECT id FROM trace_id_prefilter)
+                          <else>
+                          <if(uuid_from_time)> AND item_id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND item_id \\<= :uuid_to_time <endif>
+                          <endif>
+                    ) AS aqi
+                    JOIN trace_scope_queues AS aq ON aq.id = aqi.queue_id
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
             )
@@ -1597,6 +1638,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
                   <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id, eaag.experiment_dataset_item_id<endif>
+                  <if(!exclude_annotation_queues)>, taqi.annotation_queues AS annotation_queues<endif>
              FROM page_wide t
              <if(!exclude_feedback_scores)>
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
@@ -1606,6 +1648,7 @@ class TraceDAOImpl implements TraceDAO {
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
              <if(sort_has_experiment || !exclude_experiment)>LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id<endif>
+             <if(!exclude_annotation_queues)>LEFT JOIN trace_annotation_queue_ids taqi ON taqi.trace_id = t.id<endif>
              ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, id) DESC, last_updated_at DESC
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -4097,6 +4140,12 @@ class TraceDAOImpl implements TraceDAO {
                         .orElse(null))
                 .environment(getValue(exclude, Trace.TraceField.ENVIRONMENT, row, "environment", String.class))
                 .experiment(mapExperiment(exclude, row))
+                .annotationQueues(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.ANNOTATION_QUEUES, row, "annotation_queues",
+                                List[].class))
+                        .map(AnnotationQueueReferenceMapper::map)
+                        .filter(not(List::isEmpty))
+                        .orElse(null))
                 .build();
     }
 
@@ -4477,6 +4526,8 @@ class TraceDAOImpl implements TraceDAO {
                                 fields.contains(Trace.TraceField.HAS_TOOL_SPANS.getValue()));
                         template.add("exclude_experiment",
                                 fields.contains(Trace.TraceField.EXPERIMENT.getValue()));
+                        template.add("exclude_annotation_queues",
+                                fields.contains(Trace.TraceField.ANNOTATION_QUEUES.getValue()));
                     }
                 });
     }

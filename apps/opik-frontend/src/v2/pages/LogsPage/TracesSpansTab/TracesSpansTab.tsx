@@ -35,6 +35,7 @@ import useTracesOrSpansList, {
 } from "@/hooks/useTracesOrSpansList";
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
+  COLUMN_ANNOTATION_QUEUES_ID,
   COLUMN_COMMENTS_ID,
   COLUMN_ENVIRONMENT_ID,
   COLUMN_EXPERIMENT_ID,
@@ -94,6 +95,7 @@ import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchin
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/shared/DataTableCells/LinkCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";
+import ResourceListCell from "@/shared/DataTableCells/ResourceListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
@@ -339,6 +341,7 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   "llm_span_count",
   "thread_id",
   COLUMN_EXPERIMENT_ID,
+  COLUMN_ANNOTATION_QUEUES_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
 ];
@@ -825,6 +828,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       exclude.push("experiment");
     }
 
+    if (
+      type === TRACE_DATA_TYPE.traces &&
+      !selectedColumns.includes(COLUMN_ANNOTATION_QUEUES_ID)
+    ) {
+      exclude.push(COLUMN_ANNOTATION_QUEUES_ID);
+    }
+
     const hasFeedbackScoreColumn = selectedColumns.some(
       (col) =>
         col.startsWith(COLUMN_FEEDBACK_SCORES_ID) ||
@@ -1260,6 +1270,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 getSearch: (row: BaseTraceData) => ({
                   experiments: [get(row, "experiment.id")],
                 }),
+              },
+            },
+            {
+              id: COLUMN_ANNOTATION_QUEUES_ID,
+              label: "Annotation queues",
+              type: COLUMN_TYPE.list,
+              size: 220,
+              accessorFn: (row: BaseTraceData) =>
+                get(row, "annotation_queues", []),
+              cell: ResourceListCell as never,
+              customMeta: {
+                nameKey: "name",
+                idKey: "id",
+                resource: RESOURCE_TYPE.annotationQueue,
               },
             },
           ]

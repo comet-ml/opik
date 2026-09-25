@@ -5,6 +5,9 @@ import { useToast } from "@/ui/use-toast";
 import api, {
   ANNOTATION_QUEUES_REST_ENDPOINT,
   ANNOTATION_QUEUES_KEY,
+  TRACES_KEY,
+  TRACE_KEY,
+  THREADS_KEY,
 } from "@/api/api";
 
 type UseAnnotationQueueBatchDeleteMutationParams = {
@@ -41,9 +44,13 @@ const useAnnotationQueueBatchDeleteMutation = () => {
       });
     },
     onSettled: () => {
-      return queryClient.invalidateQueries({
-        queryKey: [ANNOTATION_QUEUES_KEY],
-      });
+      // Traces and threads lists render queue names, so a deleted queue must drop out of them too
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: [ANNOTATION_QUEUES_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [TRACES_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [TRACE_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [THREADS_KEY] }),
+      ]);
     },
   });
 };

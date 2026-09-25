@@ -37,6 +37,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -370,18 +371,34 @@ class ThreadDAOImpl implements ThreadDAO {
                 LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), thread_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND scope = 'thread'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), thread_annotation_queue_ids AS (
                  SELECT thread_id,
-                        groupArray(id) AS annotation_queue_ids
+                        groupArray(id) AS annotation_queue_ids,
+                        groupArray(tuple(id, name)) AS annotation_queues
                  FROM (
-                    SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
-                    FROM annotation_queue_items aqi
-                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
-                    WHERE aq.scope = 'thread'
-                      AND workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as thread_id
+                    FROM (
+                        -- annotation_queue_items is keyed (workspace_id, project_id, queue_id, item_id): binding
+                        -- queue_id to the project's thread-scope queues is what lets the item_id lookup use the
+                        -- full primary key instead of a generic scan of the project's items (OPIK-5592).
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND queue_id IN (SELECT id FROM thread_scope_queues)
+                          AND item_id IN (SELECT thread_model_id FROM trace_threads_final)
+                          <if(uuid_from_time)> AND item_id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND item_id \\<= :uuid_to_time <endif>
+                    ) AS aqi
+                    JOIN thread_scope_queues AS aq ON aq.id = aqi.queue_id
                  ) AS annotation_queue_ids_with_thread_id
                  GROUP BY thread_id
             )
@@ -422,6 +439,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
                 c.comments AS comments
+                <if(!exclude_annotation_queues)>, ttaqi.annotation_queues AS annotation_queues<endif>
             FROM (
                 SELECT
                     t.thread_id as id,
@@ -459,7 +477,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
-            <if(annotation_queue_filters || annotation_queue_id)>
+            <if(!exclude_annotation_queues || annotation_queue_filters || annotation_queue_id)>
             LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
             <endif>
             WHERE workspace_id = :workspace_id
@@ -973,6 +991,30 @@ class ThreadDAOImpl implements ThreadDAO {
                 LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), thread_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND scope = 'thread'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), thread_annotation_queues AS (
+                 SELECT thread_id,
+                        groupArray(tuple(id, name)) AS annotation_queues
+                 FROM (
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as thread_id
+                    FROM (
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND queue_id IN (SELECT id FROM thread_scope_queues)
+                          AND item_id IN (SELECT thread_model_id FROM trace_threads_ids)
+                    ) AS aqi
+                    JOIN thread_scope_queues AS aq ON aq.id = aqi.queue_id
+                 ) AS queues_with_thread_id
+                 GROUP BY thread_id
             )
             SELECT
                 t.workspace_id as workspace_id,
@@ -998,7 +1040,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 if(tt.environment = '', t.environment, tt.environment) as environment,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
-                c.comments AS comments
+                c.comments AS comments,
+                ttaq.annotation_queues AS annotation_queues
             FROM (
                 SELECT
                     t.thread_id as thread_id,
@@ -1033,6 +1076,7 @@ class ThreadDAOImpl implements ThreadDAO {
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
+            LEFT JOIN thread_annotation_queues ttaq ON ttaq.thread_id = tt.thread_model_id
             SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
             """;
 
@@ -1464,6 +1508,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                     traceColumnsNonNullable());
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                            addExcludeFlags(template, criteria);
 
                             template = template.add("offset", offset)
                                     .add("log_comment", getLogComment("find_threads_by_project", workspaceId, userName,
@@ -1520,6 +1565,13 @@ class ThreadDAOImpl implements ThreadDAO {
         return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
     }
 
+    private void addExcludeFlags(ST template, TraceSearchCriteria criteria) {
+        var exclude = Optional.ofNullable(criteria.excludeThreadFields()).orElse(Set.of());
+        if (exclude.contains(TraceThread.TraceThreadField.ANNOTATION_QUEUES)) {
+            template.add("exclude_annotation_queues", true);
+        }
+    }
+
     @Override
     public Mono<TraceThread> findById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
         return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
@@ -1571,6 +1623,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     THREAD_SEARCH_CLAUSE,
                     traceColumnsNonNullable());
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            addExcludeFlags(template, criteria);
 
             template.add("limit", limit)
                     .add("stream", true)
@@ -1708,6 +1761,12 @@ class ThreadDAOImpl implements ThreadDAO {
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
                 .environment(row.get("environment", String.class))
+                .annotationQueues(rowMetadata.contains("annotation_queues")
+                        ? Optional.ofNullable(row.get("annotation_queues", List[].class))
+                                .map(AnnotationQueueReferenceMapper::map)
+                                .filter(not(List::isEmpty))
+                                .orElse(null)
+                        : null)
                 .build());
     }
 
