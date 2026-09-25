@@ -15,6 +15,41 @@ class MistralChatCompletionChunksAggregated(pydantic.BaseModel):
     usage: Optional[Dict[str, Any]] = None
 
 
+def _tool_call_key(
+    tool_call: Any,
+    tool_calls_by_index: Dict[int, Dict[str, Any]],
+    keys_by_call_id: Dict[str, int],
+) -> int:
+    """Which reassembled call a streamed fragment belongs to.
+
+    A fragment that repeats a known ``id`` continues that call, even when it also
+    sends an ``index``: the id is already mapped to a slot, and taking the index
+    at face value moves the rest of the call into a second one.
+
+    Otherwise ``index`` identifies a call only when the stream sent one: the model
+    type declares ``index: Optional[int] = 0`` (``mistralai/models/toolcall.py``),
+    so a payload that omits it parses as ``0`` and every call in the stream would
+    be merged into that one slot. Any remaining fragment opens a new call --
+    ``function.name`` and ``function.arguments`` are required by the model, so
+    every fragment the SDK accepts is a complete call.
+
+    A call opened here is keyed below every key already in use, so it is negative
+    while provider indexes are not: a stream that sends ``index`` for some
+    fragments and omits it for others cannot land a provider index on a slot this
+    function invented, which would merge two different calls into one.
+    """
+    if "id" in tool_call.model_fields_set and tool_call.id:
+        known_key = keys_by_call_id.get(tool_call.id)
+        if known_key is not None:
+            return known_key
+
+    sent_index = tool_call.index
+    if "index" in tool_call.model_fields_set and isinstance(sent_index, int):
+        return sent_index
+
+    return min((key for key in tool_calls_by_index if key < 0), default=0) - 1
+
+
 def _merge_tool_call(
     tool_calls_by_index: Dict[int, Dict[str, Any]],
     index: int,
@@ -67,6 +102,7 @@ def aggregate(
         # instead of strings; those are kept as plain data, in order.
         content_chunks: List[Dict[str, Any]] = []
         tool_calls_by_index: Dict[int, Dict[str, Any]] = {}
+        keys_by_call_id: Dict[str, int] = {}
 
         for chunk in chunks:
             if chunk.choices and chunk.choices[0].delta:
@@ -96,19 +132,15 @@ def aggregate(
                         )
 
                 if delta.tool_calls:
-                    # Mistral currently emits each tool call complete in a single
-                    # chunk, but accumulate by index (concatenating streamed
-                    # argument fragments) so nothing is lost if a call is ever
-                    # split across chunks.
-                    for position, tool_call in enumerate(delta.tool_calls):
-                        index = (
-                            tool_call.index if tool_call.index is not None else position
+                    # ``_tool_call_key`` owns how a fragment is matched to a call.
+                    for tool_call in delta.tool_calls:
+                        index = _tool_call_key(
+                            tool_call, tool_calls_by_index, keys_by_call_id
                         )
-                        _merge_tool_call(
-                            tool_calls_by_index,
-                            index,
-                            tool_call.model_dump(mode="json"),
-                        )
+                        payload = tool_call.model_dump(mode="json")
+                        _merge_tool_call(tool_calls_by_index, index, payload)
+                        if "id" in tool_call.model_fields_set and tool_call.id:
+                            keys_by_call_id[tool_call.id] = index
 
             if chunk.choices and chunk.choices[0].finish_reason:
                 aggregated_response["choices"][0]["finish_reason"] = chunk.choices[
@@ -127,8 +159,13 @@ def aggregate(
                 text_chunks
             )
         if tool_calls_by_index:
+            # Calls with a stream-provided index retain index order; calls opened
+            # without one follow the order their fragments arrived.
+            ordered_keys = sorted(key for key in tool_calls_by_index if key >= 0) + [
+                key for key in tool_calls_by_index if key < 0
+            ]
             aggregated_response["choices"][0]["message"]["tool_calls"] = [
-                tool_calls_by_index[index] for index in sorted(tool_calls_by_index)
+                tool_calls_by_index[key] for key in ordered_keys
             ]
 
         return MistralChatCompletionChunksAggregated(**aggregated_response)

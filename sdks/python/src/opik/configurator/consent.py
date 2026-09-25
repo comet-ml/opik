@@ -12,7 +12,7 @@ Rendering and prompting belong to the caller; this only says what to do and why.
 """
 
 import enum
-from typing import Callable, List, NamedTuple, Optional
+from typing import Callable, NamedTuple, Optional
 
 
 class Decision(enum.Enum):
@@ -87,6 +87,23 @@ def resolve(
     return Verdict(Decision.ASK, Reason.ASKING)
 
 
+def decision_reason(verdict: Verdict, granted_: bool) -> str:
+    """What this step decided and why, as one value for analytics.
+
+    The verdict alone cannot answer it: ``ASK`` says a question was put to the
+    user, not what came back, so an accept and a decline shared a reason and
+    then shared a row in the funnel. Folding the answer in is what separates
+    them — and separates both from the runs where nobody was asked at all.
+
+    Reused by both halves rather than written twice: the MCP server and the
+    skill pack ask the same shape of question, so they have to report the same
+    vocabulary or the two cannot be compared.
+    """
+    if verdict.decision is Decision.ASK:
+        return (Reason.REQUESTED if granted_ else Reason.DECLINED).value
+    return verdict.reason.value
+
+
 def granted(verdict: Verdict, ask: Callable[[], bool]) -> bool:
     """Turn a verdict into a yes or no, asking only when that is the verdict.
 
@@ -100,51 +117,13 @@ def granted(verdict: Verdict, ask: Callable[[], bool]) -> bool:
     return verdict.decision is Decision.PROCEED
 
 
-def readable_list(names: List[str]) -> str:
-    """``a``, ``a and b``, ``a, b and c`` — a list a person would read aloud."""
-    if len(names) <= 1:
-        # Empty joins to "", which reads correctly in a sentence that a caller
-        # only builds when something was found.
-        return "".join(names)
-    return f"{', '.join(names[:-1])} and {names[-1]}"
-
-
-def mcp_prompt(detected: List[str]) -> str:
-    """The consent prompt, framed so it does not read as one more log line.
-
-    Plain text with blank lines and an indent rather than anything richer: this
-    runs from ``opik.configure()`` too, which must not take over the caller's
-    stdout with a rendered panel.
-    """
-    return (
-        "\n"
-        "  ─── AI clients ───────────────────────────────────────────\n"
-        "\n"
-        f"  Found {readable_list(detected)}.\n"
-        "\n"
-        "  The Opik MCP server lets them read traces, log scores and run\n"
-        "  experiments from chat.\n"
-        "\n"
-        "  Register it with them? (y/N) "
-    )
-
-
 SKILL_PACK_PITCH: str = (
     "It teaches your AI client how to instrument code with Opik, wire up "
-    "integrations, and run test suites."
+    "integrations, run test suites and agent logs diagnostics."
 )
 """The case for the pack, as one line — used by the CLI, which wraps it itself.
 
-Says the same thing as the body of :data:`SKILLS_PROMPT` below, which is hand-
-wrapped for plain-text output. Keep the two in step; "AI client" is the term the
-rest of the CLI uses for these tools."""
-
-
-SKILLS_PROMPT: str = (
-    "\n  Recommended: also install the Opik skill pack?\n"
-    "  It teaches your AI client how to instrument code with Opik, wire\n"
-    "  up integrations, and run test suites. (Y/n) "
-)
-"""Asked after the server step, so the user answers with its output in front of
-them, and recommended — hence the default yes. The clients are not named again
-because the server step just listed them."""
+The only prompt text left here. Its plain-text siblings went with the library
+path: `opik.configure()` no longer offers the MCP server or the skill pack, so
+there is nothing outside the CLI left to word. "AI client" is the term the rest
+of the CLI uses for these tools."""

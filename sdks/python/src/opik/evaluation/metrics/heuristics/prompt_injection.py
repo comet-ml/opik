@@ -90,8 +90,11 @@ class PromptInjection(BaseMetric):
         track: Whether to automatically track metric results. Defaults to ``True``.
         project_name: Optional tracking project. Defaults to ``None``.
         patterns: Iterable of regex strings considered strong indicators of
-            injection attempts.
+            injection attempts. ``None`` uses the built-in patterns; an empty
+            iterable disables this tier.
         keywords: Iterable of substrings that suggest suspicious behaviour.
+            ``None`` uses the built-in keywords; an empty iterable disables
+            this tier.
 
     Example:
         >>> from opik.evaluation.metrics import PromptInjection
@@ -111,9 +114,13 @@ class PromptInjection(BaseMetric):
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self._patterns = [
-            re.compile(pat, re.IGNORECASE) for pat in (patterns or _INJECTION_PATTERNS)
+            re.compile(pat, re.IGNORECASE)
+            for pat in (_INJECTION_PATTERNS if patterns is None else patterns)
         ]
-        self._keywords = [kw.lower() for kw in (keywords or _SUSPICIOUS_KEYWORDS)]
+        self._keywords = [
+            kw.lower()
+            for kw in (_SUSPICIOUS_KEYWORDS if keywords is None else keywords)
+        ]
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
         processed = preprocessing.normalize_text(output)

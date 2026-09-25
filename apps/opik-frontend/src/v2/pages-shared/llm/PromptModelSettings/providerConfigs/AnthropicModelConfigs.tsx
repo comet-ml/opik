@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React from "react";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import {
@@ -8,7 +8,7 @@ import {
 } from "@/types/providers";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import {
   getAnthropicThinkingEffortOptions,
   resolveEffort,
@@ -18,7 +18,6 @@ import {
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import isNil from "lodash/isNil";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
 interface AnthropicModelConfigsProps {
@@ -41,98 +40,18 @@ const AnthropicModelConfigs = ({
   // carry, and it guarantees exactly one half is live, which is what the choice below reflects.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const { thinkingEffort } = resolveEffort(model ?? "", configs);
-  // Top P only counts as live where the surface can actually store one.
-  const topPLive = !isNil(topP) && supports("topP");
-
-  const handleTemperatureChange = useCallback(
-    (v: number) => {
-      onChange({ temperature: v, topP: undefined });
-    },
-    [onChange],
-  );
-
-  const handleTopPChange = useCallback(
-    (v: number) => {
-      onChange({ topP: v, temperature: undefined });
-    },
-    [onChange],
-  );
-
-  // Switching hands the incoming parameter its default and clears the outgoing one, because the
-  // config holds whichever is live and Anthropic rejects a request carrying both.
-  const handleSamplingParamChange = useCallback(
-    (value: string) => {
-      if (value === "topP") {
-        onChange({
-          topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
-          temperature: undefined,
-        });
-      } else if (value === "temperature") {
-        onChange({
-          temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
-          topP: undefined,
-        });
-      }
-    },
-    [onChange],
-  );
 
   return (
     <div className="flex w-72 flex-col gap-6">
       {showSamplingParams && (
-        <div className="space-y-2">
-          {supports("topP") && (
-            <>
-              <div className="flex items-center space-x-2">
-                <Label className="text-sm font-medium">Sampling</Label>
-                <ExplainerIcon description="Anthropic models take either Temperature or Top P, not both. Pick the one you want to tune." />
-              </div>
-              <ToggleGroup
-                type="single"
-                variant="secondary"
-                value={topPLive ? "topP" : "temperature"}
-                onValueChange={handleSamplingParamChange}
-                className="w-full"
-              >
-                <ToggleGroupItem value="temperature" className="flex-1">
-                  Temperature
-                </ToggleGroupItem>
-                <ToggleGroupItem value="topP" className="flex-1">
-                  Top P
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </>
-          )}
-          {topPLive ? (
-            <SliderInputControl
-              value={topP}
-              onChange={handleTopPChange}
-              id="topP"
-              min={0}
-              max={1}
-              step={0.01}
-              defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TOP_P}
-              label="Top P"
-              tooltip={
-                <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered." />
-              }
-            />
-          ) : (
-            <SliderInputControl
-              value={temperature}
-              onChange={handleTemperatureChange}
-              id="temperature"
-              min={0}
-              max={1}
-              step={0.01}
-              defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE}
-              label="Temperature"
-              tooltip={
-                <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
-              }
-            />
-          )}
-        </div>
+        <ExclusiveSamplingParams
+          temperature={temperature}
+          topP={topP}
+          temperatureDefault={DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE}
+          topPDefault={DEFAULT_ANTHROPIC_CONFIGS.TOP_P}
+          offerChoice={supports("topP")}
+          onChange={onChange}
+        />
       )}
 
       {supports("maxCompletionTokens") && (

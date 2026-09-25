@@ -17,10 +17,13 @@ import {
   ExperimentsCompare,
 } from "@/types/datasets";
 import { isExperimentTerminal } from "@/lib/experiments";
+import { createCompletionAnnouncer } from "@/lib/playground";
 import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
 import usePlaygroundStore, {
+  getExperimentNameForPrompt,
+  getExperimentNamesForPrompts,
   usePromptIds,
   usePromptMap,
   useResetOutputMap,
@@ -49,6 +52,7 @@ import {
 import usePromptDatasetItemCombination, {
   DatasetItemPromptCombination,
 } from "@/v2/pages/PlaygroundPage/usePromptDatasetItemCombination";
+import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
 
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
 const MAX_POLL_DURATION_MS = 5 * 60 * 1000; // 5 minutes
@@ -56,6 +60,7 @@ const MAX_POLL_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 interface PollScope {
   scopedPromptIds?: string[];
   pollKeySuffix?: string;
+  announceExperiments?: LogExperiment[];
 }
 
 interface UseActionButtonActionsArguments {
@@ -101,6 +106,9 @@ const useActionButtonActions = ({
     new Map<string, { controller: AbortController; promptId: string }>(),
   );
   const runExperimentExecution = useRunExperimentExecution();
+  const announceRunComplete = useRunCompletionToast(datasetId);
+  const announcePendingRef = useRef(false);
+  const scopedAnnounceRef = useRef(new Set<string>());
 
   const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
 
@@ -149,6 +157,8 @@ const useActionButtonActions = ({
   }, [resetOutputMap, clearCreatedExperiments, clearRunningMap, resetProgress]);
 
   const stopAll = useCallback(() => {
+    announcePendingRef.current = false;
+    scopedAnnounceRef.current.clear();
     clearRunningMap();
     isToStopRef.current = true;
     abortControllersRef.current.forEach(({ controller }) => controller.abort());
@@ -157,6 +167,7 @@ const useActionButtonActions = ({
 
   const stopSingle = useCallback(
     (promptId: string) => {
+      scopedAnnounceRef.current.delete(promptId);
       setPromptRunning(promptId, false);
       for (const [key, entry] of abortControllersRef.current.entries()) {
         if (entry.promptId === promptId) {
@@ -250,6 +261,7 @@ const useActionButtonActions = ({
 
   const handlePollTimeout = useCallback(
     (description: string) => {
+      announcePendingRef.current = false;
       clearRunningMap();
       isToStopRef.current = false;
       resetProgress();
@@ -384,6 +396,10 @@ const useActionButtonActions = ({
               setTimeout(() => resetProgress(), 3000);
             }
             finishPollScope(scope);
+            const scopedId = scope?.scopedPromptIds?.[0];
+            if (!scopedId || scopedAnnounceRef.current.delete(scopedId)) {
+              announceRunComplete(scope?.announceExperiments ?? []);
+            }
             queryClient.invalidateQueries({ queryKey: ["experiments"] });
             queryClient.invalidateQueries({
               queryKey: [COMPARE_EXPERIMENTS_KEY],
@@ -412,6 +428,7 @@ const useActionButtonActions = ({
       setProgress,
       resetProgress,
       handlePollTimeout,
+      announceRunComplete,
       finishPollScope,
       queryClient,
       toast,
@@ -486,6 +503,10 @@ const useActionButtonActions = ({
               setTimeout(() => resetProgress(), 3000);
             }
             finishPollScope(scope);
+            const scopedId = scope?.scopedPromptIds?.[0];
+            if (!scopedId || scopedAnnounceRef.current.delete(scopedId)) {
+              announceRunComplete(scope?.announceExperiments ?? []);
+            }
             queryClient.invalidateQueries({ queryKey: ["experiments"] });
             queryClient.invalidateQueries({
               queryKey: [COMPARE_EXPERIMENTS_KEY],
@@ -523,6 +544,7 @@ const useActionButtonActions = ({
       setProgressPhase,
       resetProgress,
       finishPollScope,
+      announceRunComplete,
       handlePollTimeout,
       queryClient,
       pollAssertionEvaluation,
@@ -540,6 +562,9 @@ const useActionButtonActions = ({
 
     try {
       const prompts = promptIds.map((id) => promptMap[id]);
+      const experimentNames = getExperimentNamesForPrompts(
+        prompts.map((p) => p.id),
+      );
       const response = await runExperimentExecution.mutateAsync({
         datasetName,
         datasetVersionId,
@@ -547,6 +572,7 @@ const useActionButtonActions = ({
         versionHash,
         prompts,
         projectName,
+        experimentNames,
       });
 
       // Build experiment-to-prompt mapping from BE response
@@ -556,6 +582,7 @@ const useActionButtonActions = ({
         experimentPromptMap[promptId] = exp.experiment_id;
         return {
           id: exp.experiment_id,
+          name: experimentNames[promptId],
           datasetName,
           datasetVersionId,
           evaluationMethod: EVALUATION_METHOD.TEST_SUITE,
@@ -571,7 +598,9 @@ const useActionButtonActions = ({
 
       // Poll for completion instead of immediately finishing
       const experimentIds = response.experiments.map((e) => e.experiment_id);
-      pollExperimentCompletion(experimentIds, response.total_items, datasetId);
+      pollExperimentCompletion(experimentIds, response.total_items, datasetId, {
+        announceExperiments: experiments,
+      });
     } catch {
       clearRunningMap();
       isToStopRef.current = false;
@@ -599,13 +628,29 @@ const useActionButtonActions = ({
   const runAllViaFrontend = useCallback(async () => {
     resetState();
     isToStopRef.current = false;
+    announcePendingRef.current = true;
     setAllRunning(true);
+
+    const runExperiments: LogExperiment[] = [];
+    const announcer = createCompletionAnnouncer(promptIds.length, () => {
+      if (!announcePendingRef.current) return;
+      announcePendingRef.current = false;
+      announceRunComplete(runExperiments);
+    });
 
     const logProcessor = buildLogProcessor({
       datasetName,
       canLogTraceSpanThread,
       canCreateExperiments,
-      args: { ...logProcessorHandlers, projectName },
+      args: {
+        ...logProcessorHandlers,
+        projectName,
+        onAddExperimentRegistry: (experiments, map) => {
+          runExperiments.splice(0, runExperiments.length, ...experiments);
+          logProcessorHandlers.onAddExperimentRegistry?.(experiments, map);
+          announcer.experimentsRegistered(experiments.length);
+        },
+      },
     });
 
     const combinations = createCombinations();
@@ -633,12 +678,14 @@ const useActionButtonActions = ({
         clearRunningMap();
         isToStopRef.current = false;
         abortControllersRef.current.clear();
+        announcer.loggingFinished();
       },
     );
   }, [
     resetState,
     setAllRunning,
     clearRunningMap,
+    announceRunComplete,
     createCombinations,
     processCombination,
     logProcessorHandlers,
@@ -648,6 +695,7 @@ const useActionButtonActions = ({
     datasetName,
     canLogTraceSpanThread,
     canCreateExperiments,
+    promptIds.length,
   ]);
 
   const runAll = useCallback(async () => {
@@ -663,18 +711,42 @@ const useActionButtonActions = ({
       if (!prompt) return;
 
       setPromptRunning(promptId, true);
+      scopedAnnounceRef.current.add(promptId);
+
+      const singleRunExperiments: LogExperiment[] = [];
+      const announcer = createCompletionAnnouncer(1, () => {
+        if (!scopedAnnounceRef.current.delete(promptId)) return;
+        announceRunComplete(singleRunExperiments);
+      });
 
       const logProcessor = buildLogProcessor({
         datasetName,
         canLogTraceSpanThread,
         canCreateExperiments,
-        args: { ...logProcessorHandlers, projectName },
+        args: {
+          ...logProcessorHandlers,
+          projectName,
+          onAddExperimentRegistry: (experiments, map) => {
+            singleRunExperiments.splice(
+              0,
+              singleRunExperiments.length,
+              ...experiments,
+            );
+            logProcessorHandlers.onAddExperimentRegistry?.(experiments, map);
+            announcer.experimentsRegistered(experiments.length);
+          },
+        },
       });
 
+      const experimentName = getExperimentNameForPrompt(promptId);
       const combinations: DatasetItemPromptCombination[] =
         datasetItems.length > 0
-          ? datasetItems.map((di) => ({ datasetItem: di, prompt }))
-          : [{ prompt }];
+          ? datasetItems.map((di) => ({
+              datasetItem: di,
+              prompt,
+              experimentName,
+            }))
+          : [{ prompt, experimentName }];
 
       try {
         await new Promise<void>((resolve) => {
@@ -690,12 +762,14 @@ const useActionButtonActions = ({
       } finally {
         logProcessor.finishLogging();
         setPromptRunning(promptId, false);
+        announcer.loggingFinished();
       }
     },
     [
       datasetItems,
       maxConcurrentRequests,
       setPromptRunning,
+      announceRunComplete,
       logProcessorHandlers,
       processCombination,
       projectName,
@@ -712,6 +786,9 @@ const useActionButtonActions = ({
       if (!prompt) return;
 
       setPromptRunning(promptId, true);
+      scopedAnnounceRef.current.add(promptId);
+
+      const experimentName = getExperimentNameForPrompt(prompt.id);
 
       try {
         const response = await runExperimentExecution.mutateAsync({
@@ -721,6 +798,7 @@ const useActionButtonActions = ({
           versionHash,
           prompts: [prompt],
           projectName,
+          experimentNames: { [prompt.id]: experimentName },
         });
 
         const experiment = response.experiments[0];
@@ -749,6 +827,15 @@ const useActionButtonActions = ({
           {
             scopedPromptIds: [promptId],
             pollKeySuffix: `-${promptId}`,
+            announceExperiments: [
+              {
+                id: experiment.experiment_id,
+                name: experimentName,
+                datasetName,
+                datasetVersionId,
+                evaluationMethod: EVALUATION_METHOD.TEST_SUITE,
+              },
+            ],
           },
         );
       } catch {
