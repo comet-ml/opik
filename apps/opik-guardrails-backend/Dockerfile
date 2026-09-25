@@ -24,16 +24,25 @@ ENV PYTHONUNBUFFERED=1 \
 # hadolint ignore=DL3008
 #
 # Every attempt is bounded so a stalled mirror cannot consume the calling CI job's
-# 15-minute budget. apt's built-in acquire timeout is 120s and is not applied to the
-# operation as a whole, so it is lowered here and each apt call is additionally
-# wrapped in `timeout`. DEADLINE caps the loop overall: retries stop once the budget
-# is spent, rather than letting worst-case attempts multiply past the job limit.
-RUN DEADLINE=$(( $(date +%s) + 480 )); \
+# 15-minute budget.
+#
+# Acquire::*::Timeout is an INACTIVITY timeout, not a cap on total download time:
+# apt rebuilds the select() timeval on each read, so the timer resets whenever data
+# arrives (methods/http.cc, HttpServerState::Go). 20s therefore aborts a silent or
+# black-holed connection without penalising a slow but steadily progressing mirror;
+# it only lowers apt's 120s default, which is too coarse to detect a stall in time.
+#
+# The `timeout` wrappers, by contrast, ARE hard wall-clock caps, so they are sized
+# well above a normal run (the install completes in well under a minute) to leave a
+# slow mirror room rather than killing it. DEADLINE caps the loop overall so retries
+# stop once the budget is spent. Worst case is ~9 min, which still leaves room for the
+# pip install and model downloads that follow within the caller's 15-minute job limit.
+RUN DEADLINE=$(( $(date +%s) + 240 )); \
     for attempt in 1 2 3 4 5; do \
         timeout 120 apt-get update \
             -o Acquire::http::Timeout=20 \
             -o Acquire::https::Timeout=20 \
-        && timeout 240 apt-get install -y --no-install-recommends \
+        && timeout 420 apt-get install -y --no-install-recommends \
             -o Acquire::Retries=3 \
             -o Acquire::http::Timeout=20 \
             -o Acquire::https::Timeout=20 \
