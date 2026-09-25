@@ -109,8 +109,9 @@ type SharedProps<T extends FieldValues> = {
   maxConditionsPerGroup?: number;
   /**
    * One AND-ed group only: no "Add OR group" footer, and while exactly one group exists its header row
-   * (label and remove button) is dropped so the list reads as plain conditions. A value that already
-   * holds several groups still shows all of them, with OR badges, so nothing saved is hidden.
+   * (label and remove button) and the AND badges between conditions are dropped so the list reads as
+   * plain conditions. A value that already holds several groups still shows all of them, with their
+   * chrome and OR badges, so nothing saved is hidden.
    */
   singleGroup?: boolean;
   /** Label of the button that appends a condition to a group. */
@@ -319,7 +320,7 @@ const ConditionGroup = <T extends FieldValues>({
       >
         {conditionsFieldArray.fields.map((condition, conditionIndex) => (
           <React.Fragment key={condition.id}>
-            {conditionIndex > 0 && <SeparatorBadge kind="AND" />}
+            {conditionIndex > 0 && showHeader && <SeparatorBadge kind="AND" />}
             <ConditionRow
               form={form}
               groupsPath={groupsPath}
