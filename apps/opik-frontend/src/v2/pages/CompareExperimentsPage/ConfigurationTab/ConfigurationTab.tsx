@@ -3,6 +3,7 @@ import { BooleanParam, StringParam, useQueryParam } from "use-query-params";
 import { ColumnPinningState } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import isObject from "lodash/isObject";
+import isUndefined from "lodash/isUndefined";
 import uniq from "lodash/uniq";
 import toLower from "lodash/toLower";
 import find from "lodash/find";
@@ -24,12 +25,17 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import NavigationTag from "@/shared/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
-import { formatPromptVersionLabel } from "@/lib/experiments";
+import {
+  formatExperimentPromptVersions,
+  formatPromptVersionLabel,
+} from "@/lib/experiments";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
+
+const PROMPT_VERSION_ROW_NAME = "Prompt version";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: ["name"],
@@ -65,8 +71,9 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
 
   const isCompare = experimentsIds.length > 1;
 
-  // Prompt-version links only make sense for a single experiment; in compare
-  // mode we don't show them. An empty array simply renders nothing.
+  // Outside compare mode the prompt versions are navigable tags next to the
+  // search box; in compare mode they become a table row instead, so each
+  // experiment's version sits in its own column and the diff toggle applies.
   const promptVersions = isCompare ? [] : experiments[0]?.prompt_versions ?? [];
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
@@ -112,6 +119,31 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     }, {});
   }, [experiments]);
 
+  const promptVersionRow = useMemo(() => {
+    if (!isCompare) return null;
+
+    const data = experimentsIds.reduce<Record<string, CompareFiledValue>>(
+      (acc, id: string) => {
+        acc[id] = formatExperimentPromptVersions(
+          find(experiments, (e) => e.id === id),
+        );
+        return acc;
+      },
+      {},
+    );
+
+    if (Object.values(data).every(isUndefined)) return null;
+
+    const values = Object.values(data);
+
+    return {
+      name: PROMPT_VERSION_ROW_NAME,
+      base: experimentsIds[0],
+      data,
+      different: !values.every((v) => values[0] === v),
+    } as CompareConfig;
+  }, [isCompare, experimentsIds, experiments]);
+
   const rows = useMemo(() => {
     const keys = uniq(
       Object.values(flattenExperimentMetadataMap).reduce<string[]>(
@@ -140,14 +172,22 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   }, [flattenExperimentMetadataMap, experimentsIds]);
 
   const filteredRows = useMemo(() => {
-    return rows.filter((row) => {
+    // A metadata key can legitimately be called "Prompt version"; keep the
+    // real one rather than rendering two indistinguishable rows.
+    const showPromptVersionRow =
+      promptVersionRow &&
+      !rows.some((row) => row.name === PROMPT_VERSION_ROW_NAME);
+
+    const allRows = showPromptVersionRow ? [promptVersionRow, ...rows] : rows;
+
+    return allRows.filter((row) => {
       if (isCompare && onlyDiff && !row.different) {
         return false;
       }
 
       return !(search && !toLower(row.name).includes(toLower(search)));
     });
-  }, [rows, search, onlyDiff, isCompare]);
+  }, [rows, promptVersionRow, search, onlyDiff, isCompare]);
 
   const noDataText = search
     ? "No search results"

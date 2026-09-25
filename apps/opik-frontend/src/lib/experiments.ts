@@ -68,6 +68,25 @@ export const formatPromptVersionLabel = (
     : promptVersion.prompt_name;
 };
 
+/**
+ * Every prompt version linked to an experiment, as one comparable string
+ * (e.g. "Guardrail (v1), My Prompt (v3)"). Returns undefined when the
+ * experiment has no linked prompt, which the compare table renders as
+ * "No value" like any other absent field.
+ *
+ * Labels are sorted so the compare view diffs on content rather than on the
+ * order the backend happened to return: two experiments linked to the same
+ * prompt versions must read as identical.
+ */
+export const formatExperimentPromptVersions = (
+  experiment: Pick<Experiment, "prompt_versions"> | undefined,
+): string | undefined => {
+  const promptVersions = experiment?.prompt_versions;
+  if (!promptVersions?.length) return undefined;
+
+  return promptVersions.map(formatPromptVersionLabel).sort().join(", ");
+};
+
 export const isExperimentTerminal = (
   status: EXPERIMENT_STATUS | undefined | null,
 ): boolean =>
