@@ -62,8 +62,9 @@ import { DECISION_MODELS } from "@/constants/decisionModels";
 import {
   DECISION_MODEL_SCORE_TYPES,
   getDecisionModelReservedVariables,
-  isDecisionModelTemplate,
-  toDecisionModelSchema,
+  fromDecisionModelDetails,
+  getDecisionModelTemplates,
+  toDecisionModelDetails,
 } from "@/v2/pages-shared/automations/AddEditRuleDialog/decisionModelRule";
 
 const MESSAGE_TYPE_OPTIONS = [
@@ -161,8 +162,8 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
 
-  // Scores removed when switching to a decisions model, shown so the switch is never silent.
-  const [removedScoreNames, setRemovedScoreNames] = useState<string[]>([]);
+  // What switching to a decisions model changed in the form, shown so the switch is never silent.
+  const [decisionModelNotes, setDecisionModelNotes] = useState<string[]>([]);
 
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
@@ -170,7 +171,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const isDecision = isDecisionModel(form.watch("llmJudgeDetails.model"));
 
   const templates = isDecision
-    ? LLM_PROMPT_TEMPLATES[scope].filter(isDecisionModelTemplate)
+    ? getDecisionModelTemplates(scope)
     : LLM_PROMPT_TEMPLATES[scope];
 
   // Thread rules don't support decisions models.
@@ -210,24 +211,37 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     [calculateModelProvider, form],
   );
 
-  // Adapts the form when switching to a decisions model: only Boolean scores and only the templates that
-  // fit are kept. Messages and variables stay as they are; validation points at anything left to fix.
+  // Adapts the form when switching to a decisions model (see toDecisionModelDetails) and keeps what it changed.
   const handleSwitchToDecisionModel = useCallback(() => {
-    const { schema, template } = form.getValues("llmJudgeDetails");
-    const currentScope = form.getValues("scope");
-    const adapted = toDecisionModelSchema(schema, currentScope);
+    const { template, messages, variables, schema } =
+      form.getValues("llmJudgeDetails");
+    const adapted = toDecisionModelDetails(
+      { template, messages, variables, schema },
+      form.getValues("scope"),
+    );
 
-    if (adapted.removedScoreNames.length || !schema.length) {
-      form.setValue("llmJudgeDetails.schema", adapted.schema);
-    }
-    setRemovedScoreNames(adapted.removedScoreNames);
+    form.setValue("llmJudgeDetails.template", adapted.template);
+    form.setValue("llmJudgeDetails.messages", adapted.messages);
+    form.setValue("llmJudgeDetails.variables", adapted.variables);
+    form.setValue("llmJudgeDetails.schema", adapted.schema);
+    setDecisionModelNotes(adapted.notes);
+  }, [form]);
 
-    const fitsDecisionModel = LLM_PROMPT_TEMPLATES[currentScope]
-      .filter(isDecisionModelTemplate)
-      .some((t) => t.value === template);
-    if (!fitsDecisionModel) {
-      form.setValue("llmJudgeDetails.template", LLM_JUDGE.custom);
+  // Undoes the template part of the switch when going back to a chat model (see fromDecisionModelDetails).
+  const handleSwitchFromDecisionModel = useCallback(() => {
+    const { template, messages, variables, schema } =
+      form.getValues("llmJudgeDetails");
+    const restored = fromDecisionModelDetails(
+      { template, messages, variables, schema },
+      form.getValues("scope"),
+    );
+    if (restored) {
+      form.setValue("llmJudgeDetails.template", restored.template);
+      form.setValue("llmJudgeDetails.messages", restored.messages);
+      form.setValue("llmJudgeDetails.variables", restored.variables);
+      form.setValue("llmJudgeDetails.schema", restored.schema);
     }
+    setDecisionModelNotes([]);
   }, [form]);
 
   // Memoized callback to handle messages change
@@ -315,8 +329,8 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                           if (!wasDecision) {
                             handleSwitchToDecisionModel();
                           }
-                        } else {
-                          setRemovedScoreNames([]);
+                        } else if (wasDecision) {
+                          handleSwitchFromDecisionModel();
                         }
                         // Update config to ensure reasoning models have temperature >= 1.0
                         const currentConfig = form.getValues(
@@ -384,14 +398,13 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           );
         }}
       />
-      {isDecision && removedScoreNames.length > 0 && (
+      {isDecision && decisionModelNotes.length > 0 && (
         <Alert size="sm">
           <MessageCircleWarning />
-          <AlertDescription size="sm">
-            <span>
-              Jev only supports Boolean scores, so these scores were removed:{" "}
-              {removedScoreNames.join(", ")}.
-            </span>
+          <AlertDescription size="sm" className="flex flex-col gap-1">
+            {decisionModelNotes.map((note) => (
+              <span key={note}>{note}</span>
+            ))}
           </AlertDescription>
         </Alert>
       )}
