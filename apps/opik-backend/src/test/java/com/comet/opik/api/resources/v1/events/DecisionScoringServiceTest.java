@@ -15,7 +15,9 @@ import dev.langchain4j.data.message.UserMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -121,6 +123,25 @@ class DecisionScoringServiceTest {
                 .build());
 
         assertThat(summary).isEqualTo("forged?INFO line=0.93");
+    }
+
+    @Test
+    void injectedConstructorQualifiesTheOnlineScoringConfig() {
+        // The Docker build compiles without lombok.config, so the qualifier must be on a hand-written parameter:
+        // without it Guice injects an empty OnlineScoringConfig instead of the loaded one.
+        var constructor = Arrays.stream(DecisionScoringService.class.getConstructors())
+                .filter(c -> c.isAnnotationPresent(jakarta.inject.Inject.class))
+                .findFirst()
+                .orElseThrow();
+        var configParameter = Arrays.stream(constructor.getParameters())
+                .filter(parameter -> parameter.getType() == OnlineScoringConfig.class)
+                .findFirst()
+                .orElseThrow();
+
+        var qualifier = configParameter.getAnnotation(Config.class);
+
+        assertThat(qualifier).isNotNull();
+        assertThat(qualifier.value()).isEqualTo("onlineScoring");
     }
 
     private static DecisionsResponse.Answer noul(Double probability) {

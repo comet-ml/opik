@@ -19,7 +19,6 @@ import dev.langchain4j.data.message.UserMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -44,7 +43,6 @@ import java.util.stream.Collectors;
  * becomes {@code 1} at {@link #TRUE_THRESHOLD} or above and {@code 0} below, with the probability in the reason.
  */
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class DecisionScoringService {
 
     /** OpenRouter's context length for Jev, covering state and questions together. */
@@ -55,9 +53,20 @@ public class DecisionScoringService {
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
     private static final int MAX_SUMMARY_CHARS = 1_000;
 
-    private final @NonNull OpenRouterDecisionsClient decisionsClient;
-    private final @NonNull LlmProviderFactory llmProviderFactory;
-    private final @NonNull @Config("onlineScoring") OnlineScoringConfig onlineScoringConfig;
+    private final OpenRouterDecisionsClient decisionsClient;
+    private final LlmProviderFactory llmProviderFactory;
+    private final OnlineScoringConfig onlineScoringConfig;
+
+    // Hand-written so @Config sits on the parameter itself: the Docker build compiles without lombok.config, and
+    // Lombok then drops the qualifier from a generated constructor, leaving Guice to inject an empty config.
+    @Inject
+    public DecisionScoringService(@NonNull OpenRouterDecisionsClient decisionsClient,
+            @NonNull LlmProviderFactory llmProviderFactory,
+            @NonNull @Config("onlineScoring") OnlineScoringConfig onlineScoringConfig) {
+        this.decisionsClient = decisionsClient;
+        this.llmProviderFactory = llmProviderFactory;
+        this.onlineScoringConfig = onlineScoringConfig;
+    }
 
     /**
      * Builds the request from the rendered rule messages: their text, in order, is the {@code state}.
