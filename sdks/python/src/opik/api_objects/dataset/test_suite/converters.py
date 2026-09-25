@@ -44,7 +44,6 @@ def version_evaluators_to_assertions(
     evaluators: Optional[List[rest_evaluator_item_public.EvaluatorItemPublic]],
 ) -> List[str]:
     """Extract assertion strings from REST evaluator items on a dataset version."""
-    from opik.evaluation.suite_evaluators import llm_judge
     from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 
     assertions: List[str] = []
@@ -52,8 +51,7 @@ def version_evaluators_to_assertions(
         for evaluator in evaluators:
             if evaluator.type == "llm_judge":
                 cfg = llm_judge_config.LLMJudgeConfig(**evaluator.config)
-                judge = llm_judge.LLMJudge.from_config(cfg)
-                assertions.extend(judge.assertions)
+                assertions.extend(item.description for item in cfg.schema_)
     return assertions
 
 
