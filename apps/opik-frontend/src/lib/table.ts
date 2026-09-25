@@ -164,6 +164,73 @@ export const mapColumnDataFields = <TColumnData, TData>(
   };
 };
 
+export type ReconcileSelectedRowsOptions = {
+  /**
+   * Opaque key for the query scope (search/filters/project/type/etc).
+   * When it changes, the retained-row map is cleared. Callers must also
+   * clear `rowSelection` when the scope changes so checkbox state stays
+   * in sync — pagination must not change this key.
+   */
+  scopeKey?: string;
+  scopeKeyRef?: { current?: string };
+  /**
+   * IDs known deleted / removed from the authoritative dataset. Always
+   * dropped from the retained map so off-page selections cannot survive
+   * after entities are deleted. Distinct from pagination (off-page IDs
+   * that still exist must NOT be listed here).
+   */
+  deletedIds?: ReadonlySet<string>;
+};
+
+/**
+ * Reconciles selected rows across pages: merges current-page selected
+ * rows into the map, drops deselected IDs, and preserves off-page
+ * selections for pagination only. Pass a changing `scopeKey` (and clear
+ * `rowSelection`) when filters/search/scope change, and pass
+ * `deletedIds` (or clear selection) after deletes so stale IDs cannot
+ * remain bulk-action targets.
+ */
+export const reconcileSelectedRows = <T extends { id: string }>(
+  selectedRowsMap: Map<string, T>,
+  rowSelection: Record<string, boolean>,
+  rows: T[],
+  options?: ReconcileSelectedRowsOptions,
+): T[] => {
+  if (
+    options?.scopeKey !== undefined &&
+    options.scopeKeyRef &&
+    options.scopeKeyRef.current !== options.scopeKey
+  ) {
+    selectedRowsMap.clear();
+    options.scopeKeyRef.current = options.scopeKey;
+  }
+
+  if (options?.deletedIds?.size) {
+    options.deletedIds.forEach((id) => {
+      selectedRowsMap.delete(id);
+    });
+  }
+
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+  Object.entries(rowSelection).forEach(([id, selected]) => {
+    if (selected && rowsById.has(id) && !options?.deletedIds?.has(id)) {
+      selectedRowsMap.set(id, rowsById.get(id)!);
+    }
+  });
+
+  Array.from(selectedRowsMap.keys()).forEach((id) => {
+    if (!rowSelection[id] || options?.deletedIds?.has(id)) {
+      selectedRowsMap.delete(id);
+    }
+  });
+
+  return Object.keys(rowSelection)
+    .filter((id) => rowSelection[id] && !options?.deletedIds?.has(id))
+    .map((id) => selectedRowsMap.get(id))
+    .filter((row): row is T => row !== undefined);
+};
+
 /**
  * Injects a callback into a column's custom metadata.
  * Useful for adding dynamic row click handlers to columns that need to be editable via the columns menu.
