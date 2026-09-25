@@ -165,6 +165,121 @@ def test_jsonable_encoder__non_serializable_lock_inside_dataclass__lock_converte
     assert encoded["b"].startswith("<unlocked _thread.lock object at 0x")
 
 
+@dataclasses.dataclass(slots=True)
+class SlotsPoint:
+    x: int
+    y: int
+
+
+@dataclasses.dataclass
+class DictBase:
+    a: int
+
+
+@dataclasses.dataclass(slots=True)
+class SlotsChildOfDictBase(DictBase):
+    b: int
+
+
+@dataclasses.dataclass(slots=True)
+class SlotsNode:
+    value: int
+    child: Optional["SlotsNode"] = None
+
+
+@dataclasses.dataclass
+class InitFalseDefault:
+    a: int
+    b: int = dataclasses.field(default=7, init=False)
+
+
+@dataclasses.dataclass(slots=True)
+class SlotsInitFalseDefault:
+    a: int
+    b: int = dataclasses.field(default=7, init=False)
+
+
+@dataclasses.dataclass(slots=True, frozen=True)
+class FrozenSlotsKey:
+    x: int
+
+
+@dataclasses.dataclass(slots=True)
+class SlotsWithUnsetField:
+    x: int
+    y: int = dataclasses.field(init=False)
+
+
+def test_jsonable_encoder__slots_dataclass__encoded_as_dict():
+    assert jsonable_encoder.encode(SlotsPoint(x=1, y=2)) == {"x": 1, "y": 2}
+
+
+def test_jsonable_encoder__slots_dataclass_nested_in_container__encoded_as_dict():
+    encoded = jsonable_encoder.encode({"points": [SlotsPoint(x=1, y=2)]})
+
+    assert encoded == {"points": [{"x": 1, "y": 2}]}
+
+
+def test_jsonable_encoder__slots_dataclass_inheriting_dict_based_dataclass__all_fields_encoded():
+    encoded = jsonable_encoder.encode(SlotsChildOfDictBase(a=1, b=2))
+
+    assert encoded == {"a": 1, "b": 2}
+
+
+def test_jsonable_encoder__slots_dataclass_cyclic_reference__cycle_detected():
+    node_a = SlotsNode(value=1)
+    node_b = SlotsNode(value=2, child=node_a)
+    node_a.child = node_b
+
+    encoded = jsonable_encoder.encode(node_a)
+
+    assert encoded["value"] == 1
+    assert encoded["child"]["value"] == 2
+    assert encoded["child"]["child"].startswith("<Cyclic reference to SlotsNode")
+
+
+def test_jsonable_encoder__same_slots_dataclass_in_sibling_branches__not_reported_as_cycle():
+    shared = SlotsPoint(x=1, y=2)
+
+    encoded = jsonable_encoder.encode([shared, shared])
+
+    assert encoded == [{"x": 1, "y": 2}, {"x": 1, "y": 2}]
+
+
+def test_jsonable_encoder__slots_dataclass_class_object__not_encoded_as_field_dict():
+    assert isinstance(jsonable_encoder.encode(SlotsPoint), str)
+
+
+def test_jsonable_encoder__dataclass_init_false_field_with_default__class_default_not_added():
+    assert jsonable_encoder.encode(InitFalseDefault(a=1)) == {"a": 1}
+
+
+def test_jsonable_encoder__slots_dataclass_unset_field__unset_field_omitted():
+    assert jsonable_encoder.encode(SlotsWithUnsetField(x=1)) == {"x": 1}
+
+
+def test_jsonable_encoder__slots_dataclass_init_false_field_with_default__encoded_like_plain_dataclass():
+    assert jsonable_encoder.encode(
+        SlotsInitFalseDefault(a=1)
+    ) == jsonable_encoder.encode(InitFalseDefault(a=1))
+
+
+def test_jsonable_encoder__init_false_field_reassigned__encoded_for_plain_and_slots_dataclass():
+    plain = InitFalseDefault(a=1)
+    plain.b = 9
+    slots = SlotsInitFalseDefault(a=1)
+    slots.b = 9
+
+    assert jsonable_encoder.encode(plain) == {"a": 1, "b": 9}
+    assert jsonable_encoder.encode(slots) == {"a": 1, "b": 9}
+
+
+def test_jsonable_encoder__slots_dataclass_as_dict_key__key_stringified_and_siblings_kept():
+    encoded = jsonable_encoder.encode({FrozenSlotsKey(x=1): "a", "other": "b"})
+
+    assert encoded == {"FrozenSlotsKey(x=1)": "a", "other": "b"}
+
+
 def test_jsonable_encoder__non_serializable_to_text__bytes():
     data = b"deadbeef"
 

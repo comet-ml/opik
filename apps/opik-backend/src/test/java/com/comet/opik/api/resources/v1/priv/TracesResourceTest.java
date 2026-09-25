@@ -19,6 +19,7 @@ import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceSearchStreamRequest;
@@ -91,6 +92,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.Assertions;
@@ -121,6 +123,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -6071,6 +6074,109 @@ class TracesResourceTest {
             var expectedThreads = getExpectedThreads(traces, projectId, threadId, spans, TraceThreadStatus.ACTIVE);
 
             TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
+        }
+
+        @Test
+        @DisplayName("when a span is updated, then the thread aggregates use the latest span version only")
+        void getTraceThread__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly() {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(null)
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(0.01, 1))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .comments(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // The update writes a second row version; the aggregates must dedup it without FINAL
+            var latestSpan = span.toBuilder()
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(1, 2))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .build();
+            spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .provider(latestSpan.provider())
+                    .usage(latestSpan.usage())
+                    .totalEstimatedCost(latestSpan.totalEstimatedCost())
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+
+            var expectedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(latestSpan),
+                    TraceThreadStatus.ACTIVE);
+            TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
+            assertThat(actualThread.usage()).isEqualTo(Map.of(latestSpan.usage().keySet().iterator().next(),
+                    latestSpan.usage().values().iterator().next().longValue()));
+            assertThat(actualThread.totalEstimatedCost()).isEqualByComparingTo(latestSpan.totalEstimatedCost());
+        }
+
+        @Test
+        @DisplayName("when a span is re-inserted with a different parent, then the thread aggregates count it once")
+        void getTraceThread__whenSpanReinsertedWithDifferentParent__thenAggregatesCountItOnce() {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            // Batch create skips the parent-mismatch check, so both versions land. The live sorting key still
+            // holds parent_span_id: FINAL keeps both rows and sums them, the id dedup keeps only the latest.
+            var staleSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(generator.generate())
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(0.01, 1))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.MINUTES))
+                    .comments(null)
+                    .feedbackScores(null)
+                    .build();
+            var latestSpan = staleSpan.toBuilder()
+                    .parentSpanId(generator.generate())
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(1, 2))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .lastUpdatedAt(Instant.now())
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(staleSpan), API_KEY, TEST_WORKSPACE);
+            spanResourceClient.batchCreateSpans(List.of(latestSpan), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+
+            var expectedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(latestSpan),
+                    TraceThreadStatus.ACTIVE);
+            TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
+            assertThat(actualThread.totalEstimatedCost()).isEqualByComparingTo(latestSpan.totalEstimatedCost());
         }
 
         @Test
