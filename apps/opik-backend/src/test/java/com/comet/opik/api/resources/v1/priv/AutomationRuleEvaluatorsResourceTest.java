@@ -22,6 +22,9 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPyt
 import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
@@ -883,6 +886,58 @@ class AutomationRuleEvaluatorsResourceTest {
             return factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).getCode().toBuilder()
                     .messages(List.of(message))
                     .variables(Map.of())
+                    .build();
+        }
+
+        @Test
+        @DisplayName("create evaluator: when the model is a decisions model and the rule fits it, then create it")
+        void createEvaluator__whenDecisionModelRuleIsValid__thenCreated() {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var jevEvaluator = evaluator.toBuilder().code(jevCode(LlmAsJudgeOutputSchemaType.BOOLEAN)).build();
+
+            var id = evaluatorsResourceClient.createEvaluator(jevEvaluator, WORKSPACE_NAME, API_KEY);
+
+            assertThat(id).isNotNull();
+        }
+
+        @Test
+        @DisplayName("create and update evaluator: when a decisions model rule has a numeric score, then reject it")
+        void createAndUpdateEvaluator__whenDecisionModelRuleHasNumericScore__thenBadRequest() {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var invalidEvaluator = evaluator.toBuilder()
+                    .code(jevCode(LlmAsJudgeOutputSchemaType.INTEGER))
+                    .build();
+
+            try (var actualResponse = evaluatorsResourceClient.createEvaluator(
+                    invalidEvaluator, WORKSPACE_NAME, API_KEY, HttpStatus.SC_BAD_REQUEST)) {
+                assertThat(actualResponse.readEntity(ErrorMessage.class).getMessage())
+                        .contains("Decisions models only support Boolean scores");
+            }
+
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+            var invalidUpdate = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .code(jevCode(LlmAsJudgeOutputSchemaType.INTEGER))
+                    .build();
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
+                    id, WORKSPACE_NAME, invalidUpdate, API_KEY, HttpStatus.SC_BAD_REQUEST)) {
+                assertThat(actualResponse.readEntity(ErrorMessage.class).getMessage())
+                        .contains("Decisions models only support Boolean scores");
+            }
+        }
+
+        private AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode jevCode(LlmAsJudgeOutputSchemaType scoreType) {
+            return AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.builder()
+                    .model(LlmAsJudgeModelParameters.builder().name("~typesafe/jev-latest").build())
+                    .messages(List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Question: {{question}}\nAnswer: {{answer}}")
+                            .build()))
+                    .variables(Map.of("question", "input.question", "answer", "output.answer"))
+                    .schema(List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("answer_relevant")
+                            .type(scoreType)
+                            .description("Does the answer respond to the question?")
+                            .build()))
                     .build();
         }
 

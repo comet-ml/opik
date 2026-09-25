@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { Info } from "lucide-react";
+import { Info, MessageCircleWarning } from "lucide-react";
 import find from "lodash/find";
 import get from "lodash/get";
 
+import { Alert, AlertDescription } from "@/ui/alert";
 import { Label } from "@/ui/label";
 import { Input } from "@/ui/input";
 import {
@@ -37,7 +38,12 @@ import {
   getAllTemplateStringsFromContent,
   resolveTraceEvaluatorVariableDefault,
 } from "@/lib/llm";
-import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+  ProviderModelsMap,
+} from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { cn } from "@/lib/utils";
 import {
@@ -51,6 +57,14 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { isDecisionModel } from "@/lib/modelCapabilities";
+import { DECISION_MODELS } from "@/constants/decisionModels";
+import {
+  DECISION_MODEL_SCORE_TYPES,
+  getDecisionModelReservedVariables,
+  isDecisionModelTemplate,
+  toDecisionModelSchema,
+} from "@/v2/pages-shared/automations/AddEditRuleDialog/decisionModelRule";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -70,6 +84,15 @@ const MESSAGE_TYPE_OPTIONS = [
     value: LLM_MESSAGE_ROLE.tool_execution_result,
   },
 ];
+
+// Decisions models (Jev) take a single user message.
+const DECISION_MODEL_MESSAGE_TYPE_OPTIONS = MESSAGE_TYPE_OPTIONS.filter(
+  (option) => option.value === LLM_MESSAGE_ROLE.user,
+);
+
+const DECISION_MODEL_PROVIDER_MODELS: ProviderModelsMap = {
+  [PROVIDER_TYPE.OPEN_ROUTER]: DECISION_MODELS,
+};
 
 type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
@@ -138,11 +161,22 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
 
+  // Scores removed when switching to a decisions model, shown so the switch is never silent.
+  const [removedScoreNames, setRemovedScoreNames] = useState<string[]>([]);
+
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
+  const isDecision = isDecisionModel(form.watch("llmJudgeDetails.model"));
 
-  const templates = LLM_PROMPT_TEMPLATES[scope];
+  const templates = isDecision
+    ? LLM_PROMPT_TEMPLATES[scope].filter(isDecisionModelTemplate)
+    : LLM_PROMPT_TEMPLATES[scope];
+
+  // Thread rules don't support decisions models.
+  const extraProviderModels = !isThreadScope
+    ? DECISION_MODEL_PROVIDER_MODELS
+    : undefined;
 
   // Determine the type for autocomplete based on scope
   const autocompleteType = isSpanScope
@@ -176,6 +210,26 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     [calculateModelProvider, form],
   );
 
+  // Adapts the form when switching to a decisions model: only Boolean scores and only the templates that
+  // fit are kept. Messages and variables stay as they are; validation points at anything left to fix.
+  const handleSwitchToDecisionModel = useCallback(() => {
+    const { schema, template } = form.getValues("llmJudgeDetails");
+    const currentScope = form.getValues("scope");
+    const adapted = toDecisionModelSchema(schema, currentScope);
+
+    if (adapted.removedScoreNames.length || !schema.length) {
+      form.setValue("llmJudgeDetails.schema", adapted.schema);
+    }
+    setRemovedScoreNames(adapted.removedScoreNames);
+
+    const fitsDecisionModel = LLM_PROMPT_TEMPLATES[currentScope]
+      .filter(isDecisionModelTemplate)
+      .some((t) => t.value === template);
+    if (!fitsDecisionModel) {
+      form.setValue("llmJudgeDetails.template", LLM_JUDGE.custom);
+    }
+  }, [form]);
+
   // Memoized callback to handle messages change
   const handleMessagesChange = useCallback(
     (
@@ -189,8 +243,12 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       const variables = formInstance.getValues("llmJudgeDetails.variables");
       const currentScope = formInstance.getValues("scope");
       // {{span}} is reserved on span scope; {{trace}} / {{spans}} on trace scope.
-      const reservedVariables =
-        currentScope === EVALUATORS_RULE_SCOPE.span
+      // Decisions models don't take {{trace}} / {{span}}, so those aren't auto-mapped to the sentinel.
+      const reservedVariables = isDecisionModel(
+        formInstance.getValues("llmJudgeDetails.model"),
+      )
+        ? getDecisionModelReservedVariables(currentScope)
+        : currentScope === EVALUATORS_RULE_SCOPE.span
           ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
           : RESERVED_TRACE_LLM_JUDGE_VARIABLES;
       const localVariables: Record<string, string> = {};
@@ -251,7 +309,15 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     value={model}
                     onChange={(m, selectedProvider) => {
                       if (m) {
+                        const wasDecision = isDecisionModel(field.value);
                         field.onChange(m);
+                        if (isDecisionModel(m)) {
+                          if (!wasDecision) {
+                            handleSwitchToDecisionModel();
+                          }
+                        } else {
+                          setRemovedScoreNames([]);
+                        }
                         // Update config to ensure reasoning models have temperature >= 1.0
                         const currentConfig = form.getValues(
                           "llmJudgeDetails.config",
@@ -276,34 +342,63 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     workspaceName={workspaceName}
                     onAddProvider={handleAddProvider}
                     onDeleteProvider={handleDeleteProvider}
+                    extraProviderModels={extraProviderModels}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="llmJudgeDetails.config"
-                    render={({ field }) => (
-                      <PromptModelConfigs
-                        size="icon"
-                        provider={provider}
-                        model={model}
-                        configs={field.value}
-                        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
-                        onChange={(partialConfig) => {
-                          field.onChange({ ...field.value, ...partialConfig });
-                        }}
-                      />
-                    )}
-                  ></FormField>
+                  {/* A decisions model takes no settings: no temperature, seed, thinking or custom parameters. */}
+                  {!isDecision && (
+                    <FormField
+                      control={form.control}
+                      name="llmJudgeDetails.config"
+                      render={({ field }) => (
+                        <PromptModelConfigs
+                          size="icon"
+                          provider={provider}
+                          model={model}
+                          configs={field.value}
+                          unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+                          onChange={(partialConfig) => {
+                            field.onChange({
+                              ...field.value,
+                              ...partialConfig,
+                            });
+                          }}
+                        />
+                      )}
+                    ></FormField>
+                  )}
                 </div>
               </FormControl>
+              {isDecision && (
+                <FormDescription className="comet-body-xs text-muted-slate">
+                  Jev answers each score as a yes/no question about your prompt.
+                  The prompt is the text Jev reads; each score&apos;s
+                  description is its question. Ask one thing per score, phrased
+                  so that a high probability means yes. A score is 1 when the
+                  probability is 0.5 or higher, and the reason shows the
+                  probability.
+                </FormDescription>
+              )}
               <FormMessage />
             </FormItem>
           );
         }}
       />
+      {isDecision && removedScoreNames.length > 0 && (
+        <Alert size="sm">
+          <MessageCircleWarning />
+          <AlertDescription size="sm">
+            <span>
+              Jev only supports Boolean scores, so these scores were removed:{" "}
+              {removedScoreNames.join(", ")}.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
       {/* Budget applies only to agentic (multi-turn) evaluations — trace and thread. Span scoring is
-          a single LLM call with no loop to wrap up, so the field is hidden there. */}
-      {!isSpanScope && (
+          a single LLM call with no loop to wrap up, so the field is hidden there, as it is for
+          decisions models, which never run the agentic loop. */}
+      {!isSpanScope && !isDecision && (
         <FormField
           control={form.control}
           name="llmJudgeDetails.maxCostUsd"
@@ -405,8 +500,13 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 <LLMPromptMessages
                   messages={messages}
                   validationErrors={validationErrors}
-                  possibleTypes={MESSAGE_TYPE_OPTIONS}
-                  disableMedia={isThreadScope}
+                  possibleTypes={
+                    isDecision
+                      ? DECISION_MODEL_MESSAGE_TYPE_OPTIONS
+                      : MESSAGE_TYPE_OPTIONS
+                  }
+                  disableMedia={isThreadScope || isDecision}
+                  hideAddButton={isDecision && messages.length > 0}
                   promptVariables={datasetColumnNames}
                   onChange={(messages: LLMMessage[]) =>
                     handleMessagesChange(messages, field.onChange, form)
@@ -449,9 +549,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     type={autocompleteType}
                     includeIntermediateNodes
                     reservedSentinels={
-                      isSpanScope
-                        ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
-                        : RESERVED_TRACE_LLM_JUDGE_VARIABLES
+                      isDecision
+                        ? getDecisionModelReservedVariables(scope)
+                        : isSpanScope
+                          ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
+                          : RESERVED_TRACE_LLM_JUDGE_VARIABLES
                     }
                   />
                 </>
@@ -486,6 +588,9 @@ multiple scores to this section.`}
                 validationErrors={validationErrors}
                 scores={field.value}
                 onChange={field.onChange}
+                allowedTypes={
+                  isDecision ? DECISION_MODEL_SCORE_TYPES : undefined
+                }
               />
             );
           }}
