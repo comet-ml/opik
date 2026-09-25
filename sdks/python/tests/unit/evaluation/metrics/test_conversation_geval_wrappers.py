@@ -23,6 +23,18 @@ class ErrorJudge(BaseMetric):
         raise ValueError("fail")
 
 
+class RecordingJudge(StubJudge):
+    """Keeps every string the metric handed to the judge, so a test can assert on it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.received: List[str] = []
+
+    def score(self, output: str, **_: Any) -> ScoreResult:
+        self.received.append(output)
+        return super().score(output)
+
+
 def _conversation(messages: List[str]) -> List[dict]:
     turns = []
     for idx, content in enumerate(messages):
@@ -62,3 +74,187 @@ def test_geval_conversation_metric_exception_marks_failed():
 
     assert result.scoring_failed is True
     assert result.name == "conversation_error"
+
+
+def test_geval_conversation_metric_grades_answer_before_empty_final_turn():
+    """A closing turn with no text must not hide the answer before it.
+
+    ``create_conversation_from_traces`` only skips an assistant message when the output
+    transform returns ``None``, so a turn whose text is ``""`` (an agent call that issued
+    tool calls only, or an empty completion) reaches the metric. ``score()`` documents
+    that only assistant turns with non-empty content are considered, so the judge must
+    get the summary rather than nothing.
+    """
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = _conversation(
+        ["Summarise these notes.", "Summary: timelines and budgets.", "Thanks", ""]
+    )
+
+    result = metric.score(conversation)
+
+    assert judge.received == ["Summary: timelines and budgets."]
+    assert result.scoring_failed is False
+    assert result.value == 0.8
+    assert result.reason == "ok"
+
+
+def test_geval_conversation_metric_takes_latest_text_turn_not_the_first_one():
+    """Skipping must stay backwards: of two gradeable answers, the later one is graded."""
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = _conversation(
+        ["q1", "FIRST answer", "q2", "SECOND answer", "q3", ""]
+    )
+
+    result = metric.score(conversation)
+
+    assert judge.received == ["SECOND answer"]
+    assert result.scoring_failed is False
+
+
+def test_geval_conversation_metric_treats_whitespace_as_no_text():
+    """A blank-but-present closing turn carries no text, so the earlier answer is graded."""
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = _conversation(["q", "real answer", "thanks", "  \n "])
+
+    result = metric.score(conversation)
+
+    assert judge.received == ["real answer"]
+    assert result.scoring_failed is False
+
+
+def test_geval_conversation_metric_all_assistant_turns_without_text_marks_failed():
+    """When nothing carries text, the score still fails with the real reason."""
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = _conversation(["Hello", "   "])
+
+    result = metric.score(conversation)
+
+    assert judge.received == []
+    assert result.scoring_failed is True
+    assert result.value == 0.0
+    assert result.reason == "Conversation contains no assistant messages to evaluate."
+
+
+def test_geval_conversation_metric_non_string_content_marks_failed_without_raising():
+    """A hand-built dict whose content is not text is not 'no text' either.
+
+    The TypedDict asks for ``str``, and the conversation built from traces enforces it,
+    but ``score()`` takes plain dicts. A value that is neither text nor content parts
+    must be reported as a failed score naming the type, rather than skipped so that an
+    older turn is graded and reported as a success.
+    """
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = [
+        {"role": "assistant", "content": "gradeable answer"},
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "content": 0},
+    ]
+
+    result = metric.score(conversation)
+
+    assert judge.received == []
+    assert result.scoring_failed is True
+    assert result.value == 0.0
+    assert result.reason == (
+        "Assistant turn content must be text or a list of content parts, got int."
+    )
+
+
+def test_geval_conversation_metric_unreadable_content_part_marks_failed():
+    """A part this adapter cannot read is a shape error, not an empty turn."""
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = [
+        {"role": "assistant", "content": "gradeable answer"},
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "content": [42]},
+    ]
+
+    result = metric.score(conversation)
+
+    assert judge.received == []
+    assert result.scoring_failed is True
+    assert result.reason == (
+        "Assistant turn content must be text or a list of content parts, got int."
+    )
+
+
+def test_geval_conversation_metric_malformed_text_part_marks_failed():
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+
+    for content in ([{"type": "text", "text": 42}], [{"type": "text"}]):
+        result = metric.score(
+            [
+                {"role": "assistant", "content": "gradeable answer"},
+                {"role": "user", "content": "q"},
+                {"role": "assistant", "content": content},
+            ]
+        )
+
+        assert judge.received == []
+        assert result.scoring_failed is True
+        assert result.reason == (
+            "Assistant turn content must be text or a list of content parts, got dict."
+        )
+
+
+def test_geval_conversation_metric_multimodal_final_turn_grades_its_own_text():
+    """OpenAI-style content parts on the last turn are text from that turn.
+
+    The turn carries text, so the metric must not fall back to the earlier answer: the
+    image part is ignored and the text parts are joined.
+    """
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = [
+        {"role": "user", "content": "What is in this chart?"},
+        {"role": "assistant", "content": "an older answer"},
+        {"role": "user", "content": "And the second one?"},
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "The second chart shows"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.invalid/c.png"},
+                },
+                {"type": "text", "text": "a rising trend."},
+            ],
+        },
+    ]
+
+    result = metric.score(conversation)
+
+    assert judge.received == ["The second chart shows\na rising trend."]
+    assert result.scoring_failed is False
+
+
+def test_geval_conversation_metric_image_only_final_turn_grades_the_earlier_answer():
+    """A final turn with parts but no text carries nothing to grade."""
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = [
+        {"role": "user", "content": "Summarise the plot."},
+        {"role": "assistant", "content": "Summary: timelines and budgets."},
+        {"role": "user", "content": "And the figure?"},
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.invalid/c.png"},
+                }
+            ],
+        },
+    ]
+
+    result = metric.score(conversation)
+
+    assert judge.received == ["Summary: timelines and budgets."]
+    assert result.scoring_failed is False
