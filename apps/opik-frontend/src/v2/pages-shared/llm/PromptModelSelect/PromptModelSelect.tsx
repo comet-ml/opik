@@ -30,6 +30,7 @@ import { parseComposedProviderType } from "@/lib/provider";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useModelOptions } from "./useModelOptions";
+import { mergeProviderModels } from "./mergeProviderModels";
 
 interface PromptModelSelectProps {
   value: PROVIDER_MODEL_TYPE | "";
@@ -70,16 +71,10 @@ const PromptModelSelect = ({
   const [openProviderMenu, setOpenProviderMenu] =
     useState<COMPOSED_PROVIDER_TYPE | null>(null);
   const { providerModels: registryProviderModels } = useLLMProviderModelsData();
-  const providerModels = useMemo<ProviderModelsMap>(() => {
-    if (!extraProviderModels) {
-      return registryProviderModels;
-    }
-    const merged: ProviderModelsMap = { ...registryProviderModels };
-    Object.entries(extraProviderModels).forEach(([provider, models]) => {
-      merged[provider] = [...(merged[provider] ?? []), ...models];
-    });
-    return merged;
-  }, [extraProviderModels, registryProviderModels]);
+  const providerModels = useMemo<ProviderModelsMap>(
+    () => mergeProviderModels(registryProviderModels, extraProviderModels),
+    [extraProviderModels, registryProviderModels],
+  );
 
   const {
     permissions: { canUpdateAIProviders },

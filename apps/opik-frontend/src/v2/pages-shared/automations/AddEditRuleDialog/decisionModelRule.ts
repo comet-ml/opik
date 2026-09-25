@@ -23,14 +23,14 @@ import {
 export const DECISION_MODEL_SCORE_TYPES = [LLM_SCHEMA_TYPE.BOOLEAN];
 
 // The structure variable each scope reserves: rejected for decisions models.
-export const DECISION_MODEL_FORBIDDEN_VARIABLE: Partial<
+export const DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE: Partial<
   Record<EVALUATORS_RULE_SCOPE, string>
 > = {
   [EVALUATORS_RULE_SCOPE.trace]: RESERVED_TRACE_LLM_JUDGE_VARIABLES.trace,
   [EVALUATORS_RULE_SCOPE.span]: RESERVED_SPAN_LLM_JUDGE_VARIABLES.span,
 };
 
-const DECISION_MODEL_RESERVED_VARIABLES: Partial<
+const DECISION_MODEL_RESERVED_VARIABLES_BY_SCOPE: Partial<
   Record<EVALUATORS_RULE_SCOPE, Readonly<Record<string, string>>>
 > = {
   [EVALUATORS_RULE_SCOPE.trace]: {
@@ -39,7 +39,7 @@ const DECISION_MODEL_RESERVED_VARIABLES: Partial<
   [EVALUATORS_RULE_SCOPE.span]: {},
 };
 
-const DEFAULT_DECISION_MODEL_SCHEMA: Partial<
+const DEFAULT_DECISION_MODEL_SCHEMA_BY_SCOPE: Partial<
   Record<EVALUATORS_RULE_SCOPE, LLMJudgeSchema[]>
 > = {
   [EVALUATORS_RULE_SCOPE.trace]: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.schema,
@@ -50,7 +50,7 @@ const DEFAULT_DECISION_MODEL_SCHEMA: Partial<
 export const getDecisionModelReservedVariables = (
   scope: EVALUATORS_RULE_SCOPE,
 ): Readonly<Record<string, string>> =>
-  DECISION_MODEL_RESERVED_VARIABLES[scope] ?? {};
+  DECISION_MODEL_RESERVED_VARIABLES_BY_SCOPE[scope] ?? {};
 
 /**
  * Keeps the Boolean scores for a decisions model and reports the ones removed, so the switch is never
@@ -70,7 +70,7 @@ export const toDecisionModelSchema = (
   return {
     schema: booleanScores.length
       ? booleanScores
-      : cloneDeep(DEFAULT_DECISION_MODEL_SCHEMA[scope] ?? []),
+      : cloneDeep(DEFAULT_DECISION_MODEL_SCHEMA_BY_SCOPE[scope] ?? []),
     removedScoreNames,
   };
 };
@@ -83,3 +83,8 @@ export const isDecisionModelTemplate = (template: LLMPromptTemplate) =>
 
 export const hasSingleUserMessage = (messages: LLMMessage[]) =>
   messages.length === 1 && messages[0].role === LLM_MESSAGE_ROLE.user;
+
+/** Plain text, or structured content made only of text parts: no image, video or audio. */
+export const isTextOnlyMessage = (message: LLMMessage) =>
+  typeof message.content === "string" ||
+  message.content.every((part) => part.type === "text");

@@ -34,8 +34,9 @@ import {
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
 import {
-  DECISION_MODEL_FORBIDDEN_VARIABLE,
+  DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE,
   hasSingleUserMessage,
+  isTextOnlyMessage,
 } from "@/v2/pages-shared/automations/AddEditRuleDialog/decisionModelRule";
 import {
   hasImagesInContent,
@@ -155,8 +156,7 @@ type LLMJudgeRefineData = {
   schema: { type: LLM_SCHEMA_TYPE }[];
 };
 
-// Mirrors the backend's DecisionModelRuleValidator so a rule it would reject fails here first. Media is
-// covered by the model-capability check, which already reports decisions models as text-only.
+// Mirrors the backend's DecisionModelRuleValidator so a rule it would reject fails here first.
 const refineDecisionModelRule = (
   data: LLMJudgeRefineData,
   ctx: z.RefinementCtx,
@@ -164,6 +164,14 @@ const refineDecisionModelRule = (
 ) => {
   if (!isDecisionModel(data.model)) {
     return;
+  }
+
+  if (!data.schema.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Jev needs at least one score",
+      path: ["schema"],
+    });
   }
 
   if (data.schema.some((score) => score.type !== LLM_SCHEMA_TYPE.BOOLEAN)) {
@@ -182,7 +190,19 @@ const refineDecisionModelRule = (
     });
   }
 
-  const forbiddenVariable = DECISION_MODEL_FORBIDDEN_VARIABLE[scope];
+  // The model-capability check only looks for images and videos; audio, or media kept from another model,
+  // would otherwise reach the backend.
+  data.messages.forEach((message, index) => {
+    if (!isTextOnlyMessage(message)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Jev only accepts text messages",
+        path: ["messages", index, "content"],
+      });
+    }
+  });
+
+  const forbiddenVariable = DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE[scope];
   Object.entries(data.variables).forEach(([key, value]) => {
     if (forbiddenVariable && value === forbiddenVariable) {
       ctx.addIssue({

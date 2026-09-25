@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getDecisionModelReservedVariables,
   hasSingleUserMessage,
+  isTextOnlyMessage,
   isDecisionModelTemplate,
   toDecisionModelSchema,
 } from "./decisionModelRule";
@@ -109,5 +110,32 @@ describe("getDecisionModelReservedVariables", () => {
     expect(
       getDecisionModelReservedVariables(EVALUATORS_RULE_SCOPE.span),
     ).toEqual({});
+  });
+});
+
+describe("isTextOnlyMessage", () => {
+  const message = (content: unknown) =>
+    ({ id: "m", role: LLM_MESSAGE_ROLE.user, content }) as Parameters<
+      typeof isTextOnlyMessage
+    >[0];
+
+  it("accepts plain text and text-only parts", () => {
+    expect(isTextOnlyMessage(message("hi"))).toBe(true);
+    expect(isTextOnlyMessage(message([{ type: "text", text: "hi" }]))).toBe(
+      true,
+    );
+  });
+
+  it("rejects any image, video or audio part", () => {
+    ["image_url", "video_url", "audio_url"].forEach((type) => {
+      expect(
+        isTextOnlyMessage(
+          message([
+            { type: "text", text: "hi" },
+            { type, [type]: { url: "https://example.com/x" } },
+          ]),
+        ),
+      ).toBe(false);
+    });
   });
 });

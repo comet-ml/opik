@@ -89,6 +89,54 @@ describe("Jev rule validation", () => {
     );
   });
 
+  it("rejects an empty score list", () => {
+    const result = LLMJudgeDetailsTraceFormSchema.safeParse(
+      jevDetails({ schema: [] }),
+    );
+
+    expect(issueMessages(result)).toContain("Jev needs at least one score");
+  });
+
+  it("rejects non-text content, including audio the capability check misses", () => {
+    const audio = LLMJudgeDetailsTraceFormSchema.safeParse(
+      jevDetails({
+        messages: [
+          {
+            id: "a",
+            role: LLM_MESSAGE_ROLE.user,
+            content: [
+              { type: "text", text: "Answer: {{answer}}" },
+              {
+                type: "audio_url",
+                audio_url: { url: "https://example.com/a.mp3" },
+              },
+            ],
+          },
+        ],
+        variables: { answer: "output.answer" },
+      }),
+    );
+
+    expect(issueMessages(audio)).toContain("Jev only accepts text messages");
+  });
+
+  it("accepts structured content made only of text parts", () => {
+    const result = LLMJudgeDetailsTraceFormSchema.safeParse(
+      jevDetails({
+        messages: [
+          {
+            id: "t",
+            role: LLM_MESSAGE_ROLE.user,
+            content: [{ type: "text", text: "Answer: {{answer}}" }],
+          },
+        ],
+        variables: { answer: "output.answer" },
+      }),
+    );
+
+    expect(result.success).toBe(true);
+  });
+
   it("rejects the structure variable of the scope", () => {
     const trace = LLMJudgeDetailsTraceFormSchema.safeParse(
       jevDetails({
