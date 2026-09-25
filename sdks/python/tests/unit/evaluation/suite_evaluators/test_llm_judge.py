@@ -1,6 +1,7 @@
 import logging
 import pytest
 from opik.evaluation.suite_evaluators import llm_judge
+from opik.evaluation.metrics import score_result
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 
 
@@ -228,12 +229,53 @@ class TestLLMJudgeFromConfig:
         assert evaluator.assertions[0] == "Is accurate"
         assert evaluator.assertions[1] == "Is helpful"
 
-    def test_from_config__rejects_non_boolean_assertion_type(self):
+    @pytest.mark.parametrize("assertion_type", ["INTEGER", "DOUBLE"])
+    def test_from_config__preserves_unsupported_type_and_returns_failed_score(
+        self, assertion_type, monkeypatch
+    ):
         config = llm_judge_config.LLMJudgeConfig(
             name="numeric_evaluator",
             model=llm_judge_config.LLMJudgeModelConfig(temperature=0.5),
             variables={"input": "input", "output": "output"},
             schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type=assertion_type,
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        monkeypatch.setattr(
+            evaluator,
+            "_generate_and_parse",
+            lambda **kwargs: pytest.fail("unsupported numeric assertion was scored"),
+        )
+
+        results = evaluator.score(input="input", output="output")
+
+        assert len(results) == 1
+        assert results[0].name == "Rate usefulness from 0.0 to 1.0"
+        assert results[0].scoring_failed is True
+        assert assertion_type in results[0].reason
+        assert evaluator.to_config().schema_[0].type == assertion_type
+        assert evaluator.to_config().schema_[0].name == "usefulness"
+
+    def test_from_config__mixed_types__scores_boolean_and_fails_numeric(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="mixed_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="accurate",
+                    type="BOOLEAN",
+                    description="Response is accurate",
+                ),
                 llm_judge_config.LLMJudgeSchemaItem(
                     name="usefulness",
                     type="DOUBLE",
@@ -242,9 +284,27 @@ class TestLLMJudgeFromConfig:
             ],
             messages=[],
         )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        monkeypatch.setattr(
+            evaluator,
+            "_generate_and_parse",
+            lambda **kwargs: [
+                score_result.ScoreResult(
+                    name="Response is accurate",
+                    value=True,
+                    reason="The response is accurate.",
+                    category_name="suite_assertion",
+                )
+            ],
+        )
 
-        with pytest.raises(ValueError, match="BOOLEAN"):
-            llm_judge.LLMJudge.from_config(config, track=False)
+        results = evaluator.score(input="input", output="output")
+
+        assert len(results) == 2
+        assert results[0].value is True
+        assert results[0].scoring_failed is False
+        assert results[1].name == "Rate usefulness from 0.0 to 1.0"
+        assert results[1].scoring_failed is True
 
     def test_from_config__no_model_name__uses_default(self):
         """When config has no model name, from_config uses the default model."""

@@ -187,6 +187,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
         super().__init__(name=name, track=track, project_name=project_name)
 
         self._assertions: List[str] = list(assertions)
+        self._config_schema_items: Optional[
+            List[llm_judge_config.LLMJudgeSchemaItem]
+        ] = None
 
         self._seed = seed
         self._temperature = temperature
@@ -252,6 +255,11 @@ class LLMJudge(base.BaseSuiteEvaluator):
         if len(judges) <= 1:
             return None
 
+        # Merging would rebuild the judge from assertion text alone and lose
+        # the original types of numeric schemas restored from the backend.
+        if any(judge._get_unsupported_schema_items() for judge in judges):
+            return None
+
         first = judges[0]
         if not all(first._has_same_settings(j) for j in judges[1:]):
             return None
@@ -314,11 +322,15 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 - value: True if passed, False if failed
                 - reason: Explanation from the judge
         """
+        assertions = self._get_supported_assertions()
+        if not assertions and self._get_unsupported_schema_items():
+            return self._merge_config_schema_results([])
+
         trace_tool_context = kwargs.get("trace_tool_context")
         strategy = self._strategy_selector_instance.select(
             trace_tool_context=trace_tool_context,
             model_name=self._model_name,
-            assertions=self._assertions,
+            assertions=assertions,
         )
         if strategy is _strategy_selector.ScoringToolStrategy.AGENTIC:
             if trace_tool_context is None:
@@ -327,24 +339,28 @@ class LLMJudge(base.BaseSuiteEvaluator):
                     "was provided; falling back to one-shot."
                 )
             else:
-                return self._score_agentic(trace_tool_context)
+                results = self._score_agentic(trace_tool_context, assertions)
+                return self._merge_config_schema_results(results)
 
         try:
-            return self._generate_and_parse(input=input, output=output)
+            results = self._generate_and_parse(
+                input=input, output=output, assertions=assertions
+            )
+            return self._merge_config_schema_results(results)
         except LLMJudgeParseError as e:
             LOGGER.warning(
                 "LLMJudge scoring failed after retries: %s", e, exc_info=True
             )
-            return e.results
+            return self._merge_config_schema_results(e.results)
 
-    def _score_agentic(self, ctx: Any) -> List[score_result.ScoreResult]:
+    def _score_agentic(
+        self, ctx: Any, assertions: List[str]
+    ) -> List[score_result.ScoreResult]:
         # Import lazily so the agentic dependencies (tool registry, loop,
         # prompt) don't load when the one-shot path is the only one used.
         from opik.evaluation.suite_evaluators.agentic import judge as agentic_judge
 
-        judge = agentic_judge.AgenticLLMJudge(
-            assertions=self._assertions, model=self._model
-        )
+        judge = agentic_judge.AgenticLLMJudge(assertions=assertions, model=self._model)
         return judge.score(ctx)
 
     @_RETRY_POLICY
@@ -352,8 +368,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
         self,
         input: Any,
         output: Any,
+        assertions: Optional[List[str]] = None,
     ) -> List[score_result.ScoreResult]:
-        schema = parsers.ResponseSchema(self._assertions)
+        assertions = self._assertions if assertions is None else assertions
+        schema = parsers.ResponseSchema(assertions)
         messages = _build_messages(
             input=input,
             output=output,
@@ -383,21 +401,30 @@ class LLMJudge(base.BaseSuiteEvaluator):
         Returns:
             List[ScoreResult]: A list of ScoreResult objects, one per assertion.
         """
+        assertions = self._get_supported_assertions()
+        if not assertions and self._get_unsupported_schema_items():
+            return self._merge_config_schema_results([])
+
         try:
-            return await self._agenerate_and_parse(input=input, output=output)
+            results = await self._agenerate_and_parse(
+                input=input, output=output, assertions=assertions
+            )
+            return self._merge_config_schema_results(results)
         except LLMJudgeParseError as e:
             LOGGER.warning(
                 "LLMJudge async scoring failed after retries: %s", e, exc_info=True
             )
-            return e.results
+            return self._merge_config_schema_results(e.results)
 
     @_RETRY_POLICY
     async def _agenerate_and_parse(
         self,
         input: Any,
         output: Any,
+        assertions: Optional[List[str]] = None,
     ) -> List[score_result.ScoreResult]:
-        schema = parsers.ResponseSchema(self._assertions)
+        assertions = self._assertions if assertions is None else assertions
+        schema = parsers.ResponseSchema(assertions)
         messages = _build_messages(
             input=input,
             output=output,
@@ -407,6 +434,72 @@ class LLMJudge(base.BaseSuiteEvaluator):
             messages=messages, response_format=schema.response_format
         )
         return schema.parse(message["content"])
+
+    def _get_unsupported_schema_items(
+        self,
+    ) -> List[llm_judge_config.LLMJudgeSchemaItem]:
+        if self._config_schema_items is None:
+            return []
+        return [item for item in self._config_schema_items if item.type != "BOOLEAN"]
+
+    def _get_supported_assertions(self) -> List[str]:
+        if self._config_schema_items is None:
+            return self._assertions
+        return [
+            item.description
+            for item in self._config_schema_items
+            if item.type == "BOOLEAN"
+        ]
+
+    def _merge_config_schema_results(
+        self, supported_results: List[score_result.ScoreResult]
+    ) -> List[score_result.ScoreResult]:
+        unsupported_items = self._get_unsupported_schema_items()
+        if not unsupported_items or self._config_schema_items is None:
+            return supported_results
+
+        unsupported_types = sorted({item.type for item in unsupported_items})
+        LOGGER.warning(
+            "LLMJudge %s cannot score configured assertion types: %s",
+            self.name,
+            ", ".join(unsupported_types),
+        )
+        unsupported_names = ", ".join(
+            f"{item.name} ({item.type})" for item in unsupported_items
+        )
+        reason = (
+            "LLMJudge cannot score assertion(s) "
+            f"{unsupported_names}; only BOOLEAN assertion scores are currently supported."
+        )
+
+        supported_results_iter = iter(supported_results)
+        results: List[score_result.ScoreResult] = []
+        for item in self._config_schema_items:
+            if item.type == "BOOLEAN":
+                try:
+                    results.append(next(supported_results_iter))
+                except StopIteration:
+                    results.append(
+                        score_result.ScoreResult(
+                            name=item.description,
+                            value=0.0,
+                            reason="LLMJudge did not return a score for this assertion.",
+                            category_name="suite_assertion",
+                            scoring_failed=True,
+                        )
+                    )
+            else:
+                results.append(
+                    score_result.ScoreResult(
+                        name=item.description,
+                        value=0.0,
+                        reason=reason,
+                        category_name="suite_assertion",
+                        metadata={"unsupported_type": item.type},
+                        scoring_failed=True,
+                    )
+                )
+        return results
 
     def to_config(self) -> llm_judge_config.LLMJudgeConfig:
         """
@@ -459,14 +552,24 @@ class LLMJudge(base.BaseSuiteEvaluator):
             "output": "output",
         }
 
-        schema_items = [
-            llm_judge_config.LLMJudgeSchemaItem(
-                name=assertion,
-                type="BOOLEAN",
-                description=assertion,
-            )
-            for assertion in self._assertions
-        ]
+        if self._config_schema_items is not None:
+            schema_items = [
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name=item.name,
+                    type=item.type,
+                    description=item.description,
+                )
+                for item in self._config_schema_items
+            ]
+        else:
+            schema_items = [
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name=assertion,
+                    type="BOOLEAN",
+                    description=assertion,
+                )
+                for assertion in self._assertions
+            ]
 
         return llm_judge_config.LLMJudgeConfig(
             name=self.name,
@@ -489,6 +592,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         This method allows reconstructing an LLMJudge from a serialized config,
         typically retrieved from the backend's online evaluation system.
+        BOOLEAN assertions are scored normally. INTEGER and DOUBLE schema items
+        are retained for serialization, but produce explicit failed score
+        results when evaluated because numeric assertion scoring is not yet
+        supported by this evaluator.
 
         Args:
             config: LLMJudgeConfig with model, messages, variables, and schema.
@@ -511,15 +618,6 @@ class LLMJudge(base.BaseSuiteEvaluator):
             ... )
             >>> evaluator = LLMJudge.from_config(config, init_kwargs={"model": "gpt-4o"})
         """
-        unsupported_types = sorted(
-            {item.type for item in config.schema_ if item.type != "BOOLEAN"}
-        )
-        if unsupported_types:
-            raise ValueError(
-                "LLMJudge.from_config currently supports only BOOLEAN assertion "
-                f"types; unsupported types: {', '.join(unsupported_types)}"
-            )
-
         assertion_texts = [item.description for item in config.schema_]
 
         init_kwargs = init_kwargs or {}
@@ -529,7 +627,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         custom = config.model.custom_parameters or {}
         reasoning_effort = custom.get("reasoning_effort")
 
-        return cls(
+        evaluator = cls(
             assertions=assertion_texts,
             name=config.name,
             model=model,
@@ -540,3 +638,12 @@ class LLMJudge(base.BaseSuiteEvaluator):
             reasoning_effort=reasoning_effort,
             scoring_tool_strategy=scoring_tool_strategy,
         )
+        evaluator._config_schema_items = [
+            llm_judge_config.LLMJudgeSchemaItem(
+                name=item.name,
+                type=item.type,
+                description=item.description,
+            )
+            for item in config.schema_
+        ]
+        return evaluator
