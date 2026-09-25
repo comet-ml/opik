@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 500" width="640" height="500" role="img" aria-labelledby="title desc">
+  <title id="title">Data anonymization data flow</title>
+  <desc id="desc">Your application logs a trace with an email address to Opik. Opik stores the original data. When a user reads the trace, Opik checks the user's permission. A workspace admin with the Original data view permission gets the email address. For a member without the permission, Opik applies the masking rules and returns [EMAIL].</desc>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif; }
+    .title { font-size: 16px; font-weight: 600; fill: #101828; }
+    .sub { font-size: 13px; fill: #667085; }
+    .edge { font-size: 13px; fill: #475467; font-weight: 500; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+    .node { fill: #ffffff; stroke: #d0d5dd; stroke-width: 1.5; }
+    .line { fill: none; stroke: #d0d5dd; stroke-width: 2; }
+    .flow { fill: none; stroke: #98a2b3; stroke-width: 2; stroke-dasharray: 6 8; animation: dash 1.2s linear infinite; }
+    @keyframes dash { to { stroke-dashoffset: -14; } }
+
+    .anim { animation-duration: 10s; animation-iteration-count: infinite; animation-timing-function: linear; }
+
+    #dot-log { animation-name: log; }
+    @keyframes log {
+      0% { transform: translate(320px, 48px); opacity: 0; }
+      3% { transform: translate(320px, 48px); opacity: 1; }
+      14% { transform: translate(320px, 172px); opacity: 1; }
+      15%, 100% { transform: translate(320px, 172px); opacity: 0; }
+    }
+
+    #dot-read { animation-name: read; }
+    @keyframes read {
+      0%, 22% { transform: translate(320px, 172px); opacity: 0; }
+      23% { transform: translate(320px, 172px); opacity: 1; }
+      32% { transform: translate(320px, 262px); opacity: 1; }
+      33%, 100% { transform: translate(320px, 262px); opacity: 0; }
+    }
+
+    #dot-up { animation-name: up; }
+    @keyframes up {
+      0%, 32% { transform: translate(320px, 262px); opacity: 0; }
+      33% { transform: translate(320px, 262px); opacity: 1; }
+      39% { transform: translate(140px, 262px); }
+      52% { transform: translate(140px, 418px); opacity: 1; }
+      53%, 100% { transform: translate(140px, 418px); opacity: 0; }
+    }
+
+    #dot-down { animation-name: down; }
+    @keyframes down {
+      0%, 32% { transform: translate(320px, 262px); opacity: 0; }
+      33% { transform: translate(320px, 262px); opacity: 1; }
+      39% { transform: translate(500px, 262px); }
+      43% { transform: translate(500px, 318px); opacity: 1; }
+      44%, 100% { transform: translate(500px, 318px); opacity: 0; }
+    }
+
+    #dot-masked { animation-name: masked; }
+    @keyframes masked {
+      0%, 47% { transform: translate(500px, 318px); opacity: 0; }
+      48% { transform: translate(500px, 318px); opacity: 1; }
+      57% { transform: translate(500px, 418px); opacity: 1; }
+      58%, 100% { transform: translate(500px, 418px); opacity: 0; }
+    }
+
+    #chip-stored { animation-name: stored; }
+    @keyframes stored { 0%, 13% { opacity: 0; } 16%, 92% { opacity: 1; } 98%, 100% { opacity: 0; } }
+
+    #chip-original { animation-name: original; }
+    @keyframes original { 0%, 51% { opacity: 0; } 54%, 92% { opacity: 1; } 98%, 100% { opacity: 0; } }
+
+    #chip-token { animation-name: token; }
+    @keyframes token { 0%, 56% { opacity: 0; } 59%, 92% { opacity: 1; } 98%, 100% { opacity: 0; } }
+
+    #rules-glow { animation-name: glow; }
+    @keyframes glow { 0%, 42% { opacity: 0; } 45% { opacity: 1; } 52%, 100% { opacity: 0; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .anim, .flow { animation: none; }
+      .dot, #rules-glow { opacity: 0; }
+      #chip-stored, #chip-original, #chip-token { opacity: 1; }
+    }
+  </style>
+
+  <rect x="0.75" y="0.75" width="638.5" height="498.5" rx="14" fill="#f9fafb" stroke="#eaecf0" stroke-width="1.5"/>
+
+  <!-- Opik boundary -->
+  <rect x="20" y="108" width="600" height="250" rx="14" fill="#f4f3ff" fill-opacity="0.55" stroke="#bdb4fe" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="38" y="136" style="font-size:17px;font-weight:700;fill:#5925dc">Opik</text>
+
+  <!-- Connectors -->
+  <path class="line" d="M320 76 V142"/>
+  <path class="line" d="M320 202 V237"/>
+  <path class="line" d="M235 262 H140 V390"/>
+  <path class="line" d="M405 262 H500 V293"/>
+  <path class="line" d="M500 343 V390"/>
+  <path class="flow" d="M320 76 V142"/>
+  <path class="flow" d="M320 202 V237"/>
+  <path class="flow" d="M235 262 H140 V390"/>
+  <path class="flow" d="M405 262 H500 V293"/>
+  <path class="flow" d="M500 343 V390"/>
+
+  <text class="edge" x="332" y="98">log trace</text>
+  <text class="edge" x="332" y="224">read</text>
+  <text class="edge" x="152" y="304">has permission</text>
+  <text class="edge" x="453" y="252" text-anchor="middle">no permission</text>
+
+  <!-- Moving data, drawn under the nodes so it passes through them -->
+  <circle id="dot-log" class="dot anim" r="7" fill="#3b82f6"/>
+  <circle id="dot-read" class="dot anim" r="7" fill="#3b82f6"/>
+  <circle id="dot-up" class="dot anim" r="7" fill="#3b82f6"/>
+  <circle id="dot-down" class="dot anim" r="7" fill="#3b82f6"/>
+  <circle id="dot-masked" class="dot anim" r="7" fill="#f79009"/>
+
+  <!-- Outside Opik: the application -->
+  <rect class="node" x="235" y="20" width="170" height="56" rx="10"/>
+  <text class="title" x="320" y="43" text-anchor="middle">Your application</text>
+  <text class="sub" x="320" y="63" text-anchor="middle">Opik SDK</text>
+  <rect x="420" y="35" width="170" height="26" rx="6" fill="#eff8ff" stroke="#b2ddff"/>
+  <text class="mono" x="505" y="52.5" text-anchor="middle" fill="#175cd3">jane.doe@example.com</text>
+
+  <!-- Inside Opik -->
+  <path d="M235 150 A85 9 0 0 1 405 150 V194 A85 9 0 0 1 235 194 Z" class="node"/>
+  <ellipse cx="320" cy="150" rx="85" ry="9" fill="none" stroke="#d0d5dd" stroke-width="1.5"/>
+  <text class="title" x="320" y="180" text-anchor="middle">Trace storage</text>
+  <text class="sub" x="320" y="198" text-anchor="middle">original data</text>
+
+  <g id="chip-stored" class="anim">
+    <rect x="420" y="160" width="170" height="26" rx="6" fill="#eff8ff" stroke="#b2ddff"/>
+    <text class="mono" x="505" y="177.5" text-anchor="middle" fill="#175cd3">jane.doe@example.com</text>
+  </g>
+
+  <rect class="node" x="235" y="237" width="170" height="50" rx="10"/>
+  <text class="title" x="320" y="258" text-anchor="middle">Permission check</text>
+  <text class="sub" x="320" y="277" text-anchor="middle">role of the user</text>
+
+  <rect id="rules-glow" class="anim" x="424" y="287" width="152" height="62" rx="13" fill="none" stroke="#fdb022" stroke-width="4"/>
+  <rect class="node" x="430" y="293" width="140" height="50" rx="10" style="fill:#fffaeb;stroke:#fec84b"/>
+  <text class="title" x="500" y="314" text-anchor="middle">Masking rules</text>
+  <text class="sub" x="500" y="333" text-anchor="middle">email, phone, …</text>
+
+  <!-- Outside Opik: the users -->
+  <rect class="node" x="55" y="390" width="170" height="56" rx="10" style="fill:#ecfdf3;stroke:#75e0a7"/>
+  <text class="title" x="140" y="413" text-anchor="middle">Workspace admin</text>
+  <text class="sub" x="140" y="433" text-anchor="middle">has Original data view</text>
+
+  <rect class="node" x="415" y="390" width="170" height="56" rx="10" style="fill:#fef3f2;stroke:#fda29b"/>
+  <text class="title" x="500" y="413" text-anchor="middle">Member</text>
+  <text class="sub" x="500" y="433" text-anchor="middle">permission excluded</text>
+
+  <g id="chip-original" class="anim">
+    <rect x="55" y="456" width="170" height="26" rx="6" fill="#eff8ff" stroke="#b2ddff"/>
+    <text class="mono" x="140" y="473.5" text-anchor="middle" fill="#175cd3">jane.doe@example.com</text>
+  </g>
+
+  <g id="chip-token" class="anim">
+    <rect x="455" y="456" width="90" height="26" rx="6" fill="#fffaeb" stroke="#fec84b"/>
+    <text class="mono" x="500" y="473.5" text-anchor="middle" fill="#b54708">[EMAIL]</text>
+  </g>
+</svg>

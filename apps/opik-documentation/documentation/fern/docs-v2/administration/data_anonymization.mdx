@@ -22,6 +22,10 @@ Your team can then give analysts, annotators or external reviewers access to pro
 
 ## How it works
 
+<Frame caption="Opik stores the trace as it was logged. Each time a user reads the trace, Opik checks the user's permission and masks the data for users without Original data view.">
+  <img src="/img/administration/data_anonymization_flow.svg" alt="Data flow: your application logs a trace, Opik stores the original data, and on read a workspace admin sees the email address while a member without the permission sees [EMAIL]" />
+</Frame>
+
 - **Opik stores the original data.** Nothing is changed when traces are logged. Masking is applied each time data is read, so a change to the rules applies to all traces, including traces logged before the change.
 - **Rules decide what is masked.** Opik includes rules for common types of sensitive data, such as email addresses and phone numbers. You can also add rules for data that is specific to your organization, such as customer IDs or account numbers. Each rule replaces the matched value with a token, for example `[EMAIL]`. The rules apply to all workspaces in your deployment.
 - **A permission decides who sees original data.** The **Original data view** permission (listed as **View unanonymized data** in the [permissions table](/administration/roles_and_permissions#permissions-by-role)) lets a user see the original values. Users without it see masked values.
