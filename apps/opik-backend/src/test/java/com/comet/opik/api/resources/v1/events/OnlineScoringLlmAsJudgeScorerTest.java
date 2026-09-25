@@ -914,7 +914,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         @BeforeEach
         void setUpDecisionModel() {
-            lenient().when(serviceTogglesConfig.isJevOnlineEvaluationEnabled()).thenReturn(true);
             lenient().when(llmProviderFactory.getClientApiConfig(anyString(), eq(JEV_MODEL)))
                     .thenReturn(clientConfig);
             lenient().when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
@@ -1021,17 +1020,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
             // 4 chars per token (set in setUp): this answer alone is over the 32k-token limit.
             var message = buildJevMessage("question",
                     RandomStringUtils.secure().nextAlphanumeric(DecisionScoringService.MAX_CONTEXT_TOKENS * 4 + 1));
-
-            scorer.score(message).block();
-
-            verifyNoInteractions(decisionsClient);
-            assertThat(captureStoredScores()).isEmpty();
-        }
-
-        @Test
-        void disabledToggleSkipsWithoutCallingTheModel() {
-            when(serviceTogglesConfig.isJevOnlineEvaluationEnabled()).thenReturn(false);
-            var message = buildJevMessage("question", "answer");
 
             scorer.score(message).block();
 

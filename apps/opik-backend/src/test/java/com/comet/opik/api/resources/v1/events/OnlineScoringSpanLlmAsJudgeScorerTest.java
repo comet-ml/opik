@@ -460,7 +460,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .apiKey(RandomStringUtils.secure().nextAlphanumeric(16))
                 .build();
 
-        when(serviceTogglesConfig.isJevOnlineEvaluationEnabled()).thenReturn(true);
         when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL)).thenReturn(clientConfig);
         var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
@@ -484,19 +483,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         assertThat(score.id()).isEqualTo(span.id());
         assertThat(score.value()).isEqualByComparingTo("1");
         assertThat(score.reason()).isEqualTo("Probability: 0.97");
-        verifyNoInteractions(aiProxyService);
-    }
-
-    @Test
-    void decisionModelWithDisabledToggleSkipsWithoutCallingTheModel() {
-        var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
-        var message = buildMessage(createSpan(), code);
-        when(serviceTogglesConfig.isJevOnlineEvaluationEnabled()).thenReturn(false);
-        when(feedbackScoreService.scoreBatchOfSpans(List.of())).thenReturn(Mono.empty());
-
-        scorer.score(message).block();
-
-        verifyNoInteractions(decisionsClient);
         verifyNoInteractions(aiProxyService);
     }
 

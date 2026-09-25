@@ -59,8 +59,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
     @NotNull boolean onlineScoringTracingEnabled;
-    @JsonProperty
-    @NotNull boolean jevOnlineEvaluationEnabled;
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;

@@ -12,10 +12,8 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
-import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import dev.langchain4j.data.message.ChatMessageType;
 import jakarta.ws.rs.BadRequestException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -27,8 +25,6 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class DecisionModelRuleValidatorTest {
 
@@ -43,13 +39,7 @@ class DecisionModelRuleValidatorTest {
     private static final Map<String, String> VARIABLES = Map.of(
             "question", "input.question", "answer", "output.answer");
 
-    private final ServiceTogglesConfig serviceTogglesConfig = mock(ServiceTogglesConfig.class);
-    private final DecisionModelRuleValidator validator = new DecisionModelRuleValidator(serviceTogglesConfig);
-
-    @BeforeEach
-    void setUp() {
-        when(serviceTogglesConfig.isJevOnlineEvaluationEnabled()).thenReturn(true);
-    }
+    private final DecisionModelRuleValidator validator = new DecisionModelRuleValidator();
 
     @Test
     void acceptsValidTraceAndSpanRules() {
@@ -131,16 +121,6 @@ class DecisionModelRuleValidatorTest {
         assertThatThrownBy(() -> validator.validate(rule))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("Thread rules don't support decisions models");
-    }
-
-    @Test
-    void rejectsWhenToggleIsOff() {
-        when(serviceTogglesConfig.isJevOnlineEvaluationEnabled()).thenReturn(false);
-
-        assertThatThrownBy(() -> validator.validate(traceRule(
-                code(JEV_MODEL, List.of(USER_MESSAGE), VARIABLES, List.of(BOOLEAN_SCORE)))))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Decisions models are disabled");
     }
 
     private static AutomationRuleEvaluatorLlmAsJudge traceRule(LlmAsJudgeCode code) {

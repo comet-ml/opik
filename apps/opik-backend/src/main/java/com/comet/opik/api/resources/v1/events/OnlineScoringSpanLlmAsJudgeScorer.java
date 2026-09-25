@@ -242,8 +242,8 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
 
     /**
      * Scores with a decisions model: the rendered prompt is the state, and each score is a yes/no question,
-     * all answered by one call (see {@link DecisionScoringService}). Skipped with a user-facing warning when the
-     * feature is off or the span doesn't fit the model's context.
+     * all answered by one call (see {@link DecisionScoringService}). Skipped with a user-facing warning when no
+     * Boolean score is left or the span doesn't fit the model's context.
      */
     private Mono<List<FeedbackScoreBatchItem>> evaluateWithDecisionModel(SpanToScoreLlmAsJudge message,
             Map<String, String> mdc, EvaluationRecorder recorder) {
@@ -252,11 +252,6 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         // A null from the callable (skipped evaluation) completes empty and stores no scores.
         return Mono.<DecisionsRequest>fromCallable(() -> {
             try (var _ = wrapWithMdc(mdc)) {
-                if (!serviceTogglesConfig.isJevOnlineEvaluationEnabled()) {
-                    userFacingLogger.warn("Skipped evaluation, decisions models are disabled, spanId '{}', model '{}'",
-                            span.id(), code.model().name());
-                    return null;
-                }
                 userFacingLogger.info("Evaluating with decision model spanId '{}' sampled by rule '{}'", span.id(),
                         message.ruleName());
                 var request = decisionScoringService.buildRequest(code.model().name(),

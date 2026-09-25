@@ -57,8 +57,6 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { isDecisionModel } from "@/lib/modelCapabilities";
 import { DECISION_MODELS } from "@/constants/decisionModels";
 import {
@@ -163,9 +161,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
 
-  const isJevEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.JEV_ONLINE_EVALUATION_ENABLED,
-  );
   // Scores removed when switching to a decisions model, shown so the switch is never silent.
   const [removedScoreNames, setRemovedScoreNames] = useState<string[]>([]);
 
@@ -178,12 +173,10 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     ? LLM_PROMPT_TEMPLATES[scope].filter(isDecisionModelTemplate)
     : LLM_PROMPT_TEMPLATES[scope];
 
-  // Offered when the feature is on, and kept for a rule already on one so its selection still shows.
   // Thread rules don't support decisions models.
-  const extraProviderModels =
-    !isThreadScope && (isJevEnabled || isDecision)
-      ? DECISION_MODEL_PROVIDER_MODELS
-      : undefined;
+  const extraProviderModels = !isThreadScope
+    ? DECISION_MODEL_PROVIDER_MODELS
+    : undefined;
 
   // Determine the type for autocomplete based on scope
   const autocompleteType = isSpanScope

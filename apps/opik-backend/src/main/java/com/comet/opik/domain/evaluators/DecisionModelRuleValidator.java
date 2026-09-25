@@ -13,16 +13,13 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.resources.v1.events.OnlineScoringEngine;
-import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import dev.langchain4j.data.message.ChatMessageType;
-import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.Map;
@@ -34,10 +31,7 @@ import java.util.Map;
  * supported. Rules on other models pass through untouched.
  */
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class DecisionModelRuleValidator {
-
-    private final @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig;
 
     public void validate(@NonNull AutomationRuleEvaluator<?, ?> evaluator) {
         switch (evaluator) {
@@ -97,9 +91,6 @@ public class DecisionModelRuleValidator {
     private void validate(RuleCode code) {
         if (!OpenRouterDecisionModel.isDecisionModel(code.model())) {
             return;
-        }
-        if (!serviceTogglesConfig.isJevOnlineEvaluationEnabled()) {
-            throw new BadRequestException("Decisions models are disabled, model '%s'".formatted(code.model()));
         }
         if (code.schema().isEmpty()) {
             throw new BadRequestException(
