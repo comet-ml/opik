@@ -40,9 +40,10 @@ public record AnnotationQueueAutomation(
                 AnnotationQueue.View.Write.class}) @Nullable @Valid Conditions conditions,
 
         /**
-         * Ceiling on how large automation is allowed to grow the queue: once the queue holds this many
-         * items, automation stops adding. Absent means no ceiling. Nullable for the same reason as
-         * conditions — a toggle-only request must not silently drop it.
+         * Queue size at which automation stops adding: once the queue holds this many items, however they
+         * got there, automation adds no more. Items added by hand are never refused. Absent means no
+         * ceiling. Nullable for the same reason as conditions — a toggle-only request must not silently
+         * drop it.
          */
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable @Positive Integer maxItemsInQueue) {
