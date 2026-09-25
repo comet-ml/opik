@@ -606,6 +606,38 @@ def test_bertscore_with_stubbed_fn():
     assert result.metadata["recall"] == pytest.approx(0.75)
 
 
+@pytest.mark.parametrize(
+    "reference, expected_refs",
+    [
+        (["hi there", "hello"], [["hi there", "hello"]]),
+        ([["hi there", "hello"]], [["hi there", "hello"]]),
+        (["hello"], ["hello"]),
+    ],
+)
+def test_bertscore__multiple_references__passed_as_one_group(reference, expected_refs):
+    # bert_score asserts one reference entry per candidate. A plain list of
+    # references for the single output used to be passed through as-is, so two
+    # references against one candidate failed that assertion.
+    def scorer(cands, refs):
+        assert len(cands) == len(refs), "Different number of candidates and references"
+        assert refs == expected_refs
+        return ([_Scalar(0.8)], [_Scalar(0.75)], [_Scalar(0.77)])
+
+    metric = BERTScore(scorer_fn=scorer, track=False)
+    result = metric.score(output="hello", reference=reference)
+
+    assert result.value == pytest.approx(0.77)
+
+
+def test_bertscore__mixed_reference_list__raises_metric_error():
+    def scorer(cands, refs):
+        raise AssertionError("scorer should not be called")
+
+    metric = BERTScore(scorer_fn=scorer, track=False)
+    with pytest.raises(MetricComputationError, match="list"):
+        metric.score(output="hello", reference=["hi there", ["hello"]])
+
+
 def test_bertscore_rejects_empty_candidate():
     metric = BERTScore(scorer_fn=lambda c, r: ([0.0], [0.0], [0.0]), track=False)
     with pytest.raises(MetricComputationError):
