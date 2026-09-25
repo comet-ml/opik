@@ -116,8 +116,9 @@
 
         <!--
             Extended free-form SQL account. Same profile with comet_readonly_freeform_sql_user shape,
-            wider reach: traces/spans stay bound to workspace and, when SQL_project_id is not '*', to that
-            project too; every other table is workspace-only - authored_feedback_scores included.
+            wider reach: tables carrying project_id in their primary key stay bound to workspace and, when
+            SQL_project_id is not '*', to that project too; experiments, experiment_items and dataset_items
+            are workspace-only.
         -->
         <comet_readonly_freeform_extended_sql_user>
             <password>opik</password>
@@ -145,10 +146,10 @@
                         <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
                     </traces>
                     <authored_feedback_scores>
-                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
                     </authored_feedback_scores>
                     <feedback_scores>
-                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
                     </feedback_scores>
                     <experiments>
                         <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
@@ -160,7 +161,7 @@
                         <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
                     </dataset_items>
                     <trace_threads>
-                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
                     </trace_threads>
                 </opik>
             </databases>
