@@ -132,3 +132,16 @@ def test_get_json_size_complex_nested():
         )
     )
     assert sequence_splitter._get_json_size(test_input) == expected
+
+
+def test_split_list_into_batches__items_packed_to_the_limit__serialized_batch_stays_under_it():
+    # A kilobyte per item once quoted, so 1024 of them pack to exactly the 1MB
+    # budget and the commas between them are all that pushes the request over.
+    ONE_MEGABYTE = fake_message_factory.ONE_MEGABYTE
+    items = ["a" * 1022] * 1024
+
+    batches = sequence_splitter.split_into_batches(items, max_payload_size_MB=1.0)
+
+    for batch in batches:
+        serialized = json.dumps(batch, separators=(",", ":")).encode("utf-8")
+        assert len(serialized) <= ONE_MEGABYTE

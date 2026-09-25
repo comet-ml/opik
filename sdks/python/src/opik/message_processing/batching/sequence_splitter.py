@@ -6,6 +6,13 @@ T = TypeVar("T")
 
 LOGGER = logging.getLogger(__name__)
 
+_BYTES_PER_MB = 1024 * 1024
+# A batch is sent as a JSON list, so its brackets and the commas between its
+# items ride along with the items themselves. Sizing only the items lets a
+# batch packed right up to the limit cross it once serialized.
+_JSON_LIST_BRACKETS_MB = 2 / _BYTES_PER_MB
+_JSON_LIST_SEPARATOR_MB = 1 / _BYTES_PER_MB
+
 
 def _get_expected_payload_size_MB(item: T) -> float:
     encoded_for_json = jsonable_encoder.encode(item)
@@ -92,29 +99,34 @@ def split_into_batches(
 
     batches: List[List[T]] = []
     current_batch: List[T] = []
-    current_batch_size_MB: float = 0.0
+    current_batch_size_MB: float = _JSON_LIST_BRACKETS_MB
 
     for item in items:
-        item_size_MB = (
-            0.0 if max_payload_size_MB is None else _get_expected_payload_size_MB(item)
-        )
+        item_size_MB = _get_expected_payload_size_MB(item)
 
         if item_size_MB >= max_payload_size_MB:
             batches.append([item])
             continue
 
+        appended_size_MB = item_size_MB + (
+            _JSON_LIST_SEPARATOR_MB if len(current_batch) > 0 else 0.0
+        )
+
         batch_is_already_full = len(current_batch) == max_length
+        # The first item of a batch always goes in: its brackets are unavoidable,
+        # and an empty batch is worth less than a slightly oversized one.
         batch_will_exceed_memory_limit_after_adding = (
-            current_batch_size_MB + item_size_MB > max_payload_size_MB
+            len(current_batch) > 0
+            and current_batch_size_MB + appended_size_MB > max_payload_size_MB
         )
 
         if batch_is_already_full or batch_will_exceed_memory_limit_after_adding:
             batches.append(current_batch)
             current_batch = [item]
-            current_batch_size_MB = item_size_MB
+            current_batch_size_MB = _JSON_LIST_BRACKETS_MB + item_size_MB
         else:
             current_batch.append(item)
-            current_batch_size_MB += item_size_MB
+            current_batch_size_MB += appended_size_MB
 
     if len(current_batch) > 0:
         batches.append(current_batch)
