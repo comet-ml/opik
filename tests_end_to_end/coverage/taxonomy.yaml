@@ -753,6 +753,7 @@ areas:
       # (deleted-queue URL loads forever instead of showing a not-found state).
       # Fixing that bug turns the run red until the annotation is removed.
       delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
+      queue-items-tab:         { covered: false, note: "QueueItemsTab — the queue detail page's default tab, split TraceQueueItemsTab / ThreadQueueItemsTab by queue scope. Its own key rather than part of score-queue-item: that key is about a score reaching the source trace, and annotation-queue-scoring.spec.ts only traverses this table to open an item. Nothing asserts the listing itself — its rows, its Source column, or the row/bulk actions" }
       queue-configuration-tab: { covered: false }
       add-traces-to-queue:     { covered: true,  tier: t2-cuj }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
