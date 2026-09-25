@@ -52,6 +52,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -3883,6 +3884,23 @@ class ExperimentAggregatesIntegrationTest {
                 .as("the two aliased experiment items collapse onto one dataset item")
                 .extracting(DatasetItem::id)
                 .containsExactlyInAnyOrderElementsOf(stableIds);
+
+        assertThat(unpaged.total())
+                .as("the count query resolves the aliases the same way the page does, or a page of collapsed "
+                        + "items reports a total that counts each alias separately")
+                .isEqualTo(stableIds.size());
+
+        // The stats query joins its experiment items back to dataset items on the resolved stable id, so an
+        // item naming a version row id is dropped outright when the alias lookup regresses - the counts halve
+        // rather than shifting. This is the only legacy-id assertion on the stats query.
+        var stats = datasetResourceClient.getDatasetExperimentItemsStats(dataset.id(), experimentIds, apiKey,
+                workspaceName, null);
+        assertThat(stats.stats())
+                .as("both experiment items per dataset item reach the stats, not only the stable-id one")
+                .filteredOn(stat -> Set.of(StatsMapper.EXPERIMENT_ITEMS_COUNT, StatsMapper.TRACE_COUNT)
+                        .contains(stat.getName()))
+                .hasSize(2)
+                .allSatisfy(stat -> assertThat(stat.getValue()).isEqualTo((long) experimentItems.size()));
 
         var paged = new ArrayList<DatasetItem>();
         int pageCount = (LEGACY_ITEM_COUNT + 2 + LEGACY_PAGE_SIZE - 1) / LEGACY_PAGE_SIZE;
