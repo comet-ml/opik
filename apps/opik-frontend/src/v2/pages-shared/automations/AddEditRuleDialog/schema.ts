@@ -236,7 +236,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       // bare sentinel like `spans` / `trace` — see RESERVED_TRACE_LLM_JUDGE_VARIABLES.
       // The backend's OnlineScoringEngine substitutes `spans` with the JSON-serialized
       // spans list and `trace` with the trace skeleton (ids + attachments) at render time.
-      .regex(/^(input|output|metadata)(\.|$)|^spans$|^trace$/, {
+      .regex(/^(input|output|metadata)(\.|\[|$)|^spans$|^trace$/, {
         message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), the reserved word "spans" to inject the trace's spans list, or "trace" to inject the trace skeleton with attachments`,
       }),
   ),
@@ -291,7 +291,7 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
       // bare sentinel `span` — see RESERVED_SPAN_LLM_JUDGE_VARIABLES. The backend's
       // OnlineScoringEngine substitutes `span` with the span structure (span id +
       // attachment file_names) at render time.
-      .regex(/^(input|output|metadata)(\.|$)|^span$/, {
+      .regex(/^(input|output|metadata)(\.|\[|$)|^span$/, {
         message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "span" to inject the span with its attachments`,
       }),
   ),
@@ -336,7 +336,8 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
   }
 });
 
-export const THREAD_CONTEXT_VARIABLE = "{{context}}";
+export const THREAD_CONTEXT_VARIABLE_NAME = "context";
+export const THREAD_CONTEXT_VARIABLE = `{{${THREAD_CONTEXT_VARIABLE_NAME}}}`;
 
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),

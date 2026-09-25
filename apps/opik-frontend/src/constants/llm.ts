@@ -425,7 +425,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
   LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
   {
     label: "Hallucination",
-    description: "Check if the output contains any hallucinations",
+    description: "Checks if the response includes unsupported information",
     value: LLM_JUDGE.hallucination,
     messages: [
       {
@@ -475,7 +475,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
   },
   {
     label: "Moderation",
-    description: "Check if the output contains any harmful content",
+    description: "Checks if the response contains unsafe or harmful content",
     value: LLM_JUDGE.moderation,
     messages: [
       {
@@ -525,7 +525,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
   },
   {
     label: "Answer relevance",
-    description: "Check if the output is relevant to the input",
+    description: "Checks if the response directly answers the user's question",
     value: LLM_JUDGE.answer_relevance,
     messages: [
       {
@@ -570,7 +570,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
   {
     label: "Structured Output Compliance",
     description:
-      "Checks if the output follows a defined JSON or JSON-LD structure",
+      "Checks whether the response follows the required structure or format",
     value: LLM_JUDGE.structure_compliance,
     messages: [
       {
@@ -600,8 +600,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
   },
   {
     label: "Meaning Match",
-    description:
-      "Evaluates semantic equivalence between output and ground truth",
+    description: "Checks if the response matches the expected meaning",
     value: LLM_JUDGE.meaning_match,
     messages: [
       {
@@ -675,7 +674,7 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
   LLM_PROMPT_CUSTOM_THREAD_TEMPLATE,
   {
     label: "Conversational coherence",
-    description: "Check if the output is coherent with the conversation",
+    description: "Checks if each response stays coherent with the conversation",
     value: LLM_JUDGE.conversational_coherence,
     messages: [
       {

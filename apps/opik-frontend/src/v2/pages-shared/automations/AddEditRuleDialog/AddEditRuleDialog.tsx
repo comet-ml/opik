@@ -1,33 +1,26 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
-import { Info, MessageCircleWarning } from "lucide-react";
+import { ExternalLink, MessageCircleWarning } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
-import {
-  Dialog,
-  DialogAutoScrollBody,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/ui/dialog";
+import { SheetTopBar } from "@/ui/sheet";
 import { Label } from "@/ui/label";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
 import { Input } from "@/ui/input";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/ui/select";
+import { Switch } from "@/ui/switch";
+import { ToastAction } from "@/ui/toast";
+import { useToast } from "@/ui/use-toast";
+import SideDialog from "@/shared/SideDialog/SideDialog";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
+import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import { useConfirmAction } from "@/shared/ConfirmDialog/useConfirmAction";
 import {
   EVAL_TRIGGER_SCOPE,
   EVALUATORS_RULE_SCOPE,
@@ -38,17 +31,32 @@ import {
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
-import { COLUMN_TYPE } from "@/types/shared";
+import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { LLM_JUDGE, LLM_MESSAGE_ROLE, LLMJudgeSchema } from "@/types/llm";
 import { isFilterValid } from "@/lib/filters";
 import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
+import { buildDocsUrl } from "@/v2/lib/utils";
+import { LOGS_TYPE } from "@/constants/traces";
+import {
+  DEFAULT_PYTHON_CODE_THREAD_DATA,
+  DEFAULT_PYTHON_CODE_TRACE_DATA,
+  DEFAULT_PYTHON_CODE_SPAN_DATA,
+  LLM_PROMPT_CUSTOM_THREAD_TEMPLATE,
+  LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
+  LLM_PROMPT_CUSTOM_SPAN_TEMPLATE,
+} from "@/constants/llm";
 import PythonCodeRuleDetails from "@/v2/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/v2/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
-import RuleAdvancedSettingsSection from "@/v2/pages-shared/automations/AddEditRuleDialog/RuleAdvancedSettingsSection";
+import LLMJudgeMaxCostField from "@/v2/pages-shared/automations/AddEditRuleDialog/LLMJudgeMaxCostField";
+import RuleScopeSection from "@/v2/pages-shared/automations/AddEditRuleDialog/RuleScopeSection";
+import LLMJudgeScores from "@/v2/pages-shared/llm/LLMJudgeScores/LLMJudgeScores";
 import RuleFilteringSection, {
   TRACE_FILTER_COLUMNS,
   THREAD_FILTER_COLUMNS,
@@ -60,73 +68,42 @@ import {
   EvaluationRuleFormSchema,
   EvaluationRuleFormType,
 } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
-import { LLM_JUDGE } from "@/types/llm";
-import { ColumnData } from "@/types/shared";
-import {
-  DEFAULT_PYTHON_CODE_THREAD_DATA,
-  DEFAULT_PYTHON_CODE_TRACE_DATA,
-  DEFAULT_PYTHON_CODE_SPAN_DATA,
-  LLM_PROMPT_CUSTOM_THREAD_TEMPLATE,
-  LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
-  LLM_PROMPT_CUSTOM_SPAN_TEMPLATE,
-} from "@/constants/llm";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import { Description } from "@/ui/description";
-import { ToastAction } from "@/ui/toast";
-import { useToast } from "@/ui/use-toast";
-import { useNavigate } from "@tanstack/react-router";
 import {
   getBackendRuleType,
   getUIRuleScope,
   getUIRuleType,
   normalizeFilters,
 } from "./helpers";
-import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import { useConfirmAction } from "@/shared/ConfirmDialog/useConfirmAction";
-import { LOGS_TYPE } from "@/constants/traces";
-import { usePermissions } from "@/contexts/PermissionsContext";
+
+// A new rule starts from a blank prompt; the templates are offered beside it.
+const EMPTY_JUDGE_MESSAGES = [
+  { id: "kYZIEMPT", role: LLM_MESSAGE_ROLE.user, content: "" },
+];
+
+const judgeDefaults = (schema: LLMJudgeSchema[]) => ({
+  model: "",
+  config: {
+    temperature: 0.0,
+    seed: null,
+    custom_parameters: null,
+  },
+  template: LLM_JUDGE.custom,
+  messages: EMPTY_JUDGE_MESSAGES,
+  variables: {},
+  schema,
+  maxCostUsd: null,
+});
 
 export const DEFAULT_LLM_AS_JUDGE_DATA = {
-  [EVALUATORS_RULE_SCOPE.trace]: {
-    model: "",
-    config: {
-      temperature: 0.0,
-      seed: null,
-      custom_parameters: null,
-    },
-    template: LLM_JUDGE.custom,
-    messages: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.messages,
-    variables: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.variables,
-    schema: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.schema,
-    maxCostUsd: null,
-  },
-  [EVALUATORS_RULE_SCOPE.thread]: {
-    model: "",
-    config: {
-      temperature: 0.0,
-      seed: null,
-      custom_parameters: null,
-    },
-    template: LLM_JUDGE.custom,
-    messages: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.messages,
-    variables: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.variables,
-    schema: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.schema,
-    maxCostUsd: null,
-  },
-  [EVALUATORS_RULE_SCOPE.span]: {
-    model: "",
-    config: {
-      temperature: 0.0,
-      seed: null,
-      custom_parameters: null,
-    },
-    template: LLM_JUDGE.custom,
-    messages: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.messages,
-    variables: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.variables,
-    schema: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.schema,
-  },
+  [EVALUATORS_RULE_SCOPE.trace]: judgeDefaults(
+    LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.schema,
+  ),
+  [EVALUATORS_RULE_SCOPE.thread]: judgeDefaults(
+    LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.schema,
+  ),
+  [EVALUATORS_RULE_SCOPE.span]: judgeDefaults(
+    LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.schema,
+  ),
 };
 
 const DEFAULT_PYTHON_CODE_DATA: Record<
@@ -138,11 +115,20 @@ const DEFAULT_PYTHON_CODE_DATA: Record<
   [EVALUATORS_RULE_SCOPE.span]: DEFAULT_PYTHON_CODE_SPAN_DATA,
 };
 
+const filterColumnsForScope = (scope: EVALUATORS_RULE_SCOPE) =>
+  (scope === EVALUATORS_RULE_SCOPE.thread
+    ? THREAD_FILTER_COLUMNS
+    : scope === EVALUATORS_RULE_SCOPE.span
+      ? SPAN_FILTER_COLUMNS
+      : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[];
+
 type AddEditRuleDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   projectId: string;
   rule?: EvaluatorsRule;
+  /** Rule type for a new rule; picked by the caller (create menu) before the panel opens. */
+  uiType?: UI_EVALUATORS_RULE_TYPE;
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
   hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
   defaultScope?: EVALUATORS_RULE_SCOPE; // Optional: default scope for new rules
@@ -155,6 +141,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   setOpen,
   projectId,
   rule: defaultRule,
+  uiType = UI_EVALUATORS_RULE_TYPE.llm_judge,
   datasetColumnNames,
   hideScopeSelector = false,
   defaultScope,
@@ -184,10 +171,10 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
   const formUIRuleType = defaultRule?.type
     ? getUIRuleType(defaultRule.type)
-    : UI_EVALUATORS_RULE_TYPE.llm_judge;
+    : uiType;
   const formScope = defaultRule?.type
     ? getUIRuleScope(defaultRule.type)
-    : EVALUATORS_RULE_SCOPE.trace;
+    : defaultScope || EVALUATORS_RULE_SCOPE.trace;
 
   const getInitialRuleName = () => {
     if (mode === "clone" && defaultRule) {
@@ -213,11 +200,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       triggerScope: defaultRule?.trigger_scope ?? EVAL_TRIGGER_SCOPE.production,
       filters: normalizeFilters(
         defaultRule?.filters ?? [],
-        (formScope === EVALUATORS_RULE_SCOPE.thread
-          ? THREAD_FILTER_COLUMNS
-          : formScope === EVALUATORS_RULE_SCOPE.span
-            ? SPAN_FILTER_COLUMNS
-            : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
+        filterColumnsForScope(formScope),
       ) as Filter[],
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
@@ -232,50 +215,31 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     },
   });
 
-  const isLLMJudge =
-    form.getValues("uiType") === UI_EVALUATORS_RULE_TYPE.llm_judge;
-  const scope = form.getValues("scope");
+  const isLLMJudge = form.watch("uiType") === UI_EVALUATORS_RULE_TYPE.llm_judge;
+  const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
   const formProjectIds = form.watch("projectIds");
 
-  // Open the collapsed Advanced settings when editing a rule that actually uses
-  // them, so a disabled rule or a non-default trigger scope is not hidden.
-  const advancedDefaultOpen = Boolean(
-    defaultRule &&
-      (defaultRule.enabled === false ||
-        (defaultRule.trigger_scope != null &&
-          defaultRule.trigger_scope !== EVAL_TRIGGER_SCOPE.production) ||
-        (isLLMJudgeRule(defaultRule) &&
-          (defaultRule.code as LLMJudgeObject).max_cost_usd != null)),
-  );
-
   // Reset form to default values when dialog opens for creating a new rule
   useEffect(() => {
     if (open && !defaultRule) {
-      // Reset the entire form to default values
       const initialScope = defaultScope || EVALUATORS_RULE_SCOPE.trace;
-      const defaultUIType = UI_EVALUATORS_RULE_TYPE.llm_judge;
-      const defaultType =
-        initialScope === EVALUATORS_RULE_SCOPE.thread
-          ? EVALUATORS_RULE_TYPE.thread_llm_judge
-          : initialScope === EVALUATORS_RULE_SCOPE.span
-            ? EVALUATORS_RULE_TYPE.span_llm_judge
-            : EVALUATORS_RULE_TYPE.llm_judge;
 
       form.reset({
         ruleName: "",
         projectIds: projectId ? [projectId] : [],
         samplingRate: 1,
-        uiType: defaultUIType,
+        uiType,
         scope: initialScope,
-        type: defaultType,
+        type: getBackendRuleType(initialScope, uiType),
         enabled: true,
         triggerScope: EVAL_TRIGGER_SCOPE.production,
         filters: [],
         llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[initialScope]),
-      });
+        pythonCodeDetails: cloneDeep(DEFAULT_PYTHON_CODE_DATA[initialScope]),
+      } as EvaluationRuleFormType);
     } else if (open && defaultRule && mode === "clone") {
       // For clone mode, reset the form with cloned rule data and append " (Copy)" to name
       const cloneFormData = {
@@ -290,11 +254,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
           defaultRule.trigger_scope ?? EVAL_TRIGGER_SCOPE.production,
         filters: normalizeFilters(
           defaultRule.filters ?? [],
-          (formScope === EVALUATORS_RULE_SCOPE.thread
-            ? THREAD_FILTER_COLUMNS
-            : formScope === EVALUATORS_RULE_SCOPE.span
-              ? SPAN_FILTER_COLUMNS
-              : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
+          filterColumnsForScope(formScope),
         ) as Filter[],
         pythonCodeDetails:
           defaultRule && isPythonCodeRule(defaultRule)
@@ -315,16 +275,44 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     projectId,
     defaultScope,
     mode,
+    uiType,
     formScope,
     formUIRuleType,
     form,
   ]);
 
+  // The main score is named after the rule, so the score card needs no name
+  // field. Older rules whose first score was named separately keep that name
+  // and show the field; a clone keeps the original score name as well.
+  const isMainScoreLinked = useMemo(
+    () =>
+      mode !== "clone" &&
+      (!defaultRule ||
+        (isLLMJudgeRule(defaultRule) &&
+          (defaultRule.code as LLMJudgeObject).schema?.[0]?.name ===
+            defaultRule.name)),
+    [defaultRule, mode],
+  );
+  const ruleName = form.watch("ruleName");
+  const mainScoreName = form.watch("llmJudgeDetails.schema")?.[0]?.name;
+  useEffect(() => {
+    if (!isMainScoreLinked || !isLLMJudge || mainScoreName === ruleName) {
+      return;
+    }
+    const schema = form.getValues("llmJudgeDetails.schema");
+    if (schema?.[0]) {
+      form.setValue("llmJudgeDetails.schema", [
+        { ...schema[0], name: ruleName },
+        ...schema.slice(1),
+      ]);
+    }
+  }, [ruleName, mainScoreName, isMainScoreLinked, isLLMJudge, form]);
+
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
       const applyChange = () => {
-        const { uiType } = form.getValues();
-        const type = getBackendRuleType(value, uiType);
+        const { uiType: currentUIType } = form.getValues();
+        const type = getBackendRuleType(value, currentUIType);
 
         form.setValue("scope", value);
         form.setValue("type", type);
@@ -360,14 +348,18 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
   const isEdit = mode === "edit";
   const isClone = mode === "clone";
+  const typeLabel = isLLMJudge ? "LLM-as-judge" : "code metric";
   const title = isEdit
-    ? "Edit rule"
+    ? `Edit ${typeLabel} rule`
     : isClone
-      ? "Clone evaluation rule"
-      : "Create a new rule";
+      ? `Clone ${typeLabel} rule`
+      : `New ${typeLabel} rule`;
   const submitText = isEdit ? "Update rule" : "Create rule";
 
   const isCodeMetricEditBlock = !isCodeMetricEnabled && !isLLMJudge && isEdit;
+  const showSpanScope = isLLMJudge
+    ? isSpanLlmAsJudgeEnabled
+    : isSpanPythonCodeEnabled;
 
   const onRuleCreatedEdited = useCallback(() => {
     const expainerIdMap = {
@@ -511,228 +503,180 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          className="max-w-lg sm:max-w-[790px]"
+      <SideDialog
+        open={open}
+        setOpen={setOpen}
+        blockOverlayClose
+        header={
+          <SheetTopBar title={title}>
+            <Button variant="outline" size="sm" asChild>
+              <a
+                href={buildDocsUrl("/production/online-evaluation/rules")}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Docs
+                <ExternalLink className="ml-1.5 size-3.5" />
+              </a>
+            </Button>
+          </SheetTopBar>
+        }
+      >
+        <div
+          className="flex h-[calc(100%-var(--header-height))] flex-col"
           data-testid="add-edit-rule-dialog"
         >
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-          </DialogHeader>
-          <DialogAutoScrollBody>
-            {isEdit && (
-              <ExplainerCallout
-                Icon={MessageCircleWarning}
-                className="mb-2"
-                isDismissable={false}
-                {...EXPLAINERS_MAP[
-                  isThreadScope
-                    ? EXPLAINER_ID.what_happens_if_i_edit_a_thread_rule
-                    : EXPLAINER_ID.what_happens_if_i_edit_a_rule
-                ]}
-              />
-            )}
-            <Form {...form}>
-              <form
-                className="flex flex-col gap-4"
-                onSubmit={form.handleSubmit(onSubmit)}
-              >
-                <FormField
-                  control={form.control}
-                  name="ruleName"
-                  render={({ field, formState }) => {
-                    const validationErrors = get(formState.errors, [
-                      "ruleName",
-                    ]);
-                    return (
-                      <FormItem>
-                        <Label>Name</Label>
-                        <FormControl>
-                          <Input
-                            className={cn({
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                            placeholder="Rule name"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-                <div className="flex gap-4">
-                  {!hideScopeSelector && (
+          <Form {...form}>
+            <form
+              className="flex min-h-0 flex-1 flex-col"
+              onSubmit={form.handleSubmit(onSubmit)}
+            >
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+                {isEdit && (
+                  <ExplainerCallout
+                    Icon={MessageCircleWarning}
+                    className="mb-4"
+                    isDismissable={false}
+                    {...EXPLAINERS_MAP[
+                      isThreadScope
+                        ? EXPLAINER_ID.what_happens_if_i_edit_a_thread_rule
+                        : EXPLAINER_ID.what_happens_if_i_edit_a_rule
+                    ]}
+                  />
+                )}
+                <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+                  <div className="flex min-w-0 flex-col gap-4">
                     <FormField
                       control={form.control}
-                      name="scope"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0 flex-1">
-                          <Label className="flex items-center">
-                            Scope{" "}
-                            <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread, each individual trace, or each span. Thread-level rules assess the full conversation, trace-level rules evaluate one model response at a time, and span-level rules evaluate individual operations within a trace.">
-                              <Info className="ml-1 size-4 text-light-slate" />
-                            </TooltipWrapper>
-                          </Label>
-                          <FormControl>
-                            <Select
-                              value={field.value}
-                              onValueChange={handleScopeChange}
-                              disabled={isEdit}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select scope" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
-                                  Trace
-                                </SelectItem>
-                                <SelectItem
-                                  value={EVALUATORS_RULE_SCOPE.thread}
-                                >
-                                  Thread
-                                </SelectItem>
-                                {(isSpanLlmAsJudgeEnabled ||
-                                  isSpanPythonCodeEnabled) && (
-                                  <SelectItem
-                                    value={EVALUATORS_RULE_SCOPE.span}
-                                  >
-                                    Span
-                                  </SelectItem>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </FormControl>
-                        </FormItem>
-                      )}
+                      name="ruleName"
+                      render={({ field, formState }) => {
+                        const validationErrors = get(formState.errors, [
+                          "ruleName",
+                        ]);
+                        return (
+                          <FormItem>
+                            <Label>Name</Label>
+                            <FormControl>
+                              <Input
+                                className={cn({
+                                  "border-destructive": Boolean(
+                                    validationErrors?.message,
+                                  ),
+                                })}
+                                placeholder="Rule name"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
                     />
+                    {isLLMJudge ? (
+                      <LLMJudgeRuleDetails
+                        workspaceName={workspaceName}
+                        projectId={formProjectIds[0] || ""}
+                        form={form}
+                        datasetColumnNames={datasetColumnNames}
+                      />
+                    ) : (
+                      <PythonCodeRuleDetails
+                        form={form}
+                        projectId={formProjectIds[0] || ""}
+                        datasetColumnNames={datasetColumnNames}
+                      />
+                    )}
+                  </div>
+
+                  <div className="flex min-w-0 flex-col gap-4">
+                    {!hideScopeSelector && (
+                      <RuleScopeSection
+                        form={form}
+                        onScopeChange={handleScopeChange}
+                        showSpanScope={showSpanScope}
+                        disabled={isEdit}
+                      />
+                    )}
+                    <RuleFilteringSection
+                      form={form}
+                      projectId={formProjectIds[0] || ""}
+                    />
+                    {isLLMJudge && (
+                      <FormField
+                        control={form.control}
+                        name="llmJudgeDetails.schema"
+                        render={({ field, formState }) => (
+                          <LLMJudgeScores
+                            validationErrors={get(formState.errors, [
+                              "llmJudgeDetails",
+                              "schema",
+                            ])}
+                            scores={field.value}
+                            onChange={field.onChange}
+                            showMainScoreName={!isMainScoreLinked}
+                          />
+                        )}
+                      />
+                    )}
+                    {/* A cost cap only applies where the judge may loop with tools — trace and thread scope. */}
+                    {isLLMJudge && !isSpanScope && (
+                      <LLMJudgeMaxCostField form={form} />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-6 py-3">
+                <FormField
+                  control={form.control}
+                  name="enabled"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center gap-2 space-y-0 rounded-md border border-border px-3 py-1.5">
+                      <FormControl>
+                        <Switch
+                          id="enabled"
+                          size="sm"
+                          aria-label="Enable rule"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <Label htmlFor="enabled" className="comet-body-s">
+                        Enabled
+                      </Label>
+                    </FormItem>
+                  )}
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  {isCodeMetricEditBlock ? (
+                    <TooltipWrapper content="Code metric cannot be updated. This feature is not available for this environment">
+                      <span>
+                        <Button type="submit" disabled>
+                          {submitText}
+                        </Button>
+                      </span>
+                    </TooltipWrapper>
+                  ) : (
+                    <Button
+                      type="submit"
+                      data-testid="add-edit-rule-dialog-submit"
+                    >
+                      {submitText}
+                    </Button>
                   )}
                 </div>
-
-                {!isEdit && (
-                  <FormField
-                    control={form.control}
-                    name="uiType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label>Type</Label>
-                        <FormControl>
-                          <div className="flex">
-                            <ToggleGroup
-                              type="single"
-                              data-testid="add-edit-rule-dialog-type"
-                              value={field.value}
-                              onValueChange={(
-                                value: UI_EVALUATORS_RULE_TYPE,
-                              ) => {
-                                if (!value) return;
-
-                                const { scope } = form.getValues();
-                                const type = getBackendRuleType(scope, value);
-
-                                field.onChange(value);
-                                form.setValue("type", type);
-
-                                // Reset details when switching types
-                                if (
-                                  value === UI_EVALUATORS_RULE_TYPE.llm_judge
-                                ) {
-                                  form.setValue(
-                                    "llmJudgeDetails",
-                                    cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[scope]),
-                                  );
-                                } else {
-                                  form.setValue(
-                                    "pythonCodeDetails",
-                                    cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
-                                  );
-                                }
-                              }}
-                            >
-                              <ToggleGroupItem
-                                value={UI_EVALUATORS_RULE_TYPE.llm_judge}
-                                aria-label="LLM-as-judge"
-                              >
-                                LLM-as-judge
-                              </ToggleGroupItem>
-                              {isCodeMetricEnabled &&
-                                (!isSpanScope ||
-                                  (isSpanScope && isSpanPythonCodeEnabled)) && (
-                                  <ToggleGroupItem
-                                    value={UI_EVALUATORS_RULE_TYPE.python_code}
-                                    aria-label="Code metric"
-                                  >
-                                    Code metric
-                                  </ToggleGroupItem>
-                                )}
-                            </ToggleGroup>
-                          </div>
-                        </FormControl>
-                        <Description>
-                          {isLLMJudge
-                            ? EXPLAINERS_MAP[EXPLAINER_ID.whats_llm_as_a_judge]
-                                .description
-                            : EXPLAINERS_MAP[EXPLAINER_ID.whats_a_code_metric]
-                                .description}
-                        </Description>
-                      </FormItem>
-                    )}
-                  />
-                )}
-                {isLLMJudge ? (
-                  <LLMJudgeRuleDetails
-                    workspaceName={workspaceName}
-                    form={form}
-                    datasetColumnNames={datasetColumnNames}
-                  />
-                ) : (
-                  <PythonCodeRuleDetails
-                    form={form}
-                    datasetColumnNames={datasetColumnNames}
-                  />
-                )}
-
-                <RuleAdvancedSettingsSection
-                  form={form}
-                  showMaxCost={isLLMJudge && !isSpanScope}
-                  showTriggerScope={!isThreadScope && !isSpanScope}
-                  defaultOpen={advancedDefaultOpen}
-                />
-
-                {/* Filtering Section */}
-                <RuleFilteringSection
-                  form={form}
-                  projectId={formProjectIds[0] || ""}
-                />
-              </form>
-            </Form>
-          </DialogAutoScrollBody>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
-            {isCodeMetricEditBlock ? (
-              <TooltipWrapper content="Code metric cannot be updated. This feature is not available for this environment">
-                <span>
-                  <Button type="submit" disabled>
-                    {submitText}
-                  </Button>
-                </span>
-              </TooltipWrapper>
-            ) : (
-              <Button
-                type="submit"
-                onClick={form.handleSubmit(onSubmit)}
-                data-testid="add-edit-rule-dialog-submit"
-              >
-                {submitText}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              </div>
+            </form>
+          </Form>
+        </div>
+      </SideDialog>
 
       <ConfirmDialog
         open={isOpen}

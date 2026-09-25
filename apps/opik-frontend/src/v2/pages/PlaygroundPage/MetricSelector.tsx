@@ -9,11 +9,14 @@ import { ListAction } from "@/ui/list-action";
 import { Separator } from "@/ui/separator";
 import { Checkbox } from "@/ui/checkbox";
 import { cn, getSelectAllCheckedState } from "@/lib/utils";
-import { EvaluatorsRule } from "@/types/automations";
+import { EvaluatorsRule, UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import DropdownEmptyState from "@/v2/pages-shared/DropdownEmptyState/DropdownEmptyState";
 import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import { RULE_TYPE_OPTIONS } from "@/v2/pages-shared/automations/CreateRuleMenu";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
   toggleAllMetrics,
   toggleMetricSelection,
@@ -112,11 +115,25 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     [isAllSelected, selectedRuleIdsSet],
   );
 
-  const openCreateDialog = useCallback(() => {
-    setRuleToEdit(null);
-    openChangeHandler(false);
-    setIsRuleDialogOpen(true);
-  }, [openChangeHandler]);
+  const isCodeMetricEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
+  );
+  const [createUIType, setCreateUIType] = useState<UI_EVALUATORS_RULE_TYPE>(
+    UI_EVALUATORS_RULE_TYPE.llm_judge,
+  );
+  const openCreateDialog = useCallback(
+    (uiType: UI_EVALUATORS_RULE_TYPE = UI_EVALUATORS_RULE_TYPE.llm_judge) => {
+      setCreateUIType(uiType);
+      setRuleToEdit(null);
+      openChangeHandler(false);
+      setIsRuleDialogOpen(true);
+    },
+    [openChangeHandler],
+  );
+  const openCreateLLMJudgeDialog = useCallback(
+    () => openCreateDialog(UI_EVALUATORS_RULE_TYPE.llm_judge),
+    [openCreateDialog],
+  );
 
   const openEditDialog = useCallback(
     (rule: EvaluatorsRule) => {
@@ -203,7 +220,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                 darkImageUrl={emptyMetricsDarkUrl}
                 title="No metrics yet"
                 ctaLabel={canCreateRule ? "Create metric" : undefined}
-                onCreate={canCreateRule ? openCreateDialog : undefined}
+                onCreate={canCreateRule ? openCreateLLMJudgeDialog : undefined}
               />
             ) : filteredRules.length > 0 ? (
               filteredRules.map((rule) => (
@@ -271,14 +288,21 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               {canCreateRule && (
                 <>
                   <Separator className="my-1" />
-                  <ListAction
-                    variant="default"
-                    size="sm"
-                    onClick={openCreateDialog}
-                  >
-                    <Plus className="size-3.5 shrink-0" />
-                    New metric
-                  </ListAction>
+                  {RULE_TYPE_OPTIONS.filter(
+                    (option) =>
+                      isCodeMetricEnabled ||
+                      option.value === UI_EVALUATORS_RULE_TYPE.llm_judge,
+                  ).map((option) => (
+                    <ListAction
+                      key={option.value}
+                      variant="default"
+                      size="sm"
+                      onClick={() => openCreateDialog(option.value)}
+                    >
+                      <Plus className="size-3.5 shrink-0" />
+                      New {option.label} metric
+                    </ListAction>
+                  ))}
                 </>
               )}
             </div>
@@ -293,6 +317,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         projectId={projectId || ""}
         rule={ruleToEdit ?? undefined}
         mode={ruleToEdit ? "edit" : "create"}
+        uiType={createUIType}
         datasetColumnNames={datasetColumnNames}
         hideScopeSelector
         onRuleCreated={onRuleCreated}

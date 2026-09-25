@@ -9,9 +9,9 @@ import {
   FormDescription,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
 } from "@/ui/form";
+import { Label } from "@/ui/label";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 
 // Positive decimal only (also rejects the sign/exponent/comma that type=number would accept).
@@ -51,8 +51,9 @@ const MaxCostInput: React.FC<MaxCostInputProps> = ({
       type="text"
       inputMode="decimal"
       placeholder="No limit"
+      aria-label="Cost limit (USD)"
       value={text}
-      className={cn("max-w-40", { "border-destructive": hasError })}
+      className={cn({ "border-destructive": hasError })}
       onChange={(event) => {
         const raw = event.target.value;
         if (raw !== "" && !POSITIVE_DECIMAL_REGEX.test(raw)) {
@@ -89,7 +90,7 @@ const LLMJudgeMaxCostField: React.FC<LLMJudgeMaxCostFieldProps> = ({
 
       return (
         <FormItem>
-          <FormLabel>Max cost per evaluation (USD)</FormLabel>
+          <Label>Cost limit (USD)</Label>
           <FormControl>
             <MaxCostInput
               value={field.value}
@@ -97,9 +98,9 @@ const LLMJudgeMaxCostField: React.FC<LLMJudgeMaxCostFieldProps> = ({
               onChange={field.onChange}
             />
           </FormControl>
-          <FormDescription className="comet-body-xs text-muted-slate">
-            Once an evaluation&apos;s spend reaches this amount the judge wraps
-            up and returns its scores so far. Leave empty for no limit.
+          <FormDescription className="comet-body-s text-light-slate">
+            Set a spending limit per evaluation. Once reached, the judge stops
+            and returns the scores collected so far.
           </FormDescription>
           <FormMessage />
         </FormItem>

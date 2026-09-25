@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { Plus } from "lucide-react";
+import { Filter as FilterIcon, Plus } from "lucide-react";
 import uniqid from "uniqid";
 import round from "lodash/round";
 import isArray from "lodash/isArray";
 
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
+import { Tag } from "@/ui/tag";
 import { FormErrorSkeleton, FormField, FormItem } from "@/ui/form";
 import {
   Accordion,
@@ -34,7 +35,6 @@ import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilt
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/ui/description";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -423,25 +423,21 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
     <Accordion
       type="single"
       collapsible
-      className="-mb-4 w-full border-t border-border"
+      className="w-full rounded-md border border-border"
+      data-testid="add-edit-rule-dialog-filtering-sampling"
     >
       <AccordionItem value="filtering-sampling" className="border-none">
         <AccordionTrigger
-          className="px-3 py-2 hover:no-underline"
+          className="h-12 px-3 py-2 hover:no-underline"
           data-testid="add-edit-rule-dialog-filtering-sampling-trigger"
         >
-          <div className="flex items-center gap-1">
-            <Label className="text-sm font-medium">Filtering & Sampling</Label>
-            <ExplainerIcon
-              className="mt-0.5"
-              description={
-                isTraceScope
-                  ? "Apply filters and sampling to select which traces will be evaluated by this rule"
-                  : isThreadScope
-                    ? "Use sampling rate to control how frequently this rule is applied to threads"
-                    : "Apply filters and sampling to select which spans will be evaluated by this rule"
-              }
-            />
+          <div className="flex items-center gap-2">
+            <Tag variant="green" size="sm" className="px-1">
+              <FilterIcon className="size-3" />
+            </Tag>
+            <Label className="text-sm font-medium">
+              Filtering and sampling
+            </Label>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-3 pb-3">
