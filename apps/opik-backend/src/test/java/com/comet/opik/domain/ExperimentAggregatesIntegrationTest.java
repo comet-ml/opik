@@ -6,6 +6,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
@@ -48,6 +49,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -58,6 +60,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
+import lombok.Builder;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -74,6 +77,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -3586,5 +3590,390 @@ class ExperimentAggregatesIntegrationTest {
                             runsPerItem)
                     .hasSize(runsPerItem);
         }
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Raw-branch limit pushdown (top_dataset_items_raw).
+    //
+    // The raw branch now resolves the page's dataset_item_ids in a CTE over experiment_items and
+    // constrains the rest of the query by them, instead of building the whole experiment and
+    // slicing at the end. The CTE pages on stable_dataset_item_id, the key the outer query groups
+    // and orders by, so the invariant worth pinning is that paging is a partition: the pages
+    // concatenated are exactly the unpaged read, in order, with no gap and no repeat.
+    // ----------------------------------------------------------------------------------------
+
+    private static final int RAW_PUSHDOWN_ITEM_COUNT = 7;
+    private static final int RAW_PUSHDOWN_PAGE_SIZE = 2;
+
+    @Builder(toBuilder = true)
+    private record RawPushdownFixture(Dataset dataset, UUID experimentId, int itemCount) {
+    }
+
+    /**
+     * A dataset whose experiment exercises the parts of the raw branch the Top-N CTE has to get
+     * right: a dataset item carrying two experiment items (so the CTE's DISTINCT matters), and an
+     * experiment item whose trace does not exist (so the LEFT JOINs onto trace/span data are
+     * exercised on a miss).
+     */
+    private RawPushdownFixture createRawPushdownFixture(String projectName, String apiKey, String workspaceName) {
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+
+        var datasetItems = IntStream.range(0, RAW_PUSHDOWN_ITEM_COUNT)
+                .mapToObj(idx -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                        .datasetId(dataset.id())
+                        .traceId(null)
+                        .spanId(null)
+                        .experimentItems(null)
+                        .source(DatasetItemSource.SDK)
+                        .build())
+                .toList();
+        datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                .datasetId(dataset.id())
+                .items(datasetItems)
+                .build(), workspaceName, apiKey);
+
+        // One trace per dataset item, plus a second one for item 0. endTime is always set: a trace
+        // without it reports duration null on the raw branch and 0 once aggregated, which is a
+        // pre-existing divergence between the branches and not what this test is about.
+        var traces = IntStream.range(0, RAW_PUSHDOWN_ITEM_COUNT + 1)
+                .mapToObj(idx -> {
+                    var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .visibilityMode(null)
+                            .build();
+                    return trace.toBuilder()
+                            .endTime(trace.startTime().plusSeconds((idx + 1) * 10L))
+                            .build();
+                })
+                .toList();
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        var spans = traces.stream()
+                .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                        .map(span -> span.toBuilder()
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .parentSpanId(null)
+                                .usage(spanResourceClient.getTokenUsage())
+                                .build()))
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+        var experimentItems = new ArrayList<ExperimentItem>();
+        IntStream.range(0, RAW_PUSHDOWN_ITEM_COUNT)
+                .forEach(idx -> experimentItems.add(ExperimentItem.builder()
+                        .experimentId(experiment.id())
+                        .datasetItemId(datasetItems.get(idx).id())
+                        .traceId(traces.get(idx).id())
+                        .build()));
+        // Second experiment item on dataset item 0.
+        experimentItems.add(ExperimentItem.builder()
+                .experimentId(experiment.id())
+                .datasetItemId(datasetItems.getFirst().id())
+                .traceId(traces.getLast().id())
+                .build());
+        // Experiment item whose trace was never created.
+        experimentItems.add(ExperimentItem.builder()
+                .experimentId(experiment.id())
+                .datasetItemId(datasetItems.getLast().id())
+                .traceId(factory.manufacturePojo(UUID.class))
+                .build());
+
+        experimentResourceClient.createExperimentItem(Set.copyOf(experimentItems), apiKey, workspaceName);
+
+        return RawPushdownFixture.builder()
+                .dataset(dataset)
+                .experimentId(experiment.id())
+                .itemCount(RAW_PUSHDOWN_ITEM_COUNT)
+                .build();
+    }
+
+    private List<DatasetItem> readAllPages(RawPushdownFixture fixture, List<SortingField> sorting, int pageSize,
+            String apiKey, String workspaceName) {
+        var experimentIds = List.of(fixture.experimentId());
+        var collected = new ArrayList<DatasetItem>();
+        int pageCount = (fixture.itemCount() + pageSize - 1) / pageSize;
+
+        for (int page = 1; page <= pageCount; page++) {
+            var pageResult = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    fixture.dataset().id(), experimentIds, null, null, sorting, page, pageSize, apiKey,
+                    workspaceName);
+            assertThat(pageResult.total()).isEqualTo(fixture.itemCount());
+            collected.addAll(pageResult.content());
+        }
+
+        // One page past the end must be empty, not a wrapped-around slice.
+        var pastEnd = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                fixture.dataset().id(), experimentIds, null, null, sorting, pageCount + 1, pageSize, apiKey,
+                workspaceName);
+        assertThat(pastEnd.content()).as("page past the end").isEmpty();
+
+        return collected;
+    }
+
+    private void assertSameItemsInSameOrder(List<DatasetItem> expected, List<DatasetItem> actual, String as,
+            String... alsoIgnoredExperimentItemFields) {
+        assertThat(actual).as("%s: dataset item ids and their order", as)
+                .extracting(DatasetItem::id)
+                .containsExactlyElementsOf(expected.stream().map(DatasetItem::id).toList());
+
+        assertDatasetItems(actual, expected);
+
+        var ignoredFields = Stream
+                .concat(Arrays.stream(IGNORED_FIELDS_EXPERIMENT_ITEM), Arrays.stream(alsoIgnoredExperimentItemFields))
+                .toArray(String[]::new);
+
+        assertThat(actual)
+                .as("%s: compared item count", as)
+                .hasSameSizeAs(expected);
+
+        for (var idx = 0; idx < expected.size(); idx++) {
+            assertThat(actual.get(idx).experimentItems())
+                    .as("%s: experiment items of dataset item %s", as, expected.get(idx).id())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                    .ignoringCollectionOrder()
+                    .ignoringFields(ignoredFields)
+                    .isEqualTo(expected.get(idx).experimentItems());
+        }
+    }
+
+    static Stream<List<SortingField>> rawPushdownSortings() {
+        return Stream.of(
+                null,
+                List.of(SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+                List.of(SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()));
+    }
+
+    @ParameterizedTest(name = "sorting={0}")
+    @MethodSource("rawPushdownSortings")
+    @DisplayName("DatasetItemVersionDAO raw branch: paging is a partition of the unpaged read (push_top_limit_raw)")
+    void rawBranchPaging__matchesUnpagedRead(List<SortingField> sorting) {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var fixture = createRawPushdownFixture(project.name(), apiKey, workspaceName);
+
+        var unpaged = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                fixture.dataset().id(), List.of(fixture.experimentId()), null, null, sorting, 1,
+                fixture.itemCount(), apiKey, workspaceName);
+        assertThat(unpaged.content()).hasSize(fixture.itemCount());
+
+        var paged = readAllPages(fixture, sorting, RAW_PUSHDOWN_PAGE_SIZE, apiKey, workspaceName);
+
+        assertThat(paged).as("no id is repeated or dropped across pages")
+                .extracting(DatasetItem::id)
+                .doesNotHaveDuplicates()
+                .hasSize(fixture.itemCount());
+        assertSameItemsInSameOrder(unpaged.content(), paged, "raw branch, paged vs unpaged");
+    }
+
+    /**
+     * The same partition invariant, but with legacy rows in the experiment.
+     * <p>
+     * A legacy experiment item (pre-OPIK-4518) holds a per-version {@code dataset_item_versions.id} in
+     * {@code dataset_item_id} rather than the stable id, so two different raw ids resolve to one stable item.
+     * {@code applyDatasetItemChanges} still writes version rows whose {@code id} differs from their
+     * {@code dataset_item_id}, which is what makes the shape reachable through the public API.
+     * <p>
+     * The outer query groups and orders on {@code stable_dataset_item_id}, so a Top-N CTE that paged the raw
+     * column would give such an item two slots on a page and one output row — a short page — and would order
+     * the page by a different key than the one the read is sorted by. This fails on a CTE that pages the raw
+     * column and passes on one that pages the stable id.
+     */
+    @Test
+    @DisplayName("DatasetItemVersionDAO raw branch: paging is a partition when legacy ids alias one stable item")
+    void rawBranchPaging__withLegacyAliasedIds__matchesUnpagedRead(
+            com.comet.opik.infrastructure.db.TransactionTemplateAsync template) {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+
+        // applyDatasetItemChanges assigns the version row id separately from the stable dataset_item_id, so
+        // the rows it writes carry id != dataset_item_id — the alias a legacy experiment item points at.
+        var seedItems = IntStream.range(0, LEGACY_ITEM_COUNT)
+                .mapToObj(idx -> newDatasetItem())
+                .toList();
+        datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                .datasetId(dataset.id())
+                .items(seedItems)
+                .build(), workspaceName, apiKey);
+
+        var baseVersion = datasetResourceClient.listVersions(dataset.id(), apiKey, workspaceName)
+                .content().stream()
+                .filter(DatasetVersion::isLatest)
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        // Applying a delta rewrites the whole version, minting a fresh row id for every item - carried-forward
+        // ones included - while each keeps its stable dataset_item_id. That is what produces id != dataset_item_id.
+        var firstDelta = datasetResourceClient.applyDatasetItemChanges(dataset.id(),
+                DatasetItemChanges.builder().addedItems(List.of(newDatasetItem())).baseVersion(baseVersion).build(),
+                false, apiKey, workspaceName);
+
+        // A second delta, so every item carries several version rows and the alias set holds more than one
+        // row per stable item. That is what the join's dedup has to get right: picking the wrong version row
+        // still resolves to the same stable id, but picking none - or several - would not.
+        var newVersion = datasetResourceClient.applyDatasetItemChanges(dataset.id(),
+                DatasetItemChanges.builder().addedItems(List.of(newDatasetItem()))
+                        .baseVersion(firstDelta.id()).build(),
+                false, apiKey, workspaceName);
+
+        Map<UUID, UUID> rowIdByStableId = readRowIdsByStableId(template, workspaceId, dataset.id(), newVersion.id());
+
+        assertThat(rowIdByStableId).as("the new version holds the seed items plus the added one")
+                .hasSize(LEGACY_ITEM_COUNT + 2);
+        // Without this the test would pass by testing nothing: no alias, no defect to expose.
+        assertThat(rowIdByStableId.entrySet())
+                .as("every version row's id must differ from its stable dataset_item_id, or there is no alias")
+                .allSatisfy(entry -> assertThat(entry.getValue()).isNotEqualTo(entry.getKey()));
+
+        var stableIds = List.copyOf(rowIdByStableId.keySet());
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+
+        // Two experiment items per dataset item, one naming the stable id and one naming the version row id.
+        // Both resolve to the same stable item, so the read must still return one row per dataset item.
+        var traces = IntStream.range(0, stableIds.size() * 2)
+                .mapToObj(idx -> {
+                    var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(project.name())
+                            .usage(null)
+                            .visibilityMode(null)
+                            .build();
+                    return trace.toBuilder().endTime(trace.startTime().plusSeconds(idx + 1L)).build();
+                })
+                .toList();
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        var experimentItems = new ArrayList<ExperimentItem>();
+        IntStream.range(0, stableIds.size()).forEach(idx -> {
+            experimentItems.add(ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(stableIds.get(idx))
+                    .traceId(traces.get(idx * 2).id())
+                    .build());
+            experimentItems.add(ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(rowIdByStableId.get(stableIds.get(idx)))
+                    .traceId(traces.get(idx * 2 + 1).id())
+                    .build());
+        });
+        experimentResourceClient.createExperimentItem(Set.copyOf(experimentItems), apiKey, workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+        var unpaged = datasetResourceClient.getDatasetItemsWithExperimentItems(dataset.id(), experimentIds,
+                null, null, null, 1, LEGACY_ITEM_COUNT + 2, apiKey, workspaceName);
+
+        // Anchored to the fixture rather than to the other read: these are exactly the stable ids written, so a
+        // bug the two reads share cannot make them agree on the wrong set of items.
+        assertThat(unpaged.content())
+                .as("the two aliased experiment items collapse onto one dataset item")
+                .extracting(DatasetItem::id)
+                .containsExactlyInAnyOrderElementsOf(stableIds);
+
+        var paged = new ArrayList<DatasetItem>();
+        int pageCount = (LEGACY_ITEM_COUNT + 2 + LEGACY_PAGE_SIZE - 1) / LEGACY_PAGE_SIZE;
+        for (int page = 1; page <= pageCount; page++) {
+            paged.addAll(datasetResourceClient.getDatasetItemsWithExperimentItems(dataset.id(), experimentIds,
+                    null, null, null, page, LEGACY_PAGE_SIZE, apiKey, workspaceName).content());
+        }
+
+        assertThat(paged).as("the pages together hold exactly the fixture's items, once each")
+                .extracting(DatasetItem::id)
+                .doesNotHaveDuplicates()
+                .containsExactlyInAnyOrderElementsOf(stableIds);
+        // Order is pinned against the unpaged read rather than a fixture-derived order on purpose: the outer
+        // ORDER BY is ClickHouse's own UUID collation, which is not the textual or java.util.UUID ordering, so
+        // a hand-sorted expectation would pin the test to an assumption about collation instead of to paging.
+        assertSameItemsInSameOrder(unpaged.content(), paged, "raw branch with legacy ids, paged vs unpaged");
+    }
+
+    private DatasetItem newDatasetItem() {
+        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .traceId(null)
+                .spanId(null)
+                .experimentItems(null)
+                .source(DatasetItemSource.SDK)
+                .build();
+    }
+
+    private static final int LEGACY_ITEM_COUNT = 6;
+    private static final int LEGACY_PAGE_SIZE = 2;
+
+    /**
+     * {@code dataset_item_id -> id} for the dataset's version rows. The version row id is not on the API's
+     * {@code DatasetItem} — reads return the stable id as {@code id} — so the alias a legacy experiment item
+     * would point at has to be read from the table. A read; the fixture itself is written through the API.
+     */
+    private Map<UUID, UUID> readRowIdsByStableId(
+            com.comet.opik.infrastructure.db.TransactionTemplateAsync template, String workspaceId, UUID datasetId,
+            UUID versionId) {
+        String sql = """
+                SELECT dataset_item_id, id
+                FROM dataset_item_versions FINAL
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :dataset_id
+                AND dataset_version_id = :version_id
+                """;
+        return template.nonTransaction(connection -> Flux
+                .from(connection.createStatement(sql)
+                        .bind("workspace_id", workspaceId)
+                        .bind("dataset_id", datasetId.toString())
+                        .bind("version_id", versionId.toString())
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                        row.get("dataset_item_id", UUID.class), row.get("id", UUID.class))))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue))
+                .block();
+    }
+
+    @Test
+    @DisplayName("DatasetItemVersionDAO: raw and aggregated branches page the same rows in the same order")
+    void rawAndAggregatedBranches__pageTheSameRowsInTheSameOrder() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var fixture = createRawPushdownFixture(project.name(), apiKey, workspaceName);
+
+        // Nothing has been aggregated yet, so this read takes the raw branch.
+        var rawPages = readAllPages(fixture, null, RAW_PUSHDOWN_PAGE_SIZE, apiKey, workspaceName);
+
+        experimentAggregatesService.populateAggregations(fixture.experimentId())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var aggregatedPages = readAllPages(fixture, null, RAW_PUSHDOWN_PAGE_SIZE, apiKey, workspaceName);
+
+        // duration and traceVisibilityMode are excluded because the two branches genuinely disagree on
+        // them for an experiment item whose trace is missing: the raw branch reads the trace and finds
+        // nothing (null), while experiment_item_aggregates stores the column defaults (0 and DEFAULT).
+        // That is a pre-existing difference between the branches, not something paging introduces —
+        // which is why this assertion is about rows and their order, and the strict content check lives
+        // in rawBranchPaging__matchesUnpagedRead, where both sides are the same branch.
+        assertSameItemsInSameOrder(rawPages, aggregatedPages, "aggregated vs raw",
+                "duration", "traceVisibilityMode");
+
+        assertThat(aggregatedPages)
+                .as("the dataset item with two experiment items keeps both in either branch")
+                .anySatisfy(item -> assertThat(item.experimentItems()).hasSize(2));
     }
 }

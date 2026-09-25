@@ -12,7 +12,10 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts;
 import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
@@ -22,6 +25,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
@@ -37,6 +41,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
@@ -362,6 +367,22 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private static final String DATASET_ITEM_VERSIONS = "dataset_item_versions";
     private static final String CLICKHOUSE = "Clickhouse";
 
+    /**
+     * Cache group for the compare-view target projects, whose answer does not depend on {@code page} /
+     * {@code size}. One read of a large experiment is dozens of requests that differ only by page, so without
+     * this each of them re-runs the same query. TTL is a few seconds — see {@code cacheManager.caches} in
+     * config.yml.
+     * <p>
+     * <b>This relies on an experiment belonging to one project</b>, which is the v2 contract but is not
+     * enforced in the write path: {@code POST /v1/private/experiments/items} resolves each item's project
+     * individually. Hold that invariant when changing either side. If an experiment's items are ever allowed
+     * to span projects, a set cached before the second project appears stays stale until the TTL expires, and
+     * rows in the project the set is missing come back present but blank — right {@code trace_id}, null
+     * {@code input} / {@code output} / {@code duration} — while {@code trace_count}, which does not go through
+     * this cache, already counts them.
+     */
+    private static final String TARGET_PROJECTS_CACHE = "experiment_compare_target_projects";
+
     private static final List<FilterQueryBuilder.FilterStrategyParam> FILTER_STRATEGY_PARAMS = List.of(
             new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.DATASET_ITEM, "dataset_item_filters"),
             new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.EXPERIMENT_ITEM, "experiment_item_filters"),
@@ -620,13 +641,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ) AS count
             FROM experiment_item_aggregates AS eia FINAL
             LEFT JOIN (
-                SELECT id, workspace_id, dataset_item_id
-                FROM dataset_item_versions FINAL
+                SELECT id, dataset_item_id
+                FROM dataset_item_versions
                 WHERE workspace_id = :workspace_id
                   AND dataset_id = :datasetId
+                  AND id != dataset_item_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ) AS lookup_div
-                ON lookup_div.workspace_id = eia.workspace_id
-                AND lookup_div.id = eia.dataset_item_id
+                ON lookup_div.id = eia.dataset_item_id
             WHERE eia.workspace_id = :workspace_id
             AND eia.experiment_id IN (
                 SELECT id
@@ -641,7 +664,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <if(dataset_item_filters)>AND eia.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_filtered_ids)<endif>
             SETTINGS log_comment = '<log_comment>'
             <else>
-            WITH experiment_aggregated_scope_ids AS (
+            WITH aliased_dataset_items AS (
+                SELECT id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id != dataset_item_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
                     COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
@@ -679,10 +710,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
             	FROM experiment_items ei
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
-            	LEFT JOIN dataset_item_versions AS lookup_div FINAL
-            	    ON lookup_div.workspace_id = ei.workspace_id
-            	    AND lookup_div.dataset_id = :datasetId
-            	    AND lookup_div.id = ei.dataset_item_id
+            	LEFT JOIN aliased_dataset_items AS lookup_div ON lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
             	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
             	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
@@ -897,10 +925,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     eia.input AS input,
                     eia.output AS output
                 FROM experiment_item_aggregates AS eia FINAL
-                LEFT JOIN dataset_item_versions AS lookup_div FINAL
-                    ON lookup_div.workspace_id = eia.workspace_id
-                    AND lookup_div.dataset_id = :datasetId
-                    AND lookup_div.id = eia.dataset_item_id
+                LEFT JOIN aliased_dataset_items AS lookup_div ON lookup_div.id = eia.dataset_item_id
                 WHERE eia.workspace_id = :workspace_id
                 AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
                 <if(experiment_item_filters)> AND <experiment_item_filters> <endif>
@@ -987,7 +1012,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             )
             """;
 
-    // Query to get target project_ids from traces for experiment items (executed separately to reduce table scans)
+    /**
+     * Query to get target project_ids from traces for experiment items (executed separately to reduce table scans).
+     * <p>
+     * The projects have to be resolved through {@code traces}, not read off the denormalized
+     * {@code experiment_items.project_id}: that column holds the project the <i>item</i> named, and is only
+     * filled in from the item's trace when the item named none (see {@code ExperimentItemService}). An item
+     * whose {@code project_name} differs from where its trace was logged therefore contributes the wrong
+     * project. The result prunes {@code traces} / {@code spans} / {@code comments} by project, so a project
+     * missing from it silently drops that trace's data from the response rather than erroring.
+     */
     private static final String SELECT_TARGET_PROJECTS = """
             WITH experiments_scope AS (
                 SELECT id
@@ -1079,7 +1113,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * ({@code dataset_items_(aggr_)resolved} orders by {@code dataset_version_id} DESC).
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
-            WITH experiment_aggregated_scope_ids AS (
+            WITH aliased_dataset_items AS (
+                SELECT id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id != dataset_item_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
                     COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
@@ -1098,7 +1140,31 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND id NOT IN (SELECT id FROM experiment_aggregated_scope_ids)
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ), experiment_items_scope AS (
+            )<if(push_top_limit_raw)>
+            , top_dataset_items_raw AS (
+                SELECT arrayJoin(raw_dataset_item_ids) AS dataset_item_id
+                FROM (
+                    SELECT
+                        ei_top.stable_dataset_item_id AS stable_dataset_item_id,
+                        groupUniqArray(ei_top.dataset_item_id) AS raw_dataset_item_ids
+                    FROM (
+                        SELECT
+                            ei.id AS id,
+                            ei.dataset_item_id AS dataset_item_id,
+                            if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
+                        FROM experiment_items ei
+                        LEFT JOIN aliased_dataset_items AS lookup_div ON lookup_div.id = ei.dataset_item_id
+                        WHERE ei.workspace_id = :workspace_id
+                        AND ei.experiment_id IN (SELECT id FROM experiments_resolved)
+                        <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
+                        ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                        LIMIT 1 BY ei.id
+                    ) AS ei_top
+                    GROUP BY ei_top.stable_dataset_item_id
+                    ORDER BY <if(top_sorting_raw)><top_sorting_raw><else>stable_dataset_item_id DESC<endif>
+                    LIMIT :top_limit OFFSET :top_offset
+                ) AS top_stable_items_raw
+            )<endif>, experiment_items_scope AS (
             	SELECT
             	    ei.id AS id,
             	    ei.experiment_id AS experiment_id,
@@ -1115,12 +1181,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
             	FROM experiment_items ei
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
-            	LEFT JOIN dataset_item_versions AS lookup_div FINAL
-            	    ON lookup_div.workspace_id = ei.workspace_id
-            	    AND lookup_div.dataset_id = :datasetId
-            	    AND lookup_div.id = ei.dataset_item_id
+            	LEFT JOIN aliased_dataset_items AS lookup_div ON lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
             	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
+            	<if(push_top_limit_raw)>AND ei.dataset_item_id IN (SELECT dataset_item_id FROM top_dataset_items_raw)<endif>
             	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
             	LIMIT 1 BY ei.id
             ), experiment_items_trace_scope AS (
@@ -1129,6 +1193,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
                 WHERE ei.workspace_id = :workspace_id
                 <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
+                <if(push_top_limit_raw)>AND ei.dataset_item_id IN (SELECT dataset_item_id FROM top_dataset_items_raw)<endif>
             ), experiment_item_aggr_trace_scope AS (
                 SELECT DISTINCT trace_id
                 FROM experiment_item_aggregates ei
@@ -1141,8 +1206,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if(isNaN(duration), NULL, duration) AS duration,
                     <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
                     <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
+                    <if(search)>
                     output as full_output,
                     input as full_input,
+                    <endif>
                     metadata,
                     visibility_mode
                 FROM traces
@@ -1584,10 +1651,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         eia.execution_policy AS execution_policy,
                         eia.assertions_array AS assertions_array
                     FROM experiment_item_aggregates AS eia FINAL
-                    LEFT JOIN dataset_item_versions AS lookup_div FINAL
-                        ON lookup_div.workspace_id = eia.workspace_id
-                        AND lookup_div.dataset_id = :datasetId
-                        AND lookup_div.id = eia.dataset_item_id
+                    LEFT JOIN aliased_dataset_items AS lookup_div ON lookup_div.id = eia.dataset_item_id
                     WHERE eia.workspace_id = :workspace_id
                     AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
                     <if(push_top_limit)>AND eia.dataset_item_id IN (SELECT dataset_item_id FROM top_dataset_items)<endif>
@@ -1694,8 +1758,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         ei2.id AS item_id,
                         t.input,
                         t.output,
+                        <if(search)>
                         t.full_input,
                         t.full_output,
+                        <endif>
                         t.metadata,
                         t.duration,
                         t.visibility_mode,
@@ -1829,8 +1895,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         t.metadata,
                         t.duration,
                         t.visibility_mode,
+                        <if(search)>
                         t.full_input,
                         t.full_output,
+                        <endif>
                         s.total_estimated_cost,
                         s.usage
                 ) AS tfs ON ei.id = tfs.item_id
@@ -1872,7 +1940,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ORDER BY u.id DESC
             <endif>
             LIMIT :limit
-            <if(!push_top_limit)>OFFSET :offset<endif>
+            <if(!push_top_limit && !push_top_limit_raw)>OFFSET :offset<endif>
             SETTINGS output_format_json_named_tuples_as_objects = 1
             ;
             """;
@@ -2280,7 +2348,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS = """
-            WITH experiment_aggregated_scope_ids AS (
+            WITH aliased_dataset_items AS (
+                SELECT id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id != dataset_item_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
                     COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
@@ -2310,10 +2386,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
                 FROM experiment_items ei
                 INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
-                LEFT JOIN dataset_item_versions AS lookup_div FINAL
-                    ON lookup_div.workspace_id = ei.workspace_id
-                    AND lookup_div.dataset_id = :datasetId
-                    AND lookup_div.id = ei.dataset_item_id
+                LEFT JOIN aliased_dataset_items AS lookup_div ON lookup_div.id = ei.dataset_item_id
                 WHERE ei.workspace_id = :workspace_id
                 <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
                 ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
@@ -2968,7 +3041,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .build();
 
             // Run pre-queries in parallel: target project IDs and aggregated experiment IDs
-            var targetProjectIdsMono = getTargetProjectIds(workspaceId, criteria.datasetId(), criteria.experimentIds());
+            var targetProjectIdsMono = getTargetProjectIdsCached(workspaceId, targetProjectsScopeKey(criteria),
+                    criteria.datasetId(), criteria.experimentIds())
+                    .defaultIfEmpty(List.of());
             var branchCountsMono = getAggregationBranchCounts(aggregationCriteria);
 
             return Mono.zip(targetProjectIdsMono, branchCountsMono)
@@ -3087,6 +3162,47 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         });
                     });
         });
+    }
+
+    /**
+     * Key for {@link #TARGET_PROJECTS_CACHE}, covering every input that can change the target projects: the
+     * dataset and the experiment set, order-independent.
+     * <p>
+     * The workspace id is <b>not</b> part of this key on purpose: the caching method prepends its own
+     * {@code $workspaceId}, so that a caller cannot end up sharing an entry across tenants by forgetting to
+     * include it here.
+     */
+    private static String targetProjectsScopeKey(DatasetItemSearchCriteria criteria) {
+        String experimentIds = Optional.ofNullable(criteria.experimentIds())
+                .orElseGet(Set::of)
+                .stream()
+                .map(UUID::toString)
+                .sorted()
+                .collect(Collectors.joining(","));
+
+        return DigestUtils.sha256Hex(String.join("|", criteria.datasetId().toString(), experimentIds));
+    }
+
+    /**
+     * Must not be private: Guice method interception (which implements {@link Cacheable}) cannot intercept
+     * private methods, so a private modifier silently disables the cache.
+     * <p>
+     * <b>An empty result is never cached.</b> An empty set is not evidence that the experiment has no items.
+     * The analytics store is replicated, so a read served by a replica that is momentarily behind returns no
+     * projects for an experiment that plainly has them, and caching that would pin one replica's transient
+     * view for the whole TTL. It is returned to the caller but not written, so the next read asks again. Do
+     * not "optimise" this into caching the empty list, and do not swap it for a shorter TTL: a shorter window
+     * narrows the exposure without removing it.
+     * <p>
+     * The mechanics: {@code CacheInterceptor} stores whatever the {@code Mono} emits, so emitting nothing
+     * stores nothing, and the caller supplies the empty list because an empty {@code Mono} would drop the
+     * {@code Mono.zip} it feeds.
+     */
+    @Cacheable(name = TARGET_PROJECTS_CACHE, key = "$workspaceId + '-' + $scopeKey", returnType = UUID.class, wrapperType = List.class)
+    public Mono<List<UUID>> getTargetProjectIdsCached(String workspaceId, String scopeKey, UUID datasetId,
+            Set<UUID> experimentIds) {
+        return getTargetProjectIds(workspaceId, datasetId, experimentIds)
+                .filter(CollectionUtils::isNotEmpty);
     }
 
     /**
@@ -4521,11 +4637,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     /**
-     * Conditionally enables the push-top-limit optimization on the aggregated branch of the
-     * dataset items + experiment items query, returning whether it was applied so the caller
-     * can bind {@code top_limit}/{@code top_offset} parameters accordingly.
+     * Conditionally enables the push-top-limit optimization on the dataset items + experiment
+     * items query, returning whether it was applied so the caller can bind
+     * {@code top_limit}/{@code top_offset} parameters accordingly.
      *
-     * <p>The optimization wraps the result page in a {@code top_dataset_items} CTE that
+     * <p>There are two independent forms, one per branch; they are mutually exclusive because each
+     * requires its own branch to be the only one present.
+     *
+     * <p><b>Aggregated branch ({@code push_top_limit}).</b> It wraps the result page in a
+     * {@code top_dataset_items} CTE that
      * pre-resolves the page's {@code dataset_item_id}s, so the IN filter on
      * {@code dataset_item_id} can prune both the EIA outer scan and the
      * {@code dataset_items_aggr_resolved} dedup CTE via the existing minmax / bloom_filter
@@ -4551,10 +4671,42 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      *         {@link SortingFactoryDatasets#supportsPushTopLimit}.</li>
      * </ul>
      *
-     * <p>Sets {@code push_top_limit}, {@code top_sorting}, and {@code push_top_needs_div}
-     * template variables as appropriate.
+     * <p><b>Raw branch ({@code push_top_limit_raw}).</b> Same idea, sourced from
+     * {@code experiment_items} instead of {@code experiment_item_aggregates}. It matters more here:
+     * without it the raw branch materialises the whole experiment on every page — it dedups every
+     * trace, aggregates every span, and only applies {@code LIMIT/OFFSET} after
+     * {@code GROUP BY u.id} over all items. The CTE's ids prune {@code experiment_items_scope} and,
+     * decisively, {@code experiment_items_trace_scope}, which is what bounds the {@code traces},
+     * {@code spans}, {@code feedback_scores} and {@code comments} reads.
      *
-     * @return {@code true} when the optimization was applied to the template, {@code false} otherwise.
+     * <p><b>It pages on {@code stable_dataset_item_id}, not on the raw {@code ei.dataset_item_id}.</b> The
+     * outer query groups and orders by the stable id, so a CTE that paged the raw column would disagree with
+     * it for legacy rows (pre-OPIK-4518, where {@code ei.dataset_item_id} holds a per-version
+     * {@code dataset_item_versions.id}): two raw ids resolving to one stable id would take two slots on the
+     * page and yield one output row, and the two orderings would select different slices. So the CTE resolves
+     * through {@code lookup_div} exactly as {@code experiment_items_scope} does, groups by the stable id, and
+     * then emits the underlying raw ids via {@code groupUniqArray}/{@code arrayJoin} — the downstream
+     * predicate stays {@code ei.dataset_item_id IN (...)}, which is the form the index pruning needs.
+     *
+     * <p>Its guard is <b>stricter</b> than the aggregated one, and deliberately not the same test:
+     * <ul>
+     *     <li><b>No filters at all.</b> The aggregated Top-N CTE folds filters in before its
+     *         {@code LIMIT}. The raw one cannot do so cheaply — raw filters resolve through
+     *         {@code traces} / {@code feedback_scores} / {@code dataset_item_versions}, i.e. the
+     *         very scans being avoided. Taking the top N ids and filtering afterwards would drop
+     *         rows that belong on the page, so filters disable it outright.</li>
+     *     <li><b>Sorting only by {@code id}, or not at all.</b>
+     *         {@link SortingFactoryDatasets#supportsPushTopLimit} whitelists columns that exist on
+     *         {@code experiment_item_aggregates} (duration, cost, usage, feedback scores, input /
+     *         output / metadata); none of them exists on {@code experiment_items}, so that
+     *         whitelist cannot be reused here. {@code id} is the one field the raw CTE can order
+     *         by on its own, and it is the ordering key of the outer query.</li>
+     * </ul>
+     *
+     * <p>Sets {@code push_top_limit}, {@code top_sorting} and {@code push_top_needs_div}, or
+     * {@code push_top_limit_raw} and {@code top_sorting_raw}, as appropriate.
+     *
+     * @return {@code true} when either form was applied to the template, {@code false} otherwise.
      */
     private boolean applyPushTopLimit(ST template, DatasetItemSearchCriteria criteria,
             boolean hasAggregated, boolean hasRaw) {
@@ -4570,15 +4722,59 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         || sortingFactory.supportsPushTopLimit(criteria.sortingFields()));
 
         if (pushTopLimit) {
-            template.add("push_top_limit", true);
-            if (hasSortingFields) {
-                template.add("top_sorting", buildTopItemsSorting(criteria.sortingFields()));
-                if (isDiNeededForSort) {
-                    template.add("push_top_needs_div", true);
-                }
+            applyAggregatedTopLimit(template, criteria, hasSortingFields, isDiNeededForSort);
+            return true;
+        }
+
+        boolean pushTopLimitRaw = hasRaw && !hasAggregated
+                && !hasSearch
+                && !hasFilters
+                && (!hasSortingFields || isRawPushableSorting(criteria.sortingFields()));
+
+        if (pushTopLimitRaw) {
+            applyRawTopLimit(template, criteria, hasSortingFields);
+        }
+        return pushTopLimitRaw;
+    }
+
+    private void applyAggregatedTopLimit(ST template, DatasetItemSearchCriteria criteria, boolean hasSortingFields,
+            boolean isDiNeededForSort) {
+        template.add("push_top_limit", true);
+        if (hasSortingFields) {
+            template.add("top_sorting", buildTopItemsSorting(criteria.sortingFields()));
+            if (isDiNeededForSort) {
+                template.add("push_top_needs_div", true);
             }
         }
-        return pushTopLimit;
+    }
+
+    private void applyRawTopLimit(ST template, DatasetItemSearchCriteria criteria, boolean hasSortingFields) {
+        template.add("push_top_limit_raw", true);
+        if (hasSortingFields) {
+            // stable_dataset_item_id, not the raw column: it is what the outer query orders by.
+            template.add("top_sorting_raw", "stable_dataset_item_id %s"
+                    .formatted(rawSortDirection(criteria.sortingFields().getFirst())));
+        }
+    }
+
+    /**
+     * The raw Top-N CTE only sees {@code experiment_items} plus the {@code lookup_div} resolution, so the one
+     * outer-query-visible column it can order by is {@code stable_dataset_item_id}. A single sort on
+     * {@code id} is pushable and nothing else is.
+     */
+    private boolean isRawPushableSorting(List<SortingField> sortingFields) {
+        return sortingFields.size() == 1
+                && SortableFields.ID.equals(sortingFields.getFirst().field());
+    }
+
+    /**
+     * Mirrors {@code SortingQueryBuilder.getDirection}, which defaults a null direction to ASC — the
+     * CTE's ordering must match the outer {@code ORDER BY} exactly or the page is the wrong slice.
+     */
+    private String rawSortDirection(SortingField sortingField) {
+        return sortingField.direction() != null
+                ? sortingField.direction().name()
+                : Direction.ASC.name();
     }
 
     /**
@@ -4586,7 +4782,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Maps outer query field names to CTE-context expressions using experiment_item_aggregates (eia_t)
      * and optionally dataset_items_aggr_resolved (di_t).
      */
-    private String buildTopItemsSorting(List<com.comet.opik.api.sorting.SortingField> sortingFields) {
+    private String buildTopItemsSorting(List<SortingField> sortingFields) {
         String primarySort = sortingFields.stream()
                 .map(sf -> {
                     String expr = getTopSortExpression(sf);
@@ -4598,7 +4794,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 + ", eia_t.dataset_item_id DESC";
     }
 
-    private String getTopSortExpression(com.comet.opik.api.sorting.SortingField sf) {
+    private String getTopSortExpression(SortingField sf) {
         String field = sf.field();
 
         if ("id".equals(field)) {
