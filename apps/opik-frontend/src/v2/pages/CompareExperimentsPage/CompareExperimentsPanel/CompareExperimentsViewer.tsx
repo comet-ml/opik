@@ -1,14 +1,12 @@
 import React, { useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import isFunction from "lodash/isFunction";
+import isEmpty from "lodash/isEmpty";
 import { FlaskConical, ListTree } from "lucide-react";
 
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
 import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
-import {
-  MediaProvider,
-  mapAndCombineMessages,
-} from "@/shared/PrettyLLMMessage/llmMessages";
+import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
 import { useExperimentItemMedia } from "@/hooks/useExperimentItemMedia";
 import ExperimentMessagesViewer from "@/v2/pages-shared/experiments/ExperimentMessagesViewer/ExperimentMessagesViewer";
 import ExperimentFeedbackScoresViewer from "@/v2/pages-shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer";
@@ -21,6 +19,7 @@ import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
 import { traceExist, traceVisible } from "@/lib/traces";
 import ExperimentCommentsViewer from "./DataTab/ExperimentCommentsViewer";
+import { splitOutputForMessages } from "./splitOutputForMessages";
 import { CommentItems } from "@/types/comment";
 
 type CompareExperimentsViewerProps = {
@@ -53,15 +52,28 @@ const CompareExperimentsViewer: React.FunctionComponent<
     projectId: data?.project_id,
   });
 
-  // The input carries its own placeholders, which stay unresolved literals in
-  // the messages view unless their media is extracted too. Attachments are
-  // already requested for the trace above, so this pass only handles inline media.
-  const { media: inputMedia, transformedOutput: transformedInput } =
-    useExperimentItemMedia({ output: experimentItem.input });
+  const inputAndOutput = useMemo(
+    () => ({ input: experimentItem.input, output: experimentItem.output }),
+    [experimentItem.input, experimentItem.output],
+  );
 
-  const combinedMedia = useMemo(
-    () => [...inputMedia, ...media],
-    [inputMedia, media],
+  // Extracted in one pass so input and output media share one placeholder
+  // numbering: separate passes both start at [image_0], and the provider would
+  // then resolve the output's [image_0] to the input's picture.
+  const {
+    media: inputAndOutputMedia,
+    transformedOutput: transformedInputAndOutput,
+  } = useExperimentItemMedia({ output: inputAndOutput });
+
+  const { input: messagesInput, output: messagesOutput } =
+    transformedInputAndOutput as typeof inputAndOutput;
+
+  const messagesMedia = useMemo(
+    () => [
+      ...inputAndOutputMedia,
+      ...media.filter((item) => item.source === "attachment"),
+    ],
+    [inputAndOutputMedia, media],
   );
 
   const feedbackScores: TraceFeedbackScore[] = useMemo(
@@ -74,14 +86,11 @@ const CompareExperimentsViewer: React.FunctionComponent<
     [experimentItem.comments],
   );
 
-  // The trace-style renderer only applies when the payload is a recognised LLM
-  // message format; anything else keeps the JSON/YAML/pretty viewer. Detection
-  // runs on the media-resolved output so it matches what actually gets rendered.
-  const hasMessages = useMemo(
-    () =>
-      mapAndCombineMessages(transformedInput, transformedOutput).messages
-        .length > 0,
-    [transformedInput, transformedOutput],
+  // Gated on the output alone: mapAndCombineMessages silently drops a side it
+  // does not recognise, and this panel is the only place the output is shown.
+  const { rendersAsMessages, remainingOutput } = useMemo(
+    () => splitOutputForMessages(messagesOutput),
+    [messagesOutput],
   );
 
   const onExpandClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -108,31 +117,45 @@ const CompareExperimentsViewer: React.FunctionComponent<
       return null;
     }
 
-    const body = hasMessages ? (
-      <ExperimentMessagesViewer
-        input={transformedInput}
-        output={transformedOutput}
-        preserveKey={`compare-experiment-messages-${sectionIdx}`}
-      />
-    ) : (
-      <SyntaxHighlighter
-        data={transformedOutput as object}
-        prettifyConfig={{ fieldType: "output" }}
-        preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
-      />
-    );
+    if (!rendersAsMessages) {
+      const highlighter = (
+        <SyntaxHighlighter
+          data={transformedOutput as object}
+          prettifyConfig={{ fieldType: "output" }}
+          preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
+        />
+      );
 
-    if (!combinedMedia.length) {
-      return body;
+      if (!media.length) {
+        return highlighter;
+      }
+
+      return (
+        <MediaProvider media={media}>
+          <div className="flex flex-col gap-2">
+            <AttachmentsList media={media} />
+            {highlighter}
+          </div>
+        </MediaProvider>
+      );
     }
 
-    // The provider resolves placeholders from either side, while the attachments
-    // list stays scoped to the output media it has always shown.
     return (
-      <MediaProvider media={combinedMedia}>
+      <MediaProvider media={messagesMedia}>
         <div className="flex flex-col gap-2">
           {media.length > 0 && <AttachmentsList media={media} />}
-          {body}
+          <ExperimentMessagesViewer
+            input={messagesInput}
+            output={messagesOutput}
+            preserveKey={`compare-experiment-messages-${sectionIdx}`}
+          />
+          {!isEmpty(remainingOutput) && (
+            <SyntaxHighlighter
+              data={remainingOutput}
+              prettifyConfig={{ fieldType: "output" }}
+              preserveKey={`syntax-highlighter-compare-experiment-output-remaining-${sectionIdx}`}
+            />
+          )}
         </div>
       </MediaProvider>
     );
