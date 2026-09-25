@@ -5,7 +5,7 @@ import opik
 from opik.rest_api import TraceThread
 from opik.types import BatchFeedbackScoreDict
 
-from .. import helpers, rest_stream_parser, constants
+from .. import helpers, rest_stream_parser, constants, search_helpers
 from ... import config
 from ...message_processing import messages
 from ...message_processing.batching import sequence_splitter
@@ -89,7 +89,11 @@ class ThreadsClient:
 
         Returns:
             List[TraceThread]: A list of TraceThread objects that match the search
-            criteria.
+            criteria. Threads are streamed page by page using `thread_model_id`
+            as the pagination cursor. Pagination stops early and logs a
+            warning when a full page's last item carries no cursor or when the
+            extracted cursor repeats the previous one: the returned list may
+            be truncated rather than complete.
 
         Example:
             >>> from opik import Opik
@@ -119,6 +123,9 @@ class ThreadsClient:
             ),
             max_results=max_results,
             parsed_item_class=TraceThread,
+            # The endpoint's cursor is compared against `thread_model_id`
+            # (a UUID), not the caller-supplied thread `id`.
+            cursor_extractor=search_helpers.extract_thread_model_id_cursor,
         )
         return threads
 
