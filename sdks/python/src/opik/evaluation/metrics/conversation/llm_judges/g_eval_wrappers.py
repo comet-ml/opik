@@ -31,16 +31,23 @@ def _text_from_parts(parts: Any) -> str:
 
     A part that is neither a string nor a mapping with string ``text`` is a shape this
     adapter cannot read, so it is reported rather than counted as an empty turn --
-    counting it as empty would grade an older turn and report success.
+    counting it as empty would grade an older turn and report success. The public
+    conversation type still declares string content; list/tuple handling is defensive
+    support for direct ``score()`` calls, while ``evaluate_threads`` continues to
+    normalize its output to strings.
     """
     texts: List[str] = []
     for part in parts:
         if isinstance(part, str):
             texts.append(part)
         elif isinstance(part, dict):
-            text = part.get("text")
-            if isinstance(text, str):
+            if "text" in part:
+                text = part["text"]
+                if not isinstance(text, str):
+                    raise _bad_content(part)
                 texts.append(text)
+            elif part.get("type") == "text":
+                raise _bad_content(part)
         else:
             raise _bad_content(part)
 
