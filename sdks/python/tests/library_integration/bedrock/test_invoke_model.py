@@ -684,7 +684,7 @@ def test_bedrock_invoke_model__openai___streaming__happyflow(fake_backend):
                     {
                         "index": 0,
                         "message": {"role": "assistant", "content": ANY_STRING},
-                        "finish_reason": ANY_STRING,
+                        "finish_reason": "stop",
                     }
                 ],
             }
