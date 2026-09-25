@@ -184,33 +184,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     ? TRACE_DATA_TYPE.spans
     : TRACE_DATA_TYPE.traces;
 
-  const handleAddProvider = useCallback(
-    (provider: COMPOSED_PROVIDER_TYPE) => {
-      const model =
-        (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
-
-      if (!model) {
-        form.setValue(
-          "llmJudgeDetails.model",
-          calculateDefaultModel(model, [provider], provider),
-        );
-      }
-    },
-    [calculateDefaultModel, form],
-  );
-
-  const handleDeleteProvider = useCallback(
-    (provider: COMPOSED_PROVIDER_TYPE) => {
-      const model =
-        (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
-      const currentProvider = calculateModelProvider(model, provider);
-      if (currentProvider === provider) {
-        form.setValue("llmJudgeDetails.model", "");
-      }
-    },
-    [calculateModelProvider, form],
-  );
-
   // Adapts the form when switching to a decisions model (see toDecisionModelDetails) and keeps what it changed.
   const handleSwitchToDecisionModel = useCallback(() => {
     const { template, messages, variables, schema } =
@@ -243,6 +216,49 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     }
     setDecisionModelNotes([]);
   }, [form]);
+
+  // Every model change goes through here, so leaving or entering Jev adapts the prompt on each path: the
+  // selector, and the provider callbacks that clear or default the model.
+  const handleModelTransition = useCallback(
+    (previousModel: string, nextModel: string) => {
+      const wasDecision = isDecisionModel(previousModel);
+      if (isDecisionModel(nextModel)) {
+        if (!wasDecision) {
+          handleSwitchToDecisionModel();
+        }
+      } else if (wasDecision) {
+        handleSwitchFromDecisionModel();
+      }
+    },
+    [handleSwitchFromDecisionModel, handleSwitchToDecisionModel],
+  );
+
+  const handleAddProvider = useCallback(
+    (provider: COMPOSED_PROVIDER_TYPE) => {
+      const model =
+        (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
+
+      if (!model) {
+        const defaultModel = calculateDefaultModel(model, [provider], provider);
+        handleModelTransition(model, defaultModel);
+        form.setValue("llmJudgeDetails.model", defaultModel);
+      }
+    },
+    [calculateDefaultModel, form, handleModelTransition],
+  );
+
+  const handleDeleteProvider = useCallback(
+    (provider: COMPOSED_PROVIDER_TYPE) => {
+      const model =
+        (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
+      const currentProvider = calculateModelProvider(model, provider);
+      if (currentProvider === provider) {
+        handleModelTransition(model, "");
+        form.setValue("llmJudgeDetails.model", "");
+      }
+    },
+    [calculateModelProvider, form, handleModelTransition],
+  );
 
   // Memoized callback to handle messages change
   const handleMessagesChange = useCallback(
@@ -323,15 +339,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     value={model}
                     onChange={(m, selectedProvider) => {
                       if (m) {
-                        const wasDecision = isDecisionModel(field.value);
+                        const previousModel = field.value;
                         field.onChange(m);
-                        if (isDecisionModel(m)) {
-                          if (!wasDecision) {
-                            handleSwitchToDecisionModel();
-                          }
-                        } else if (wasDecision) {
-                          handleSwitchFromDecisionModel();
-                        }
+                        handleModelTransition(previousModel, m);
                         // Update config to ensure reasoning models have temperature >= 1.0
                         const currentConfig = form.getValues(
                           "llmJudgeDetails.config",

@@ -18,7 +18,10 @@ import {
   LLMJudgeSchema,
   LLMMessage,
 } from "@/types/llm";
-import { LLM_PROMPT_CUSTOM_TRACE_TEMPLATE } from "@/constants/llm";
+import {
+  LLM_PROMPT_CUSTOM_SPAN_TEMPLATE,
+  LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
+} from "@/constants/llm";
 import { isDecisionModel } from "@/lib/modelCapabilities";
 
 const score = (name: string, type: LLM_SCHEMA_TYPE): LLMJudgeSchema => ({
@@ -375,5 +378,48 @@ describe("fromDecisionModelDetails", () => {
     const back = fromDecisionModelDetails(jev, scope);
 
     expect(back).toEqual(chat);
+  });
+});
+
+describe("span scope transitions", () => {
+  const scope = EVALUATORS_RULE_SCOPE.span;
+  const [jevTemplate] = getDecisionModelTemplates(scope);
+  const chat = {
+    template: LLM_JUDGE.custom,
+    messages: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.messages,
+    variables: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.variables,
+    schema: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.schema,
+  };
+
+  it("loads the span version of Jev's Custom template", () => {
+    const jev = toDecisionModelDetails(chat, scope);
+
+    expect(jev.messages).toEqual([
+      expect.objectContaining({
+        role: LLM_MESSAGE_ROLE.user,
+        content: "INPUT:\n{{input}}\n\nOUTPUT:\n{{output}}",
+      }),
+    ]);
+    expect(jev.variables).toEqual({ input: "input", output: "output" });
+    expect(jev.schema).toEqual([
+      expect.objectContaining({
+        type: LLM_SCHEMA_TYPE.BOOLEAN,
+        description:
+          "Does the span's output correctly and fully address the span's input?",
+      }),
+    ]);
+    expect(jev.schema).toEqual(jevTemplate.schema);
+  });
+
+  it("round-trips back to the span chat Custom template", () => {
+    const back = fromDecisionModelDetails(
+      toDecisionModelDetails(chat, scope),
+      scope,
+    );
+
+    expect(back).toEqual(chat);
+    expect(back?.schema[0].description).toBe(
+      LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.schema[0].description,
+    );
   });
 });
