@@ -153,6 +153,34 @@ class AnnotationQueueRoutingReadsTest {
                 .containsExactly(sdk);
     }
 
+    /**
+     * The reason the query reads the latest row per id rather than matching on any row: a trace is written
+     * more than once, and until the parts merge both versions are there to be read. An out-of-order create
+     * leaves an earlier row holding a source the later write corrects.
+     */
+    @Test
+    @DisplayName("logging source: the latest version of a trace decides, not whichever version is read first")
+    void loggingSourceIdsTakeTheLatestVersionOfATrace() {
+        String projectName = randomName("project");
+        UUID becameSdk = createTrace(projectName, Source.PLAYGROUND, null);
+        UUID becamePlayground = createTrace(projectName, Source.SDK, null);
+        UUID projectId = projectIdOf(becameSdk);
+
+        // A second version of each, written after the first and carrying the other source.
+        traceResourceClient.batchCreateTraces(List.of(
+                traceOf(projectName, Source.SDK, null).toBuilder().id(becameSdk).build(),
+                traceOf(projectName, Source.PLAYGROUND, null).toBuilder().id(becamePlayground).build()),
+                API_KEY, WORKSPACE_NAME);
+
+        var kept = traceDAO.getLoggingSourceIds(Set.of(projectId), Set.of(becameSdk, becamePlayground))
+                .contextWrite(this::workspaceContext)
+                .block();
+
+        assertThat(kept)
+                .as("the correction is what counts, in both directions")
+                .containsExactly(becameSdk);
+    }
+
     @Test
     @DisplayName("logging source: an id set with no project or no ids reads nothing")
     void loggingSourceIdsShortCircuitOnEmptyInput() {
@@ -207,7 +235,11 @@ class AnnotationQueueRoutingReadsTest {
     }
 
     private UUID createTrace(String projectName, Source source, String threadId) {
-        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+        return traceResourceClient.createTrace(traceOf(projectName, source, threadId), API_KEY, WORKSPACE_NAME);
+    }
+
+    private Trace traceOf(String projectName, Source source, String threadId) {
+        return factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
                 .projectName(projectName)
                 .projectId(null)
@@ -218,8 +250,6 @@ class AnnotationQueueRoutingReadsTest {
                 .feedbackScores(null)
                 .usage(null)
                 .build();
-
-        return traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
     }
 
     private void score(String projectName, UUID traceId, String name, double value) {

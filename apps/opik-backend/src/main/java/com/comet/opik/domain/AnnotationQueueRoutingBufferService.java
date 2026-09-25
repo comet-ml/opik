@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -174,7 +175,7 @@ public class AnnotationQueueRoutingBufferService {
      * member this deployment cannot parse — a leftover from an older member format, or a corrupted write.
      */
     @Builder(toBuilder = true)
-    private record ParsedMember(@NonNull String member, PendingEntity entity) {
+    private record ParsedMember(@NonNull String member, @Nullable PendingEntity entity) {
 
         static ParsedMember of(@NonNull String member) {
             return ParsedMember.builder().member(member).entity(decode(member)).build();
@@ -184,7 +185,7 @@ public class AnnotationQueueRoutingBufferService {
             return entity == null;
         }
 
-        private static PendingEntity decode(String member) {
+        private static @Nullable PendingEntity decode(String member) {
             int entityAt = member.lastIndexOf(MEMBER_SEPARATOR);
             int scopeAt = entityAt > 0 ? member.lastIndexOf(MEMBER_SEPARATOR, entityAt - 1) : -1;
             if (scopeAt <= 0) {

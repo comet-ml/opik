@@ -1177,7 +1177,7 @@ annotationQueueRouting:
   #   added to every routed item. Same semantics as the experimentDenormalization debounce.
   debounceDelay: 15s
   # Default: 2m
-  # Description: TTL of the Redis buffer key (10s-1h). Set when the key is created and renewed by every flush run,
+  # Description: TTL of the Redis buffer key (10s-10m). Set when the key is created and renewed by every flush run,
   #   so if nothing drains the buffer it expires this long after the last flush instead of growing without limit.
   #   Matches experimentDenormalization, whose buckets expire at twice their debounce delay.
   bufferTtl: 2m
