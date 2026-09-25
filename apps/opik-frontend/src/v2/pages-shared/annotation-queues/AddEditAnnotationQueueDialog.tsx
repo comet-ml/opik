@@ -71,7 +71,9 @@ const SCOPE_OPTIONS = [
   },
 ];
 
-const formSchema = z
+// Exported for its own tests: the cap's rules live in the superRefine below, and they are worth
+// asserting without standing up the whole sheet.
+export const formSchema = z
   .object({
     project_id: z.string().min(1, "Project is required"),
     name: z

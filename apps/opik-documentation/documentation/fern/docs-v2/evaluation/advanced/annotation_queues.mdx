@@ -64,11 +64,13 @@ A queue can also collect items on its own, so low-quality output reaches reviewe
 watching the traces list. Turn on **Automation** when creating or editing a queue, then describe what
 is worth reviewing as conditions on feedback scores:
 
-- All conditions must hold for an item to be added — they are combined with **AND**
+- In the UI, all conditions must hold for an item to be added — they are combined with **AND**. The REST
+  API also accepts several groups of conditions, which are OR-ed: any group matching is enough, and within
+  a group all conditions must hold
 - An item with no value for a score in the condition never matches it
-- Tick **Cap automatically added items at** to bound how many items automation adds; once that many
-  automated items are in the queue, automation stops adding until some are removed. Only items added by the
-  automation count — adding by hand is unaffected. Leave it unticked for no limit
+- Tick **Cap automatically added items at** to bound how large automation lets the queue grow; once the
+  queue holds that many items, however they got there, automation stops adding until some are removed.
+  Adding by hand is never refused. Leave it unticked for no limit
 
 Conditions are evaluated whenever a score is written, so an item is added as soon as it qualifies —
 whether that is seconds after the trace, when an online evaluation rule scores it, or days later when
@@ -86,6 +88,11 @@ scored like any other, but automation skips them, so trying a prompt in the Play
 to your reviewers. Those can still be added by hand.
 
 Automation works the same way for thread queues, matching on thread scores instead of trace scores.
+
+<Note>
+  Automation is configured in the UI. The SDK helpers below create queues without it — a queue created
+  programmatically can be given conditions afterwards from its configuration screen.
+</Note>
 
 ### Sharing with Subject Matter Experts
 
