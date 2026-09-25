@@ -17,6 +17,16 @@ export type SpanSeedUsage = {
   total_tokens: number;
 } & Record<string, number>;
 
+/**
+ * One dataset-item field, named by the Python type the bridge must build it as
+ * before `Dataset.insert` sees it. `value` is the JSON form the object is built
+ * FROM — never what it has to store as, which is the caller's assertion.
+ */
+export type TypedValueSpec = {
+  kind: 'float' | 'uuid' | 'enum' | 'datetime' | 'set' | 'tuple';
+  value: unknown;
+};
+
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
   createTrace(args: {
@@ -81,6 +91,18 @@ export interface PythonSdkClient {
    * payload into. `num_threads` > 1 uploads those batches in parallel.
    * `deduplication: false` bypasses the content-hash dedup path, so identical
    * content sent twice is stored twice.
+   *
+   * `num_threads` is deliberately unconstrained so a caller can assert the
+   * SDK's own validation of it: a value it refuses comes back as `value_error`
+   * carrying the ValueError's message with `inserted: 0`, rather than as a
+   * bridge failure. Validation runs before any batch is sent, so a rejected
+   * insert leaves the dataset untouched.
+   *
+   * `enable_json_request_compression: false` selects the uncompressed upload
+   * arm. Omit it to get whatever the deployment is configured for. Either way
+   * `compression_enabled` reports what the upload actually did — read off the
+   * client the bridge built, not echoed from this argument, so the two arms can
+   * be shown to have genuinely differed.
    */
   insertDatasetItems(args: {
     dataset_name: string;
@@ -88,8 +110,14 @@ export interface PythonSdkClient {
     items: Array<Record<string, unknown>>;
     num_threads?: number;
     deduplication?: boolean;
+    enable_json_request_compression?: boolean;
     workspace?: string;
-  }): Promise<{ dataset_id: string; inserted: number }>;
+  }): Promise<{
+    dataset_id: string;
+    inserted: number;
+    compression_enabled: boolean;
+    value_error: string | null;
+  }>;
   /**
    * Several `Dataset.insert(...)` calls sharing ONE `Dataset` object — the
    * shape `insertDatasetItems` cannot express, because the bridge builds a
@@ -107,6 +135,32 @@ export interface PythonSdkClient {
     }>;
     workspace?: string;
   }): Promise<{ dataset_id: string; inserted: number[] }>;
+  /**
+   * One `Dataset.insert([item])` whose content carries non-JSON-native Python
+   * types — a `uuid.UUID`, an `enum.Enum` member, a tz-aware `datetime`, a
+   * `set`, a `tuple`.
+   *
+   * `insertDatasetItems` cannot express this and never will: its items are JSON
+   * by the time the bridge reads them, so a UUID has already become a string
+   * and a set a list. That normalisation is precisely what the content-hash
+   * path performs, so sending it pre-normalised tests nothing. Here the field
+   * carries the *kind* to build and the JSON value to build it FROM, and the
+   * bridge materialises the object before `Dataset.insert` sees it.
+   *
+   * One insert per call, so posting twice compares the second digest against
+   * what the backend stored rather than against an in-process cache.
+   *
+   * `accelerated` reports whether `orjson` answered in the bridge process. It
+   * is diagnostic — the round trip must hold under either encoder — but a
+   * failure is unreadable without knowing which one produced it.
+   */
+  insertTypedDatasetItem(args: {
+    dataset_name: string;
+    project_name: string;
+    typed_content: Record<string, TypedValueSpec>;
+    deduplication?: boolean;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; inserted: number; accelerated: boolean }>;
   /**
    * One `Dataset.get_items(...)`, reduced to the item ids it returned **in the
    * order it returned them** — the property a concurrent paged read has to
@@ -197,6 +251,30 @@ export interface PythonSdkClient {
         score_name: string;
         score_value: number;
       }>;
+    }>;
+  }>;
+  /**
+   * `Experiment.get_items()` — the SDK read the estate has never driven.
+   *
+   * Every knob is optional so an omitted one exercises the SDK's own default
+   * rather than a copy of it pinned in the suite. `idx` is the monotonic index
+   * the caller wrote onto each dataset item, echoed back so a read can be
+   * checked for order, gaps and duplicates without transferring whole rows.
+   */
+  readExperimentItems(args: {
+    experiment_id: string;
+    max_results?: number;
+    page_size?: number;
+    num_threads?: number;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    count: number;
+    items: Array<{
+      id: string;
+      dataset_item_id: string;
+      trace_id: string;
+      idx: number | null;
     }>;
   }>;
   createTextPrompt(args: {
@@ -385,9 +463,39 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     }
   }
 
+  /**
+   * Run a bridge write, standing off and retrying while it is rate-limited.
+   *
+   * Project creation is the first call almost every SDK-seeded spec makes, so
+   * on a shared cloud workspace a burst of parallel workers can spend the
+   * per-workspace budget before any of them reaches its subject. A 429 there
+   * fails the whole spec in `Before Hooks`, reporting an ingestion budget as a
+   * product defect.
+   *
+   * Matched on the typed `status`, not the message: a generated id containing
+   * `429` would otherwise make an unrelated 4xx look retryable. Only 429 is
+   * retried — any other status is a real error and must surface at once — and a
+   * rate limit outlasting the whole backoff still throws, because by then it is
+   * not a burst.
+   */
+  async function withRateLimitRetry<T>(write: () => Promise<T>): Promise<T> {
+    const backoffMs = [2_000, 5_000, 10_000, 20_000];
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await write();
+      } catch (err) {
+        const rateLimited = err instanceof PythonSdkBridgeError && err.status === 429;
+        if (!rateLimited || attempt >= backoffMs.length) throw err;
+        await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
+      }
+    }
+  }
+
   return {
     async createProject({ name, workspace }) {
-      return request<{ id: string; name: string }>('POST', '/projects', { name, workspace });
+      return withRateLimitRetry(() =>
+        request<{ id: string; name: string }>('POST', '/projects', { name, workspace }),
+      );
     },
     async createTrace(args) {
       return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
@@ -418,12 +526,12 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       // Multi-batch inserts against a cloud backend outlive the default budget
       // when the workspace is being rate-limited, and a client-side abort here
       // would leave a half-written dataset behind.
-      return request<{ dataset_id: string; inserted: number }>(
-        'POST',
-        '/datasets/insert-items',
-        args,
-        { timeoutMs: 180_000 },
-      );
+      return request<{
+        dataset_id: string;
+        inserted: number;
+        compression_enabled: boolean;
+        value_error: string | null;
+      }>('POST', '/datasets/insert-items', args, { timeoutMs: 180_000 });
     },
     async insertDatasetItemsSession(args) {
       // Same budget as insertDatasetItems, and for the same reason — except
@@ -431,6 +539,17 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       return request<{ dataset_id: string; inserted: number[] }>(
         'POST',
         '/datasets/insert-items-session',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async insertTypedDatasetItem(args) {
+      // One item, but the same cloud rate-limiting exposure as the other insert
+      // routes — and an abort here would leave the dataset half-written, which
+      // is the state this spec's dedup assertion cannot tell apart from a bug.
+      return request<{ dataset_id: string; inserted: number; accelerated: boolean }>(
+        'POST',
+        '/datasets/insert-typed-item',
         args,
         { timeoutMs: 180_000 },
       );
@@ -472,6 +591,23 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           }>;
         }>;
       }>('POST', '/experiments/compare-seed', args);
+    },
+    async readExperimentItems(args) {
+      return request<{
+        experiment_id: string;
+        count: number;
+        items: Array<{
+          id: string;
+          dataset_item_id: string;
+          trace_id: string;
+          idx: number | null;
+        }>;
+      }>('POST', '/experiments/read-items', args, {
+        // A full read of a multi-page experiment against a cloud backend is
+        // several round trips deep, and the sequential arms (num_threads=1 at
+        // a small page size) are deliberately the slowest way to do it.
+        timeoutMs: 300_000,
+      });
     },
     async createTextPrompt(args) {
       return request<{ id: string; name: string }>('POST', '/prompts/text', args);

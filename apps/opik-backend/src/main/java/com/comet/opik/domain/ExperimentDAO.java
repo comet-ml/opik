@@ -570,6 +570,7 @@ public class ExperimentDAO {
                         <if(has_target_projects)>
                         AND project_id IN :target_project_ids
                         <endif>
+                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                         ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     )
@@ -1060,7 +1061,7 @@ public class ExperimentDAO {
                     ON ef.id = ea.id AND ea.workspace_id = :workspace_id
                 WHERE 1=1
                 <if(has_target_projects)>
-                AND ea.project_id IN :target_project_ids
+                AND (ea.project_id IN :target_project_ids OR ea.project_id = :zero_uuid)
                 <endif>
             ), experiment_items_final AS (
                 SELECT
@@ -1595,6 +1596,72 @@ public class ExperimentDAO {
             ;
             """;
 
+    /**
+     * The experiment row on its own, with the aggregation columns nulled out exactly as {@code FIND_BY_NAME}
+     * does, so the result maps to the same DTO.
+     * <p>
+     * For callers that only need the experiment's own fields (its dataset and project, say), {@code FIND} is
+     * the wrong query: it joins nine tables and re-reads every item of the experiment, which grows with the
+     * experiment while the answer here does not.
+     * <p>
+     * <b>{@code project_id} is the effective project, not the stored column.</b> An experiment created without
+     * a {@code project_name} stores none ({@code ProjectService.resolveProjectIdOrCreate} returns empty for a
+     * blank name), and {@code FIND} fills that gap from the experiment's items. Callers act on the result —
+     * bulk ingestion reuses it for new traces and rejects a mismatching {@code project_name} — so returning the
+     * bare column instead re-homes such an experiment's traces into the default project and turns the correct
+     * {@code project_name} into a 409.
+     * <p>
+     * <b>The fallback reads the project off the experiment's traces, not off
+     * {@code experiment_items.project_id}.</b> That column holds the project the <i>item</i> named and is only
+     * filled from the trace when the item named none, so an item naming a different project than where its
+     * trace was logged makes the two disagree — and {@code FIND} derives from the traces
+     * ({@code experiment_items_final} LEFT JOIN {@code traces}), so reading the denormalized column here
+     * inverts which {@code project_name} bulk ingestion accepts. Same reason
+     * {@code SELECT_TARGET_PROJECTS} resolves through traces rather than that column.
+     * <p>
+     * It takes the first project found rather than reproducing {@code FIND}'s dedup: {@code FIND} picks
+     * {@code groupUniqArrayIf(...)[1]} off a {@code groupUniqArray} whose order is undefined, so both sides are
+     * arbitrary when an experiment's traces span several projects, and a superseded item row winning is
+     * accepted. The trace ids are matched as a set rather than by picking one item, so an item whose trace is
+     * missing or not yet written does not shadow the ones that do resolve; when none resolves the result is
+     * empty, which is what {@code FIND} returns in that case too.
+     */
+    private static final String FIND_METADATA_BY_ID = """
+            SELECT
+                * EXCEPT (project_id),
+                if(notEmpty(project_id), project_id, (
+                    SELECT t.project_id
+                    FROM traces t
+                    WHERE t.workspace_id = :workspace_id
+                    AND t.id IN (
+                        SELECT ei.trace_id
+                        FROM experiment_items ei
+                        WHERE ei.workspace_id = :workspace_id
+                        AND ei.experiment_id = :id
+                    )
+                    AND notEmpty(t.project_id)
+                    LIMIT 1
+                )) AS project_id,
+                null AS feedback_scores,
+                null AS trace_count,
+                null AS duration,
+                null AS total_estimated_cost,
+                null AS total_estimated_cost_avg,
+                null AS usage,
+                null AS comments_array_agg,
+                null AS pass_rate,
+                null AS passed_count,
+                null AS total_count,
+                null AS assertion_scores
+            FROM experiments
+            WHERE workspace_id = :workspace_id
+            AND id = :id
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String FIND_EXPERIMENT_AND_WORKSPACE_BY_EXPERIMENT_IDS = """
             SELECT
                 DISTINCT id, workspace_id
@@ -1838,6 +1905,27 @@ public class ExperimentDAO {
                             .flatMap(this::mapToDto)
                             .singleOrEmpty();
                 });
+    }
+
+    /**
+     * The experiment's own row, without any of the aggregations {@link #getById(UUID)} computes.
+     * Aggregation columns come back null, so only callers that don't read them may use this.
+     */
+    @WithSpan
+    Mono<Experiment> getMetadataById(@NonNull UUID id) {
+        log.info("Getting experiment metadata by id '{}'", id);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(FIND_METADATA_BY_ID, "get_experiment_metadata_by_id",
+                            workspaceId, userName, "experimentId=%s".formatted(id));
+                    var statement = connection.createStatement(template.render())
+                            .bind("id", id)
+                            .bind("workspace_id", workspaceId);
+                    return Flux.from(statement.execute());
+                }))
+                .flatMap(this::mapToDto)
+                .singleOrEmpty();
     }
 
     @WithSpan
@@ -2466,7 +2554,11 @@ public class ExperimentDAO {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             var targetProjectIdsMono = getTargetProjectIdsForExperiments(TargetProjectsCriteria.from(criteria));
-            var branchCountsMono = getAggregationBranchCounts(AggregationBranchCountsCriteria.empty());
+            // Scoped by project so a single non-aggregated experiment elsewhere in the workspace doesn't keep
+            // the raw branch for every grouping request; project is the only scope the grouping criteria has.
+            var branchCountsMono = getAggregationBranchCounts(AggregationBranchCountsCriteria.builder()
+                    .projectId(criteria.projectId())
+                    .build());
 
             return Mono.zip(targetProjectIdsMono, branchCountsMono)
                     .flatMapMany(preQueryResults -> {

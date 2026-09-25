@@ -12,6 +12,7 @@ import tenacity
 
 import opik.config as config
 from opik import exceptions
+from opik.api_objects import streaming_upload
 from opik.api_objects.dataset import converters, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
 from opik.rest_api.core.jsonable_encoder import jsonable_encoder
@@ -141,8 +142,11 @@ def test_insert__generator__consumed_lazily_not_drained_up_front():
     assert len(drawn) == 6
 
 
-def test_insert__peak_memory__does_not_grow_with_item_count():
+def test_insert__peak_memory__does_not_grow_with_item_count(monkeypatch):
     """Asserts the slope, not an absolute number, so it does not depend on the machine."""
+    # Both sizes have to run past the batch cap for the slope to mean anything: what is
+    # held is one batch, and a run that fits in a single batch measures the input instead.
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.05)
 
     def peak_for(count: int) -> int:
         capture = UploadCapture()
@@ -224,6 +228,23 @@ def test_insert__value_not_json_serializable__raises_explicitly():
         dataset.insert([{"input": NotSerializable()}])
 
 
+def test_insert__deduplication__set_member_with_a_raising_repr__raises_explicitly():
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    class BadRepr:
+        def __repr__(self) -> str:
+            raise RuntimeError("repr exploded")
+
+    from opik.api_objects.dataset import streaming_writer
+
+    # Mixed types force the repr-keyed ordering, so the repr failure must surface as
+    # the serialization error rather than escape the dedup pass.
+    with pytest.raises(streaming_writer.ItemNotSerializableError):
+        dataset.insert([{"input": {1, BadRepr()}}], deduplication=True)
+    assert capture.request_count == 0
+
+
 # --------------------------------------------------------------------------- #
 # compatibility: a Dataset built from a rest client alone still uploads
 # --------------------------------------------------------------------------- #
@@ -259,9 +280,9 @@ def test_insert__streaming__worker_count_gated_by_backend_version(monkeypatch):
     used_workers = []
     original = Dataset._open_send_pool
 
-    def spy(self, num_threads):
+    def spy(self, num_threads, **kwargs):
         used_workers.append(num_threads)
-        return original(self, num_threads)
+        return original(self, num_threads, **kwargs)
 
     monkeypatch.setattr(Dataset, "_open_send_pool", spy)
     dataset.insert(_items(4), num_threads=4)
@@ -321,13 +342,13 @@ def test_insert__streaming__uses_the_dataset_upload_compression_level(monkeypatc
     monkeypatch.setenv("OPIK_DATASET_UPLOAD_COMPRESSION_LEVEL", "2")
 
     levels = []
-    original = streaming_writer.StreamingBatchWriter
+    original = streaming_upload.BoundedSendPool
 
-    def spy(**kwargs):
+    def spy(*args, **kwargs):
         levels.append(kwargs["gzip_level"])
-        return original(**kwargs)
+        return original(*args, **kwargs)
 
-    monkeypatch.setattr(streaming_writer, "StreamingBatchWriter", spy)
+    monkeypatch.setattr(streaming_upload, "BoundedSendPool", spy)
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
 
@@ -407,6 +428,38 @@ def test_insert__parallel_upload__a_failing_request_raises_to_the_caller(
         dataset.insert(_items(50), num_threads=4)
 
 
+def test_insert__parallel_upload__each_request_carries_the_rows_it_was_built_from(
+    monkeypatch,
+):
+    """Batches are assembled by the producer and compressed by a worker, so they can slip.
+
+    Order survives only if each body still holds its own rows, in the order they arrived.
+    """
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0005)  # a few items per request
+    mock_rest_client = Mock()
+    mock_rest_client.version.return_value = {"version": "99.0.0"}  # allow parallelism
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
+
+    dataset.insert(
+        [{"input": {"i": i, "pad": "x" * 100}} for i in range(40)], num_threads=4
+    )
+
+    batches = [
+        [item["data"]["input"]["i"] for item in batch] for batch in capture.batches
+    ]
+    assert sorted(i for batch in batches for i in batch) == list(range(40)), (
+        "Every row must be sent exactly once"
+    )
+    assert len(batches) > 1, (
+        "The batch cap should have split this into several requests"
+    )
+    for batch in batches:
+        assert batch == list(range(batch[0], batch[0] + len(batch))), (
+            f"A request carried rows that were not built together: {batch}"
+        )
+
+
 @pytest.mark.parametrize("materialised", [True, False], ids=["list", "generator"])
 def test_insert__invalid_item__items_sent_before_it_stay_persisted(
     monkeypatch, materialised
@@ -449,7 +502,10 @@ def _payloads_with_an_oversized_item():
 
 def test_insert__oversized_item__gets_its_own_request_in_input_order(monkeypatch):
     """An item past the cap is sent alone, and the input's order survives batching."""
-    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0005)
+    # Room for the envelope plus two of the small items but not three: the cap now
+    # covers the whole request body, and at these sizes the envelope is a visible
+    # share of it. The grouping under test is unchanged.
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0006)
 
     capture = UploadCapture()
     streaming = make_dataset(Dataset, Mock(), capture)

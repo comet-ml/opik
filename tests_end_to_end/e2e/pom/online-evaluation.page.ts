@@ -228,6 +228,31 @@ export class OnlineEvaluationPage {
   }
 
   /**
+   * The Trigger scope toggle group inside the add/edit dialog — Production
+   * traces / Experiment traces / Both.
+   *
+   * Only rendered for trace-scope rules; the dialog omits it entirely for span
+   * and thread scope. That makes it the control a spec uses to show that a
+   * dialog which is missing the filtering section is still the full trace-scope
+   * dialog, rather than one that failed to render.
+   */
+  get triggerScopeControl(): Locator {
+    return this.dialog.getByTestId('add-edit-rule-dialog-trigger-scope');
+  }
+
+  /**
+   * One option of the Trigger scope toggle group, by its accessible name.
+   *
+   * Radix `ToggleGroupItem` renders a radio whose selected member carries
+   * `data-state="on"`, so a caller asserting which scope the dialog hydrated
+   * should check that attribute rather than the group's text — every option's
+   * label is on screen whichever one is active.
+   */
+  triggerScopeOption(name: 'Production traces' | 'Experiment traces' | 'Both'): Locator {
+    return this.triggerScopeControl.getByRole('radio', { name, exact: true });
+  }
+
+  /**
    * Open a rule's edit dialog through the row's kebab → Edit, and resolve once
    * the dialog is on screen. The same trigger/menu-item pair as
    * `deleteRuleByName`, scoped by the row first and then by accessible name

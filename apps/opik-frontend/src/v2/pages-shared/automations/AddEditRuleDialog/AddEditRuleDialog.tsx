@@ -31,9 +31,8 @@ import {
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { ColumnData } from "@/types/shared";
 import { LLM_JUDGE, LLM_MESSAGE_ROLE, LLMJudgeSchema } from "@/types/llm";
-import { isFilterValid } from "@/lib/filters";
 import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
@@ -69,6 +68,7 @@ import {
   EvaluationRuleFormType,
 } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import {
+  buildRuleFilters,
   getBackendRuleType,
   getUIRuleScope,
   getUIRuleType,
@@ -415,20 +415,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     const ruleType = formData.type;
 
-    const validFilters = formData.filters
-      .filter((f) =>
-        isFilterValid(
-          (f.field === "input" || f.field === "output") && !f.key
-            ? { ...f, type: COLUMN_TYPE.string }
-            : f,
-        ),
-      )
-      .map((f) => {
-        if ((f.field === "input" || f.field === "output") && f.key) {
-          return { ...f, field: `${f.field}_json` };
-        }
-        return f;
-      });
+    const validFilters = buildRuleFilters(formData.filters);
 
     const ruleData = {
       name: formData.ruleName,

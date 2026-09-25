@@ -13,7 +13,7 @@ env:
   GOOGLE_CLOUD_LOCATION: us-east1
   GOOGLE_CLOUD_PROJECT: opik-sdk-tests
   GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_PYTHON_SDK_TESTS }}
   AWS_DEFAULT_REGION: us-east-1
   AWS_ACCESS_KEY_ID: ${{ secrets.BEDROCK_AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.BEDROCK_AWS_SECRET_ACCESS_KEY }}
@@ -49,7 +49,7 @@ jobs:
           python-version: ${{matrix.python_version}}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.1.0
 
       - name: Install opik
         run: uv pip install --system .

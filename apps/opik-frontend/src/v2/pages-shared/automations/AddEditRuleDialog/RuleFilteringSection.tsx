@@ -33,7 +33,7 @@ import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpa
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
-import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import { EVAL_TRIGGER_SCOPE, EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -65,7 +65,7 @@ export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   },
   {
     id: "duration",
-    label: "Duration",
+    label: "Duration (s)",
     type: COLUMN_TYPE.duration,
   },
   {
@@ -125,7 +125,7 @@ export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   // },
   {
     id: "duration",
-    label: "Duration",
+    label: "Duration (s)",
     type: COLUMN_TYPE.duration,
   },
   {
@@ -165,7 +165,7 @@ export const SPAN_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   },
   {
     id: "duration",
-    label: "Duration",
+    label: "Duration (s)",
     type: COLUMN_TYPE.duration,
   },
   {
@@ -246,6 +246,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
   projectId,
 }) => {
   const scope = form.watch("scope");
+  const triggerScope = form.watch("triggerScope");
   const isTraceScope = scope === EVALUATORS_RULE_SCOPE.trace;
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
@@ -417,6 +418,12 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
     },
     [form],
   );
+
+  // Neither filters nor the sampling rate reach an experiment trace, so a rule that only targets
+  // experiments has nothing to configure here.
+  if (triggerScope === EVAL_TRIGGER_SCOPE.experiment) {
+    return null;
+  }
 
   return (
     <Accordion

@@ -23,6 +23,12 @@ const SCOPE_OPTIONS: { value: EVALUATORS_RULE_SCOPE; label: string }[] = [
   { value: EVALUATORS_RULE_SCOPE.span, label: "Spans" },
 ];
 
+const TRIGGER_SCOPE_OPTIONS: { value: EVAL_TRIGGER_SCOPE; label: string }[] = [
+  { value: EVAL_TRIGGER_SCOPE.production, label: "Production traces" },
+  { value: EVAL_TRIGGER_SCOPE.experiment, label: "Experiment traces" },
+  { value: EVAL_TRIGGER_SCOPE.both, label: "Both" },
+];
+
 const RuleScopeSection: React.FC<RuleScopeSectionProps> = ({
   form,
   onScopeChange,
@@ -78,34 +84,67 @@ const RuleScopeSection: React.FC<RuleScopeSectionProps> = ({
         <FormField
           control={form.control}
           name="triggerScope"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-center justify-between space-y-0 pl-1">
-              <Label
-                htmlFor="exclude-experiment-traces"
-                className="comet-body-s flex items-center gap-1 font-normal text-foreground"
-              >
-                <CornerDownRight className="size-3.5 text-light-slate" />
-                Exclude experiment traces
-                <TooltipWrapper content="On, the rule scores production traces only. Off, it also scores traces logged by experiments.">
-                  <Info className="size-4 text-light-slate" />
-                </TooltipWrapper>
-              </Label>
-              <FormControl>
-                <Switch
-                  id="exclude-experiment-traces"
-                  size="sm"
-                  checked={field.value === EVAL_TRIGGER_SCOPE.production}
-                  onCheckedChange={(checked) =>
-                    field.onChange(
-                      checked
-                        ? EVAL_TRIGGER_SCOPE.production
-                        : EVAL_TRIGGER_SCOPE.both,
-                    )
-                  }
-                />
-              </FormControl>
-            </FormItem>
-          )}
+          render={({ field }) =>
+            // An experiment-only rule (set through the API or an older UI) has no
+            // switch position, so it keeps the full three-way control instead.
+            field.value === EVAL_TRIGGER_SCOPE.experiment ? (
+              <FormItem>
+                <Label className="comet-body-s font-normal text-foreground">
+                  Trigger scope
+                </Label>
+                <FormControl>
+                  <ToggleGroup
+                    type="single"
+                    variant="secondary"
+                    className="w-full"
+                    value={field.value}
+                    data-testid="add-edit-rule-dialog-trigger-scope"
+                    onValueChange={(value: EVAL_TRIGGER_SCOPE) => {
+                      if (value) field.onChange(value);
+                    }}
+                  >
+                    {TRIGGER_SCOPE_OPTIONS.map((option) => (
+                      <ToggleGroupItem
+                        key={option.value}
+                        value={option.value}
+                        aria-label={option.label}
+                        className="h-6 flex-1"
+                      >
+                        {option.label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </FormControl>
+              </FormItem>
+            ) : (
+              <FormItem className="flex flex-row items-center justify-between space-y-0 pl-1">
+                <Label
+                  htmlFor="exclude-experiment-traces"
+                  className="comet-body-s flex items-center gap-1 font-normal text-foreground"
+                >
+                  <CornerDownRight className="size-3.5 text-light-slate" />
+                  Exclude experiment traces
+                  <TooltipWrapper content="On, the rule scores production traces only. Off, it also scores traces logged by experiments.">
+                    <Info className="size-4 text-light-slate" />
+                  </TooltipWrapper>
+                </Label>
+                <FormControl>
+                  <Switch
+                    id="exclude-experiment-traces"
+                    size="sm"
+                    checked={field.value === EVAL_TRIGGER_SCOPE.production}
+                    onCheckedChange={(checked) =>
+                      field.onChange(
+                        checked
+                          ? EVAL_TRIGGER_SCOPE.production
+                          : EVAL_TRIGGER_SCOPE.both,
+                      )
+                    }
+                  />
+                </FormControl>
+              </FormItem>
+            )
+          }
         />
       )}
     </div>

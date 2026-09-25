@@ -10,6 +10,8 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
+          - 'opik.sh'
+          - 'opik.ps1'
     push:
         branches:
           - 'main'
@@ -17,6 +19,8 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
+          - 'opik.sh'
+          - 'opik.ps1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -54,6 +58,9 @@ jobs:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
     build-opik:
+        # Fork PRs get a read-only GITHUB_TOKEN, so the GHCR push below always
+        # 403s. Skip rather than fail; delete once fork PRs can run E2E.
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
         # The reusable build workflow pushes images to GHCR; pass down the
         # packages: write grant here rather than at the workflow level (a
         # called workflow's permissions can only be maintained or reduced from
@@ -66,6 +73,8 @@ jobs:
           include_guardrails: true
 
     run-compatibility-v1-e2e:
+        # No explicit if: needed here -- the default success() check skips this
+        # whenever build-opik is skipped.
         needs: [select-matrix, build-opik]
         name: Python SDK Compatibility V1.x E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
@@ -110,7 +119,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.1.0
 
         - name: Run latest Opik server
           env:
