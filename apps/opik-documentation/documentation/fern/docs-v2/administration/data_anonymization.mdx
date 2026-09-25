@@ -12,17 +12,9 @@ title: Data Anonymization
   your Comet account team to enable it for your organization.
 </Note>
 
-Data anonymization masks sensitive values, such as email addresses, phone numbers or account numbers, when Opik shows trace data to a user. Users who have the **Original data view** permission see the data as it was logged. All other users see a replacement token, such as `[EMAIL]` or `[PHONE]`, in its place.
+Data anonymization masks sensitive values, such as email addresses, phone numbers or your own customer IDs, when Opik shows trace data to a user. Opik stores traces exactly as they are logged and masks them only when they are read. Users with the **Original data view** permission (listed as **View unanonymized data** in the [permissions table](/administration/roles_and_permissions#permissions-by-role)) see the original values. All other users see a token such as `[EMAIL]` instead, in the Opik UI, the REST API and the SDKs alike.
 
 Your team can then give analysts, annotators or external reviewers access to production traces without exposing the personal data inside them.
-
-<Frame caption="The same trace, seen by a workspace admin (top) and by a member whose role excludes the Original data view permission (bottom).">
-  <img src="/img/administration/data_anonymization_comparison.png" alt="The same trace shown with original values for an admin and with [EMAIL] and [PHONE] tokens for a member without the Original data view permission" />
-</Frame>
-
-## How it works
-
-Opik stores traces exactly as they are logged and masks them only when they are read. Users with the **Original data view** permission (listed as **View unanonymized data** in the [permissions table](/administration/roles_and_permissions#permissions-by-role)) see the original values. For all other users, masking rules replace sensitive values such as email addresses, phone numbers or your own customer IDs with a token like `[EMAIL]`, in the Opik UI, the REST API and the SDKs alike.
 
 <Frame caption="Opik stores the trace as it was logged. Each time a user reads the trace, Opik checks the user's permission and masks the data for users without Original data view.">
   <img src="/img/administration/data_anonymization_flow.svg" alt="Data flow: your application logs a trace, Opik stores the original data, and on read a workspace admin sees the email address while a member without the permission sees [EMAIL]" />
@@ -48,6 +40,23 @@ Opik has two ways to protect sensitive data. You can use them together.
 | **Availability**          | Opik Enterprise (preview)                       | Opik Cloud, Enterprise and open source                        |
 
 Use SDK anonymizers for data that must never leave your application, such as passwords or API keys. Use data anonymization when some users must see the original data, for example to debug a customer issue, and other users must not.
+
+## What is masked
+
+Opik applies the rules to every text value it returns to a user without the permission, including:
+
+- Trace and span input, output and metadata, at every level of the JSON.
+- Trace and span names, tags, comments and feedback score reasons.
+- Thread messages, dataset items, experiment items and prompt text.
+
+Some values are never masked, because Opik uses them to find and link data:
+
+- IDs, including trace, span and thread IDs.
+- The names of projects, datasets, prompts and experiments.
+- The model and provider of a span.
+- The keys of JSON objects. Only values are masked. Do not put sensitive data in key names, for example `{"jane.doe@example.com": "..."}`.
+
+Attachments cannot be masked. A user without the permission gets a permission error when they download a trace or span attachment.
 
 ## Set up data anonymization
 
@@ -90,23 +99,6 @@ Role changes take effect within a few seconds. The user does not need to log in 
 ### 3. Check the result
 
 Ask the user to open a trace that contains data that matches one of your rules. The matched values show as replacement tokens in the trace input, output and metadata. A user who has the permission sees the original values in the same trace.
-
-## What is masked
-
-Opik applies the rules to every text value it returns to a user without the permission, including:
-
-- Trace and span input, output and metadata, at every level of the JSON.
-- Trace and span names, tags, comments and feedback score reasons.
-- Thread messages, dataset items, experiment items and prompt text.
-
-Some values are never masked, because Opik uses them to find and link data:
-
-- IDs, including trace, span and thread IDs.
-- The names of projects, datasets, prompts and experiments.
-- The model and provider of a span.
-- The keys of JSON objects. Only values are masked. Do not put sensitive data in key names, for example `{"jane.doe@example.com": "..."}`.
-
-Attachments cannot be masked. A user without the permission gets a permission error when they download a trace or span attachment.
 
 ## Things to know
 
