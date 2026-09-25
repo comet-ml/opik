@@ -3,6 +3,12 @@ import json
 from typing import Any, Dict, List, Optional
 from unittest import mock
 
+import pytest
+from mistralai.models import (
+    CompletionChunk,
+    CompletionResponseStreamChoice,
+    DeltaMessage,
+)
 from mistralai.models.completionevent import CompletionEvent
 
 from opik.integrations.mistral import (
@@ -554,3 +560,102 @@ def test_patched_async_stream__two_calls_without_index__both_reach_the_output() 
     assert asyncio.run(_drain()) == len(_TWO_CALL_STREAM)
 
     _assert_both_calls_reach_the_callback(callback)
+
+
+# The content of an assistant message: a string on most models, a list of chunks
+# on the reasoning ones. These cover the list case the aggregator used to raise on.
+REASONING = "The user asks for the capital of France. It is Paris."
+ANSWER = "Paris."
+
+
+def _content_event(content, finish_reason=None):
+    return CompletionEvent(
+        data=CompletionChunk(
+            id="b3f1d1f0e8d94f8f9d4b8d7e5a1c2b3d",
+            model="magistral-medium-latest",
+            choices=[
+                CompletionResponseStreamChoice(
+                    index=0,
+                    delta=DeltaMessage(role="assistant", content=content),
+                    finish_reason=finish_reason,
+                )
+            ],
+        )
+    )
+
+
+def test_aggregate__plain_text_deltas__joined_into_one_string():
+    result = chat_completion_chunks_aggregator.aggregate(
+        [_content_event("Par"), _content_event("is."), _content_event(None, "stop")]
+    )
+
+    assert result is not None
+    assert result.choices[0]["message"]["content"] == ANSWER
+    assert result.choices[0]["finish_reason"] == "stop"
+
+
+def test_aggregate__chunk_list_deltas__kept_as_content_chunks():
+    # Every 1.x SDK accepts a list of text chunks, which is enough to hit the
+    # join that used to raise.
+    result = chat_completion_chunks_aggregator.aggregate(
+        [
+            _content_event([{"type": "text", "text": "Par"}]),
+            _content_event([{"type": "text", "text": "is."}]),
+            _content_event(None, "stop"),
+        ]
+    )
+
+    assert result is not None, "a chunk-list delta must not make aggregation fail"
+    assert result.choices[0]["message"]["content"] == [
+        {"type": "text", "text": "Par"},
+        {"type": "text", "text": "is."},
+    ]
+    assert result.choices[0]["message"]["role"] == "assistant"
+    assert result.choices[0]["finish_reason"] == "stop"
+
+
+def test_aggregate__text_before_and_after_a_chunk_list__arrival_order_kept():
+    result = chat_completion_chunks_aggregator.aggregate(
+        [
+            _content_event("Par"),
+            _content_event([{"type": "text", "text": "is."}]),
+            _content_event(" later"),
+            _content_event(None, "stop"),
+        ]
+    )
+
+    assert result is not None
+    assert result.choices[0]["message"]["content"] == [
+        {"type": "text", "text": "Par"},
+        {"type": "text", "text": "is."},
+        {"type": "text", "text": " later"},
+    ]
+
+
+def test_aggregate__reasoning_model_thinking_chunks__kept_structured():
+    # The thinking chunk only exists in newer SDKs; older ones cannot build it.
+    try:
+        from mistralai.models import ThinkChunk  # noqa: F401
+    except ImportError:
+        pytest.skip("this mistralai SDK has no thinking chunk")
+
+    result = chat_completion_chunks_aggregator.aggregate(
+        [
+            _content_event(
+                [
+                    {
+                        "type": "thinking",
+                        "thinking": [{"type": "text", "text": REASONING}],
+                    }
+                ]
+            ),
+            _content_event([{"type": "text", "text": ANSWER}]),
+            _content_event(None, "stop"),
+        ]
+    )
+
+    assert result is not None
+    content = result.choices[0]["message"]["content"]
+    assert content[0]["type"] == "thinking"
+    assert content[0]["thinking"][0]["text"] == REASONING
+    assert content[1] == {"type": "text", "text": ANSWER}
