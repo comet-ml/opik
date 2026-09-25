@@ -36,6 +36,11 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
     stopped being helpful. Detailed per-turn diagnostics are returned in the
     ``ScoreResult.metadata`` payload.
 
+    An assistant turn with no words (for example ``"..."`` or only whitespace)
+    scores `1.0` and is marked with ``is_wordless: 1.0`` in its per-turn metadata,
+    so a conversation made only of such turns scores `1.0`. A conversation with no
+    assistant turns that have content raises ``MetricComputationError``.
+
     Args:
         name: Display name for the metric result. Defaults to
             ``"conversation_degeneration_metric"``.
@@ -101,6 +106,21 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
         for content in assistant_turns:
             tokens = _tokenize(content)
             if not tokens:
+                # A reply with no words at all ("...", "???", whitespace) is the
+                # assistant short-circuiting the dialogue, so count it as maximal
+                # risk instead of skipping it.
+                per_turn_metadata.append(
+                    {
+                        "repetition_ratio": 0.0,
+                        "overlap_previous": 0.0,
+                        "fallback_hit": 0.0,
+                        "normalized_entropy": 0.0,
+                        "is_wordless": 1.0,
+                        "degeneration_score": 1.0,
+                    }
+                )
+                degeneracy_scores.append(1.0)
+                prev_tokens = tokens
                 continue
 
             entropy_norm = self._token_entropy(tokens)
@@ -123,16 +143,12 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
                     "overlap_previous": prev_overlap,
                     "fallback_hit": fallback_score,
                     "normalized_entropy": normalized_entropy,
+                    "is_wordless": 0.0,
                     "degeneration_score": deg_score,
                 }
             )
             degeneracy_scores.append(deg_score)
             prev_tokens = tokens
-
-        if not degeneracy_scores:
-            raise MetricComputationError(
-                "Assistant messages were empty after tokenization"
-            )
 
         average_score = sum(degeneracy_scores) / len(degeneracy_scores)
         peak_score = max(degeneracy_scores)
