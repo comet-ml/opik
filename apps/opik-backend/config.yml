@@ -1191,7 +1191,7 @@ agentInsightsReport:
 annotationQueueRouting:
   # Default: false
   # Description: When false, score events are never buffered or published and nothing is routed automatically
-  enabled: ${ANNOTATION_QUEUE_ROUTING_ENABLED:-true}
+  enabled: ${ANNOTATION_QUEUE_ROUTING_ENABLED:-false}
   # Default: true
   # Description: When enabled (and the feature above is on), schedule the periodic flush job. Set false to buffer
   #   in Redis without a scheduler (e.g. tests that invoke the job manually).

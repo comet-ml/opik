@@ -1320,16 +1320,15 @@ class TraceDAOImpl implements TraceDAO {
                     )) AS span_feedback_scores_list
                 FROM span_feedback_scores_final
                 GROUP BY workspace_id, project_id, trace_id
-            ),<endif> spans_agg AS (
+            ),<endif> spans_deduped AS (
                 SELECT
                     trace_id,
-                    sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost,
-                    COUNT(DISTINCT id) as span_count,
-                    toInt64(countIf(type = 'llm')) as llm_span_count,
-                    countIf(type = 'tool') > 0 as has_tool_spans,
-                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans FINAL
+                    id,
+                    type,
+                    usage,
+                    total_estimated_cost,
+                    provider
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
@@ -1338,7 +1337,19 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
-                GROUP BY workspace_id, project_id, trace_id
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), spans_agg AS (
+                SELECT
+                    trace_id,
+                    sumMap(usage) as usage,
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    COUNT(DISTINCT id) as span_count,
+                    toInt64(countIf(type = 'llm')) as llm_span_count,
+                    countIf(type = 'tool') > 0 as has_tool_spans,
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
+                FROM spans_deduped
+                GROUP BY trace_id
             ), comments_agg AS (
                 SELECT
                     entity_id,
