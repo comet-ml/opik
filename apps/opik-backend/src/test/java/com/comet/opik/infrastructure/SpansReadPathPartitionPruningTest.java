@@ -203,8 +203,12 @@ class SpansReadPathPartitionPruningTest {
             spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
             return span.id();
         };
-        // Span creation itself runs the partial lookup and the insert.
-        Function<Span, UUID> created = Span::id;
+        // Span creation runs the partial lookup. Re-posting makes it find the stored row, so the read touches the
+        // span's partition rather than being ruled out by the primary key before any partition.
+        Function<Span, UUID> created = span -> {
+            spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
+            return span.id();
+        };
         Function<Span, UUID> update = span -> {
             updateTags(span);
             return span.id();
@@ -223,7 +227,14 @@ class SpansReadPathPartitionPruningTest {
                 arguments("get_spans_by_ids", getById),
                 arguments("get_target_project_ids_for_spans", getById),
                 arguments("get_partial_span_by_id", created),
-                arguments("insert_span", created),
+                // INSERT reads a stored row only over a partial one: PATCH a fresh id in the span's week, then POST it.
+                arguments("insert_span", (Function<Span, UUID>) span -> {
+                    var id = ID_GENERATOR.getTimeOrderedEpoch(span.id().getMostSignificantBits() >>> 16);
+                    var fresh = span.toBuilder().id(id).build();
+                    updateTags(fresh);
+                    spanResourceClient.createSpan(fresh, API_KEY, WORKSPACE_NAME);
+                    return id;
+                }),
                 arguments("get_only_span_by_id", update),
                 arguments("update_span", update),
                 arguments("get_project_id_from_span", comment),
@@ -247,9 +258,11 @@ class SpansReadPathPartitionPruningTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("sites")
     void aBoundedReadTouchesOnlyItsOwnWeek(String queryName, Function<Span, UUID> trigger) {
-        var id = trigger.apply(createSpan(Instant.now(), ID_GENERATOR.generateId()));
+        // One instant for both the id and the expected week, so a run crossing Monday UTC still agrees
+        var idAt = Instant.now();
+        var id = trigger.apply(createSpan(idAt, ID_GENERATOR.generateId()));
 
-        assertThat(spansPartitionsRead(queryName, id)).isSubsetOf(THIS_WEEK);
+        assertThat(spansPartitionsRead(queryName, id)).containsExactly(yyyymmdd(mondayOf(idAt)));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -343,6 +356,10 @@ class SpansReadPathPartitionPruningTest {
                 .filter(partition -> !partition.isEmpty())
                 .map(partition -> partition.substring(PARTITION_PREFIX.length()))
                 .collect(Collectors.toSet());
+    }
+
+    private static LocalDate mondayOf(Instant instant) {
+        return instant.atZone(ZoneOffset.UTC).toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     }
 
     private static String yyyymmdd(LocalDate monday) {
