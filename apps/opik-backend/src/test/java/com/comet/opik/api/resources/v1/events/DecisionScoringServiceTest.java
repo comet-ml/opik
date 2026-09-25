@@ -58,8 +58,10 @@ class DecisionScoringServiceTest {
                         "a".repeat(DecisionScoringService.MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN + 4))),
                 schema);
 
-        assertThat(DecisionScoringService.exceedsContext(atLimit, CHARS_PER_TOKEN)).isFalse();
-        assertThat(DecisionScoringService.exceedsContext(overLimit, CHARS_PER_TOKEN)).isTrue();
+        assertThat(DecisionScoringService.exceedsContext(
+                DecisionScoringService.estimateTokens(atLimit, CHARS_PER_TOKEN))).isFalse();
+        assertThat(DecisionScoringService.exceedsContext(
+                DecisionScoringService.estimateTokens(overLimit, CHARS_PER_TOKEN))).isTrue();
     }
 
     @Test

@@ -486,6 +486,30 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         verifyNoInteractions(aiProxyService);
     }
 
+    @Test
+    void decisionModelPromptOverContextLimitIsSkippedWithoutCallingTheModel() {
+        var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
+        // 4 chars per token: this reply alone is over Jev's 32k-token limit.
+        var span = createSpan().toBuilder()
+                .output(JsonUtils.valueToTree(Map.of("reply",
+                        RandomStringUtils.secure()
+                                .nextAlphanumeric(DecisionScoringService.MAX_CONTEXT_TOKENS * 4 + 1))))
+                .build();
+        when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
+        // A resolvable key, so the only thing keeping the request from the client is the context check.
+        lenient().when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL))
+                .thenReturn(LlmProviderClientApiConfig.builder().apiKey("key").build());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+        when(feedbackScoreService.scoreBatchOfSpans(scoresCaptor.capture())).thenReturn(Mono.empty());
+
+        scorer.score(buildMessage(span, code)).block();
+
+        verifyNoInteractions(decisionsClient);
+        verifyNoInteractions(aiProxyService);
+        assertThat(scoresCaptor.getValue()).isEmpty();
+    }
+
     // Podam manufactures a fully-populated Span; toBuilder then pins only the fields these tests assert on
     // (id for attachment lookups, input/output for the injected {{span}} structure). Other fields keep
     // their random Podam values.

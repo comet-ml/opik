@@ -90,8 +90,9 @@ public class DecisionScoringService {
         return (int) Math.min(Integer.MAX_VALUE, chars / charsPerToken);
     }
 
-    public static boolean exceedsContext(@NonNull DecisionsRequest request, int charsPerToken) {
-        return estimateTokens(request, charsPerToken) > MAX_CONTEXT_TOKENS;
+    /** Whether an {@link #estimateTokens estimated} request is over Jev's context length. */
+    public static boolean exceedsContext(int estimatedTokens) {
+        return estimatedTokens > MAX_CONTEXT_TOKENS;
     }
 
     /**

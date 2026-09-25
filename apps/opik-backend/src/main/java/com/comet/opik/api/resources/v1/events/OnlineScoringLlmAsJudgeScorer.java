@@ -423,10 +423,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 if (request.questions().isEmpty()) {
                     return null;
                 }
-                int charsPerToken = onlineScoringConfig.getAgenticToolsCharsPerToken();
-                int estimatedTokens = DecisionScoringService.estimateTokens(request, charsPerToken);
+                int estimatedTokens = DecisionScoringService.estimateTokens(request,
+                        onlineScoringConfig.getAgenticToolsCharsPerToken());
                 recorder.recordPreparation(spans.size(), estimatedTokens, false);
-                if (DecisionScoringService.exceedsContext(request, charsPerToken)) {
+                if (DecisionScoringService.exceedsContext(estimatedTokens)) {
                     userFacingLogger.warn("Skipped evaluation, the prompt is too large for the decision model,"
                             + " traceId '{}', model '{}', estimated tokens '{}', limit '{}'", trace.id(),
                             code.model().name(),
