@@ -48,8 +48,9 @@ import java.util.concurrent.CompletionException;
  * whose grants do:
  *
  * <ul>
- * <li>{@code POST /} — scope in the body. Eight tables; {@code traces} and {@code spans} are restricted to
- * {@code project_id} when supplied and cover the workspace when it is not. Gated on {@code ollieEnabled} and
+ * <li>{@code POST /} — scope in the body. Eight tables; those carrying {@code project_id} in their primary key are
+ * restricted to {@code project_id} when supplied and cover the workspace when it is not, while {@code experiments},
+ * {@code experiment_items} and {@code dataset_items} always cover the workspace. Gated on {@code ollieEnabled} and
  * {@code customCharts.enabledWorkspaces}.</li>
  * <li>{@code POST /projects/{projectId}} — scope in the path, and the older of the two. Three tables, every one
  * bound to workspace <em>and</em> project; its request body has no project field at all. Gated on
@@ -100,7 +101,7 @@ public class AnalyticsQueriesResource {
     }
 
     @POST
-    @Operation(operationId = "executeScopedAnalyticsQuery", summary = "Execute free-form analytics SQL", description = "Runs read-only SQL bounded to the caller's workspace. Supply project_id to restrict traces and spans to one project, or omit it to cover the whole workspace.", responses = {
+    @Operation(operationId = "executeScopedAnalyticsQuery", summary = "Execute free-form analytics SQL", description = "Runs read-only SQL bounded to the caller's workspace. Supply project_id to restrict traces, spans, feedback scores and trace threads to one project, or omit it to cover the whole workspace. Experiments, experiment items and dataset items always cover the whole workspace.", responses = {
             @ApiResponse(responseCode = "200", description = "Query results", content = @Content(schema = @Schema(implementation = AnalyticsQueryResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
