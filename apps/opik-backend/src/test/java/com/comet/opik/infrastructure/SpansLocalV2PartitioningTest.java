@@ -34,6 +34,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,16 +103,13 @@ class SpansLocalV2PartitioningTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
-    /** Mondays of weekInstant(1) and weekInstant(2), written out rather than derived so a derivation bug can't hide. */
-    private static final Long[] WEEKS_1_AND_2 = {20250310L, 20250317L};
-
     /**
-     * {@code weekInstant(0)}'s Monday, then {@link #FAR_FUTURE_INSTANT}'s week as the legacy 32-bit {@code id_at} stores
-     * it (wrapped mod 2^32 seconds) and as this table stores it (honest). Computed once in ClickHouse 26.3 via
+     * {@link #FAR_FUTURE_INSTANT}'s week as the legacy 32-bit {@code id_at} stores it (wrapped mod 2^32 seconds), then
+     * as this table stores it (honest). Computed once in ClickHouse 26.3 via
      * {@code toYYYYMMDD(toDate32(d) - toIntervalDay(toDayOfWeek(d, 1)))} over {@code d} and
      * {@code toDateTime(toUnixTimestamp64Second(d) % 4294967296, 'UTC')}.
      */
-    private static final Long[] PRESENT_AND_FAR_FUTURE_WEEKS = {20250303L, 20650420L, 22010601L};
+    private static final List<Long> FAR_FUTURE_WEEKS = List.of(20650420L, 22010601L);
 
     /** The predicate the span-id reads emit (OPIK-8361); run both through EXPLAIN and executed, so it is one value. */
     private static final String SELECT_BY_ID_LIST_AND_WEEK_SET = """
@@ -283,40 +281,49 @@ class SpansLocalV2PartitioningTest {
 
     @Test
     void idListWithWeekInSetPrunesPartitions() {
-        var seed = seedConsecutiveWeeklyPartitions();
+        var thisMonday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        var seed = seedConsecutiveWeeklyPartitions(thisMonday.minusWeeks(3));
         var ids = new UUID[]{seed.ids().get(1), seed.ids().get(2)};
+        var expectedWeeks = List.of(yyyymmdd(thisMonday.minusWeeks(2)), yyyymmdd(thisMonday.minusWeeks(1)));
 
         var actualParts = prunedParts(SELECT_BY_ID_LIST_AND_WEEK_SET, statement -> statement
                 .bind("workspace_id", seed.workspaceId())
                 .bind("ids", ids)
-                .bind("id_weeks", WEEKS_1_AND_2));
+                .bind("id_weeks", expectedWeeks.toArray(Long[]::new)));
         var actualIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, seed.workspaceId(), statement -> statement
                 .bind("ids", ids)
-                .bind("id_weeks", WEEKS_1_AND_2));
+                .bind("id_weeks", expectedWeeks.toArray(Long[]::new)));
 
         // Weeks 0 and 3 prune away; the rows asserted too, since a set naming the wrong weeks would also prune.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
         assertThat(actualIds).containsExactlyInAnyOrder(ids[0].toString(), ids[1].toString());
         // The DAOs bind weeksOf's output, so it has to name exactly the weeks this table holds the rows in.
-        assertThat(WeeklyPartitions.weeksOf(List.of(ids))).contains(List.of(WEEKS_1_AND_2));
+        assertThat(WeeklyPartitions.weeksOf(List.of(ids))).contains(expectedWeeks);
     }
 
     /**
      * A far-future id resolves to two weeks and this schema files it under the honest one, so a set naming only the
-     * legacy wrapped week would return nothing; the literal set is bound, and {@link WeeklyPartitions#weeksOf} must
+     * legacy wrapped week would return nothing. The expected set is built independently of {@link WeeklyPartitions}
+     * (java.time for the present week, ClickHouse-computed literals for the far-future ones), and {@code weeksOf} must
      * produce exactly it.
      */
     @Test
     void weekInSetKeepsFarFutureRowsThatTheIdListAdmits() {
-        var seed = seedPresentAndFarFuture();
+        var now = Instant.now();
+        var workspaceId = UUID.randomUUID().toString();
+        var present = ID_GENERATOR.generateId(now);
+        var farFuture = ID_GENERATOR.generateId(FAR_FUTURE_INSTANT);
+        insert(List.of(present, farFuture), workspaceId, ID_GENERATOR.generateId(), ID_GENERATOR.generateId(), now);
+        var presentWeek = yyyymmdd(LocalDate.ofInstant(now, ZoneOffset.UTC)
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)));
+        var expectedWeeks = Stream.concat(Stream.of(presentWeek), FAR_FUTURE_WEEKS.stream()).sorted().toList();
 
-        var actualIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, seed.workspaceId(), statement -> statement
-                .bind("ids", new UUID[]{seed.present(), seed.farFuture()})
-                .bind("id_weeks", PRESENT_AND_FAR_FUTURE_WEEKS));
+        var actualIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, workspaceId, statement -> statement
+                .bind("ids", new UUID[]{present, farFuture})
+                .bind("id_weeks", expectedWeeks.toArray(Long[]::new)));
 
-        assertThat(actualIds).containsExactlyInAnyOrder(seed.present().toString(), seed.farFuture().toString());
-        assertThat(WeeklyPartitions.weeksOf(List.of(seed.present(), seed.farFuture())))
-                .contains(List.of(PRESENT_AND_FAR_FUTURE_WEEKS));
+        assertThat(actualIds).containsExactlyInAnyOrder(present.toString(), farFuture.toString());
+        assertThat(WeeklyPartitions.weeksOf(List.of(present, farFuture))).contains(expectedWeeks);
     }
 
     /**
@@ -561,14 +568,18 @@ class SpansLocalV2PartitioningTest {
      * layout the trace_id-keyed guards read. Returns the ids so the reads target the same rows.
      */
     private Seed seedConsecutiveWeeklyPartitions() {
+        return seedConsecutiveWeeklyPartitions(ANCHOR_MONDAY);
+    }
+
+    private Seed seedConsecutiveWeeklyPartitions(LocalDate firstMonday) {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
-        var traceId = ID_GENERATOR.generateId(weekInstant(0));
+        var traceId = ID_GENERATOR.generateId(weekInstant(firstMonday, 0));
         var ids = List.of(
-                ID_GENERATOR.generateId(weekInstant(0)),
-                ID_GENERATOR.generateId(weekInstant(1)),
-                ID_GENERATOR.generateId(weekInstant(2)),
-                ID_GENERATOR.generateId(weekInstant(3)));
+                ID_GENERATOR.generateId(weekInstant(firstMonday, 0)),
+                ID_GENERATOR.generateId(weekInstant(firstMonday, 1)),
+                ID_GENERATOR.generateId(weekInstant(firstMonday, 2)),
+                ID_GENERATOR.generateId(weekInstant(firstMonday, 3)));
         insert(ids, workspaceId, projectId, traceId, Instant.now());
         return Seed.builder().workspaceId(workspaceId).projectId(projectId).traceId(traceId).ids(ids).build();
     }
@@ -745,7 +756,16 @@ class SpansLocalV2PartitioningTest {
     }
 
     private Instant weekInstant(int weekOffset) {
-        return ANCHOR_MONDAY.plusWeeks(weekOffset).atTime(12, 0).toInstant(ZoneOffset.UTC);
+        return weekInstant(ANCHOR_MONDAY, weekOffset);
+    }
+
+    private Instant weekInstant(LocalDate firstMonday, int weekOffset) {
+        return firstMonday.plusWeeks(weekOffset).atTime(12, 0).toInstant(ZoneOffset.UTC);
+    }
+
+    /** A Monday as the partition value, via java.time rather than {@link WeeklyPartitions}, so the two stay independent. */
+    private static long yyyymmdd(LocalDate monday) {
+        return Long.parseLong(monday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 
     @Builder(toBuilder = true)
