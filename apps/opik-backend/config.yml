@@ -1525,6 +1525,11 @@ cacheManager:
     # Default: PT30M
     # Description: Cache TTL for the max(timeout_mark_thread_as_inactive) across all workspaces, used to compute the closing job lookback window
     max_timeout_mark_thread_as_inactive: ${CACHE_MANAGER_MAX_TIMEOUT_MARK_THREAD_AS_INACTIVE_DURATION:-PT30M}
+    # Default: PT10S
+    # Description: Cache TTL for the compare-view target projects, whose answer doesn't depend on page/size.
+    # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
+    # survive a single read.
+    experiment_compare_target_projects: ${CACHE_MANAGER_EXPERIMENT_COMPARE_TARGET_PROJECTS_DURATION:-PT10S}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
