@@ -265,8 +265,12 @@ repos:
         language: system
         # Self-check: the checker is a gate, so its failure paths (parse error,
         # analyzer violation, missing path, absent pwsh) are exercised whenever
-        # the checker or its settings change.
-        files: ^scripts/(precommit-powershell-check\.(sh|ps1)|test_precommit_powershell\.sh)$|^PSScriptAnalyzerSettings\.psd1$
+        # the checker or its settings change. `.pre-commit-config.yaml` is in the
+        # list because this hook's own `files:` regex is the routing contract:
+        # editing it (or the powershell-check entry above) must run the tests
+        # that assert routing, otherwise a config-only change could silently
+        # stop matching PowerShell and nothing would notice.
+        files: ^scripts/(precommit-powershell-check\.(sh|ps1)|test_precommit_powershell\.sh)$|^PSScriptAnalyzerSettings\.psd1$|^\.pre-commit-config\.yaml$
         pass_filenames: false
 
   # ---------------------------------------------------------------------------

@@ -122,6 +122,42 @@ check_exit "excluded rules do not fail the gate" 0 "$rc"
 rc=$(scripts/precommit-powershell-check.sh >/dev/null 2>&1; echo $?)
 check_exit "repo PowerShell files pass full discovery" 0 "$rc"
 
+# --- Analyzer version is pinned consistently --------------------------------
+# The workflow installs one version and the checker enforces another constant.
+# If they drift, the gate validates against a rule set the committed baseline in
+# PSScriptAnalyzerSettings.psd1 was never measured against.
+wf_version=$(grep -oE 'ANALYZER_VERSION: *"[0-9.]+"' .github/workflows/powershell_checks.yml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+script_version=$(grep -oE "\\\$RequiredAnalyzerVersion = '[0-9.]+'" scripts/precommit-powershell-check.ps1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+check "workflow declares an analyzer version" "." "$wf_version"
+if [ "$wf_version" = "$script_version" ]; then
+	echo "  ok: workflow and checker pin the same analyzer version ($wf_version)"
+else
+	echo "  FAIL: analyzer version drift — workflow=$wf_version checker=$script_version"
+	fails=$((fails + 1))
+fi
+
+# A caller passing a different version must be rejected, not silently accepted:
+# this is what stops a PR moving the checker's constant away from the version CI
+# actually installed.
+rc=$(pwsh -NoProfile -File scripts/precommit-powershell-check.ps1 \
+	-ExpectedAnalyzerVersion 9.9.9 "$tmp/clean.ps1" >/dev/null 2>&1; echo $?)
+check_exit "mismatched -ExpectedAnalyzerVersion is rejected" 2 "$rc"
+
+rc=$(pwsh -NoProfile -File scripts/precommit-powershell-check.ps1 \
+	-ExpectedAnalyzerVersion "$script_version" "$tmp/clean.ps1" >/dev/null 2>&1; echo $?)
+check_exit "matching -ExpectedAnalyzerVersion is accepted" 0 "$rc"
+
+# --- Routing contract: config must match PowerShell paths -------------------
+# The hooks' `files:` regexes are the routing contract. If an edit stops them
+# matching PowerShell, the gate goes quiet rather than red, so assert the
+# detector still emits both legs for a .ps1 change — including uppercase.
+legs=$(printf 'opik.ps1\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "a .ps1 change routes to powershell-check" '"id": "powershell-check"' "$legs"
+legs_upper=$(printf 'Tool.PS1\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "an uppercase .PS1 change routes too" '"id": "powershell-check"' "$legs_upper"
+legs_cfg=$(printf '.pre-commit-config.yaml\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "a config change runs this self-test" '"id": "powershell-check-tests"' "$legs_cfg"
+
 if [ "$fails" -eq 0 ]; then
 	echo "All PowerShell check tests passed."
 else

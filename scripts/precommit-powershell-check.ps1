@@ -11,17 +11,21 @@
 # passes its glob discovery). With no arguments, discovers every PowerShell file.
 [CmdletBinding()]
 param(
-    [Parameter(ValueFromRemainingArguments = $true)]
+    [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [string[]]$Paths = @(),
 
     # Emit ::error/::warning workflow commands so findings land as inline
     # annotations on the PR diff. Off for local runs, where they'd be noise.
     [switch]$Annotate,
 
-    # Print the required PSScriptAnalyzer version and exit. Lets the workflow
-    # install exactly the version this script enforces, instead of repeating the
-    # literal in two places that can drift.
-    [switch]$PrintRequiredAnalyzerVersion
+    # The analyzer version the CALLER believes is correct, asserted against this
+    # script's own constant below. CI passes the version it actually installed,
+    # which is declared in the workflow (trusted, branch-protected) rather than
+    # read from here -- a PR must not be able to choose which module version the
+    # gate installs. Omitted for local runs, where the constant alone applies.
+    # Named-only (no Position): otherwise it swallows the first file path.
+    [Parameter(Mandatory = $false)]
+    [string]$ExpectedAnalyzerVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,14 +42,20 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $settingsFile = Join-Path $repoRoot 'PSScriptAnalyzerSettings.psd1'
 $settingsName = 'PSScriptAnalyzerSettings.psd1'
 
-# The one place this version is declared. The workflow installs it by reading
-# this value, so CI and local runs cannot drift onto different rule sets, and
-# bumping the analyzer is a one-line change here.
+# The analyzer version the committed baseline in PSScriptAnalyzerSettings.psd1
+# was measured against. Bumping the analyzer means changing this AND the matching
+# literal in .github/workflows/powershell_checks.yml -- deliberately two edits,
+# because the workflow copy is what CI installs and it must stay under branch
+# protection rather than being read out of a PR's worktree.
 $RequiredAnalyzerVersion = '1.25.0'
 
-if ($PrintRequiredAnalyzerVersion) {
-    Write-Output $RequiredAnalyzerVersion
-    exit 0
+# Cross-check the two declarations. CI passes the version it installed; if a PR
+# edits the constant above, this fails instead of silently letting the gate
+# validate against a version nobody reviewed.
+if ($ExpectedAnalyzerVersion -and $ExpectedAnalyzerVersion -ne $RequiredAnalyzerVersion) {
+    Write-Host "Analyzer version mismatch: caller installed $ExpectedAnalyzerVersion, this script requires $RequiredAnalyzerVersion."
+    Write-Host 'Update both .github/workflows/powershell_checks.yml and this script together.'
+    exit 2
 }
 
 if ($Paths.Count -gt 0) {
