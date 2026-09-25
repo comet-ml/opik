@@ -17,6 +17,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookTestResult;
@@ -2393,6 +2394,57 @@ class AlertResourceTest {
 
             alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("when a span's cost is updated, then cost alert counts only the latest span version")
+        void whenSpanCostUpdated_thenCostAlertCountsOnlyLatestSpanVersion() {
+            var mock = prepareMockWorkspace();
+
+            String projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_COST, AlertTriggerConfigType.THRESHOLD_COST,
+                    projectId, "50.00", "60");
+            var alert = createAlertForEvent(alertTrigger);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            Span updatedSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .totalEstimatedCost(new BigDecimal("30.00"))
+                    .build();
+            spanResourceClient.createSpan(updatedSpan, mock.getLeft(), mock.getRight());
+            Span otherSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .totalEstimatedCost(new BigDecimal("15.00"))
+                    .build();
+            spanResourceClient.createSpan(otherSpan, mock.getLeft(), mock.getRight());
+
+            // The update writes a second row version for the span: summing both would report $85, not $55
+            spanResourceClient.updateSpan(updatedSpan.id(), SpanUpdate.builder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(updatedSpan.parentSpanId())
+                    .totalEstimatedCost(new BigDecimal("40.00"))
+                    .build(), mock.getLeft(), mock.getRight());
+
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            MetricsAlertPayload costPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
+
+            verifyMetricsPayload(costPayload, "TRACE_COST", "55", "50", "60", projectId, projectName);
+
+            alertResourceClient.deleteAlertBatch(BatchDelete.builder().ids(Set.of(alertId)).build(), mock.getLeft(),
+                    mock.getRight(), HttpStatus.SC_NO_CONTENT);
         }
 
         @Test
