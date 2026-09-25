@@ -7541,25 +7541,52 @@ class DatasetsResourceTest {
             var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(datasetId,
                     List.of(experimentId), apiKey, workspaceName);
 
-            assertThat(actualPage.content()).hasSize(datasetItems.size());
+            // The page comes back ordered by id descending, so line the expectations up the same way.
+            var expectedByItemId = Map.of(
+                    datasetItems.getFirst().id(), expectedFrom(experimentItems, datasetItems.getFirst(),
+                            existingTrace, actualPage),
+                    datasetItems.getLast().id(), expectedFrom(experimentItems, datasetItems.getLast(),
+                            lateTrace, actualPage));
+            var expectedDatasetItems = actualPage.content().stream()
+                    .map(item -> datasetItems.stream().filter(di -> di.id().equals(item.id())).findFirst()
+                            .orElseThrow())
+                    .toList();
 
-            Map<UUID, ExperimentItem> actualItems = actualPage.content().stream()
-                    .collect(toMap(DatasetItem::id, datasetItem -> datasetItem.experimentItems().getFirst()));
+            assertDatasetItemExperiments(actualPage, expectedDatasetItems,
+                    expectedDatasetItems.stream().map(di -> expectedByItemId.get(di.id())).toList());
+        }
 
-            assertThat(actualItems.get(datasetItems.getFirst().id()).input()).isEqualTo(existingTrace.input());
-            assertThat(actualItems.get(datasetItems.getFirst().id()).output()).isEqualTo(existingTrace.output());
-            assertThat(actualItems.get(datasetItems.getLast().id()).input()).isEqualTo(lateTrace.input());
-            assertThat(actualItems.get(datasetItems.getLast().id()).output()).isEqualTo(lateTrace.output());
+        /**
+         * The experiment item as the API returns it: the one the fixture wrote, with the trace data the read
+         * resolves onto it. Duration is taken from the response because it is computed from the trace's
+         * timestamps rather than stored.
+         */
+        private ExperimentItem expectedFrom(Set<ExperimentItem> written, DatasetItem datasetItem, Trace trace,
+                DatasetItemPage actualPage) {
+            var item = written.stream().filter(ei -> ei.datasetItemId().equals(datasetItem.id())).findFirst()
+                    .orElseThrow();
+            var actual = actualPage.content().stream().filter(di -> di.id().equals(datasetItem.id())).findFirst()
+                    .orElseThrow().experimentItems().getFirst();
+            return item.toBuilder()
+                    .input(trace.input())
+                    .output(trace.output())
+                    .duration(actual.duration())
+                    .totalEstimatedCost(actual.totalEstimatedCost())
+                    .usage(actual.usage())
+                    .traceVisibilityMode(actual.traceVisibilityMode())
+                    .build();
         }
 
         private ExperimentItem buildExperimentItem(UUID experimentId, DatasetItem datasetItem, Trace trace) {
-            return ExperimentItem.builder()
+            return factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .id(GENERATOR.generate())
                     .datasetItemId(datasetItem.id())
                     .traceId(trace.id())
                     .experimentId(experimentId)
                     .traceVisibilityMode(VisibilityMode.DEFAULT)
                     .executionPolicy(ExecutionPolicy.DEFAULT)
+                    .feedbackScores(null)
+                    .comments(null)
                     .build();
         }
 

@@ -60,6 +60,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
+import lombok.Builder;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -3604,6 +3605,7 @@ class ExperimentAggregatesIntegrationTest {
     private static final int RAW_PUSHDOWN_ITEM_COUNT = 7;
     private static final int RAW_PUSHDOWN_PAGE_SIZE = 2;
 
+    @Builder(toBuilder = true)
     private record RawPushdownFixture(Dataset dataset, UUID experimentId, int itemCount) {
     }
 
@@ -3681,7 +3683,11 @@ class ExperimentAggregatesIntegrationTest {
 
         experimentResourceClient.createExperimentItem(Set.copyOf(experimentItems), apiKey, workspaceName);
 
-        return new RawPushdownFixture(dataset, experiment.id(), RAW_PUSHDOWN_ITEM_COUNT);
+        return RawPushdownFixture.builder()
+                .dataset(dataset)
+                .experimentId(experiment.id())
+                .itemCount(RAW_PUSHDOWN_ITEM_COUNT)
+                .build();
     }
 
     private List<DatasetItem> readAllPages(RawPushdownFixture fixture, List<SortingField> sorting, int pageSize,
@@ -3718,6 +3724,10 @@ class ExperimentAggregatesIntegrationTest {
         var ignoredFields = Stream
                 .concat(Arrays.stream(IGNORED_FIELDS_EXPERIMENT_ITEM), Arrays.stream(alsoIgnoredExperimentItemFields))
                 .toArray(String[]::new);
+
+        assertThat(actual)
+                .as("%s: compared item count", as)
+                .hasSameSizeAs(expected);
 
         for (var idx = 0; idx < expected.size(); idx++) {
             assertThat(actual.get(idx).experimentItems())
@@ -3810,14 +3820,22 @@ class ExperimentAggregatesIntegrationTest {
 
         // Applying a delta rewrites the whole version, minting a fresh row id for every item - carried-forward
         // ones included - while each keeps its stable dataset_item_id. That is what produces id != dataset_item_id.
-        var newVersion = datasetResourceClient.applyDatasetItemChanges(dataset.id(),
+        var firstDelta = datasetResourceClient.applyDatasetItemChanges(dataset.id(),
                 DatasetItemChanges.builder().addedItems(List.of(newDatasetItem())).baseVersion(baseVersion).build(),
+                false, apiKey, workspaceName);
+
+        // A second delta, so every item carries several version rows and the alias set holds more than one
+        // row per stable item. That is what the join's dedup has to get right: picking the wrong version row
+        // still resolves to the same stable id, but picking none - or several - would not.
+        var newVersion = datasetResourceClient.applyDatasetItemChanges(dataset.id(),
+                DatasetItemChanges.builder().addedItems(List.of(newDatasetItem()))
+                        .baseVersion(firstDelta.id()).build(),
                 false, apiKey, workspaceName);
 
         Map<UUID, UUID> rowIdByStableId = readRowIdsByStableId(template, workspaceId, dataset.id(), newVersion.id());
 
         assertThat(rowIdByStableId).as("the new version holds the seed items plus the added one")
-                .hasSize(LEGACY_ITEM_COUNT + 1);
+                .hasSize(LEGACY_ITEM_COUNT + 2);
         // Without this the test would pass by testing nothing: no alias, no defect to expose.
         assertThat(rowIdByStableId.entrySet())
                 .as("every version row's id must differ from its stable dataset_item_id, or there is no alias")
@@ -3857,7 +3875,7 @@ class ExperimentAggregatesIntegrationTest {
 
         var experimentIds = List.of(experiment.id());
         var unpaged = datasetResourceClient.getDatasetItemsWithExperimentItems(dataset.id(), experimentIds,
-                null, null, null, 1, LEGACY_ITEM_COUNT + 1, apiKey, workspaceName);
+                null, null, null, 1, LEGACY_ITEM_COUNT + 2, apiKey, workspaceName);
 
         // Anchored to the fixture rather than to the other read: these are exactly the stable ids written, so a
         // bug the two reads share cannot make them agree on the wrong set of items.
@@ -3867,7 +3885,7 @@ class ExperimentAggregatesIntegrationTest {
                 .containsExactlyInAnyOrderElementsOf(stableIds);
 
         var paged = new ArrayList<DatasetItem>();
-        int pageCount = (LEGACY_ITEM_COUNT + 1 + LEGACY_PAGE_SIZE - 1) / LEGACY_PAGE_SIZE;
+        int pageCount = (LEGACY_ITEM_COUNT + 2 + LEGACY_PAGE_SIZE - 1) / LEGACY_PAGE_SIZE;
         for (int page = 1; page <= pageCount; page++) {
             paged.addAll(datasetResourceClient.getDatasetItemsWithExperimentItems(dataset.id(), experimentIds,
                     null, null, null, page, LEGACY_PAGE_SIZE, apiKey, workspaceName).content());

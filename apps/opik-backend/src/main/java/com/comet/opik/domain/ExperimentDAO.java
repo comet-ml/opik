@@ -1656,7 +1656,7 @@ public class ExperimentDAO {
             FROM experiments
             WHERE workspace_id = :workspace_id
             AND id = :id
-            ORDER BY id DESC, last_updated_at DESC
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1918,7 +1918,7 @@ public class ExperimentDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(FIND_METADATA_BY_ID, "get_experiment_metadata_by_id",
-                            workspaceId, userName, "");
+                            workspaceId, userName, "experimentId=%s".formatted(id));
                     var statement = connection.createStatement(template.render())
                             .bind("id", id)
                             .bind("workspace_id", workspaceId);
