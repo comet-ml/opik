@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { Filter as FilterIcon, Plus } from "lucide-react";
+import { Filter as FilterIcon, Plus, Trash } from "lucide-react";
 import uniqid from "uniqid";
 import round from "lodash/round";
 import isArray from "lodash/isArray";
@@ -457,6 +457,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                           setFilters={setFilters}
                           columns={currentFilterColumns}
                           config={filtersConfig}
+                          RemoveIcon={Trash}
                           // The shared rows assume a wide popover; in this column drop the
                           // "Where/And" prefix and let the value input shrink so the delete
                           // button stays on screen.
