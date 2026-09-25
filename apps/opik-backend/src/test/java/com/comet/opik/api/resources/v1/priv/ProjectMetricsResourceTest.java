@@ -1923,6 +1923,35 @@ class ProjectMetricsResourceTest {
             getAndAssertEmpty(projectId, interval, marker);
         }
 
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("traces ingested after the window end stay out, matching the thread list")
+        void whenTracesIngestedAfterWindowEnd_thenThreadNotCounted(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            mockGetWorkspaceIdByName(WORKSPACE_NAME, WORKSPACE_ID);
+
+            Instant marker = getIntervalStart(interval);
+
+            createThreadsWithTraceIdsMintedAt(projectName, subtract(marker, TIME_BUCKET_3, interval), marker, 3);
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(subtract(marker, TIME_BUCKET_1, interval))
+                    .build(), Long.class, API_KEY, WORKSPACE_NAME);
+
+            assertThat(response.results()).hasSize(1);
+            assertThat(response.results().getFirst().name()).isEqualTo(ProjectMetricsDAO.NAME_THREADS);
+            assertThat(response.results().getFirst().data())
+                    .allMatch(dataPoint -> dataPoint.value() == null || dataPoint.value() == 0L);
+        }
+
         private List<List<Trace>> createTracesWithThreads(String projectName, Instant marker, int threadCount,
                 Integer tracesPerThread) {
             // Create traces with different thread_ids to simulate multiple threads
@@ -1970,6 +1999,85 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class, empty, empty, empty);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("buckets by the first trace's start time, not by when the thread row was created")
+        void whenThreadRowMintedAfterItsTraces_thenBucketsByTraceStartTime(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            Instant marker = getIntervalStart(interval);
+
+            int threadCount = 3;
+            createThreadsWithTraceIdsMintedAt(projectName, subtract(marker, TIME_BUCKET_3, interval), marker,
+                    threadCount);
+
+            // SUT
+            Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) threadCount);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    minus3, null, null);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("a thread whose traces predate the window is excluded, even if its row is inside it")
+        void whenTracesPredateWindow_thenThreadExcludedDespiteRecentThreadRow(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            mockGetWorkspaceIdByName(WORKSPACE_NAME, WORKSPACE_ID);
+
+            Instant marker = getIntervalStart(interval);
+
+            int bucketsBeforeWindow = TIME_BUCKET_4 + TIME_BUCKET_3;
+            createThreadsWithTraceIdsMintedAt(projectName, subtract(marker, bucketsBeforeWindow, interval), marker, 3);
+
+            // SUT
+            getAndAssertEmpty(projectId, interval, marker);
+        }
+
+        private List<String> createThreadsWithTraceIdsMintedAt(String projectName, Instant startedAt,
+                Instant idsMintedAt, int threadCount) {
+            List<String> threadIds = IntStream.range(0, threadCount)
+                    .mapToObj(i -> RandomStringUtils.secure().nextAlphabetic(10))
+                    .toList();
+
+            List<Trace> traces = IntStream.range(0, threadIds.size())
+                    .mapToObj(threadIdx -> IntStream.range(0, 2)
+                            .mapToObj(i -> {
+                                long offset = threadIdx * 10L + i + 1;
+                                return factory.manufacturePojo(Trace.class).toBuilder()
+                                        .id(idGenerator.generateId(idsMintedAt.plusSeconds(offset)))
+                                        .projectName(projectName)
+                                        .threadId(threadIds.get(threadIdx))
+                                        .startTime(startedAt.plusSeconds(offset))
+                                        .build();
+                            })
+                            .toList())
+                    .flatMap(List::stream)
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            Mono.delay(Duration.ofMillis(100)).block();
+
+            traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+
+            return threadIds;
         }
     }
 
@@ -4173,6 +4281,54 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("one epoch-sentinel trace does not null a thread's duration")
+        void whenOneTraceCarriesTheEpochSentinel_thenDurationStillComputed(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant ranAt = subtract(marker, TIME_BUCKET_3, interval);
+            long durationMs = 500;
+            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+
+            List<Trace> traces = List.of(
+                    factory.manufacturePojo(Trace.class).toBuilder()
+                            .id(idGenerator.generateId(ranAt))
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .startTime(ranAt)
+                            .endTime(ranAt.plusMillis(durationMs))
+                            .build(),
+                    factory.manufacturePojo(Trace.class).toBuilder()
+                            .id(idGenerator.generateId(ranAt.plusMillis(1)))
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .startTime(Instant.EPOCH)
+                            // ends after the real trace: if max(end_time) ignored the sentinel guard the
+                            // thread's duration would stretch to here
+                            .endTime(ranAt.plusMillis(durationMs * 4))
+                            .build());
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
+
+            var expected = Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION,
+                    BigDecimal.valueOf(durationMs).setScale(9));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_AVERAGE_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION), BigDecimal.class,
+                    expected, null, null);
+        }
+
+        @ParameterizedTest
         @MethodSource
         void happyPathWithFilter(Function<TraceThread, TraceThreadFilter> getFilter, List<Integer> expectedIndexes) {
             mockTargetWorkspace();
@@ -4438,6 +4594,70 @@ class ProjectMetricsResourceTest {
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 
             return Pair.of(threadIds, threadCosts);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("cost lands in the bucket the traces ran in, not the one their ids were minted in")
+        void whenThreadRowMintedAfterItsTraces_thenCostBucketsByTraceStartTime(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            BigDecimal cost = createThreadsWithTraceIdsMintedAtAndGetTotalCost(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), marker);
+
+            var costMinus3 = Map.of(ProjectMetricsDAO.NAME_THREAD_COST, cost);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST), BigDecimal.class,
+                    costMinus3, null, null);
+        }
+
+        private BigDecimal createThreadsWithTraceIdsMintedAtAndGetTotalCost(String projectName, Instant ranAt,
+                Instant idsMintedAt) {
+            List<String> threadIds = new ArrayList<>();
+            List<Trace> allTraces = new ArrayList<>();
+            List<Span> allSpans = new ArrayList<>();
+            BigDecimal total = BigDecimal.ZERO;
+
+            for (int i = 0; i < 3; i++) {
+                String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+                threadIds.add(threadId);
+
+                for (int j = 0; j < 2; j++) {
+                    long offset = i * 100L + j * 50L;
+                    Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                            .id(idGenerator.generateId(idsMintedAt.plusMillis(offset)))
+                            .projectName(projectName)
+                            .startTime(ranAt.plusMillis(offset))
+                            .threadId(threadId)
+                            .build();
+                    allTraces.add(trace);
+
+                    BigDecimal spanCost = BigDecimal.valueOf(Math.abs(RANDOM.nextInt(10000)));
+                    allSpans.add(factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .startTime(ranAt.plusMillis(offset))
+                            .totalEstimatedCost(spanCost)
+                            .build());
+                    total = total.add(spanCost);
+                }
+            }
+
+            traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
+            spanResourceClient.batchCreateSpans(allSpans, API_KEY, WORKSPACE_NAME);
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+
+            return total;
         }
 
         private BigDecimal createThreadsAndGetTotalCost(String projectName, Instant marker) {
