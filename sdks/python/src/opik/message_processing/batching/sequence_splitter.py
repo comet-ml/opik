@@ -105,6 +105,13 @@ def split_into_batches(
         item_size_MB = _get_expected_payload_size_MB(item)
 
         if item_size_MB >= max_payload_size_MB:
+            # Whatever is accumulating was read first and has to go out first.
+            # Feedback scores upsert by (entity id, name) in the order they are sent,
+            # so emitting this item ahead of them silently keeps the older value.
+            if len(current_batch) > 0:
+                batches.append(current_batch)
+                current_batch = []
+                current_batch_size_MB = _JSON_LIST_BRACKETS_MB
             batches.append([item])
             continue
 
