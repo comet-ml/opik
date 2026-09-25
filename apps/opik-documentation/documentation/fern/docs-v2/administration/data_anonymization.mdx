@@ -37,24 +37,14 @@ Opik stores traces exactly as they are logged and masks them only when they are 
 
 ## Set up data anonymization
 
-To set up data anonymization, ask Comet to enable it, then give the users who should see masked data a custom role that excludes **Original data view**.
-
 <Note>
-  Custom roles are available on Enterprise plans. You must be an organization
-  admin to create them.
+  Ask your Comet account team to enable data anonymization for your
+  organization.
 </Note>
 
-### 1. Enable data anonymization
+Give the users who should see masked data a custom role that excludes **Original data view**.
 
-Data anonymization is enabled per deployment by Comet. To enable it:
-
-1. Contact your Comet account team.
-2. Select the types of sensitive data to mask, such as email addresses and phone numbers.
-3. Tell them about other data that is specific to your organization, such as customer IDs or account numbers, so that they can add rules for it.
-
-The account team configures the rules and tells you when they are active. To change the rules later, contact your account team again.
-
-### 2. Create a custom role
+### 1. Create a custom role
 
 1. Open the **Admin Dashboard** and go to **Roles & permissions**.
 2. Click **Create custom role**.
@@ -70,7 +60,7 @@ The account team configures the rules and tells you when they are active. To cha
 
 In the **Custom roles** table, the new role shows its base role and the number of excluded permissions, for example **Read -1 excluded**.
 
-### 3. Assign the role to users
+### 2. Assign the role to users
 
 You can assign the role from the Admin Dashboard or from the workspace:
 
@@ -83,7 +73,7 @@ You can assign the role from the Admin Dashboard or from the workspace:
 
 Role changes take effect within a few seconds. The user does not need to log in again.
 
-### 4. Check the result
+### 3. Check the result
 
 Ask the user to open a trace that contains data that matches one of your rules. The matched values show as replacement tokens in the trace input, output and metadata. A user who has the permission sees the original values in the same trace.
 
