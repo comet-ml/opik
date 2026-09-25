@@ -1,7 +1,7 @@
 import asyncio
 import dataclasses
-import gc
 import functools
+import gc
 import threading
 from typing import Dict
 
@@ -10,7 +10,7 @@ import pytest
 
 from opik import context_storage, opik_context, rest_api, PromptType
 from opik.api_objects import opik_client, trace, prompt
-from opik.decorator import tracker
+from opik.decorator import generator_wrappers, tracker
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_STRING,
@@ -800,17 +800,27 @@ def test_track__single_generator_function_tracked__never_iterated__no_span_repor
 async def test_track__async_generator_function_tracked__consumer_stops_early__span_ended_with_what_was_yielded(
     fake_backend,
 ):
+    cleaned_up = []
+
     @tracker.track
     async def f(x):
-        values = ["yielded-1", " yielded-2", " yielded-3"]
-        for value in values:
-            yield value
+        try:
+            values = ["yielded-1", " yielded-2", " yielded-3"]
+            for value in values:
+                yield value
+        finally:
+            cleaned_up.append("closed")
 
     generator = f("generator-input")
     async for _ in generator:
         break
     del generator
     gc.collect()
+    # The dropped wrapper schedules `aclose()` on the loop; let it run.
+    for _ in range(10):
+        await asyncio.sleep(0)
+
+    assert cleaned_up == ["closed"]
 
     tracker.flush_tracker()
 
@@ -2450,6 +2460,108 @@ def test_track__generator_cleanup_raises_on_close__error_recorded_on_span(fake_b
     assert trace.error_info["exception_type"] == "ValueError"
     assert trace.error_info["message"] == "cleanup failed"
     assert trace.spans[0].error_info["exception_type"] == "ValueError"
+
+
+def test_track__generator_cleanup_raises_when_dropped__error_recorded_on_span(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        try:
+            yield "yielded-1"
+            yield " yielded-2"
+        finally:
+            raise ValueError("cleanup failed")
+
+    generator = f("generator-input")
+    next(iter(generator))
+    del generator
+    gc.collect()
+
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace = fake_backend.trace_trees[0]
+    assert trace.error_info["exception_type"] == "ValueError"
+    assert trace.spans[0].error_info["exception_type"] == "ValueError"
+
+
+@pytest.mark.asyncio
+async def test_track__async_generator_cleanup_raises_when_dropped__error_recorded_on_span(
+    fake_backend,
+):
+    @tracker.track
+    async def f(x):
+        try:
+            yield "yielded-1"
+            yield " yielded-2"
+        finally:
+            raise ValueError("cleanup failed")
+
+    generator = f("generator-input")
+    await generator.__anext__()
+    del generator
+    gc.collect()
+    for _ in range(10):
+        await asyncio.sleep(0)
+
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace = fake_backend.trace_trees[0]
+    assert trace.error_info["exception_type"] == "ValueError"
+    assert trace.spans[0].error_info["exception_type"] == "ValueError"
+
+
+def test_track__generator_cleanup_interrupted_on_close__error_recorded_on_span(
+    fake_backend,
+):
+    # Not every cleanup failure is an Exception; the span must still be ended.
+    @tracker.track
+    def f(x):
+        try:
+            yield "yielded-1"
+            yield " yielded-2"
+        finally:
+            raise KeyboardInterrupt()
+
+    generator = f("generator-input")
+    next(iter(generator))
+
+    with pytest.raises(KeyboardInterrupt):
+        generator.close()
+
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace = fake_backend.trace_trees[0]
+    assert trace.error_info["exception_type"] == "KeyboardInterrupt"
+    assert trace.spans[0].error_info["exception_type"] == "KeyboardInterrupt"
+
+
+def test_track__generator_still_alive_at_exit__closed_by_exit_hook(fake_backend):
+    # `__del__` does not run for objects alive at interpreter exit, so the atexit
+    # hook has to end these spans before the client's own exit-time flush.
+    cleaned_up = []
+
+    @tracker.track
+    def f(x):
+        try:
+            yield "yielded-1"
+            yield " yielded-2"
+        finally:
+            cleaned_up.append("closed")
+
+    generator = f("generator-input")
+    next(iter(generator))
+
+    generator_wrappers._finalize_unfinished_generators()
+
+    assert cleaned_up == ["closed"]
+
+    tracker.flush_tracker()
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(_expected_generator_trace("yielded-1"), fake_backend.trace_trees[0])
 
 
 def test_track__slots_dataclass_input_and_output__encoded_as_dicts(fake_backend):
