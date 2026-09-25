@@ -51,6 +51,11 @@ class StreamingBatchWriter:
         envelope_bytes = streaming_upload.dumps(dict(envelope))
         self._prefix = envelope_bytes[:-1] + b',"items":['
         self._suffix = b"]}"
+        # `max_payload_bytes` caps the request body, and the envelope is part of that
+        # body, so it has to be inside the budget rather than added after the decision
+        # to flush. Counting only the items let every request run over the cap by this
+        # many bytes, which grows with the dataset and project names.
+        self._envelope_bytes = len(self._prefix) + len(self._suffix)
 
         self._start_buffer()
 
@@ -77,7 +82,7 @@ class StreamingBatchWriter:
         # or over the cap alone in its own request: a request rejected for its size then
         # fails that one row instead of every row that shared a batch with it. The `+ 1`
         # is the comma that would join this item to the one before it.
-        if self._items > 0 and self._logical_bytes + 1 + len(payload) > (
+        if self._items > 0 and self._body_bytes() + 1 + len(payload) > (
             self._max_payload_bytes
         ):
             self.flush()
@@ -95,9 +100,13 @@ class StreamingBatchWriter:
         if self._should_flush():
             self.flush()
 
+    def _body_bytes(self) -> int:
+        """The size of the request body as it stands, envelope included."""
+        return self._envelope_bytes + self._logical_bytes
+
     def _should_flush(self) -> bool:
         return (
-            self._logical_bytes >= self._max_payload_bytes
+            self._body_bytes() >= self._max_payload_bytes
             or self._items >= self._max_items
         )
 
@@ -110,7 +119,7 @@ class StreamingBatchWriter:
         chunks, item_count = self._chunks, self._items
         # The pool would otherwise re-derive this by summing every chunk, on the very
         # thread this class exists to keep free.
-        body_bytes = self._logical_bytes + len(self._prefix) + len(self._suffix)
+        body_bytes = self._body_bytes()
 
         self._start_buffer()
         self._flush_callback(chunks, item_count, body_bytes)

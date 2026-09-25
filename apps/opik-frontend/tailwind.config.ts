@@ -134,6 +134,7 @@ module.exports = {
         "chart-red": "var(--chart-red)",
         "chart-burgundy": "var(--chart-burgundy)",
         "chart-purple": "var(--chart-purple)",
+        "chart-violet": "var(--chart-violet)",
         "chart-pink": "var(--chart-pink)",
         "chart-orange": "var(--chart-orange)",
         "chart-teal": "var(--chart-teal)",

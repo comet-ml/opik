@@ -1172,10 +1172,10 @@ def main():
             anthropic_labels = {id_: name for id_, name in anthropic_api if name}
             print(f"  Found {len(anthropic_models)} models from API", file=sys.stderr)
         except Exception as e:
-            print(f"  WARNING: Anthropic API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
+            print(f"::warning::Anthropic API fetch failed, falling back to prices JSON (model list will lack API display names): {e}", file=sys.stderr)
             anthropic_models = extract_models_from_prices(prices, "anthropic", ANTHROPIC_EXCLUDE_PATTERNS)
     else:
-        print("  Anthropic: using prices JSON (no ANTHROPIC_API_KEY)", file=sys.stderr)
+        print("::warning::Anthropic: using prices JSON (no ANTHROPIC_API_KEY); model list will lack API display names", file=sys.stderr)
         anthropic_models = extract_models_from_prices(prices, "anthropic", ANTHROPIC_EXCLUDE_PATTERNS)
 
     # Gemini
