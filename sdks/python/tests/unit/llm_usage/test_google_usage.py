@@ -52,6 +52,20 @@ def test_opik_usage__from_google_dict__no_candidates_key__completion_tokens_zero
     assert usage.prompt_tokens == 10
 
 
+@pytest.mark.parametrize("provider", ["google_ai", "google_vertexai"])
+def test_build_opik_usage__google__no_candidates_key__completion_tokens_zero(provider):
+    from opik import llm_usage
+    from opik.types import LLMProvider
+
+    usage = llm_usage.build_opik_usage(
+        provider=LLMProvider(provider),
+        usage={"prompt_token_count": 10, "total_token_count": 10},
+    )
+
+    assert usage.completion_tokens == 0
+    assert usage.prompt_tokens == 10
+
+
 def test_google_gemini_usage__to_backend_compatible_flat_dict__happyflow():
     usage_data = {
         "candidates_token_count": 100,
