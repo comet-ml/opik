@@ -1,6 +1,8 @@
 package com.comet.opik.domain.evaluation;
 
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import reactor.core.publisher.Mono;
@@ -31,6 +33,12 @@ public interface EvaluationRecorder {
 
     /** Records one LLM round as a span; returns the response unchanged (or the error, unchanged). */
     Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call);
+
+    /**
+     * Records one Decisions API call (decisions models such as TypeSafe Jev) as an {@code llm} span; returns
+     * the response unchanged (or the error, unchanged).
+     */
+    Mono<DecisionsResponse> recordDecisionCall(DecisionsRequest request, Mono<DecisionsResponse> call);
 
     /** Records one agentic tool execution as a {@code tool} span; returns the result unchanged. */
     Mono<String> recordToolCall(String toolName, String arguments, Mono<String> execution);

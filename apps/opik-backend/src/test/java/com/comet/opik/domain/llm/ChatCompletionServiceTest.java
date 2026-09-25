@@ -2,6 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.google.api.gax.rpc.ApiException;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -95,6 +97,42 @@ class ChatCompletionServiceTest {
         when(llmProviderClientConfig.getBackoffExp()).thenReturn(null);
 
         chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+    }
+
+    @Nested
+    @DisplayName("Decisions models:")
+    class DecisionModels {
+
+        @ParameterizedTest
+        @EnumSource(OpenRouterDecisionModel.class)
+        @DisplayName("create: when the model is a decisions model, then reject it without calling the provider")
+        void create__whenDecisionModel__thenBadRequest(OpenRouterDecisionModel model) {
+            var request = ChatCompletionRequest.builder()
+                    .from(podamFactory.manufacturePojo(ChatCompletionRequest.class))
+                    .model(model.toString())
+                    .build();
+
+            assertThatThrownBy(() -> chatCompletionService.create(request, "test-workspace-id"))
+                    .isExactlyInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("Decisions models can't be used for chat completions");
+            verify(llmProviderFactory, never()).getService(anyString(), anyString());
+        }
+
+        @ParameterizedTest
+        @EnumSource(OpenRouterDecisionModel.class)
+        @DisplayName("stream: when the model is a decisions model, then reject it without calling the provider")
+        void createAndStreamResponse__whenDecisionModel__thenBadRequest(OpenRouterDecisionModel model) {
+            var request = ChatCompletionRequest.builder()
+                    .from(podamFactory.manufacturePojo(ChatCompletionRequest.class))
+                    .model(model.toString())
+                    .build();
+
+            assertThatThrownBy(() -> chatCompletionService.createAndStreamResponse(request, "test-workspace-id",
+                    mock(ChunkedOutputHandlers.class)))
+                    .isExactlyInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("Decisions models can't be used for chat completions");
+            verify(llmProviderFactory, never()).getService(anyString(), anyString());
+        }
     }
 
     @Nested

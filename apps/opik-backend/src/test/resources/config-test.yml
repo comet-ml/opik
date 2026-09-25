@@ -665,6 +665,7 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: https://openrouter.ai/api/v1
+  openRouterDecisionsUrl: https://openrouter.ai/api/alpha/decisions
   # Configuration for Vertex AI client
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform

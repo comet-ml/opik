@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Span;
@@ -27,6 +28,11 @@ import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -107,6 +113,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
     private OnlineEvaluationRecorder onlineEvaluationRecorder;
     @Mock
     private com.comet.opik.domain.attachment.AttachmentService attachmentService;
+    @Mock
+    private OpenRouterDecisionsClient decisionsClient;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringLlmAsJudgeScorer scorer;
@@ -163,7 +171,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 workspaceNameService,
                 opikConfiguration,
                 onlineEvaluationRecorder,
-                attachmentService);
+                attachmentService,
+                new DecisionScoringService(decisionsClient, llmProviderFactory));
     }
 
     @AfterEach
@@ -872,6 +881,211 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .projectId(UUID.randomUUID())
                     .name(UUID.randomUUID().toString())
                     .startTime(Instant.now())
+                    .build();
+            return new TraceToScoreLlmAsJudge(
+                    trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
+                    UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
+                    PromptType.MUSTACHE, null, null);
+        }
+    }
+
+    @Nested
+    class DecisionModelScoringTests {
+
+        private static final String JEV_MODEL = "~typesafe/jev-latest";
+
+        private static final String JEV_EVALUATOR_JSON = """
+                {
+                  "model": { "name": "~typesafe/jev-latest" },
+                  "messages": [
+                    { "role": "USER", "content": "Question: {{question}}\\nAnswer: {{answer}}" }
+                  ],
+                  "schema": [
+                    { "name": "answer_relevant", "type": "BOOLEAN", "description": "Does the answer respond to the question?" },
+                    { "name": "answer_correct", "type": "BOOLEAN", "description": "Is the answer correct?" }
+                  ],
+                  "variables": { "question": "input.question", "answer": "output.answer" }
+                }
+                """;
+
+        private final LlmProviderClientApiConfig clientConfig = LlmProviderClientApiConfig.builder()
+                .apiKey(RandomStringUtils.secure().nextAlphanumeric(16))
+                .build();
+
+        @BeforeEach
+        void setUpDecisionModel() {
+            lenient().when(llmProviderFactory.getClientApiConfig(anyString(), eq(JEV_MODEL)))
+                    .thenReturn(clientConfig);
+            lenient().when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+        }
+
+        @Test
+        void scoresEveryBooleanScoreWithOneDecisionsCall() {
+            var message = buildJevMessage("What is the capital of France?", "Paris");
+            var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+            when(decisionsClient.decide(requestCaptor.capture(), eq(clientConfig)))
+                    .thenReturn(Mono.just(response(Map.of("answer_relevant", 0.93, "answer_correct", 0.2))));
+
+            scorer.score(message).block();
+
+            var request = requestCaptor.getValue();
+            assertThat(request.model()).isEqualTo(JEV_MODEL);
+            assertThat(request.state())
+                    .isEqualTo("Question: What is the capital of France?\nAnswer: Paris");
+            assertThat(request.questions()).containsOnlyKeys("answer_relevant", "answer_correct");
+            assertThat(request.questions().get("answer_relevant"))
+                    .isEqualTo(DecisionsQuestion.noul("Does the answer respond to the question?"));
+
+            var scores = captureStoredScores();
+            assertThat(scores).extracting(FeedbackScoreBatchItem::name)
+                    .containsExactly("answer_relevant", "answer_correct");
+            assertThat(scores.getFirst().value()).isEqualByComparingTo("1");
+            assertThat(scores.getFirst().reason()).isEqualTo("Probability: 0.93");
+            assertThat(scores.getFirst().id()).isEqualTo(message.trace().id());
+            assertThat(scores.getLast().value()).isEqualByComparingTo("0");
+            assertThat(scores.getLast().reason()).isEqualTo("Probability: 0.2");
+            // No chat judge, no tool loop, and no span fetch: the template doesn't reference spans.
+            verifyNoInteractions(aiProxyService);
+            verifyNoInteractions(spanService);
+        }
+
+        @ParameterizedTest(name = "probability={0} → score={1}")
+        @CsvSource({"0.0, 0", "0.49, 0", "0.5, 1", "1.0, 1"})
+        void mapsProbabilityToBooleanAtHalf(double probability, int expectedScore) {
+            var message = buildJevMessage("question", "answer");
+            when(decisionsClient.decide(any(), any())).thenReturn(Mono.just(
+                    response(Map.of("answer_relevant", probability, "answer_correct", probability))));
+
+            scorer.score(message).block();
+
+            assertThat(captureStoredScores()).allSatisfy(score -> assertThat(score.value())
+                    .isEqualByComparingTo(String.valueOf(expectedScore)));
+        }
+
+        @Test
+        void missingAnswerDropsOnlyThatScore() {
+            var message = buildJevMessage("question", "answer");
+            when(decisionsClient.decide(any(), any()))
+                    .thenReturn(Mono.just(response(Map.of("answer_relevant", 0.7))));
+
+            scorer.score(message).block();
+
+            assertThat(captureStoredScores()).extracting(FeedbackScoreBatchItem::name)
+                    .containsExactly("answer_relevant");
+        }
+
+        @Test
+        void testSuiteNumericScoresAreSkippedNotStoredAsBoolean() {
+            // Test-suite assertions build their rule from the evaluator config, so rule validation never sees it.
+            var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, LlmAsJudgeCode.class);
+            code = code.toBuilder()
+                    .schema(List.of(code.schema().getFirst(), com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema
+                            .builder()
+                            .name("quality")
+                            .type(com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType.INTEGER)
+                            .description("Rate the answer from 1 to 5")
+                            .build()))
+                    .build();
+            var message = buildJevMessage(code, "question", "answer");
+            var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+            when(decisionsClient.decide(requestCaptor.capture(), any())).thenReturn(Mono.just(
+                    response(Map.of("answer_relevant", 0.9))));
+
+            scorer.score(message).block();
+
+            assertThat(requestCaptor.getValue().questions()).containsOnlyKeys("answer_relevant");
+            assertThat(captureStoredScores()).extracting(FeedbackScoreBatchItem::name)
+                    .containsExactly("answer_relevant");
+        }
+
+        @Test
+        void onlyNumericScoresSkipsWithoutCallingTheModel() {
+            var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, LlmAsJudgeCode.class);
+            code = code.toBuilder()
+                    .schema(code.schema().stream()
+                            .map(score -> score.toBuilder()
+                                    .type(com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType.DOUBLE)
+                                    .build())
+                            .toList())
+                    .build();
+
+            scorer.score(buildJevMessage(code, "question", "answer")).block();
+
+            verifyNoInteractions(decisionsClient);
+            assertThat(captureStoredScores()).isEmpty();
+        }
+
+        @Test
+        void promptOverContextLimitIsSkippedWithoutCallingTheModel() {
+            // 4 chars per token (set in setUp): this answer alone is over the 32k-token limit.
+            var message = buildJevMessage("question",
+                    RandomStringUtils.secure().nextAlphanumeric(DecisionScoringService.MAX_CONTEXT_TOKENS * 4 + 1));
+
+            scorer.score(message).block();
+
+            verifyNoInteractions(decisionsClient);
+            assertThat(captureStoredScores()).isEmpty();
+        }
+
+        @Test
+        void decisionsFailurePropagatesSoTheMessageIsRetried() {
+            var message = buildJevMessage("question", "answer");
+            var failure = new jakarta.ws.rs.ServerErrorException("OpenRouter down", 502);
+            when(decisionsClient.decide(any(), any())).thenReturn(Mono.error(failure));
+
+            assertThatThrownBy(() -> scorer.score(message).block()).isSameAs(failure);
+        }
+
+        @ParameterizedTest(name = "templateHasSpans={0} → fetch={1}")
+        @CsvSource({"false, false", "true, true"})
+        void fetchesSpansOnlyWhenTheTemplateNeedsThem(boolean templateHasSpans, boolean expected) {
+            var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, LlmAsJudgeCode.class);
+            if (templateHasSpans) {
+                code = code.toBuilder()
+                        .messages(List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("Spans: {{spans}}")
+                                .build()))
+                        .build();
+            }
+            var message = buildJevMessage(code, "question", "answer");
+
+            // Unlike chat models on OpenRouter, a decisions model never takes the agentic path, so the
+            // tool-calling provider alone doesn't trigger the fetch.
+            assertThat(scorer.shouldFetchSpans(message)).isEqualTo(expected);
+        }
+
+        private List<FeedbackScoreBatchItem> captureStoredScores() {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfTraces(captor.capture());
+            return captor.getValue();
+        }
+
+        private DecisionsResponse response(Map<String, Double> probabilities) {
+            var answers = new java.util.LinkedHashMap<String, DecisionsResponse.Answer>();
+            probabilities.forEach((name, probability) -> answers.put(name,
+                    DecisionsResponse.Answer.builder().type(DecisionsQuestion.NOUL_TYPE).noul(probability).build()));
+            return DecisionsResponse.builder()
+                    .model("typesafe/jev-1.13-20260917")
+                    .answers(answers)
+                    .usage(DecisionsResponse.Usage.builder().inputTokens(340).outputTokens(40)
+                            .cost(new java.math.BigDecimal("0.00001428")).build())
+                    .build();
+        }
+
+        private TraceToScoreLlmAsJudge buildJevMessage(String question, String answer) {
+            return buildJevMessage(JsonUtils.readValue(JEV_EVALUATOR_JSON, LlmAsJudgeCode.class), question, answer);
+        }
+
+        private TraceToScoreLlmAsJudge buildJevMessage(LlmAsJudgeCode code, String question, String answer) {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .name(UUID.randomUUID().toString())
+                    .startTime(Instant.now())
+                    .input(JsonUtils.valueToTree(Map.of("question", question)))
+                    .output(JsonUtils.valueToTree(Map.of("answer", answer)))
                     .build();
             return new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
