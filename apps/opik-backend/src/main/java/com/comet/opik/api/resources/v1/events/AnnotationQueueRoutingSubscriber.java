@@ -200,26 +200,27 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
         return feedbackScoreDAO.getEffectiveScores(entityType, message.entityIds())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
-                .collect(Collectors.groupingBy(EffectiveFeedbackScore::entityId))
-                .map(AnnotationQueueRoutingSubscriber::byEntity);
+                // Straight into the per-entity view: each entity's rows are folded as its group closes,
+                // so no second map of the same rows is built alongside the first.
+                .collect(Collectors.groupingBy(EffectiveFeedbackScore::entityId,
+                        Collectors.collectingAndThen(Collectors.toList(),
+                                AnnotationQueueRoutingSubscriber::toEntityScores)));
     }
 
     /**
-     * Turns the rows the DAO streams into the per-entity view the conditions are evaluated against. The
-     * collecting lives here rather than in the DAO because this is where the bound on it is known: the rows
-     * belong to the entity ids of one message, which the buffer flush caps at {@code jobBatchSize}.
+     * Folds one entity's rows into the view the conditions are evaluated against. This lives here rather
+     * than in the DAO because this is where the bound on it is known: the rows belong to the entity ids of
+     * one message, which the buffer flush caps at {@code jobBatchSize}.
      */
-    private static Map<UUID, EntityFeedbackScores> byEntity(Map<UUID, List<EffectiveFeedbackScore>> rowsByEntity) {
-        return rowsByEntity.entrySet().stream()
-                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> EntityFeedbackScores.builder()
-                        .entityId(entry.getKey())
-                        .projectId(entry.getValue().getFirst().projectId())
-                        // The query returns one row per (entity, name); the merge only keeps a corrupted
-                        // duplicate from failing a whole batch.
-                        .scores(entry.getValue().stream()
-                                .collect(Collectors.toUnmodifiableMap(EffectiveFeedbackScore::name,
-                                        EffectiveFeedbackScore::value, (first, ignored) -> first)))
-                        .build()));
+    private static EntityFeedbackScores toEntityScores(List<EffectiveFeedbackScore> rows) {
+        return EntityFeedbackScores.builder()
+                .entityId(rows.getFirst().entityId())
+                .projectId(rows.getFirst().projectId())
+                // The query returns one row per (entity, name); the merge only keeps a corrupted duplicate
+                // from failing a whole batch.
+                .scores(rows.stream().collect(Collectors.toUnmodifiableMap(EffectiveFeedbackScore::name,
+                        EffectiveFeedbackScore::value, (first, ignored) -> first)))
+                .build();
     }
 
     private Mono<Long> addMatches(List<AnnotationQueueAutomationService.QueueAutomation> automations,
@@ -256,7 +257,10 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                         // only way to see a badly scoped condition filling one up.
                         .doOnNext(added -> AnnotationQueueRoutingMetrics.ITEMS_ROUTED.add(added))
                         .onErrorResume(error -> {
-                            log.error("Failed to route items into annotation queue, queueId '{}'", entry.getKey(),
+                            // DEBUG, not ERROR: every failure here is rethrown below, and the base
+                            // subscriber logs that one at ERROR with the rest attached as suppressed. This
+                            // line only adds the queue each failure belongs to.
+                            log.debug("Failed to route items into annotation queue, queueId '{}'", entry.getKey(),
                                     error);
                             AnnotationQueueRoutingMetrics.QUEUE_WRITE_FAILURES.add(1);
                             failures.add(error);
