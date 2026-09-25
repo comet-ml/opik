@@ -49,53 +49,68 @@ export const test = baseTest.extend<ExperimentFixtures>({
   experiment: async ({ sdkClient, backendClient, project, testNamespace }, use, testInfo) => {
     const datasetName = `${testNamespace}-exp-ds`;
     const experimentName = `${testNamespace}-exp`;
+    // Both ids are registered as soon as the seed call reports them: a failure
+    // anywhere after that must tear down what already exists.
+    let experimentId: string | null = null;
+    let datasetId: string | null = null;
+    let ref: ExperimentRef | null = null;
+    try {
+      const created = await sdkClient.python.evaluateExperiment({
+        project_name: project.name,
+        dataset_name: datasetName,
+        experiment_name: experimentName,
+        items: SEED_ITEMS as unknown as Array<Record<string, unknown>>,
+      });
+      experimentId = created.experiment_id;
+      datasetId = created.dataset_id;
 
-    const created = await sdkClient.python.evaluateExperiment({
-      project_name: project.name,
-      dataset_name: datasetName,
-      experiment_name: experimentName,
-      items: SEED_ITEMS as unknown as Array<Record<string, unknown>>,
-    });
+      const scores: ExperimentItemScore[] = created.scores.map((s) => ({
+        datasetItemId: s.dataset_item_id,
+        input: s.input,
+        expectedOutput: s.expected_output,
+        taskOutput: s.task_output,
+        scoreName: s.score_name,
+        scoreValue: s.score_value,
+      }));
 
-    const scores: ExperimentItemScore[] = created.scores.map((s) => ({
-      datasetItemId: s.dataset_item_id,
-      input: s.input,
-      expectedOutput: s.expected_output,
-      taskOutput: s.task_output,
-      scoreName: s.score_name,
-      scoreValue: s.score_value,
-    }));
+      ref = {
+        experimentId: created.experiment_id,
+        experimentName: created.experiment_name,
+        datasetId: created.dataset_id,
+        datasetName,
+        projectName: project.name,
+        items: SEED_ITEMS,
+        evaluator: { name: 'equals_metric', type: 'Equals' },
+        expectedScores: EXPECTED_SCORES,
+        scores,
+      };
 
-    const ref: ExperimentRef = {
-      experimentId: created.experiment_id,
-      experimentName: created.experiment_name,
-      datasetId: created.dataset_id,
-      datasetName,
-      projectName: project.name,
-      items: SEED_ITEMS,
-      evaluator: { name: 'equals_metric', type: 'Equals' },
-      expectedScores: EXPECTED_SCORES,
-      scores,
-    };
+      await testInfo.attach('opik.experiment', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
+      });
 
-    await testInfo.attach('opik.experiment', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use(ref);
-
-    /** Teardown order: experiment first (it references the dataset), then dataset (it references the project). Project fixture handles its own delete. */
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteExperiment(created.experiment_id);
-      } catch (err) {
-        console.warn(`[experiment fixture] delete experiment warning for ${experimentName}:`, err);
-      }
-      try {
-        await backendClient.deleteDataset(created.dataset_id);
-      } catch (err) {
-        console.warn(`[experiment fixture] delete dataset warning for ${datasetName}:`, err);
+      await use(ref);
+    } finally {
+      // A fully built fixture follows shouldLeaveArtifacts; a partially built
+      // one is always removed. Teardown order: experiment first (it references
+      // the dataset), then dataset (it references the project). The project
+      // fixture handles its own delete.
+      if (ref === null || !shouldLeaveArtifacts(testInfo)) {
+        if (experimentId !== null) {
+          try {
+            await backendClient.deleteExperiment(experimentId);
+          } catch (err) {
+            console.warn(`[experiment fixture] delete experiment warning for ${experimentName}:`, err);
+          }
+        }
+        if (datasetId !== null) {
+          try {
+            await backendClient.deleteDataset(datasetId);
+          } catch (err) {
+            console.warn(`[experiment fixture] delete dataset warning for ${datasetName}:`, err);
+          }
+        }
       }
     }
   },

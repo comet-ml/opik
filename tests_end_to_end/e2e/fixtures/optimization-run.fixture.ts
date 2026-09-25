@@ -77,122 +77,139 @@ export const test = baseTest.extend<OptimizationRunFixtures>({
     const datasetName = `${testNamespace}-ds`;
     const optimizationId = uuid7();
 
-    const dataset = await sdkClient.python.createDataset({
-      project_name: project.name,
-      name: datasetName,
-      description: 'optimization trial logs scoping',
-      items: DATASET_ITEMS as unknown as Array<Record<string, unknown>>,
-    });
+    const trials: OptimizationTrialRef[] = [];
+    const decoyTraceIds: string[] = [];
+    const allTraceIds: string[] = [];
+    let datasetId: string | null = null;
+    let ref: OptimizationRunRef | null = null;
 
-    const items = await backendClient.getDatasetItems(dataset.id);
-    const datasetItemIds = items.map((i) => i.id);
-
-    await backendClient.createOptimization({
-      id: optimizationId,
-      name: `${testNamespace}-opt`,
-      datasetName,
-      projectName: project.name,
-      objectiveName: OBJECTIVE,
-      status: 'completed',
-    });
-
-    const seedTraces = async (prefix: string, count: number): Promise<string[]> => {
-      const ids: string[] = [];
-      for (let i = 0; i < count; i++) {
-        const id = uuid7();
-        await backendClient.createTraceWithSource({
-          id,
-          projectName: project.name,
-          name: `${testNamespace}-${prefix}-${i + 1}`,
-          source: 'optimization',
-          input: { text: `${prefix} input ${i + 1}` },
-          output: { label: `${prefix} output ${i + 1}` },
-        });
-        ids.push(id);
+    // Experiments before the optimization they belong to, traces before the
+    // dataset, so nothing is removed from under a still-referencing parent.
+    const safe = async (what: string, fn: () => Promise<unknown>): Promise<void> => {
+      try {
+        await fn();
+      } catch (err) {
+        console.warn(`[optimizationRun fixture] delete warning for ${what}:`, err);
       }
-      return ids;
     };
 
-    const trials: OptimizationTrialRef[] = [];
-    for (let t = 0; t < TRIAL_TRACE_COUNTS.length; t++) {
-      // step_index 0 is the run's baseline (rendered "Baseline", no trial
-      // number); step_index 1 is the first numbered trial. candidate_id is what
-      // the trials table groups rows on.
-      const isBaseline = t === 0;
-      const experimentId = uuid7();
-      const slug = isBaseline ? 'baseline' : `trial${t}`;
-      const traceIds = await seedTraces(slug, TRIAL_TRACE_COUNTS[t]);
+    try {
+      const dataset = await sdkClient.python.createDataset({
+        project_name: project.name,
+        name: datasetName,
+        description: 'optimization trial logs scoping',
+        items: DATASET_ITEMS as unknown as Array<Record<string, unknown>>,
+      });
+      datasetId = dataset.id;
 
-      await backendClient.createExperiment({
-        id: experimentId,
-        name: isBaseline ? `${testNamespace}-baseline` : `${testNamespace}-trial-${t}`,
+      const items = await backendClient.getDatasetItems(dataset.id);
+      const datasetItemIds = items.map((i) => i.id);
+
+      await backendClient.createOptimization({
+        id: optimizationId,
+        name: `${testNamespace}-opt`,
         datasetName,
         projectName: project.name,
-        type: 'trial',
-        optimizationId,
-        metadata: {
-          step_index: t,
-          candidate_id: `${testNamespace}-cand-${isBaseline ? 'baseline' : t}`,
-          parent_candidate_ids: isBaseline ? [] : [`${testNamespace}-cand-baseline`],
-        },
+        objectiveName: OBJECTIVE,
+        status: 'completed',
       });
-      await backendClient.createExperimentItems(
-        traceIds.map((traceId, i) => ({
-          experimentId,
-          datasetItemId: datasetItemIds[i % datasetItemIds.length],
-          traceId,
-        })),
-      );
 
-      trials.push({
-        label: isBaseline ? 'Baseline' : `Trial #${t}`,
-        experimentId,
-        traceIds,
-      });
-    }
-
-    const decoyTraceIds = await seedTraces('decoy', DECOY_TRACE_COUNT);
-
-    const ref: OptimizationRunRef = {
-      optimizationId,
-      datasetId: dataset.id,
-      datasetName,
-      datasetItemIds,
-      projectId: project.id,
-      projectName: project.name,
-      trials,
-      decoyTraceIds,
-    };
-    await testInfo.attach('opik.optimizationRun', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      const safe = async (what: string, fn: () => Promise<unknown>): Promise<void> => {
-        try {
-          await fn();
-        } catch (err) {
-          console.warn(`[optimizationRun fixture] delete warning for ${what}:`, err);
+      const seedTraces = async (prefix: string, count: number): Promise<string[]> => {
+        const ids: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const id = uuid7();
+          await backendClient.createTraceWithSource({
+            id,
+            projectName: project.name,
+            name: `${testNamespace}-${prefix}-${i + 1}`,
+            source: 'optimization',
+            input: { text: `${prefix} input ${i + 1}` },
+            output: { label: `${prefix} output ${i + 1}` },
+          });
+          allTraceIds.push(id);
+          ids.push(id);
         }
+        return ids;
       };
-      // Experiments before the optimization they belong to, traces before the
-      // dataset, so nothing is removed from under a still-referencing parent.
-      for (const trial of trials) {
-        await safe(`experiment ${trial.experimentId}`, () =>
-          backendClient.deleteExperiment(trial.experimentId),
+
+      for (let t = 0; t < TRIAL_TRACE_COUNTS.length; t++) {
+        // step_index 0 is the run's baseline (rendered "Baseline", no trial
+        // number); step_index 1 is the first numbered trial. candidate_id is what
+        // the trials table groups rows on.
+        const isBaseline = t === 0;
+        const experimentId = uuid7();
+        const slug = isBaseline ? 'baseline' : `trial${t}`;
+        const traceIds = await seedTraces(slug, TRIAL_TRACE_COUNTS[t]);
+
+        await backendClient.createExperiment({
+          id: experimentId,
+          name: isBaseline ? `${testNamespace}-baseline` : `${testNamespace}-trial-${t}`,
+          datasetName,
+          projectName: project.name,
+          type: 'trial',
+          optimizationId,
+          metadata: {
+            step_index: t,
+            candidate_id: `${testNamespace}-cand-${isBaseline ? 'baseline' : t}`,
+            parent_candidate_ids: isBaseline ? [] : [`${testNamespace}-cand-baseline`],
+          },
+        });
+        await backendClient.createExperimentItems(
+          traceIds.map((traceId, i) => ({
+            experimentId,
+            datasetItemId: datasetItemIds[i % datasetItemIds.length],
+            traceId,
+          })),
         );
+
+        trials.push({
+          label: isBaseline ? 'Baseline' : `Trial #${t}`,
+          experimentId,
+          traceIds,
+        });
       }
-      await safe(`optimization ${optimizationId}`, () =>
-        backendClient.deleteOptimization(optimizationId),
-      );
-      const allTraceIds = [...trials.flatMap((t) => t.traceIds), ...decoyTraceIds];
-      await safe(`${allTraceIds.length} traces`, () =>
-        backendClient.deleteTraces(allTraceIds),
-      );
-      await safe(`dataset ${datasetName}`, () => backendClient.deleteDataset(dataset.id));
+
+      decoyTraceIds.push(...(await seedTraces('decoy', DECOY_TRACE_COUNT)));
+
+      ref = {
+        optimizationId,
+        datasetId,
+        datasetName,
+        datasetItemIds,
+        projectId: project.id,
+        projectName: project.name,
+        trials,
+        decoyTraceIds,
+      };
+      await testInfo.attach('opik.optimizationRun', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
+      });
+
+      await use(ref);
+    } finally {
+      // A fully built fixture follows shouldLeaveArtifacts (keep failed-test
+      // resources for debugging); a partially built one is garbage the
+      // run-prefix sweep in global-teardown cannot see, so it is always removed.
+      if (ref === null || !shouldLeaveArtifacts(testInfo)) {
+        for (const trial of trials) {
+          await safe(`experiment ${trial.experimentId}`, () =>
+            backendClient.deleteExperiment(trial.experimentId),
+          );
+        }
+        await safe(`optimization ${optimizationId}`, () =>
+          backendClient.deleteOptimization(optimizationId),
+        );
+        await safe(`${allTraceIds.length} traces`, () =>
+          backendClient.deleteTraces(allTraceIds),
+        );
+        if (datasetId !== null) {
+          const id = datasetId;
+          await safe(`dataset ${datasetName}`, () =>
+            backendClient.deleteDataset(id),
+          );
+        }
+      }
     }
   },
 });
