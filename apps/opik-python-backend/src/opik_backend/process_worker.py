@@ -267,6 +267,28 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
+def user_facing_stacktrace(skip_frames: int = 1) -> str:
+    """Format the current exception with this module's own frames dropped.
+
+    Walks frames rather than slicing a fixed number of leading lines, so the
+    exception line survives however short the traceback is. A failure raised while
+    binding the call arguments has no user frame at all, so a fixed slice could
+    remove the message itself and report a cause of "".
+    """
+    exc_type, exc, tb = sys.exc_info()
+    for _ in range(skip_frames):
+        if tb is None:
+            break
+        tb = tb.tb_next
+    # The exception leads because the caller truncates this message to its first 500
+    # characters, so frames are what gets lost on a deep traceback, not the cause.
+    # format_exception_only rather than slicing the formatted list: for a SyntaxError
+    # the first entry is the offending location, not a header.
+    cause = "".join(traceback.format_exception_only(exc_type, exc)).rstrip()
+    frames = "".join(traceback.format_tb(tb)).rstrip()
+    return f"{cause}\n{frames}" if frames else cause
+
+
 def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
     """
     Run the scoring logic with the provided code and data.
@@ -277,7 +299,7 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
     try:
         exec(code, module.__dict__)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        stacktrace = user_facing_stacktrace()
         return {
             "code": 400,
             "error": f"Field 'code' contains invalid Python code: {stacktrace}",
@@ -301,7 +323,7 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
             # Regular scoring - unpack data as keyword arguments
             score_result = metric.score(**data)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        stacktrace = user_facing_stacktrace()
         return {
             "code": 400,
             "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}",
@@ -383,6 +405,61 @@ def validate_user_code(code: str) -> dict:
         "accepts_var_keyword": _score_accepts_var_keyword_ast(metric_class),
         "score_params": _score_params_ast(metric_class),
     }
+
+
+def required_score_params(code: str) -> List[str]:
+    """``score()`` parameters with no default that can be passed by keyword.
+
+    Static because this runs before any user code does, and outside the sandbox:
+    the metric object is never constructed here. Returns nothing whenever the class
+    this reads cannot be shown to be the one :func:`get_metric_class` will
+    instantiate -- filling from a different class injects a keyword the real metric
+    rejects, which is worse than not filling at all. The sandbox runner's selection
+    lacks the ``__module__`` filter, so there an imported metric can still be the one
+    instantiated; the opik SDK's metrics take ``**ignored_kwargs``, which absorbs it.
+
+    That covers three ways of being unsure. No class resolves statically, so there
+    is nothing to read; one resolves but another class sorts ahead of it and could
+    be a metric through a base this cannot see, in which case runtime picks that
+    one; or the resolved class inherits ``score()`` rather than declaring it, which
+    would mean reproducing the MRO from source.
+
+    The receiver is dropped by position rather than by the name ``self``, which is
+    only a convention: filling it would make the call pass two values for the same
+    parameter. Positional-only parameters are excluded because ``score(**data)``
+    cannot supply them at all.
+    """
+    try:
+        tree = ast.parse(code)
+    except Exception:
+        # Anything unparseable yields no names, so the call dispatches exactly as it
+        # would have. Deliberately broad: this runs in the request thread, ahead of
+        # the executor, and `code` is untyped JSON.
+        return []
+    metric_class = _find_basemetric_classdef(tree)
+    if metric_class is None:
+        return []
+    # Any earlier-sorting class with a base may be a metric through it, and would be
+    # the one runtime instantiates. One with no bases at all cannot be a metric.
+    for node in _top_level_classdefs(tree):
+        if node.name < metric_class.name and node.bases:
+            return []
+    score = _score_funcdef(metric_class)
+    if score is None:
+        return []
+    # posonlyargs precede args; the receiver is the first of the two combined.
+    positional = score.args.posonlyargs + score.args.args
+    fillable = positional[max(len(score.args.posonlyargs), 1):]
+    # Defaults align to the tail and may cover the receiver too, so this can go
+    # negative -- which as a slice bound would keep the wrong prefix.
+    required = fillable[: max(0, len(fillable) - len(score.args.defaults))]
+    names = [a.arg for a in required]
+    names += [
+        a.arg
+        for a, default in zip(score.args.kwonlyargs, score.args.kw_defaults)
+        if default is None
+    ]
+    return names
 
 
 def worker_process_main(connection):
