@@ -2398,7 +2398,7 @@ def test_track__generator_closed__underlying_generator_cleanup_runs(fake_backend
 
 
 @pytest.mark.asyncio
-async def test_track__async_generator_aclosed__underlying_generator_cleanup_runs(
+async def test_track__async_generator_closed__underlying_generator_cleanup_runs(
     fake_backend,
 ):
     # The async half of the same contract, driven through `aclose()` rather than
