@@ -1635,8 +1635,9 @@ def test_tracker__ignore_list_was_passed__arguments_passed_through_kwargs_are_no
     tracker.flush_tracker()
 
     assert len(fake_backend.trace_trees) == 1
-    span_input = fake_backend.trace_trees[0].spans[0].input
-    assert span_input == {"prompt": "hi", "kwargs": {"temperature": 0}}
+    expected_input = {"prompt": "hi", "kwargs": {"temperature": 0}}
+    assert fake_backend.trace_trees[0].input == expected_input
+    assert fake_backend.trace_trees[0].spans[0].input == expected_input
     assert call_kwargs == {"api_key": "sk-secret", "temperature": 0}
 
 
