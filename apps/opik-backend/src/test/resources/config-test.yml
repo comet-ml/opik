@@ -690,6 +690,11 @@ cacheManager:
     # Default: {}
     # Description: Dynamically created caches with their respective time to live in seconds
     testCache: PT1S
+    # Default: PT10S
+    # Description: Cache TTL for the compare-view target projects, whose answer doesn't depend on page/size.
+    # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
+    # survive a single read.
+    experiment_compare_target_projects: PT10S
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
