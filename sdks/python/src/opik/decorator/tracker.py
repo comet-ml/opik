@@ -21,15 +21,27 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        input = (
-            inspect_helpers.extract_inputs(func, args, kwargs)
-            if track_options.capture_input
-            else None
-        )
+        input: Optional[Dict[str, Any]] = None
+        var_keyword_key: Optional[str] = None
+        if track_options.capture_input:
+            input, var_keyword_key = inspect_helpers.extract_inputs_and_var_keyword_key(
+                func, args, kwargs
+            )
 
         if input is not None and track_options.ignore_arguments is not None:
-            for argument in track_options.ignore_arguments:
+            ignored = set(track_options.ignore_arguments)
+            for argument in ignored:
                 input.pop(argument, None)
+
+            # Arguments passed through **kwargs are captured as one nested dict. Build
+            # a filtered copy rather than popping, since on the unbound fallback path
+            # it is the wrapper's own kwargs, which is then used to call the function.
+            if var_keyword_key is not None:
+                nested = input.get(var_keyword_key)
+                if isinstance(nested, dict) and ignored & nested.keys():
+                    input[var_keyword_key] = {
+                        k: v for k, v in nested.items() if k not in ignored
+                    }
 
         name = (
             track_options.name
