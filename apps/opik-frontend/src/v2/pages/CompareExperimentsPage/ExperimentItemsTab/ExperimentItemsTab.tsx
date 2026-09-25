@@ -222,7 +222,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const columnPinning = useMemo<ColumnPinningState>(
     () => ({
-      left: [COLUMN_SELECT_ID],
+      left: [COLUMN_SELECT_ID, COLUMN_EXPERIMENT_NAME_ID],
       right: isTestSuite ? [COLUMN_PASSED_ID] : [],
     }),
     [isTestSuite],
@@ -641,6 +641,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         setExpandedCommentSections([String(idx)]);
       },
       columnsStatistic,
+      subRowHighlightColor: "var(--tag-lavender-bg)",
     }),
     [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
