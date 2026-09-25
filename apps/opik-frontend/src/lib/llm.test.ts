@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveTraceEvaluatorVariableDefault } from "./llm";
+import {
+  isInlineEntityPath,
+  resolveTraceEvaluatorVariableDefault,
+} from "./llm";
 import {
   RESERVED_SPAN_EVALUATOR_VARIABLES,
   RESERVED_SPAN_LLM_JUDGE_VARIABLES,
@@ -127,6 +130,53 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
         "",
         EVALUATORS_RULE_SCOPE.trace,
         RESERVED_TRACE_LLM_JUDGE_VARIABLES,
+      ),
+    ).toBe("");
+  });
+});
+
+describe("isInlineEntityPath", () => {
+  it("accepts the three root keys and paths under them", () => {
+    expect(isInlineEntityPath("input")).toBe(true);
+    expect(isInlineEntityPath("output.answer")).toBe(true);
+    expect(isInlineEntityPath("input.messages[0].content")).toBe(true);
+    expect(isInlineEntityPath("metadata[0]")).toBe(true);
+  });
+
+  it("rejects names that only look like a root key", () => {
+    expect(isInlineEntityPath("inputs")).toBe(false);
+    expect(isInlineEntityPath("context")).toBe(false);
+    expect(isInlineEntityPath("ground_truth")).toBe(false);
+  });
+});
+
+describe("resolveTraceEvaluatorVariableDefault inline paths", () => {
+  it("maps an inline path to itself on trace scope", () => {
+    expect(
+      resolveTraceEvaluatorVariableDefault(
+        "input.messages[0].content",
+        undefined,
+        EVALUATORS_RULE_SCOPE.trace,
+      ),
+    ).toBe("input.messages[0].content");
+  });
+
+  it("leaves a non-path variable for the user to map", () => {
+    expect(
+      resolveTraceEvaluatorVariableDefault(
+        "context",
+        undefined,
+        EVALUATORS_RULE_SCOPE.trace,
+      ),
+    ).toBe("");
+  });
+
+  it("never auto-maps on thread scope, where only {{context}} exists", () => {
+    expect(
+      resolveTraceEvaluatorVariableDefault(
+        "input",
+        undefined,
+        EVALUATORS_RULE_SCOPE.thread,
       ),
     ).toBe("");
   });

@@ -24,6 +24,7 @@ type FilterRowProps<TColumnData> = {
   filter: Filter;
   onRemove: (id: string) => void;
   onChange: (filter: Filter) => void;
+  RemoveIcon?: React.ComponentType<{ className?: string }>;
 };
 
 export const FilterRow = <TColumnData,>({
@@ -34,6 +35,7 @@ export const FilterRow = <TColumnData,>({
   disabledColumns,
   onRemove,
   onChange: onFilterChange,
+  RemoveIcon = X,
 }: FilterRowProps<TColumnData>) => {
   const onChange = useCallback(
     (newFilter: Filter) => {
@@ -113,8 +115,9 @@ export const FilterRow = <TColumnData,>({
             variant="minimal"
             size="icon-xs"
             onClick={() => onRemove(filter.id)}
+            aria-label="Delete filter"
           >
-            <X />
+            <RemoveIcon />
           </Button>
         </td>
       </tr>
