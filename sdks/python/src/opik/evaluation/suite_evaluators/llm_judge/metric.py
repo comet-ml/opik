@@ -11,9 +11,14 @@ from typing import Any, Dict, List, Optional, Union
 
 import tenacity
 
+from opik.decorator import error_info_collector
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result
-from opik.exceptions import EmptyLLMResponseError, LLMJudgeParseError
+from opik.exceptions import (
+    EmptyLLMResponseError,
+    EvaluationError,
+    LLMJudgeParseError,
+)
 
 from opik.evaluation.suite_evaluators import base
 from . import config as llm_judge_config
@@ -30,6 +35,27 @@ _RETRY_POLICY = tenacity.retry(
     before_sleep=tenacity.before_sleep_log(LOGGER, logging.WARNING),
     reraise=True,
 )
+
+
+def _build_failed_score_result(
+    name: str,
+    reason: str,
+    *,
+    category_name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> score_result.ScoreResult:
+    error = EvaluationError(reason)
+    return score_result.ScoreResult(
+        name=name,
+        value=0.0,
+        reason=reason,
+        category_name=category_name,
+        metadata={
+            **(metadata or {}),
+            "error_info": error_info_collector.collect(error),
+        },
+        scoring_failed=True,
+    )
 
 
 LLM_JUDGE_SYSTEM_PROMPT = """You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
@@ -321,6 +347,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 - name: The assertion text
                 - value: True if passed, False if failed
                 - reason: Explanation from the judge
+                Unsupported numeric schema items are retained as explicit failed
+                results with ``value=0.0`` and an unsupported-type reason.
         """
         assertions = self._get_supported_assertions()
         if not assertions and self._get_unsupported_schema_items():
@@ -400,6 +428,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         Returns:
             List[ScoreResult]: A list of ScoreResult objects, one per assertion.
+                Unsupported numeric schema items are retained as explicit failed
+                results with ``value=0.0`` and an unsupported-type reason.
         """
         assertions = self._get_supported_assertions()
         if not assertions and self._get_unsupported_schema_items():
@@ -480,23 +510,19 @@ class LLMJudge(base.BaseSuiteEvaluator):
                     results.append(next(supported_results_iter))
                 except StopIteration:
                     results.append(
-                        score_result.ScoreResult(
-                            name=item.description,
-                            value=0.0,
-                            reason="LLMJudge did not return a score for this assertion.",
+                        _build_failed_score_result(
+                            item.description,
+                            "LLMJudge did not return a score for this assertion.",
                             category_name="suite_assertion",
-                            scoring_failed=True,
                         )
                     )
             else:
                 results.append(
-                    score_result.ScoreResult(
-                        name=item.description,
-                        value=0.0,
-                        reason=reason,
+                    _build_failed_score_result(
+                        item.description,
+                        reason,
                         category_name="suite_assertion",
                         metadata={"unsupported_type": item.type},
-                        scoring_failed=True,
                     )
                 )
         return results
