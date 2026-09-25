@@ -33,13 +33,13 @@ ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
 
 # Copy custom Nginx configuration
-COPY --chown=nginx:nginx nginx /etc/nginx
+COPY --chown=1001:1001 nginx /etc/nginx
 
 # Copy entrypoint script to the docker-entrypoint.d directory so it runs automatically
 COPY --chmod=0755 patch-nginx.conf.sh /docker-entrypoint.d/99-patch-nginx.conf.sh
       
 # Fix permissions
-RUN chown -R nginx:nginx /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d \
+RUN chown -R 1001:1001 /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d \
  && rm -f /var/log/nginx/access.log /var/log/nginx/error.log
 
 # Copy the built files from the builder stage
@@ -47,4 +47,4 @@ COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
 EXPOSE 5173
 
-USER nginx:nginx
+USER 1001:1001

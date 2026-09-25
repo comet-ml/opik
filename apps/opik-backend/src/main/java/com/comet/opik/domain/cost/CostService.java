@@ -58,7 +58,27 @@ public class CostService {
             Map.entry("snowflake", "snowflake"),
             Map.entry("deepinfra", "deepinfra"),
             Map.entry("cerebras", "cerebras"),
-            Map.entry("typesafe", "typesafe"));
+            Map.entry("typesafe", "typesafe"),
+            Map.entry("hyperbolic", "hyperbolic"),
+            Map.entry("baseten", "baseten"),
+            Map.entry("lambda_ai", "lambda_ai"),
+            Map.entry("nscale", "nscale"),
+            Map.entry("oci", "oci"),
+            Map.entry("replicate", "replicate"),
+            Map.entry("watsonx", "watsonx"),
+            Map.entry("cohere", "cohere"),
+            Map.entry("cohere_chat", "cohere"),
+            Map.entry("novita", "novita"),
+            Map.entry("cloudflare", "cloudflare"),
+            Map.entry("anyscale", "anyscale"),
+            Map.entry("scaleway", "scaleway"),
+            Map.entry("ovhcloud", "ovhcloud"),
+            Map.entry("gmi", "gmi"),
+            Map.entry("gradient_ai", "gradient_ai"),
+            Map.entry("libertai", "libertai"),
+            Map.entry("azure_ai", "azure_ai"),
+            Map.entry("vercel_ai_gateway", "vercel_ai_gateway"),
+            Map.entry("openrouter", "openrouter"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider

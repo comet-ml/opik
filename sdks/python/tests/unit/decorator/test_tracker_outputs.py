@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import gc
 import functools
 import threading
@@ -2449,3 +2450,44 @@ def test_track__generator_cleanup_raises_on_close__error_recorded_on_span(fake_b
     assert trace.error_info["exception_type"] == "ValueError"
     assert trace.error_info["message"] == "cleanup failed"
     assert trace.spans[0].error_info["exception_type"] == "ValueError"
+
+
+def test_track__slots_dataclass_input_and_output__encoded_as_dicts(fake_backend):
+    @dataclasses.dataclass(slots=True)
+    class Point:
+        x: int
+        y: int
+
+    @tracker.track
+    def f(p):
+        return Point(x=p.x + 2, y=p.y + 2)
+
+    f(Point(x=1, y=2))
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"p": {"x": 1, "y": 2}},
+        output={"output": {"x": 3, "y": 4}},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"p": {"x": 1, "y": 2}},
+                output={"output": {"x": 3, "y": 4}},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

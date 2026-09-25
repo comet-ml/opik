@@ -1,11 +1,12 @@
 import base64
 import dataclasses
 import datetime as dt
+import functools
 import logging
 from enum import Enum
 from pathlib import PurePath
 from types import GeneratorType
-from typing import Any, Callable, Optional, Set, Tuple, Type
+from typing import Any, Callable, Dict, Optional, Set, Tuple, Type
 
 import pydantic
 
@@ -34,7 +35,11 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
     if seen is None:
         seen = set()
 
-    if hasattr(obj, "__dict__"):
+    is_dataclass = dataclasses.is_dataclass(obj)
+    # slots=True dataclass instances have no __dict__, or only a partial one
+    # inherited from a non-slots base, but are still encoded recursively.
+    track_cycles = is_dataclass or hasattr(obj, "__dict__")
+    if track_cycles:
         obj_id = id(obj)
         if obj_id in seen:
             LOGGER.debug(f"Found cyclic reference to {type(obj).__name__} id={obj_id}")
@@ -46,8 +51,12 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             if isinstance(obj, type_):
                 return encode(encoder(obj), seen)
 
-        if dataclasses.is_dataclass(obj):
-            obj_dict = obj.__dict__
+        if is_dataclass:
+            obj_dict = getattr(obj, "__dict__", {})
+            if not isinstance(obj, type):
+                slot_values = _slot_field_values(obj)
+                if slot_values:
+                    obj_dict = {**slot_values, **obj_dict}
             return encode(obj_dict, seen)
 
         if isinstance(obj, pydantic.BaseModel):
@@ -77,6 +86,9 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             for key, value in obj.items():
                 if key in allowed_keys:
                     encoded_key = encode(key, seen)
+                    if isinstance(encoded_key, dict):
+                        # Hashable dataclass keys encode to a dict, which cannot be a key.
+                        encoded_key = str(key)
                     encoded_value = encode(value, seen)
                     encoded_dict[encoded_key] = encoded_value
             return encoded_dict
@@ -99,7 +111,7 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
     finally:
         # Once done encoding this object, remove from `seen`,
         # so the same object can appear again at a sibling branch.
-        if hasattr(obj, "__dict__"):
+        if track_cycles:
             obj_id = id(obj)
             seen.remove(obj_id)
 
@@ -118,3 +130,30 @@ def _is_pydantic_iterator_validator(obj: Any) -> bool:
         return True
 
     return False
+
+
+@functools.lru_cache
+def _slot_backed_fields(cls: type) -> Tuple[dataclasses.Field, ...]:
+    slot_names: Set[str] = set()
+    for klass in cls.__mro__:
+        slots = klass.__dict__.get("__slots__", ())
+        slot_names.update([slots] if isinstance(slots, str) else slots)
+    return tuple(field for field in dataclasses.fields(cls) if field.name in slot_names)
+
+
+def _slot_field_values(obj: Any) -> Dict[str, Any]:
+    # Slot-backed fields are not stored in __dict__, so they are read one by one.
+    values = {}
+    obj_type: type = type(obj)
+    for field in _slot_backed_fields(obj_type):
+        try:
+            value = getattr(obj, field.name)
+        except AttributeError:
+            continue
+        # A plain dataclass keeps an init=False default on the class, so it is
+        # absent from the instance __dict__ until reassigned; slots=True stores
+        # it per instance. Skipping it keeps both variants encoding the same.
+        if not field.init and value is field.default:
+            continue
+        values[field.name] = value
+    return values
