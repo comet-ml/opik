@@ -5,6 +5,8 @@ import { z } from "zod";
 import get from "lodash/get";
 
 import { cn } from "@/lib/utils";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 
 import { Button } from "@/ui/button";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
@@ -253,6 +255,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     useAnnotationQueueUpdateMutation();
   const isSubmitting = isCreatePending || isUpdatePending;
 
+  const isAutomationEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
+  );
   const automationEnabled = form.watch("automation_enabled");
   const capEnabled = form.watch("automation_cap_enabled");
   const capError = get(
@@ -289,23 +294,27 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       name: formData.name.trim(),
       project_id: formData.project_id,
       lock_timeout_seconds: lock_timeout_minutes * 60,
-      automation: {
-        enabled: automation_enabled,
-        max_items_in_queue: automation_cap_enabled
-          ? Number(automation_max_items)
-          : null,
-        conditions: {
-          groups: automation_groups.map((group) => ({
-            conditions: group.conditions.map((condition) => ({
-              score_name: condition.name,
-              operator: condition.operator,
-              value: Number(condition.threshold),
-            })),
-          })),
-        },
-      },
+      // Omitted while the feature is off: the API reads an absent automation as "leave what is
+      // stored alone", so editing a queue cannot silently drop one the UI never showed.
+      automation: isAutomationEnabled
+        ? {
+            enabled: automation_enabled,
+            max_items_in_queue: automation_cap_enabled
+              ? Number(automation_max_items)
+              : null,
+            conditions: {
+              groups: automation_groups.map((group) => ({
+                conditions: group.conditions.map((condition) => ({
+                  score_name: condition.name,
+                  operator: condition.operator,
+                  value: Number(condition.threshold),
+                })),
+              })),
+            },
+          }
+        : undefined,
     };
-  }, [form]);
+  }, [form, isAutomationEnabled]);
 
   const onQueueCreatedEdited = useCallback(
     (queue: Partial<AnnotationQueue>) => {
@@ -560,139 +569,147 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   )}
                 />
               </div>
-              <Separator orientation="horizontal" className="my-1" />
-              <div className="overflow-hidden rounded-md border border-border bg-soft-background">
-                <div
-                  className={cn(
-                    // pb is 1px under the p-3 the note states, because that is what the frame
-                    // renders: its card is 71px, where 12px all round sums to 72.
-                    "flex flex-col gap-1.5 p-3 pb-[11px] pl-[13px]",
-                    automationEnabled && "border-b border-border",
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-5 items-center justify-center rounded-[4px] bg-lime-400 px-1">
-                      <AutomationZapIcon className="text-black" />
-                    </span>
-                    <span className="comet-body-s-accented">Automation</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="comet-body-s min-w-0 flex-1">
-                      Set conditions to automatically add matching{" "}
-                      {isThreadScope ? "threads" : "traces"} to this queue
-                    </div>
-                    <FormField
-                      control={form.control}
-                      name="automation_enabled"
-                      render={({ field }) => (
-                        <FormItem className="shrink-0">
-                          <FormControl>
-                            <Switch
-                              size="xs"
-                              // The frame's switch is a 24x14 track with a 12px thumb, 1px of
-                              // padding and a #cbd5e1 off state; the nearest stock variant is
-                              // 28x16 on --light-slate, so track, padding, thumb travel
-                              // (24 - 12 - 2) and the off colour are all set here.
-                              className="h-[14px] w-6 border data-[state=unchecked]:bg-slate-300 [&>span]:size-3 [&>span]:data-[state=checked]:translate-x-[10px]"
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                              aria-label="Enable automation"
-                            />
-                          </FormControl>
-                        </FormItem>
+              {isAutomationEnabled && (
+                <>
+                  <Separator orientation="horizontal" className="my-1" />
+                  <div className="overflow-hidden rounded-md border border-border bg-soft-background">
+                    <div
+                      className={cn(
+                        // pb is 1px under the p-3 the note states, because that is what the frame
+                        // renders: its card is 71px, where 12px all round sums to 72.
+                        "flex flex-col gap-1.5 p-3 pb-[11px] pl-[13px]",
+                        automationEnabled && "border-b border-border",
                       )}
-                    />
-                  </div>
-                </div>
-                {automationEnabled && (
-                  <div className="p-3 pl-[13px]">
-                    <FeedbackScoreConditions
-                      form={form}
-                      groupsPath="automation_groups"
-                      scoreSource={
-                        isThreadScope ? ScoreSource.THREADS : ScoreSource.TRACES
-                      }
-                      projectId={projectId}
-                      // The design offers > and < only. The schema still accepts "=", which the API
-                      // supports, so a condition saved through the API keeps validating.
-                      operators={[...OPERATOR_VALUES]}
-                      // One AND-ed list only: the API accepts OR-ed groups, but the UI does not offer
-                      // them for now.
-                      singleGroup
-                      addConditionLabel="Add score"
-                      maxConditionsPerGroup={
-                        AUTOMATION_MAX_CONDITIONS_PER_GROUP
-                      }
-                      groupIconClassName="bg-lime-400"
-                      minimumMessage="Can't remove — automation needs at least one condition."
-                    />
-                    {automationGroupsError && (
-                      <p className="comet-body-s mt-1.5 px-0.5 text-destructive">
-                        {automationGroupsError}
-                      </p>
-                    )}
-                    <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 items-center justify-center rounded-[4px] bg-lime-400 px-1">
+                          <AutomationZapIcon className="text-black" />
+                        </span>
+                        <span className="comet-body-s-accented">
+                          Automation
+                        </span>
+                      </div>
                       <div className="flex items-center gap-1.5">
+                        <div className="comet-body-s min-w-0 flex-1">
+                          Set conditions to automatically add matching{" "}
+                          {isThreadScope ? "threads" : "traces"} to this queue
+                        </div>
                         <FormField
                           control={form.control}
-                          name="automation_cap_enabled"
+                          name="automation_enabled"
                           render={({ field }) => (
-                            <FormItem className="flex-row items-center gap-1.5">
+                            <FormItem className="shrink-0">
                               <FormControl>
-                                <Checkbox
-                                  id="automation-cap-enabled"
+                                <Switch
+                                  size="xs"
+                                  // The frame's switch is a 24x14 track with a 12px thumb, 1px of
+                                  // padding and a #cbd5e1 off state; the nearest stock variant is
+                                  // 28x16 on --light-slate, so track, padding, thumb travel
+                                  // (24 - 12 - 2) and the off colour are all set here.
+                                  className="h-[14px] w-6 border data-[state=unchecked]:bg-slate-300 [&>span]:size-3 [&>span]:data-[state=checked]:translate-x-[10px]"
                                   checked={field.value}
-                                  onCheckedChange={(checked) =>
-                                    field.onChange(checked === true)
-                                  }
-                                />
-                              </FormControl>
-                              <FormLabel
-                                htmlFor="automation-cap-enabled"
-                                className="comet-body-s cursor-pointer font-normal"
-                              >
-                                Cap automatically added items at
-                              </FormLabel>
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="automation_max_items"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <Input
-                                  {...field}
-                                  type="number"
-                                  min={1}
-                                  step={1}
-                                  dimension="xs"
-                                  disabled={!capEnabled}
-                                  aria-label="Cap automatically added items at"
-                                  className={cn(
-                                    "w-[87px] text-right",
-                                    capError && "border-destructive",
-                                  )}
+                                  onCheckedChange={field.onChange}
+                                  aria-label="Enable automation"
                                 />
                               </FormControl>
                             </FormItem>
                           )}
                         />
                       </div>
-                      <p className="comet-body-xs pl-[22px] text-light-slate">
-                        Automation stops adding once the queue holds this many
-                        items. Adding by hand is unaffected.
-                      </p>
-                      {capError && (
-                        <p className="comet-body-xs pl-[26px] text-destructive">
-                          {capError}
-                        </p>
-                      )}
                     </div>
+                    {automationEnabled && (
+                      <div className="p-3 pl-[13px]">
+                        <FeedbackScoreConditions
+                          form={form}
+                          groupsPath="automation_groups"
+                          scoreSource={
+                            isThreadScope
+                              ? ScoreSource.THREADS
+                              : ScoreSource.TRACES
+                          }
+                          projectId={projectId}
+                          // The design offers > and < only. The schema still accepts "=", which the API
+                          // supports, so a condition saved through the API keeps validating.
+                          operators={[...OPERATOR_VALUES]}
+                          // One AND-ed list only: the API accepts OR-ed groups, but the UI does not offer
+                          // them for now.
+                          singleGroup
+                          addConditionLabel="Add score"
+                          maxConditionsPerGroup={
+                            AUTOMATION_MAX_CONDITIONS_PER_GROUP
+                          }
+                          groupIconClassName="bg-lime-400"
+                          minimumMessage="Can't remove — automation needs at least one condition."
+                        />
+                        {automationGroupsError && (
+                          <p className="comet-body-s mt-1.5 px-0.5 text-destructive">
+                            {automationGroupsError}
+                          </p>
+                        )}
+                        <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
+                          <div className="flex items-center gap-1.5">
+                            <FormField
+                              control={form.control}
+                              name="automation_cap_enabled"
+                              render={({ field }) => (
+                                <FormItem className="flex-row items-center gap-1.5">
+                                  <FormControl>
+                                    <Checkbox
+                                      id="automation-cap-enabled"
+                                      checked={field.value}
+                                      onCheckedChange={(checked) =>
+                                        field.onChange(checked === true)
+                                      }
+                                    />
+                                  </FormControl>
+                                  <FormLabel
+                                    htmlFor="automation-cap-enabled"
+                                    className="comet-body-s cursor-pointer font-normal"
+                                  >
+                                    Cap automatically added items at
+                                  </FormLabel>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="automation_max_items"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      type="number"
+                                      min={1}
+                                      step={1}
+                                      dimension="xs"
+                                      disabled={!capEnabled}
+                                      aria-label="Cap automatically added items at"
+                                      className={cn(
+                                        "w-[87px] text-right",
+                                        capError && "border-destructive",
+                                      )}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          <p className="comet-body-xs pl-[22px] text-light-slate">
+                            Automation stops adding once the queue holds this
+                            many items. Adding by hand is unaffected.
+                          </p>
+                          {capError && (
+                            <p className="comet-body-xs pl-[26px] text-destructive">
+                              {capError}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </form>
           </Form>
         </div>
