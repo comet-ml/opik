@@ -86,10 +86,17 @@ class BERTScore(base_metric.BaseMetric):
             if isinstance(reference, Sequence) and len(reference) == 0:
                 raise MetricComputationError("Reference is empty (BERTScore metric).")
             ref_strings = [ref for ref in reference if isinstance(ref, str)]
-            if len(ref_strings) == len(reference):
+            if len(ref_strings) == len(reference) and len(reference) > 1:
                 # Several references for the single output. bert_score expects one
                 # entry per candidate and scores against the best one in a group.
                 references = [ref_strings]
+            elif 0 < len(ref_strings) < len(reference):
+                other = next(ref for ref in reference if not isinstance(ref, str))
+                raise MetricComputationError(
+                    "Reference mixes strings with "
+                    f"{type(other).__name__} elements (BERTScore metric). Pass "
+                    "either a list of strings or a list of lists of strings."
+                )
             else:
                 references = reference
 

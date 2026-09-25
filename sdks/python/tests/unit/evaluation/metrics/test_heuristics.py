@@ -611,6 +611,7 @@ def test_bertscore_with_stubbed_fn():
     [
         (["hi there", "hello"], [["hi there", "hello"]]),
         ([["hi there", "hello"]], [["hi there", "hello"]]),
+        (["hello"], ["hello"]),
     ],
 )
 def test_bertscore__multiple_references__passed_as_one_group(reference, expected_refs):
@@ -626,6 +627,15 @@ def test_bertscore__multiple_references__passed_as_one_group(reference, expected
     result = metric.score(output="hello", reference=reference)
 
     assert result.value == pytest.approx(0.77)
+
+
+def test_bertscore__mixed_reference_list__raises_metric_error():
+    def scorer(cands, refs):
+        raise AssertionError("scorer should not be called")
+
+    metric = BERTScore(scorer_fn=scorer, track=False)
+    with pytest.raises(MetricComputationError, match="list"):
+        metric.score(output="hello", reference=["hi there", ["hello"]])
 
 
 def test_bertscore_rejects_empty_candidate():
