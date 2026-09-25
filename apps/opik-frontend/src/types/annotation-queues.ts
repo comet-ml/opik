@@ -36,7 +36,8 @@ export interface AnnotationQueueConditionGroup {
  */
 export interface AnnotationQueueAutomation {
   enabled: boolean;
-  conditions: {
+  /** Absent means "leave the stored conditions alone", which is what a toggle-only request sends. */
+  conditions?: {
     groups: AnnotationQueueConditionGroup[];
   };
   /** Automation stops adding once the queue holds this many items; null or absent means no ceiling. */

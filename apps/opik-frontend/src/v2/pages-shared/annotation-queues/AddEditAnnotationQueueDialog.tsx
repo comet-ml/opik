@@ -52,12 +52,10 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
-// The value the cap field shows before anyone types: the design's 1,000. The cap itself is opt-in.
 const DEFAULT_AUTOMATION_MAX_ITEMS = 1000;
 
 const QUEUE_DOCS_LINK = buildDocsUrl("/evaluation/advanced/annotation_queues");
 
-// The design's labels sit 2px in from the field edge with 2px beneath, making a 22px label box.
 const LABEL_CLASS = "px-0.5 pb-0.5";
 
 const SCOPE_OPTIONS = [
@@ -196,7 +194,6 @@ type AddEditAnnotationQueueDialogProps = {
   projectId: string;
   scope?: ANNOTATION_QUEUE_SCOPE;
   queue?: AnnotationQueue;
-  /** Start with automation switched on — used when the form is opened from the 'Add automation' menu. */
 };
 
 const AddEditAnnotationQueueDialog: React.FunctionComponent<
@@ -231,8 +228,6 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       automation_enabled: defaultQueue?.automation?.enabled ?? false,
       // conditions is nullable on the backend: a toggle-off request keeps them server-side but a
       // queue can still arrive with automation and no conditions.
-      // The cap is opt-in, per the design. An existing queue reflects what it has: checked with its
-      // value, or unchecked with the default shown greyed out.
       automation_cap_enabled:
         defaultQueue?.automation?.max_items_in_queue != null,
       automation_max_items: String(
@@ -297,24 +292,28 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       project_id: formData.project_id,
       lock_timeout_seconds: lock_timeout_minutes * 60,
       // Omitted while the feature is off: the API reads an absent automation as "leave what is
-      // stored alone", so editing a queue cannot silently drop one the UI never showed.
-      automation: isAutomationEnabled
-        ? {
-            enabled: automation_enabled,
-            max_items_in_queue: automation_cap_enabled
-              ? Number(automation_max_items)
-              : null,
-            conditions: {
-              groups: automation_groups.map((group) => ({
-                conditions: group.conditions.map((condition) => ({
-                  score_name: condition.name,
-                  operator: condition.operator,
-                  value: Number(condition.threshold),
+      // stored alone", so editing a queue cannot silently drop one the UI never showed. Switched off,
+      // only the switch travels — the form still holds a blank condition row to render, and sending it
+      // would overwrite the queue's stored conditions with an empty score name.
+      automation: !isAutomationEnabled
+        ? undefined
+        : automation_enabled
+          ? {
+              enabled: true,
+              max_items_in_queue: automation_cap_enabled
+                ? Number(automation_max_items)
+                : null,
+              conditions: {
+                groups: automation_groups.map((group) => ({
+                  conditions: group.conditions.map((condition) => ({
+                    score_name: condition.name,
+                    operator: condition.operator,
+                    value: Number(condition.threshold),
+                  })),
                 })),
-              })),
-            },
-          }
-        : undefined,
+              },
+            }
+          : { enabled: false },
     };
   }, [form, isAutomationEnabled]);
 
@@ -446,8 +445,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                             key={option.value}
                             value={option.value}
                             size="sm"
-                            // bg-muted is this theme's #F1F5F9 — the design's active fill — and it
-                            // follows dark mode, which a literal hex would not.
+                            // bg-muted is the design's active fill and follows dark mode.
                             className="comet-body-xs h-[22px] flex-1 hover:bg-upload-icon-bg data-[state=on]:bg-muted data-[state=on]:text-foreground"
                           >
                             {option.label}
@@ -577,8 +575,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   <div className="overflow-hidden rounded-md border border-border bg-soft-background">
                     <div
                       className={cn(
-                        // pb is 1px under the p-3 the note states, because that is what the frame
-                        // renders: its card is 71px, where 12px all round sums to 72.
+                        // pb is 1px under p-3: what the frame actually renders.
                         "flex flex-col gap-1.5 p-3 pb-[11px] pl-[13px]",
                         automationEnabled && "border-b border-border",
                       )}
@@ -604,10 +601,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                               <FormControl>
                                 <Switch
                                   size="xs"
-                                  // The frame's switch is a 24x14 track with a 12px thumb, 1px of
-                                  // padding and a #cbd5e1 off state; the nearest stock variant is
-                                  // 28x16 on --light-slate, so track, padding, thumb travel
-                                  // (24 - 12 - 2) and the off colour are all set here.
+                                  // The frame's switch is 24x14 with a 12px thumb; the nearest stock variant
+                                  // is 28x16, so track, thumb travel and off colour are set here.
                                   className="h-[14px] w-6 border data-[state=unchecked]:bg-slate-300 [&>span]:size-3 [&>span]:data-[state=checked]:translate-x-[10px]"
                                   checked={field.value}
                                   onCheckedChange={field.onChange}

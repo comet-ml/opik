@@ -3,12 +3,8 @@ import React from "react";
 /**
  * The zap glyph from the design, used on the automation tag.
  *
- * lucide's Zap is a stroked bolt with a different silhouette, and filling its path still does not
- * reproduce this shape - so this is the design's own exported asset rather than an approximation. It is
- * the one place in the feature that does not use the project's icon set, and it exists because the
- * glyph sits inside a 20px tag where the difference is visible.
- *
- * Colour comes from currentColor so the tag controls it, unlike the export's hardcoded fill.
+ * The design's own asset rather than lucide's Zap, whose stroked silhouette is visibly different inside
+ * a 20px tag. Colour comes from currentColor so the tag controls it.
  */
 const AutomationZapIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg

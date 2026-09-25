@@ -126,6 +126,14 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     sortable: true,
   },
   ...SHARED_COLUMNS,
+  // Displayed only: the queues API has no automation filter field, so offering one would build a
+  // query it answers with a 400.
+  {
+    id: AUTOMATION_COLUMN_ID,
+    label: "Automation",
+    type: COLUMN_TYPE.category,
+    cell: AutomationCell as never,
+  },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Avg feedback scores",
@@ -155,12 +163,6 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     label: "Progress",
     type: COLUMN_TYPE.string,
     cell: AnnotationQueueProgressCell as never,
-  },
-  {
-    id: AUTOMATION_COLUMN_ID,
-    label: "Automation",
-    type: COLUMN_TYPE.category,
-    cell: AutomationCell as never,
   },
 ];
 
@@ -372,14 +374,6 @@ export const AnnotationQueuesPage: React.FC = () => {
     [isAutomationEnabled],
   );
 
-  const filterColumns = useMemo(
-    () =>
-      isAutomationEnabled
-        ? FILTER_COLUMNS
-        : FILTER_COLUMNS.filter((column) => column.id !== AUTOMATION_COLUMN_ID),
-    [isAutomationEnabled],
-  );
-
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<AnnotationQueue>(),
@@ -469,7 +463,7 @@ export const AnnotationQueuesPage: React.FC = () => {
                 dimension="sm"
               />
               <FiltersButton
-                columns={filterColumns}
+                columns={FILTER_COLUMNS}
                 config={FILTERS_CONFIG as never}
                 filters={filters}
                 onChange={setFilters}

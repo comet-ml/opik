@@ -6,9 +6,8 @@ import QueuePill from "@/v2/pages-shared/annotation-queues/QueuePill";
 import { AnnotationQueue } from "@/types/annotation-queues";
 
 /**
- * What a queue collects. Shares QueuePill with the Automation and Source columns, because the design
- * asks the three to read as the same kind of object - a gray tag beside a bordered pill would look
- * like two unrelated things in adjacent columns.
+ * What a queue collects. Shares QueuePill with the Automation and Source columns so the three read as
+ * the same kind of object.
  */
 const ScopeCell: React.FC<CellContext<AnnotationQueue, string>> = (context) => (
   <CellWrapper
