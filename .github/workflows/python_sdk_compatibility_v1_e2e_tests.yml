@@ -10,6 +10,8 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
+          - 'opik.sh'
+          - 'opik.ps1'
     push:
         branches:
           - 'main'
@@ -17,6 +19,8 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
+          - 'opik.sh'
+          - 'opik.ps1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -115,7 +119,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.1.0
 
         - name: Run latest Opik server
           env:

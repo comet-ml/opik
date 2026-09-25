@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -18,15 +19,20 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
+import com.comet.opik.domain.SpanDAO;
+import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Row;
@@ -38,6 +44,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -51,13 +58,16 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
@@ -109,6 +119,13 @@ class BulkInsertV2ClientIntegrationTest {
      */
     private static final Duration CLOCK_SKEW = Duration.ofMinutes(2);
 
+    /**
+     * A double whose shortest round-tripping decimal needs all 17 significant digits. Most randomly
+     * generated doubles need only 16 and survive a lossy 16-digit conversion unchanged, so pinning this
+     * is what makes the precision assertions meaningful rather than luck.
+     */
+    private static final double TTFT_17_DIGITS = 1.2583709557071319E9;
+
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysqlContainer = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
@@ -145,6 +162,9 @@ class BulkInsertV2ClientIntegrationTest {
     private ProjectResourceClient projectResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private DatasetResourceClient datasetResourceClient;
+    private SpanResourceClient spanResourceClient;
+    private TraceDAO traceDAO;
+    private SpanDAO spanDAO;
 
     @BeforeAll
     void beforeAll(ClientSupport clientSupport, FeedbackScoreDAO feedbackScoreDAO, Injector injector) {
@@ -152,6 +172,8 @@ class BulkInsertV2ClientIntegrationTest {
         // The shared template rather than a connection factory of our own, so the suite does not open and
         // close a connection per assertion.
         this.clickHouseTemplate = injector.getInstance(TransactionTemplateAsync.class);
+        this.traceDAO = injector.getInstance(TraceDAO.class);
+        this.spanDAO = injector.getInstance(SpanDAO.class);
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -159,6 +181,7 @@ class BulkInsertV2ClientIntegrationTest {
         projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
         datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
+        spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
     }
 
     private <T> T queryOne(String sql, Function<Row, T> mapper) {
@@ -578,5 +601,244 @@ class BulkInsertV2ClientIntegrationTest {
         assertThat((Instant) stamped[2]).isBetween(before, after);
         // Written as "" unconditionally, matching the binder -- not carried from the item.
         assertThat(stamped[3]).isEqualTo("");
+    }
+
+    @Test
+    @DisplayName("traces round-trip their tags, and an absent end_time and ttft stay null")
+    void tracesRoundTrip() {
+        // traceColumnsNonNullable is false in config-test.yml, so this covers the Nullable branch of
+        // end_time / ttft -- the state every install is in until that migration flips. The sentinel
+        // branch is not reachable from here (it needs a different app config), so it is covered by
+        // TraceJsonRowMapperTest instead.
+        var projectName = "v2-traces-" + RandomStringUtils.secure().nextAlphanumeric(12);
+
+        var traces = IntStream.range(0, 4)
+                .mapToObj(i -> {
+                    var trace = newTraceBuilder()
+                            .projectName(projectName)
+                            .tags(i == 3 ? null : Set.of("tag-" + i, "shared"))
+                            .build();
+                    // Half with both optional columns absent: they are Nullable here, so the mapper
+                    // writes an explicit JSON null and the read must give null back rather than an
+                    // epoch or a 0.0.
+                    // Pinned, as in spansRoundTrip: a random double usually needs only 16 significant
+                    // digits and would survive a lossy conversion unchanged, so it would not exercise
+                    // the precision the assertion below claims to check.
+                    return i % 2 == 0
+                            ? trace.toBuilder().endTime(null).ttft(null).build()
+                            : trace.toBuilder().ttft(TTFT_17_DIGITS).build();
+                })
+                .toList();
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+        var actual = traces.stream()
+                .map(trace -> traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY))
+                .toList();
+
+        // tags is excluded and compared as a set below: Array(String) keeps the order it was written in,
+        // and the source here is a Set, whose iteration order is not defined. Comparing the lists
+        // positionally passes or fails on that ordering rather than on anything the mapper controls.
+        var ignoredTraceFields = Stream
+                .concat(Arrays.stream(TraceAssertions.IGNORED_FIELDS_TRACES), Stream.of("tags"))
+                .toArray(String[]::new);
+
+        assertThat(actual)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredTraceFields)
+                .containsExactlyInAnyOrderElementsOf(traces);
+
+        // null and empty are the same cell: tags is a non-nullable Array(String), so an absent collection
+        // is written as [] and reads back as empty rather than null.
+        var actualTraceTags = actual.stream().collect(toMap(Trace::id,
+                trace -> new HashSet<>(Optional.ofNullable(trace.tags()).orElseGet(Set::of))));
+        var expectedTraceTags = traces.stream().collect(toMap(Trace::id,
+                trace -> new HashSet<>(Optional.ofNullable(trace.tags()).orElseGet(Set::of))));
+        assertThat(actualTraceTags).isEqualTo(expectedTraceTags);
+
+        // Asserted separately because the two are what the Nullable branch is about, and a mapper that
+        // wrote the sentinel instead would still satisfy the comparison above on every other field.
+        assertThat(actual).filteredOn(trace -> traces.stream()
+                .anyMatch(expected -> expected.id().equals(trace.id()) && expected.endTime() == null))
+                .isNotEmpty()
+                .allSatisfy(trace -> {
+                    assertThat(trace.endTime()).isNull();
+                    assertThat(trace.ttft()).isNull();
+                });
+
+        // Not vacuous: three of the four carry tags, so a mapper that dropped them would fail above.
+        assertThat(actualTraceTags.values().stream().filter(tags -> !tags.isEmpty())).hasSize(3);
+
+        // Same exactness requirement as spans: the trace mapper writes the decimal expansion, so the
+        // double comes back identical rather than 1 ULP away.
+        var expectedTraceTtft = traces.stream().filter(trace -> trace.ttft() != null)
+                .collect(toMap(Trace::id, Trace::ttft));
+        assertThat(expectedTraceTtft).isNotEmpty();
+        assertThat(actual).filteredOn(trace -> expectedTraceTtft.containsKey(trace.id()))
+                .allSatisfy(trace -> assertThat(trace.ttft()).isEqualTo(expectedTraceTtft.get(trace.id())));
+    }
+
+    @Test
+    @DisplayName("spans round-trip their usage map and cost, and an absent end_time and ttft stay null")
+    void spansRoundTrip() {
+        var projectName = "v2-spans-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var trace = newTraceBuilder().projectName(projectName).build();
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+        var cost = new BigDecimal("0.000000123456");
+        var spans = IntStream.range(0, 4)
+                .mapToObj(i -> {
+                    var span = factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .parentSpanId(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .errorInfo(null)
+                            // Supplied rather than computed, so total_estimated_cost_version must stay
+                            // empty -- the version is stamped only for a cost the DAO derived itself.
+                            .totalEstimatedCost(cost)
+                            .usage(Map.of("prompt_tokens", 11, "completion_tokens", 22))
+                            // One span with no metadata, so the absent case is actually exercised rather
+                            // than assumed: the mapper writes "" for it and the read path still folds in
+                            // provider, so the result is neither the input nor empty.
+                            .metadata(i == 1 ? null : factory.manufacturePojo(Span.class).metadata())
+                            .build();
+                    // Pinned rather than podam's: TTFT_17_DIGITS needs all 17 significant digits to
+                    // round-trip, so it is the value that actually exercises double precision. A random
+                    // one usually needs only 16 and passes either way.
+                    return i % 2 == 0
+                            ? span.toBuilder().endTime(null).ttft(null).build()
+                            : span.toBuilder().ttft(TTFT_17_DIGITS).build();
+                })
+                .toList();
+
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+        var actual = spans.stream()
+                .map(span -> spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY))
+                .toList();
+
+        // metadata is excluded on top of the shared list and asserted below instead: SpanDAO's READ path
+        // runs getMetadataWithProvider, which folds the span's provider into the metadata it returns. That
+        // enrichment is independent of the write path, so comparing metadata verbatim would fail on the
+        // R2DBC path too.
+        // tags joins metadata in the exclusions for the ordering reason given in tracesRoundTrip.
+        // ttft is NOT excluded: the mapper writes the exact decimal expansion of the double, so the
+        // stored Float64 is bit-for-bit what was handed in and plain equality is the right assertion.
+        // Writing Jackson's shortest form instead let ClickHouse's JSON parse land 1 ULP away.
+        //
+        // totalEstimatedCostVersion stays in the shared ignore list and is asserted separately below.
+        // It cannot be compared against the input: the version is the DAO's to decide, so podam's random
+        // value on the way in is meaningless -- the assertion worth making is what the DAO stored.
+        var ignored = Stream
+                .concat(Arrays.stream(SpanAssertions.IGNORED_FIELDS), Stream.of("metadata", "tags"))
+                .toArray(String[]::new);
+
+        assertThat(actual)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignored)
+                .containsExactlyInAnyOrderElementsOf(spans);
+
+        // The complete key set, not merely "every original key survived": the weaker check would pass a
+        // mapper that invented keys. The one addition the read path may make is `provider`, folded in by
+        // getMetadataWithProvider. Null-safe on both sides, since one span carries no metadata at all.
+        var expectedMetadata = spans.stream()
+                .collect(toMap(Span::id, span -> Optional.ofNullable(span.metadata())));
+        assertThat(actual).allSatisfy(span -> {
+            var original = expectedMetadata.get(span.id()).orElse(null);
+            var originalKeys = fieldNamesOf(original);
+            var allowedKeys = new HashSet<>(originalKeys);
+            allowedKeys.add("provider");
+
+            assertThat(fieldNamesOf(span.metadata()))
+                    .as("metadata keys for span '%s'", span.id())
+                    .isSubsetOf(allowedKeys)
+                    .containsAll(originalKeys);
+
+            originalKeys.forEach(field -> assertThat(span.metadata().get(field))
+                    .as("metadata field '%s'", field)
+                    .isEqualTo(original.get(field)));
+
+            // Allowing the key without checking its value would let a wrong enrichment through. Only
+            // asserted where the input did not already carry a `provider` of its own -- there the key is
+            // the input's and the read path does not own it.
+            if (!originalKeys.contains("provider")) {
+                assertThat(span.metadata().get("provider"))
+                        .as("provider enrichment for span '%s'", span.id())
+                        .isEqualTo(TextNode.valueOf(span.provider()));
+            }
+        });
+
+        assertThat(actual).allSatisfy(span -> {
+            // totalEstimatedCost and totalEstimatedCostVersion are both in IGNORED_FIELDS, so the
+            // comparison above never sees them -- and they are the two columns this path owns that no
+            // other slice has. Decimal128(12) written via toPlainString: compared by value, since the
+            // column's scale is not the BigDecimal's.
+            assertThat(span.totalEstimatedCost()).isEqualByComparingTo(cost);
+            // Map(String, Int64), the other span-only column shape.
+            assertThat(span.usage()).containsEntry("prompt_tokens", 11).containsEntry("completion_tokens", 22);
+        });
+
+        var actualSpanTags = actual.stream().collect(toMap(Span::id,
+                span -> new HashSet<>(Optional.ofNullable(span.tags()).orElseGet(Set::of))));
+        var expectedSpanTags = spans.stream().collect(toMap(Span::id,
+                span -> new HashSet<>(Optional.ofNullable(span.tags()).orElseGet(Set::of))));
+        assertThat(actualSpanTags).isEqualTo(expectedSpanTags);
+
+        // Bit-for-bit, not approximately: isEqualTo on Double compares the exact value, so a mapper that
+        // went back to the shortest-decimal form would fail here rather than pass within a tolerance.
+        var expectedTtft = spans.stream().filter(span -> span.ttft() != null)
+                .collect(toMap(Span::id, Span::ttft));
+        assertThat(expectedTtft).isNotEmpty();
+        assertThat(actual).filteredOn(span -> expectedTtft.containsKey(span.id()))
+                .allSatisfy(span -> assertThat(span.ttft()).isEqualTo(expectedTtft.get(span.id())));
+
+        // Supplied rather than DAO-derived, so no version is stamped. The stamping branch is
+        // deterministic and covered by SpanJsonRowMapperTest, which can set it directly.
+        assertThat(actual).allSatisfy(span -> assertThat(span.totalEstimatedCostVersion()).isNullOrEmpty());
+
+        // spanColumnsNonNullable is false here, so an absent end_time/ttft must read back as null rather
+        // than as the epoch or 0.0. The sentinel branch is covered by SpanJsonRowMapperTest.
+        assertThat(actual).filteredOn(span -> spans.stream()
+                .anyMatch(expected -> expected.id().equals(span.id()) && expected.endTime() == null))
+                .isNotEmpty()
+                .allSatisfy(span -> {
+                    assertThat(span.endTime()).isNull();
+                    assertThat(span.ttft()).isNull();
+                });
+    }
+
+    /**
+     * Field names of a {@link com.fasterxml.jackson.databind.JsonNode}, or an empty set when it is absent.
+     * Exists so the metadata assertions treat a null node and an empty object identically instead of
+     * throwing on the null.
+     */
+    private static Set<String> fieldNamesOf(com.fasterxml.jackson.databind.JsonNode node) {
+        var names = new HashSet<String>();
+        if (node != null) {
+            node.fieldNames().forEachRemaining(names::add);
+        }
+        return names;
+    }
+
+    // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
+    // throw when the Mono is assembled rather than deferring a failure into the reactive chain. Covered
+    // here rather than in the mapper tests because the guard is the DAO's, and it is the one place both
+    // write paths share.
+    @ParameterizedTest
+    @NullAndEmptySource
+    @DisplayName("a trace batch that is empty or absent is rejected before either write path is chosen")
+    void emptyOrAbsentTraceBatchIsRejected(List<Trace> traces) {
+        assertThatThrownBy(() -> traceDAO.batchInsert(traces))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("traces must not be empty");
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @DisplayName("a span batch that is empty or absent is rejected before either write path is chosen")
+    void emptyOrAbsentSpanBatchIsRejected(List<Span> spans) {
+        assertThatThrownBy(() -> spanDAO.batchInsert(spans))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Spans list must not be empty");
     }
 }

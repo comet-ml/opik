@@ -25,6 +25,8 @@ on:
           - 'sdks/python/**'
           - '.github/workflows/sdk-e2e-library-tests.yaml'
           - '.github/actions/install_opik_and_run_e2e_lib_integration_tests/**'
+          - 'opik.sh'
+          - 'opik.ps1'
     push:
         branches:
           - 'main'
@@ -32,6 +34,8 @@ on:
           - 'sdks/python/**'
           - '.github/workflows/sdk-e2e-library-tests.yaml'
           - '.github/actions/install_opik_and_run_e2e_lib_integration_tests/**'
+          - 'opik.sh'
+          - 'opik.ps1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -112,7 +116,7 @@ jobs:
           docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Install uv and set the Python version ${{ matrix.python_version }}
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: ${{ matrix.python_version }}
 
