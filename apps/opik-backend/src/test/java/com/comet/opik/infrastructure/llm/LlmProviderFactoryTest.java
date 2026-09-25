@@ -24,6 +24,7 @@ import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
@@ -37,11 +38,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -402,6 +405,40 @@ class LlmProviderFactoryTest {
 
         // Then
         assertThat(result).isEqualTo(LlmProvider.OPEN_ROUTER);
+    }
+
+    @ParameterizedTest
+    @EnumSource(OpenRouterDecisionModel.class)
+    @DisplayName("getLlmProvider returns OPEN_ROUTER for decisions models")
+    void testGetLlmProvider_returnsOpenRouter_forDecisionModels(OpenRouterDecisionModel model) {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        assertThat(llmProviderFactory.getLlmProvider(model.toString())).isEqualTo(LlmProvider.OPEN_ROUTER);
+    }
+
+    @Test
+    @DisplayName("getClientApiConfig returns the decrypted workspace key for the model's provider")
+    void testGetClientApiConfig_returnsDecryptedKey() {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        String workspaceId = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        when(llmProviderApiKeyService.findByProviders(workspaceId, Set.of(LlmProvider.OPEN_ROUTER)))
+                .thenReturn(List.of(ProviderApiKey.builder()
+                        .provider(LlmProvider.OPEN_ROUTER)
+                        .apiKey(EncryptionUtils.encrypt(apiKey))
+                        .headers(Map.of("X-Custom", "value"))
+                        .build()));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        var clientConfig = llmProviderFactory.getClientApiConfig(workspaceId,
+                OpenRouterDecisionModel.TYPESAFE_JEV_LATEST.toString());
+
+        assertThat(clientConfig.apiKey()).isEqualTo(apiKey);
+        assertThat(clientConfig.headers()).isEqualTo(Map.of("X-Custom", "value"));
+        assertThat(clientConfig.workspaceId()).isEqualTo(workspaceId);
     }
 
     // ========== Structured Output Strategy Tests ==========
