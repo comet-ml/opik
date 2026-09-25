@@ -51,9 +51,14 @@ export const useEntitySampleJson = ({
       };
     }
     if (fromDataset) {
-      return Object.fromEntries(
-        (datasetColumnNames ?? []).map((column) => [column, "…"]),
-      );
+      // Playground rules read dataset columns through the trace metadata.
+      return {
+        metadata: {
+          dataset_item_data: Object.fromEntries(
+            (datasetColumnNames ?? []).map((column) => [column, "…"]),
+          ),
+        },
+      };
     }
     const entity = data?.content?.[0];
     if (!entity) {

@@ -452,7 +452,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
           "{{input}}\n" +
           "\n" +
           "CONTEXT:\n" +
-          "{{context}}\n" +
+          "{{metadata.context}}\n" +
           "\n" +
           "OUTPUT:\n" +
           "{{output}}",
@@ -460,7 +460,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
     ],
     variables: {
       input: "input",
-      context: "",
+      "metadata.context": "metadata.context",
       output: "output",
     },
     schema: [
@@ -549,13 +549,13 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
           "{{output}}\n" +
           "\n" +
           "CONTEXT:\n" +
-          "{{context}}",
+          "{{metadata.context}}",
       },
     ],
     variables: {
       input: "input",
       output: "output",
-      context: "",
+      "metadata.context": "metadata.context",
     },
     schema: [
       {
@@ -579,13 +579,13 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
         content:
           `You are an expert in evaluating structured data. Your task is to determine whether the OUTPUT is a valid JSON or JSON-LD object and conforms to the expected structure.\n\n` +
           `Expected Schema (for context):\n` +
-          `{{context}}\n\n` +
+          `{{metadata.expected_schema}}\n\n` +
           `OUTPUT:\n` +
           `{{output}}`,
       },
     ],
     variables: {
-      context: "",
+      "metadata.expected_schema": "metadata.expected_schema",
       output: "output",
     },
     schema: [
@@ -648,7 +648,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
           "{{input}}\n" +
           "\n" +
           "GROUND_TRUTH:\n" +
-          "{{ground_truth}}\n" +
+          "{{metadata.expected_output}}\n" +
           "\n" +
           "OUTPUT:\n" +
           "{{output}}",
@@ -656,7 +656,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
     ],
     variables: {
       input: "input",
-      ground_truth: "",
+      "metadata.expected_output": "metadata.expected_output",
       output: "output",
     },
     schema: [

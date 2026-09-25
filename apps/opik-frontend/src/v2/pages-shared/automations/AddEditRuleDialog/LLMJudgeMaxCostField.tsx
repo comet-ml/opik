@@ -49,6 +49,7 @@ const MaxCostInput: React.FC<MaxCostInputProps> = ({
   return (
     <Input
       type="text"
+      dimension="sm"
       inputMode="decimal"
       placeholder="No limit"
       aria-label="Cost limit (USD)"

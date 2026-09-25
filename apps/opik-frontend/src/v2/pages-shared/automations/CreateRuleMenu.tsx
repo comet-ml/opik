@@ -2,6 +2,7 @@ import React from "react";
 import { Bot, Code, Plus } from "lucide-react";
 
 import { Button, ButtonProps } from "@/ui/button";
+import IconBadge, { IconBadgeColor } from "@/shared/IconBadge/IconBadge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +18,7 @@ export const RULE_TYPE_OPTIONS: {
   label: string;
   description: string;
   Icon: React.ComponentType<{ className?: string }>;
+  color: IconBadgeColor;
 }[] = [
   {
     value: UI_EVALUATORS_RULE_TYPE.llm_judge,
@@ -24,6 +26,7 @@ export const RULE_TYPE_OPTIONS: {
     description:
       "Use an LLM to assess qualities like clarity, relevance, and accuracy.",
     Icon: Bot,
+    color: "turquoise",
   },
   {
     value: UI_EVALUATORS_RULE_TYPE.python_code,
@@ -31,6 +34,7 @@ export const RULE_TYPE_OPTIONS: {
     description:
       "Use Python to check exact matches, keywords, and custom rules.",
     Icon: Code,
+    color: "yellow",
   },
 ];
 
@@ -87,13 +91,13 @@ const CreateRuleMenu: React.FC<CreateRuleMenuProps> = ({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="w-72 p-1">
-        {RULE_TYPE_OPTIONS.map(({ value, label, description, Icon }) => (
+        {RULE_TYPE_OPTIONS.map(({ value, label, description, Icon, color }) => (
           <DropdownMenuItem
             key={value}
             onClick={() => onSelect(value)}
             className="h-auto items-start gap-2 py-2"
           >
-            <Icon className="mt-0.5 size-4 shrink-0 text-muted-slate" />
+            <IconBadge Icon={Icon} color={color} className="mt-0.5" />
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="comet-body-s-accented">{label}</span>
               <span className="comet-body-xs whitespace-normal text-muted-slate">

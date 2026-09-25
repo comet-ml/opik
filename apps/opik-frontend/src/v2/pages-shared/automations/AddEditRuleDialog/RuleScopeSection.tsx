@@ -64,7 +64,7 @@ const RuleScopeSection: React.FC<RuleScopeSectionProps> = ({
                     key={option.value}
                     value={option.value}
                     aria-label={option.label}
-                    className="flex-1"
+                    className="h-6 flex-1"
                   >
                     {option.label}
                   </ToggleGroupItem>

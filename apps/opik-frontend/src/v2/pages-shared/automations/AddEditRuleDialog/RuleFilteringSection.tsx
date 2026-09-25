@@ -7,7 +7,7 @@ import isArray from "lodash/isArray";
 
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
-import { Tag } from "@/ui/tag";
+import IconBadge from "@/shared/IconBadge/IconBadge";
 import { FormErrorSkeleton, FormField, FormItem } from "@/ui/form";
 import {
   Accordion,
@@ -35,7 +35,6 @@ import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilt
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
-import { Description } from "@/ui/description";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -428,13 +427,11 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
     >
       <AccordionItem value="filtering-sampling" className="border-none">
         <AccordionTrigger
-          className="h-12 px-3 py-2 hover:no-underline"
+          className="h-10 px-3 py-2 hover:no-underline"
           data-testid="add-edit-rule-dialog-filtering-sampling-trigger"
         >
           <div className="flex items-center gap-2">
-            <Tag variant="green" size="sm" className="px-1">
-              <FilterIcon className="size-3" />
-            </Tag>
+            <IconBadge Icon={FilterIcon} color="green" />
             <Label className="text-sm font-medium">
               Filtering and sampling
             </Label>
@@ -442,24 +439,6 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
         </AccordionTrigger>
         <AccordionContent className="px-3 pb-3">
           <div className="mb-8 space-y-4">
-            <Description>
-              Use sampling rate to control how frequently this rule is applied.
-              You can also add filters to select specific{" "}
-              {scope === EVALUATORS_RULE_SCOPE.trace
-                ? "traces"
-                : scope === EVALUATORS_RULE_SCOPE.thread
-                  ? "threads"
-                  : "spans"}{" "}
-              based on their properties. If nothing is defined, the rule will
-              evaluate all{" "}
-              {scope === EVALUATORS_RULE_SCOPE.trace
-                ? "traces"
-                : scope === EVALUATORS_RULE_SCOPE.thread
-                  ? "threads"
-                  : "spans"}
-              .
-            </Description>
-
             <FormField
               control={form.control}
               name="filters"
@@ -478,7 +457,10 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                           setFilters={setFilters}
                           columns={currentFilterColumns}
                           config={filtersConfig}
-                          className="py-0"
+                          // The shared rows assume a wide popover; in this column drop the
+                          // "Where/And" prefix and let the value input shrink so the delete
+                          // button stays on screen.
+                          className="py-0 [&_.min-w-40]:min-w-0 [&_table]:w-full [&_tr>td:first-child:not([colspan])]:hidden"
                         />
                       )}
 

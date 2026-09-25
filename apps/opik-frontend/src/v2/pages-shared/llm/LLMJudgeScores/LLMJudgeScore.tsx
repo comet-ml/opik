@@ -1,6 +1,6 @@
 import React from "react";
 import TextareaAutosize from "react-textarea-autosize";
-import { Gauge, Trash } from "lucide-react";
+import { SlidersHorizontal, Trash } from "lucide-react";
 import get from "lodash/get";
 
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ import { Button } from "@/ui/button";
 import { FormErrorSkeleton } from "@/ui/form";
 import { Input } from "@/ui/input";
 import { TEXT_AREA_CLASSES } from "@/ui/textarea";
+import IconBadge from "@/shared/IconBadge/IconBadge";
 
 const SCORE_TYPE_OPTIONS: DropdownOption<LLM_SCHEMA_TYPE>[] = [
   {
@@ -67,7 +68,7 @@ const LLMJudgeScore = ({
     >
       <div className="flex h-6 items-center justify-between">
         <div className="comet-body-xs-accented flex items-center gap-1.5 text-muted-slate">
-          <Gauge className="size-3.5" />
+          <IconBadge Icon={SlidersHorizontal} color="blue" />
           {title}
         </div>
         {onRemoveScore && (

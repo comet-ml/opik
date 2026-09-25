@@ -10,29 +10,29 @@ import {
 } from "lucide-react";
 
 import { LLM_JUDGE } from "@/types/llm";
-import { TagProps } from "@/ui/tag";
+import { IconBadgeColor } from "@/shared/IconBadge/IconBadge";
 
 type TemplatePresentation = {
   Icon: React.ComponentType<{ className?: string }>;
-  variant: NonNullable<TagProps["variant"]>;
+  color: IconBadgeColor;
 };
 
 const DEFAULT_PRESENTATION: TemplatePresentation = {
   Icon: Sparkles,
-  variant: "gray",
+  color: "gray",
 };
 
 const PRESENTATION: Partial<Record<LLM_JUDGE, TemplatePresentation>> = {
-  [LLM_JUDGE.hallucination]: { Icon: TriangleAlert, variant: "blue" },
-  [LLM_JUDGE.moderation]: { Icon: ShieldAlert, variant: "pink" },
-  [LLM_JUDGE.answer_relevance]: { Icon: Target, variant: "green" },
-  [LLM_JUDGE.structure_compliance]: { Icon: ListChecks, variant: "yellow" },
-  [LLM_JUDGE.meaning_match]: { Icon: BadgeCheck, variant: "turquoise" },
+  [LLM_JUDGE.hallucination]: { Icon: TriangleAlert, color: "blue" },
+  [LLM_JUDGE.moderation]: { Icon: ShieldAlert, color: "pink" },
+  [LLM_JUDGE.answer_relevance]: { Icon: Target, color: "green" },
+  [LLM_JUDGE.structure_compliance]: { Icon: ListChecks, color: "yellow" },
+  [LLM_JUDGE.meaning_match]: { Icon: BadgeCheck, color: "turquoise" },
   [LLM_JUDGE.conversational_coherence]: {
     Icon: MessagesSquare,
-    variant: "purple",
+    color: "purple",
   },
-  [LLM_JUDGE.user_frustration]: { Icon: Frown, variant: "orange" },
+  [LLM_JUDGE.user_frustration]: { Icon: Frown, color: "orange" },
 };
 
 export const getTemplatePresentation = (

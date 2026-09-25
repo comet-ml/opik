@@ -226,6 +226,35 @@ const LLMJudgeBaseSchema = z.object({
     .nullable(),
 });
 
+/**
+ * With no mapping UI, a variable is valid only when it is a field path the
+ * backend can read on its own ({@code input…}, {@code output…}, {@code metadata…})
+ * or a reserved sentinel. Anything else is reported on the message that uses
+ * it, where the user can fix it.
+ */
+const addUnmappedVariableIssues = (
+  data: {
+    messages: { content: LLMMessage["content"] }[];
+    variables: Record<string, string>;
+  },
+  ctx: z.RefinementCtx,
+  entity: "trace" | "span",
+) => {
+  Object.entries(data.variables).forEach(([name, value]) => {
+    if (value) return;
+    const index = data.messages.findIndex((m) =>
+      new RegExp(
+        `{{\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*}}`,
+      ).test(getTextFromMessageContent(m.content)),
+    );
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `{{${name}}} is not a ${entity} field. Type {{ to pick a field, for example {{input}} or {{metadata.${name}}}.`,
+      path: ["messages", Math.max(index, 0), "content"],
+    });
+  });
+};
+
 export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(
     z.string(),
@@ -241,6 +270,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
+  addUnmappedVariableIssues(data, ctx, "trace");
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );
@@ -296,6 +326,7 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
+  addUnmappedVariableIssues(data, ctx, "span");
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );

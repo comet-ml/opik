@@ -544,7 +544,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     ]}
                   />
                 )}
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+                <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
                   <div className="flex min-w-0 flex-col gap-4">
                     <FormField
                       control={form.control}
@@ -564,6 +564,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                   ),
                                 })}
                                 placeholder="Rule name"
+                                dimension="sm"
                                 {...field}
                               />
                             </FormControl>

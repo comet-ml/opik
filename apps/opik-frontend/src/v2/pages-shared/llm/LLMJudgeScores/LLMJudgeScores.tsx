@@ -1,12 +1,12 @@
 import React, { useCallback } from "react";
-import { Plus, SlidersHorizontal } from "lucide-react";
+import { Plus, Target } from "lucide-react";
 import get from "lodash/get";
 
 import { LLMJudgeSchema } from "@/types/llm";
 import { LLM_SCHEMA_TYPE, ScoresValidationError } from "@/types/llm";
 import { Button } from "@/ui/button";
 import { FormErrorSkeleton } from "@/ui/form";
-import { Tag } from "@/ui/tag";
+import IconBadge from "@/shared/IconBadge/IconBadge";
 import LLMJudgeScore from "@/v2/pages-shared/llm/LLMJudgeScores/LLMJudgeScore";
 
 interface LLMJudgeScoresProps {
@@ -63,9 +63,7 @@ const LLMJudgeScores = ({
     >
       <div className="flex flex-col gap-1 border-b border-border bg-soft-background p-3">
         <div className="comet-body-s-accented flex items-center gap-2">
-          <Tag variant="turquoise" size="sm" className="px-1">
-            <SlidersHorizontal className="size-3" />
-          </Tag>
+          <IconBadge Icon={Target} color="turquoise" />
           Score configuration
         </div>
         <span className="comet-body-s text-light-slate">

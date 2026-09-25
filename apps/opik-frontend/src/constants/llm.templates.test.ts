@@ -7,6 +7,7 @@ import {
 } from "@/constants/llm";
 import { getTextFromMessageContent } from "@/lib/llm";
 import { LLMPromptTemplate } from "@/types/llm";
+import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 
 const allTemplates: LLMPromptTemplate[] =
   Object.values(LLM_PROMPT_TEMPLATES).flat();
@@ -28,6 +29,27 @@ describe("LLM-as-judge prompt templates", () => {
 
         expect(tags).toEqual(["context"]);
         expect(Object.keys(template.variables ?? {})).toEqual(["context"]);
+      },
+    );
+  });
+
+  describe("trace and span scope", () => {
+    it.each(
+      [
+        ...LLM_PROMPT_TEMPLATES[EVALUATORS_RULE_SCOPE.trace],
+        ...LLM_PROMPT_TEMPLATES[EVALUATORS_RULE_SCOPE.span],
+      ].map((t) => [t.label, t] as const),
+    )(
+      "%s only uses variables that resolve without a mapping",
+      (_label, template) => {
+        // There is no mapping UI any more: every variable must be a field path
+        // (input/output/metadata…) or a reserved sentinel, mapped to itself.
+        Object.entries(template.variables ?? {}).forEach(([name, value]) => {
+          expect(value).toBe(name);
+          expect(name).toMatch(
+            /^(input|output|metadata)(\.|\[|$)|^(spans|trace|span)$/,
+          );
+        });
       },
     );
   });

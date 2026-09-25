@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { FileText } from "lucide-react";
+import { FileText, X } from "lucide-react";
 import find from "lodash/find";
 import get from "lodash/get";
 
@@ -17,8 +17,8 @@ import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptMod
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import { RULE_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import IconBadge from "@/shared/IconBadge/IconBadge";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
-import LLMPromptMessagesVariables from "@/v2/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariables";
 import {
   LLM_MESSAGE_ROLE_NAME_MAP,
   LLM_PROMPT_TEMPLATES,
@@ -36,7 +36,6 @@ import {
   generateDefaultLLMPromptMessage,
   getAllTemplateStringsFromContent,
   getTextFromMessageContent,
-  isInlineEntityPath,
   resolveTraceEvaluatorVariableDefault,
 } from "@/lib/llm";
 import {
@@ -46,7 +45,6 @@ import {
 } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { updateProviderConfig } from "@/lib/modelUtils";
-import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import {
@@ -82,15 +80,12 @@ type LLMJudgeRuleDetailsProps = {
   datasetColumnNames?: string[];
 };
 
-const TemplateBadge: React.FC<{ template: LLMPromptTemplate }> = ({
-  template,
-}) => {
-  const { Icon, variant } = getTemplatePresentation(template.value);
-  return (
-    <Tag variant={variant} size="sm" className="shrink-0 px-1">
-      <Icon className="size-3" />
-    </Tag>
-  );
+const TemplateBadge: React.FC<{
+  template: LLMPromptTemplate;
+  className?: string;
+}> = ({ template, className }) => {
+  const { Icon, color } = getTemplatePresentation(template.value);
+  return <IconBadge Icon={Icon} color={color} className={className} />;
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
@@ -104,7 +99,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
   const scope = form.watch("scope");
   const messages = form.watch("llmJudgeDetails.messages");
-  const variables = form.watch("llmJudgeDetails.variables");
+  const currentTemplate = form.watch("llmJudgeDetails.template");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
@@ -113,6 +108,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       LLM_PROMPT_TEMPLATES[scope].filter((t) => t.value !== LLM_JUDGE.custom),
     [scope],
   );
+  const appliedTemplate = find(templates, (t) => t.value === currentTemplate);
   const isPromptEmpty = messages.every(
     (m) => !getTextFromMessageContent(m.content).trim(),
   );
@@ -122,27 +118,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     scope,
     datasetColumnNames,
   });
-
-  const reservedVariables = isSpanScope
-    ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
-    : RESERVED_TRACE_LLM_JUDGE_VARIABLES;
-
-  // Rows hidden from the "Variable sources" list: reserved sentinels and
-  // inline paths, which resolve on their own. Whatever remains needs a source.
-  const selfResolvedSentinels = useMemo(
-    () => ({
-      ...reservedVariables,
-      ...Object.fromEntries(
-        Object.keys(variables ?? {})
-          .filter(isInlineEntityPath)
-          .map((name) => [name, name]),
-      ),
-    }),
-    [reservedVariables, variables],
-  );
-  const unmappedCount = Object.entries(variables ?? {}).filter(
-    ([name, value]) => selfResolvedSentinels[name] !== value,
-  ).length;
 
   const handleAddProvider = useCallback(
     (provider: COMPOSED_PROVIDER_TYPE) => {
@@ -231,6 +206,20 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     [form, handleMessagesChange, templates],
   );
 
+  // Back to a blank prompt; the score definition resets to the scope's default.
+  const removeTemplate = useCallback(() => {
+    const custom = find(
+      LLM_PROMPT_TEMPLATES[scope],
+      (t) => t.value === LLM_JUDGE.custom,
+    );
+    form.setValue("llmJudgeDetails.template", LLM_JUDGE.custom);
+    if (custom) form.setValue("llmJudgeDetails.schema", custom.schema);
+    form.setValue("llmJudgeDetails.variables", {});
+    handleMessagesChange([
+      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
+    ]);
+  }, [form, handleMessagesChange, scope]);
+
   const model = form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE | "";
   const provider = calculateModelProvider(model);
   const modelError = get(form.formState.errors, [
@@ -308,42 +297,67 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
               )}
             />
           </div>
-          {templates.length > 0 && (
-            <DropdownMenu>
-              <TooltipWrapper content="Start from a template">
-                <DropdownMenuTrigger asChild>
+          <div className="flex shrink-0 items-center gap-1">
+            {appliedTemplate && (
+              <div
+                className="comet-body-xs flex h-6 items-center gap-1 rounded-sm border border-border bg-background pl-1.5 pr-0.5"
+                data-testid="llm-judge-applied-template"
+              >
+                <TemplateBadge
+                  template={appliedTemplate}
+                  className="size-3.5"
+                />
+                <span className="truncate">{appliedTemplate.label}</span>
+                <TooltipWrapper content="Remove template">
                   <Button
                     variant="minimal"
-                    size="icon-2xs"
+                    size="icon-3xs"
                     type="button"
-                    aria-label="Prompt templates"
-                    data-testid="llm-judge-template-menu"
+                    aria-label="Remove template"
+                    onClick={removeTemplate}
                   >
-                    <FileText />
+                    <X />
                   </Button>
-                </DropdownMenuTrigger>
-              </TooltipWrapper>
-              <DropdownMenuContent align="end" className="w-80 p-1">
-                {templates.map((template) => (
-                  <DropdownMenuItem
-                    key={template.value}
-                    onClick={() => applyTemplate(template.value)}
-                    className="h-auto items-start gap-2 py-2"
-                  >
-                    <TemplateBadge template={template} />
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="comet-body-s-accented">
-                        {template.label}
-                      </span>
-                      <span className="comet-body-xs whitespace-normal text-muted-slate">
-                        {template.description}
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+                </TooltipWrapper>
+              </div>
+            )}
+            {templates.length > 0 && (
+              <DropdownMenu>
+                <TooltipWrapper content="Start from a template">
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="minimal"
+                      size="icon-2xs"
+                      type="button"
+                      aria-label="Prompt templates"
+                      data-testid="llm-judge-template-menu"
+                    >
+                      <FileText />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipWrapper>
+                <DropdownMenuContent align="end" className="w-80 p-1">
+                  {templates.map((template) => (
+                    <DropdownMenuItem
+                      key={template.value}
+                      onClick={() => applyTemplate(template.value)}
+                      className="h-auto items-start gap-2 py-2"
+                    >
+                      <TemplateBadge template={template} className="mt-0.5" />
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="comet-body-s-accented">
+                          {template.label}
+                        </span>
+                        <span className="comet-body-xs whitespace-normal text-muted-slate">
+                          {template.description}
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
         {modelError && (
           <FormErrorSkeleton className="mx-2 mt-2">
@@ -364,6 +378,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 possibleTypes={MESSAGE_TYPE_OPTIONS}
                 disableMedia={isThreadScope}
                 hidePromptActions={false}
+                hideAddButton
                 improvePromptConfig={improvePromptConfig}
                 promptVariables={datasetColumnNames}
                 jsonTreeData={sampleJson}
@@ -388,17 +403,17 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
               <span className="comet-body-s text-muted-slate">
                 Or get started with a template
               </span>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-nowrap gap-1 overflow-x-auto pb-1">
                 {templates.map((template) => (
                   <Button
                     key={template.value}
                     variant="outline"
-                    size="xs"
+                    size="2xs"
                     type="button"
-                    className="gap-1.5 px-1.5"
+                    className="shrink-0 gap-1 px-1"
                     onClick={() => applyTemplate(template.value)}
                   >
-                    <TemplateBadge template={template} />
+                    <TemplateBadge template={template} className="size-3.5" />
                     {template.label}
                   </Button>
                 ))}
@@ -425,35 +440,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           </>
         )}
       </span>
-      {!isThreadScope && unmappedCount > 0 && (
-        <FormField
-          control={form.control}
-          name="llmJudgeDetails.variables"
-          render={({ field, formState }) => (
-            <LLMPromptMessagesVariables
-              parsingError={form.getValues(
-                "llmJudgeDetails.parsingVariablesError",
-              )}
-              validationErrors={get(formState.errors, [
-                "llmJudgeDetails",
-                "variables",
-              ])}
-              projectId={projectId}
-              variables={field.value}
-              onChange={field.onChange}
-              description={`These variables are not ${
-                isSpanScope ? "span" : "trace"
-              } field paths, so pick the field each one should read from.`}
-              datasetColumnNames={datasetColumnNames}
-              type={
-                isSpanScope ? TRACE_DATA_TYPE.spans : TRACE_DATA_TYPE.traces
-              }
-              includeIntermediateNodes
-              reservedSentinels={selfResolvedSentinels}
-            />
-          )}
-        />
-      )}
     </div>
   );
 };
