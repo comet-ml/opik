@@ -1,0 +1,129 @@
+---
+headline: Data Anonymization
+og:description: Mask emails, phone numbers and other sensitive values in trace data for users who should not see them, controlled by a workspace permission.
+og:site_name: Opik Documentation
+og:title: 'Opik Data Anonymization: Permission-Based Masking of Trace Data'
+subtitle: Mask sensitive values in trace data for users who do not have permission to see them
+title: Data Anonymization
+---
+
+<Note>
+  Data anonymization is in **preview** and available on Opik Enterprise. Contact
+  your Comet account team to enable it for your organization.
+</Note>
+
+Data anonymization masks sensitive values, such as email addresses, phone numbers or account numbers, when Opik shows trace data to a user. Users who have the **Original data view** permission see the data as it was logged. All other users see a replacement token, such as `[EMAIL]` or `[PHONE]`, in its place.
+
+Your team can then give analysts, annotators or external reviewers access to production traces without exposing the personal data inside them.
+
+<Frame caption="The same trace, seen by a workspace admin (top) and by a member whose role excludes the Original data view permission (bottom).">
+  <img src="/img/administration/data_anonymization_comparison.png" alt="The same trace shown with original values for an admin and with [EMAIL] and [PHONE] tokens for a member without the Original data view permission" />
+</Frame>
+
+## How it works
+
+- **Opik stores the original data.** Nothing is changed when traces are logged. Masking is applied each time data is read, so a change to the rules applies to all traces, including traces logged before the change.
+- **Rules decide what is masked.** Opik includes rules for common types of sensitive data, such as email addresses and phone numbers. You can also add rules for data that is specific to your organization, such as customer IDs or account numbers. Each rule replaces the matched value with a token, for example `[EMAIL]`. The rules apply to all workspaces in your deployment.
+- **A permission decides who sees original data.** The **Original data view** permission (listed as **View unanonymized data** in the [permissions table](/administration/roles_and_permissions#permissions-by-role)) lets a user see the original values. Users without it see masked values.
+- **Masking applies everywhere data is read.** The Opik UI, the REST API and the SDKs all return the same masked values to a user without the permission. A user cannot get the original data by calling the API directly.
+
+<Warning>
+  All default workspace roles (Manage, Write, Annotate and Read) include the
+  **Original data view** permission. When anonymization is enabled, no data is
+  masked until you assign a [custom role](#give-users-a-role-without-the-permission)
+  that excludes this permission. Organization admins always see original data.
+</Warning>
+
+## Enable data anonymization
+
+Data anonymization is enabled per deployment by Comet. To enable it:
+
+1. Contact your Comet account team.
+2. Select the types of sensitive data to mask, such as email addresses and phone numbers.
+3. Tell them about other data that is specific to your organization, such as customer IDs or account numbers, so that they can add rules for it.
+
+The account team configures the rules and tells you when they are active. To change the rules later, contact your account team again.
+
+## Give users a role without the permission
+
+After anonymization is enabled, create a custom role that excludes **Original data view** and assign it to the users who should see masked data.
+
+<Note>
+  Custom roles are available on Enterprise plans. You must be an organization
+  admin to create them.
+</Note>
+
+### 1. Create a custom role
+
+1. Open the **Admin Dashboard** and go to **Roles & permissions**.
+2. Click **Create custom role**.
+3. Enter a **Role name**, for example `redacted-viewer`, and an optional description.
+4. Under **Base role**, select the role to start from, for example **Read**.
+5. Under **Customize permissions**, expand **Opik Traces**.
+6. Clear the **Original data view** checkbox. The permission is now listed next to **Excluded**.
+7. Click **Create role**.
+
+<Frame caption="Create a custom role based on Read, with the Original data view permission excluded.">
+  <img src="/img/administration/data_anonymization_create_role.gif" alt="Creating a custom role in the Admin Dashboard and excluding the Original data view permission" />
+</Frame>
+
+In the **Custom roles** table, the new role shows its base role and the number of excluded permissions, for example **Read -1 excluded**.
+
+### 2. Assign the role to users
+
+You can assign the role from the Admin Dashboard or from the workspace:
+
+- **Admin Dashboard**: go to **Workspaces**, click the menu (**⋮**) of the workspace, and select **Manage users**. In the **Workspace role** column, select the custom role for each user.
+- **Workspace**: go to **Configuration** > **[Members](/administration/workspace-settings/workspace_members)** and change the **Workspace role** of each user.
+
+<Frame caption="Assign the custom role to a workspace member.">
+  <img src="/img/administration/data_anonymization_assign_role.png" alt="The Manage users dialog of a workspace with the workspace role list open and a custom role without original_data_view selected" />
+</Frame>
+
+Role changes take effect within a few seconds. The user does not need to log in again.
+
+### 3. Check the result
+
+Ask the user to open a trace that contains data that matches one of your rules. The matched values show as replacement tokens in the trace input, output and metadata. A user who has the permission sees the original values in the same trace.
+
+## What is masked
+
+Opik applies the rules to every text value it returns to a user without the permission, including:
+
+- Trace and span input, output and metadata, at every level of the JSON.
+- Trace and span names, tags, comments and feedback score reasons.
+- Thread messages, dataset items, experiment items and prompt text.
+
+Some values are never masked, because Opik uses them to find and link data:
+
+- IDs, including trace, span and thread IDs.
+- The names of projects, datasets, prompts and experiments.
+- The model and provider of a span.
+- The keys of JSON objects. Only values are masked. Do not put sensitive data in key names, for example `{"jane.doe@example.com": "..."}`.
+
+Attachments cannot be masked. A user without the permission gets a permission error when they download a trace or span attachment.
+
+## Things to know
+
+- **Masked data can overwrite original data.** A user without the permission sees masked values. If this user edits and saves a prompt, dataset item or experiment, the masked text replaces the original text. Give users who see masked data a role that cannot edit these resources, such as a role based on **Read** or **Annotate**.
+- **Rules apply to all text.** A rule can also match values that are not sensitive. For example, a rule for dates also matches a date in a model version. When you ask for a custom rule, describe the format of the data as precisely as possible.
+
+## Data anonymization vs. SDK anonymizers
+
+Opik has two ways to protect sensitive data. You can use them together.
+
+|                           | Data anonymization (this page)                  | [SDK anonymizers](/production/gateway-guardrails/anonymizers) |
+| ------------------------- | ----------------------------------------------- | ------------------------------------------------------------- |
+| **Where it runs**         | On the Opik server, when data is read           | In your application, before data is sent to Opik              |
+| **Original data**         | Stored, and visible to users with the permission | Never sent to Opik and cannot be recovered                   |
+| **Who sees masked data**  | Users whose role excludes Original data view    | Every user                                                    |
+| **Configured by**         | Your Comet account team, per deployment         | Your developers, in code                                      |
+| **Availability**          | Opik Enterprise (preview)                       | Opik Cloud, Enterprise and open source                        |
+
+Use SDK anonymizers for data that must never leave your application, such as passwords or API keys. Use data anonymization when some users must see the original data, for example to debug a customer issue, and other users must not.
+
+## Next steps
+
+- Learn how [roles and permissions](/administration/roles_and_permissions) work.
+- [Manage workspace members](/administration/workspace-settings/workspace_members) and their roles.
+- Mask data before it is logged with [SDK anonymizers](/production/gateway-guardrails/anonymizers).

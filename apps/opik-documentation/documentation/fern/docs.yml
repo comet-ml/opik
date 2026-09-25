@@ -583,6 +583,9 @@ navigation:
           - page: Roles and Permissions
             path: ./docs-v2/administration/roles_and_permissions.mdx
             slug: roles_and_permissions
+          - page: Data Anonymization
+            path: ./docs-v2/administration/data_anonymization.mdx
+            slug: data_anonymization
           - section: Workspace Settings
             slug: /workspace-settings
             contents:
