@@ -6,34 +6,23 @@ import React, {
   useState,
 } from "react";
 import isNumber from "lodash/isNumber";
-import sortBy from "lodash/sortBy";
 import { Copy, Trash, X } from "lucide-react";
-import DebounceInput from "@/shared/DebounceInput/DebounceInput";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
-import {
-  FEEDBACK_DEFINITION_TYPE,
-  FeedbackDefinition,
-} from "@/types/feedback-definitions";
+import { FeedbackDefinition } from "@/types/feedback-definitions";
 import { TraceFeedbackScore } from "@/types/traces";
 import { Button } from "@/ui/button";
-import { isNumericFeedbackScoreValid } from "@/lib/traces";
 import ColoredTagNew from "@/shared/ColoredTag/ColoredTagNew";
-import SelectBox from "@/shared/SelectBox/SelectBox";
-import { SelectItem } from "@/ui/select";
-import { DropdownOption } from "@/types/shared";
 import { updateTextAreaHeight } from "@/lib/utils";
 import { Textarea } from "@/ui/textarea";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import {
-  categoryOptionLabelRenderer,
-  findValueByAuthor,
-  hasValuesByAuthor,
-} from "@/lib/feedback-scores";
+import { findValueByAuthor, hasValuesByAuthor } from "@/lib/feedback-scores";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import copy from "clipboard-copy";
 import { useToast } from "@/ui/use-toast";
 import { UpdateFeedbackScoreData } from "./types";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
+import FeedbackScoreValueInput, {
+  FeedbackScoreValue,
+} from "../../FeedbackScoreValueInput/FeedbackScoreValueInput";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -136,11 +125,11 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   });
 
   const handleChangeValue = useCallback(
-    (value: number, categoryName?: string) => {
+    (newValue: number, newCategoryName?: string) => {
       onUpdateFeedbackScore({
-        categoryName,
+        categoryName: newCategoryName,
         name,
-        value,
+        value: newValue,
         reason: reasonValue,
       });
     },
@@ -153,185 +142,31 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, setReasonValue]);
 
+  const handleValueChange = useCallback(
+    (update: FeedbackScoreValue) => {
+      if (update.status === "invalid") {
+        return;
+      }
+
+      if (update.status === "empty" || update.value === undefined) {
+        setValue("");
+        deleteFeedbackScore();
+        return;
+      }
+
+      setCategoryName(update.categoryName);
+      setValue(update.value);
+      handleChangeValue(update.value, update.categoryName);
+    },
+    [deleteFeedbackScore, handleChangeValue],
+  );
+
   const handleCopyReasonClick = async (v: string) => {
     await copy(v);
 
     toast({
       description: "Reason successfully copied to clipboard",
     });
-  };
-
-  const renderOptions = (feedbackDefinition: FeedbackDefinition) => {
-    if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
-      return (
-        <DebounceInput
-          className="my-0.5 h-7 min-w-[100px] py-1"
-          max={feedbackDefinition.details.max}
-          min={feedbackDefinition.details.min}
-          step="any"
-          dimension="sm"
-          delay={SET_VALUE_DEBOUNCE_DELAY}
-          onValueChange={(value) => {
-            const newValue = value === "" ? "" : Number(value);
-
-            setValue(newValue);
-
-            if (newValue === "") {
-              deleteFeedbackScore();
-              return;
-            }
-
-            if (
-              isNumericFeedbackScoreValid(feedbackDefinition.details, newValue)
-            ) {
-              handleChangeValue(newValue as number);
-            }
-          }}
-          placeholder="Score"
-          type="number"
-          value={value}
-          data-testid="annotate-score-input"
-        />
-      );
-    }
-
-    if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.boolean) {
-      const onBooleanValueChange = (value?: string) => {
-        const boolValue =
-          value === feedbackDefinition.details.true_label ? 1 : 0;
-        const categoryName = value;
-
-        setCategoryName(categoryName);
-        setValue(boolValue);
-        handleChangeValue(boolValue, categoryName);
-      };
-
-      return (
-        <ToggleGroup
-          className="min-w-fit p-0.5"
-          onValueChange={onBooleanValueChange}
-          variant="outline"
-          type="single"
-          size="md"
-          value={categoryName}
-        >
-          <ToggleGroupItem
-            className="w-full"
-            key="true"
-            value={feedbackDefinition.details.true_label}
-          >
-            <div className="text-nowrap">
-              {feedbackDefinition.details.true_label}
-            </div>
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            className="w-full"
-            key="false"
-            value={feedbackDefinition.details.false_label}
-          >
-            <div className="text-nowrap">
-              {feedbackDefinition.details.false_label}
-            </div>
-          </ToggleGroupItem>
-        </ToggleGroup>
-      );
-    }
-
-    if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.categorical) {
-      const onCategoricalValueChange = (value?: string) => {
-        if (value === "") {
-          deleteFeedbackScore();
-          return;
-        }
-
-        const categoryEntry = Object.entries(
-          feedbackDefinition.details.categories,
-        ).find(([categoryName]) => categoryName === value);
-
-        if (categoryEntry) {
-          const categoryValue = categoryEntry[1];
-
-          setCategoryName(value);
-          setValue(categoryValue);
-          handleChangeValue(categoryValue, value);
-        }
-      };
-      const categoricalOptionList = sortBy(
-        Object.entries(feedbackDefinition.details.categories).map(
-          ([name, value]) => ({
-            name,
-            value,
-          }),
-        ),
-        "value",
-      );
-
-      const hasLongNames = categoricalOptionList.some((item) => {
-        const label = categoryOptionLabelRenderer(item.name, item.value);
-        return label.length > 10;
-      });
-      const hasMultipleOptions = categoricalOptionList.length > 2;
-
-      if (hasLongNames || hasMultipleOptions) {
-        const categoricalSelectOptionList = categoricalOptionList.map(
-          (item) => ({
-            label: item.name,
-            value: item.name,
-            description: String(item.value),
-          }),
-        );
-        return (
-          <SelectBox
-            value={categoryName || ""}
-            options={categoricalSelectOptionList}
-            onChange={onCategoricalValueChange}
-            className="my-0.5 h-7 min-w-[100px] py-1"
-            renderTrigger={(value) => {
-              const selectedOption = categoricalOptionList.find(
-                (item) => item.name.trim() === value.trim(),
-              );
-
-              if (!selectedOption) {
-                return <div className="truncate">Select a category</div>;
-              }
-
-              return (
-                <span className="text-nowrap">
-                  {categoryOptionLabelRenderer(value, selectedOption.value)}
-                </span>
-              );
-            }}
-            renderOption={(option: DropdownOption<string>) => (
-              <SelectItem key={option.value} value={option.value}>
-                {categoryOptionLabelRenderer(option.value, option.description)}
-              </SelectItem>
-            )}
-          ></SelectBox>
-        );
-      }
-      return (
-        <ToggleGroup
-          className="min-w-fit p-0.5"
-          onValueChange={onCategoricalValueChange}
-          variant="outline"
-          type="single"
-          size="md"
-          value={String(categoryName)}
-        >
-          {categoricalOptionList.map(({ name, value }) => {
-            return (
-              <ToggleGroupItem className="w-full" key={name} value={name}>
-                <div className="text-nowrap">
-                  {name} ({value})
-                </div>
-              </ToggleGroupItem>
-            );
-          })}
-        </ToggleGroup>
-      );
-    }
-
-    return null;
   };
 
   return (
@@ -346,7 +181,13 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
       >
         {feedbackDefinition ? (
           <div className="min-w-0 flex-1 overflow-auto">
-            {renderOptions(feedbackDefinition)}
+            <FeedbackScoreValueInput
+              feedbackDefinition={feedbackDefinition}
+              value={value}
+              categoryName={categoryName}
+              onChange={handleValueChange}
+              testIdPrefix="annotate"
+            />
           </div>
         ) : (
           <div>{feedbackScoreData?.value}</div>
