@@ -11,10 +11,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _tokens(counts: Any, key: str, current: int) -> int:
-    """`counts[key]` if it is an int, else `current`: the stream wrapper calls the
-    aggregator in `finally`, so a malformed count must not raise."""
+    """`counts[key]` if it is an int (not a bool), else `current`: the stream wrapper
+    calls the aggregator in `finally`, so a malformed count must not raise."""
     value = counts.get(key) if isinstance(counts, dict) else None
-    return value if isinstance(value, int) else current
+    return value if isinstance(value, int) and not isinstance(value, bool) else current
 
 
 class OpenAIAggregator(ChunkAggregator):

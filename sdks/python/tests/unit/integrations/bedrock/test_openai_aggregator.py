@@ -38,10 +38,23 @@ STOP = _chunk([{"delta": {}, "finish_reason": "stop"}])
             "stop",
             (8, 5),
         ),
+        # A JSON true is not a count, although bool is an int in Python
+        (
+            [STOP, _chunk([], usage={"prompt_tokens": True, "completion_tokens": 5})],
+            "stop",
+            (0, 5),
+        ),
         # Cut before finish_reason: still reported under finish_reason, as null
         ([], None, (0, 0)),
     ],
-    ids=["metrics-win", "usage", "scalar-choice", "scalar-delta", "no-finish-reason"],
+    ids=[
+        "metrics-win",
+        "usage",
+        "scalar-choice",
+        "scalar-delta",
+        "bool-count",
+        "no-finish-reason",
+    ],
 )
 def test_aggregate_chunks__openai_chunks__text_finish_reason_and_tokens_kept(
     last_chunks: List[Dict[str, Any]],
