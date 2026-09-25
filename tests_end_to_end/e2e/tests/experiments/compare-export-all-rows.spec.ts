@@ -37,12 +37,14 @@ test.describe(
   'Experiments comparison — browser export',
   { tag: ['@t2-cuj', '@area:experiments'] },
   () => {
+    // At group level so the budget covers the `exportComparison` seed, which
+    // runs before a test body and can stand off a 429 for up to a minute.
+    test.slow();
+
     test(
       'exporting with no rows selected covers the whole result set and carries untruncated values',
       { tag: ['@cap:experiments.export-comparison'] },
       async ({ exportComparison, project, page }) => {
-        test.slow();
-
         const compare = new CompareExperimentsPage(
           page,
           project.id,
@@ -121,8 +123,6 @@ test.describe(
       'the exported file follows the grid filter, search and sort',
       { tag: ['@cap:experiments.export-comparison'] },
       async ({ exportComparison, project, page }) => {
-        test.slow();
-
         const compare = new CompareExperimentsPage(
           page,
           project.id,
@@ -212,8 +212,6 @@ test.describe(
       'selecting rows exports only the selection, and clearing it restores the full export',
       { tag: ['@cap:experiments.export-comparison'] },
       async ({ exportComparison, project, page }) => {
-        test.slow();
-
         const compare = new CompareExperimentsPage(
           page,
           project.id,

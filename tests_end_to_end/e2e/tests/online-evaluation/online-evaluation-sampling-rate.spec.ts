@@ -49,22 +49,13 @@ const PARTIAL_RATE_MIN_SCORED = Math.floor(PARTIAL_RATE_MIN_FRACTION * BATCH_SIZ
 const PARTIAL_RATE_MAX_SCORED = Math.ceil(PARTIAL_RATE_MAX_FRACTION * BATCH_SIZE);
 
 /**
- * Trace sources that bypass the sampling rate, and how each becomes scorable.
+ * Trace sources that bypass the sampling rate.
  *
- * `evaluator` also bypasses it (`Source.isLoggingSource` is true only for `sdk`
- * and null), but is deliberately absent: an evaluator-source trace is a score's
- * own trace, so scoring it is what the product avoids rather than something to
- * assert here.
+ * Only `experiment`: `OnlineScoringSampler` scores SDK and experiment traces
+ * and nothing else, so a playground or optimization trace is never scored —
+ * picked rule or not — and has no rate to bypass (OPIK-8059).
  */
-const BYPASS_SOURCES = [
-  // An experiment trace needs no rule selection — the sampler treats SDK and
-  // experiment sources as implicitly eligible for every rule in the project.
-  { source: 'experiment' as const, needsRuleSelection: false },
-  // Playground and optimization traces are only scorable when they name the
-  // rule in `metadata.selected_rule_ids` (OnlineScoringSampler.sampleAndScore).
-  { source: 'playground' as const, needsRuleSelection: true },
-  { source: 'optimization' as const, needsRuleSelection: true },
-];
+const BYPASS_SOURCES = ['experiment'] as const;
 
 /** How many SDK traces the 0% rule must skip. */
 const SDK_TRACE_COUNT = 4;
@@ -293,7 +284,7 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
     );
   });
 
-  test('A 0% rule skips every SDK trace but still scores experiment, playground and optimization traces', { tag: ['@cap:online-evaluation.sampling-rate', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
+  test('A 0% rule skips every SDK trace but still scores experiment traces', { tag: ['@cap:online-evaluation.sampling-rate', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
     project,
     backendClient,
     testNamespace,
@@ -308,15 +299,14 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
 
     // The complement of the 50%-vs-100% test above: that one pins the behaviour
     // that must NOT change (an SDK stream is thinned by the rate), this one pins
-    // the carve-out — `OnlineScoringSampler.shouldSampleTrace` returns true for
-    // any non-SDK source BEFORE consulting the rate, because the rate exists to
-    // thin a production firehose and an experiment/playground/optimization trace
-    // is a deliberate, user-initiated evaluation.
+    // the carve-out — `OnlineScoringSampler.shouldScoreTrace` never consults the
+    // rate for an experiment trace, because the rate exists to thin a production
+    // firehose and an experiment run is a deliberate, user-initiated evaluation.
     //
     // Rate 0.0 makes that partition exact rather than statistical: no SDK trace
-    // can ever clear `secureRandom.nextFloat() >= 0.0`, and every non-SDK trace
-    // short-circuits above that line. So this test asserts equalities, not a
-    // band, and has no flake budget to spend.
+    // can ever clear `secureRandom.nextFloat() >= 0.0`, and no experiment trace
+    // reaches that line. So this test asserts equalities, not a band, and has no
+    // flake budget to spend.
     const ruleName = `${testNamespace}-zero-rate`;
     const bypassCount = BYPASS_SOURCES.length;
 
@@ -351,17 +341,13 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
     });
 
     const sdkTraces = await test.step(
-      `Seed ${SDK_TRACE_COUNT} SDK traces and ${bypassCount} non-SDK traces`,
+      `Seed ${SDK_TRACE_COUNT} SDK traces and ${bypassCount} experiment trace(s)`,
       async () => {
         // Seeded through the REST write rather than the SDK bridge because the
         // bridge always emits `source=sdk`, and `source` is the entire subject
         // of this test. Ids are minted up front (the write answers 204 with no
         // body) so every assertion below can name the trace it is about.
-        const seed = async (
-          source: 'sdk' | 'experiment' | 'playground' | 'optimization',
-          index: number,
-          needsRuleSelection: boolean,
-        ) => {
+        const seed = async (source: 'sdk' | 'experiment', index: number) => {
           const id = uuid7();
           const now = new Date();
           await backendClient.createTraceWithSource({
@@ -375,23 +361,20 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
             // discards partial traces outright.
             startTime: now,
             endTime: now,
-            ...(needsRuleSelection ? { metadata: { selected_rule_ids: [ruleId] } } : {}),
           });
           return { id, source, name: `${testNamespace}-${source}-${index}` };
         };
 
         const sdk = await Promise.all(
-          Array.from({ length: SDK_TRACE_COUNT }, (_, i) => seed('sdk', i, false)),
+          Array.from({ length: SDK_TRACE_COUNT }, (_, i) => seed('sdk', i)),
         );
-        const bypass = await Promise.all(
-          BYPASS_SOURCES.map((s, i) => seed(s.source, i, s.needsRuleSelection)),
-        );
+        const bypass = await Promise.all(BYPASS_SOURCES.map((source, i) => seed(source, i)));
         return { sdk, bypass };
       },
     );
 
     await test.step(
-      `Every non-SDK trace was scored despite the 0% rate (${bypassCount} of ${bypassCount})`,
+      `Every experiment trace was scored despite the 0% rate (${bypassCount} of ${bypassCount})`,
       async () => {
         const scored = await Promise.all(
           sdkTraces.bypass.map(async (t) => {
@@ -407,29 +390,19 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
             `${t.source} trace ${t.name} was evaluated, so the constant metric must return 1.0`,
           ).toBe(1.0);
         }
-        // The count is asserted separately from the values so "one source
-        // silently stopped bypassing" fails as a count, not as a timeout on a
-        // trace nobody named.
-        expect(scored.length, 'every non-SDK source must bypass the rate').toBe(bypassCount);
+        expect(scored.length, 'every experiment trace must bypass the rate').toBe(bypassCount);
       },
     );
 
     const logMessages = await test.step(
-      `Wait until the rule has ruled on all ${SDK_TRACE_COUNT + bypassCount} traces`,
+      `Wait until the rule has ruled on all ${SDK_TRACE_COUNT} SDK traces`,
       async () => {
         // The absence assertion below is only sound once the engine has
         // finished with each SDK trace, and a skipped trace produces no score
         // to wait on. The rule's own log stream is the only signal that says
-        // "this trace was seen and deliberately dropped", so anchor on it.
-        //
-        // Wait for the bypass lines too, not just the skips. The two are
-        // written on different branches of `shouldSampleTrace` and reach
-        // ClickHouse through a logback AsyncAppender that batches on a flush
-        // interval, so their arrival is independent: polling only for skips can
-        // return a snapshot whose bypass lines are still queued, and the exact
-        // `toHaveLength(bypassCount)` assertion below would then fail on a run
-        // where the engine did everything right. Requiring one line of each
-        // kind per trace id makes the snapshot complete by construction.
+        // "this trace was seen and deliberately dropped", so anchor on it. The
+        // experiment traces need no anchor: their scores, already polled above,
+        // are the proof they were processed.
         let messages: string[] = [];
         const seen = (traceId: string, marker: string) =>
           messages.some((m) => m.includes(traceId) && m.includes(marker));
@@ -438,25 +411,17 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
             async () => {
               const logs = await backendClient.getAutomationRuleLogs(ruleId);
               messages = logs.map((l) => `${l.level} ${l.message}`);
-              const skips = sdkTraces.sdk.filter((t) =>
-                seen(t.id, 'per the sampling rate'),
-              ).length;
-              const bypasses = sdkTraces.bypass.filter((t) =>
-                seen(t.id, 'the rate applies to production traces only'),
-              ).length;
-              return skips + bypasses;
+              return sdkTraces.sdk.filter((t) => seen(t.id, 'per the sampling rate')).length;
             },
             {
               timeout: 180_000,
               intervals: [2_000, 5_000],
               message:
-                'the rule must log a decision for every trace — a sampling skip for each ' +
-                'SDK trace, a rate-exempt line for each non-SDK one. Without both, ' +
-                '"no score" cannot be distinguished from "not processed yet", and the ' +
-                'exact per-kind counts below race the log appender\'s flush.',
+                'the rule must log a sampling skip for each SDK trace. Without it, ' +
+                '"no score" cannot be distinguished from "not processed yet".',
             },
           )
-          .toBe(SDK_TRACE_COUNT + bypassCount);
+          .toBe(SDK_TRACE_COUNT);
         return messages;
       },
     );
@@ -472,42 +437,22 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
       }
     });
 
-    await test.step('The log stream explains every decision, and only those', async () => {
-      // Asserting the counts rather than "at least one of each" is what catches
-      // a leak: a rule that bypassed an SDK trace as well would raise the bypass
-      // count above the number of non-SDK traces without failing any assertion
-      // made so far.
-      const bypassLines = logMessages.filter((m) =>
-        m.includes('the rate applies to production traces only'),
-      );
+    await test.step('The rate skipped exactly the SDK traces', async () => {
+      // An exact count, so a trace the sampler ruled on twice fails here too.
       const skipLines = logMessages.filter((m) => m.includes('per the sampling rate'));
-
-      for (const t of sdkTraces.bypass) {
-        expect(
-          bypassLines.filter((m) => m.includes(t.id)),
-          `${t.source} trace ${t.name} must be logged as exempt from the rate`,
-        ).toHaveLength(1);
-      }
-      expect(
-        bypassLines,
-        'exactly the non-SDK traces may bypass the rate',
-      ).toHaveLength(bypassCount);
       expect(skipLines, 'exactly the SDK traces may be skipped by the rate').toHaveLength(
         SDK_TRACE_COUNT,
       );
     });
 
-    await test.step('The bypassed playground trace renders its score in the trace panel', async () => {
-      // The API says the score landed; this says a user can see it. Playground
-      // traces are the case a reader is most likely to doubt, since they only
-      // become scorable through `selected_rule_ids`.
-      const playgroundTrace = sdkTraces.bypass.find((t) => t.source === 'playground');
-      expect(playgroundTrace, 'the seed must include a playground trace').toBeDefined();
+    await test.step('The bypassed experiment trace renders its score in the trace panel', async () => {
+      // The API says the score landed; this says a user can see it.
+      const experimentTrace = sdkTraces.bypass[0];
 
       const logs = new LogsPage(page);
       await logs.goto(project.id);
       await logs.waitForReady();
-      const panel = await logs.openTraceById(playgroundTrace!.id);
+      const panel = await logs.openTraceById(experimentTrace.id);
       await panel.waitForFullyLoaded();
       await panel.openFeedbackScoresTab();
       expect(await panel.readFeedbackScoreValue(ruleName)).toBe(1.0);

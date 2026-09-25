@@ -1809,15 +1809,22 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       /** Omit for the mutate-latest path; the backend reads null as "no group". */
       batchGroupId?: string;
     }): Promise<void> {
-      await opik.api.datasets.createOrUpdateDatasetItems({
-        datasetId: args.datasetId,
-        items: args.items.map((item) => ({
-          id: item.id,
-          source: 'manual' as const,
-          data: item.data,
-        })),
-        ...(args.batchGroupId ? { batchGroupId: args.batchGroupId } : {}),
-      });
+      await opik.api.datasets.createOrUpdateDatasetItems(
+        {
+          datasetId: args.datasetId,
+          items: args.items.map((item) => ({
+            id: item.id,
+            source: 'manual' as const,
+            data: item.data,
+          })),
+          ...(args.batchGroupId ? { batchGroupId: args.batchGroupId } : {}),
+        },
+        // The SDK retries a 429 itself, but on a 1s-doubling backoff: it reads
+        // `Retry-After`, and Opik answers with `RateLimit-Reset`. Its default two
+        // retries span ~3s of the 60s workspace window; six span ~63s. Safe for a
+        // write, since the limiter refuses before the handler runs.
+        { maxRetries: 6 },
+      );
     },
 
     /**

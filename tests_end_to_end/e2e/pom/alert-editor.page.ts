@@ -238,13 +238,31 @@ export class AlertEditorPage {
    */
   async addTrigger(triggerTitle: string): Promise<void> {
     return test.step(`add the "${triggerTitle}" trigger`, async () => {
-      await this.page.getByRole('button', { name: 'Add trigger' }).click();
-      const popover = this.page.locator('[data-radix-popper-content-wrapper]');
-      await popover.waitFor({ state: 'visible' });
-      await popover.locator('label').filter({ hasText: triggerTitle }).getByRole('checkbox').click();
-      await this.page.keyboard.press('Escape');
-      await popover.waitFor({ state: 'detached' });
+      await this.inTriggerPicker(triggerTitle, (checkbox) => checkbox.click());
     });
+  }
+
+  /**
+   * Unticks an event type in the same popover, which is a toggle. `uncheck`
+   * rather than a click, so a trigger that was never added fails here instead
+   * of being added.
+   */
+  async removeTrigger(triggerTitle: string): Promise<void> {
+    return test.step(`remove the "${triggerTitle}" trigger`, async () => {
+      await this.inTriggerPicker(triggerTitle, (checkbox) => checkbox.uncheck());
+    });
+  }
+
+  private async inTriggerPicker(
+    triggerTitle: string,
+    act: (checkbox: Locator) => Promise<void>,
+  ): Promise<void> {
+    await this.page.getByRole('button', { name: 'Add trigger' }).click();
+    const popover = this.page.locator('[data-radix-popper-content-wrapper]');
+    await popover.waitFor({ state: 'visible' });
+    await act(popover.locator('label').filter({ hasText: triggerTitle }).getByRole('checkbox'));
+    await this.page.keyboard.press('Escape');
+    await popover.waitFor({ state: 'detached' });
   }
 
   /**
