@@ -4744,6 +4744,7 @@ class SpansResourceTest {
                     .projectName(DEFAULT_PROJECT)
                     .traceId(traceId)
                     .source(Source.EXPERIMENT)
+                    .feedbackScores(null)
                     .build();
             var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
 
@@ -4756,8 +4757,11 @@ class SpansResourceTest {
                     .build();
             spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
-            assertThat(actual.source()).isEqualTo(Source.EXPERIMENT);
+            var expectedSpanBuilder = span.toBuilder();
+            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
+
+            var actualSpan = getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
+            assertThat(actualSpan.source()).isEqualTo(Source.EXPERIMENT);
         }
 
         @Test
