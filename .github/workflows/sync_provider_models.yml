@@ -32,7 +32,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.1.0
 
       - name: Install dependencies
         run: uv pip install --system requests
@@ -45,7 +45,7 @@ jobs:
         id: sync
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FORCE_REGEN_FLAG: ${{ inputs.force_regen == true && '--force-regen' || '' }}
         run: |
@@ -55,8 +55,12 @@ jobs:
           # would pass a literal empty argument to python, which is harmless
           # here but conceptually wrong — the variable is acting as an
           # optional argv slot, not a single value.
+          # stderr is teed rather than only redirected: it carries ::warning::
+          # annotations that GitHub parses from the live stream, so a file the
+          # step later deletes would swallow them. It still stays out of
+          # sync_summary.txt, which becomes the PR body.
           # shellcheck disable=SC2086
-          python scripts/sync_provider_models.py $FORCE_REGEN_FLAG 2>sync_stderr.txt | tee sync_summary.txt
+          python scripts/sync_provider_models.py $FORCE_REGEN_FLAG 2> >(tee sync_stderr.txt >&2) | tee sync_summary.txt
           EXIT_CODE=${PIPESTATUS[0]}
           set -e
           echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"

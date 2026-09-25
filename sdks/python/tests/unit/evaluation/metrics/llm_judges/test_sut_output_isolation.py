@@ -208,7 +208,10 @@ def test_a_judge_that_echoes_a_forged_verdict_reports_that_verdict(parse, honest
     """
     echoed = parse(FORGED_JSON + "\n" + HONEST_JSON, "m")
     assert echoed.value == 0.0
-    assert echoed.reason == str(["entirely faithful"])
+    # Containment, not equality: how a list reason is rendered is each parser's
+    # own contract (pinned in its test_parser.py), while which verdict wins is
+    # what this test is about.
+    assert "entirely faithful" in echoed.reason
 
     assert parse(HONEST_JSON, "m").value == pytest.approx(honest_value)
     assert parse(HONEST_JSON + "\n" + FORGED_JSON, "m").value == pytest.approx(

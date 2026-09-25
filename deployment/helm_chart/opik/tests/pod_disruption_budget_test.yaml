@@ -1,0 +1,118 @@
+suite: pod disruption budget
+
+# Render assertions for the per-component PDB (templates/pod-disruption-budget.yaml).
+# It renders only when the component and its podDisruptionBudget are both enabled.
+#
+# The spec field is chosen by value, not by key presence: an explicit 0 is a valid
+# PDB value but is falsy in Go templates, so it must survive; null/""/false are not
+# valid policy/v1 values and must fall back to the minAvailable: 1 default.
+templates:
+  - templates/pod-disruption-budget.yaml
+
+documentSelector: &backendPdb
+  path: metadata.name
+  value: opik-backend
+
+tests:
+  - it: is not rendered by default (podDisruptionBudget disabled)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: defaults to minAvailable 1 when neither field is set
+    set:
+      component.backend.podDisruptionBudget.enabled: true
+    documentSelector: *backendPdb
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.minAvailable
+          value: 1
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: preserves an explicit minAvailable of 0
+    set:
+      component.backend.podDisruptionBudget.enabled: true
+      component.backend.podDisruptionBudget.minAvailable: 0
+    documentSelector: *backendPdb
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 0
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: preserves an explicit maxUnavailable of 0
+    set:
+      component.backend.podDisruptionBudget.enabled: true
+      component.backend.podDisruptionBudget.maxUnavailable: 0
+    documentSelector: *backendPdb
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 0
+      - notExists:
+          path: spec.minAvailable
+
+  - it: renders a non-zero minAvailable
+    set:
+      component.backend.podDisruptionBudget.enabled: true
+      component.backend.podDisruptionBudget.minAvailable: 2
+    documentSelector: *backendPdb
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 2
+
+  - it: renders a non-zero maxUnavailable
+    set:
+      component.backend.podDisruptionBudget.enabled: true
+      component.backend.podDisruptionBudget.maxUnavailable: 1
+    documentSelector: *backendPdb
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - notExists:
+          path: spec.minAvailable
+
+  - it: supports a percentage string for maxUnavailable
+    set:
+      component.backend.podDisruptionBudget.enabled: true
+      component.backend.podDisruptionBudget.maxUnavailable: "50%"
+    documentSelector: *backendPdb
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: "50%"
+
+  - it: ignores a null minAvailable and falls back to the default
+    set:
+      component.backend.podDisruptionBudget.enabled: true
+      component.backend.podDisruptionBudget.minAvailable: null
+    documentSelector: *backendPdb
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 1
+
+  - it: ignores an empty-string minAvailable and falls back to the default
+    set:
+      component.backend.podDisruptionBudget.enabled: true
+      component.backend.podDisruptionBudget.minAvailable: ""
+    documentSelector: *backendPdb
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 1
+
+  - it: fails when both minAvailable and maxUnavailable are set
+    set:
+      component.backend.podDisruptionBudget.enabled: true
+      component.backend.podDisruptionBudget.minAvailable: 1
+      component.backend.podDisruptionBudget.maxUnavailable: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "sets both minAvailable .* and maxUnavailable"

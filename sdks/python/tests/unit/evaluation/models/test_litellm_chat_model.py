@@ -263,6 +263,49 @@ def test_litellm_stub_survives_the_real_integration_having_been_imported(
     assert not caplog.records
 
 
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "bedrock/converse/us.openai.gpt-6-sol",
+        "bedrock/converse/global.openai.gpt-6-luna",
+        "bedrock/us.openai.gpt-6-astra",
+        "bedrock/us.openai.gpt-5.6-sol",
+        "bedrock_mantle/openai.gpt-6-sol",
+    ],
+)
+@pytest.mark.parametrize("temperature", [0.0, 1.0])
+def test_litellm_chat_model_drops_temperature_for_bedrock_openai_gpt(
+    monkeypatch, model_name, temperature
+):
+    # Bedrock Converse rejects the temperature field for GPT-5.x / GPT-6 at any
+    # value, so even temperature=1 must not be forwarded.
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=model_name,
+        temperature=temperature,
+    )
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert "temperature" not in kwargs
+
+
+def test_litellm_chat_model_keeps_temperature_for_bedrock_gpt_oss(monkeypatch):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="bedrock/converse/openai.gpt-oss-120b-1:0",
+        temperature=0.0,
+    )
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("temperature") == 0.0
+
+
 def test_litellm_chat_model_drops_seed_when_provider_does_not_support(
     monkeypatch, caplog
 ):

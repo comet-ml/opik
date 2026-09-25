@@ -212,7 +212,10 @@ class TestMessageAdapter:
             == "claude-sonnet-4-20250514"
         )
 
-    def test_filter_unsupported_params_drops_openai_specific(self):
+    def test_filter_unsupported_params_drops_openai_specific(self, monkeypatch):
+        # Pin the SDK lookup so the assertion doesn't depend on which
+        # anthropic version is installed.
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
         warned: set = set()
         result = message_adapter.filter_unsupported_params(
             {"temperature": 0.5, "logprobs": True, "top_logprobs": 20, "top_p": 0.9},
@@ -221,6 +224,31 @@ class TestMessageAdapter:
         assert result == {"temperature": 0.5, "top_p": 0.9}
         assert "logprobs" in warned
         assert "top_logprobs" in warned
+
+    def test_filter_unsupported_params__sdk_dropped_sampling_params__removed(
+        self, monkeypatch
+    ):
+        # anthropic>=1.7.0 removed temperature/top_p/top_k from create().
+        monkeypatch.setattr(
+            message_adapter,
+            "_sdk_accepted_params",
+            lambda: frozenset({"model", "messages", "max_tokens", "system"}),
+        )
+        warned: set = set()
+        result = message_adapter.filter_unsupported_params(
+            {"temperature": 0.0, "top_p": 0.9, "max_tokens": 10}, warned
+        )
+        assert result == {"max_tokens": 10}
+        assert warned == {"temperature", "top_p"}
+
+    def test_filter_unsupported_params__sdk_signature_unknown__static_allowlist_used(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        result = message_adapter.filter_unsupported_params(
+            {"temperature": 0.0, "logprobs": True}, set()
+        )
+        assert result == {"temperature": 0.0}
 
     def test_filter_unsupported_params_warns_once(self):
         warned: set = set()

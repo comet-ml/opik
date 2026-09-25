@@ -38,7 +38,7 @@ jobs:
                 python-version: 3.12
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@v10.0.1
+              uses: astral-sh/setup-uv@v10.1.0
 
             - name: Install Opik
               run: uv pip install --system opik
@@ -68,7 +68,7 @@ jobs:
                 OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
                 AWS_ACCESS_KEY_ID: ${{ secrets.BEDROCK_AWS_ACCESS_KEY_ID }}
                 AWS_SECRET_ACCESS_KEY: ${{ secrets.BEDROCK_AWS_SECRET_ACCESS_KEY }}
-                ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+                ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
               run: |
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'

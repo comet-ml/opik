@@ -36,6 +36,8 @@ servers:
 tags:
 - name: MCP OAuth
   description: MCP OAuth 2.1 Authorization Server resources
+- name: Agent Insights enrollment
+  description: Internal auto-first-run rollout enrollment
 - name: System analytics queries
   description: Internal endpoint to run Agent Insights free-form SQL
 - name: System usage
@@ -330,6 +332,27 @@ paths:
                 $ref: "#/components/schemas/ValidatedToken"
         "401":
           description: "Missing, malformed, or unknown access token"
+  /v1/internal/agent-insights/enrollment:
+    post:
+      tags:
+      - Agent Insights enrollment
+      summary: Enrol projects in the auto-first-run rollout
+      description: "Enrols the given projects, creating their job row if needed, or\
+        \ clears their enrolment. Idempotent."
+      operationId: enrolProjectsInAutoFirstRun
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Request"
+        required: true
+      responses:
+        "200":
+          description: Enrollment result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
   /v1/internal/analytics-queries/projects/{projectId}:
     post:
       tags:
@@ -982,8 +1005,9 @@ paths:
       tags:
       - Agent Insights Jobs
       summary: Create Agent Insights job
-      description: Creates the Agent Insights job for a project. 409 if one already
-        exists.
+      description: "Creates the Agent Insights job for a project, disabled: the daily\
+        \ schedule stays off until the job is enabled with PATCH. 409 if one already\
+        \ exists."
       operationId: createAgentInsightsJob
       parameters:
       - name: projectId
@@ -9779,6 +9803,49 @@ components:
         expires_at:
           type: string
           format: date-time
+    Response:
+      type: object
+      properties:
+        enrolled:
+          type: integer
+          format: int32
+        cleared:
+          type: integer
+          format: int32
+        unknown_project_ids:
+          uniqueItems: true
+          type: array
+          description: Ids that match no project
+          items:
+            type: string
+            description: Ids that match no project
+            format: uuid
+        already_run_project_ids:
+          uniqueItems: true
+          type: array
+          description: "Ids whose automatic run already happened, so enrolling has\
+            \ no effect"
+          items:
+            type: string
+            description: "Ids whose automatic run already happened, so enrolling has\
+              \ no effect"
+            format: uuid
+    Request:
+      required:
+      - enrolled
+      - project_ids
+      type: object
+      properties:
+        enrolled:
+          type: boolean
+          description: "True enrols the given projects, false clears their enrolment"
+        project_ids:
+          maxItems: 500
+          minItems: 0
+          type: array
+          items:
+            type: string
+            format: uuid
     AnalyticsQueryResponse:
       type: object
       properties:
@@ -10215,6 +10282,13 @@ components:
           enum:
           - enabled
           - disabled
+        auto_first_run_enrolled:
+          type: boolean
+          readOnly: true
+        auto_first_run_at:
+          type: string
+          format: date-time
+          readOnly: true
         last_scan_at:
           type: string
           format: date-time
@@ -14818,6 +14892,16 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        field_mappings:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional mapping of dataset item field name to a path into\
+              \ the span, e.g. 'input.input_text'. Takes precedence over the fields\
+              \ produced by enrichment_options. Ignored for test suite datasets."
+          description: "Optional mapping of dataset item field name to a path into\
+            \ the span, e.g. 'input.input_text'. Takes precedence over the fields\
+            \ produced by enrichment_options. Ignored for test suite datasets."
     SpanEnrichmentOptions:
       type: object
       properties:
@@ -14856,6 +14940,16 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        field_mappings:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional mapping of dataset item field name to a path into\
+              \ the trace, e.g. 'input.input_text'. Takes precedence over the fields\
+              \ produced by enrichment_options. Ignored for test suite datasets."
+          description: "Optional mapping of dataset item field name to a path into\
+            \ the trace, e.g. 'input.input_text'. Takes precedence over the fields\
+            \ produced by enrichment_options. Ignored for test suite datasets."
     TraceEnrichmentOptions:
       type: object
       properties:
@@ -16659,6 +16753,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+        experiment_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
     Check:
       type: object
       properties:
