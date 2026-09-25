@@ -500,21 +500,26 @@ class TraceDAOImpl implements TraceDAO {
      * holding 'unknown' until the real source arrives (see the merge in the batch insert), and matching on any
      * row would read that 'unknown' as SDK and route a playground trace.
      * <p>
+     * Takes the latest source with {@code argMax} rather than deduplicating whole rows: one column is all this
+     * reads, and grouping by the table's own sort key keeps the aggregation in the order the parts are already in.
+     * <p>
      * Carries the {@code <id_weeks>} week bound — see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} (OPIK-8332).
      */
+    /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
+    private static final String[] LOGGING_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
+
     private static final String SELECT_LOGGING_SOURCE_IDS = """
             SELECT id
             FROM (
-                SELECT id, source
+                SELECT id, argMax(source, last_updated_at) AS source
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND id IN :ids
                 <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-                ORDER BY id, last_updated_at DESC
-                LIMIT 1 BY id
+                GROUP BY workspace_id, project_id, id
             )
-            WHERE source IN (:source, :source_legacy)
+            WHERE source IN :sources
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -5168,8 +5173,8 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<Set<UUID>> getLoggingSourceIds(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds) {
-        if (projectIds.isEmpty() || traceIds.isEmpty()) {
+    public Mono<Set<UUID>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(projectIds) || CollectionUtils.isEmpty(traceIds)) {
             return Mono.just(Set.of());
         }
 
@@ -5184,8 +5189,7 @@ class TraceDAOImpl implements TraceDAO {
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", projectIds.toArray(UUID[]::new))
                     .bind("ids", traceIds.toArray(UUID[]::new))
-                    .bind("source", Source.SDK.getValue())
-                    .bind("source_legacy", Source.UNKNOWN_VALUE);
+                    .bind("sources", LOGGING_SOURCES);
 
             idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 

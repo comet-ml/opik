@@ -6,7 +6,7 @@ import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
-import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -62,7 +62,7 @@ class AnnotationQueueRoutingListenerTest {
     private AnnotationQueueRoutingBufferService bufferService;
 
     @Mock
-    private AnnotationQueueRoutingConfig config;
+    private FeatureFlags featureFlags;
 
     private AnnotationQueueRoutingListener listener;
 
@@ -73,9 +73,9 @@ class AnnotationQueueRoutingListenerTest {
     void setUp() {
         workspaceId = randomString();
         userName = randomString();
-        when(config.isEnabled()).thenReturn(true);
+        when(featureFlags.isAnnotationQueueAutomationEnabled()).thenReturn(true);
         when(bufferService.add(anyString(), any(), any())).thenReturn(Mono.empty());
-        listener = new AnnotationQueueRoutingListener(automationService, bufferService, config);
+        listener = new AnnotationQueueRoutingListener(automationService, bufferService, featureFlags);
     }
 
     private static String randomString() {
@@ -124,7 +124,7 @@ class AnnotationQueueRoutingListenerTest {
         void publishesNothingWhenRoutingIsDisabled() {
             // The guard below is a database round trip on the busiest event in the system, so a disabled
             // feature must not reach it either.
-            when(config.isEnabled()).thenReturn(false);
+            when(featureFlags.isAnnotationQueueAutomationEnabled()).thenReturn(false);
 
             listener.onFeedbackScoresCreated(event(EntityType.TRACE, ID_GENERATOR.generateId(),
                     Set.of(ID_GENERATOR.generateId())));

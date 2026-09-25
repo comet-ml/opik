@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import lombok.Builder;
+import lombok.NonNull;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -9,10 +10,10 @@ import java.util.UUID;
 /**
  * The effective feedback scores of one entity, as a name to value map, alongside the project it belongs to.
  *
- * <p>The project comes back with the scores because the caller generally does not know it: the
- * {@code FeedbackScoresCreated} event carries entity ids and, on the batch path, no project at all — a
- * batch may span several projects.
+ * <p>Assembled by the caller from the {@link EffectiveFeedbackScore} rows the DAO streams, so that the
+ * collecting — and the memory it holds — stays where the bound on it is known.
  */
 @Builder(toBuilder = true)
-public record EntityFeedbackScores(UUID entityId, UUID projectId, Map<String, BigDecimal> scores) {
+public record EntityFeedbackScores(@NonNull UUID entityId, @NonNull UUID projectId,
+        @NonNull Map<String, BigDecimal> scores) {
 }
