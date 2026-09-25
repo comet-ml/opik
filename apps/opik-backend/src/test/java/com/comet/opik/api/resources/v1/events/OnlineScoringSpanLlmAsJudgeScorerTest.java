@@ -15,6 +15,7 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -152,6 +153,10 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getMaxPromptFieldChars()).thenReturn(4_000);
         lenient().when(onlineScoringConfig.getAttachmentFetchMaxRetries()).thenReturn(5);
         lenient().when(onlineScoringConfig.getAttachmentFetchRetryDelay()).thenReturn(Duration.milliseconds(300));
+
+        lenient().when(onlineEvaluationRecorder.begin(
+                any(Span.class), any(), any(), any(), any(), any()))
+                .thenReturn(EvaluationRecorder.NOOP);
 
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(ReadTool.NAME, "{}"),

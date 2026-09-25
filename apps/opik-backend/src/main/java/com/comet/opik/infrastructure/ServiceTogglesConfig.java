@@ -58,7 +58,9 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
-    @NotNull boolean onlineScoringTracingEnabled;
+    @NotNull boolean agenticToolsEnabled;
+    @JsonProperty
+    @NotNull boolean agentInsightsEnabled;
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;

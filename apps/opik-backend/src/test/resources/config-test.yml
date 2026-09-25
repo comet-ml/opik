@@ -904,9 +904,29 @@ serviceToggles:
   #   freeform SQL path and the clickhouse-readonly-freeform-sql health check. Tests flip this on when exercising
   #   the read-only ClickHouse client.
   ollieEnabled: "false"
-  # Default: true
-  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
-  onlineScoringTracingEnabled: "true"
+  # Default: false
+  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
+  agenticToolsEnabled: "false"
+  # Default: false
+  # Description: Whether or not the Agent Insights freeform SQL path is enabled. Tests flip this on when exercising
+  #   the read-only ClickHouse client and the clickhouse-readonly-freeform-sql health check.
+  agentInsightsEnabled: "false"
+  # Default: "" (empty, no allowlisted workspaces)
+  # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
+  # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
+  # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
+  # Priority: Highest — overrides forceWorkspaceVersion and all other determination logic for listed workspaces.
+  # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
+  # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
+  v2WorkspaceAllowlist: ""
+  # Default: version_2
+  # Description: Forces ALL workspaces to a specific navigation version.
+  # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
+  # Scope: Global — applies to all workspaces regardless of their entity state.
+  # Priority: Third — overridden by v2WorkspaceAllowlist and v1WorkspaceAllowlist for listed workspaces.
+  # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
+  # Operational impact: Default is "version_2". Override to "disabled" (entity-based determination) or "version_1" if global enforcement is needed.
+  forceWorkspaceVersion: "version_2"
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
