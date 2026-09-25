@@ -4665,26 +4665,6 @@ class SpansResourceTest {
         }
     }
 
-    /**
-     * The two span ingestion entry points, so a test can cover both without branching on the mode.
-     */
-    enum IngestionMode {
-        SINGLE {
-            @Override
-            void ingest(SpanResourceClient client, Span span) {
-                client.createSpan(span, API_KEY, TEST_WORKSPACE);
-            }
-        },
-        BATCH {
-            @Override
-            void ingest(SpanResourceClient client, Span span) {
-                client.batchCreateSpans(List.of(span), API_KEY, TEST_WORKSPACE);
-            }
-        };
-
-        abstract void ingest(SpanResourceClient client, Span span);
-    }
-
     @Nested
     @DisplayName("Source field on span creation")
     class CreateSpanWithSource {
@@ -4710,10 +4690,9 @@ class SpansResourceTest {
             assertThat(actual.source()).isEqualTo(source);
         }
 
-        @ParameterizedTest
-        @EnumSource(IngestionMode.class)
-        @DisplayName("Create span without source stores no source, on either ingestion path")
-        void createWithoutSourceStoresNoSource(IngestionMode mode) {
+        @Test
+        @DisplayName("Create span without source stores no source")
+        void createSpanWithoutSourceStoresNoSource() {
             var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .build();
@@ -4726,7 +4705,28 @@ class SpansResourceTest {
                     .feedbackScores(null)
                     .build();
 
-            mode.ingest(spanResourceClient, expectedSpan);
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            var actualSpan = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+            assertThat(actualSpan.source()).isNull();
+        }
+
+        @Test
+        @DisplayName("Batch create span without source stores no source")
+        void batchCreateSpanWithoutSourceStoresNoSource() {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .source(null)
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(expectedSpan), API_KEY, TEST_WORKSPACE);
 
             var actualSpan = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
             assertThat(actualSpan.source()).isNull();
