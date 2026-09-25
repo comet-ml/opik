@@ -22,20 +22,29 @@ Your team can then give analysts, annotators or external reviewers access to pro
 
 ## How it works
 
+Opik stores traces exactly as they are logged and masks them only when they are read. Users with the **Original data view** permission (listed as **View unanonymized data** in the [permissions table](/administration/roles_and_permissions#permissions-by-role)) see the original values. For all other users, masking rules replace sensitive values such as email addresses, phone numbers or your own customer IDs with a token like `[EMAIL]`, in the Opik UI, the REST API and the SDKs alike.
+
 <Frame caption="Opik stores the trace as it was logged. Each time a user reads the trace, Opik checks the user's permission and masks the data for users without Original data view.">
   <img src="/img/administration/data_anonymization_flow.svg" alt="Data flow: your application logs a trace, Opik stores the original data, and on read a workspace admin sees the email address while a member without the permission sees [EMAIL]" />
 </Frame>
 
-Opik stores traces exactly as they are logged and masks them only when they are read. Users with the **Original data view** permission (listed as **View unanonymized data** in the [permissions table](/administration/roles_and_permissions#permissions-by-role)) see the original values. For all other users, masking rules replace sensitive values such as email addresses, phone numbers or your own customer IDs with a token like `[EMAIL]`, in the Opik UI, the REST API and the SDKs alike.
-
 <Warning>
   All default workspace roles (Manage, Write, Annotate and Read) include the
   **Original data view** permission. When anonymization is enabled, no data is
-  masked until you assign a [custom role](#give-users-a-role-without-the-permission)
+  masked until you assign a [custom role](#set-up-data-anonymization)
   that excludes this permission. Organization admins always see original data.
 </Warning>
 
-## Enable data anonymization
+## Set up data anonymization
+
+To set up data anonymization, ask Comet to enable it, then give the users who should see masked data a custom role that excludes **Original data view**.
+
+<Note>
+  Custom roles are available on Enterprise plans. You must be an organization
+  admin to create them.
+</Note>
+
+### 1. Enable data anonymization
 
 Data anonymization is enabled per deployment by Comet. To enable it:
 
@@ -45,16 +54,7 @@ Data anonymization is enabled per deployment by Comet. To enable it:
 
 The account team configures the rules and tells you when they are active. To change the rules later, contact your account team again.
 
-## Give users a role without the permission
-
-After anonymization is enabled, create a custom role that excludes **Original data view** and assign it to the users who should see masked data.
-
-<Note>
-  Custom roles are available on Enterprise plans. You must be an organization
-  admin to create them.
-</Note>
-
-### 1. Create a custom role
+### 2. Create a custom role
 
 1. Open the **Admin Dashboard** and go to **Roles & permissions**.
 2. Click **Create custom role**.
@@ -70,7 +70,7 @@ After anonymization is enabled, create a custom role that excludes **Original da
 
 In the **Custom roles** table, the new role shows its base role and the number of excluded permissions, for example **Read -1 excluded**.
 
-### 2. Assign the role to users
+### 3. Assign the role to users
 
 You can assign the role from the Admin Dashboard or from the workspace:
 
@@ -83,7 +83,7 @@ You can assign the role from the Admin Dashboard or from the workspace:
 
 Role changes take effect within a few seconds. The user does not need to log in again.
 
-### 3. Check the result
+### 4. Check the result
 
 Ask the user to open a trace that contains data that matches one of your rules. The matched values show as replacement tokens in the trace input, output and metadata. A user who has the permission sees the original values in the same trace.
 
