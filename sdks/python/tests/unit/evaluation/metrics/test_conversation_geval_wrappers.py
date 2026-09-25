@@ -184,6 +184,26 @@ def test_geval_conversation_metric_unreadable_content_part_marks_failed():
     )
 
 
+def test_geval_conversation_metric_malformed_text_part_marks_failed():
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+
+    for content in ([{"type": "text", "text": 42}], [{"type": "text"}]):
+        result = metric.score(
+            [
+                {"role": "assistant", "content": "gradeable answer"},
+                {"role": "user", "content": "q"},
+                {"role": "assistant", "content": content},
+            ]
+        )
+
+        assert judge.received == []
+        assert result.scoring_failed is True
+        assert result.reason == (
+            "Assistant turn content must be text or a list of content parts, got dict."
+        )
+
+
 def test_geval_conversation_metric_multimodal_final_turn_grades_its_own_text():
     """OpenAI-style content parts on the last turn are text from that turn.
 
