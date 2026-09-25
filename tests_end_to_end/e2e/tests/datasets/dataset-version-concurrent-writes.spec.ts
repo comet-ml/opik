@@ -36,7 +36,11 @@ import { uuid7, buildDatasetItemBatches, sumDatasetVersionField } from '@e2e/cor
  * Every assertion holds whatever order the race resolves in — see the counter
  * arithmetic on ACCOUNTED_* below.
  */
-const BATCH_SIZE = 100;
+// Kept small because the workspace limiter admits a batch only when it has
+// that many permits free at once. Under the suite's shared load a 100-item
+// batch starved past a full 60s window; the race needs concurrent requests,
+// not large ones.
+const BATCH_SIZE = 25;
 const SEED_BATCHES = 8;
 const SEED_ITEMS = BATCH_SIZE * SEED_BATCHES;
 
@@ -69,7 +73,7 @@ const batches = (ids: string[], count: number, revision: string) =>
   buildDatasetItemBatches(ids, count, BATCH_SIZE, revision);
 
 test.describe('Dataset version counters — concurrent grouped and ungrouped writes', { tag: ['@area:datasets'] }, () => {
-  /** 1600 item writes against a cloud backend outrun the default budget. */
+  /** 400 item writes, in batches that may stand off a 429, outrun the default budget. */
   test.slow();
 
   test(
