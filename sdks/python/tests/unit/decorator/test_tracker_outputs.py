@@ -1630,15 +1630,34 @@ def test_tracker__ignore_list_was_passed__arguments_passed_through_kwargs_are_no
     def f(prompt, **kwargs):
         return {"some-key": "the-output-value"}
 
-    call_kwargs = {"api_key": "sk-secret", "temperature": 0}
-    f("hi", **call_kwargs)
+    f("hi", api_key="sk-secret", temperature=0)
     tracker.flush_tracker()
 
     assert len(fake_backend.trace_trees) == 1
     expected_input = {"prompt": "hi", "kwargs": {"temperature": 0}}
     assert fake_backend.trace_trees[0].input == expected_input
     assert fake_backend.trace_trees[0].spans[0].input == expected_input
-    assert call_kwargs == {"api_key": "sk-secret", "temperature": 0}
+
+
+def test_tracker__ignore_list_was_passed__regular_parameter_named_kwargs__its_dict_is_logged_as_is(
+    fake_backend,
+):
+    # Only the **kwargs dict is filtered, not a regular parameter that happens
+    # to be named "kwargs".
+    @tracker.track(ignore_arguments=["api_key"])
+    def f(prompt, kwargs):
+        return {"some-key": "the-output-value"}
+
+    f("hi", {"api_key": "not-a-secret", "temperature": 0})
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    expected_input = {
+        "prompt": "hi",
+        "kwargs": {"api_key": "not-a-secret", "temperature": 0},
+    }
+    assert fake_backend.trace_trees[0].input == expected_input
+    assert fake_backend.trace_trees[0].spans[0].input == expected_input
 
 
 def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__input_dicts_are_empty(
