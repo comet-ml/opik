@@ -815,6 +815,30 @@ class TraceDAOImpl implements TraceDAO {
                 ) e ON ei.experiment_id = e.id
                 ORDER BY trace_id, experiment_id DESC
                 LIMIT 1 BY trace_id
+            ), trace_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                AND scope = 'trace'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), trace_annotation_queues AS (
+                SELECT trace_id,
+                       groupArray(tuple(id, name)) AS annotation_queues
+                FROM (
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as trace_id
+                    FROM (
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                        <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                        AND queue_id IN (SELECT id FROM trace_scope_queues)
+                        AND item_id IN :ids
+                    ) AS aqi
+                    JOIN trace_scope_queues AS aq ON aq.id = aqi.queue_id
+                ) AS queues_with_trace_id
+                GROUP BY trace_id
             )
             SELECT
                 t.*,
@@ -833,7 +857,8 @@ class TraceDAOImpl implements TraceDAO {
                 eaag.experiment_id as experiment_id,
                 eaag.experiment_name as experiment_name,
                 eaag.experiment_dataset_id as experiment_dataset_id,
-                eaag.experiment_dataset_item_id as experiment_dataset_item_id
+                eaag.experiment_dataset_item_id as experiment_dataset_item_id,
+                taq.annotation_queues as annotation_queues
             FROM (
                 SELECT
                     *,
@@ -848,6 +873,7 @@ class TraceDAOImpl implements TraceDAO {
             ) AS t
             LEFT JOIN spans_agg s ON t.id = s.trace_id
             LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
+            LEFT JOIN trace_annotation_queues taq ON taq.trace_id = t.id
             LEFT JOIN (
                 SELECT
                     entity_id,

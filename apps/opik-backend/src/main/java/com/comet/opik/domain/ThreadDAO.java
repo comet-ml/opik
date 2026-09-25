@@ -991,6 +991,30 @@ class ThreadDAOImpl implements ThreadDAO {
                 LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), thread_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND scope = 'thread'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), thread_annotation_queues AS (
+                 SELECT thread_id,
+                        groupArray(tuple(id, name)) AS annotation_queues
+                 FROM (
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as thread_id
+                    FROM (
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND queue_id IN (SELECT id FROM thread_scope_queues)
+                          AND item_id IN (SELECT thread_model_id FROM trace_threads_ids)
+                    ) AS aqi
+                    JOIN thread_scope_queues AS aq ON aq.id = aqi.queue_id
+                 ) AS queues_with_thread_id
+                 GROUP BY thread_id
             )
             SELECT
                 t.workspace_id as workspace_id,
@@ -1016,7 +1040,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 if(tt.environment = '', t.environment, tt.environment) as environment,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
-                c.comments AS comments
+                c.comments AS comments,
+                ttaq.annotation_queues AS annotation_queues
             FROM (
                 SELECT
                     t.thread_id as thread_id,
@@ -1051,6 +1076,7 @@ class ThreadDAOImpl implements ThreadDAO {
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
+            LEFT JOIN thread_annotation_queues ttaq ON ttaq.thread_id = tt.thread_model_id
             SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
             """;
 

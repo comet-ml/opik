@@ -1142,6 +1142,11 @@ class GetTracesByProjectResourceTest {
             assertThat(actualById.get(inOne.id()).annotationQueues()).containsExactly(refB);
             assertThat(actualById.get(inNone.id()).annotationQueues()).isNull();
 
+            assertThat(traceResourceClient.getById(inBoth.id(), workspaceName, apiKey).annotationQueues())
+                    .containsExactly(refA, refB);
+            assertThat(traceResourceClient.getById(inNone.id(), workspaceName, apiKey).annotationQueues())
+                    .isNull();
+
             var excluded = getTracesById(project.name(), apiKey, workspaceName, traces.size(),
                     Map.of("exclude", toURLEncodedQueryParam(List.of(Trace.TraceField.ANNOTATION_QUEUES))));
             assertThat(excluded.values()).allSatisfy(trace -> assertThat(trace.annotationQueues()).isNull());

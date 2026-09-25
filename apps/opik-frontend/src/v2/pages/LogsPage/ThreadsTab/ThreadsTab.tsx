@@ -102,7 +102,7 @@ import {
 } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import { useTagsOptions } from "@/v2/pages-shared/TagsAutocomplete/useTagsOptions";
 import ListCell from "@/shared/DataTableCells/ListCell";
-import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
+import ResourceListCell from "@/shared/DataTableCells/ResourceListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { withExplain } from "@/v2/pages/LogsPage/explain/withExplain";
 import {
@@ -254,8 +254,9 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     id: COLUMN_ANNOTATION_QUEUES_ID,
     label: "Annotation queues",
     type: COLUMN_TYPE.list,
+    size: 220,
     accessorFn: (row) => row.annotation_queues ?? [],
-    cell: MultiResourceCell as never,
+    cell: ResourceListCell as never,
     customMeta: {
       nameKey: "name",
       idKey: "id",

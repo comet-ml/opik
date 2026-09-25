@@ -815,6 +815,11 @@ class FindTraceThreadsResourceTest {
             assertThat(actualById.get(inOne.id()).annotationQueues()).containsExactly(refB);
             assertThat(actualById.get(inNone.id()).annotationQueues()).isNull();
 
+            assertThat(traceResourceClient.getTraceThread(inBoth.id(), projectId, apiKey, workspaceName)
+                    .annotationQueues()).containsExactly(refA, refB);
+            assertThat(traceResourceClient.getTraceThread(inNone.id(), projectId, apiKey, workspaceName)
+                    .annotationQueues()).isNull();
+
             // sort x exclude: the excluded join must not disturb an explicitly sorted page
             var sortByStartTime = List.of(SortingField.builder().field("start_time").direction(Direction.DESC).build());
             var excludeParam = Map.of("exclude",

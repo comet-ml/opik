@@ -95,7 +95,7 @@ import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchin
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/shared/DataTableCells/LinkCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";
-import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
+import ResourceListCell from "@/shared/DataTableCells/ResourceListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
@@ -1276,9 +1276,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               id: COLUMN_ANNOTATION_QUEUES_ID,
               label: "Annotation queues",
               type: COLUMN_TYPE.list,
+              size: 220,
               accessorFn: (row: BaseTraceData) =>
                 get(row, "annotation_queues", []),
-              cell: MultiResourceCell as never,
+              cell: ResourceListCell as never,
               customMeta: {
                 nameKey: "name",
                 idKey: "id",
