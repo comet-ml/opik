@@ -5,6 +5,8 @@ doc §5.3 for the canonical grammar. The supported forms are:
 
     .                       root
     .foo / .foo.bar         dotted field access
+    .["a-b"] / ["a-b"]      quoted field access, for keys the dotted form
+                            cannot express (see path_format.field_step)
     .foo[3] / .foo[-1]      array index (negative allowed)
     .foo[0:5]               array slice (Python-style, bounds optional)
     .foo[]                  iterate array → multi-result
@@ -66,7 +68,9 @@ def normalize_expression(expression: str) -> str:
     if not stripped:
         return expression
     first = stripped[0]
-    if first.isalpha() or first == "_":
+    # `[` covers a quoted key at the root (`["a-b"]`), which is how
+    # `path_format.field_step` renders a non-identifier top-level key.
+    if first.isalpha() or first == "_" or first == "[":
         return "." + expression
     return expression
 
@@ -338,6 +342,12 @@ class _Parser:
         # `[]` — iterate.
         if self._accept("RBRACKET") is not None:
             return Iterate()
+        # `["quoted-key"]` — field access for keys the dotted form cannot
+        # express; this is the form `path_format.field_step` renders.
+        quoted = self._accept("STRING")
+        if quoted is not None:
+            self._expect("RBRACKET")
+            return Field(name=_unquote(quoted.value))
         # `[ INTEGER ]` or `[ INTEGER? : INTEGER? ]`.
         start: Optional[int] = None
         stop: Optional[int] = None
@@ -354,8 +364,8 @@ class _Parser:
         if first_int is None:
             tok = self._peek()
             raise PathError(
-                f"Expected integer, slice, or ']' at position {tok.pos}, "
-                f"got {tok.value!r}"
+                f"Expected integer, slice, quoted key, or ']' at position "
+                f"{tok.pos}, got {tok.value!r}"
             )
         self._expect("RBRACKET")
         return Index(idx=start or 0)

@@ -5,8 +5,13 @@ unsupported form has a parse-error test, so the prompt-taught surface
 can't drift silently.
 """
 
+import re
+
 import pytest
 
+from opik.evaluation.suite_evaluators.agentic.compression import (
+    path_aware_truncator,
+)
 from opik.evaluation.suite_evaluators.agentic.tools import path_evaluator
 
 
@@ -110,6 +115,39 @@ class TestIterate:
         assert results == ["agent.run", "tool_call", "broken"]
 
 
+# Bracket-quoted keys ---------------------------------------------------------
+
+
+class TestQuotedKeyPaths:
+    def test_evaluate__quoted_key_at_root__returns_value(self):
+        assert path_evaluator.evaluate('.["a-b"].c', {"a-b": {"c": 1}}) == [1]
+
+    def test_evaluate__quoted_key_after_dotted_step__returns_value(self):
+        doc = {"trace": {"gen_ai.tool.input": "hello"}}
+        results = path_evaluator.evaluate('.trace["gen_ai.tool.input"]', doc)
+        assert results == ["hello"]
+
+    def test_evaluate__quoted_key_then_index__returns_element(self):
+        doc = {"a-b": ["first", "second"]}
+        assert path_evaluator.evaluate('.["a-b"][1]', doc) == ["second"]
+
+    def test_evaluate__escaped_quote_in_key__returns_value(self):
+        assert path_evaluator.evaluate(r'.["say\"hi"]', {'say"hi': 1}) == [1]
+
+    def test_normalize__quoted_key_at_root__gets_leading_dot(self):
+        assert path_evaluator.normalize_expression('["a-b"]') == '.["a-b"]'
+
+    def test_evaluate__path_taken_from_truncation_hint__recovers_the_value(self):
+        # `read` renders these hints, and the prompt tells the model to paste
+        # them verbatim, so both sides have to speak the same grammar.
+        payload = {"tool-results": "z" * 80}
+        truncated = path_aware_truncator.truncate_strings(payload, max_string_chars=5)
+        hint = re.search(r"scan\('([^']+)'\)", truncated["tool-results"]).group(1)
+        expression = path_evaluator.normalize_expression(hint)
+
+        assert path_evaluator.evaluate(expression, payload) == ["z" * 80]
+
+
 # Recursive descent -----------------------------------------------------------
 
 
@@ -194,6 +232,7 @@ class TestUnsupportedSyntax:
             ".foo +",  # arithmetic not supported
             ".foo | length",  # pipe outside of `..`
             ".foo[",  # unterminated bracket
+            ".foo[.bar]",  # a bracket body is an index, slice or quoted key
             "..|wat",  # unknown post-descent filter
             ".foo == ",  # equality without literal
             ".foo as $x",  # bindings not supported
