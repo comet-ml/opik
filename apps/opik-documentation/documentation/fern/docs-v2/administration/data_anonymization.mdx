@@ -35,6 +35,20 @@ Opik stores traces exactly as they are logged and masks them only when they are 
   that excludes this permission. Organization admins always see original data.
 </Warning>
 
+## Data anonymization vs. SDK anonymizers
+
+Opik has two ways to protect sensitive data. You can use them together.
+
+|                           | Data anonymization (this page)                  | [SDK anonymizers](/production/gateway-guardrails/anonymizers) |
+| ------------------------- | ----------------------------------------------- | ------------------------------------------------------------- |
+| **Where it runs**         | On the Opik server, when data is read           | In your application, before data is sent to Opik              |
+| **Original data**         | Stored, and visible to users with the permission | Never sent to Opik and cannot be recovered                   |
+| **Who sees masked data**  | Users whose role excludes Original data view    | Every user                                                    |
+| **Configured by**         | Your Comet account team, per deployment         | Your developers, in code                                      |
+| **Availability**          | Opik Enterprise (preview)                       | Opik Cloud, Enterprise and open source                        |
+
+Use SDK anonymizers for data that must never leave your application, such as passwords or API keys. Use data anonymization when some users must see the original data, for example to debug a customer issue, and other users must not.
+
 ## Set up data anonymization
 
 <Note>
@@ -98,20 +112,6 @@ Attachments cannot be masked. A user without the permission gets a permission er
 
 - **Masked data can overwrite original data.** A user without the permission sees masked values. If this user edits and saves a prompt, dataset item or experiment, the masked text replaces the original text. Give users who see masked data a role that cannot edit these resources, such as a role based on **Read** or **Annotate**.
 - **Rules apply to all text.** A rule can also match values that are not sensitive. For example, a rule for dates also matches a date in a model version. When you ask for a custom rule, describe the format of the data as precisely as possible.
-
-## Data anonymization vs. SDK anonymizers
-
-Opik has two ways to protect sensitive data. You can use them together.
-
-|                           | Data anonymization (this page)                  | [SDK anonymizers](/production/gateway-guardrails/anonymizers) |
-| ------------------------- | ----------------------------------------------- | ------------------------------------------------------------- |
-| **Where it runs**         | On the Opik server, when data is read           | In your application, before data is sent to Opik              |
-| **Original data**         | Stored, and visible to users with the permission | Never sent to Opik and cannot be recovered                   |
-| **Who sees masked data**  | Users whose role excludes Original data view    | Every user                                                    |
-| **Configured by**         | Your Comet account team, per deployment         | Your developers, in code                                      |
-| **Availability**          | Opik Enterprise (preview)                       | Opik Cloud, Enterprise and open source                        |
-
-Use SDK anonymizers for data that must never leave your application, such as passwords or API keys. Use data anonymization when some users must see the original data, for example to debug a customer issue, and other users must not.
 
 ## Next steps
 
