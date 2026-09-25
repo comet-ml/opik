@@ -4,8 +4,6 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.utils.RetryUtils;
-import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
@@ -17,7 +15,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.Map;
@@ -32,10 +29,13 @@ import java.util.Set;
  * <p>Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException},
  * so the online-scoring consumer drops permanent failures (bad request, missing credits) and redelivers
  * transient ones. Rate limits and gateway errors are also retried in-process first.
+ *
+ * <p>Provided by {@link com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule} rather than injected
+ * directly: the {@code @Config} qualifier has to sit on a hand-written parameter, since the Docker build compiles
+ * without {@code lombok.config} and Lombok then drops it from generated constructors.
  */
 @Slf4j
-@Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
+@RequiredArgsConstructor
 public class OpenRouterDecisionsClient {
 
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
@@ -49,7 +49,7 @@ public class OpenRouterDecisionsClient {
     private static final Set<Integer> RETRYABLE_STATUSES = Set.of(429, 502, 524, 529);
 
     private final @NonNull RetriableHttpClient client;
-    private final @NonNull @Config("llmProviderClient") LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
