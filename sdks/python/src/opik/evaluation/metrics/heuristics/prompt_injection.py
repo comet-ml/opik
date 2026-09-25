@@ -38,15 +38,11 @@ _INJECTION_PATTERNS = [
     r"\bDan\b.*?mode",  # "Dan mode" or similar
     r"\bJailbreak\b",
     r"DAN\:|DAN mode",  # DAN pattern
-    r"Unleash",  # "Unleash DAN", "Unleash yourself", etc.
     r"no restrictions apply",
     r"no rules apply",
     r"\bno longer (?:bound|restricted|limited) by",  # flexible "no longer bound by..."
-    r"###",  # common delimiter used in leaked prompts
-    r"```",  # triple backtick for code/metadata leakage
     r"\[system message\]",  # Often appears as system message marker
     r"\[prompt\]",  # prompt marker
-    r"system\s*:",  # "system: " as preface
     r"please disregard (?:the )?(?:previous|prior|above) (?:instructions|prompts|messages)",
     r"please ignore (?:the )?(?:previous|prior|above) (?:instructions|prompts|messages)",
 ]
