@@ -6,6 +6,7 @@ import api, {
   ANNOTATION_QUEUES_REST_ENDPOINT,
   ANNOTATION_QUEUES_KEY,
   TRACES_KEY,
+  TRACE_KEY,
   THREADS_KEY,
 } from "@/api/api";
 
@@ -47,6 +48,7 @@ const useAnnotationQueueBatchDeleteMutation = () => {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: [ANNOTATION_QUEUES_KEY] }),
         queryClient.invalidateQueries({ queryKey: [TRACES_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [TRACE_KEY] }),
         queryClient.invalidateQueries({ queryKey: [THREADS_KEY] }),
       ]);
     },

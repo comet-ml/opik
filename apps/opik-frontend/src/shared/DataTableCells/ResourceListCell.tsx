@@ -85,6 +85,11 @@ const ResourceListCell = (context: CellContext<unknown, unknown>) => {
     return perRow * getVisibleRowCount(rowHeight);
   }, [isSmall, rowHeight, itemsPerRow]);
 
+  // Key by id AND name: ChildrenWidthMeasurer re-measures only when its children's keys change, so a
+  // renamed queue has to produce a new key or the chip keeps the width measured for the old name.
+  const itemKey = (item: ResourceItem) =>
+    `${get(item, idKey)}:${get(item, nameKey, "")}`;
+
   const renderTag = (item: ResourceItem) => (
     <NavigationTag
       id={String(get(item, idKey))}
@@ -132,13 +137,13 @@ const ResourceListCell = (context: CellContext<unknown, unknown>) => {
         >
           <ChildrenWidthMeasurer onMeasure={onMeasure}>
             {sortedList.map((item) => (
-              <div key={String(get(item, idKey))} className="shrink-0">
+              <div key={itemKey(item)} className="shrink-0">
                 {renderTag(item)}
               </div>
             ))}
           </ChildrenWidthMeasurer>
           {displayedItems.map((item) => (
-            <div key={String(get(item, idKey))} className="min-w-0 max-w-full">
+            <div key={itemKey(item)} className="min-w-0 max-w-full">
               {renderTag(item)}
             </div>
           ))}
@@ -164,7 +169,7 @@ const ResourceListCell = (context: CellContext<unknown, unknown>) => {
                 onClick={(event) => event.stopPropagation()}
               >
                 {hiddenItems.map((item) => (
-                  <div key={String(get(item, idKey))}>{renderTag(item)}</div>
+                  <div key={itemKey(item)}>{renderTag(item)}</div>
                 ))}
               </PopoverContent>
             </Popover>
