@@ -11,12 +11,13 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 import opik
-from opik import jsonable_encoder, context_storage
+from opik import jsonable_encoder, context_storage, opik_context
 from opik.api_objects import opik_client
 from opik.api_objects import span, trace
 from opik.integrations.langchain import (
     OpikTracer,
     extract_current_langgraph_span_data,
+    track_langgraph,
     LANGGRAPH_INTERRUPT_OUTPUT_KEY,
     LANGGRAPH_RESUME_INPUT_KEY,
     LANGGRAPH_INTERRUPT_METADATA_KEY,
@@ -664,6 +665,554 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
     assert len(fake_backend.trace_trees) == 1
     assert len(opik_tracer.created_traces()) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.asyncio
+async def test_langgraph__astream__tracked_node__update_current_span_updates_langgraph_trace(
+    fake_backend,
+):
+    """A @track-ed node running under astream() must nest inside the LangGraph trace.
+
+    Regression test for https://github.com/comet-ml/opik/issues/3175: under async
+    LangGraph execution the OpikTracer callbacks ran in a copied context, so
+    @track saw an empty context stack, opened its own root trace, and any
+    opik_context.update_current_span(total_cost=...) written inside the node was
+    silently attributed to that second trace instead of the LangGraph one.
+    """
+
+    class State(TypedDict):
+        messages: Annotated[list, langgraph_message.add_messages]
+
+    def node_1(state: State) -> Dict[str, Any]:
+        return {"messages": [AIMessage(content="node_1")]}
+
+    @opik.track
+    def node_2(state: State) -> Dict[str, Any]:
+        opik_context.update_current_span(total_cost=100.0)
+        return {"messages": [AIMessage(content="node_2")]}
+
+    builder = StateGraph(State)
+    builder.add_node("node_1", node_1)
+    builder.add_node("node_2", node_2)
+    builder.add_edge(START, "node_1")
+    builder.add_edge("node_1", "node_2")
+    builder.add_edge("node_2", END)
+    graph = builder.compile()
+
+    opik_tracer = OpikTracer()
+
+    async for _chunk in graph.astream(
+        {"messages": [HumanMessage(content="start")]},
+        config={"callbacks": [opik_tracer]},
+        stream_mode="values",
+    ):
+        pass
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="node_1",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="node_2",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="node_2",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        total_cost=100.0,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    # The cost must not land on a second, spurious root trace.
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.asyncio
+async def test_langgraph__ainvoke__async_node__tracked_call_nests_and_context_is_visible(
+    fake_backend,
+):
+    """An async node under ainvoke() sees the tracer's context and a plain @track call nests.
+
+    This is what the LangGraph integration docs promise for asynchronous execution: no
+    explicit propagation via extract_current_langgraph_span_data is needed, because
+    OpikTracer's callbacks run inline in the calling task.
+    """
+    seen: Dict[str, Any] = {}
+
+    @opik.track
+    def process_data(value: int) -> int:
+        return value * 2
+
+    async def my_async_node(state: Dict[str, Any]) -> Dict[str, Any]:
+        seen["trace"] = opik_context.get_current_trace_data()
+        seen["span"] = opik_context.get_current_span_data()
+        return {"value": process_data(state["value"])}
+
+    graph = StateGraph(dict)
+    graph.add_node("processor", my_async_node)
+    graph.add_edge(START, "processor")
+    graph.add_edge("processor", END)
+    app = track_langgraph(graph.compile(), OpikTracer())
+
+    result = await app.ainvoke({"value": 21})
+    opik.flush_tracker()
+
+    assert result == {"value": 42}
+    assert seen["trace"] is not None and seen["trace"].name == "LangGraph"
+    assert seen["span"] is not None and seen["span"].name == "processor"
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="processor",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="process_data",
+                        input={"value": 21},
+                        output={"output": 42},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.asyncio
+async def test_langgraph__ainvoke__parallel_fan_out__tracked_calls_nest_under_their_own_node(
+    fake_backend,
+):
+    """Two branches fanning out from START stay in one trace, each tracked call under its own node.
+
+    The two tests above are sequential, so they pin one branch at a time. This one
+    pins the parallel case of https://github.com/comet-ml/opik/issues/3175: with the
+    callbacks running in a copied context every branch's @track call found an empty
+    context and opened a root trace of its own, so a fan-out of two logged three
+    traces and the costs written inside the branches landed on the wrong two.
+
+    It also pins the isolation that makes inline callbacks safe here. LangGraph runs
+    the branches of a superstep as separate asyncio tasks, and a task copies the
+    context when it is created, so each branch pushes its node's span onto a stack of
+    its own and neither branch sees the other's. Hence one span per node, one tracked
+    call under each, and an empty stack once the graph returns. If a LangGraph release
+    stopped putting a task boundary between branches, the two costs would
+    cross-attribute and the per-node assertions below would say so.
+    """
+
+    class State(TypedDict):
+        value: int
+        fan_a_result: int
+        fan_b_result: int
+
+    observed: Dict[str, Any] = {}
+
+    def observe_context() -> Dict[str, Any]:
+        current_span_data = opik_context.get_current_span_data()
+        return {
+            "span_stack_depth": context_storage.span_data_stack_size(),
+            "current_span_name": current_span_data.name
+            if current_span_data is not None
+            else None,
+        }
+
+    @opik.track
+    def tracked_a(value: int) -> int:
+        opik_context.update_current_span(total_cost=1.0)
+        return value * 2
+
+    @opik.track
+    def tracked_b(value: int) -> int:
+        opik_context.update_current_span(total_cost=2.0)
+        return value * 3
+
+    async def fan_a(state: State) -> Dict[str, Any]:
+        observed["fan_a"] = observe_context()
+        return {"fan_a_result": tracked_a(state["value"])}
+
+    async def fan_b(state: State) -> Dict[str, Any]:
+        observed["fan_b"] = observe_context()
+        return {"fan_b_result": tracked_b(state["value"])}
+
+    builder = StateGraph(State)
+    builder.add_node("fan_a", fan_a)
+    builder.add_node("fan_b", fan_b)
+    builder.add_edge(START, "fan_a")
+    builder.add_edge(START, "fan_b")
+    builder.add_edge("fan_a", END)
+    builder.add_edge("fan_b", END)
+    graph = builder.compile()
+
+    opik_tracer = OpikTracer()
+
+    result = await graph.ainvoke({"value": 21}, config={"callbacks": [opik_tracer]})
+
+    opik.flush_tracker()
+
+    assert result["fan_a_result"] == 42
+    assert result["fan_b_result"] == 63
+
+    # Each branch saw its own node's span, and only its own: one entry on the stack,
+    # not its sibling's as well. The fan-out also left nothing on the caller's stack.
+    assert observed == {
+        "fan_a": {"span_stack_depth": 1, "current_span_name": "fan_a"},
+        "fan_b": {"span_stack_depth": 1, "current_span_name": "fan_b"},
+    }
+    assert context_storage.span_data_stack_size() == 0
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="fan_a",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="tracked_a",
+                        input={"value": 21},
+                        output={"output": 42},
+                        total_cost=1.0,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="fan_b",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="tracked_b",
+                        input={"value": 21},
+                        output={"output": 63},
+                        total_cost=2.0,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    # One trace, not three: neither branch opened a root trace of its own.
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.asyncio
+async def test_langgraph__two_sequential_ainvoke_in_one_task__two_traces_and_a_clean_context(
+    fake_backend,
+):
+    """Two awaited runs in one task log two traces and give the caller its context back.
+
+    Running the callbacks inline puts the tracer's context writes in the caller's task,
+    which is what makes the node's task inherit them. The matching pops cannot get back
+    there: LangChain wraps every end and error callback in
+    ``asyncio.create_task(..., context=copy_context())``
+    (``langchain_core.callbacks.manager.shielded``), so ``on_chain_start`` writes to the
+    caller's context while ``_persist_run`` pops from a throwaway copy of it. The caller
+    is therefore left holding the finished trace and the finished node span.
+
+    Anything reading the context next inherits them, and the reading is what does the
+    damage: the second run found the first run's span as its parent and its trace as its
+    trace, so two runs logged one trace reading LangGraph -> node_one -> LangGraph ->
+    node_two, with the second run's cost inside the first run's node. The span stack
+    grew by two per run and never came back down.
+
+    ``opik.context_storage`` closes that by reporting trace and span data that carries
+    an ``end_time`` as absent - it has been sent as complete, so it cannot be anyone's
+    parent. Hence two traces here, each with its own cost, and an empty stack after.
+    """
+
+    class State(TypedDict):
+        value: int
+        result: int
+
+    @opik.track
+    def tracked_one(value: int) -> int:
+        opik_context.update_current_span(total_cost=1.0)
+        return value * 2
+
+    @opik.track
+    def tracked_two(value: int) -> int:
+        opik_context.update_current_span(total_cost=2.0)
+        return value * 3
+
+    def build_graph(node_name: str, tracked_function: Any) -> Any:
+        async def node(state: State) -> Dict[str, Any]:
+            return {"result": tracked_function(state["value"])}
+
+        builder = StateGraph(State)
+        builder.add_node(node_name, node)
+        builder.add_edge(START, node_name)
+        builder.add_edge(node_name, END)
+        return builder.compile()
+
+    first_graph = build_graph("node_one", tracked_one)
+    second_graph = build_graph("node_two", tracked_two)
+
+    opik_tracer = OpikTracer()
+
+    # Both awaited from this one task, which is what a user's async entry point does.
+    first_result = await first_graph.ainvoke(
+        {"value": 21}, config={"callbacks": [opik_tracer]}
+    )
+    second_result = await second_graph.ainvoke(
+        {"value": 21}, config={"callbacks": [opik_tracer]}
+    )
+
+    opik.flush_tracker()
+
+    assert first_result["result"] == 42
+    assert second_result["result"] == 63
+
+    # The caller's context is back where it started, so whatever runs next in this task
+    # is not parented under a run that has already been sent.
+    assert context_storage.span_data_stack_size() == 0
+    assert opik_context.get_current_span_data() is None
+    assert opik_context.get_current_trace_data() is None
+
+    EXPECTED_FIRST_TRACE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="node_one",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="tracked_one",
+                        input={"value": 21},
+                        output={"output": 42},
+                        total_cost=1.0,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    EXPECTED_SECOND_TRACE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="node_two",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="tracked_two",
+                        input={"value": 21},
+                        output={"output": 63},
+                        total_cost=2.0,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    # Two traces, not one: the second run did not attach to the first run's leftovers,
+    # and each run's cost is on its own node rather than both on the first one's.
+    assert len(fake_backend.trace_trees) == 2
+    assert_equal(EXPECTED_FIRST_TRACE, fake_backend.trace_trees[0])
+    assert_equal(EXPECTED_SECOND_TRACE, fake_backend.trace_trees[1])
+
+
+@pytest.mark.asyncio
+async def test_langgraph__tracked_call_after_ainvoke__opens_its_own_trace(
+    fake_backend,
+):
+    """Work tracked after the graph returns belongs to itself, not to the finished graph.
+
+    This is the same leftover context as the test above, seen from the other side, and it
+    is why the guard belongs in ``opik.context_storage`` rather than in this tracer: the
+    read that gets it wrong here is ``@track``'s own, on a call the tracer never sees.
+    Measured without the guard: ``unrelated_work`` was logged as a child span of the
+    finished ``node_one`` span inside the finished ``LangGraph`` trace, and no trace of
+    its own - so a function whose only connection to the graph is running after it in the
+    same task disappeared into the graph's trace.
+    """
+
+    @opik.track
+    def unrelated_work(value: int) -> int:
+        return value * 10
+
+    async def node(state: Dict[str, Any]) -> Dict[str, Any]:
+        return {"value": state["value"] + 1}
+
+    builder = StateGraph(dict)
+    builder.add_node("node_one", node)
+    builder.add_edge(START, "node_one")
+    builder.add_edge("node_one", END)
+    graph = builder.compile()
+
+    await graph.ainvoke({"value": 21}, config={"callbacks": [OpikTracer()]})
+
+    assert unrelated_work(5) == 50
+
+    opik.flush_tracker()
+
+    EXPECTED_GRAPH_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="node_one",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    EXPECTED_TRACKED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="unrelated_work",
+        input={"value": 5},
+        output={"output": 50},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="unrelated_work",
+                input={"value": 5},
+                output={"output": 50},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 2
+    assert_equal(EXPECTED_GRAPH_TRACE_TREE, fake_backend.trace_trees[0])
+    assert_equal(EXPECTED_TRACKED_TRACE_TREE, fake_backend.trace_trees[1])
 
 
 def test_langgraph__distributed_headers__langgraph_span_is_kept(
