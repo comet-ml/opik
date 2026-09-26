@@ -834,6 +834,150 @@ async def test_langgraph__ainvoke__async_node__tracked_call_nests_and_context_is
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@pytest.mark.asyncio
+async def test_langgraph__ainvoke__parallel_fan_out__tracked_calls_nest_under_their_own_node(
+    fake_backend,
+):
+    """Two branches fanning out from START stay in one trace, each tracked call under its own node.
+
+    The two tests above are sequential, so they pin one branch at a time. This one
+    pins the parallel case of https://github.com/comet-ml/opik/issues/3175: with the
+    callbacks running in a copied context every branch's @track call found an empty
+    context and opened a root trace of its own, so a fan-out of two logged three
+    traces and the costs written inside the branches landed on the wrong two.
+
+    It also pins the isolation that makes inline callbacks safe here. LangGraph runs
+    the branches of a superstep as separate asyncio tasks, and a task copies the
+    context when it is created, so each branch pushes its node's span onto a stack of
+    its own and neither branch sees the other's. Hence one span per node, one tracked
+    call under each, and an empty stack once the graph returns. If a LangGraph release
+    stopped putting a task boundary between branches, the two costs would
+    cross-attribute and the per-node assertions below would say so.
+    """
+
+    class State(TypedDict):
+        value: int
+        fan_a_result: int
+        fan_b_result: int
+
+    observed: Dict[str, Any] = {}
+
+    def observe_context() -> Dict[str, Any]:
+        current_span_data = opik_context.get_current_span_data()
+        return {
+            "span_stack_depth": context_storage.span_data_stack_size(),
+            "current_span_name": current_span_data.name
+            if current_span_data is not None
+            else None,
+        }
+
+    @opik.track
+    def tracked_a(value: int) -> int:
+        opik_context.update_current_span(total_cost=1.0)
+        return value * 2
+
+    @opik.track
+    def tracked_b(value: int) -> int:
+        opik_context.update_current_span(total_cost=2.0)
+        return value * 3
+
+    async def fan_a(state: State) -> Dict[str, Any]:
+        observed["fan_a"] = observe_context()
+        return {"fan_a_result": tracked_a(state["value"])}
+
+    async def fan_b(state: State) -> Dict[str, Any]:
+        observed["fan_b"] = observe_context()
+        return {"fan_b_result": tracked_b(state["value"])}
+
+    builder = StateGraph(State)
+    builder.add_node("fan_a", fan_a)
+    builder.add_node("fan_b", fan_b)
+    builder.add_edge(START, "fan_a")
+    builder.add_edge(START, "fan_b")
+    builder.add_edge("fan_a", END)
+    builder.add_edge("fan_b", END)
+    graph = builder.compile()
+
+    opik_tracer = OpikTracer()
+
+    result = await graph.ainvoke({"value": 21}, config={"callbacks": [opik_tracer]})
+
+    opik.flush_tracker()
+
+    assert result["fan_a_result"] == 42
+    assert result["fan_b_result"] == 63
+
+    # Each branch saw its own node's span, and only its own: one entry on the stack,
+    # not its sibling's as well. The fan-out also left nothing on the caller's stack.
+    assert observed == {
+        "fan_a": {"span_stack_depth": 1, "current_span_name": "fan_a"},
+        "fan_b": {"span_stack_depth": 1, "current_span_name": "fan_b"},
+    }
+    assert context_storage.span_data_stack_size() == 0
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="fan_a",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="tracked_a",
+                        input={"value": 21},
+                        output={"output": 42},
+                        total_cost=1.0,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="fan_b",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="tracked_b",
+                        input={"value": 21},
+                        output={"output": 63},
+                        total_cost=2.0,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    # One trace, not three: neither branch opened a root trace of its own.
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
 def test_langgraph__distributed_headers__langgraph_span_is_kept(
     fake_backend,
 ):
