@@ -66,6 +66,8 @@ import OlliePage from "@/v2/pages/OlliePage/OlliePage";
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
+import SystemMetricsPage from "@/v2/pages/SystemMetricsPage/SystemMetricsPage";
+import RequestMonitoringPage from "@/v2/pages/RequestMonitoringPage/RequestMonitoringPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -284,6 +286,26 @@ const projectDashboardsIndexRoute = createRoute({
   path: "/",
   getParentRoute: () => projectDashboardsRoute,
   component: ProjectDashboardsPage,
+});
+
+// ----------- system monitoring (project-scoped)
+const systemMetricsRoute = createRoute({
+  path: "/system-monitoring",
+  getParentRoute: () => projectScopedRoute,
+  component: SystemMetricsPage,
+  staticData: {
+    title: "System monitoring",
+  },
+});
+
+// ----------- HTTP and MCP request monitoring (project-scoped)
+const requestMonitoringRoute = createRoute({
+  path: "/request-monitoring",
+  getParentRoute: () => projectScopedRoute,
+  component: RequestMonitoringPage,
+  staticData: {
+    title: "HTTP & MCP requests",
+  },
 });
 
 // ----------- traces redirect (old path → /logs, handles ?tab= params)
@@ -666,6 +688,8 @@ const routeTree = rootRoute.addChildren([
           diagnosticsRoute,
           diagnosticsResolvedRoute,
           projectDashboardsRoute.addChildren([projectDashboardsIndexRoute]),
+          systemMetricsRoute,
+          requestMonitoringRoute,
           tracesRedirectRoute,
           experimentsRoute.addChildren([
             experimentsListRoute,
