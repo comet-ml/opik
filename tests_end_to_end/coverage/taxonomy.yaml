@@ -350,6 +350,7 @@ areas:
       - trace-explore/thread-evaluation.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-logging-smoke.spec.ts
+      - trace-explore/thread-time-window-boundary.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }
@@ -689,6 +690,7 @@ areas:
       - experiments/compare-export-all-rows.spec.ts
       - experiments/compare-json-key-sorting.spec.ts
       - experiments/experiment-delete.spec.ts
+      - experiments/experiment-items-sdk-read.spec.ts
       - experiments/experiment-logs-date-window.spec.ts
       - experiments/experiments-compare.spec.ts
       - experiments/experiments-smoke.spec.ts
@@ -707,7 +709,7 @@ areas:
       # per-item-scores: the read carries no scores, and OPIK-8274 rewrote it
       # into concurrent paged waves, which is a correctness surface — dropped,
       # duplicated or reordered rows — that no score assertion would reach.
-      experiment-item-read:    { covered: false }
+      experiment-item-read:    { covered: true,  tier: t2-cuj }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: true,  tier: t2-cuj, note: "browser export off the compare Results tab, asserted on the downloaded file: an unscoped export covers the whole result set untruncated and carries both compared experiments' outputs, filter/search/sort scope and order it, a row selection narrows it and clearing restores it. NOT covered: the over-the-cap disabled state (EXPORT_ROW_LIMIT is 2,000, and seeding past it costs far more than the assertion is worth), and the CSV format — only JSON is read back" }
       delete-experiment:       { covered: true,  tier: t2-cuj }
@@ -901,8 +903,10 @@ areas:
     routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
     spec_dir: alerts
     specs:
+      - alerts/alert-enable-toggle.spec.ts
       - alerts/alert-name-suggestion.spec.ts
       - alerts/alert-threshold-config-validation.spec.ts
+      - alerts/alert-webhook-test-connection.spec.ts
       - alerts/alerts-crud.spec.ts
     capabilities:
       list-alerts:         { covered: true,  tier: t1-smoke }
@@ -931,7 +935,7 @@ areas:
       # .invalid TLD, which can never resolve — so the failure response and the
       # reason it puts in front of the user are pinned without depending on
       # anything being down. Partial by construction, not by omission.
-      test-alert:          { covered: false }
+      test-alert:          { covered: true,  tier: t2-cuj }
 
     visual:
       alerts-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E12" }
