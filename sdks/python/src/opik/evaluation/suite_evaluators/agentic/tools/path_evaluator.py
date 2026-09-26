@@ -26,6 +26,8 @@ Predicates inside `select(...)`:
     <pred> or <pred>
     ( <pred> )
 
+String literals in predicates use JSON string syntax and escaping.
+
 Anything outside this grammar produces a `PathError` with `reason` set;
 callers (the `scan` tool) translate that into a structured error
 response so the model can retry within the prompt-taught grammar.

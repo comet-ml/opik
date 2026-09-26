@@ -208,6 +208,25 @@ class TestRecursiveDescent:
         names = [r["name"] for r in results if isinstance(r, dict)]
         assert names == ["tool_call"]
 
+    def test_evaluate__select_with_unicode_string_literal__matches_value(self):
+        document = {"spans": [{"name": "café"}]}
+
+        results = path_evaluator.evaluate('..|select(.name == "café")', document)
+
+        assert results == [{"name": "café"}]
+
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            r'..|select(.path == "C:\users")',
+            r'..|select(.path == "a\x41b")',
+            '..|select(.path == "raw\ttab")',
+        ],
+    )
+    def test_parse__invalid_json_string_literal__raises_path_error(self, expression):
+        with pytest.raises(path_evaluator.PathError, match="Invalid quoted string"):
+            path_evaluator.parse(expression)
+
     def test_evaluate__select_with_inequality__matches_not_equal_value(self):
         results = path_evaluator.evaluate('..|select(.type != "tool")', _trace_doc())
         # Spans of type general → root and err.
