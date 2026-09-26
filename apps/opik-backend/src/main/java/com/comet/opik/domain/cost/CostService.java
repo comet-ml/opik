@@ -78,7 +78,10 @@ public class CostService {
             Map.entry("libertai", "libertai"),
             Map.entry("azure_ai", "azure_ai"),
             Map.entry("vercel_ai_gateway", "vercel_ai_gateway"),
-            Map.entry("openrouter", "openrouter"));
+            Map.entry("openrouter", "openrouter"),
+            Map.entry("friendliai", "friendliai"),
+            Map.entry("crusoe", "crusoe"),
+            Map.entry("darkbloom", "darkbloom"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider

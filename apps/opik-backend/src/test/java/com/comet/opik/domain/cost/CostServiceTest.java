@@ -1385,4 +1385,32 @@ class CostServiceTest {
                 // 1000*3e-06 + 200*1.5e-05 = 0.006
                 Arguments.of("openrouter", "openrouter/anthropic/claude-3.5-sonnet", "0.006"));
     }
+
+    /**
+     * Covers registering {@code friendliai}, {@code crusoe} and {@code darkbloom} as canonical
+     * providers so that their token-priced entries in {@code model_prices_and_context_window.json}
+     * are no longer silently dropped at load time. Each case exercises a representative token-priced
+     * model routed through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @ParameterizedTest(name = "{0}: {1}")
+    @MethodSource("provideInferenceProviderCases")
+    void calculateCostHandlesInferenceProviderModels(String provider, String model, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideInferenceProviderCases() {
+        return Stream.of(
+                // friendliai/meta-llama-3.1-70b-instruct: input 6e-07, output 6e-07
+                // 1000*6e-07 + 200*6e-07 = 0.00072
+                Arguments.of("friendliai", "friendliai/meta-llama-3.1-70b-instruct", "0.00072"),
+                // crusoe/deepseek-ai/DeepSeek-R1-0528: input 3e-06, output 7e-06
+                // 1000*3e-06 + 200*7e-06 = 0.0044
+                Arguments.of("crusoe", "crusoe/deepseek-ai/DeepSeek-R1-0528", "0.0044"),
+                // darkbloom/gemma-4-26b: input 3e-08, output 1.65e-07
+                // 1000*3e-08 + 200*1.65e-07 = 0.000063
+                Arguments.of("darkbloom", "darkbloom/gemma-4-26b", "0.000063"));
+    }
 }
