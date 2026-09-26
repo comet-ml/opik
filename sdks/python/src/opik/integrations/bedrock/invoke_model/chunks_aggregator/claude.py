@@ -5,19 +5,9 @@ import logging
 from typing import Any, Dict, List
 
 from .. import usage_converters
-from .base import ChunkAggregator
+from .base import ChunkAggregator, updated_token_count
 
 LOGGER = logging.getLogger(__name__)
-
-
-def _updated_token_count(value: Any, current: int) -> int:
-    """Keep the running count unless the incoming value is a usable integer.
-
-    Later chunks can report a token field as null. Assigning that through would
-    both discard an earlier real count and drop the field from the span, because
-    the backend usage dict keeps only integers.
-    """
-    return value if isinstance(value, int) else current
 
 
 class ClaudeAggregator(ChunkAggregator):
@@ -61,12 +51,19 @@ class ClaudeAggregator(ChunkAggregator):
                     message = chunk_data.get("message", {})
                     role = message.get("role", "assistant")
                     usage = message.get("usage", {})
-                    input_tokens = usage.get("input_tokens", 0)
-                    output_tokens = usage.get("output_tokens", 0)
-                    cache_creation_input_tokens = usage.get(
-                        "cache_creation_input_tokens", 0
+                    input_tokens = updated_token_count(
+                        usage.get("input_tokens"), input_tokens
                     )
-                    cache_read_input_tokens = usage.get("cache_read_input_tokens", 0)
+                    output_tokens = updated_token_count(
+                        usage.get("output_tokens"), output_tokens
+                    )
+                    cache_creation_input_tokens = updated_token_count(
+                        usage.get("cache_creation_input_tokens"),
+                        cache_creation_input_tokens,
+                    )
+                    cache_read_input_tokens = updated_token_count(
+                        usage.get("cache_read_input_tokens"), cache_read_input_tokens
+                    )
                     LOGGER.debug(
                         "Claude message_start: input_tokens=%d, output_tokens=%d",
                         input_tokens,
@@ -88,29 +85,34 @@ class ClaudeAggregator(ChunkAggregator):
                     if "stop_reason" in delta:
                         stop_reason = delta["stop_reason"]
                     usage = chunk_data.get("usage", {})
-                    if "output_tokens" in usage:
-                        output_tokens = usage["output_tokens"]
-                        LOGGER.debug(
-                            "Claude message_delta: output_tokens=%d", output_tokens
-                        )
-                    cache_creation_input_tokens = _updated_token_count(
+                    output_tokens = updated_token_count(
+                        usage.get("output_tokens"), output_tokens
+                    )
+                    LOGGER.debug(
+                        "Claude message_delta: output_tokens=%d", output_tokens
+                    )
+                    cache_creation_input_tokens = updated_token_count(
                         usage.get("cache_creation_input_tokens"),
                         cache_creation_input_tokens,
                     )
-                    cache_read_input_tokens = _updated_token_count(
+                    cache_read_input_tokens = updated_token_count(
                         usage.get("cache_read_input_tokens"), cache_read_input_tokens
                     )
 
                 elif chunk_type == "message_stop":
                     metrics = chunk_data.get("amazon-bedrock-invocationMetrics", {})
                     if metrics:
-                        input_tokens = metrics.get("inputTokenCount", input_tokens)
-                        output_tokens = metrics.get("outputTokenCount", output_tokens)
-                        cache_creation_input_tokens = _updated_token_count(
+                        input_tokens = updated_token_count(
+                            metrics.get("inputTokenCount"), input_tokens
+                        )
+                        output_tokens = updated_token_count(
+                            metrics.get("outputTokenCount"), output_tokens
+                        )
+                        cache_creation_input_tokens = updated_token_count(
                             metrics.get("cacheWriteInputTokenCount"),
                             cache_creation_input_tokens,
                         )
-                        cache_read_input_tokens = _updated_token_count(
+                        cache_read_input_tokens = updated_token_count(
                             metrics.get("cacheReadInputTokenCount"),
                             cache_read_input_tokens,
                         )
