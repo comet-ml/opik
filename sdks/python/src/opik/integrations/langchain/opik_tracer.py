@@ -103,6 +103,13 @@ class OpikTracer(BaseTracer):
     # LangChain's own LangChainTracer sets this for the same reason, and the flag
     # stays for as long as the tracer keeps its state in ContextVars.
     #
+    # The push reaches the caller's context; the pop cannot. LangChain wraps every
+    # end and error callback in `asyncio.create_task(..., context=copy_context())`
+    # (`langchain_core.callbacks.manager.shielded`), so `on_chain_start` writes here
+    # while `_persist_run` pops from a throwaway copy. What stays behind is finished
+    # trace and span data, and `opik.context_storage` reports finished data as absent
+    # for exactly that reason - see its "Finished data is never current data" section.
+    #
     # Known cost, upstream: on langchain-core 0.3.10 (langchain-ai/langchain#26885)
     # through at least 1.6.3, `AsyncCallbackManager.on_llm_start` dispatches to the
     # inline handlers OR the non-inline ones, never both, so with this flag set a

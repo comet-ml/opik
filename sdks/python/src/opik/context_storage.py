@@ -36,6 +36,21 @@ class OpikContextStorage:
 
     The methods in this class follow these patterns and provide a safe API
     for manipulating the context stacks.
+
+    ## Finished data is never current data
+
+    That isolation cuts both ways: a push made in one task and a pop made in another
+    do not meet, because the second task only ever saw a copy. A callback-based
+    integration can end up on exactly that split - LangChain runs a handler's start
+    callbacks in the caller's task but its end/error callbacks inside
+    `asyncio.create_task(..., context=copy_context())`
+    (`langchain_core.callbacks.manager.shielded`), so the pop cannot reach the push.
+
+    So the getters do not trust a stale write: trace and span data carrying an
+    `end_time` has been finalized and sent, and is reported as absent rather than as
+    the current observation. Otherwise later work would be parented under a closed
+    span inside a closed trace and silently mis-attributed. `pop_*` and `clear_*`
+    stay authoritative - they act on what is actually stored.
     """
 
     def __init__(self) -> None:
@@ -55,6 +70,32 @@ class OpikContextStorage:
 
     def _has_span_id(self, span_id: str) -> bool:
         return any(span.id == span_id for span in self._spans_data_stack_context.get())
+
+    def _raw_top_span_data(self) -> Optional[span.SpanData]:
+        stack = self._spans_data_stack_context.get()
+        return stack[-1] if stack else None
+
+    def _discard_finished_spans(self) -> None:
+        """Drop already-finished spans from the top of the span stack.
+
+        A span gets an ``end_time`` only when it is finalized and sent, so a finished
+        span still sitting on this stack is one whose pop never reached this context.
+        That happens when a callback-based integration pushes a span in one asyncio
+        task and pops it in another: an asyncio task gets a *copy* of the context it
+        was created in, so the pop lands in the copy and the push stays here. Reporting
+        such a span as the current one would parent later work under a span that is
+        already closed, inside a trace that is already closed - the same silent
+        mis-attribution the pops exist to prevent. So it is discarded on read.
+        """
+        stack = self._spans_data_stack_context.get()
+        finished_on_top = 0
+        for span_data in reversed(stack):
+            if span_data.end_time is None:
+                break
+            finished_on_top += 1
+
+        if finished_on_top > 0:
+            self._spans_data_stack_context.set(stack[: len(stack) - finished_on_top])
 
     def trim_span_data_stack_to_certain_span(self, span_id: str) -> None:
         """
@@ -85,10 +126,8 @@ class OpikContextStorage:
         self._spans_data_stack_context.set(tuple(new_stack_list))
 
     def top_span_data(self) -> Optional[span.SpanData]:
-        if self.span_data_stack_empty():
-            return None
-        stack = self._spans_data_stack_context.get()
-        return stack[-1]
+        self._discard_finished_spans()
+        return self._raw_top_span_data()
 
     def pop_span_data(
         self,
@@ -104,15 +143,18 @@ class OpikContextStorage:
         Returns:
             The span that was popped from the stack or None.
         """
-        if self.span_data_stack_empty():
+        self._discard_finished_spans()
+
+        current_span_data = self._raw_top_span_data()
+        if current_span_data is None:
             return None
 
         if ensure_id is None:
             stack = self._spans_data_stack_context.get()
             self._spans_data_stack_context.set(stack[:-1])
-            return stack[-1]
+            return current_span_data
 
-        if self.top_span_data().id == ensure_id:  # type: ignore
+        if current_span_data.id == ensure_id:
             return self.pop_span_data()
 
         STACK_IS_EMPTY_OR_THE_ID_DOES_NOT_MATCH = None
@@ -123,13 +165,24 @@ class OpikContextStorage:
         self._spans_data_stack_context.set(stack + (span,))
 
     def span_data_stack_empty(self) -> bool:
+        self._discard_finished_spans()
         return len(self._spans_data_stack_context.get()) == 0
 
     def span_data_stack_size(self) -> int:
+        self._discard_finished_spans()
         return len(self._spans_data_stack_context.get())
 
     def get_trace_data(self) -> Optional[trace.TraceData]:
         trace_data = self._current_trace_data_context.get()
+
+        if trace_data is not None and trace_data.end_time is not None:
+            # A finished trace left in the context is the trace counterpart of the
+            # finished spans dropped by `_discard_finished_spans` - its pop landed in
+            # another task's copy of this context. Attaching to it would add spans to
+            # a trace that has already been sent as complete.
+            self._current_trace_data_context.set(None)
+            return None
+
         return trace_data
 
     def pop_trace_data(
