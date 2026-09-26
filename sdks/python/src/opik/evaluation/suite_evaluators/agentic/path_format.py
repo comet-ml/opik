@@ -13,6 +13,7 @@ Convention:
 - list index      → `[3]`
 """
 
+import json
 from typing import Any, List
 
 
@@ -31,7 +32,7 @@ def field_step(key: Any) -> str:
     text = str(key)
     if _is_bare_identifier(text):
         return "." + text
-    return '["' + text.replace('"', '\\"') + '"]'
+    return "[" + json.dumps(text, ensure_ascii=False) + "]"
 
 
 def index_step(index: int) -> str:
@@ -40,7 +41,7 @@ def index_step(index: int) -> str:
 
 
 def _is_bare_identifier(text: str) -> bool:
-    if not text:
+    if not text or not text.isascii():
         return False
     if not (text[0].isalpha() or text[0] == "_"):
         return False
