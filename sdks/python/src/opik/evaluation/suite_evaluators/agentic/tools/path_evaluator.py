@@ -37,6 +37,7 @@ Both raise `PathLimitError` with a descriptive message.
 """
 
 import dataclasses
+import json
 import re
 from typing import Any, Iterable, Iterator, List, Optional, Union
 
@@ -68,9 +69,9 @@ def normalize_expression(expression: str) -> str:
     if not stripped:
         return expression
     first = stripped[0]
-    # `[` covers a quoted key at the root (`["a-b"]`), which is how
-    # `path_format.field_step` renders a non-identifier top-level key.
-    if first.isalpha() or first == "_" or first == "[":
+    # Only a bracket-quoted key is a valid root path without a leading dot.
+    # A bare index/slice/iterator (for example `[0]`) must stay invalid.
+    if first.isalpha() or first == "_" or stripped.startswith('["'):
         return "." + expression
     return expression
 
@@ -444,9 +445,13 @@ class _Parser:
 
 
 def _unquote(quoted: str) -> str:
-    # Strip enclosing quotes, then unescape `\"` and `\\`.
-    body = quoted[1:-1]
-    return body.encode("utf-8").decode("unicode_escape")
+    try:
+        value = json.loads(quoted)
+    except json.JSONDecodeError as error:
+        raise PathError(f"Invalid quoted string: {error.msg}") from error
+    if not isinstance(value, str):
+        raise PathError("Expected a quoted string")
+    return value
 
 
 def parse(expression: str) -> PathExpr:

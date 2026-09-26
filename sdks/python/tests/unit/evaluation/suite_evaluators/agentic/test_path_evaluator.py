@@ -12,6 +12,7 @@ import pytest
 from opik.evaluation.suite_evaluators.agentic.compression import (
     path_aware_truncator,
 )
+from opik.evaluation.suite_evaluators.agentic import path_format
 from opik.evaluation.suite_evaluators.agentic.tools import path_evaluator
 
 
@@ -136,6 +137,23 @@ class TestQuotedKeyPaths:
 
     def test_normalize__quoted_key_at_root__gets_leading_dot(self):
         assert path_evaluator.normalize_expression('["a-b"]') == '.["a-b"]'
+
+    @pytest.mark.parametrize(
+        "key", ["a-bé", "café", "é", r"a\n", 'say"hi', "line\nbreak"]
+    )
+    def test_evaluate__path_format_key__round_trips(self, key):
+        document = {key: "value"}
+        expression = path_evaluator.normalize_expression(path_format.field_step(key))
+
+        assert path_evaluator.evaluate(expression, document) == ["value"]
+
+    @pytest.mark.parametrize("expression", ["[0]", "[]", "[:2]"])
+    def test_normalize__root_index_or_slice__does_not_add_dot(self, expression):
+        normalized = path_evaluator.normalize_expression(expression)
+
+        assert normalized == expression
+        with pytest.raises(path_evaluator.PathError):
+            path_evaluator.evaluate(normalized, ["value"])
 
     def test_evaluate__path_taken_from_truncation_hint__recovers_the_value(self):
         # `read` renders these hints, and the prompt tells the model to paste
