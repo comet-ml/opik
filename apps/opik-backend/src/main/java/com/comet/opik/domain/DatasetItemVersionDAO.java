@@ -1111,6 +1111,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code experiment_items_array}. The {@code argMax} tiebreaker on
      * {@code dataset_version_id} matches single-branch's "latest version wins" semantic
      * ({@code dataset_items_(aggr_)resolved} orders by {@code dataset_version_id} DESC).
+     *
+     * <p><b>{@code top_dataset_item_ids_raw} is a scalar {@code WITH}, not a table CTE.</b>
+     * ClickHouse evaluates a scalar subquery once and substitutes the result as a constant,
+     * whereas a table CTE is re-inlined at every reference. The raw paging scan is referenced
+     * by {@code experiment_items_scope} and by {@code experiment_items_trace_scope}, and the
+     * latter is referenced five more times, so as a table CTE the scan ran roughly six times
+     * per page. Holding the ids in a scalar array and exposing them through a trivial
+     * {@code arrayJoin} CTE keeps every reference site unchanged while running the scan once:
+     * a 100k-item raw page read drops from 1,239,899 rows to 412,185, and a full 50-page read
+     * at four threads from 14.5s to 5.6s.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
             WITH legacy_dataset_item_aliases AS (
@@ -1141,29 +1151,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )<if(push_top_limit_raw)>
-            , top_dataset_items_raw AS (
-                SELECT arrayJoin(raw_dataset_item_ids) AS dataset_item_id
+            , (
+                SELECT groupArray(dataset_item_id)
                 FROM (
-                    SELECT
-                        ei_top.stable_dataset_item_id AS stable_dataset_item_id,
-                        groupUniqArray(ei_top.dataset_item_id) AS raw_dataset_item_ids
+                    SELECT arrayJoin(raw_dataset_item_ids) AS dataset_item_id
                     FROM (
                         SELECT
-                            ei.id AS id,
-                            ei.dataset_item_id AS dataset_item_id,
-                            if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
-                        FROM experiment_items ei
-                        LEFT JOIN legacy_dataset_item_aliases AS lookup_div ON lookup_div.id = ei.dataset_item_id
-                        WHERE ei.workspace_id = :workspace_id
-                        AND ei.experiment_id IN (SELECT id FROM experiments_resolved)
-                        <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
-                        ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
-                        LIMIT 1 BY ei.id
-                    ) AS ei_top
-                    GROUP BY ei_top.stable_dataset_item_id
-                    ORDER BY <if(top_sorting_raw)><top_sorting_raw><else>stable_dataset_item_id DESC<endif>
-                    LIMIT :top_limit OFFSET :top_offset
-                ) AS top_stable_items_raw
+                            ei_top.stable_dataset_item_id AS stable_dataset_item_id,
+                            groupUniqArray(ei_top.dataset_item_id) AS raw_dataset_item_ids
+                        FROM (
+                            SELECT
+                                ei.id AS id,
+                                ei.dataset_item_id AS dataset_item_id,
+                                if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
+                            FROM experiment_items ei
+                            LEFT JOIN legacy_dataset_item_aliases AS lookup_div ON lookup_div.id = ei.dataset_item_id
+                            WHERE ei.workspace_id = :workspace_id
+                            AND ei.experiment_id IN (SELECT id FROM experiments_resolved)
+                            <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
+                            ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                            LIMIT 1 BY ei.id
+                        ) AS ei_top
+                        GROUP BY ei_top.stable_dataset_item_id
+                        ORDER BY <if(top_sorting_raw)><top_sorting_raw><else>stable_dataset_item_id DESC<endif>
+                        LIMIT :top_limit OFFSET :top_offset
+                    ) AS top_stable_items_raw
+                )
+            ) AS top_dataset_item_ids_raw
+            , top_dataset_items_raw AS (
+                SELECT arrayJoin(top_dataset_item_ids_raw) AS dataset_item_id
             )<endif>, experiment_items_scope AS (
             	SELECT
             	    ei.id AS id,
