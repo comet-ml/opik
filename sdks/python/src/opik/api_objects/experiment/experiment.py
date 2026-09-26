@@ -605,10 +605,11 @@ class Experiment:
         a bad one raises when it is reached, with earlier batches already delivered.
 
         Batch boundaries are no longer identical to ``split_into_batches``: that helper
-        charges a batch for the brackets and commas its JSON list adds, and this loop
-        budgets records only, so this loop packs a batch slightly fuller. Both stay
-        under ``EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB``, which the endpoint's 4MB
-        ceiling already leaves 0.5MB of headroom beneath.
+        now charges a batch for the brackets and commas its JSON list adds, and this loop
+        budgets records only, so the two pack to different points. Neither number is the
+        size of the request the endpoint sees, which is why
+        ``EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB`` sits 0.5MB under the endpoint's own
+        4MB limit.
 
         Each record is serialised once, here, and what a batch carries is those bytes.
         The length of a fragment is the size it is budgeted at, so the number that closes
