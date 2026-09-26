@@ -138,6 +138,12 @@ class TestQuotedKeyPaths:
     def test_normalize__quoted_key_at_root__gets_leading_dot(self):
         assert path_evaluator.normalize_expression('["a-b"]') == '.["a-b"]'
 
+    @pytest.mark.parametrize("expression", ['[ "a-b"]', '[ "a-b" ]'])
+    def test_evaluate__whitespace_in_root_quoted_key__returns_value(self, expression):
+        normalized = path_evaluator.normalize_expression(expression)
+
+        assert path_evaluator.evaluate(normalized, {"a-b": "value"}) == ["value"]
+
     @pytest.mark.parametrize(
         "key", ["a-bé", "café", "é", r"a\n", 'say"hi', "line\nbreak"]
     )
@@ -147,7 +153,7 @@ class TestQuotedKeyPaths:
 
         assert path_evaluator.evaluate(expression, document) == ["value"]
 
-    @pytest.mark.parametrize("expression", ["[0]", "[]", "[:2]"])
+    @pytest.mark.parametrize("expression", ["[0]", "[ 0]", "[]", "[:2]", "[ :2]"])
     def test_normalize__root_index_or_slice__does_not_add_dot(self, expression):
         normalized = path_evaluator.normalize_expression(expression)
 

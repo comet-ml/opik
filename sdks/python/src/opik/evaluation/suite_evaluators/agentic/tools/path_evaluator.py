@@ -54,7 +54,8 @@ def normalize_expression(expression: str) -> str:
     """Auto-prepend a leading `.` when the caller omits it.
 
     Every valid expression in the SDK's constrained jq dialect begins
-    with `.` (root, field access) or `..` (recursive descent). Models
+    with `.` (root, field access) or `..` (recursive descent), except
+    bracket-quoted root keys emitted by `path_format`. Models
     sometimes drop the leading dot — `dataset_item` instead of
     `.dataset_item` — typically when they pasted a field name from a
     `read` payload. Silently rewriting to `.<name>` avoids the
@@ -69,9 +70,9 @@ def normalize_expression(expression: str) -> str:
     if not stripped:
         return expression
     first = stripped[0]
-    # Only a bracket-quoted key is a valid root path without a leading dot.
-    # A bare index/slice/iterator (for example `[0]`) must stay invalid.
-    if first.isalpha() or first == "_" or stripped.startswith('["'):
+    # Bare identifiers and bracket-quoted keys may omit the leading dot.
+    # Bare indexes, slices, and iterators must stay invalid at the root.
+    if first.isalpha() or first == "_" or re.match(r'\[\s*"', stripped) is not None:
         return "." + expression
     return expression
 

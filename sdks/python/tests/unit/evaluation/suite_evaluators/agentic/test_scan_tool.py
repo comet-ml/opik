@@ -10,7 +10,9 @@ import json
 
 from opik.message_processing.emulation import models
 
+from opik.evaluation.suite_evaluators.agentic import entity_ref
 from opik.evaluation.suite_evaluators.agentic.tools import scan as scan_module
+from opik.evaluation.suite_evaluators.agentic.tools import search as search_module
 
 from . import _seeding
 
@@ -158,6 +160,36 @@ class TestScanAgainstActiveTrace:
 
         body = result.split("\n", 1)[1]
         assert body == "<no matches>"
+
+
+class TestQuotedSearchPathRoundTrip:
+    def test_search__quoted_root_path__scan_recovers_cached_value(self):
+        for key in ("tool-results", "café"):
+            trace = _trace()
+            ctx = _ctx(trace, [])
+            ref = entity_ref.EntityRef(entity_ref.EntityType.TRACE, trace.id)
+            ctx.cache(ref, {key: "needle"})
+
+            search_result = search_module.SearchTool().execute(
+                json.dumps({"type": "trace", "id": trace.id, "pattern": "needle"}),
+                ctx,
+            )
+            expression = search_result.split("\n", 1)[1].partition(": ")[0]
+
+            assert expression == f"[{json.dumps(key, ensure_ascii=False)}]"
+
+            scan_result = scan_module.ScanTool().execute(
+                json.dumps(
+                    {
+                        "type": "trace",
+                        "id": trace.id,
+                        "expression": expression,
+                    }
+                ),
+                ctx,
+            )
+
+            assert scan_result.split("\n", 1)[1] == "needle"
 
 
 class TestErrorPropagation:
