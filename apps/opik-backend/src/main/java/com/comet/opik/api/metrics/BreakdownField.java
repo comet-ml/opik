@@ -55,7 +55,8 @@ public enum BreakdownField {
             MetricType.SPAN_COUNT,
             MetricType.SPAN_DURATION,
             MetricType.SPAN_TOKEN_USAGE,
-            MetricType.SPAN_FEEDBACK_SCORES);
+            MetricType.SPAN_FEEDBACK_SCORES,
+            MetricType.SPAN_COST);
 
     /**
      * Check if this group by field is compatible with the given metric type.

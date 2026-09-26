@@ -18,6 +18,7 @@ const METRIC_LABELS: Record<string, string> = {
   [METRIC_NAME_TYPE.SPAN_DURATION]: "Span duration",
   [METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES]: "Span metrics",
   [METRIC_NAME_TYPE.SPAN_TOKEN_USAGE]: "Span token usage",
+  [METRIC_NAME_TYPE.SPAN_COST]: "Span cost",
 };
 
 const FEEDBACK_SCORE_METRIC_TYPES = [
