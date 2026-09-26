@@ -5,7 +5,6 @@ from typing import Any, cast, Dict, List, Optional, Type
 import pydantic
 import tenacity
 
-import opik.config as opik_config
 from .. import base_model
 from opik import exceptions
 from . import message_adapter, response_parser
@@ -61,13 +60,10 @@ class AnthropicChatModel(base_model.OpikBaseModel):
                 self._completion_kwargs["tools"]
             )
 
-        config = opik_config.OpikConfig()
-        enable_tracking = track and config.enable_litellm_models_monitoring
-
         client = anthropic.Anthropic(timeout=60.0)
         async_client = anthropic.AsyncAnthropic(timeout=60.0)
 
-        if enable_tracking:
+        if track:
             from opik.integrations.anthropic import track_anthropic
 
             client = track_anthropic(client)

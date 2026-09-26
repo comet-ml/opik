@@ -51,6 +51,20 @@ def _install_anthropic_stub(monkeypatch):
     return stub, mock_client, async_mock_client
 
 
+def _install_track_anthropic_stub(monkeypatch):
+    """AnthropicChatModel.__init__ does a lazy
+    `from opik.integrations.anthropic import track_anthropic`, and that
+    package eagerly imports the real anthropic SDK's `types` and
+    `lib.streaming` submodules, which `_install_anthropic_stub` above does
+    not provide. Stub the integration module itself so the lazy import
+    resolves without ever loading the real one."""
+    integration_stub = types.ModuleType("opik.integrations.anthropic")
+    mock_track_anthropic = MagicMock(side_effect=lambda client: client)
+    integration_stub.track_anthropic = mock_track_anthropic
+    monkeypatch.setitem(sys.modules, "opik.integrations.anthropic", integration_stub)
+    return mock_track_anthropic
+
+
 @pytest.fixture(autouse=True)
 def _clear_model_cache():
     models_factory._MODEL_CACHE.clear()
@@ -970,3 +984,38 @@ class TestAnthropicChatModelAsync:
         )
         result = await model.agenerate_string("hello async")
         assert result == "async result"
+
+
+class TestAnthropicChatModelTracking:
+    """enable_litellm_models_monitoring is documented as governing only
+    LiteLLMChatModel's external-callback tracking; AnthropicChatModel uses
+    track_anthropic (an in-process wrapper) and must not read that flag."""
+
+    @pytest.mark.parametrize("litellm_monitoring_flag", ["false", "true"])
+    def test_track_true_wraps_client_regardless_of_litellm_flag(
+        self, monkeypatch, litellm_monitoring_flag
+    ):
+        _install_anthropic_stub(monkeypatch)
+        mock_track_anthropic = _install_track_anthropic_stub(monkeypatch)
+
+        monkeypatch.setenv(
+            "OPIK_ENABLE_LITELLM_MODELS_MONITORING", litellm_monitoring_flag
+        )
+
+        anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-20250514", track=True
+        )
+
+        assert mock_track_anthropic.call_count == 2
+
+    def test_track_false_never_wraps_client(self, monkeypatch):
+        _install_anthropic_stub(monkeypatch)
+        mock_track_anthropic = _install_track_anthropic_stub(monkeypatch)
+
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+
+        anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-20250514", track=False
+        )
+
+        mock_track_anthropic.assert_not_called()
