@@ -51,6 +51,25 @@ def test_version_evaluators_to_assertions__llm_judge__extracts_assertions():
     ]
 
 
+def test_version_evaluators_to_assertions__numeric_schema__remains_readable():
+    from opik.evaluation.suite_evaluators import LLMJudge
+    from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
+
+    config = LLMJudge(assertions=["Rate usefulness"], track=False).to_config()
+    config.schema_[0] = llm_judge_config.LLMJudgeSchemaItem(
+        name="usefulness",
+        type="DOUBLE",
+        description="Rate usefulness from 0.0 to 1.0",
+    )
+    evaluator_item = mock.MagicMock()
+    evaluator_item.type = "llm_judge"
+    evaluator_item.config = config.model_dump(by_alias=True)
+
+    assert converters.version_evaluators_to_assertions([evaluator_item]) == [
+        "Rate usefulness from 0.0 to 1.0"
+    ]
+
+
 def test_version_evaluators_to_assertions__none__returns_empty():
     assert converters.version_evaluators_to_assertions(None) == []
 

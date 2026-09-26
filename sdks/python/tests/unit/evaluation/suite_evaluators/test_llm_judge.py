@@ -1,6 +1,9 @@
 import logging
+from unittest.mock import AsyncMock, Mock
+
 import pytest
 from opik.evaluation.suite_evaluators import llm_judge
+from opik.evaluation.metrics import score_result
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 
 
@@ -227,6 +230,289 @@ class TestLLMJudgeFromConfig:
         # from_config extracts description as assertion texts
         assert evaluator.assertions[0] == "Is accurate"
         assert evaluator.assertions[1] == "Is helpful"
+
+    @pytest.mark.parametrize("assertion_type", ["INTEGER", "DOUBLE"])
+    def test_from_config__preserves_unsupported_type_and_returns_failed_score(
+        self, assertion_type, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="numeric_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(temperature=0.5),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type=assertion_type,
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        monkeypatch.setattr(
+            evaluator,
+            "_generate_and_parse",
+            lambda **kwargs: pytest.fail("unsupported numeric assertion was scored"),
+        )
+
+        results = evaluator.score(input="input", output="output")
+
+        assert len(results) == 1
+        assert results[0].name == "Rate usefulness from 0.0 to 1.0"
+        assert results[0].value == 0.0
+        assert results[0].scoring_failed is True
+        assert results[0].category_name == "suite_assertion"
+        assert results[0].metadata["unsupported_type"] == assertion_type
+        assert results[0].metadata["error_info"]["exception_type"] == "EvaluationError"
+        assert results[0].metadata["error_info"]["message"] == results[0].reason
+        assert assertion_type in results[0].reason
+        assert evaluator.to_config().schema_[0].type == assertion_type
+        assert evaluator.to_config().schema_[0].name == "usefulness"
+
+    def test_from_config__mixed_types__scores_boolean_and_fails_numeric(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="mixed_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="accurate",
+                    type="BOOLEAN",
+                    description="Response is accurate",
+                ),
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        generate_and_parse = Mock(
+            return_value=[
+                score_result.ScoreResult(
+                    name="Response is accurate",
+                    value=True,
+                    reason="The response is accurate.",
+                    category_name="suite_assertion",
+                )
+            ]
+        )
+        monkeypatch.setattr(evaluator, "_generate_and_parse", generate_and_parse)
+
+        results = evaluator.score(input="input", output="output")
+
+        generate_and_parse.assert_called_once()
+        assert generate_and_parse.call_args.kwargs["assertions"] == [
+            "Response is accurate"
+        ]
+        assert len(results) == 2
+        assert results[0].value is True
+        assert results[0].scoring_failed is False
+        assert results[1].name == "Rate usefulness from 0.0 to 1.0"
+        assert results[1].value == 0.0
+        assert results[1].scoring_failed is True
+        assert results[1].category_name == "suite_assertion"
+        assert results[1].metadata["unsupported_type"] == "DOUBLE"
+        assert results[1].metadata["error_info"]["exception_type"] == "EvaluationError"
+
+    def test_from_config__missing_boolean_result__returns_failed_score(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="mixed_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="accurate",
+                    type="BOOLEAN",
+                    description="Response is accurate",
+                ),
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        generate_and_parse = Mock(return_value=[])
+        monkeypatch.setattr(evaluator, "_generate_and_parse", generate_and_parse)
+
+        results = evaluator.score(input="input", output="output")
+
+        generate_and_parse.assert_called_once_with(
+            input="input",
+            output="output",
+            assertions=["Response is accurate"],
+        )
+        missing_boolean = results[0]
+        assert missing_boolean.name == "Response is accurate"
+        assert missing_boolean.value == 0.0
+        assert missing_boolean.scoring_failed is True
+        assert missing_boolean.category_name == "suite_assertion"
+        assert missing_boolean.metadata["error_info"]["exception_type"] == (
+            "EvaluationError"
+        )
+        assert missing_boolean.metadata["error_info"]["message"] == (
+            missing_boolean.reason
+        )
+        assert "did not return a score" in missing_boolean.reason
+
+        unsupported_numeric = results[1]
+        assert unsupported_numeric.scoring_failed is True
+        assert unsupported_numeric.metadata["unsupported_type"] == "DOUBLE"
+
+    @pytest.mark.asyncio
+    async def test_ascore__missing_boolean_result__returns_failed_score(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="mixed_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="accurate",
+                    type="BOOLEAN",
+                    description="Response is accurate",
+                ),
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+
+        agenerate_and_parse = AsyncMock(return_value=[])
+        monkeypatch.setattr(evaluator, "_agenerate_and_parse", agenerate_and_parse)
+
+        results = await evaluator.ascore(input="input", output="output")
+
+        agenerate_and_parse.assert_awaited_once_with(
+            input="input",
+            output="output",
+            assertions=["Response is accurate"],
+        )
+        assert [result.name for result in results] == [
+            "Response is accurate",
+            "Rate usefulness from 0.0 to 1.0",
+        ]
+        missing_boolean = results[0]
+        assert missing_boolean.value == 0.0
+        assert missing_boolean.scoring_failed is True
+        assert missing_boolean.category_name == "suite_assertion"
+        assert missing_boolean.metadata["error_info"]["exception_type"] == (
+            "EvaluationError"
+        )
+        assert missing_boolean.metadata["error_info"]["message"] == (
+            missing_boolean.reason
+        )
+        assert "did not return a score" in missing_boolean.reason
+
+        unsupported_numeric = results[1]
+        assert unsupported_numeric.scoring_failed is True
+        assert unsupported_numeric.metadata["unsupported_type"] == "DOUBLE"
+
+    @pytest.mark.asyncio
+    async def test_ascore__numeric_only__returns_failed_without_calling_model(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="numeric_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                )
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+
+        async def fail_if_called(**kwargs):
+            pytest.fail("numeric-only ascore called the model")
+
+        monkeypatch.setattr(evaluator, "_agenerate_and_parse", fail_if_called)
+
+        results = await evaluator.ascore(input="input", output="output")
+
+        assert len(results) == 1
+        assert results[0].value == 0.0
+        assert results[0].scoring_failed is True
+        assert results[0].metadata["unsupported_type"] == "DOUBLE"
+        assert results[0].metadata["error_info"]["exception_type"] == "EvaluationError"
+
+    @pytest.mark.asyncio
+    async def test_ascore__mixed_types__preserves_order_and_scores_boolean(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="mixed_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="accurate",
+                    type="BOOLEAN",
+                    description="Response is accurate",
+                ),
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        generate_and_parse = Mock()
+
+        async def agenerate_and_parse(**kwargs):
+            generate_and_parse(**kwargs)
+            return [
+                score_result.ScoreResult(
+                    name="Response is accurate",
+                    value=True,
+                    reason="The response is accurate.",
+                    category_name="suite_assertion",
+                )
+            ]
+
+        monkeypatch.setattr(evaluator, "_agenerate_and_parse", agenerate_and_parse)
+
+        results = await evaluator.ascore(input="input", output="output")
+
+        generate_and_parse.assert_called_once_with(
+            input="input",
+            output="output",
+            assertions=["Response is accurate"],
+        )
+        assert [result.name for result in results] == [
+            "Response is accurate",
+            "Rate usefulness from 0.0 to 1.0",
+        ]
+        assert results[0].value is True
+        assert results[1].value == 0.0
+        assert results[1].scoring_failed is True
+        assert results[1].category_name == "suite_assertion"
+        assert results[1].metadata["unsupported_type"] == "DOUBLE"
+        assert results[1].metadata["error_info"]["exception_type"] == (
+            "EvaluationError"
+        )
+        assert results[1].metadata["error_info"]["message"] == results[1].reason
 
     def test_from_config__no_model_name__uses_default(self):
         """When config has no model name, from_config uses the default model."""
