@@ -44,11 +44,15 @@ const DataTab = ({
   };
 
   return (
+    /* Bounded to the tab's scroll viewport rather than growing with its
+       content: min-h-full let a long conversation stretch the whole row, so the
+       columns scrolled together as one block and the scores and comments
+       sections drifted with them. Each column now scrolls on its own instead. */
     <ResizablePanelGroup
       direction="horizontal"
       autoSaveId="compare-vetical-sidebar"
-      style={{ height: "unset", overflow: "unset" }}
-      className="min-h-full"
+      style={{ overflow: "unset" }}
+      className="h-full min-h-0"
     >
       <ResizablePanel order={0} defaultSize={30} className="min-w-72">
         <ExperimentDataset data={data} datasetItemId={datasetItemId} />

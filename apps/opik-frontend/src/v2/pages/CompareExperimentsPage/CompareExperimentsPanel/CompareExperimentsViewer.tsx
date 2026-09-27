@@ -185,7 +185,11 @@ const CompareExperimentsViewer: React.FunctionComponent<
         )}
       </div>
 
-      {renderOutput()}
+      {/* Scrolls within the column so a long conversation does not push the
+          scores and comments sections out of reach, and so each experiment
+          scrolls independently instead of the whole row moving as one block.
+          min-h-0 lets this flex child shrink below its content height. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">{renderOutput()}</div>
 
       {isTraceExist && (
         <div className="sticky bottom-0 right-0 mt-auto flex max-h-[50vh] shrink-0 flex-col bg-background contain-content">
