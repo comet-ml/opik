@@ -541,6 +541,24 @@ class TraceFilterEvaluationServiceTest {
         }
 
         @Test
+        void matchesFilterWithFlatMetadataKeyContainingDots() {
+            ObjectNode metadata = JsonUtils.createObjectNode();
+            metadata.put("uni.workflow.id", "019e7212-cbb2-7972-b061-0a703e19ef18");
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .metadata(metadata)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .key("uni.workflow.id")
+                    .operator(Operator.EQUAL)
+                    .value("019e7212-cbb2-7972-b061-0a703e19ef18")
+                    .build();
+
+            assertThat(traceFilterEvaluationService.matchesFilter(filter, trace)).isTrue();
+        }
+
+        @Test
         void matchesFilterWithCustomInputField() {
             // Given
             ObjectNode input = JsonUtils.createObjectNode();

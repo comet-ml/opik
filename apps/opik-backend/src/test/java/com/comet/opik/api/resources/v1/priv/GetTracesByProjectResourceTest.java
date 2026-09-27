@@ -1920,6 +1920,41 @@ class GetTracesByProjectResourceTest {
                     values.all(), List.of(), Map.of());
         }
 
+        @Test
+        @DisplayName("metadata filter matches a flat key whose name contains dots")
+        void whenFilterMetadataOnFlatDottedKey__thenReturnMatchingTrace() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var workflowId = "019e7212-cbb2-7972-b061-0a703e19ef18";
+            var matchingTrace = setCommonTraceDefaults(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni.workflow.id\":\"%s\",\"environment\":\"prod\"}".formatted(workflowId)))
+                    .build());
+            var otherTrace = setCommonTraceDefaults(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"environment\":\"prod\"}"))
+                    .build());
+            traceResourceClient.batchCreateTraces(List.of(matchingTrace, otherTrace), apiKey, workspaceName);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("uni.workflow.id")
+                    .value(workflowId)
+                    .build());
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, filters, null, 10, Map.of());
+
+            assertThat(actualPage.content()).extracting(Trace::id).containsExactly(matchingTrace.id());
+            assertThat(actualPage.total()).isEqualTo(1);
+        }
+
         @ParameterizedTest
         @ValueSource(strings = {"$..test", "$[abc]", "$.key with space", "[", "]", "[..]"})
         @DisplayName("a malformed or non-matching metadata path returns an empty page rather than failing")
