@@ -47,9 +47,17 @@ jobs:
       # loss, and worse on PRs that touch package.json.
       - name: Build frontend image
         uses: docker/build-push-action@v7
+        env:
+          # The action uploads a build record artifact by default (~60KB per run,
+          # kept for the repo's retention period). Nothing consumes it here.
+          DOCKER_BUILD_RECORD_UPLOAD: false
+          DOCKER_BUILD_SUMMARY: false
         with:
           context: apps/opik-frontend
           file: apps/opik-frontend/Dockerfile
           platforms: linux/amd64
           push: false
           load: false
+          # Default is on: provenance attestation exists to verify a published
+          # image's origin, and this one is discarded.
+          provenance: false
