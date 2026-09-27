@@ -7,6 +7,8 @@ on:
     paths:
       - "apps/opik-frontend/**"
       - ".github/workflows/build_frontend_docker.yml"
+  # Also on main: catches a break that lands despite green PRs -- e.g. two PRs that
+  # each build fine alone but not merged together.
   push:
     branches:
       - 'main'
@@ -37,6 +39,12 @@ jobs:
       # it went empty. amd64 only: the Dockerfile has no arch-conditional logic, so
       # a second arch doubles runtime without covering a distinct failure mode.
       # Multi-arch stays on the release path in build_apps.yml.
+      #
+      # No layer cache: this job only runs when apps/opik-frontend/** changed, so the
+      # Dockerfile's `COPY . .` is invalidated every time by construction and the
+      # `npm run build` below it always re-runs. The only restorable layer is
+      # `npm ci` (72s), while exporting the cache cost 77.8s on every run -- a net
+      # loss, and worse on PRs that touch package.json.
       - name: Build frontend image
         uses: docker/build-push-action@v7
         with:
@@ -45,5 +53,3 @@ jobs:
           platforms: linux/amd64
           push: false
           load: false
-          cache-from: type=gha,scope=opik-frontend
-          cache-to: type=gha,mode=max,scope=opik-frontend
