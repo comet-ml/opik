@@ -32,7 +32,6 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -65,14 +64,27 @@ import java.util.concurrent.CompletionException;
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "System analytics queries", description = "Internal endpoints to run free-form analytics SQL")
 public class AnalyticsQueriesResource {
 
-    private final @NonNull FreeFormSqlQueryService freeFormSqlQueryService;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles;
-    private final @NonNull @Config("customCharts") CustomChartsConfig customCharts;
+    private final FreeFormSqlQueryService freeFormSqlQueryService;
+    private final Provider<RequestContext> requestContext;
+    private final ServiceTogglesConfig serviceToggles;
+    private final CustomChartsConfig customCharts;
+
+    // Hand-written rather than Lombok's: image builds do not read lombok.config, so a generated constructor loses the
+    // @Config qualifiers and customCharts is injected as an empty default instance (OPIK-8548).
+    @Inject
+    public AnalyticsQueriesResource(
+            @NonNull FreeFormSqlQueryService freeFormSqlQueryService,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
+            @NonNull @Config("customCharts") CustomChartsConfig customCharts) {
+        this.freeFormSqlQueryService = freeFormSqlQueryService;
+        this.requestContext = requestContext;
+        this.serviceToggles = serviceToggles;
+        this.customCharts = customCharts;
+    }
 
     @POST
     @Path("/projects/{projectId}")

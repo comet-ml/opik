@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.Handle;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -35,15 +34,22 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  */
 @Singleton
 @Slf4j
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class FreeFormSqlEntityNameEnricher {
 
     private static final Map<String, String> ID_TO_NAME_COLUMNS = Map.of(
             DATASET_ID_QUERY_PARAM, "dataset_name",
             PROJECT_ID_QUERY_PARAM, "project_name");
 
-    private final @NonNull TransactionTemplate template;
-    private final @NonNull @Config("customCharts") CustomChartsConfig customChartsConfig;
+    private final TransactionTemplate template;
+    private final CustomChartsConfig customChartsConfig;
+
+    // Hand-written rather than Lombok's so the @Config qualifier survives image builds (OPIK-8548).
+    @Inject
+    public FreeFormSqlEntityNameEnricher(@NonNull TransactionTemplate template,
+            @NonNull @Config("customCharts") CustomChartsConfig customChartsConfig) {
+        this.template = template;
+        this.customChartsConfig = customChartsConfig;
+    }
 
     public List<JsonNode> enrich(@NonNull List<JsonNode> rows, @NonNull String workspaceId) {
         Map<String, Map<UUID, String>> labelsByColumn = new HashMap<>();
