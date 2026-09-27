@@ -11,11 +11,18 @@ stream wrapper's `finally`, so the span is never closed and the caller's
 """
 
 import json
+import logging
 from typing import Any, Dict, List
 
 import pytest
 
-from opik.integrations.bedrock.invoke_model import chunks_aggregator
+from opik.integrations.bedrock.invoke_model import (
+    chunks_aggregator,
+    stream_wrappers,
+)
+from opik.integrations.bedrock.invoke_model.chunks_aggregator.base import (
+    updated_token_count,
+)
 
 
 def _chunk(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -153,6 +160,43 @@ def _llama_stream(metrics: Dict[str, Any]) -> List[Dict[str, Any]]:
             1,
             id="llama-metrics-null-output",
         ),
+        # Booleans are ints in Python, so a boolean count would otherwise
+        # overwrite an earlier real one and reach the usage conversion as
+        # `True + int`, which is an int of the wrong magnitude rather than an
+        # error. One case per provider, each with an earlier integer to keep.
+        pytest.param(
+            _claude_stream({"outputTokenCount": True}),
+            12,
+            1,
+            id="claude-metrics-bool-output",
+        ),
+        pytest.param(
+            _claude_stream({"inputTokenCount": False, "outputTokenCount": 3}),
+            12,
+            3,
+            id="claude-metrics-bool-input",
+        ),
+        pytest.param(
+            _nova_stream({"inputTokens": True, "outputTokens": 3}, {}),
+            0,
+            3,
+            id="nova-usage-bool-input",
+        ),
+        pytest.param(
+            _mistral_stream(
+                {"prompt_tokens": 7, "completion_tokens": 3},
+                {"inputTokenCount": 5, "outputTokenCount": True},
+            ),
+            5,
+            3,
+            id="mistral-metrics-bool-output",
+        ),
+        pytest.param(
+            _llama_stream({"outputTokenCount": False}),
+            7,
+            1,
+            id="llama-metrics-bool-output",
+        ),
     ],
 )
 def test_aggregate_chunks__null_token_count__earlier_count_kept(
@@ -163,3 +207,54 @@ def test_aggregate_chunks__null_token_count__earlier_count_kept(
     assert response.usage["inputTokens"] == expected_input
     assert response.usage["outputTokens"] == expected_output
     assert response.usage["totalTokens"] == expected_input + expected_output
+
+
+def test_stream_wrapper__null_token_count__stream_completes_and_callback_runs() -> None:
+    """The regression as the caller sees it, through the production wrapper.
+
+    The aggregators are called from the stream wrapper's `finally`, so a raise
+    anywhere below skips `finally_callback` and leaves the span open: the
+    caller's `for ... in stream` ends in `TypeError` instead of `StopIteration`.
+    Asserting the counts alone would not reach that, so drive the wrapper.
+    """
+    recorded: Dict[str, Any] = {}
+
+    def _finally_callback(**kwargs: Any) -> None:
+        recorded.update(kwargs)
+
+    chunks = _claude_stream({"inputTokenCount": None, "outputTokenCount": 3})
+    stream = stream_wrappers.wrap_invoke_model_with_response_stream_response(
+        stream=iter(chunks),
+        capture_output=True,
+        span_to_end=None,
+        trace_to_end=None,
+        generations_aggregator=chunks_aggregator.aggregate_chunks_to_dataclass,
+        response_metadata={},
+        finally_callback=_finally_callback,
+    )
+
+    assert list(stream) == chunks
+
+    assert recorded["error_info"] is None
+    usage = recorded["output"].usage
+    assert usage["inputTokens"] == 12
+    assert usage["outputTokens"] == 3
+    assert usage["totalTokens"] == 15
+
+
+def test_updated_token_count__unexpected_type__logged_and_dropped(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A type that is neither null, boolean nor int is logged, not raised on."""
+    caplog.set_level(logging.WARNING, logger=chunks_aggregator.base.LOGGER.name)
+
+    assert updated_token_count("12", 5) == 5
+    assert updated_token_count(1.5, 5) == 5
+
+    assert "token count of type str" in caplog.text
+    assert "token count of type float" in caplog.text
+    # The documented cases stay quiet: they are the shape this PR is about.
+    assert updated_token_count(None, 5) == 5
+    assert updated_token_count(True, 5) == 5
+    assert updated_token_count(9, 5) == 9
+    assert caplog.text.count("Ignoring a token count") == 2

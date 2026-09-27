@@ -1,6 +1,9 @@
 """Base types and protocols for chunk aggregators."""
 
+import logging
 from typing import Any, Dict, List, Protocol
+
+LOGGER = logging.getLogger(__name__)
 
 
 def updated_token_count(value: Any, current: int) -> int:
@@ -12,8 +15,21 @@ def updated_token_count(value: Any, current: int) -> int:
     `TypeError` on `None + int`. The stream wrapper calls the aggregator in its
     `finally`, where a raise skips `finally_callback` and leaves the span open,
     so every aggregator reads its counts through this helper.
+
+    That is also why an unexpected type is not raised on: the same `finally`
+    would skip `finally_callback` and the span would stay open, which is the
+    failure this helper exists to prevent. A type that is neither null, boolean
+    nor int is a provider anomaly rather than a recoverable one, so it is logged
+    instead of passed on silently.
     """
     if isinstance(value, bool) or not isinstance(value, int):
+        if value is not None and not isinstance(value, bool):
+            LOGGER.warning(
+                "Ignoring a token count of type %s (%r), keeping the running count %d",
+                type(value).__name__,
+                value,
+                current,
+            )
         return current
     return value
 
