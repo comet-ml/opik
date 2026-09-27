@@ -112,13 +112,14 @@ public class AnalyticsQueriesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         // TEMPORARY debug for the dev Custom Charts rollout - remove before merge.
-        log.info("DEBUG Custom Charts gate: workspaceId=[{}] len={} ollieEnabled={} allowlist={} contains={} env=[{}]",
+        log.info(
+                "DEBUG Custom Charts gate: workspaceId=[{}] len={} ollieEnabled={} allowlist={} contains={} raw=[{}] env=[{}]",
                 workspaceId, workspaceId == null ? -1 : workspaceId.length(), serviceToggles.isOllieEnabled(),
-                customCharts.getEnabledWorkspaces().stream().map(id -> "[" + id + "] len=" + id.length()).toList(),
-                customCharts.getEnabledWorkspaces().contains(workspaceId),
+                customCharts.enabledWorkspaceIds().stream().map(id -> "[" + id + "] len=" + id.length()).toList(),
+                customCharts.enabledWorkspaceIds().contains(workspaceId), customCharts.getEnabledWorkspaces(),
                 System.getenv("TOGGLE_CUSTOM_CHARTS_WORKSPACES"));
         if (!serviceToggles.isOllieEnabled()
-                || !customCharts.getEnabledWorkspaces().contains(workspaceId)) {
+                || !customCharts.enabledWorkspaceIds().contains(workspaceId)) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
 

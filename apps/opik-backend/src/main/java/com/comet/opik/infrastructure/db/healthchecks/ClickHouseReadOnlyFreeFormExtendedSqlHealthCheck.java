@@ -35,7 +35,7 @@ public class ClickHouseReadOnlyFreeFormExtendedSqlHealthCheck extends AbstractCl
         // Mirrors the endpoint's gate: the account is provisioned separately and only where the feature is
         // meant to run, so probing it anywhere else would fail against a user that was never created.
         this.enabled = serviceToggles.isOllieEnabled()
-                && !customCharts.getEnabledWorkspaces().isEmpty();
+                && !customCharts.enabledWorkspaceIds().isEmpty();
     }
 
     @Override
