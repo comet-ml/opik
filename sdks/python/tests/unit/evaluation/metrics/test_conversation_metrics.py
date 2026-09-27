@@ -53,31 +53,46 @@ def test_conversation_degeneration_low_repetition():
     assert 0.0 <= result.value < 0.3
 
 
-@pytest.mark.parametrize("empty_reply", ["...", "???", "!!!", "   "])
-def test_conversation_degeneration_scores_wordless_turn_as_degenerate(empty_reply):
+@pytest.mark.parametrize("wordless_reply", ["...", "???", "!!!", "   "])
+def test_conversation_degeneration_scores_wordless_turn(wordless_reply):
     conversation = [
         {"role": "user", "content": "Hi"},
         {"role": "assistant", "content": "Hello, thanks for your question."},
         {"role": "user", "content": "Can you help?"},
-        {"role": "assistant", "content": empty_reply},
-        {"role": "user", "content": "Hello?"},
-        {
-            "role": "assistant",
-            "content": "Let me know if you'd like a breakdown of recent transactions.",
-        },
+        {"role": "assistant", "content": wordless_reply},
     ]
 
     metric = ConversationDegenerationMetric(track=False)
     result = metric.score(conversation=conversation)
 
-    assert result.value == 1.0
     per_turn = result.metadata["per_turn"]
-    assert len(per_turn) == 3
-    assert per_turn[1]["degeneration_score"] == 1.0
-    assert [turn["is_wordless"] for turn in per_turn] == [0.0, 1.0, 0.0]
-    # The reply after the wordless turn is compared with it, not with the first
-    # reply, so it has no overlap with the previous turn.
-    assert per_turn[2]["overlap_previous"] == 0.0
+    assert len(per_turn) == 2
+    assert [turn["is_wordless"] for turn in per_turn] == [0.0, 1.0]
+    # Scored through the same four factors as a one-word reply, not saturated.
+    one_word = metric.score(conversation=[{"role": "assistant", "content": "ok"}])
+    assert per_turn[1]["degeneration_score"] == one_word.value
+    assert result.value == one_word.value < 1.0
+
+
+def test_conversation_degeneration_wordless_turn_does_not_hide_a_loop():
+    looping_reply = "Let me check the balance of your savings account for you."
+    conversation = [
+        {"role": "assistant", "content": looping_reply},
+        {"role": "assistant", "content": "..."},
+        {"role": "assistant", "content": looping_reply},
+    ]
+
+    metric = ConversationDegenerationMetric(track=False)
+    result = metric.score(conversation=conversation)
+
+    per_turn = result.metadata["per_turn"]
+    assert per_turn[1]["overlap_previous"] == 0.0
+    assert per_turn[2]["overlap_previous"] == 1.0
+
+    without_filler = metric.score(
+        conversation=[conversation[0], conversation[2]],
+    )
+    assert result.value == without_filler.value
 
 
 def test_conversation_degeneration_all_wordless_turns():
@@ -89,9 +104,8 @@ def test_conversation_degeneration_all_wordless_turns():
     metric = ConversationDegenerationMetric(track=False)
     result = metric.score(conversation=conversation)
 
-    assert result.value == 1.0
-    assert result.metadata["average_score"] == 1.0
-    assert len(result.metadata["per_turn"]) == 2
+    assert [turn["is_wordless"] for turn in result.metadata["per_turn"]] == [1.0, 1.0]
+    assert 0.0 < result.value < 1.0
 
 
 @pytest.mark.parametrize(
