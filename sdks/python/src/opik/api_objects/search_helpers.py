@@ -7,6 +7,14 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import span_public, trace_public, trace_thread
 
 
+def extract_thread_model_id_cursor(thread: trace_thread.TraceThread) -> Optional[str]:
+    # The trace-threads endpoint compares the cursor against `thread_model_id`
+    # (a UUID), not the caller-supplied thread `id` (e.g. "thread_124").
+    # Kept as a named function (not an inline lambda) so tests can assert the
+    # call sites below actually wire it up.
+    return thread.thread_model_id
+
+
 def search_spans_with_filters(
     rest_client: rest_api_client.OpikApi,
     trace_id: Optional[str],
@@ -92,6 +100,7 @@ def search_threads_with_filters(
     filters: Optional[OptionalFilterParsedItemList] = None,
     max_results: Optional[int] = None,
     truncate: bool = True,
+    max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
 ) -> List[trace_thread.TraceThread]:
     def fetch_page(
         current_batch_size: int, last_retrieved_id: Optional[str]
@@ -114,6 +123,8 @@ def search_threads_with_filters(
         read_source=fetch_page,
         max_results=max_results,
         parsed_item_class=trace_thread.TraceThread,
+        cursor_extractor=extract_thread_model_id_cursor,
+        max_endpoint_batch_size=max_batch_size,
     )
     return threads
 
