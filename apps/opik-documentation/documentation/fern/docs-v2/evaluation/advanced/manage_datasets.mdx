@@ -160,7 +160,7 @@ client.rest_client.datasets.update_dataset_version(
   `client.rest_client` is a thin wrapper around the public REST API. The underlying endpoints are stable, but the Python wrapper itself is not guaranteed to be backward-compatible across SDK versions. A first-class `Dataset.set_tags()` / `Dataset.add_version_tags()` helper is on the roadmap — this snippet is the supported interim path.
 </Note>
 
-You can then filter dataset items by these tags via [`get_items(filter_string=...)`](#querying-dataset-items) using the `tags contains` operator.
+You can then filter dataset items by these tags via [`get_items(filter_string=...)`](#filtering-datasets-programmatically) using the `tags contains` operator.
 
 ## Adding traces to a dataset
 

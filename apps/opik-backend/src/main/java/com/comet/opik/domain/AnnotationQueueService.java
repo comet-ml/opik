@@ -339,6 +339,9 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
      * reason: both are limits on what automation may do, and neither should depend on a caller remembering
      * to apply it.
      *
+     * <p>The ceiling is a queue size: every item counts towards it, however it got there, and automation
+     * stops adding once the queue holds that many. A person adding by hand is never refused.
+     *
      * <p>A queue over its ceiling is filled to the ceiling rather than skipped wholesale — dropping a batch
      * of 500 because there is room for 3 would waste the 3. The remainder is not held anywhere; automation
      * will consider those entities again the next time one of their scores changes.

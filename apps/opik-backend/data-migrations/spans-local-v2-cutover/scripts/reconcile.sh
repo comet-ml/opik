@@ -39,9 +39,9 @@
 # so a read-only assessor needs `readonly = 2` and the migration user needs a non-readonly profile.
 #
 # PRIVILEGES: the forward path MUTATES THE LIVE NAME, which the rest of the forward cutover does not. On top of the
-# forward grant set it needs INSERT and ALTER UPDATE(_row_exists) on `spans` (or `spans_local` on a wrapped estate) and
-# SELECT on `spans_pre_cutover_backup`. See the runbook's privileges table — that widening is deliberate and is called
-# out there rather than buried here.
+# forward grant set it needs INSERT, ALTER DELETE and ALTER UPDATE(_row_exists) on `spans` (or `spans_local` on a
+# wrapped estate) and SELECT on `spans_pre_cutover_backup`. See the runbook's privileges table — that widening is
+# deliberate and is called out there rather than buried here.
 #
 # Options:
 #   --database NAME           analytics database (e.g. opik). Required.

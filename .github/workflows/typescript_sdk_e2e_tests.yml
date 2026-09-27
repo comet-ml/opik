@@ -10,6 +10,8 @@ on:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
       - '.github/workflows/typescript_sdk_e2e_tests.yml'
+      - 'opik.sh'
+      - 'opik.ps1'
   push:
     branches:
       - 'main'
@@ -17,6 +19,8 @@ on:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
       - '.github/workflows/typescript_sdk_e2e_tests.yml'
+      - 'opik.sh'
+      - 'opik.ps1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

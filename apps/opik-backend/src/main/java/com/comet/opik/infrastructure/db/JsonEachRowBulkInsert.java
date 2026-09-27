@@ -4,6 +4,7 @@ import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,6 +26,9 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.function.Function;
+
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 
 /**
  * Bulk insert through the ClickHouse Java client v2 using {@link ClickHouseFormat#JSONEachRow}.
@@ -129,8 +133,21 @@ public class JsonEachRowBulkInsert {
                 // Serialization is CPU work that scales with the batch; keep it on the bounded pool and
                 // off the reactive event loop.
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(payload -> Mono.fromFuture(() -> clickHouseClient.insert(
-                        table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment))))
+                // Opened here, around the statement alone, not around the serialization above: the
+                // R2DBC paths time statement.execute() and nothing else, so measuring more here would
+                // make the two transports incomparable on the metric that exists to compare them.
+                // Named for the table, so a JSONEachRow write lands on the same segment as its R2DBC
+                // counterpart -- spans already report custom-reactive-spans / batch_insert.
+                //
+                // No Mono.defer: the flatMap body runs when the payload is emitted, which is already
+                // subscription time, so the segment cannot open on an unsubscribed publisher.
+                .flatMap(payload -> {
+                    Segment segment = startSegment(table, "Clickhouse", "batch_insert");
+
+                    return Mono.fromFuture(() -> clickHouseClient.insert(
+                            table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)))
+                            .doFinally(signalType -> endSegment(segment));
+                })
                 .map(response -> {
                     try (response) {
                         return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
