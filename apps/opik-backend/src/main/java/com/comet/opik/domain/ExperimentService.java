@@ -366,6 +366,25 @@ public class ExperimentService {
                 });
     }
 
+    /**
+     * Same as {@link #getById(UUID)} - including the {@code NotFoundException} on a missing id and the
+     * dataset / project / prompt enrichment - but without the aggregations, whose cost grows with the number
+     * of items in the experiment. For callers that read only the experiment's own fields.
+     */
+    @WithSpan
+    public Mono<Experiment> getMetadataById(@NonNull UUID id) {
+        log.info("Getting experiment metadata by id '{}'", id);
+        return enrichExperiment(experimentDAO.getMetadataById(id),
+                "Not found experiment with id '%s'".formatted(id))
+                .doOnEach(signal -> {
+                    if (signal.isOnNext()) {
+                        var experiment = signal.get();
+                        triggerLazyAggregationIfNeeded(experiment.id(), experiment.status(),
+                                signal.getContextView());
+                    }
+                });
+    }
+
     private void triggerLazyAggregationIfNeeded(UUID experimentId, ExperimentStatus status, ContextView ctx) {
         if (status != ExperimentStatus.COMPLETED && status != ExperimentStatus.CANCELLED) {
             return;

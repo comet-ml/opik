@@ -39,6 +39,14 @@ ANALYTICS_URL_DEFAULT: Final[str] = "https://stats.comet.com/notify/event/"
 LOGGER = logging.getLogger(__name__)
 
 
+def _resolve_config_file_path() -> str:
+    """Return ``OPIK_CONFIG_PATH``, or the default when it is unset or blank."""
+    raw = os.getenv("OPIK_CONFIG_PATH")
+    if raw is None or not raw.strip():
+        return CONFIG_FILE_PATH_DEFAULT
+    return raw.strip()
+
+
 class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     """
     A source class that loads variables from a INI file
@@ -48,7 +56,7 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self,
         settings_cls: Type[BaseSettings],
     ):
-        config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
+        config_file_path = _resolve_config_file_path()
         expanded_path = pathlib.Path(config_file_path).expanduser()
         if config_file_path != CONFIG_FILE_PATH_DEFAULT and not expanded_path.exists():
             LOGGER.warning(
@@ -59,7 +67,7 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         super().__init__(settings_cls, self.ini_data)
 
     def _read_file(self, file_path: pathlib.Path) -> Dict[str, Any]:
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(interpolation=None)
         config.read(file_path)
         config_values = {
             section: dict(config.items(section)) for section in config.sections()
@@ -389,7 +397,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def config_file_fullpath(self) -> pathlib.Path:
-        config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
+        config_file_path = _resolve_config_file_path()
         return pathlib.Path(config_file_path).expanduser()
 
     @property
@@ -445,7 +453,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         Raises:
             OSError: If there is an issue writing to the file.
         """
-        config_file_content = configparser.ConfigParser()
+        config_file_content = configparser.ConfigParser(interpolation=None)
 
         config_file_content["opik"] = {
             "url_override": self.url_override,

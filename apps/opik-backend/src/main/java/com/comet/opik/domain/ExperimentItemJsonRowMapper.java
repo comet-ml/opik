@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.infrastructure.db.JsonRowValues;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.NonNull;
@@ -35,11 +36,7 @@ class ExperimentItemJsonRowMapper {
         // Nullable(FixedString(36)): an absent project id stays NULL. "" would be a 36-byte FixedString
         // mismatch, and would read back as a project rather than as absent — so this is the one column
         // here that must be an explicit null rather than an omitted field.
-        if (item.projectId() != null) {
-            node.put("project_id", item.projectId().toString());
-        } else {
-            node.putNull("project_id");
-        }
+        JsonRowValues.putStringOrNull(node, "project_id", item.projectId());
 
         node.put("created_by", userName);
         node.put("last_updated_by", userName);

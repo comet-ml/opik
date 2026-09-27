@@ -9,12 +9,16 @@ on:
         paths:
           - 'sdks/opik_optimizer/**'
           - '.github/workflows/opik-optimizer-e2e-tests.yaml'
+          - 'opik.sh'
+          - 'opik.ps1'
     push:
         branches:
           - 'main'
         paths:
           - 'sdks/opik_optimizer/**'
           - '.github/workflows/opik-optimizer-e2e-tests.yaml'
+          - 'opik.sh'
+          - 'opik.ps1'
 
 permissions:
   contents: read
@@ -93,7 +97,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.1.0
 
         - name: Run latest Opik server
           env:
@@ -183,7 +187,7 @@ jobs:
             python-version: "3.12"
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.1.0
 
         - name: Cache HuggingFace datasets
           uses: actions/cache@v6

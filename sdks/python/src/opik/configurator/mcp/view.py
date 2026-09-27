@@ -66,10 +66,15 @@ MANUAL_SETUP_LABEL = "My AI client is not listed"
 
 
 #: How the sign-in step is phrased, once, so both views agree.
+#:
+#: Written to hold whether or not the sign-in already happened: Codex signs in
+#: inside `codex mcp add`, and Claude Code is signed in right after it, so for
+#: those two the browser has usually opened by the time this prints. Promising a
+#: prompt that already came and went is what this wording avoids.
 SIGN_IN_HINT = (
-    "Depending on your assistant, you will either be prompted with a sign-in "
-    "link the first time it uses Opik, or need to authorize the opik-mcp "
-    "server yourself from its MCP settings."
+    "Signing in to Opik happens in your browser. Your assistant may have opened "
+    "it during setup; otherwise it will prompt you the first time it uses Opik, "
+    "or wait for you to authorize the opik-mcp server from its MCP settings."
 )
 
 

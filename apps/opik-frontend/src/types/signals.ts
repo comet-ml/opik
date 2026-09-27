@@ -93,6 +93,9 @@ export interface AgentInsightsJob {
   id: string;
   project_id: string;
   status: AGENT_INSIGHTS_JOB_STATUS;
+  auto_first_run_enrolled?: boolean;
+  // When that automatic run was enqueued; manual runs don't set it
+  auto_first_run_at?: string;
   // When a diagnostic report was last generated (incl. "all clear"); unaffected
   // by resolving/reopening issues. Used for the "Last scan" header.
   last_scan_at?: string;

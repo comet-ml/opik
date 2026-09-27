@@ -4,6 +4,7 @@ import com.comet.opik.api.AnnotationQueue.AnnotationScope;
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
+import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.domain.AnnotationQueueRoutingMessage;
 import com.comet.opik.domain.AnnotationQueueRoutingPublisher;
 import com.comet.opik.domain.EntityType;
@@ -11,6 +12,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.util.Duration;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -23,12 +25,15 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
+import org.redisson.api.RScoredSortedSetReactive;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.stream.StreamMessageId;
+import org.redisson.client.codec.StringCodec;
 import org.redisson.config.Config;
 
-import java.time.Duration;
+import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -43,18 +48,23 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * OPIK-6303, cross-layer half. The unit tests assert what the listener asks the publisher to do; this
- * asserts what actually lands on a real Redis stream and survives the shipped codec, driving the real
- * listener and the real publisher.
+ * OPIK-6303, cross-layer half. The unit tests assert what the listener asks the buffer to do; this asserts
+ * what actually lands in a real Redis buffer, what a real flush publishes to a real stream, and that it
+ * survives the shipped codec — driving the real listener, buffer service and publisher.
  *
  * <p>Stops at the stream rather than driving the REST API end to end: the router rule that the guard reads
- * has no REST surface on this PR, so there is nothing to create one through from outside, and standing up
- * MySQL and ClickHouse to re-observe a Redis write would test the harness more than the change. The
- * automation service is therefore the one mock here, and the disabled cases assert
- * {@code verifyNoInteractions} on it so that a guard which stopped short cannot pass unnoticed.
+ * is the automation service's, mocked here, and standing up MySQL and ClickHouse to re-observe Redis writes
+ * would test the harness more than the change. The disabled cases assert {@code verifyNoInteractions} on
+ * that mock so a guard which stopped short cannot pass unnoticed.
+ *
+ * <p>The flush is invoked directly rather than through the Quartz job, which only adds the lock and the
+ * schedule; {@code AnnotationQueueRoutingFlushJobTest} covers that orchestration.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AnnotationQueueRoutingIntegrationTest {
+
+    private static final Duration IMMEDIATE = Duration.milliseconds(100);
+    private static final Duration FAR_AWAY = Duration.seconds(30);
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
@@ -63,6 +73,7 @@ class AnnotationQueueRoutingIntegrationTest {
     private AnnotationQueueRoutingConfig config;
     private AnnotationQueueAutomationService automationService;
     private AnnotationQueueRoutingPublisher publisher;
+    private AnnotationQueueRoutingBufferService bufferService;
     private AnnotationQueueRoutingListener listener;
 
     @BeforeAll
@@ -84,21 +95,30 @@ class AnnotationQueueRoutingIntegrationTest {
     }
 
     /**
-     * A stream per test, so one test's entries can never be read by another - these run against a reused
-     * container, and the listener is fire and forget, so a late write has nowhere to land but its own key.
+     * A stream per test, so one test's entries can never be read by another. The buffer key is a constant,
+     * so it is emptied instead: every test awaits its own writes before finishing, so nothing lands late.
      */
     @BeforeEach
     void setUp() {
+        redissonClient.getKeys().delete(AnnotationQueueRoutingConfig.PENDING_SET_KEY).block();
+        wire(IMMEDIATE, 100);
+    }
+
+    private void wire(Duration debounceDelay, int jobBatchSize) {
         config = AnnotationQueueRoutingConfig.builder()
                 .enabled(true)
                 .streamName("test-stream-%s".formatted(randomString().toLowerCase()))
                 .streamMaxLen(10_000)
                 .streamTrimLimit(100)
+                .debounceDelay(debounceDelay)
+                .bufferTtl(Duration.minutes(1))
+                .jobBatchSize(jobBatchSize)
                 .build();
 
         automationService = mock(AnnotationQueueAutomationService.class);
         publisher = new AnnotationQueueRoutingPublisher(redissonClient, config);
-        listener = new AnnotationQueueRoutingListener(automationService, publisher, config);
+        bufferService = new AnnotationQueueRoutingBufferService(redissonClient, publisher, config);
+        listener = new AnnotationQueueRoutingListener(automationService, bufferService, config);
     }
 
     static Stream<Arguments> scopes() {
@@ -111,96 +131,205 @@ class AnnotationQueueRoutingIntegrationTest {
 
     @ParameterizedTest
     @MethodSource("scopes")
-    @DisplayName("An admitted event lands one decodable entry carrying the whole batch")
-    void admittedEventLandsOneEntryOnTheStream(EntityType entityType, AnnotationScope scope,
+    @DisplayName("An admitted event is buffered, then flushed as one decodable entry carrying the whole batch")
+    void admittedEventIsBufferedThenFlushedAsOneEntry(EntityType entityType, AnnotationScope scope,
             boolean hasProjectId) {
 
         UUID projectId = hasProjectId ? idGenerator.generateId() : null;
         var entityIds = Set.of(idGenerator.generateId(), idGenerator.generateId(), idGenerator.generateId());
-        var scoreNames = Set.of(randomString(), randomString());
         String workspaceId = randomString();
-        String userName = randomString();
         when(automationService.hasEnabledAutomation(workspaceId, projectId, scope)).thenReturn(true);
 
         listener.onFeedbackScoresCreated(new FeedbackScoresCreated(entityIds, entityType, workspaceId,
-                userName, projectId, scoreNames));
+                randomString(), projectId));
+
+        // One member per entity, not per event.
+        awaitBuffered(3);
+        assertThat(readStream()).isEmpty();
+
+        var published = awaitFlushed(1);
 
         // Compared whole, against an independently built expectation: asserting only the entity ids would
-        // pass while the codec silently dropped the author, the scope or the score names.
-        var expected = AnnotationQueueRoutingMessage.builder()
+        // pass while the codec silently dropped the scope or the workspace.
+        assertThat(published).containsExactly(AnnotationQueueRoutingMessage.builder()
                 .workspaceId(workspaceId)
-                .userName(userName)
                 .scope(scope)
                 .entityIds(entityIds)
-                .scoreNames(scoreNames)
-                .build();
-        assertThat(awaitStream(1)).containsExactly(expected);
+                .build());
+        assertThat(bufferSize()).isZero();
     }
 
     @Test
-    @DisplayName("The whole batch travels in one entry, not one entry per entity")
-    void aBatchOfEntitiesTravelsInASingleEntry() {
-        var entityIds = Stream.generate(idGenerator::generateId).limit(50)
-                .collect(Collectors.toUnmodifiableSet());
+    @DisplayName("An entity scored again while it waits folds into the one buffered member")
+    void repeatedScoresFoldIntoOneMember() {
+        UUID entityId = idGenerator.generateId();
         String workspaceId = randomString();
         when(automationService.hasEnabledAutomation(anyString(), any(), any())).thenReturn(true);
 
-        listener.onFeedbackScoresCreated(new FeedbackScoresCreated(entityIds, EntityType.TRACE, workspaceId,
-                randomString(), idGenerator.generateId(), Set.of(randomString())));
+        for (int i = 0; i < 5; i++) {
+            listener.onFeedbackScoresCreated(new FeedbackScoresCreated(Set.of(entityId), EntityType.TRACE,
+                    workspaceId, randomString(), idGenerator.generateId()));
+        }
+        awaitBuffered(1);
 
-        var published = awaitStream(1);
+        var published = awaitFlushed(1);
         assertThat(published).singleElement()
                 .extracting(AnnotationQueueRoutingMessage::entityIds)
-                .isEqualTo(entityIds);
+                .isEqualTo(Set.of(entityId));
     }
 
     @Test
-    @DisplayName("Score names survive the codec and are readable per entity")
-    void scoreNamesAreReadableForEveryEntityInTheBatch() {
-        var entityIds = Set.of(idGenerator.generateId(), idGenerator.generateId());
-        var scoreNames = Set.of(randomString(), randomString());
+    @DisplayName("Nothing scored within debounceDelay is flushed")
+    void nothingScoredWithinDebounceDelayIsFlushed() {
+        wire(FAR_AWAY, 100);
+        UUID entityId = idGenerator.generateId();
         when(automationService.hasEnabledAutomation(anyString(), any(), any())).thenReturn(true);
 
-        listener.onFeedbackScoresCreated(new FeedbackScoresCreated(entityIds, EntityType.TRACE,
-                randomString(), randomString(), idGenerator.generateId(), scoreNames));
+        listener.onFeedbackScoresCreated(event(EntityType.TRACE, randomString(), entityId));
+        awaitBuffered(1);
 
-        var message = awaitStream(1).getFirst();
-        // The flat set is read back per entity, which is the shape the consumer asks for.
-        entityIds.forEach(entityId -> assertThat(message.expectedScoreNames(entityId)).isEqualTo(scoreNames));
-        assertThat(message.expectedScoreNames(idGenerator.generateId())).isEmpty();
+        assertThat(bufferService.flush().block()).isZero();
+        assertThat(readStream()).isEmpty();
+        assertThat(bufferSize()).isEqualTo(1);
+    }
+
+    /**
+     * The timer runs from the <em>last</em> score, not the first: the consumer must never read a score
+     * younger than the delay, and only a restarted wait guarantees that for every score in a burst. Driven
+     * by writing timestamps straight into the sorted set rather than by sleeping, so nothing here depends
+     * on scheduler or Redis latency.
+     */
+    @Test
+    @DisplayName("A later score moves a buffered entity's timestamp forward, never back")
+    void laterScoreMovesTheTimestampForwardOnly() {
+        wire(FAR_AWAY, 100);
+        UUID entityId = idGenerator.generateId();
+        String workspaceId = randomString();
+        String member = "%s:trace:%s".formatted(workspaceId, entityId);
+        long aMinuteAgo = Instant.now().minusSeconds(60).toEpochMilli();
+        pending().add(aMinuteAgo, member).block();
+
+        // Re-scored now: the wait restarts, so a member that was due is due no longer.
+        bufferService.add(workspaceId, AnnotationScope.TRACE, Set.of(entityId)).block();
+
+        assertThat(pending().getScore(member).block()).isGreaterThan(aMinuteAgo);
+        assertThat(bufferSize()).isEqualTo(1);
+        assertThat(bufferService.flush().block()).isZero();
+        assertThat(readStream()).isEmpty();
+
+        // A write that arrives late, carrying an older timestamp, must not pull the member back.
+        double ahead = Instant.now().plusSeconds(5).toEpochMilli();
+        pending().add(ahead, member).block();
+        bufferService.add(workspaceId, AnnotationScope.TRACE, Set.of(entityId)).block();
+
+        assertThat(pending().getScore(member).block()).isEqualTo(ahead);
     }
 
     @Test
-    @DisplayName("Nothing is published, and the guard is never even reached, when routing is disabled")
+    @DisplayName("A flush publishes one entry per (workspace, scope), never mixing them")
+    void flushGroupsByWorkspaceAndScope() {
+        String workspaceId = randomString();
+        UUID traceHere = idGenerator.generateId();
+        UUID anotherTraceHere = idGenerator.generateId();
+        UUID threadHere = idGenerator.generateId();
+        UUID traceElsewhere = idGenerator.generateId();
+        when(automationService.hasEnabledAutomation(anyString(), any(), any())).thenReturn(true);
+
+        listener.onFeedbackScoresCreated(event(EntityType.TRACE, workspaceId, traceHere));
+        listener.onFeedbackScoresCreated(event(EntityType.TRACE, workspaceId, anotherTraceHere));
+        listener.onFeedbackScoresCreated(event(EntityType.THREAD, workspaceId, threadHere));
+        listener.onFeedbackScoresCreated(event(EntityType.TRACE, randomString(), traceElsewhere));
+        awaitBuffered(4);
+
+        var published = awaitFlushed(3);
+
+        // Two events from different authors in the same workspace and scope travel as one entry.
+        assertThat(published)
+                .extracting(AnnotationQueueRoutingMessage::entityIds)
+                .containsExactlyInAnyOrder(Set.of(traceHere, anotherTraceHere), Set.of(threadHere),
+                        Set.of(traceElsewhere));
+        assertThat(published)
+                .filteredOn(message -> message.entityIds().contains(threadHere))
+                .singleElement()
+                .satisfies(message -> {
+                    assertThat(message.scope()).isEqualTo(AnnotationScope.THREAD);
+                    assertThat(message.workspaceId()).isEqualTo(workspaceId);
+                });
+    }
+
+    @Test
+    @DisplayName("A backlog larger than one page is flushed in full, page by page")
+    void backlogLargerThanOnePageIsFlushedInFull() {
+        wire(IMMEDIATE, 100);
+        String workspaceId = randomString();
+        var entityIds = Stream.generate(idGenerator::generateId).limit(250).collect(Collectors.toUnmodifiableSet());
+        when(automationService.hasEnabledAutomation(anyString(), any(), any())).thenReturn(true);
+
+        listener.onFeedbackScoresCreated(new FeedbackScoresCreated(entityIds, EntityType.TRACE, workspaceId,
+                randomString(), idGenerator.generateId()));
+        awaitBuffered(250);
+
+        long published = awaitDebounce(() -> bufferService.flush().block());
+
+        // Three pages of 100, one entry each; the split is a paging artefact and the union is what matters.
+        assertThat(published).isEqualTo(3);
+        Set<UUID> routed = new HashSet<>();
+        readStream().forEach(message -> routed.addAll(message.entityIds()));
+        assertThat(routed).isEqualTo(entityIds);
+        assertThat(bufferSize()).isZero();
+    }
+
+    @Test
+    @DisplayName("A malformed member is dropped from the buffer rather than re-read every run")
+    void malformedMemberIsDropped() {
+        pending().add(Instant.now().minusSeconds(60).toEpochMilli(), "not json at all").block();
+
+        assertThat(awaitDebounce(() -> bufferService.flush().block())).isZero();
+        assertThat(readStream()).isEmpty();
+        assertThat(bufferSize()).isZero();
+    }
+
+    @Test
+    @DisplayName("The buffer key carries the configured TTL from its first write")
+    void bufferKeyCarriesTtl() {
+        UUID entityId = idGenerator.generateId();
+        when(automationService.hasEnabledAutomation(anyString(), any(), any())).thenReturn(true);
+
+        listener.onFeedbackScoresCreated(event(EntityType.TRACE, randomString(), entityId));
+        awaitBuffered(1);
+
+        Long ttlMillis = pending().remainTimeToLive().block();
+        assertThat(ttlMillis).isNotNull().isPositive()
+                .isLessThanOrEqualTo(config.getBufferTtl().toMilliseconds());
+    }
+
+    @Test
+    @DisplayName("Disabled routing buffers nothing and never reaches the automation lookup")
     void disabledRoutingWritesNothingAndSkipsTheLookup() {
-        config.setEnabled(false);
+        config = config.toBuilder().enabled(false).build();
+        listener = new AnnotationQueueRoutingListener(automationService, bufferService, config);
 
-        listener.onFeedbackScoresCreated(new FeedbackScoresCreated(
-                Set.of(idGenerator.generateId()), EntityType.TRACE, randomString(), randomString(),
-                idGenerator.generateId(), Set.of()));
+        listener.onFeedbackScoresCreated(event(EntityType.TRACE, randomString(), idGenerator.generateId()));
 
-        assertNothingPublished();
-        // Without this the test would pass on a listener that ran the lookup and only skipped the write.
+        assertNothingBuffered();
         verifyNoInteractions(automationService);
     }
 
     @Test
-    @DisplayName("Nothing is published when the workspace has no enabled automation")
+    @DisplayName("No enabled automation means nothing is buffered")
     void noEnabledAutomationWritesNothing() {
         when(automationService.hasEnabledAutomation(anyString(), any(), any())).thenReturn(false);
 
-        listener.onFeedbackScoresCreated(new FeedbackScoresCreated(
-                Set.of(idGenerator.generateId()), EntityType.TRACE, randomString(), randomString(),
-                idGenerator.generateId(), Set.of()));
+        listener.onFeedbackScoresCreated(event(EntityType.TRACE, randomString(), idGenerator.generateId()));
 
-        assertNothingPublished();
+        assertNothingBuffered();
     }
 
     @Test
     @DisplayName("An enqueue with no entities writes nothing, and neither does a null set")
     void enqueueWithoutEntitiesWritesNothing() {
-        publisher.enqueue(randomString(), randomString(), AnnotationScope.TRACE, Set.of(), Set.of()).block();
-        publisher.enqueue(randomString(), randomString(), AnnotationScope.TRACE, null, Set.of()).block();
+        publisher.enqueue(randomString(), AnnotationScope.TRACE, Set.of()).block();
+        publisher.enqueue(randomString(), AnnotationScope.TRACE, null).block();
 
         assertThat(readStream()).isEmpty();
     }
@@ -217,8 +346,7 @@ class AnnotationQueueRoutingIntegrationTest {
     @Test
     @DisplayName("The stream is trimmed to the configured bound instead of growing with every publish")
     void streamIsTrimmedToTheConfiguredBound() {
-        var bounded = AnnotationQueueRoutingConfig.builder()
-                .enabled(true)
+        var bounded = config.toBuilder()
                 .streamName("test-stream-%s".formatted(randomString().toLowerCase()))
                 .streamMaxLen(1_000)
                 .streamTrimLimit(100)
@@ -227,8 +355,8 @@ class AnnotationQueueRoutingIntegrationTest {
         int published = 5_000;
 
         for (int i = 0; i < published; i++) {
-            boundedPublisher.enqueue(randomString(), randomString(), AnnotationScope.TRACE,
-                    Set.of(idGenerator.generateId()), Set.of()).block();
+            boundedPublisher.enqueue(randomString(), AnnotationScope.TRACE, Set.of(idGenerator.generateId()))
+                    .block();
         }
 
         Long size = redissonClient.getStream(bounded.getStreamName(), bounded.getCodec()).size().block();
@@ -238,23 +366,63 @@ class AnnotationQueueRoutingIntegrationTest {
                 .isLessThan((long) published);
     }
 
-    private List<AnnotationQueueRoutingMessage> awaitStream(int expectedSize) {
+    private FeedbackScoresCreated event(EntityType entityType, String workspaceId, UUID entityId) {
+        return new FeedbackScoresCreated(Set.of(entityId), entityType, workspaceId, randomString(),
+                idGenerator.generateId());
+    }
+
+    /**
+     * The listener subscribes and returns, so the buffer fills on another thread; wait for it.
+     */
+    private void awaitBuffered(int expectedMembers) {
         Awaitility.await()
-                .atMost(Duration.ofSeconds(10))
-                .pollInterval(Duration.ofMillis(50))
-                .untilAsserted(() -> assertThat(readStream()).hasSize(expectedSize));
+                .atMost(java.time.Duration.ofSeconds(10))
+                .pollInterval(java.time.Duration.ofMillis(50))
+                .untilAsserted(() -> assertThat(bufferSize()).isEqualTo(expectedMembers));
+    }
+
+    /**
+     * Flushes until the expected number of entries is on the stream. Members become due only once they are
+     * {@code debounceDelay} old, so the first attempts may legitimately publish nothing.
+     */
+    private List<AnnotationQueueRoutingMessage> awaitFlushed(int expectedSize) {
+        Awaitility.await()
+                .atMost(java.time.Duration.ofSeconds(10))
+                .pollInterval(java.time.Duration.ofMillis(50))
+                .untilAsserted(() -> {
+                    bufferService.flush().block();
+                    assertThat(readStream()).hasSize(expectedSize);
+                });
         return readStream();
+    }
+
+    private <T> T awaitDebounce(java.util.function.Supplier<T> action) {
+        Awaitility.await()
+                .pollDelay(java.time.Duration.ofMillis(config.getDebounceDelay().toMilliseconds() + 50))
+                .atMost(java.time.Duration.ofSeconds(10))
+                .until(() -> true);
+        return action.get();
     }
 
     /**
      * Waits before concluding, rather than reading once. The listener subscribes and returns, so an
      * immediate read would pass whether the guard held or simply had not been overtaken yet.
      */
-    private void assertNothingPublished() {
+    private void assertNothingBuffered() {
         Awaitility.await()
-                .during(Duration.ofMillis(500))
-                .atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> assertThat(readStream()).isEmpty());
+                .during(java.time.Duration.ofMillis(500))
+                .atMost(java.time.Duration.ofSeconds(2))
+                .untilAsserted(() -> assertThat(bufferSize()).isZero());
+    }
+
+    private int bufferSize() {
+        Integer size = pending().size().block();
+        return size == null ? 0 : size;
+    }
+
+    private RScoredSortedSetReactive<String> pending() {
+        return redissonClient.getScoredSortedSet(AnnotationQueueRoutingConfig.PENDING_SET_KEY,
+                StringCodec.INSTANCE);
     }
 
     private List<AnnotationQueueRoutingMessage> readStream() {

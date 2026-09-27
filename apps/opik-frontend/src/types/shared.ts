@@ -21,6 +21,7 @@ export type DropdownOption<TDataType> = {
 
 export const COLUMN_ID_ID = "id";
 export const COLUMN_SELECT_ID = "select";
+export const COLUMN_PIN_ID = "pin";
 export const COLUMN_NAME_ID = "name";
 export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";

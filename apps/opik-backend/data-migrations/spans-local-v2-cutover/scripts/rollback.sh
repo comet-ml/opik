@@ -882,8 +882,8 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
         echo >&2
         echo "ERROR: the sentinel repair did not complete. Read the ClickHouse error above before re-running: the two" >&2
         echo "       likely causes need opposite responses." >&2
-        echo "  ACCESS_DENIED — the expected failure for a user scoped to the rollback grant set, which holds only" >&2
-        echo "       ALTER UPDATE(_row_exists). This statement needs ALTER UPDATE(end_time) AND ALTER UPDATE(ttft) on" >&2
+        echo "  ACCESS_DENIED — the expected failure for a user scoped to the rollback grant set, whose ALTER UPDATE" >&2
+        echo "       is scoped to _row_exists. This statement needs ALTER UPDATE(end_time) AND ALTER UPDATE(ttft) on" >&2
         echo "       'spans', and carries both commands in one mutation, so a missing grant on either applies neither." >&2
         echo "       Nothing is half-repaired. Grant the two columns (or use a more privileged user), re-run, revoke." >&2
         echo "  A TIMEOUT — the mutation is very likely still running and healthy; only the client gave up waiting. Do" >&2

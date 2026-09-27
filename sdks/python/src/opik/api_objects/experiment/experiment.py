@@ -22,7 +22,7 @@ from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
 from . import bulk_converters, bulk_item, experiment_item, experiments_client
-from .. import constants, helpers, rest_helpers, streaming_upload
+from .. import constants, helpers, rest_helpers, streaming_upload, validation_helpers
 from ...api_objects.prompt import base_prompt
 from ...rest_api.core.api_error import ApiError
 from ...rest_client_configurator import retry_decorator
@@ -681,6 +681,9 @@ class Experiment:
         self,
         max_results: Optional[int] = 10000,
         truncate: bool = False,
+        *,
+        page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
+        num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
         Retrieves and returns a list of experiment items for this experiment.
@@ -688,10 +691,34 @@ class Experiment:
         Args:
             max_results: Maximum number of experiment items to retrieve. Defaults to 10000 if not specified.
             truncate: Whether to truncate the items returned by the backend. Defaults to False.
+            page_size: Number of dataset items requested per page. Must be a
+                positive integer not exceeding
+                ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``. The read is
+                round-trip bound, so this mostly trades request count against
+                per-request size; lower it only if the backend struggles with
+                the default response size.
+            num_threads: Number of pages fetched concurrently after the first
+                one, which is read on its own to learn how many pages there are.
+                Must be a positive integer not exceeding
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``. Pass ``1`` to read
+                sequentially.
 
         Returns:
             List of ExperimentItemContent objects for this experiment.
+
+        Raises:
+            ValueError: If ``page_size`` is not a positive integer or exceeds
+                ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``, or if
+                ``num_threads`` is not a positive integer or exceeds
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
         """
+        validation_helpers.validate_bounded_positive_int(
+            page_size, "page_size", constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE
+        )
+        validation_helpers.validate_bounded_positive_int(
+            num_threads, "num_threads", constants.DATASET_ITEMS_READ_MAX_THREADS
+        )
+
         if max_results is None:
             max_results = 10000  # TODO: remove this once we have a proper way to get all experiment items
 
@@ -701,6 +728,8 @@ class Experiment:
             truncate=truncate,
             max_results=max_results,
             project_name=self._project_name,
+            page_size=page_size,
+            num_threads=num_threads,
         )
 
     def log_experiment_scores(

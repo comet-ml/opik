@@ -82,10 +82,22 @@ class METEOR(base_metric.BaseMetric):
                         ) from download_error
 
             def _scorer(references: Sequence[str], hypothesis: str) -> float:
+                # The SDK hands metrics plain strings, while NLTK's METEOR works
+                # on token lists: it aligns unigrams between hypothesis and
+                # reference (exact, then stemmed, then WordNet synonyms) and
+                # penalizes how fragmented that alignment is, so it needs the
+                # tokens themselves. Splitting on whitespace keeps that boundary
+                # in one place and matches the sibling GLEU and BLEU metrics;
+                # casing is left to meteor_score's own `preprocess` default.
+                # See Banerjee & Lavie (2005), https://aclanthology.org/W05-0909/.
                 try:
                     return float(
                         nltk_meteor_score.meteor_score(
-                            references, hypothesis, alpha=alpha, beta=beta, gamma=gamma
+                            [reference.split() for reference in references],
+                            hypothesis.split(),
+                            alpha=alpha,
+                            beta=beta,
+                            gamma=gamma,
                         )
                     )
                 except LookupError as error:

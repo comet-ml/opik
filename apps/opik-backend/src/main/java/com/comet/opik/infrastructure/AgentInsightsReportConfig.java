@@ -30,6 +30,18 @@ public class AgentInsightsReportConfig implements StreamConfiguration {
     @Valid @NotBlank @JsonProperty
     private String schedule = "0 5 0 * * ?";
 
+    // Quartz cron (UTC) for the auto-first-run sweep. Far more frequent than the daily report sweep so a
+    // project crossing the trace threshold gets its first diagnostic promptly.
+    @Valid @NotBlank @JsonProperty
+    private String autoFirstRunSchedule = "0 */10 * * * ?";
+
+    // Projects onboarded per auto-first-run sweep. Every hop below this hands off and returns — the Redis
+    // consumer, the platform's report executor, the Ollie pod — so nothing bounds how many diagnostics run
+    // concurrently except this. Runs arrive at this rate and take several minutes, so concurrent runs scale
+    // with it.
+    @Valid @JsonProperty
+    @Min(1) @Max(1_000) private int autoFirstRunMaxPerRun = 10;
+
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     @MaxDuration(value = 1, unit = TimeUnit.HOURS)

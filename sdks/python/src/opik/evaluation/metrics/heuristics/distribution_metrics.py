@@ -106,7 +106,7 @@ class JSDivergence(_DistributionMetricBase):
         ...     reference="cat sat on mat",
         ... )
         >>> round(result.value, 3)  # doctest: +SKIP
-        0.812
+        0.675
     """
 
     def __init__(
@@ -209,7 +209,7 @@ class JSDistance(JSDivergence):
         >>> metric = JSDistance()
         >>> result = metric.score("a a b", reference="a b b")
         >>> round(result.value, 3)  # doctest: +SKIP
-        0.188
+        0.082
     """
 
     def __init__(
@@ -283,7 +283,7 @@ class KLDivergence(_DistributionMetricBase):
         >>> metric = KLDivergence(direction="avg")
         >>> result = metric.score("hello hello world", reference="hello world")
         >>> round(result.value, 4)  # doctest: +SKIP
-        0.0583
+        0.0578
     """
 
     def __init__(

@@ -112,9 +112,14 @@ bind. Inert until a later, environment-gated migration attaches the
     <policies>
       <tiered_replicated>
         <volumes>
-          <hot>
+          <!-- Named `default`, not `hot`: ClickHouse rejects a policy switch unless the new
+               policy carries a volume of the same name as the old one ("New storage policy
+               shall contain volumes of the old storage policy", BAD_ARGUMENTS). Every table
+               starts on the built-in `default` policy, whose volume is `default`, so naming
+               this one anything else makes the policy unattachable to any existing table. -->
+          <default>
             <disk>default</disk>
-          </hot>
+          </default>
           <cold>
             <disk>cold</disk>
           </cold>

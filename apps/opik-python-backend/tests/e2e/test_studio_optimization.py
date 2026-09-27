@@ -29,6 +29,7 @@ import pytest
 import opik
 from opik import synchronization
 
+from conftest import resolve_e2e_model
 from llm_constants import (
     ANTHROPIC_CLAUDE_HAIKU,
     ANTHROPIC_CLAUDE_HAIKU_SHORT,
@@ -36,6 +37,26 @@ from llm_constants import (
 )
 
 pytestmark = pytest.mark.e2e
+
+
+def _task_model() -> str:
+    """The task model for this run — Anthropic, or OpenAI when it is unusable."""
+    return resolve_e2e_model()
+
+
+def _model_trace_substring() -> str:
+    """Substring identifying the task model in span records.
+
+    The Anthropic id carries a date suffix that changes, so it matches on a
+    prefix; OpenAI ids are stable and match in full.
+    """
+    model = _task_model()
+    return (
+        ANTHROPIC_CLAUDE_HAIKU_SHORT
+        if model == ANTHROPIC_CLAUDE_HAIKU
+        else model.lower()
+    )
+
 
 RunStudioOptimization = Callable[[str, str, dict[str, Any]], dict[str, Any]]
 
@@ -236,10 +257,11 @@ def _assert_only_configured_model_ran(opik_client: opik.Opik, project_name: str)
     """The configured model actually ran, and the SDK default never leaked (the
     model-passing regression fell back to it). Spans land in ClickHouse with
     eventual consistency, so wait for the expected model to appear."""
-    _wait_for_model(opik_client, project_name, ANTHROPIC_CLAUDE_HAIKU_SHORT)
+    expected = _model_trace_substring()
+    _wait_for_model(opik_client, project_name, expected)
     models = _models_in_project(opik_client, project_name)
     # Healthy volume: it evaluated the dataset, not just a single call.
-    assert sum(ANTHROPIC_CLAUDE_HAIKU_SHORT in m.lower() for m in models) >= 2, (
+    assert sum(expected in m.lower() for m in models) >= 2, (
         f"expected multiple model calls, saw {models}"
     )
     assert not any(OPENAI_GPT_NANO in m for m in models), (
@@ -261,7 +283,7 @@ def test_studio_optimization_runs_on_dataset_and_prompt(
         "type": "equals",
         "parameters": {"reference_key": "label", "case_sensitive": False},
     }
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, optimizer_type, metric)
+    studio_config = _studio_config(_task_model(), dataset_name, optimizer_type, metric)
 
     result = run_studio_optimization(project_name, dataset_name, studio_config)
 
@@ -278,7 +300,7 @@ def test_studio_optimization_with_code_metric(
 ) -> None:
     dataset_name = seeded_sentiment_classification_dataset.name
     metric = {"type": "code", "parameters": {"code": _CODE_METRIC}}
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+    studio_config = _studio_config(_task_model(), dataset_name, "gepa", metric)
 
     result = run_studio_optimization(project_name, dataset_name, studio_config)
 
@@ -301,7 +323,7 @@ def test_studio_optimization_code_metric_syntax_error_surfaces_as_error(
     """
     dataset_name = seeded_sentiment_classification_dataset.name
     metric = {"type": "code", "parameters": {"code": _SYNTAX_ERROR_CODE_METRIC}}
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+    studio_config = _studio_config(_task_model(), dataset_name, "gepa", metric)
 
     # `MetricFactory.build` raises `InvalidMetricError` inside
     # `optimization_lifecycle`, which marks the run as failed before
@@ -363,7 +385,7 @@ def test_studio_optimization_with_code_metric_arguments_map_rename(
             "arguments": {"gold_label": "label"},
         },
     }
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+    studio_config = _studio_config(_task_model(), dataset_name, "gepa", metric)
 
     result = run_studio_optimization(project_name, dataset_name, studio_config)
 
@@ -403,7 +425,7 @@ def test_studio_optimization_with_code_metric_missing_mapped_column(
             "arguments": {"reference": "does_not_exist_in_dataset"},
         },
     }
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+    studio_config = _studio_config(_task_model(), dataset_name, "gepa", metric)
 
     result = run_studio_optimization(project_name, dataset_name, studio_config)
 

@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from opik.evaluation.metrics import base_metric, score_result
+from opik.evaluation.metrics.heuristics import _vader_lexicon
 from opik.exceptions import MetricComputationError
 
 try:
@@ -52,12 +53,16 @@ class Sentiment(base_metric.BaseMetric):
                 "`python -m nltk.downloader vader_lexicon`."
             )
 
-        try:
-            self._analyzer = vader.SentimentIntensityAnalyzer()
-        except LookupError:
-            # If vader_lexicon is not downloaded, attempt to download it
-            nltk.download("vader_lexicon")
-            self._analyzer = vader.SentimentIntensityAnalyzer()
+        # The corpus is fetched once per process rather than on every construction,
+        # and a corpus that cannot be had becomes the same actionable ImportError as
+        # a missing `nltk` above, instead of whatever the download raised on the way.
+        self._analyzer = _vader_lexicon.build_analyzer(
+            vader.SentimentIntensityAnalyzer,
+            error_message=(
+                "`nltk` corpus 'vader_lexicon' is required for sentiment analysis. "
+                "Install via `python -m nltk.downloader vader_lexicon`."
+            ),
+        )
 
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """

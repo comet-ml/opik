@@ -7494,6 +7494,102 @@ class DatasetsResourceTest {
                     List.of(expectedExperimentItemWithActualDuration));
         }
 
+        /**
+         * Pins where the target projects come from: the traces, not the denormalized
+         * {@code experiment_items.project_id}. Reading them off the experiment item loses the project of any
+         * item written before its trace existed, and the compare view then returns that item with no trace
+         * data at all instead of failing.
+         */
+        @Test
+        void find__whenExperimentItemHasNoProjectId__thenTraceDataIsResolvedFromTheTrace() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).subList(0, 2);
+            putAndAssert(DatasetItemBatch.builder().items(datasetItems).datasetId(datasetId).build(), workspaceName,
+                    apiKey);
+
+            // This trace exists when its experiment item is written, so the item carries its project_id.
+            var existingTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphabetic(20))
+                    .build();
+            createAndAssert(existingTrace, workspaceName, apiKey);
+
+            // This one is written afterwards, and into another project, so its experiment item ends up with no
+            // project_id of its own.
+            var lateTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphabetic(20))
+                    .build();
+
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            var experimentItems = Set.of(
+                    buildExperimentItem(experimentId, datasetItems.getFirst(), existingTrace),
+                    buildExperimentItem(experimentId, datasetItems.getLast(), lateTrace));
+
+            createAndAssert(ExperimentItemsBatch.builder().experimentItems(experimentItems).build(), apiKey,
+                    workspaceName);
+
+            createAndAssert(lateTrace, workspaceName, apiKey);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(datasetId,
+                    List.of(experimentId), apiKey, workspaceName);
+
+            // The page comes back ordered by id descending, so line the expectations up the same way.
+            var expectedByItemId = Map.of(
+                    datasetItems.getFirst().id(), expectedFrom(experimentItems, datasetItems.getFirst(),
+                            existingTrace, actualPage),
+                    datasetItems.getLast().id(), expectedFrom(experimentItems, datasetItems.getLast(),
+                            lateTrace, actualPage));
+            var expectedDatasetItems = actualPage.content().stream()
+                    .map(item -> datasetItems.stream().filter(di -> di.id().equals(item.id())).findFirst()
+                            .orElseThrow())
+                    .toList();
+
+            assertDatasetItemExperiments(actualPage, expectedDatasetItems,
+                    expectedDatasetItems.stream().map(di -> expectedByItemId.get(di.id())).toList());
+        }
+
+        /**
+         * The experiment item as the API returns it: the one the fixture wrote, with the trace data the read
+         * resolves onto it. Duration is taken from the response because it is computed from the trace's
+         * timestamps rather than stored.
+         */
+        private ExperimentItem expectedFrom(Set<ExperimentItem> written, DatasetItem datasetItem, Trace trace,
+                DatasetItemPage actualPage) {
+            var item = written.stream().filter(ei -> ei.datasetItemId().equals(datasetItem.id())).findFirst()
+                    .orElseThrow();
+            var actual = actualPage.content().stream().filter(di -> di.id().equals(datasetItem.id())).findFirst()
+                    .orElseThrow().experimentItems().getFirst();
+            return item.toBuilder()
+                    .input(trace.input())
+                    .output(trace.output())
+                    .duration(actual.duration())
+                    .totalEstimatedCost(actual.totalEstimatedCost())
+                    .usage(actual.usage())
+                    .traceVisibilityMode(actual.traceVisibilityMode())
+                    .build();
+        }
+
+        private ExperimentItem buildExperimentItem(UUID experimentId, DatasetItem datasetItem, Trace trace) {
+            return factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .id(GENERATOR.generate())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .experimentId(experimentId)
+                    .traceVisibilityMode(VisibilityMode.DEFAULT)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
+        }
+
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
                 List<FeedbackScoreBatchItem> scores, UUID experimentId, List<ExperimentItem> experimentItems) {
             for (int i = 0; i < items.size(); i++) {

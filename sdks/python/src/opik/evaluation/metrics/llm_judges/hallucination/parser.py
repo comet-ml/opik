@@ -20,7 +20,7 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
         return score_result.ScoreResult(
             name=name,
             value=score,
-            reason=str(dict_content["reason"]),
+            reason=parsing_helpers.reason_to_text(dict_content["reason"]),
         )
     except Exception as e:
         LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)

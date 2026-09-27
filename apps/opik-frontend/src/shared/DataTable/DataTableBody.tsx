@@ -1,6 +1,7 @@
 import React from "react";
 import { TableBody } from "@/ui/table";
 import { Row, Table } from "@tanstack/react-table";
+import useTableRows from "@/shared/DataTable/useTableRows";
 import { cn } from "@/lib/utils";
 
 export type RowVirtualizationConfig = {
@@ -21,7 +22,7 @@ export const DataTableBody = <TData,>({
   renderNoData,
   showLoadingOverlay = false,
 }: DataTableBodyProps<TData>) => {
-  const rows = table.getRowModel().rows;
+  const rows = useTableRows(table);
 
   return (
     <TableBody

@@ -696,6 +696,23 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
+
+        @Test
+        @DisplayName("Batch delete evaluators returns 403 when permission is denied")
+        void deleteEvaluatorsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE.getValue());
+
+            var batchDelete = BatchDelete.builder().ids(Set.of(UUID.randomUUID())).build();
+
+            try (var response = evaluatorsResourceClient.delete(
+                    UUID.randomUUID(), workspaceName, apiKey, batchDelete, HttpStatus.SC_FORBIDDEN)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested

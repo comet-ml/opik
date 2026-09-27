@@ -5,6 +5,7 @@ import typing
 import httpx
 from .agent_configs.client import AgentConfigsClient, AsyncAgentConfigsClient
 from .agent_insights.client import AgentInsightsClient, AsyncAgentInsightsClient
+from .agent_insights_enrollment.client import AgentInsightsEnrollmentClient, AsyncAgentInsightsEnrollmentClient
 from .agent_insights_jobs.client import AgentInsightsJobsClient, AsyncAgentInsightsJobsClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
@@ -110,6 +111,7 @@ class OpikApi:
         )
         self._raw_client = RawOpikApi(client_wrapper=self._client_wrapper)
         self.mcp_o_auth = McpOAuthClient(client_wrapper=self._client_wrapper)
+        self.agent_insights_enrollment = AgentInsightsEnrollmentClient(client_wrapper=self._client_wrapper)
         self.system_analytics_queries = SystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
@@ -265,6 +267,7 @@ class AsyncOpikApi:
         )
         self._raw_client = AsyncRawOpikApi(client_wrapper=self._client_wrapper)
         self.mcp_o_auth = AsyncMcpOAuthClient(client_wrapper=self._client_wrapper)
+        self.agent_insights_enrollment = AsyncAgentInsightsEnrollmentClient(client_wrapper=self._client_wrapper)
         self.system_analytics_queries = AsyncSystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)

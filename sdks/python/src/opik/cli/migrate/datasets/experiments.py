@@ -738,12 +738,14 @@ def _read_source_experiment_items(
 
     Routes through the high-level
     ``api_objects.experiment.rest_operations.find_experiment_items_for_dataset``
-    helper, which paginates
-    ``datasets.find_dataset_items_with_experiment_items`` internally
-    (PAGE_SIZE=100), flattens each page's per-dataset-item
-    ``experiment_items`` list, and returns ``ExperimentItemContent``
-    dataclasses with ``assertion_results`` already normalized to
-    ``List[AssertionResultDict]``.
+    helper, which pages the Compare view
+    (``constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE`` items per page), fetching
+    pages concurrently but returning them in page order, bounded by the first
+    page's ``total`` and walking to an empty page when that is unusable. It
+    flattens each page's per-dataset-item ``experiment_items`` list and returns
+    ``ExperimentItemContent`` dataclasses with ``assertion_results`` already
+    normalized to ``List[AssertionResultDict]``. How it reaches the endpoint is
+    the helper's own business and documented there.
 
     Compare view (vs. the Public ``stream_experiment_items``) is the
     correct read shape here because only Compare surfaces

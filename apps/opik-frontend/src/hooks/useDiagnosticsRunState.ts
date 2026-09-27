@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 const STORAGE_KEY = (projectId: string) => `diagnostics-run:${projectId}`;
 const RUN_CHANGE_EVENT = "diagnostics-run-change";
 // Fallback for a run the backend never reports on.
-const RUN_TIMEOUT_MS = 5 * 60 * 1000;
+const RUN_TIMEOUT_MS = 10 * 60 * 1000;
 
 // Only the client-side "running" concept is persisted here; the failed state is
 // derived from the job (the backend owns it and clears it on the next success).

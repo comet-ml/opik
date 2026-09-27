@@ -8,7 +8,11 @@ import {
   mockGatewayUrlForBackend,
   mockTokenUrlForBackend,
 } from '../core/mock-auth';
-import { createProviderKey, deleteProviderKeyByName } from '../core/provider-keys';
+import {
+  createProviderKey,
+  deleteProviderKeyByName,
+  notFoundProviderBaseUrl,
+} from '../core/provider-keys';
 
 export interface OauthProviderSeed {
   providerName: string;
@@ -29,6 +33,25 @@ export interface UnreachableProviderSeed {
   modelName?: string;
 }
 
+export interface FailingProviderSeed {
+  providerName: string;
+  /**
+   * Model segment of the qualified id. Needs no per-test uniqueness of its own —
+   * `providerName` already namespaces the qualified id — so it defaults to a
+   * readable constant.
+   */
+  modelName?: string;
+}
+
+/**
+ * Seed for `createUnresponsive`. Structurally identical to
+ * {@link UnreachableProviderSeed} and named separately on purpose: the two
+ * fixtures produce OPPOSITE failure shapes — refused vs hung — and a caller
+ * reading `createUnresponsive(seed: UnreachableProviderSeed)` in the editor or
+ * in generated docs is told the wrong one.
+ */
+export type UnresponsiveProviderSeed = UnreachableProviderSeed;
+
 /**
  * Base URL for a provider that can never answer.
  *
@@ -47,6 +70,26 @@ export interface UnreachableProviderSeed {
  */
 const UNREACHABLE_BASE_URL = 'http://127.0.0.1:9/v1';
 
+/**
+ * Base URL for a provider that never answers and never refuses.
+ *
+ * `192.0.2.1` is TEST-NET-1 (RFC 5737) — reserved for documentation, routed
+ * nowhere — so a connect to it hangs until it times out instead of being
+ * refused. That is the opposite of what `UNREACHABLE_BASE_URL` wants, and
+ * deliberately so: a refused connect ends a Playground run in milliseconds,
+ * which leaves no window in which a spec can click Stop. Holding the run open
+ * is the whole point here.
+ *
+ * Only for specs that abort the run themselves and assert on the FRONTEND's
+ * reaction. Do NOT point a scoring rule at this — the warning on
+ * `UNREACHABLE_BASE_URL` stands, and an online-scoring message whose provider
+ * call is still connecting when the message is reclaimed is exactly the
+ * non-determinism that URL exists to avoid. Stop aborts the browser's own
+ * request; whether the backend's upstream connect is still timing out behind it
+ * is not something a caller here may depend on either way.
+ */
+const UNRESPONSIVE_BASE_URL = 'http://192.0.2.1/v1';
+
 export interface ProviderKeysFixture {
   /**
    * REST-seeds a Custom provider in OAuth2 token-auth mode against the suite's mock
@@ -57,12 +100,26 @@ export interface ProviderKeysFixture {
    * REST-seeds a Custom provider whose base URL refuses every connection, so any
    * rule pointed at it fails deterministically; registered for teardown deletion.
    *
+   * Sibling of `createPermanentlyFailing`, and the choice between them is the
+   * error SHAPE: this one is refused at connect, so the scorer reports a
+   * transport failure with no provider body to quote. Use the other when the
+   * assertion is about the status the provider itself answered.
+   *
    * Returns the fully-qualified model id to put on a rule, rather than leaving
    * the caller to rebuild `custom-llm/<provider>/<model>`: a rule naming a model
    * string the provider does not declare fails for the wrong reason, and the
    * two spellings drifting apart would be invisible in the log stream.
    */
   createUnreachable(seed: UnreachableProviderSeed): Promise<string>;
+  /**
+   * REST-seeds a Custom provider whose base URL is blackholed, so a call to it
+   * hangs rather than failing — which is what keeps a Playground run open long
+   * enough for a spec to stop it. Registered for teardown deletion.
+   *
+   * Returns the fully-qualified model id, for the same reason
+   * `createUnreachable` does.
+   */
+  createUnresponsive(seed: UnresponsiveProviderSeed): Promise<string>;
   /**
    * Makes the mock gateway answer `status` for every chat request naming `modelName`,
    * and clears it at teardown.
@@ -72,6 +129,18 @@ export interface ProviderKeysFixture {
    * when an assertion has already failed.
    */
   forceChatStatus(modelName: string, status: number): Promise<void>;
+  /**
+   * REST-seeds a Custom provider whose endpoint always answers a permanent HTTP
+   * 404, and returns the qualified model id (`custom-llm/<provider>/<model>`) to
+   * put in a rule or a Playground run.
+   *
+   * For specs about what Opik does when a provider REFUSES, which is otherwise
+   * awkward to stage: a real provider needs credentials, and the suite's mock
+   * gateway only exists on the test runner, so a remote backend can never reach
+   * it (see `mockAuthSkipReason`). This one has no such gate — see
+   * `notFoundProviderBaseUrl` for how.
+   */
+  createPermanentlyFailing(seed: FailingProviderSeed): Promise<string>;
   /**
    * Registers a provider name for teardown deletion without seeding — for tests where
    * UI creation is itself the behavior under test. Cleanup runs even when the test fails.
@@ -128,9 +197,37 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
         });
         return model;
       },
+      async createUnresponsive({ providerName, modelName = 'unresponsive-model' }) {
+        registered.push(providerName);
+        const model = `custom-llm/${providerName}/${modelName}`;
+        await createProviderKey({
+          provider: 'custom-llm',
+          provider_name: providerName,
+          base_url: UNRESPONSIVE_BASE_URL,
+          // Required whenever `auth_config` is absent. Never sent anywhere: the
+          // connect never completes, so no request is ever written.
+          api_key: 'unused-the-connection-never-completes',
+          configuration: { models: model },
+        });
+        return model;
+      },
       async forceChatStatus(modelName, status) {
         forcedStatusModels.push(modelName);
         await mockAuthForceChatStatus(modelName, status);
+      },
+      async createPermanentlyFailing({ providerName, modelName = 'always-404-model' }) {
+        registered.push(providerName);
+        const qualifiedModel = `custom-llm/${providerName}/${modelName}`;
+        await createProviderKey({
+          provider: 'custom-llm',
+          provider_name: providerName,
+          base_url: notFoundProviderBaseUrl,
+          // Never presented to a real provider — the request 404s at routing —
+          // but the field is required for a provider that is not in token mode.
+          api_key: 'not-a-real-key',
+          configuration: { models: qualifiedModel },
+        });
+        return qualifiedModel;
       },
       register(providerName) {
         registered.push(providerName);

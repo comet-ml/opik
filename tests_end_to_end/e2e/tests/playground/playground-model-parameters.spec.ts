@@ -1,6 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { ConfigurationPage } from '@e2e/pom/configuration.page';
+import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
 
 /**
  * The playground's model-parameters panel must send exactly what it displays.
@@ -77,7 +78,11 @@ test.describe(
           // holds a key; otherwise take the workspace as it is.
           const cfg = new ConfigurationPage(page);
           await cfg.gotoAiProviders();
-          const anthropicKey = process.env.ANTHROPIC_API_KEY;
+          // anthropicKeyUsable(), not the raw env var: after the preflight blanks
+          // a rejected key this would otherwise fall to the hasProvider() branch
+          // and stop provisioning, leaving the spec dependent on an earlier run
+          // having configured the workspace.
+          const anthropicKey = anthropicKeyUsable() ? process.env.ANTHROPIC_API_KEY : undefined;
           const configured = anthropicKey
             ? await cfg.ensureProviderConfigured('Anthropic', anthropicKey)
             : await cfg.hasProvider('Anthropic');

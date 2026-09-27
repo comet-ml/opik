@@ -265,17 +265,46 @@ def test_sentence_bleu_score(candidate, reference, expected_min, expected_max):
 
 
 @pytest.mark.parametrize(
-    "candidate,reference",
+    "candidate,reference,expected_message",
     [
-        ("", "The quick brown fox"),
-        ("The quick brown fox", ""),
+        ("", "The quick brown fox", "Candidate is empty (single-sentence BLEU)."),
+        ("The quick brown fox", "", "Reference is empty (single-sentence BLEU)."),
     ],
 )
-def test_sentence_bleu_score_empty_inputs(candidate, reference):
+def test_sentence_bleu_score_empty_inputs(candidate, reference, expected_message):
+    # Which side was empty is the useful part of the diagnostic, so pin the
+    # whole message: a substring check would pass on either one.
     metric = SentenceBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(candidate, reference)
-    assert "empty" in str(exc_info.value).lower()
+    assert str(exc_info.value) == expected_message
+
+
+def test_sentence_bleu__empty_reference_list__raises_metric_error():
+    # An empty list of references reached NLTK with no references at all and
+    # surfaced as `KeyError: ('the',)`, unlike the empty-string cases above.
+    metric = SentenceBLEU(track=False)
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output="The quick brown fox", reference=[])
+    assert str(exc_info.value) == "Reference is empty (single-sentence BLEU)."
+
+
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
+@pytest.mark.parametrize("n_grams", [None, "3", 2.5, 3.0, True, False])
+def test_bleu__non_integer_or_boolean_n_grams__raises_value_error(metric_cls, n_grams):
+    # `n_grams < 1` raised TypeError for None and str, and `bool` is a subclass
+    # of int, so `True` silently meant 1.
+    with pytest.raises(ValueError, match="n_grams must be an integer"):
+        metric_cls(n_grams=n_grams, track=False)
+
+
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
+@pytest.mark.parametrize("n_grams", [0, -1])
+def test_bleu__non_positive_n_grams__raises_value_error(metric_cls, n_grams):
+    # n_grams=0 divided by zero while building the uniform weights, and a
+    # negative order produced an empty weight list that quietly scored 0.0.
+    with pytest.raises(ValueError, match="n_grams must be at least 1"):
+        metric_cls(n_grams=n_grams, track=False)
 
 
 @pytest.mark.parametrize(
@@ -343,12 +372,13 @@ def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
 
 
 @pytest.mark.parametrize(
-    "outputs,references",
+    "outputs,references,expected_message",
     [
         # Candidate is empty
         (
             ["", "Some text here"],
             [["non-empty reference"], ["this is fine"]],
+            "Candidate is empty (corpus BLEU).",
         ),
         # Reference is empty
         (
@@ -357,14 +387,38 @@ def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
                 ["The quick brown fox jumps over the lazy dog"],
                 [""],
             ],
+            # A list holding an empty string, not an empty list of references,
+            # so this is the per-reference check rather than the missing one.
+            "Encountered empty reference (corpus BLEU).",
         ),
     ],
 )
-def test_corpus_bleu_score_empty_inputs(outputs, references):
+def test_corpus_bleu_score_empty_inputs(outputs, references, expected_message):
+    # Same reasoning as the single-sentence case: the message names the side
+    # that was empty, and that is what the test is here to protect.
     metric = CorpusBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=outputs, reference=references)
-    assert "empty" in str(exc_info.value).lower()
+    assert str(exc_info.value) == expected_message
+
+
+@pytest.mark.parametrize(
+    "outputs,references,expected_message",
+    [
+        # No candidates at all: passed the length check, then `max()` on an
+        # empty sequence raised `ValueError: max() iterable argument is empty`.
+        ([], [], "Candidate list is empty (corpus BLEU)."),
+        # A candidate with an empty list of references raised `KeyError`.
+        (["The quick brown fox"], [[]], "Reference is empty (corpus BLEU)."),
+    ],
+)
+def test_corpus_bleu__empty_sequences__raise_metric_error(
+    outputs, references, expected_message
+):
+    metric = CorpusBLEU(track=False)
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output=outputs, reference=references)
+    assert str(exc_info.value) == expected_message
 
 
 def test_js_divergence_identical_text():
@@ -468,6 +522,48 @@ def test_meteor_rejects_empty_inputs():
         metric.score(output="hyp", reference="   ")
 
 
+def test_meteor_metric__default_nltk_backend__scores_plain_strings():
+    # The default backend must tokenize before calling NLTK: meteor_score expects
+    # an iterable of token lists and a token list, so passing the raw strings
+    # raised `TypeError: "hypothesis" expects pre-tokenized hypothesis`. Both other
+    # METEOR tests inject `meteor_fn`, so the real NLTK path was never exercised.
+    nltk = pytest.importorskip("nltk")
+
+    # Check for the corpus without letting the metric's constructor fetch it:
+    # `nltk.data.find` only looks locally, while `METEOR()` downloads on a miss,
+    # which would put a network call in a unit test. Skip only that case, so a
+    # genuine failure to construct the metric still fails the test.
+    try:
+        nltk.data.find("corpora/wordnet.zip")
+    except LookupError:
+        try:
+            nltk.data.find("corpora/wordnet")
+        except LookupError:
+            pytest.skip("METEOR needs the NLTK WordNet corpus, which is not installed")
+
+    metric = METEOR(track=False)
+
+    identical = metric.score(
+        output="the cat sat on the mat", reference="the cat sat on the mat"
+    ).value
+    partial = metric.score(
+        output="the cat sat on the mat", reference="a cat was sitting on the mat"
+    ).value
+    unrelated = metric.score(
+        output="completely different words here", reference="the cat sat on the mat"
+    ).value
+
+    assert identical == pytest.approx(0.9977, abs=1e-3)
+    assert unrelated == 0.0
+    assert unrelated < partial < identical
+
+    # A sequence of references scores against the best-matching one.
+    best_of_many = metric.score(
+        output="the cat sat", reference=["a dog ran away", "the cat sat"]
+    ).value
+    assert best_of_many > 0.9
+
+
 def test_gleu_metric_with_custom_fn():
     def gleu_fn(references, hypothesis):
         return 0.5
@@ -560,6 +656,33 @@ def test_chrf_metric__char_order_and_ignore_whitespace_vary__change_score():
     assert order_1 != order_6
 
 
+def test_chrf_metric__multiple_references__scores_against_best_match():
+    # NLTK's sentence_chrf accepts only a single reference; passing the list of
+    # references straight through made it misinterpret the input and return a
+    # wrong score, even when the candidate exactly matched one reference. A
+    # candidate identical to any reference must score 1.0 (best-match semantics).
+    pytest.importorskip("nltk")
+
+    metric = ChrF(track=False)
+
+    match_second = metric.score(
+        output="hello world",
+        reference=["completely different text here", "hello world"],
+    ).value
+    match_first = metric.score(
+        output="hello world",
+        reference=["hello world", "completely different text here"],
+    ).value
+
+    assert match_second == pytest.approx(1.0)
+    assert match_first == pytest.approx(1.0)
+
+    # A perfect match against one reference must not score below matching that
+    # reference alone (the pre-fix bug returned a middling value here).
+    single = metric.score(output="hello world", reference="hello world").value
+    assert match_second == pytest.approx(single)
+
+
 def test_spearman_ranking_metric():
     metric = SpearmanRanking(track=False)
     result = metric.score(output=["b", "a", "c"], reference=["a", "b", "c"])
@@ -598,6 +721,124 @@ def test_vader_sentiment_metric_uses_custom_analyzer():
 
     assert result.value == pytest.approx((-0.4 + 1) / 2)
     assert result.metadata["vader"]["compound"] == -0.4
+
+
+def test_vader_sentiment__missing_lexicon_downloads_it(monkeypatch):
+    # SentimentIntensityAnalyzer reads the vader_lexicon corpus at construction
+    # and raises a bare LookupError when it is absent, which is what a fresh
+    # `pip install nltk` gives. The corpus is fetched once instead.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, vader_sentiment
+
+    attempts = {"analyzer": 0, "download": []}
+
+    class StubAnalyzer:
+        def __init__(self) -> None:
+            attempts["analyzer"] += 1
+            if not attempts["download"]:
+                raise LookupError("Resource 'vader_lexicon' not found.")
+
+        def polarity_scores(self, text: str) -> dict:
+            return {"compound": 0.5}
+
+    class StubNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            attempts["download"].append(name)
+
+    monkeypatch.setattr(vader_sentiment, "SentimentIntensityAnalyzer", StubAnalyzer)
+    monkeypatch.setattr(_vader_lexicon, "nltk", StubNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    metric = vader_sentiment.VADERSentiment(track=False)
+
+    assert attempts["download"] == ["vader_lexicon"]
+    assert attempts["analyzer"] == 2
+    assert metric.score(output="hello").value == pytest.approx(0.75)
+
+
+def test_vader_sentiment__lexicon_unavailable_raises_actionable_import_error(
+    monkeypatch,
+):
+    # When the corpus cannot be fetched (for example offline), the bare
+    # LookupError is replaced by an ImportError naming the manual command.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, vader_sentiment
+
+    class AlwaysMissingAnalyzer:
+        def __init__(self) -> None:
+            raise LookupError("Resource 'vader_lexicon' not found.")
+
+    class OfflineNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            raise OSError("network unreachable")
+
+    monkeypatch.setattr(
+        vader_sentiment, "SentimentIntensityAnalyzer", AlwaysMissingAnalyzer
+    )
+    monkeypatch.setattr(_vader_lexicon, "nltk", OfflineNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    with pytest.raises(ImportError, match="nltk.downloader vader_lexicon"):
+        vader_sentiment.VADERSentiment(track=False)
+
+
+def test_vader_sentiment__lexicon_is_fetched_at_most_once(monkeypatch):
+    # Every metric instance builds its own analyzer. When the corpus cannot be
+    # fetched, a process that builds several of them should not pay for a failed
+    # download each time -- the answer would be the same on every attempt.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, vader_sentiment
+
+    downloads = []
+
+    class AlwaysMissingAnalyzer:
+        def __init__(self) -> None:
+            raise LookupError("Resource 'vader_lexicon' not found.")
+
+    class OfflineNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            downloads.append(name)
+            raise OSError("network unreachable")
+
+    monkeypatch.setattr(
+        vader_sentiment, "SentimentIntensityAnalyzer", AlwaysMissingAnalyzer
+    )
+    monkeypatch.setattr(_vader_lexicon, "nltk", OfflineNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    for _ in range(3):
+        with pytest.raises(ImportError):
+            vader_sentiment.VADERSentiment(track=False)
+
+    assert downloads == ["vader_lexicon"]
+
+
+def test_vader_sentiment__unrelated_analyzer_failure_is_not_swallowed(monkeypatch):
+    # Only a missing corpus becomes the "install vader_lexicon" ImportError.
+    # Anything else NLTK raises is a real failure and has to surface as itself,
+    # otherwise an unrelated breakage is reported as a missing download.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, vader_sentiment
+
+    class BrokenAnalyzer:
+        def __init__(self) -> None:
+            if not attempts:
+                attempts.append("first")
+                raise LookupError("Resource 'vader_lexicon' not found.")
+            raise RuntimeError("vader_lexicon is corrupt")
+
+    attempts: list = []
+
+    class StubNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            pass
+
+    monkeypatch.setattr(vader_sentiment, "SentimentIntensityAnalyzer", BrokenAnalyzer)
+    monkeypatch.setattr(_vader_lexicon, "nltk", StubNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    with pytest.raises(RuntimeError, match="corrupt"):
+        vader_sentiment.VADERSentiment(track=False)
 
 
 def test_readability_metric_and_guard_behaviour():
@@ -1008,3 +1249,204 @@ def test_rouge_score_using_custom_tokenizer(
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
+
+
+def test_tone_empty_lexicons_disable_the_defaults():
+    text = "This is terrible and useless."
+
+    default = Tone(track=False).score(output=text)
+    emptied = Tone(track=False, negative_lexicon=[]).score(output=text)
+
+    assert default.metadata["sentiment_score"] < 0
+    assert emptied.metadata["sentiment_score"] == 0
+    assert emptied.value == 1.0
+
+
+def test_tone_empty_positive_lexicon_disables_the_defaults():
+    text = "I am happy to help."
+
+    assert Tone(track=False).score(output=text).metadata["sentiment_score"] > 0
+    emptied = Tone(track=False, positive_lexicon=[]).score(output=text)
+    assert emptied.metadata["sentiment_score"] == 0
+
+
+def test_tone_empty_forbidden_phrases_disable_the_defaults():
+    text = "Shut up, this is not my problem."
+
+    assert Tone(track=False).score(output=text).metadata["forbidden_hit"] is True
+    emptied = Tone(track=False, forbidden_phrases=[]).score(output=text)
+    assert emptied.metadata["forbidden_hit"] is False
+
+
+def test_tone_none_lexicons_keep_the_defaults():
+    text = "This is terrible and useless."
+    explicit_none = Tone(
+        track=False,
+        positive_lexicon=None,
+        negative_lexicon=None,
+        forbidden_phrases=None,
+    ).score(output=text)
+
+    assert explicit_none == Tone(track=False).score(output=text)
+
+
+@pytest.mark.parametrize(
+    "bad_output",
+    [None, 5, 3.5, True, {"answer": "yes"}, ["a", "b"]],
+)
+def test_contains__non_string_output__raises_metric_error(bad_output):
+    # Contains validated `reference` but never `output`, so a non-string
+    # reached `.lower()` / `in` and surfaced as AttributeError or TypeError.
+    metric = Contains(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="a")
+
+
+@pytest.mark.parametrize("bad_output", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_levenshtein_ratio__non_string_output__raises_metric_error(bad_output):
+    # The None case was already reported as MetricComputationError; every other
+    # non-string fell through to AttributeError.
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="abc")
+
+
+@pytest.mark.parametrize("bad_reference", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_levenshtein_ratio__non_string_reference__raises_metric_error(bad_reference):
+    # The guard covers `reference` as well, and rapidfuzz would otherwise be
+    # handed a non-string.
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output' and 'reference'"):
+        metric.score(output="abc", reference=bad_reference)
+
+
+@pytest.mark.parametrize("case_sensitive", [True, False])
+@pytest.mark.parametrize("bad_reference", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_contains__non_string_reference__raises_value_error(
+    bad_reference, case_sensitive
+):
+    # Contains validated the reference for None and "" but not for its type, so
+    # a non-string reached `.lower()` (case-insensitive) or `in` (case-sensitive).
+    metric = Contains(case_sensitive=case_sensitive, track=False)
+    with pytest.raises(ValueError, match="must be a string"):
+        metric.score(output="hello", reference=bad_reference)
+
+
+@pytest.mark.parametrize("bad_output", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_regex_match__non_string_output__raises_metric_error(bad_output):
+    metric = regex_match.RegexMatch(regex=r"\d+", track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output)
+
+
+def test_string_metrics__valid_strings__still_score():
+    # The new guards must not touch the normal path.
+    assert (
+        Contains(track=False).score(output="hello world", reference="world").value
+        == 1.0
+    )
+    assert (
+        levenshtein_ratio.LevenshteinRatio(track=False)
+        .score(output="abc", reference="abc")
+        .value
+        == 1.0
+    )
+    assert (
+        regex_match.RegexMatch(regex=r"\d+", track=False).score(output="abc 123").value
+        == 1.0
+    )
+
+
+def test_sentiment__missing_lexicon_is_fetched_once_and_reported_clearly(monkeypatch):
+    # Sentiment builds the same VADER analyzer as VADERSentiment and had the same two
+    # problems: it called nltk.download on every construction, and when the download
+    # itself failed the caller saw whatever that raised -- an OSError naming the
+    # network, with nothing about the corpus -- instead of the actionable message the
+    # class already uses for a missing `nltk`.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, sentiment
+
+    downloads = []
+
+    class OfflineNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            downloads.append(name)
+            raise OSError("network unreachable")
+
+    class AlwaysMissingAnalyzer:
+        def __init__(self) -> None:
+            raise LookupError("Resource vader_lexicon not found.")
+
+    class StubVader:
+        SentimentIntensityAnalyzer = AlwaysMissingAnalyzer
+
+    monkeypatch.setattr(_vader_lexicon, "nltk", OfflineNLTK)
+    monkeypatch.setattr(sentiment, "vader", StubVader)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    for _ in range(3):
+        with pytest.raises(ImportError, match="nltk.downloader vader_lexicon"):
+            sentiment.Sentiment(track=False)
+
+    assert downloads == ["vader_lexicon"]
+
+
+def test_sentiment__unrelated_analyzer_failure_is_not_swallowed(monkeypatch):
+    # As with VADERSentiment: only a missing corpus becomes the install message.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, sentiment
+
+    attempts: list = []
+
+    class BrokenAnalyzer:
+        def __init__(self) -> None:
+            if not attempts:
+                attempts.append("first")
+                raise LookupError("Resource vader_lexicon not found.")
+            raise RuntimeError("vader_lexicon is corrupt")
+
+    class StubVader:
+        SentimentIntensityAnalyzer = BrokenAnalyzer
+
+    class StubNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            pass
+
+    monkeypatch.setattr(_vader_lexicon, "nltk", StubNLTK)
+    monkeypatch.setattr(sentiment, "vader", StubVader)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    with pytest.raises(RuntimeError, match="corrupt"):
+        sentiment.Sentiment(track=False)
+
+
+def test_vader_lexicon__interrupted_download_can_be_retried(monkeypatch):
+    # The attempt is remembered so an offline process does not retry forever, but an
+    # interruption is not an answer about the corpus. Recording it before the download
+    # meant a Ctrl-C during the fetch left the flag set and every later construction
+    # reported the corpus missing without ever trying again.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon
+
+    calls = []
+
+    class InterruptedNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            calls.append(name)
+            if len(calls) == 1:
+                raise KeyboardInterrupt
+            return None
+
+    monkeypatch.setattr(_vader_lexicon, "nltk", InterruptedNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    with pytest.raises(KeyboardInterrupt):
+        _vader_lexicon._download_lexicon_once()
+
+    assert _vader_lexicon._download_attempted is False, (
+        "an interrupted download is not a completed attempt"
+    )
+
+    _vader_lexicon._download_lexicon_once()
+    assert calls == ["vader_lexicon", "vader_lexicon"]
+    assert _vader_lexicon._download_attempted is True
