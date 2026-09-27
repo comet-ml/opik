@@ -111,6 +111,12 @@ public class AnalyticsQueriesResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = ScopedAnalyticsQueryRequest.class))) @NotNull @Valid ScopedAnalyticsQueryRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        // TEMPORARY debug for the dev Custom Charts rollout - remove before merge.
+        log.info("DEBUG Custom Charts gate: workspaceId=[{}] len={} ollieEnabled={} allowlist={} contains={} env=[{}]",
+                workspaceId, workspaceId == null ? -1 : workspaceId.length(), serviceToggles.isOllieEnabled(),
+                customCharts.getEnabledWorkspaces().stream().map(id -> "[" + id + "] len=" + id.length()).toList(),
+                customCharts.getEnabledWorkspaces().contains(workspaceId),
+                System.getenv("TOGGLE_CUSTOM_CHARTS_WORKSPACES"));
         if (!serviceToggles.isOllieEnabled()
                 || !customCharts.getEnabledWorkspaces().contains(workspaceId)) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
