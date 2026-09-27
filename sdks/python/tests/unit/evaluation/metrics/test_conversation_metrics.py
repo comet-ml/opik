@@ -104,8 +104,17 @@ def test_conversation_degeneration_all_wordless_turns():
     metric = ConversationDegenerationMetric(track=False)
     result = metric.score(conversation=conversation)
 
-    assert [turn["is_wordless"] for turn in result.metadata["per_turn"]] == [1.0, 1.0]
-    assert 0.0 < result.value < 1.0
+    wordless_turn = {
+        "repetition_ratio": 0.0,
+        "overlap_previous": 0.0,
+        "fallback_hit": 0.0,
+        "normalized_entropy": 1.0,
+        "is_wordless": 1.0,
+        "degeneration_score": 0.25,
+    }
+    assert result.metadata["per_turn"] == [wordless_turn, wordless_turn]
+    assert result.value == 0.25
+    assert result.metadata["average_score"] == 0.25
 
 
 @pytest.mark.parametrize(
