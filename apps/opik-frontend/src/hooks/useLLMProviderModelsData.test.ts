@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import useLLMProviderModelsData from "./useLLMProviderModelsData";
+import { getProviderFromModel } from "@/lib/provider";
+import { DECISION_MODELS } from "@/constants/decisionModels";
 
 vi.mock("@/api/llm/useLlmModels", () => ({
   default: () => ({
@@ -51,5 +53,22 @@ describe("useLLMProviderModelsData", () => {
         PROVIDER_TYPE.GEMINI,
       ),
     ).toBe(PROVIDER_TYPE.GEMINI);
+  });
+
+  it("resolves decisions models to OpenRouter without listing them in the dropdown", () => {
+    const { result } = renderHook(() => useLLMProviderModelsData());
+
+    DECISION_MODELS.forEach(({ value }) => {
+      expect(result.current.calculateModelProvider(value)).toBe(
+        PROVIDER_TYPE.OPEN_ROUTER,
+      );
+      expect(getProviderFromModel(value)).toBe(PROVIDER_TYPE.OPEN_ROUTER);
+      // Only callers that opt in (the rule dialog) list them.
+      expect(
+        result.current.providerModels[PROVIDER_TYPE.OPEN_ROUTER]?.map(
+          (m) => m.value,
+        ) ?? [],
+      ).not.toContain(value);
+    });
   });
 });

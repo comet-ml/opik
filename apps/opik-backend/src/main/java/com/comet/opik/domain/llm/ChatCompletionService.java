@@ -2,6 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.google.api.gax.rpc.ApiException;
@@ -69,6 +70,7 @@ public class ChatCompletionService {
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId) {
         // must be final or effectively final for lambda
         var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
+        rejectDecisionModel(request.model());
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
         llmProviderClient.validateRequest(request);
@@ -101,6 +103,7 @@ public class ChatCompletionService {
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
         var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
+        rejectDecisionModel(request.model());
 
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
 
@@ -246,6 +249,18 @@ public class ChatCompletionService {
                 throw new NonRetriableException(runtimeException);
             }
             throw runtimeException;
+        }
+    }
+
+    /**
+     * Decisions models (TypeSafe Jev) resolve to OpenRouter so online scoring finds the workspace key, but they
+     * only answer through the Decisions API: OpenRouter rejects them on chat completions. Fail here with a 400
+     * instead of spending a provider round trip on a call that can't succeed.
+     */
+    private void rejectDecisionModel(String model) {
+        if (OpenRouterDecisionModel.isDecisionModel(model)) {
+            throw new BadRequestException(
+                    "Decisions models can't be used for chat completions, model '%s'".formatted(model));
         }
     }
 

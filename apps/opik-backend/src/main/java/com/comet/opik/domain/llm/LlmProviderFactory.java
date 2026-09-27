@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import dev.langchain4j.model.chat.ChatModel;
 
@@ -15,6 +16,12 @@ public interface LlmProviderFactory {
     LlmProviderService getService(String workspaceId, String model);
 
     ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters);
+
+    /**
+     * Resolves the workspace's provider configuration (decrypted API key, headers, base URL) for the model.
+     * For callers that reach a provider without a LangChain4j client, e.g. the OpenRouter Decisions API.
+     */
+    LlmProviderClientApiConfig getClientApiConfig(String workspaceId, String model);
 
     LlmProvider getLlmProvider(String model);
 

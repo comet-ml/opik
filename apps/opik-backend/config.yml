@@ -1484,6 +1484,10 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: ${LLM_PROVIDER_OPENROUTER_URL:-https://openrouter.ai/api/v1}
+  # Default: https://openrouter.ai/api/alpha/decisions
+  # Description: OpenRouter Decisions API URL, used by decisions models such as TypeSafe Jev. It lives outside
+  #   /api/v1, so it can't be derived from openRouterUrl
+  openRouterDecisionsUrl: ${LLM_PROVIDER_OPENROUTER_DECISIONS_URL:-https://openrouter.ai/api/alpha/decisions}
 
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform

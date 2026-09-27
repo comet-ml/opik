@@ -14,6 +14,9 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderFactory.ResolvedModelInfo;
 import com.comet.opik.domain.observability.ObservabilityTraceRecorder;
 import com.comet.opik.infrastructure.ResponseFormattingConfig;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -154,6 +157,53 @@ class OnlineEvaluationRecorderTest {
 
         assertThat(capturedSpan().usage()).isEqualTo(Map.of(
                 "prompt_tokens", 10, "completion_tokens", 5, "total_tokens", 15));
+    }
+
+    @Test
+    void recordsDecisionCallWithReportedCostModelAndUsage() {
+        stubSpanWrites();
+        var request = DecisionsRequest.builder()
+                .model("~typesafe/jev-latest")
+                .state("Question: q\nAnswer: a")
+                .questions(Map.of("answer_relevant", DecisionsQuestion.noul("Does the answer respond?")))
+                .build();
+        var response = DecisionsResponse.builder()
+                .model("typesafe/jev-1.13-20260917")
+                .answers(Map.of("answer_relevant",
+                        DecisionsResponse.Answer.builder().type(DecisionsQuestion.NOUL_TYPE).noul(0.99).build()))
+                .usage(DecisionsResponse.Usage.builder().inputTokens(340).outputTokens(40)
+                        .cost(new BigDecimal("0.00001428")).build())
+                .build();
+
+        var result = recorder().recordDecisionCall(request, Mono.just(response)).block();
+
+        assertThat(result).isSameAs(response);
+        var span = capturedSpan();
+        assertThat(span.type()).isEqualTo(SpanType.llm);
+        // The dated slug that answered wins over the configured alias.
+        assertThat(span.model()).isEqualTo("typesafe/jev-1.13-20260917");
+        assertThat(span.totalEstimatedCost()).isEqualByComparingTo("0.00001428");
+        assertThat(span.usage()).isEqualTo(Map.of(
+                "prompt_tokens", 340, "completion_tokens", 40, "total_tokens", 380));
+        assertThat(span.input().get("state").asText()).isEqualTo("Question: q\nAnswer: a");
+        assertThat(span.output().at("/answers/answer_relevant/noul").asDouble()).isEqualTo(0.99);
+    }
+
+    @Test
+    void recordsErrorOnSpanAndRepropagatesWhenDecisionCallFails() {
+        stubSpanWrites();
+        var request = DecisionsRequest.builder()
+                .model("~typesafe/jev-latest")
+                .state("state")
+                .questions(Map.of("q", DecisionsQuestion.noul("Is it?")))
+                .build();
+        var failure = new RuntimeException("OpenRouter down");
+
+        StepVerifier.create(recorder().recordDecisionCall(request, Mono.error(failure)))
+                .expectErrorMatches(error -> error == failure)
+                .verify();
+
+        assertThat(capturedSpan().errorInfo()).isNotNull();
     }
 
     @Test

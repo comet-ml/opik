@@ -135,13 +135,24 @@ public class OnlineScoringEngine {
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
             StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
             @NonNull List<Span> spans, String traceStructureJson) {
+        var renderedMessages = renderTraceMessages(evaluatorCode, trace, promptType, spans, traceStructureJson);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Renders the rule's messages with the trace variables (and {@code {{spans}}} / {@code {{trace}}} when the
+     * template references them), without building a chat request. Used directly by decisions models, which
+     * read the rendered text as their state.
+     */
+    public static List<ChatMessage> renderTraceMessages(
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace, @NonNull PromptType promptType,
+            @NonNull List<Span> spans, String traceStructureJson) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         injectSpansIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), promptType, spans);
         injectTraceIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), promptType, traceStructureJson);
-        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
-        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+        return renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
     }
 
     /**
