@@ -709,6 +709,18 @@ areas:
       # into concurrent paged waves, which is a correctness surface — dropped,
       # duplicated or reordered rows — that no score assertion would reach.
       experiment-item-read:    { covered: false }
+      # Walking the compare Results tab's paged read
+      # (GET /v1/private/datasets/{id}/items/experiments/items) across every page
+      # of a large experiment. Its own capability rather than part of
+      # experiment-item-read, whose note scopes that key to the Python SDK's
+      # Experiment.get_items(), and rather than part of compare-side-by-side,
+      # which is about two experiments in one row: what is asserted here is that
+      # consecutive pages are an exact, correctly-paired, correctly-ordered
+      # partition at the SHIPPED DEFAULT page size (2,000) and at a non-zero
+      # OFFSET — the un-aggregated (push_top_limit_raw) branch opik#8575/#8578
+      # rewrote, where a row silently dropped at a page boundary renders as
+      # plausible data on the view people read to pick an experiment.
+      compare-deep-paging:     { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: true,  tier: t2-cuj, note: "browser export off the compare Results tab, asserted on the downloaded file: an unscoped export covers the whole result set untruncated and carries both compared experiments' outputs, filter/search/sort scope and order it, a row selection narrows it and clearing restores it. NOT covered: the over-the-cap disabled state (EXPORT_ROW_LIMIT is 2,000, and seeding past it costs far more than the assertion is worth), and the CSV format — only JSON is read back" }
       delete-experiment:       { covered: true,  tier: t2-cuj }
