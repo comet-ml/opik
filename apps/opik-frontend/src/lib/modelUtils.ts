@@ -33,6 +33,33 @@ export const getRoutableProviderModelValue = (
   return modelValue as PROVIDER_MODEL_TYPE;
 };
 
+const REQUESTY_OPENAI_MODEL_PREFIX = "requesty/openai/";
+
+// Requesty forwards its `requesty/openai/<model>` ids to OpenAI unchanged (reasoning_effort
+// included), so such an id shares the OPENAI_MODEL_CAPABILITIES row of `<model>`. Only the lookup
+// key is rewritten here: the wire model id sent to the backend keeps its `requesty/` prefix.
+// Undefined for anything else, including Requesty ids of other vendors, so callers fall back to
+// their default handling.
+const getRequestyOpenAIModel = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): PROVIDER_MODEL_TYPE | undefined => {
+  if (!model || !model.startsWith(REQUESTY_OPENAI_MODEL_PREFIX)) {
+    return undefined;
+  }
+
+  const openAIModel = model.slice(
+    REQUESTY_OPENAI_MODEL_PREFIX.length,
+  ) as PROVIDER_MODEL_TYPE;
+
+  return openAIModel in OPENAI_MODEL_CAPABILITIES ? openAIModel : undefined;
+};
+
+// Capability row for an OpenAI model id, or for the OpenAI model behind a `requesty/openai/*` id.
+const getOpenAIModelCapabilities = (model?: PROVIDER_MODEL_TYPE | "") =>
+  OPENAI_MODEL_CAPABILITIES[
+    (getRequestyOpenAIModel(model) ?? model) as PROVIDER_MODEL_TYPE
+  ];
+
 /**
  * Checks if a model is a reasoning model that requires temperature = 1.0.
  *
@@ -55,6 +82,13 @@ export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
     getProviderFromModel(model as PROVIDER_MODEL_TYPE) === PROVIDER_TYPE.OPEN_AI
   ) {
     return OPENAI_MODEL_CAPABILITIES[model]?.reasoning ?? false;
+  }
+
+  // Requesty: its OpenAI-route ids share the OpenAI capability map. Ids of its
+  // other routes fall through to the registry handling below.
+  const requestyOpenAIModel = getRequestyOpenAIModel(model);
+  if (requestyOpenAIModel) {
+    return OPENAI_MODEL_CAPABILITIES[requestyOpenAIModel]?.reasoning ?? false;
   }
 
   // Other providers: BE flag wins; fall back to hardcoded REASONING_MODELS.
@@ -496,17 +530,14 @@ const OPENAI_EFFORT_LABELS: Record<ReasoningEffort, string> = {
 
 export const supportsOpenAIReasoningEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  !!OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.reasoningEffortOptions;
+): boolean => !!getOpenAIModelCapabilities(model)?.reasoningEffortOptions;
 
 export const getOpenAIReasoningEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): Array<{ label: string; value: ReasoningEffort }> =>
-  (
-    OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-      ?.reasoningEffortOptions ?? []
-  ).map((value) => ({ label: OPENAI_EFFORT_LABELS[value], value }));
+  (getOpenAIModelCapabilities(model)?.reasoningEffortOptions ?? []).map(
+    (value) => ({ label: OPENAI_EFFORT_LABELS[value], value }),
+  );
 
 // Single reconciler called by every model-change handler (playground, judge
 // dialog). Keeping the rules here means the form state stays valid even when
@@ -532,7 +563,11 @@ export const updateProviderConfig = <
 
   const providerType = parseComposedProviderType(params.provider);
 
-  if (providerType === PROVIDER_TYPE.OPEN_AI) {
+  // Requesty is served by the OpenAI client on the backend, so its configs follow the OpenAI rules.
+  if (
+    providerType === PROVIDER_TYPE.OPEN_AI ||
+    providerType === PROVIDER_TYPE.REQUESTY
+  ) {
     const next: T = { ...currentConfig };
     let changed = false;
 
@@ -670,7 +705,12 @@ export const resolveSamplingParams = (
   // Reasoning models take neither: top_p is rejected outright ("Unsupported parameter: 'top_p' is
   // not supported with this model.") and temperature accepts only the provider's own default, so
   // there is nothing to tune and omitting both is the one payload that always works.
-  if (provider === PROVIDER_TYPE.OPEN_AI && isReasoningModel(model)) {
+  // Requesty requests go through the OpenAI client, so the OpenAI rules apply to them as well.
+  if (
+    (provider === PROVIDER_TYPE.OPEN_AI ||
+      provider === PROVIDER_TYPE.REQUESTY) &&
+    isReasoningModel(model)
+  ) {
     return {};
   }
 
@@ -711,7 +751,11 @@ export const resolveEffort = (
 
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
-  if (provider === PROVIDER_TYPE.OPEN_AI) {
+  // Requesty requests go through the OpenAI client, so the OpenAI rules apply to them as well.
+  if (
+    provider === PROVIDER_TYPE.OPEN_AI ||
+    provider === PROVIDER_TYPE.REQUESTY
+  ) {
     const options = getOpenAIReasoningEffortOptions(model);
     if (options.length === 0) {
       return {};
@@ -749,6 +793,9 @@ export const sanitizeConfigForRequest = (
 
   const sanitized: Record<string, unknown> = { ...configs };
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+  // Requesty requests go through the OpenAI client, so the OpenAI rules apply to them as well.
+  const followsOpenAIRules =
+    provider === PROVIDER_TYPE.OPEN_AI || provider === PROVIDER_TYPE.REQUESTY;
 
   const sampling = resolveSamplingParams(model, configs as SamplingParams);
   for (const key of ["temperature", "topP"] as const) {
@@ -767,10 +814,7 @@ export const sanitizeConfigForRequest = (
       DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
   }
 
-  if (
-    provider === PROVIDER_TYPE.ANTHROPIC ||
-    provider === PROVIDER_TYPE.OPEN_AI
-  ) {
+  if (provider === PROVIDER_TYPE.ANTHROPIC || followsOpenAIRules) {
     const effort = resolveEffort(model, configs as EffortParams);
     for (const key of ["reasoningEffort", "thinkingEffort"] as const) {
       if (effort[key] === undefined) {

@@ -9,6 +9,8 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -137,9 +139,25 @@ class LlmModelRegistryServiceTest {
         var service = new LlmModelRegistryService(config);
         var registry = service.getRegistry();
 
-        assertThat(registry).containsKeys("openai", "anthropic", "gemini", "vertex-ai", "openrouter");
+        assertThat(registry).containsKeys("openai", "anthropic", "gemini", "vertex-ai", "openrouter", "requesty");
         assertThat(registry.get("openai")).isNotEmpty();
         assertThat(registry.get("openrouter")).isNotEmpty();
+        assertThat(registry.get("requesty")).isNotEmpty();
+    }
+
+    @ParameterizedTest(name = "{0} reasoning={1}")
+    @CsvSource({"requesty/openai/o1,true", "requesty/openai/gpt-4o,false"})
+    void defaultResourceRequestyModelsCarryCapabilityFlags(String modelId, boolean expectedReasoning) {
+        var config = new LlmModelRegistryConfig();
+
+        var service = new LlmModelRegistryService(config);
+
+        var result = service.findModel(modelId);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.REQUESTY);
+        assertThat(result.get().model().structuredOutput()).isTrue();
+        assertThat(result.get().model().reasoning()).isEqualTo(expectedReasoning);
     }
 
     @Test

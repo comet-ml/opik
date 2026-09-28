@@ -133,6 +133,7 @@ class AgenticScoringServiceTest {
                 arguments(LlmProvider.ANTHROPIC, ToolChoice.REQUIRED),
                 arguments(LlmProvider.GEMINI, ToolChoice.REQUIRED),
                 arguments(LlmProvider.OPEN_ROUTER, ToolChoice.REQUIRED),
+                arguments(LlmProvider.REQUESTY, ToolChoice.REQUIRED),
                 arguments(LlmProvider.BEDROCK, ToolChoice.REQUIRED),
                 // No tool support at all: callers gate these out, and AUTO keeps a caller that
                 // forgets the gate on the harmless side.

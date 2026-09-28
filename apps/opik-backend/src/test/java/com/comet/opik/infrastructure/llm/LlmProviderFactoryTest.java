@@ -26,6 +26,8 @@ import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
+import com.comet.opik.infrastructure.llm.requesty.RequestyModelName;
+import com.comet.opik.infrastructure.llm.requesty.RequestyModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
@@ -105,6 +107,7 @@ class LlmProviderFactoryTest {
         GeminiModule geminiModule = new GeminiModule();
         OpenAIModule openAIModule = new OpenAIModule();
         OpenRouterModule openRouterModule = new OpenRouterModule();
+        RequestyModule requestyModule = new RequestyModule();
         VertexAIModule vertexAIModule = new VertexAIModule();
 
         AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig);
@@ -118,6 +121,9 @@ class LlmProviderFactoryTest {
 
         OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
+
+        OpenAIClientGenerator requestyClientGenerator = requestyModule.clientGenerator(llmProviderClientConfig);
+        requestyModule.llmServiceProvider(llmProviderFactory, requestyClientGenerator);
 
         VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig);
         vertexAIModule.llmServiceProvider(llmProviderFactory, vertexAIClientGenerator);
@@ -137,10 +143,13 @@ class LlmProviderFactoryTest {
                 .map(model -> arguments(model.toString(), LlmProvider.GEMINI, "LlmProviderGemini"));
         var openRouterModels = EnumUtils.getEnumList(OpenRouterModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.OPEN_ROUTER, "LlmProviderOpenAi"));
+        var requestyModels = EnumUtils.getEnumList(RequestyModelName.class).stream()
+                .map(model -> arguments(model.toString(), LlmProvider.REQUESTY, "LlmProviderRequesty"));
         var vertexAiModels = EnumUtils.getEnumList(VertexAIModelName.class).stream()
                 .map(model -> arguments(model.qualifiedName(), LlmProvider.VERTEX_AI, "LlmProviderVertexAI"));
 
-        return Stream.of(openAiModels, anthropicModels, geminiModels, openRouterModels, vertexAiModels)
+        return Stream.of(openAiModels, anthropicModels, geminiModels, openRouterModels, requestyModels,
+                vertexAiModels)
                 .flatMap(Function.identity());
     }
 
@@ -402,6 +411,95 @@ class LlmProviderFactoryTest {
 
         // Then
         assertThat(result).isEqualTo(LlmProvider.OPEN_ROUTER);
+    }
+
+    @Test
+    @DisplayName("getLlmProvider returns REQUESTY for requesty route slugs, including models outside the enum")
+    void testGetLlmProvider_returnsRequesty_forRequestyRouteSlug() {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        // When
+        LlmProvider result = llmProviderFactory.getLlmProvider("requesty/some-vendor/some-future-model");
+
+        // Then
+        assertThat(result).isEqualTo(LlmProvider.REQUESTY);
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("getLlmProvider keeps bare vendor/model ids on OPEN_ROUTER even when Requesty serves the same model")
+    void testGetLlmProvider_bareRequestyModel_staysOnOpenRouter(String bareModel) {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        // When
+        LlmProvider result = llmProviderFactory.getLlmProvider(bareModel);
+
+        // Then
+        assertThat(result).isEqualTo(LlmProvider.OPEN_ROUTER);
+    }
+
+    private static Stream<Arguments> testGetLlmProvider_bareRequestyModel_staysOnOpenRouter() {
+        // Every one of these is also a RequestyModelName once prefixed; without the prefix the
+        // OpenRouter enum owns the id.
+        return Stream.of(
+                arguments(OpenRouterModelName.OPENAI_GPT_4O.toString()),
+                arguments(OpenRouterModelName.DEEPSEEK_DEEPSEEK_CHAT.toString()),
+                arguments(OpenRouterModelName.GOOGLE_GEMINI_2_5_PRO.toString()));
+    }
+
+    @Test
+    @DisplayName("getResolvedModelInfo strips the requesty prefix and reports the requesty provider")
+    void testGetResolvedModelInfo_stripsRequestyPrefix() {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        // When
+        LlmProviderFactory.ResolvedModelInfo result = llmProviderFactory
+                .getResolvedModelInfo(RequestyModelName.OPENAI_GPT_4O.toString());
+
+        // Then
+        assertThat(result.actualModel()).isEqualTo(RequestyModelName.OPENAI_GPT_4O.routerModel());
+        assertThat(result.provider()).isEqualTo(LlmProvider.REQUESTY.getValue());
+    }
+
+    @Test
+    @DisplayName("getStructuredOutputStrategy returns ToolCallingStrategy for a prefixed Requesty model that supports it")
+    void testGetStructuredOutputStrategy_returnsToolCalling_forSupportedRequestyModel() {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        var strategy = llmProviderFactory.getStructuredOutputStrategy(RequestyModelName.OPENAI_GPT_4O.toString());
+
+        assertThat(strategy).isInstanceOf(ToolCallingStrategy.class);
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("getStructuredOutputStrategy returns InstructionStrategy for Requesty models without structured output")
+    void testGetStructuredOutputStrategy_returnsInstruction_forUnsupportedRequestyModel(String model) {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        var strategy = llmProviderFactory.getStructuredOutputStrategy(model);
+
+        assertThat(strategy).isInstanceOf(InstructionStrategy.class);
+    }
+
+    private static Stream<Arguments> testGetStructuredOutputStrategy_returnsInstruction_forUnsupportedRequestyModel() {
+        return Stream.of(
+                arguments(RequestyModelName.DEEPSEEK_DEEPSEEK_REASONER.toString()),
+                arguments(RequestyModelName.XAI_GROK_4.toString()),
+                arguments("requesty/some-vendor/some-future-model"));
     }
 
     // ========== Structured Output Strategy Tests ==========
