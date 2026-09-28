@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -43,8 +45,8 @@ jobs:
       # No layer cache: this job only runs when apps/opik-frontend/** changed, so the
       # Dockerfile's `COPY . .` is invalidated every time by construction and the
       # `npm run build` below it always re-runs. The only restorable layer is
-      # `npm ci` (72s), while exporting the cache cost 77.8s on every run -- a net
-      # loss, and worse on PRs that touch package.json.
+      # `npm ci`, and exporting the cache costs more than restoring it saves -- a
+      # net loss, and worse on PRs that touch package.json.
       - name: Build frontend image
         uses: docker/build-push-action@v7
         env:
