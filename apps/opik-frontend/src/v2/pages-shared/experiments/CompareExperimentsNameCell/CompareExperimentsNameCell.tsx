@@ -23,16 +23,14 @@ const CompareExperimentsNameCell: React.FC<
     const experiment = experiments.find((e) => e.id === experimentId);
 
     return (
-      <div className="-mt-2 h-8">
-        <ResourceLink
-          id={experiment?.dataset_id || ""}
-          name={experiment?.name}
-          resource={RESOURCE_TYPE.experiment}
-          search={{
-            experiments: [experimentId],
-          }}
-        />
-      </div>
+      <ResourceLink
+        id={experiment?.dataset_id || ""}
+        name={experiment?.name}
+        resource={RESOURCE_TYPE.experiment}
+        search={{
+          experiments: [experimentId],
+        }}
+      />
     );
   };
 

@@ -502,7 +502,16 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     once — "writes and reads speak sentinel" and "the mutation target is weekly-partitioned" — which is the same
     coupling `traceColumnsNonNullable` has on traces. See ["Span-delete partition pruning rides the sentinel
     flag"](#span-delete-partition-pruning-rides-the-sentinel-flag) for what that costs between the flip and the swap.
-18. Schedule during off-peak hours — and budget **days**, not hours, for the backfill. `estimate.sh` will say how many.
+18. **Know that two successor columns change how the app *reads* a span, and that neither is gated by
+    `spanColumnsNonNullable`.** Migration 000115 stores `parent_span_id` as `FixedString(36)`, where a root span's
+    absent parent is NUL-padded rather than `''`, and widens `usage` to `Map(String, Int64)`. OPIK-8551 has landed both
+    read mappings; a build without them breaks on the EXCHANGE itself, whatever the flag says — and the two fail
+    differently. The parent is **silent**: the driver discards a row whose mapping throws, so every trace loses its root
+    span while the API still answers `200`, with a page whose `total` exceeds its `content`. The counts are **loud**:
+    any response carrying a span with usage fails to serialise. **Confirm the deployed build carries the fix**, and
+    assert it positively after the swap — read a trace that has a root span, and check the root span comes back with no
+    parent and the page `total` equals the number of items returned.
+19. Schedule during off-peak hours — and budget **days**, not hours, for the backfill. `estimate.sh` will say how many.
 
 ## The sequence
 
