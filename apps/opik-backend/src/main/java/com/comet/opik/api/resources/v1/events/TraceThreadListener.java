@@ -165,8 +165,8 @@ public class TraceThreadListener {
                     return traceThreadService.processTraceThreads(Map.of(threadId, timestamps), entry.getKey());
                 })
                 .doOnError(error -> log.error(
-                        "Fail to process TracesUpdated event for workspace: '{}', projectIds: '{}', error: '{}'",
-                        event.workspaceId(), traceIdsByProject.keySet(), error.getMessage()))
+                        "Fail to process TracesUpdated event for workspace: '{}', projectIds: '{}'",
+                        event.workspaceId(), traceIdsByProject.keySet(), error))
                 .doOnComplete(() -> log.info(
                         "Completed processing TracesUpdated event for workspace: '{}', projectIds: '{}'",
                         event.workspaceId(), traceIdsByProject.keySet()))
