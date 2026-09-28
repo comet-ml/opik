@@ -68,12 +68,20 @@ const GRID_PAGE_SIZE = 100;
  * day would move these reads onto the aggregated branch and the spec would still
  * go green, reading as coverage of a branch it never touched.
  *
- * Phases 4 and 5 are deliberately OUTSIDE that window and make no branch claim.
- * They are here because their value does not depend on the branch: phase 4
- * closes the SDK spec's own stated gap at the default page size, and phase 5
- * asserts the grid's paging arithmetic and slice agree with the API at a deep
- * offset. Keeping them after the window assertion also stops their latency from
- * eating into the window the branch-pinned phases need.
+ * The last two phases are deliberately OUTSIDE that window and make no branch
+ * claim. They are here because their value does not depend on the branch: the
+ * compare grid's paging arithmetic and slice must agree with the API at a deep
+ * offset, and `Experiment.get_items()` must page correctly at its own default —
+ * the gap `experiment-items-sdk-read.spec.ts` leaves open. Keeping both after the
+ * window assertion also stops their latency from eating the window the
+ * branch-pinned phases need.
+ *
+ * The browser phase runs BEFORE the SDK read, which is not arbitrary: the SDK
+ * read pulls 5,000 rows in one go, and doing that first was observed to leave the
+ * workspace rate limiter refusing the project read the compare route depends on,
+ * so the app rendered "Something went wrong" and the grid never issued a request
+ * at all. The POM retries that panel, but not provoking it is better than
+ * recovering from it.
  */
 test.describe(
   'Experiments — deep paging at the shipped default page size',
@@ -285,48 +293,6 @@ test.describe(
           ).toBeLessThan(rawBranchWindowMs);
         });
 
-        await test.step(
-          'The Python SDK reads the whole experiment at its own default page size',
-          async () => {
-            // `Experiment.get_items()` pages this endpoint with no filters, no
-            // search and no sorting, at a default page size of 2,000 — so a
-            // 5,000-item experiment is the first time the estate makes it page at
-            // the shipped default. No branch claim: this runs after the window
-            // above, and the wave loop it exercises is the same code whichever
-            // branch serves the pages.
-            const read = await sdkClient.python.readExperimentItems({
-              experiment_id: freshExperimentId,
-            });
-
-            expect(read.count, 'the default SDK read returns every seeded item').toBe(itemCount);
-            expect(read.items, 'the default SDK read returns every seeded item').toHaveLength(
-              itemCount,
-            );
-            expect(
-              read.items.filter((item) => item.idx === null).length,
-              'items that came back without their seeded idx',
-            ).toBe(0);
-            expect(
-              [...read.items.map((item) => item.idx)].sort((a, b) => a! - b!),
-              'the default SDK read covers idx 0..n-1 exactly once each',
-            ).toEqual(Array.from({ length: itemCount }, (_, i) => i));
-            // Sorted by idx and compared whole, so a failure names the indices
-            // that moved rather than only saying a set differed. The endpoint
-            // orders by its own key rather than by the seeded idx, so absolute
-            // order is not the SDK's to promise — the pairing is.
-            expect(
-              [...read.items]
-                .sort((a, b) => a.idx! - b.idx!)
-                .map((item) => ({
-                  idx: item.idx,
-                  datasetItemId: item.dataset_item_id,
-                  traceId: item.trace_id,
-                })),
-              'each SDK-read item pairs the dataset item and the trace its idx was seeded with',
-            ).toEqual(seeded);
-          },
-        );
-
         await test.step('The compare grid agrees with the API at the first and last offset', async () => {
           // Both experiments, which is the real comparison view and the shape the
           // release report names. No branch claim here either: with one
@@ -379,6 +345,48 @@ test.describe(
           );
           await expectMatchesApi(last, lastPage);
         });
+
+        await test.step(
+          'The Python SDK reads the whole experiment at its own default page size',
+          async () => {
+            // `Experiment.get_items()` pages this endpoint with no filters, no
+            // search and no sorting, at a default page size of 2,000 — so a
+            // 5,000-item experiment is the first time the estate makes it page at
+            // the shipped default. No branch claim: this runs after the window
+            // above, and the wave loop it exercises is the same code whichever
+            // branch serves the pages.
+            const read = await sdkClient.python.readExperimentItems({
+              experiment_id: freshExperimentId,
+            });
+
+            expect(read.count, 'the default SDK read returns every seeded item').toBe(itemCount);
+            expect(read.items, 'the default SDK read returns every seeded item').toHaveLength(
+              itemCount,
+            );
+            expect(
+              read.items.filter((item) => item.idx === null).length,
+              'items that came back without their seeded idx',
+            ).toBe(0);
+            expect(
+              [...read.items.map((item) => item.idx)].sort((a, b) => a! - b!),
+              'the default SDK read covers idx 0..n-1 exactly once each',
+            ).toEqual(Array.from({ length: itemCount }, (_, i) => i));
+            // Sorted by idx and compared whole, so a failure names the indices
+            // that moved rather than only saying a set differed. The endpoint
+            // orders by its own key rather than by the seeded idx, so absolute
+            // order is not the SDK's to promise — the pairing is.
+            expect(
+              [...read.items]
+                .sort((a, b) => a.idx! - b.idx!)
+                .map((item) => ({
+                  idx: item.idx,
+                  datasetItemId: item.dataset_item_id,
+                  traceId: item.trace_id,
+                })),
+              'each SDK-read item pairs the dataset item and the trace its idx was seeded with',
+            ).toEqual(seeded);
+          },
+        );
       },
     );
   },

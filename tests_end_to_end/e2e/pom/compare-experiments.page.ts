@@ -21,6 +21,21 @@ const FILTER_SETTLE_TIMEOUT_MS = 30_000;
 const GRID_READ_TIMEOUT_MS = 60_000;
 
 /**
+ * How many times a cold load of the compare view may be re-attempted when the
+ * app renders its own failure panel instead of the page.
+ *
+ * Not flake-hiding: the panel means a request the ROUTE depends on (the project
+ * read) was refused, so the grid never mounts and never issues the read this POM
+ * is waiting for — the symptom is a 60s timeout on a request that was never
+ * going to be made. Observed on staging after a spec had just spent its own
+ * budget on a few thousand rows of API reads, i.e. it is the workspace rate
+ * limiter, which is a budget over time and so clears on its own. A reload is the
+ * only remedy from here, and exhausting the attempts still fails the test with
+ * the panel named.
+ */
+const PAGE_LOAD_ATTEMPTS = 3;
+
+/**
  * The compare view lives at /experiments/{datasetId}/compare?experiments=[...]
  * and renders the SAME page in single- and multi-experiment mode. This POM
  * targets multi-experiment (comparison) mode: two experiments over one dataset.
@@ -80,8 +95,11 @@ export class CompareExperimentsPage {
    * same offset is what catches the front end and the backend disagreeing about
    * which slice a page is.
    *
-   * Registered before the navigation, or the answer can arrive first and the wait
-   * then hangs for a request that has already been served.
+   * ONLY SAFE FOR PAGE 1 on a cold load. `DataTablePagination` sends the view
+   * back to page 1 whenever `(page - 1) * size > total`, and `total` is still 0
+   * until the row read answers — so a deep offset asked for here is requested
+   * and then abandoned, leaving the footer reading 1-100. Use
+   * `clickLastResultsPage` to reach the end.
    */
   async gotoResultsPage(pageNumber: number, size: number): Promise<{ total: number; ids: string[] }> {
     return test.step(`open the compare Results tab at page ${pageNumber} (size ${size})`, async () => {
@@ -89,21 +107,75 @@ export class CompareExperimentsPage {
       url.searchParams.set('page', String(pageNumber));
       url.searchParams.set('size', String(size));
 
-      // Matched on parsed params, never a substring: `page=1` occurs inside
-      // `page=10`, and the whole point of this helper is which offset was read.
-      const settled = this.page.waitForResponse((response) => {
-        const requested = new URL(response.url());
-        return (
-          requested.pathname.endsWith('/items/experiments/items') &&
-          requested.searchParams.get('page') === String(pageNumber) &&
-          requested.searchParams.get('size') === String(size) &&
-          response.ok()
-        );
-      }, { timeout: GRID_READ_TIMEOUT_MS });
+      for (let attempt = 1; ; attempt++) {
+        // The response wait has to be armed BEFORE the navigation, or the answer
+        // can arrive first and the wait then hangs for a request that has already
+        // been served.
+        const settled = this.gridReadFor(pageNumber, size);
+        // The loser of the race below is abandoned; without this its rejection
+        // lands as an unhandled promise and Playwright reports it against
+        // whichever step happens to be open at the time.
+        settled.catch(() => {});
 
-      await this.page.goto(url.toString());
-      return this.readGridAnswer(await settled, pageNumber);
+        await this.page.goto(url.toString());
+
+        // Armed only AFTER the navigation, and that ordering is load-bearing on
+        // a retry: the previous attempt's failure panel is still in the DOM until
+        // the new document replaces it, so a wait armed before `goto` would see
+        // the OLD panel, resolve immediately, and spend every remaining attempt
+        // in a few milliseconds without ever giving the reload a chance.
+        // Registering here is safe for the fast case too — a panel already
+        // rendered by the time `goto` resolves satisfies `visible` at once.
+        const failed = this.appFailurePanel.waitFor({
+          state: 'visible',
+          timeout: GRID_READ_TIMEOUT_MS,
+        });
+        failed.catch(() => {});
+
+        const outcome = await Promise.race([
+          settled.then((response) => ({ kind: 'read' as const, response })),
+          failed.then(() => ({ kind: 'failed' as const })),
+        ]);
+
+        if (outcome.kind === 'read') return this.readGridAnswer(outcome.response, pageNumber);
+
+        if (attempt >= PAGE_LOAD_ATTEMPTS) {
+          throw new Error(
+            `CompareExperimentsPage.gotoResultsPage: the app rendered "Something went wrong" ` +
+              `instead of the compare view on all ${attempt} attempts, so the grid never issued ` +
+              `its read of page ${pageNumber}. A request the route depends on is being refused — ` +
+              'check the workspace rate limiter before reading this as a paging defect.',
+          );
+        }
+      }
     });
+  }
+
+  /** The grid's own data read for one exact offset. */
+  private gridReadFor(pageNumber: number, size: number) {
+    // Matched on parsed params, never a substring: `page=1` occurs inside
+    // `page=10`, and the whole point of this helper is which offset was read.
+    return this.page.waitForResponse((response) => {
+      const requested = new URL(response.url());
+      return (
+        requested.pathname.endsWith('/items/experiments/items') &&
+        requested.searchParams.get('page') === String(pageNumber) &&
+        requested.searchParams.get('size') === String(size) &&
+        response.ok()
+      );
+    }, { timeout: GRID_READ_TIMEOUT_MS });
+  }
+
+  /**
+   * The app's route-level failure card — what renders in place of the page when
+   * a read the route depends on is refused.
+   *
+   * Matched on the heading text because the card carries no `data-testid`; it is
+   * only ever used to decide "the page is not coming", never asserted on, so a
+   * text match is proportionate here.
+   */
+  private get appFailurePanel(): Locator {
+    return this.page.getByRole('heading', { level: 3, name: 'Something went wrong' });
   }
 
   /**
@@ -162,16 +234,7 @@ export class CompareExperimentsPage {
       await expect(button, 'exactly one last-page control').toHaveCount(1);
       await expect(button, 'last-page control').toBeEnabled();
 
-      const settled = this.page.waitForResponse((response) => {
-        const requested = new URL(response.url());
-        return (
-          requested.pathname.endsWith('/items/experiments/items') &&
-          requested.searchParams.get('page') === String(expectedPage) &&
-          requested.searchParams.get('size') === String(size) &&
-          response.ok()
-        );
-      }, { timeout: GRID_READ_TIMEOUT_MS });
-
+      const settled = this.gridReadFor(expectedPage, size);
       await button.click();
       return this.readGridAnswer(await settled, expectedPage);
     });
