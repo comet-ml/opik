@@ -234,18 +234,18 @@ export class AlertEditorPage {
    *
    * Each popover row is one `<label>` wrapping the title and its description,
    * so the title is matched on the label and the checkbox reached through it —
-   * the checkboxes carry no distinguishing name of their own.
+   * the checkboxes carry no distinguishing name of their own. `check` rather
+   * than a click because the picker toggles: a trigger already added stays added.
    */
   async addTrigger(triggerTitle: string): Promise<void> {
     return test.step(`add the "${triggerTitle}" trigger`, async () => {
-      await this.inTriggerPicker(triggerTitle, (checkbox) => checkbox.click());
+      await this.inTriggerPicker(triggerTitle, (checkbox) => checkbox.check());
     });
   }
 
   /**
-   * Unticks an event type in the same popover, which is a toggle. `uncheck`
-   * rather than a click, so a trigger that was never added fails here instead
-   * of being added.
+   * Unticks an event type in the same popover. `uncheck`, so a trigger that was
+   * never added is left alone rather than added.
    */
   async removeTrigger(triggerTitle: string): Promise<void> {
     return test.step(`remove the "${triggerTitle}" trigger`, async () => {
