@@ -868,6 +868,9 @@ class BulkInsertV2ClientIntegrationTest {
 
         assertThat(actual.input()).isEqualTo(TextNode.valueOf(inputHalf));
         assertThat(actual.output()).isEqualTo(TextNode.valueOf(outputHalf));
+        // A small column alongside the two large ones: splicing a row across a chunk boundary would
+        // not necessarily disturb the payloads themselves, and this is where it would show.
+        assertThat(actual.traceId()).isEqualTo(trace.id());
     }
 
     // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
