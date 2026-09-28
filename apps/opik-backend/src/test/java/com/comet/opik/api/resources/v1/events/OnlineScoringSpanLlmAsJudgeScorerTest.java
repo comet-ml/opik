@@ -41,6 +41,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -57,6 +59,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -450,6 +453,21 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         // No {{span}} → inline path: no tool specs, no attachment lookup.
         assertThat(requestCaptor.getValue().toolSpecifications()).isNullOrEmpty();
         verifyNoInteractions(attachmentService);
+    }
+
+    @ParameterizedTest(name = "response={0}")
+    @ValueSource(strings = {"{}", "{\"Quality\": {\"score\": null, \"reason\": \"unsure\"}}"})
+    void responseWithNoReadableScoreStoresNothing(String response) {
+        var message = buildMessage(createSpan(), JsonUtils.readValue(EVALUATOR_JSON_INLINE, SpanLlmAsJudgeCode.class));
+
+        lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+        when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
+        when(aiProxyService.scoreTrace(any(), any(), any()))
+                .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(response)).build());
+
+        // Completes without error, and with nothing to store there is no store call.
+        assertThatCode(() -> scorer.score(message).block()).doesNotThrowAnyException();
+        verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
     }
 
     @Test

@@ -55,6 +55,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -72,6 +73,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -874,6 +876,24 @@ class OnlineScoringLlmAsJudgeScorerTest {
             assertThat(subscriptions.get()).isGreaterThanOrEqualTo(2);
             String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
             assertThat(prompt).contains(spanFileName);
+        }
+
+        @ParameterizedTest(name = "response={0}")
+        @ValueSource(strings = {"{}", "{\"Quality\": {\"score\": null, \"reason\": \"unsure\"}}"})
+        void responseWithNoReadableScoreStoresNothing(String response) {
+            var message = buildScoringMessage(JsonUtils.readValue(EVALUATOR_JSON, LlmAsJudgeCode.class));
+
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+            when(aiProxyService.scoreTrace(any(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(response)).build());
+
+            // Completes without error, and with nothing to store there is no store call.
+            assertThatCode(() -> scorer.score(message).block()).doesNotThrowAnyException();
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
         }
 
         private TraceToScoreLlmAsJudge buildScoringMessage(LlmAsJudgeCode code) {

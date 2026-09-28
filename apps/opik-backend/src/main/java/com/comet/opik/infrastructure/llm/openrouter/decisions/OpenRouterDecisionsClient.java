@@ -52,6 +52,11 @@ public class OpenRouterDecisionsClient {
      * Retried in-process on top of the 503/504 that {@link RetriableHttpClient} already retries: rate limit, bad
      * gateway and OpenRouter's 529 (provider overloaded). Not OpenRouter's 524 (timeout): the timed-out call may
      * still have run and been billed, so it is left to the consumer's redelivery alone instead of both layers.
+     *
+     * <p>Every status outside this set fails on the first attempt but keeps its wire status on the thrown exception,
+     * and the consumer decides redelivery from that status ({@link com.comet.opik.utils.HttpStatusRetryability}):
+     * 408 and 425 are redelivered like any 5xx, other 4xx are dropped as permanent. Adding a status here only adds
+     * in-process attempts, each one a billed call.
      */
     private static final Set<Integer> RETRYABLE_STATUSES = Set.of(429, 502, 529);
 
