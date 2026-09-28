@@ -863,25 +863,36 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                        entity_id,
                        name,
                        value,
-                       last_updated_at,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores
-                WHERE entity_type = 'trace'
-                  AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
-                UNION ALL
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    value,
-                    last_updated_at,
-                    author
-                FROM authored_feedback_scores
-                WHERE entity_type = 'trace'
-                   AND workspace_id = :workspace_id
-                   AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                       last_updated_at
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author,
+                           source_queue_id
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
