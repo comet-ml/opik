@@ -68,9 +68,9 @@ export interface DeepPagedExperimentFixtures {
  * `@t3-nightly` and must never be pulled into a fast suite.
  *
  * Not a multiple of the page sizes the spec reads at, in either direction: at
- * 2,000 the last page is short (1,000) and at 137 it is short by a different
- * remainder, so a reader that dropped a whole page cannot finish on a clean
- * boundary at either size.
+ * 2,000 the last page is short (1,000) and at 700 it is short by a different
+ * remainder (100), so a reader that dropped a whole page cannot finish on a
+ * clean boundary at either size.
  */
 const ITEM_COUNT = 5_000;
 

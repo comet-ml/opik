@@ -115,7 +115,46 @@ test.describe(
           seeded,
         } = deepPagedExperiment;
 
-        const traceByDatasetItemId = new Map(seeded.map((row) => [row.datasetItemId, row.traceId]));
+        const seededByDatasetItemId = new Map(seeded.map((row) => [row.datasetItemId, row]));
+
+        /**
+         * The rows whose pairing does not match what the seed wrote for that
+         * dataset item id: the experiment read, the trace, and the `idx`.
+         *
+         * Keyed off the row's OWN id rather than its position, so nothing here
+         * depends on the order the endpoint chose — which is what makes it
+         * reusable across two walks at different page sizes.
+         *
+         * `idx` is checked against the seed rather than only for monotonicity
+         * because a systematic shift — every row handed the index of its
+         * neighbour — is still strictly ordered, still 5,000 distinct ids and
+         * still the right total. Only the id → idx binding catches it, and at a
+         * page boundary an off-by-one slice is exactly the shape it takes.
+         */
+        const pairingBreaks = (
+          rows: Awaited<ReturnType<typeof backendClient.compareItemsPairedPage>>['rows'],
+        ) =>
+          rows
+            .map((row) => {
+              const want = seededByDatasetItemId.get(row.id);
+              return {
+                id: row.id,
+                idx: row.idx,
+                wantIdx: want?.idx ?? null,
+                experiments: row.experimentItems.map((ei) => ei.experimentId),
+                got: row.experimentItems.map((ei) => ei.traceId),
+                want: want?.traceId,
+              };
+            })
+            .filter(
+              (row) =>
+                row.want === undefined ||
+                row.idx !== row.wantIdx ||
+                row.experiments.length !== 1 ||
+                row.experiments[0] !== freshExperimentId ||
+                row.got.length !== 1 ||
+                row.got[0] !== row.want,
+            );
 
         /**
          * Walk every page at `size`, plus the page after the last, asserting the
@@ -215,6 +254,10 @@ test.describe(
           // property a pager must have. The fixture mints dataset-item ids at
           // strictly increasing milliseconds so that id order and idx order
           // agree, which is what makes this readable as an idx sequence at all.
+          //
+          // Ordering ALONE would accept a systematic shift, so this check is
+          // only half the claim — `pairingBreaks` below pins each row's idx to
+          // its own id, and the two together are what say "contiguous".
           const indices = defaultWalk.map((row) => row.idx as number);
           const descending = indices[0] > indices[indices.length - 1];
           // Reported with their position and the value before them, not as bare
@@ -233,31 +276,16 @@ test.describe(
           ).toEqual([]);
         });
 
-        await test.step('Each row carries the trace its own dataset item was paired with', async () => {
+        await test.step('Each row carries the idx and the trace its own dataset item was paired with', async () => {
           // The half the two checks above cannot see. Completeness and
           // uniqueness are both satisfied by ANY permutation of the pairing: a
           // read that gave row N the trace seeded for row M still returns 5,000
           // distinct ids, the right total and the right page lengths. The join
           // between an experiment item, its dataset item and its trace is
           // precisely what a paged assembly can scramble.
-          const mispaired = defaultWalk
-            .map((row) => ({
-              id: row.id,
-              idx: row.idx,
-              experiments: row.experimentItems.map((ei) => ei.experimentId),
-              got: row.experimentItems.map((ei) => ei.traceId),
-              want: traceByDatasetItemId.get(row.id),
-            }))
-            .filter(
-              (row) =>
-                row.experiments.length !== 1 ||
-                row.experiments[0] !== freshExperimentId ||
-                row.got.length !== 1 ||
-                row.got[0] !== row.want,
-            );
           expect(
-            mispaired,
-            'rows whose experiment item does not name the experiment read or the trace seeded for that dataset item',
+            pairingBreaks(defaultWalk),
+            'rows whose idx, experiment or trace is not the one seeded for that dataset item',
           ).toEqual([]);
         });
 
@@ -272,6 +300,15 @@ test.describe(
               alternateWalk.map((row) => row.id),
               `paging at ${ALTERNATE_PAGE_SIZE} must yield the same rows in the same order as at ${DEFAULT_PAGE_SIZE}`,
             ).toEqual(defaultWalk.map((row) => row.id));
+            // Against the SEED, not against the other walk: the two walks cut
+            // the same ordering at different offsets, so the whole reason to
+            // read twice is that a pairing this size's boundaries scramble
+            // would be one the other walk never had a chance to get wrong.
+            // Comparing the walks to each other would only say they agree.
+            expect(
+              pairingBreaks(alternateWalk),
+              `rows the size-${ALTERNATE_PAGE_SIZE} walk paired with an idx, experiment or trace other than the seeded one`,
+            ).toEqual([]);
           },
         );
 
