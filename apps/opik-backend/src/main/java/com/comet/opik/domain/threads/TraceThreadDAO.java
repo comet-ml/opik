@@ -391,11 +391,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 statement.bind("sampling_per_rule" + i,
                         item.sampling() != null ? item.sampling() : Map.of());
 
-                if (item.source() != null) {
-                    statement.bind("source" + i, item.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
+                // The column is non-nullable with DEFAULT 'unknown'; binding NULL makes the
+                // driver wrap it in a nullable guard, costing two swallowed exceptions per row.
+                statement.bind("source" + i, item.source() == null
+                        ? Source.UNKNOWN_VALUE
+                        : item.source().getValue());
 
                 statement.bind("environment" + i, StringUtils.defaultString(item.environment()));
 
@@ -570,11 +570,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         ? traceThreadModel.tags().toArray(String[]::new)
                         : new String[]{});
 
-                if (traceThreadModel.source() != null) {
-                    statement.bind("source" + i, traceThreadModel.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
+                statement.bind("source" + i, traceThreadModel.source() == null
+                        ? Source.UNKNOWN_VALUE
+                        : traceThreadModel.source().getValue());
 
                 statement.bind("environment" + i, StringUtils.defaultString(traceThreadModel.environment()));
 
