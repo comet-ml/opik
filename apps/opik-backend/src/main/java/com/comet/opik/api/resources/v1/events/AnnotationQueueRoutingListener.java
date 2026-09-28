@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
-import com.comet.opik.domain.AnnotationQueueRoutingPublisher;
+import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.google.common.eventbus.Subscribe;
@@ -28,11 +28,11 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
  * concurrency-bounded. The event bus offers none of those, and this feature has no backfill or manual
  * re-run, so an event lost in flight would keep a trace out of a review queue permanently and silently.
  *
- * <p>Publishing straight to the stream, with no buffer in front of it. An earlier revision debounced here
- * in Redis so that repeated scores on one entity collapsed before they were published; the stream already
- * is that buffer, and the collapsing belongs on the read side, where the consumer folds a batch by entity
- * before doing any of the expensive work. One event is therefore one XADD, and the event already carries a
- * whole batch of entity ids, so a bulk score call is one message rather than one per entity.
+ * <p>Admitted events go into the Redis buffer ({@link AnnotationQueueRoutingBufferService}), not straight
+ * onto the stream. Repeated scores on one entity within the buffer window fold into one member there, and
+ * the flush job publishes one message per (workspace, scope) batch, so the consumer evaluates each entity
+ * once per window rather than once per score event — and never reads scores younger than the
+ * window, which keeps it clear of ClickHouse replica lag.
  *
  * <p>The one read kept here is the guard, and it earns its place: without it the stream would carry every
  * score event in the deployment, the vast majority of which have no automation to satisfy.
@@ -46,15 +46,15 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 public class AnnotationQueueRoutingListener {
 
     private final @NonNull AnnotationQueueAutomationService automationService;
-    private final @NonNull AnnotationQueueRoutingPublisher publisher;
+    private final @NonNull AnnotationQueueRoutingBufferService bufferService;
     private final @NonNull AnnotationQueueRoutingConfig config;
 
     @Inject
     public AnnotationQueueRoutingListener(@NonNull AnnotationQueueAutomationService automationService,
-            @NonNull AnnotationQueueRoutingPublisher publisher,
+            @NonNull AnnotationQueueRoutingBufferService bufferService,
             @NonNull @Config("annotationQueueRouting") AnnotationQueueRoutingConfig config) {
         this.automationService = automationService;
-        this.publisher = publisher;
+        this.bufferService = bufferService;
         this.config = config;
     }
 
@@ -89,12 +89,11 @@ public class AnnotationQueueRoutingListener {
                 event.projectId(), scope))
                 .subscribeOn(Schedulers.boundedElastic())
                 .filter(Boolean::booleanValue)
-                .flatMap(__ -> publisher.enqueue(event.workspaceId(), event.userName(), scope, event.entityIds(),
-                        event.getScoreNames()))
+                .flatMap(__ -> bufferService.add(event.workspaceId(), scope, event.entityIds()))
                 .subscribe(
                         __ -> {
                         },
-                        error -> log.error("Failed to publish entities for annotation queue routing, workspace '{}'",
+                        error -> log.error("Failed to buffer entities for annotation queue routing, workspace '{}'",
                                 event.workspaceId(), error));
     }
 

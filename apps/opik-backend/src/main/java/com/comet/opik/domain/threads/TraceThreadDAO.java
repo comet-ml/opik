@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.Source;
 import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -35,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
@@ -73,6 +75,12 @@ public interface TraceThreadDAO {
             Instant lookbackBound);
 
     Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags);
+
+    /**
+     * Of the given thread model ids, the ones an SDK logged — {@link Source#isLoggingSource} expressed as
+     * a query, so legacy {@code unknown} rows count as SDK the same way it treats {@code null}.
+     */
+    Mono<Set<UUID>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> threadModelIds);
 }
 
 @Singleton
@@ -322,6 +330,23 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             ;
             """;
 
+    // A thread's source is carried forward by every write that follows the first, so the latest row is
+    // the authoritative one — taken with argMax, as the other thread reads here do.
+    private static final String SELECT_LOGGING_SOURCE_IDS = """
+            SELECT id
+            FROM (
+                SELECT id, argMax(source, last_updated_at) AS source
+                FROM trace_threads
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                AND id IN :ids
+                GROUP BY id
+            )
+            WHERE source IN (:source, :source_legacy)
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull ConnectionFactory connectionFactory;
 
@@ -366,11 +391,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 statement.bind("sampling_per_rule" + i,
                         item.sampling() != null ? item.sampling() : Map.of());
 
-                if (item.source() != null) {
-                    statement.bind("source" + i, item.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
+                // The column is non-nullable with DEFAULT 'unknown'; binding NULL makes the
+                // driver wrap it in a nullable guard, costing two swallowed exceptions per row.
+                statement.bind("source" + i, item.source() == null
+                        ? Source.UNKNOWN_VALUE
+                        : item.source().getValue());
 
                 statement.bind("environment" + i, StringUtils.defaultString(item.environment()));
 
@@ -545,11 +570,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         ? traceThreadModel.tags().toArray(String[]::new)
                         : new String[]{});
 
-                if (traceThreadModel.source() != null) {
-                    statement.bind("source" + i, traceThreadModel.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
+                statement.bind("source" + i, traceThreadModel.source() == null
+                        ? Source.UNKNOWN_VALUE
+                        : traceThreadModel.source().getValue());
 
                 statement.bind("environment" + i, StringUtils.defaultString(traceThreadModel.environment()));
 
@@ -709,5 +732,31 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private void bindBulkUpdateParams(TraceThreadUpdate update, Statement statement) {
         TagOperations.bindTagParams(statement, update);
+    }
+
+    @Override
+    public Mono<Set<UUID>> getLoggingSourceIds(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> threadModelIds) {
+        if (projectIds.isEmpty() || threadModelIds.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_LOGGING_SOURCE_IDS, "get_thread_logging_source_ids",
+                    workspaceId, userName, "thread_model_ids_size=%s".formatted(threadModelIds.size()));
+
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_ids", projectIds.toArray(UUID[]::new))
+                    .bind("ids", threadModelIds.toArray(UUID[]::new))
+                    .bind("source", Source.SDK.getValue())
+                    .bind("source_legacy", Source.UNKNOWN_VALUE);
+
+            Segment segment = startSegment("trace_threads", "Clickhouse", "get_logging_source_ids");
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("id", UUID.class)))
+                    .collect(Collectors.toSet())
+                    .doFinally(signalType -> endSegment(segment));
+        }));
     }
 }
