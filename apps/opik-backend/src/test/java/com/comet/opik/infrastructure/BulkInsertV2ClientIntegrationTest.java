@@ -866,12 +866,19 @@ class BulkInsertV2ClientIntegrationTest {
         // passing on the strength of the call having returned.
         assertThat(written).isEqualTo(1L);
 
-        var storedLength = queryOne(
-                "SELECT length(input) AS len FROM spans WHERE workspace_id = '%s' AND id = '%s' LIMIT 1"
-                        .formatted(WORKSPACE_ID, span.id()),
-                row -> row.get("len", Long.class));
-        // The quoted JSON string, so two bytes more than the payload itself.
-        assertThat(storedLength).isEqualTo(oversized.length() + 2L);
+        // Content, not just length: a same-length but corrupted value would satisfy a length check, and
+        // chunked parsing is exactly the kind of mechanism that could splice or truncate rather than fail
+        // outright. Checked server-side and without materialising a 110 MiB expected value -- repeat()
+        // caps at 1,000,000 -- so the payload neither crosses the wire nor needs a second copy in the JVM
+        // to hash. Length plus "the inner content is nothing but the payload byte" is exact equality for a
+        // uniform payload; the stored form is the quoted JSON string, hence the two surrounding bytes.
+        var storedIntact = queryOne(
+                ("SELECT toInt64(length(input) = %d + 2 AND "
+                        + "length(replaceAll(substring(input, 2, length(input) - 2), 'x', '')) = 0) AS intact "
+                        + "FROM spans WHERE workspace_id = '%s' AND id = '%s' LIMIT 1")
+                        .formatted(oversized.length(), WORKSPACE_ID, span.id()),
+                row -> row.get("intact", Long.class));
+        assertThat(storedIntact).isEqualTo(1L);
     }
 
     // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
