@@ -1724,11 +1724,6 @@ serviceToggles:
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
   projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
-  # Default: true
-  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces/spans.
-  #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
-  #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
-  onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
