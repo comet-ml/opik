@@ -33,13 +33,16 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Scores with decisions models (TypeSafe Jev via the OpenRouter Decisions API) instead of a chat judge.
  *
  * <p>The rule maps onto a Decisions request as follows: the rendered prompt is the {@code state} the model
- * reads, and every score is one yes/no ({@code noul}) question keyed by the score name, with the score
- * description as its instructions. All scores go in a single call. Each answer is the probability of yes; it
+ * reads, and every score is one yes/no ({@code noul}) question with the score description as its instructions.
+ * Questions are keyed by position ({@code q0}, {@code q1}, ...) rather than by score name: names are free text and
+ * the API's key rules aren't documented, so a name it rejected would fail every evaluation of the rule with a 400.
+ * All scores go in a single call. Each answer is the probability of yes; it
  * becomes {@code 1} at {@link #TRUE_THRESHOLD} or above and {@code 0} below, with the probability in the reason.
  */
 @Singleton
@@ -51,6 +54,7 @@ public class DecisionScoringService {
     static final double TRUE_THRESHOLD = 0.5;
 
     private static final String REASON_TEMPLATE = "Probability: %s";
+    private static final String QUESTION_KEY_PREFIX = "q";
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
     private static final int MAX_SUMMARY_CHARS = 1_000;
 
@@ -68,9 +72,13 @@ public class DecisionScoringService {
                 .map(DecisionScoringService::textOf)
                 .filter(StringUtils::isNotBlank)
                 .collect(Collectors.joining("\n\n"));
+        var scores = answerableScores(schema);
         var questions = new LinkedHashMap<String, DecisionsQuestion>();
-        answerableScores(schema).forEach(score -> questions.put(score.name(),
-                DecisionsQuestion.noul(StringUtils.defaultIfBlank(score.description(), score.name()))));
+        for (int i = 0; i < scores.size(); i++) {
+            var score = scores.get(i);
+            questions.put(questionKey(i),
+                    DecisionsQuestion.noul(StringUtils.defaultIfBlank(score.description(), score.name())));
+        }
         return DecisionsRequest.builder()
                 .model(model)
                 .state(state)
@@ -120,14 +128,15 @@ public class DecisionScoringService {
     }
 
     /**
-     * One-line rendering of the answers for the rule logs ({@code name=probability}). Score names are
-     * user-defined, so control characters are replaced to keep a name from forging log lines.
+     * One-line rendering of the answers for the rule logs ({@code name=probability}), in score order. Score names
+     * are user-defined, so control characters are replaced to keep a name from forging log lines.
      */
-    public static String summarize(@NonNull DecisionsResponse response) {
-        var summary = Objects.requireNonNullElse(response.answers(), Map.<String, DecisionsResponse.Answer>of())
-                .entrySet().stream()
-                .map(entry -> "%s=%s".formatted(entry.getKey(),
-                        entry.getValue() == null ? null : entry.getValue().noul()))
+    public static String summarize(@NonNull DecisionsResponse response,
+            @NonNull List<LlmAsJudgeOutputSchema> schema) {
+        var answers = Objects.requireNonNullElse(response.answers(), Map.<String, DecisionsResponse.Answer>of());
+        var scores = answerableScores(schema);
+        var summary = IntStream.range(0, scores.size())
+                .mapToObj(i -> "%s=%s".formatted(scores.get(i).name(), probabilityOf(answers.get(questionKey(i)))))
                 .collect(Collectors.joining(", "));
         return StringUtils.abbreviate(CONTROL_CHARS.matcher(summary).replaceAll("?"), MAX_SUMMARY_CHARS);
     }
@@ -139,14 +148,15 @@ public class DecisionScoringService {
     public static ParsedFeedbackScores toFeedbackScores(@NonNull DecisionsResponse response,
             @NonNull List<LlmAsJudgeOutputSchema> schema) {
         var answers = Objects.requireNonNullElse(response.answers(), Map.<String, DecisionsResponse.Answer>of());
+        var answerable = answerableScores(schema);
         var scores = new ArrayList<FeedbackScoreBatchItem>();
         var unreadable = new ArrayList<String>();
-        answerableScores(schema).forEach(score -> {
-            var answer = answers.get(score.name());
-            var probability = answer == null ? null : answer.noul();
+        for (int i = 0; i < answerable.size(); i++) {
+            var score = answerable.get(i);
+            var probability = probabilityOf(answers.get(questionKey(i)));
             if (probability == null || probability.isNaN() || probability < 0 || probability > 1) {
                 unreadable.add(score.name());
-                return;
+                continue;
             }
             scores.add(FeedbackScoreBatchItem.builder()
                     .name(score.name())
@@ -155,7 +165,7 @@ public class DecisionScoringService {
                             BigDecimal.valueOf(probability).stripTrailingZeros().toPlainString()))
                     .source(ScoreSource.ONLINE_SCORING)
                     .build());
-        });
+        }
         return ParsedFeedbackScores.builder()
                 .scores(scores)
                 .unreadableScoreNames(unreadable)
@@ -172,6 +182,15 @@ public class DecisionScoringService {
                 .filter(score -> score.type() == LlmAsJudgeOutputSchemaType.BOOLEAN)
                 .filter(score -> seenNames.add(score.name()))
                 .toList();
+    }
+
+    /** Key of the question asked for the {@code index}-th {@link #answerableScores answerable score}. */
+    private static String questionKey(int index) {
+        return QUESTION_KEY_PREFIX + index;
+    }
+
+    private static Double probabilityOf(DecisionsResponse.Answer answer) {
+        return answer == null ? null : answer.noul();
     }
 
     private static String textOf(ChatMessage message) {

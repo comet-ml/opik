@@ -79,6 +79,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -924,7 +925,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var message = buildJevMessage("What is the capital of France?", "Paris");
             var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
             when(decisionsClient.decide(requestCaptor.capture(), eq(clientConfig)))
-                    .thenReturn(Mono.just(response(Map.of("answer_relevant", 0.93, "answer_correct", 0.2))));
+                    .thenReturn(Mono.just(response(Map.of("q0", 0.93, "q1", 0.2))));
 
             scorer.score(message).block();
 
@@ -932,8 +933,9 @@ class OnlineScoringLlmAsJudgeScorerTest {
             assertThat(request.model()).isEqualTo(JEV_MODEL);
             assertThat(request.state())
                     .isEqualTo("Question: What is the capital of France?\nAnswer: Paris");
-            assertThat(request.questions()).containsOnlyKeys("answer_relevant", "answer_correct");
-            assertThat(request.questions().get("answer_relevant"))
+            // Questions are keyed by position; the stored scores carry the configured names.
+            assertThat(request.questions()).containsOnlyKeys("q0", "q1");
+            assertThat(request.questions().get("q0"))
                     .isEqualTo(DecisionsQuestion.noul("Does the answer respond to the question?"));
 
             var scores = captureStoredScores();
@@ -954,7 +956,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         void mapsProbabilityToBooleanAtHalf(double probability, int expectedScore) {
             var message = buildJevMessage("question", "answer");
             when(decisionsClient.decide(any(), any())).thenReturn(Mono.just(
-                    response(Map.of("answer_relevant", probability, "answer_correct", probability))));
+                    response(Map.of("q0", probability, "q1", probability))));
 
             scorer.score(message).block();
 
@@ -966,7 +968,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         void missingAnswerDropsOnlyThatScore() {
             var message = buildJevMessage("question", "answer");
             when(decisionsClient.decide(any(), any()))
-                    .thenReturn(Mono.just(response(Map.of("answer_relevant", 0.7))));
+                    .thenReturn(Mono.just(response(Map.of("q0", 0.7))));
 
             scorer.score(message).block();
 
@@ -989,11 +991,11 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var message = buildJevMessage(code, "question", "answer");
             var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
             when(decisionsClient.decide(requestCaptor.capture(), any())).thenReturn(Mono.just(
-                    response(Map.of("answer_relevant", 0.9))));
+                    response(Map.of("q0", 0.9))));
 
             scorer.score(message).block();
 
-            assertThat(requestCaptor.getValue().questions()).containsOnlyKeys("answer_relevant");
+            assertThat(requestCaptor.getValue().questions()).containsOnlyKeys("q0");
             assertThat(captureStoredScores()).extracting(FeedbackScoreBatchItem::name)
                     .containsExactly("answer_relevant");
         }
@@ -1012,7 +1014,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             scorer.score(buildJevMessage(code, "question", "answer")).block();
 
             verifyNoInteractions(decisionsClient);
-            assertThat(captureStoredScores()).isEmpty();
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
         }
 
         @Test
@@ -1024,7 +1026,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             scorer.score(message).block();
 
             verifyNoInteractions(decisionsClient);
-            assertThat(captureStoredScores()).isEmpty();
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
         }
 
         @Test

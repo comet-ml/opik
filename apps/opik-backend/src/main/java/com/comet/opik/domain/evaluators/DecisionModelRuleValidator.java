@@ -21,14 +21,15 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Rejects LLM-as-a-Judge rules that a decisions model (TypeSafe Jev) can't run. Such a model answers yes/no
  * questions about a text in one call, so a rule on it needs Boolean scores, a single text-only user message,
- * and no {@code {{trace}}} / {@code {{span}}} variables (those drive the agentic path). Thread rules aren't
- * supported. Rules on other models pass through untouched.
+ * no {@code {{trace}}} / {@code {{span}}} variables (those drive the agentic path), and no spend budget (the
+ * budget guard only meters chat calls). Thread rules aren't supported. Rules on other models pass through untouched.
  */
 @Singleton
 public class DecisionModelRuleValidator {
@@ -40,6 +41,7 @@ public class DecisionModelRuleValidator {
                     .messages(llmAsJudge.getCode().messages())
                     .variables(llmAsJudge.getCode().variables())
                     .schema(llmAsJudge.getCode().schema())
+                    .maxCostUsd(llmAsJudge.getCode().maxCostUsd())
                     .scope(Scope.TRACE)
                     .build());
             case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge -> validate(RuleCode.builder()
@@ -64,6 +66,7 @@ public class DecisionModelRuleValidator {
                     .messages(llmAsJudge.getCode().messages())
                     .variables(llmAsJudge.getCode().variables())
                     .schema(llmAsJudge.getCode().schema())
+                    .maxCostUsd(llmAsJudge.getCode().maxCostUsd())
                     .scope(Scope.TRACE)
                     .build());
             case AutomationRuleEvaluatorUpdateSpanLlmAsJudge spanLlmAsJudge -> validate(RuleCode.builder()
@@ -104,6 +107,10 @@ public class DecisionModelRuleValidator {
                             "Decisions models only support Boolean scores, score '%s', type '%s'"
                                     .formatted(score.name(), score.type()));
                 });
+        if (code.maxCostUsd() != null) {
+            throw new BadRequestException(
+                    "Decisions models don't support a spend budget, model '%s'".formatted(code.model()));
+        }
         if (code.messages().size() != 1 || code.messages().getFirst().role() != ChatMessageType.USER) {
             throw new BadRequestException(
                     "Rules on decisions models need exactly one user message, model '%s'".formatted(code.model()));
@@ -142,6 +149,6 @@ public class DecisionModelRuleValidator {
     @Builder(toBuilder = true)
     private record RuleCode(@NonNull String model, @NonNull List<LlmAsJudgeMessage> messages,
             @NonNull Map<String, String> variables, @NonNull List<LlmAsJudgeOutputSchema> schema,
-            @NonNull Scope scope) {
+            BigDecimal maxCostUsd, @NonNull Scope scope) {
     }
 }

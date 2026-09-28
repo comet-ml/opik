@@ -10,6 +10,7 @@ import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.WebApplicationException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -134,8 +135,31 @@ class OpenRouterDecisionsClientTest {
                 .hasMessageContaining("boom");
     }
 
+    @Test
+    void timeoutIsNotRetriedInProcess() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(524).withBody("timeout")));
+
+        // The timed-out call may have been billed: fail once and leave any retry to the consumer's redelivery.
+        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOfSatisfying(ServerErrorException.class,
+                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(524));
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
+    void redirectCarriesStatus() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(308).withHeader("Location", "https://example.com")));
+
+        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOfSatisfying(WebApplicationException.class,
+                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(308))
+                .hasMessageContaining("status '308'");
+    }
+
     @ParameterizedTest
-    @ValueSource(ints = {429, 502, 503, 524, 529})
+    @ValueSource(ints = {429, 502, 503, 529})
     void transientErrorIsRetriedInProcess(int status) {
         wireMock.server().stubFor(post(urlEqualTo(PATH))
                 .willReturn(aResponse().withStatus(status).withBody("busy")));

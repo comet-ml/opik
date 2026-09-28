@@ -210,6 +210,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 : evaluateWithChatModel(message, spans, mdc, recorder));
 
         return recorder.monitor(scoring)
+                // Nothing to store when the evaluation was skipped or yielded no readable score; the skip or the
+                // response issues were already logged, so don't follow them with a success line.
+                .filter(scores -> !scores.isEmpty())
                 .flatMap(scores -> storeScores(scores, trace, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
@@ -404,7 +407,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             List<Span> spans, Map<String, String> mdc, EvaluationRecorder recorder) {
         var trace = message.trace();
         var code = message.llmAsJudgeCode();
-        // A null from the callable (skipped evaluation) completes empty and stores no scores.
+        // A null from the callable (skipped evaluation) completes empty; it still emits an empty list so the
+        // monitoring recorder finalizes the evaluation, and score() stores nothing for it.
         return Mono.fromCallable(() -> {
             try (var _ = wrapWithMdc(mdc)) {
                 userFacingLogger.info("Evaluating with decision model traceId '{}' sampled by rule '{}'", trace.id(),
@@ -444,7 +448,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         .map(response -> {
                             try (var _ = wrapWithMdc(mdc)) {
                                 userFacingLogger.info("Received response from decision model for traceId '{}': '{}'",
-                                        trace.id(), DecisionScoringService.summarize(response));
+                                        trace.id(), DecisionScoringService.summarize(response, code.schema()));
                                 var parsed = DecisionScoringService.toFeedbackScores(response, code.schema())
                                         .withUserFacingNames(message.scoreNameMapping());
                                 OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "traceId",

@@ -62,6 +62,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -466,7 +467,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         when(decisionsClient.decide(requestCaptor.capture(), eq(clientConfig))).thenReturn(Mono.just(
                 DecisionsResponse.builder()
                         .model("typesafe/jev-1.13-20260917")
-                        .answers(Map.of("greets", DecisionsResponse.Answer.builder()
+                        .answers(Map.of("q0", DecisionsResponse.Answer.builder()
                                 .type(DecisionsQuestion.NOUL_TYPE).noul(0.97).build()))
                         .build()));
         @SuppressWarnings("unchecked")
@@ -477,7 +478,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
 
         assertThat(requestCaptor.getValue().state()).isEqualTo("Reply: hello");
         assertThat(requestCaptor.getValue().questions())
-                .containsExactly(Map.entry("greets", DecisionsQuestion.noul("Does the reply greet the user?")));
+                .containsExactly(Map.entry("q0", DecisionsQuestion.noul("Does the reply greet the user?")));
         var score = scoresCaptor.getValue().getFirst();
         assertThat(score.name()).isEqualTo("greets");
         assertThat(score.id()).isEqualTo(span.id());
@@ -499,15 +500,12 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         // A resolvable key, so the only thing keeping the request from the client is the context check.
         lenient().when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL))
                 .thenReturn(LlmProviderClientApiConfig.builder().apiKey("key").build());
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
-        when(feedbackScoreService.scoreBatchOfSpans(scoresCaptor.capture())).thenReturn(Mono.empty());
 
         scorer.score(buildMessage(span, code)).block();
 
         verifyNoInteractions(decisionsClient);
         verifyNoInteractions(aiProxyService);
-        assertThat(scoresCaptor.getValue()).isEmpty();
+        verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
     }
 
     // Podam manufactures a fully-populated Span; toBuilder then pins only the fields these tests assert on

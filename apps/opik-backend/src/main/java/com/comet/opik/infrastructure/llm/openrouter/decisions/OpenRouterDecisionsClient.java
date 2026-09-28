@@ -7,6 +7,7 @@ import com.comet.opik.utils.RetryUtils;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -26,9 +27,14 @@ import java.util.Set;
  * such as TypeSafe Jev. Those models aren't reachable through chat completions, so there is no LangChain4j
  * client for them.
  *
- * <p>Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException},
- * so the online-scoring consumer drops permanent failures (bad request, missing credits) and redelivers
- * transient ones. Rate limits and gateway errors are also retried in-process first.
+ * <p>Requests always go to the configured {@code openRouterDecisionsUrl}, never to the {@code baseUrl} of the
+ * workspace's OpenRouter provider: that base URL points at {@code /api/v1}, and the Decisions API lives outside
+ * it, so a workspace that routes OpenRouter chat traffic through a proxy still calls Jev on openrouter.ai.
+ *
+ * <p>Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
+ * and anything else (e.g. a redirect from a misconfigured URL) as {@link WebApplicationException}, so the
+ * online-scoring consumer drops permanent failures (bad request, missing credits) and redelivers transient ones.
+ * Rate limits and gateway errors are also retried in-process first.
  *
  * <p>Provided by {@link com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule} rather than injected
  * directly: the {@code @Config} qualifier has to sit on a hand-written parameter, since the Docker build compiles
@@ -43,10 +49,11 @@ public class OpenRouterDecisionsClient {
     private static final int MAX_ERROR_MESSAGE_LENGTH = 512;
 
     /**
-     * Retried in-process on top of the 503/504 that {@link RetriableHttpClient} already retries: rate limit,
-     * bad gateway, and OpenRouter's 524 (timeout) and 529 (provider overloaded).
+     * Retried in-process on top of the 503/504 that {@link RetriableHttpClient} already retries: rate limit, bad
+     * gateway and OpenRouter's 529 (provider overloaded). Not OpenRouter's 524 (timeout): the timed-out call may
+     * still have run and been billed, so it is left to the consumer's redelivery alone instead of both layers.
      */
-    private static final Set<Integer> RETRYABLE_STATUSES = Set.of(429, 502, 524, 529);
+    private static final Set<Integer> RETRYABLE_STATUSES = Set.of(429, 502, 529);
 
     private final @NonNull RetriableHttpClient client;
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
@@ -91,10 +98,12 @@ public class OpenRouterDecisionsClient {
         if (RETRYABLE_STATUSES.contains(status)) {
             throw new RetryUtils.RetryableHttpException(message, status);
         }
-        if (response.getStatusInfo().getFamily() == Response.Status.Family.CLIENT_ERROR) {
-            throw new ClientErrorException(message, status);
+        switch (response.getStatusInfo().getFamily()) {
+            case CLIENT_ERROR -> throw new ClientErrorException(message, status);
+            // ServerErrorException rejects any non-5xx status with an IllegalArgumentException.
+            case SERVER_ERROR -> throw new ServerErrorException(message, status);
+            default -> throw new WebApplicationException(message, status);
         }
-        throw new ServerErrorException(message, status);
     }
 
     private String extractErrorMessage(Response response) {

@@ -19,6 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -104,7 +105,9 @@ class DecisionModelRuleValidatorTest {
                 Arguments.of("image content", code(JEV_MODEL, List.of(imageMessage), VARIABLES,
                         List.of(BOOLEAN_SCORE)), "only accept text messages"),
                 Arguments.of("{{trace}} variable", code(JEV_MODEL, List.of(traceMessage), Map.of(),
-                        List.of(BOOLEAN_SCORE)), "'{{trace}}' variable"));
+                        List.of(BOOLEAN_SCORE)), "'{{trace}}' variable"),
+                Arguments.of("spend budget", code(JEV_MODEL, List.of(USER_MESSAGE), VARIABLES, List.of(BOOLEAN_SCORE))
+                        .toBuilder().maxCostUsd(new BigDecimal("0.05")).build(), "don't support a spend budget"));
     }
 
     @Test
