@@ -234,6 +234,33 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #   above the read-only profile's max_execution_time (180s) so the server-side cap fires first.
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
+# Description: credentials for the extended free-form SQL read-only ClickHouse user.
+# Only used for workspaces in customCharts.enabledWorkspaces.
+databaseAnalyticsReadOnlyFreeFormExtendedSql:
+  #  Default: comet_readonly_freeform_extended_sql_user
+  #  Description: The read-only username used to connect to the server
+  username: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}
+  #  Default: opik
+  #  Description: The read-only user password used to connect to the server
+  password: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}
+  #  Default: 200s
+  #  Description: Socket read timeout, kept above the profile's max_execution_time (180s) so the server cap fires first
+  socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_SOCKET_TIMEOUT:-200s}
+
+# Custom Charts. The ClickHouse credentials it runs as are in databaseAnalyticsReadOnlyFreeFormExtendedSql instead:
+# those describe a database connection and keep the same shape as the account Agent Insights uses.
+customCharts:
+  #  Default: empty (feature off everywhere)
+  #  Description: Comma-separated workspace ids allowed to call POST /v1/internal/analytics-queries, which runs as
+  #   the wider ClickHouse account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account
+  #   for every workspace. Requires serviceToggles.ollieEnabled, which
+  #   gates the endpoint, and the account to be provisioned first (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
+  enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
+  #  Default: 5000
+  #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
+  #   than labelling some and not others.
+  maxNameLookupIds: ${CUSTOM_CHARTS_MAX_NAME_LOOKUP_IDS:-5000}
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
@@ -265,6 +292,11 @@ health:
     # provisioning issue or transient CH rejection on the read-only user must degrade only that feature, not pull
     # the whole backend out of readiness/traffic.
     - name: clickhouse-readonly-freeform-sql
+      critical: false
+      type: ready
+    # Non-critical for the same reason as the check above: Custom Charts is opt-in per workspace, and when no
+    # workspace is allowlisted the probe reports healthy without querying ClickHouse.
+    - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
     # Toggle-gated (databaseAnalytics.clusterHealthCheckEnabled). When the toggle is off the probe reports healthy
@@ -1189,13 +1221,7 @@ agentInsightsReport:
 # Configuration for automatic annotation queue population (OPIK-6303). A feedback-score event is guarded
 # in the listener and the routing work is done by a stream consumer, so it survives a replica restart.
 annotationQueueRouting:
-  # Default: false
-  # Description: When false, score events are never buffered or published and nothing is routed automatically
-  enabled: ${ANNOTATION_QUEUE_ROUTING_ENABLED:-false}
-  # Default: true
-  # Description: When enabled (and the feature above is on), schedule the periodic flush job. Set false to buffer
-  #   in Redis without a scheduler (e.g. tests that invoke the job manually).
-  jobEnabled: ${ANNOTATION_QUEUE_ROUTING_JOB_ENABLED:-true}
+  # Mechanics only. Whether the feature runs at all is serviceToggles.annotationQueueAutomationEnabled.
   # Default: annotation-queue-routing
   # Description: Redis stream name for queued annotation queue routing work
   streamName: ${ANNOTATION_QUEUE_ROUTING_STREAM_NAME:-'annotation-queue-routing'}
@@ -1216,7 +1242,7 @@ annotationQueueRouting:
   #   added to every routed item. Same semantics as the experimentDenormalization debounce.
   debounceDelay: ${ANNOTATION_QUEUE_ROUTING_DEBOUNCE_DELAY:-15s}
   # Default: 2m
-  # Description: TTL of the Redis buffer key (10s-1h). Set when the key is created and renewed by every flush run,
+  # Description: TTL of the Redis buffer key (10s-10m). Set when the key is created and renewed by every flush run,
   #   so if nothing drains the buffer it expires this long after the last flush instead of growing without limit.
   #   Matches experimentDenormalization, whose buckets expire at twice their debounce delay.
   bufferTtl: ${ANNOTATION_QUEUE_ROUTING_BUFFER_TTL:-2m}
@@ -1729,6 +1755,11 @@ serviceToggles:
   #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
   #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
   onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not automatic annotation queue population is enabled. When false the score
+  #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
+  #   automation controls on annotation queues.
+  annotationQueueAutomationEnabled: ${TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED:-"false"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.

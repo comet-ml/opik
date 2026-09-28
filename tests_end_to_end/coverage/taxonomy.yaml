@@ -28,7 +28,8 @@
 # TAG GRAMMAR (two orthogonal dimensions — see PHASE-1-FINDINGS.md Q2')
 #
 #   tier    exactly one of @t1-smoke | @t2-cuj | @t3-nightly     -> drives coverage %
-#   suites  zero or more of @t1-stsaas | @provider-sanity        -> drives WHERE it runs
+#   suites  zero or more of @t1-stsaas | @provider-sanity |
+#           @llm-daily                                       -> drives WHERE it runs
 #   area    exactly one @area:<area>                             -> from `areas:` keys below
 #   caps    one or more @cap:<area>.<capability>                 -> from `capabilities:` keys
 #

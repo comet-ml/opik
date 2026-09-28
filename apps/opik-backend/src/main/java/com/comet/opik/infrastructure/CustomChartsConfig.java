@@ -1,0 +1,51 @@
+package com.comet.opik.infrastructure;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.AccessLevel;
+import lombok.Data;
+import lombok.Getter;
+
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Data
+public class CustomChartsConfig {
+
+    /**
+     * Workspaces allowed to use Custom Charts, comma-separated. Empty (the default) disables the feature
+     * everywhere.
+     *
+     * <p>Held as a String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot
+     * bind to a collection; {@link #enabledWorkspaceIds()} splits, strips and drops blanks.
+     *
+     * <p>Nullable rather than {@code @NotNull}: Null and blank both mean "no workspace allowlisted".
+     *
+     * <p>No getter, so the raw string cannot be matched against directly; read it via {@link #enabledWorkspaceIds()}.
+     */
+    @JsonProperty
+    @Getter(AccessLevel.NONE)
+    private String enabledWorkspaces;
+
+    /**
+     * The parsed, stripped, blank-free set of allowlisted workspace ids. Deliberately neither cached nor named as a
+     * bean getter: Lombok's toString/equals/hashCode and Jackson call getters, and a cached parse taken before the
+     * field was bound kept an empty allowlist for the life of the process.
+     */
+    public Set<String> enabledWorkspaceIds() {
+        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
+                .map(String::strip)
+                .filter(workspaceId -> !workspaceId.isEmpty())
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
+     * Beyond this many distinct ids in one result, name enrichment resolves none and no row gets a name column,
+     * rather than labelling some rows and not others.
+     */
+    @JsonProperty
+    private @Min(1) @Max(50_000) int maxNameLookupIds = 5_000;
+}

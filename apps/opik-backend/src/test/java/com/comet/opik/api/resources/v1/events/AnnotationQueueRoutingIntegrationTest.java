@@ -11,6 +11,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.util.Duration;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -75,6 +76,7 @@ class AnnotationQueueRoutingIntegrationTest {
     private AnnotationQueueRoutingPublisher publisher;
     private AnnotationQueueRoutingBufferService bufferService;
     private AnnotationQueueRoutingListener listener;
+    private FeatureFlags featureFlags;
 
     @BeforeAll
     void setUpAll() {
@@ -106,7 +108,6 @@ class AnnotationQueueRoutingIntegrationTest {
 
     private void wire(Duration debounceDelay, int jobBatchSize) {
         config = AnnotationQueueRoutingConfig.builder()
-                .enabled(true)
                 .streamName("test-stream-%s".formatted(randomString().toLowerCase()))
                 .streamMaxLen(10_000)
                 .streamTrimLimit(100)
@@ -118,7 +119,9 @@ class AnnotationQueueRoutingIntegrationTest {
         automationService = mock(AnnotationQueueAutomationService.class);
         publisher = new AnnotationQueueRoutingPublisher(redissonClient, config);
         bufferService = new AnnotationQueueRoutingBufferService(redissonClient, publisher, config);
-        listener = new AnnotationQueueRoutingListener(automationService, bufferService, config);
+        featureFlags = mock(FeatureFlags.class);
+        when(featureFlags.isAnnotationQueueAutomationEnabled()).thenReturn(true);
+        listener = new AnnotationQueueRoutingListener(automationService, bufferService, featureFlags);
     }
 
     static Stream<Arguments> scopes() {
@@ -304,10 +307,9 @@ class AnnotationQueueRoutingIntegrationTest {
     }
 
     @Test
-    @DisplayName("Disabled routing buffers nothing and never reaches the automation lookup")
-    void disabledRoutingWritesNothingAndSkipsTheLookup() {
-        config = config.toBuilder().enabled(false).build();
-        listener = new AnnotationQueueRoutingListener(automationService, bufferService, config);
+    @DisplayName("A disabled feature toggle buffers nothing and never reaches the automation lookup")
+    void disabledFeatureWritesNothingAndSkipsTheLookup() {
+        when(featureFlags.isAnnotationQueueAutomationEnabled()).thenReturn(false);
 
         listener.onFeedbackScoresCreated(event(EntityType.TRACE, randomString(), idGenerator.generateId()));
 
