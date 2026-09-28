@@ -63,9 +63,10 @@ class RemoteAuthService implements AuthService {
     private static final GenericType<List<WorkspaceIdNameResponse>> WORKSPACE_LIST_TYPE = new GenericType<>() {
     };
 
-    // Comet-internal workspaces are named by wrapping the name in double underscores. A user may technically belong to
-    // one, but it must never be targetable from an agent.
-    private static final Pattern INTERNAL_WORKSPACE_NAME = Pattern.compile("^__.+__$");
+    // Cost Intelligence workspaces are named __ai_spend_{orgId}__ / __cc_{orgId}__. A user may technically belong to
+    // one, but it must never be targetable from an agent. Mirrors AI_SPEND_WORKSPACE_PATTERN in the frontend's
+    // plugins/comet/lib/aiSpend.ts, which hides the same workspaces from the workspace selector.
+    private static final Pattern INTERNAL_WORKSPACE_NAME = Pattern.compile("^__(?:ai_spend|cc)_.+__$");
 
     private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = new HashMap<>() {
         {

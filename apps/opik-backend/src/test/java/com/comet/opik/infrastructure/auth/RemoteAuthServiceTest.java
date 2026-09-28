@@ -634,12 +634,14 @@ class RemoteAuthServiceTest {
         var production = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(false).build();
         var staging = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(true).build();
         var defaultWorkspace = WorkspaceInfo.builder().id("ws-default").name(DEFAULT_WORKSPACE_NAME).build();
-        var internal = WorkspaceInfo.builder().id("ws-internal").name("__internal__").build();
-        // only the full wrapping marks a workspace internal, a lone prefix or suffix does not
-        var prefixed = WorkspaceInfo.builder().id("ws-prefixed").name("__prefixed").build();
-        var suffixed = WorkspaceInfo.builder().id("ws-suffixed").name("suffixed__").build();
+        var aiSpend = WorkspaceInfo.builder().id("ws-ai-spend").name("__ai_spend_acme__").build();
+        var creditCard = WorkspaceInfo.builder().id("ws-cc").name("__cc_acme__").build();
+        // only the Cost Intelligence naming marks a workspace internal, other double-underscore names do not
+        var underscored = WorkspaceInfo.builder().id("ws-underscored").name("__internal__").build();
+        var prefixed = WorkspaceInfo.builder().id("ws-prefixed").name("__ai_spend_acme").build();
+        var suffixed = WorkspaceInfo.builder().id("ws-suffixed").name("ai_spend_acme__").build();
         var responseJson = OBJECT_MAPPER.writeValueAsString(Stream
-                .of(production, defaultWorkspace, internal, prefixed, suffixed, staging)
+                .of(production, defaultWorkspace, aiSpend, creditCard, underscored, prefixed, suffixed, staging)
                 .map(RemoteAuthServiceTest::workspaceEntry)
                 .toList());
         WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces"))
@@ -649,7 +651,7 @@ class RemoteAuthServiceTest {
 
         var result = remoteAuthService.listEligibleWorkspaces(sessionCookie(sessionTokenValue));
 
-        assertThat(result).containsExactly(production, prefixed, suffixed, staging);
+        assertThat(result).containsExactly(production, underscored, prefixed, suffixed, staging);
     }
 
     @Test
@@ -724,7 +726,7 @@ class RemoteAuthServiceTest {
 
     @ParameterizedTest
     @NullAndEmptySource
-    @ValueSource(strings = {DEFAULT_WORKSPACE_NAME, "__internal__", "__a__", "  "})
+    @ValueSource(strings = {DEFAULT_WORKSPACE_NAME, "__ai_spend_acme__", "__cc_acme__", "__ai_spend_a__", "  "})
     void authorizeWorkspace__whenNotEligible__thenForbidden(String workspaceName) {
         var sessionTokenValue = "session-" + UUID.randomUUID();
 
