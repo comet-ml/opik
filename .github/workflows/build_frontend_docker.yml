@@ -42,11 +42,12 @@ jobs:
       # a second arch doubles runtime without covering a distinct failure mode.
       # Multi-arch stays on the release path in build_apps.yml.
       #
-      # No layer cache: this job only runs when apps/opik-frontend/** changed, so the
-      # Dockerfile's `COPY . .` is invalidated every time by construction and the
-      # `npm run build` below it always re-runs. The only restorable layer is
-      # `npm ci`, and exporting the cache costs more than restoring it saves -- a
-      # net loss, and worse on PRs that touch package.json.
+      # No layer cache: nearly every run is triggered by an apps/opik-frontend/** change,
+      # which invalidates the Dockerfile's `COPY . .` by construction, so the
+      # `npm run build` below it always re-runs. The only restorable layer is `npm ci`,
+      # and exporting the cache costs more than restoring it saves -- a net loss, and
+      # worse on PRs that touch package.json. The rare workflow-only or manual run
+      # isn't worth paying that export on every other run.
       - name: Build frontend image
         uses: docker/build-push-action@v7
         env:
