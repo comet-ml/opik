@@ -722,6 +722,28 @@ areas:
       # rewrote, where a row silently dropped at a page boundary renders as
       # plausible data on the view people read to pick an experiment.
       compare-deep-paging:     { covered: false }
+      # The compare grid's LAYOUT, as opposed to the data in it — added for
+      # opik#8510, which pins the experiment-name column beside the select
+      # column. Not part of compare-side-by-side, which is about two experiments
+      # agreeing or disagreeing in one row, and NOT the same thing as the visual
+      # `compare-view` key below: that one is a screenshot baseline owned by the
+      # visual suite, while this is asserted as computed style and geometry — the
+      # Name cells' x unchanged through a horizontal scroll that is itself proven
+      # to have moved the columns, and the inset border drawn by the pinned cell
+      # AND by each sub-row band inside it (main.scss extends the rule to
+      # `.comet-pinned-last-left [data-virtual-row-id]` because an inset shadow
+      # paints beneath its element's children).
+      compare-name-pinning:    { covered: false }
+      # Hovering one experiment's sub-row in the compare grid highlights that
+      # sub-row and not its sibling — the other half of opik#8510, and a
+      # different code path from the pinning above
+      # (`VerticallySplitCellWrapper`'s onMouseEnter/onMouseLeave, driven through
+      # the table's `subRowHighlightColor` meta). Its own key because a reader
+      # can lose track of which experiment a band belongs to either way, but only
+      # one of the two is about scrolling. Asserted as "the hovered band is
+      # painted and the sibling is not", in both directions, rather than against
+      # a literal design token.
+      compare-sub-row-hover:   { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: true,  tier: t2-cuj, note: "browser export off the compare Results tab, asserted on the downloaded file: an unscoped export covers the whole result set untruncated and carries both compared experiments' outputs, filter/search/sort scope and order it, a row selection narrows it and clearing restores it. NOT covered: the over-the-cap disabled state (EXPORT_ROW_LIMIT is 2,000, and seeding past it costs far more than the assertion is worth), and the CSV format — only JSON is read back" }
       delete-experiment:       { covered: true,  tier: t2-cuj }
