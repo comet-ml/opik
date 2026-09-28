@@ -10,30 +10,18 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Everything Custom Charts is configured by, in one place.
- *
- * <p>The ClickHouse credentials it runs as are the exception, and deliberately: they live in
- * {@code databaseAnalyticsReadOnlyFreeFormExtendedSql} so they keep the same shape as the account Agent Insights
- * uses. They describe a database connection, not this feature.
- */
 @Data
 public class CustomChartsConfig {
 
     /**
      * Workspaces allowed to use Custom Charts, comma-separated. Empty (the default) disables the feature
-     * everywhere. Membership also routes the workspace's free-form SQL to the wider ClickHouse account, so its
-     * Agent Insights queries run under that account too — intended while the allowlist is internal-only, and the
-     * reason this is an allowlist rather than a plain boolean.
+     * everywhere.
      *
      * <p>Held as a String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot
      * bind to a collection; {@link #enabledWorkspaceIds()} splits, strips and drops blanks.
      */
     /**
-     * Nullable rather than {@code @NotNull}: Dropwizard substitutes an env var that is set but empty as an empty
-     * scalar, which binds to null and would fail validation before startup — so exporting
-     * {@code TOGGLE_CUSTOM_CHARTS_WORKSPACES=""}, the obvious way to turn the feature off, would stop the backend
-     * booting. Null and blank both mean "no workspace allowlisted".
+     * Nullable rather than {@code @NotNull}: Null and blank both mean "no workspace allowlisted".
      */
     @JsonProperty
     private String enabledWorkspaces;
