@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ThreadTimestamps;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
@@ -17,8 +18,11 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @EagerSingleton
 @Slf4j
@@ -105,6 +109,51 @@ public class TraceThreadListener {
                 .doOnComplete(
                         () -> log.info("Completed processing TracesCreated event for workspace: '{}', projectIds: '{}'",
                                 event.workspaceId(), event.projectIds()))
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
+                        .put(RequestContext.USER_NAME, event.userName()))
+                .subscribe();
+    }
+
+    /**
+     * Registers the thread in trace_threads when a trace update sets a thread id.
+     *
+     * The trace UPDATE overwrites traces.thread_id, but only trace creation registers the thread, so a thread id first
+     * set by a PATCH had no trace_threads row. The Threads list inner-joins that table whenever a time range is set,
+     * so such a thread was missing from the list while direct-open, which left-joins, still resolved it.
+     *
+     * The thread the traces moved away from is intentionally left untouched: it keeps its own traces and is closed by
+     * the regular closing job.
+     *
+     * @param event the TracesUpdated event whose update may carry a thread id
+     */
+    @Subscribe
+    public void onTracesUpdated(@NonNull TracesUpdated event) {
+        String threadId = event.traceUpdate().threadId();
+
+        if (StringUtils.isBlank(threadId)) {
+            return;
+        }
+
+        log.info("Received TracesUpdated event for workspace: '{}', projectIds: '[{}]' with threadId set. "
+                + "Processing trace thread registration", event.workspaceId(), event.projectIds());
+
+        Set<UUID> projectIds = Optional.ofNullable(event.traceIdToProjectId())
+                .filter(traceIdToProjectId -> !traceIdToProjectId.isEmpty())
+                .map(traceIdToProjectId -> event.traceIds().stream()
+                        .map(traceIdToProjectId::get)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet()))
+                .filter(ids -> !ids.isEmpty())
+                .orElseGet(event::projectIds);
+
+        Flux.fromIterable(projectIds)
+                .flatMap(projectId -> traceThreadService.registerThreadsIfMissing(projectId, Set.of(threadId)))
+                .doOnError(error -> log.error(
+                        "Fail to process TracesUpdated event for workspace: '{}', projectIds: '{}', error: '{}'",
+                        event.workspaceId(), projectIds, error.getMessage()))
+                .doOnComplete(() -> log.info(
+                        "Completed processing TracesUpdated event for workspace: '{}', projectIds: '{}'",
+                        event.workspaceId(), projectIds))
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
                         .put(RequestContext.USER_NAME, event.userName()))
                 .subscribe();

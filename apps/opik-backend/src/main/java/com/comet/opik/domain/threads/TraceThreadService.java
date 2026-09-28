@@ -64,6 +64,8 @@ public interface TraceThreadService {
 
     Mono<Void> closeThreads(UUID projectId, String projectName, Set<String> threadIds);
 
+    Mono<Void> registerThreadsIfMissing(UUID projectId, Set<String> threadIds);
+
     Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId);
 
     Mono<Map<String, UUID>> getOrCreateThreadIds(UUID projectId, Set<String> threadIds);
@@ -432,6 +434,39 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                         .threadIds(threadIds)
                                         .build())))
                         .flatMap(threadModels -> checkAndTriggerOnlineScoring(verifiedProjectId, threadModels)));
+    }
+
+    /**
+     * Registers threads that exist in the traces table but have no trace_threads row yet.
+     *
+     * Unlike {@link #closeThreads}, a thread with no traces is skipped rather than reported as not found: this runs
+     * off the trace-update event, where a thread id set by a PATCH may not be readable yet, and the next update or the
+     * closing job will register it.
+     */
+    @Override
+    public Mono<Void> registerThreadsIfMissing(@NonNull UUID projectId, @NonNull Set<String> threadIds) {
+        if (CollectionUtils.isEmpty(threadIds)) {
+            return Mono.empty();
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return traceService.getMinimalThreadInfoByIds(projectId, threadIds)
+                    .flatMap(existingThreads -> {
+                        if (existingThreads.isEmpty()) {
+                            log.info("No traces found yet for threadIds: '{}' and projectId: '{}', skipping "
+                                    + "registration", threadIds, projectId);
+                            return Mono.empty();
+                        }
+
+                        return resolveThreadModelIds(projectId, workspaceId, existingThreads)
+                                .flatMap(threadsWithIds -> createMissingThreads(projectId, workspaceId, userName,
+                                        threadsWithIds));
+                    })
+                    .then();
+        });
     }
 
     private Mono<Void> verifyAndCreateThreadsIfNeeded(UUID projectId, Set<String> threadIds) {
