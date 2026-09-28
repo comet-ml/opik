@@ -350,6 +350,34 @@ class RemoteAuthService implements AuthService {
     }
 
     /**
+     * Returns the message from EM's own JSON error envelope, or {@code null} when the response is not one — an
+     * HTML or empty body from a proxy, an ingress 404, anything that did not come from EM. Callers use the null to
+     * tell "EM answered" apart from "something else answered", which for a 404 is the difference between an
+     * entitlement decision and a misconfiguration. Safe to call twice: {@code isEntityReadable} buffers.
+     */
+    private static String emErrorMessage(Response response) {
+        if (!isEntityReadable(response) || !isJson(response.getMediaType())) {
+            return null;
+        }
+        try {
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            return errorResponse == null || StringUtils.isBlank(errorResponse.msg())
+                    ? null
+                    : errorResponse.msg().strip();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Collapses line breaks so upstream-controlled text cannot forge extra records in a log that is read
+     * line by line. The value is already bounded — it is a parsed field, not the raw body.
+     */
+    private static String singleLine(String value) {
+        return value == null ? "" : value.replaceAll("[\\r\\n]+", " ");
+    }
+
+    /**
      * Guards a {@code readEntity} call: reports whether the response carries an entity and that entity was buffered, so
      * that it can be read, and read again. A client response entity is backed by a single-shot input stream, so without
      * buffering the first reader consumes it and every later read fails. Buffering is idempotent — an already buffered
@@ -523,14 +551,35 @@ class RemoteAuthService implements AuthService {
                 throw new ClientErrorException(USER_NOT_FOUND, Response.Status.UNAUTHORIZED);
             }
             return authResponse;
-        } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
+        }
+
+        int status = response.getStatus();
+
+        if (status == Response.Status.UNAUTHORIZED.getStatusCode()) {
             throw new ClientErrorException(readErrorMessage(response, NOT_LOGGED_USER),
                     Response.Status.UNAUTHORIZED);
-        } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
-            // EM never returns FORBIDDEN as of now
+        } else if (status == Response.Status.FORBIDDEN.getStatusCode()) {
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
-        } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
+        } else if (status == Response.Status.NOT_FOUND.getStatusCode()) {
+            // EM signals "user is not a member of organization" with 404; that is an entitlement failure,
+            // not a server fault.
+            //
+            // Deliberately narrowed to EM's own error envelope rather than matching every 404. A bare 404 is
+            // equally a wrong reactService URL, a missing ingress route or a renamed endpoint, and mapping
+            // that to 403 would be worse than the 500 it used to give: 403 counts as "not authenticated" in
+            // authenticate(), so a request to any endpoint in PUBLIC_ENDPOINTS would quietly continue with
+            // Visibility.PUBLIC. A misconfiguration must fail loudly, not start serving public data. Anything
+            // that is not EM's envelope therefore falls through to unexpectedRemoteError below.
+            var emMessage = emErrorMessage(response);
+            if (emMessage != null) {
+                // The parsed message, not the raw body: this branch is reached by ordinary non-member
+                // traffic rather than only by faults, so it must not put arbitrary upstream bytes in a log.
+                log.warn("React service answered 404 while authenticating, reason: '{}'", singleLine(emMessage));
+                throw new ClientErrorException(
+                        NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+            }
+        } else if (status == Response.Status.BAD_REQUEST.getStatusCode()) {
             throw new ClientErrorException(readErrorMessage(response, MISSING_WORKSPACE),
                     Response.Status.BAD_REQUEST);
         }
