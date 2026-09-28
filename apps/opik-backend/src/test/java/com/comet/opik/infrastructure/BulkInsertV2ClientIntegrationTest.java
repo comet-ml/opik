@@ -832,53 +832,42 @@ class BulkInsertV2ClientIntegrationTest {
         // The guard fires at 10x min_chunk_bytes_for_parallel_parsing, so 100 MiB at the 10 MiB
         // default -- NOT at 10 MiB, which is what the error message's "Expected not greater than
         // 10485760 bytes" misleadingly implies. Bisected on this suite's server image: 99 MiB is
-        // accepted, 100 MiB is not. The payload below has to clear that, so it cannot be trimmed to
-        // something cheaper without the test quietly ceasing to test anything.
+        // accepted, 100 MiB is not. The payload has to clear that, so it cannot be trimmed to
+        // something cheaper without the test quietly ceasing to test anything -- an earlier 12 MiB
+        // version of it passed with and without the fix.
         //
-        // The DAO seam rather than HTTP: what has to be exercised is the payload reaching ClickHouse
-        // above that threshold, and routing it through the resource layer would additionally depend on
-        // the request size limits of the test server.
+        // Split across two columns rather than one huge string, because one huge string is a shape
+        // production cannot produce: maxStringLength caps a single JSON string at 100 MiB there, so a
+        // row only reaches the ClickHouse cliff by summing several large columns -- which is what the
+        // rows rejected in production (~104.9 MB each) must have been. Each half here stays well under
+        // that cap while the row as a whole clears 100 MiB.
         var projectName = "v2-oversized-" + RandomStringUtils.secure().nextAlphanumeric(12);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var trace = newTraceBuilder().projectName(projectName).build();
         traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
 
-        // Past the 100 MiB cliff with margin, so the test does not sit on the boundary it is about.
-        var oversized = "x".repeat(110 * 1024 * 1024);
+        var inputHalf = "x".repeat(60 * 1024 * 1024);
+        var outputHalf = "y".repeat(60 * 1024 * 1024);
         var span = factory.manufacturePojo(Span.class).toBuilder()
-                .projectId(projectId)
                 .projectName(projectName)
                 .traceId(trace.id())
                 .parentSpanId(null)
                 .feedbackScores(null)
                 .comments(null)
                 .errorInfo(null)
-                .input(TextNode.valueOf(oversized))
+                .input(TextNode.valueOf(inputHalf))
+                .output(TextNode.valueOf(outputHalf))
                 .build();
 
-        var written = spanDAO.batchInsert(List.of(span))
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.USER_NAME, USER)
-                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
-                .block();
-
-        // The server's own count, so a batch rejected with written_rows = 0 fails here rather than
-        // passing on the strength of the call having returned.
-        assertThat(written).isEqualTo(1L);
+        spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
 
         // Content, not just length: a same-length but corrupted value would satisfy a length check, and
-        // chunked parsing is exactly the kind of mechanism that could splice or truncate rather than fail
-        // outright. Checked server-side and without materialising a 110 MiB expected value -- repeat()
-        // caps at 1,000,000 -- so the payload neither crosses the wire nor needs a second copy in the JVM
-        // to hash. Length plus "the inner content is nothing but the payload byte" is exact equality for a
-        // uniform payload; the stored form is the quoted JSON string, hence the two surrounding bytes.
-        var storedIntact = queryOne(
-                ("SELECT toInt64(length(input) = %d + 2 AND "
-                        + "length(replaceAll(substring(input, 2, length(input) - 2), 'x', '')) = 0) AS intact "
-                        + "FROM spans WHERE workspace_id = '%s' AND id = '%s' LIMIT 1")
-                        .formatted(oversized.length(), WORKSPACE_ID, span.id()),
-                row -> row.get("intact", Long.class));
-        assertThat(storedIntact).isEqualTo(1L);
+        // chunked parsing is exactly the kind of mechanism that could splice or truncate rather than
+        // fail outright. Without the fix this test fails at the POST above rather than here -- the
+        // rejection propagates on this synchronous path and the endpoint answers 500.
+        var actual = spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
+
+        assertThat(actual.input()).isEqualTo(TextNode.valueOf(inputHalf));
+        assertThat(actual.output()).isEqualTo(TextNode.valueOf(outputHalf));
     }
 
     // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
