@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset petrot:000127_add_steering_to_cipx_session_analysis
+--changeset petrot:000128_add_steering_to_cipx_session_analysis
 --comment: Steering turn detection for the cost API session analysis
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{cluster}'
