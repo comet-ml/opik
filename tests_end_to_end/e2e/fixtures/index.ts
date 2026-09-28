@@ -1,4 +1,4 @@
-export { test, expect } from './feedback-score-reasons.fixture';
+export { test, expect } from './deep-paged-experiment.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -230,4 +230,9 @@ export {
   COLLAPSED_JUDGE_REASON,
   EMPTY_LIST_JUDGE_REASON,
 } from './feedback-score-reasons.fixture';
+export type {
+  DeepPagedItemSeed,
+  DeepPagedExperimentRef,
+  DeepPagedExperimentFixtures,
+} from './deep-paged-experiment.fixture';
 export type { ProjectRef } from '../core/backend';

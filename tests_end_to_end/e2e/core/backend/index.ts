@@ -7,6 +7,7 @@ export {
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
+  type ComparePairedRowRef,
   type TraceEnrichmentOptions,
   type SpanEnrichmentOptions,
   type DatasetSummaryRef,

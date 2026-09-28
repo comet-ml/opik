@@ -56,6 +56,28 @@ export interface DatasetItemRef {
 }
 
 /**
+ * One comparison row reduced to the join a paged read can scramble: the stable
+ * dataset-item id, the `idx` its `data` carries, and the trace each compared
+ * experiment reported against it.
+ *
+ * Separate from `DatasetItemRef` rather than an extra field on it because
+ * `experiment_items` is the half `compareItemsPage` deliberately drops — that
+ * helper exists to answer "which rows, and what did `truncate` do to their
+ * data", and widening it would make every caller pay for a payload only a
+ * pairing assertion reads.
+ *
+ * `idx` is nullable and `experimentItems` may be empty: a row that came back
+ * without its `data.idx`, or with no experiment item at all, is exactly the
+ * corruption a partition spec is looking for, so the shape states that the API
+ * may omit them rather than letting a caller code around it.
+ */
+export interface ComparePairedRowRef {
+  id: string;
+  idx: number | null;
+  experimentItems: Array<{ experimentId: string; traceId: string }>;
+}
+
+/**
  * A dataset item read back with its tags. Separate from `DatasetItemRef`
  * because a filter-scoped batch update is asserted on exactly which rows did
  * and did not gain a tag, so `tags` must be present on every row rather than
@@ -2232,6 +2254,61 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           id: String(item.id),
           data: (item.data ?? {}) as Record<string, unknown>,
         })),
+      };
+    },
+
+    /**
+     * The same page again, projected to the row → trace pairing instead of to
+     * `data`.
+     *
+     * Exists because completeness and uniqueness are both blind to a
+     * permutation: a read that handed row N the trace seeded for row M still
+     * returns every id exactly once, with the right total, on the right number
+     * of pages. The join between a dataset item and the trace its experiment
+     * item names is what a paged assembly can scramble, and nothing else the
+     * client exposes can see it.
+     *
+     * `page` and `size` are required, unlike on `compareItemsPage`: the callers
+     * here are walking a population deliberately, and a defaulted page size
+     * would silently read something other than the one under test — which for
+     * this endpoint is the whole point, since the shipped default (2,000) is the
+     * value the estate has never paged at.
+     *
+     * `truncate: true` matches what the grid asks for. Safe for this projection:
+     * truncation shortens long string values inside `data`, and `idx` is a small
+     * number, so the field this reads back is the field the seed wrote.
+     */
+    async compareItemsPairedPage(args: {
+      datasetId: string;
+      experimentIds: string[];
+      page: number;
+      size: number;
+    }): Promise<{ total: number; rows: ComparePairedRowRef[] }> {
+      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+        experimentIds: JSON.stringify(args.experimentIds),
+        page: args.page,
+        size: args.size,
+        truncate: true,
+      });
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          `compareItemsPairedPage: dataset ${args.datasetId} answered without a total — ` +
+            'cannot tell a fully ingested comparison from a partial one.',
+        );
+      }
+      return {
+        total: page.total,
+        rows: (page.content ?? []).map((item) => {
+          const idx = (item.data as Record<string, unknown> | undefined)?.idx;
+          return {
+            id: String(item.id),
+            idx: typeof idx === 'number' ? idx : null,
+            experimentItems: (item.experimentItems ?? []).map((ei) => ({
+              experimentId: String(ei.experimentId),
+              traceId: String(ei.traceId),
+            })),
+          };
+        }),
       };
     },
 

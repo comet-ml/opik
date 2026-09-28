@@ -14,6 +14,13 @@ const EXPORT_TIMEOUT_MS = 60_000;
 const FILTER_SETTLE_TIMEOUT_MS = 30_000;
 
 /**
+ * How long the grid's own data read may take. Generous because a deep offset
+ * over a large un-aggregated experiment is the slowest shape this endpoint
+ * serves, and because a page load has to get through auth and the bundle first.
+ */
+const GRID_READ_TIMEOUT_MS = 60_000;
+
+/**
  * The compare view lives at /experiments/{datasetId}/compare?experiments=[...]
  * and renders the SAME page in single- and multi-experiment mode. This POM
  * targets multi-experiment (comparison) mode: two experiments over one dataset.
@@ -53,6 +60,162 @@ export class CompareExperimentsPage {
     await test.step('open the compare Feedback scores tab', async () => {
       await this.page.goto(this.compareUrl('scores'));
     });
+  }
+
+  /**
+   * Open the Results tab at an explicit page and page size, and return the read
+   * the grid itself made for it.
+   *
+   * Both params are explicit because neither default is the suite's to assume:
+   * `size` falls back to `ServiceTogglesConfig.defaultPageSize`, a per-deployment
+   * value, so a spec that omitted it would be asserting different pagination
+   * arithmetic on different environments. Both are URL state (`?page=`, `?size=`),
+   * which is why this can be driven by navigation — the same reason
+   * `sortByColumn` does.
+   *
+   * The grid's own response rather than the DOM, because the table is
+   * virtualised: only the rows in the viewport carry a `data-row-id`, so reading
+   * the rendered rows would compare a screenful against a page. The response is
+   * what the page actually received, and comparing it to a direct API read at the
+   * same offset is what catches the front end and the backend disagreeing about
+   * which slice a page is.
+   *
+   * Registered before the navigation, or the answer can arrive first and the wait
+   * then hangs for a request that has already been served.
+   */
+  async gotoResultsPage(pageNumber: number, size: number): Promise<{ total: number; ids: string[] }> {
+    return test.step(`open the compare Results tab at page ${pageNumber} (size ${size})`, async () => {
+      const url = new URL(this.compareUrl('items'));
+      url.searchParams.set('page', String(pageNumber));
+      url.searchParams.set('size', String(size));
+
+      // Matched on parsed params, never a substring: `page=1` occurs inside
+      // `page=10`, and the whole point of this helper is which offset was read.
+      const settled = this.page.waitForResponse((response) => {
+        const requested = new URL(response.url());
+        return (
+          requested.pathname.endsWith('/items/experiments/items') &&
+          requested.searchParams.get('page') === String(pageNumber) &&
+          requested.searchParams.get('size') === String(size) &&
+          response.ok()
+        );
+      }, { timeout: GRID_READ_TIMEOUT_MS });
+
+      await this.page.goto(url.toString());
+      return this.readGridAnswer(await settled, pageNumber);
+    });
+  }
+
+  /**
+   * The grid's own data response, narrowed to the two fields a paging assertion
+   * reads.
+   *
+   * `total` and `content` are both checked rather than defaulted: a page that
+   * answered without them is indistinguishable from an empty comparison once a
+   * `?? 0` or a `?? []` has been applied, and "the grid received no rows" is
+   * exactly the failure these callers exist to catch.
+   */
+  private async readGridAnswer(
+    response: import('@playwright/test').Response,
+    pageNumber: number,
+  ): Promise<{ total: number; ids: string[] }> {
+    const body: unknown = await response.json();
+    const { total, content } = body as { total?: unknown; content?: unknown };
+    if (typeof total !== 'number') {
+      throw new Error(
+        `CompareExperimentsPage: the grid's read of page ${pageNumber} answered without a total — ` +
+          'cannot tell a complete comparison from a partial one.',
+      );
+    }
+    if (!Array.isArray(content)) {
+      throw new Error(
+        `CompareExperimentsPage: the grid's read of page ${pageNumber} answered with no content ` +
+          `array (got ${typeof content}).`,
+      );
+    }
+    return { total, ids: content.map((row) => String((row as { id: unknown }).id)) };
+  }
+
+  /**
+   * Click through to the last page, and return the read the grid made for it.
+   *
+   * By the control rather than by `?page=`, and NOT as a matter of taste.
+   * `DataTablePagination` runs `if (page !== 1 && (page - 1) * size > total)
+   * pageChange(1)` in an effect that sits above its own `total === 0` early
+   * return, so on a cold document load at a deep offset the row read has not
+   * answered yet, `total` is still 0, and the component sends the view back to
+   * page 1 before the data arrives. The request for the deep page IS issued, so a
+   * spec that waited on the response and then read the footer would be told 1-100
+   * while believing it had jumped to the end. Clicking gets there with `total`
+   * already known, which is also the only way a user reaches it.
+   *
+   * `expectedPage` is passed in rather than read off the control so the wait
+   * pins the offset the caller means; a mismatch fails on the response wait
+   * instead of silently asserting against whatever page was served.
+   */
+  async clickLastResultsPage(
+    expectedPage: number,
+    size: number,
+  ): Promise<{ total: number; ids: string[] }> {
+    return test.step(`jump to the last page (${expectedPage})`, async () => {
+      const button = this.lastPageButton;
+      await expect(button, 'exactly one last-page control').toHaveCount(1);
+      await expect(button, 'last-page control').toBeEnabled();
+
+      const settled = this.page.waitForResponse((response) => {
+        const requested = new URL(response.url());
+        return (
+          requested.pathname.endsWith('/items/experiments/items') &&
+          requested.searchParams.get('page') === String(expectedPage) &&
+          requested.searchParams.get('size') === String(size) &&
+          response.ok()
+        );
+      }, { timeout: GRID_READ_TIMEOUT_MS });
+
+      await button.click();
+      return this.readGridAnswer(await settled, expectedPage);
+    });
+  }
+
+  /**
+   * Assert the pagination footer reads exactly this.
+   *
+   * The footer is the only place the grid states its own paging arithmetic — the
+   * offset it believes it is at and the total it believes exists — so at a deep
+   * offset it is the user-visible half of "the pages partition the experiment".
+   * Note the asymmetric formatting the component produces: the from-to pair is
+   * raw (`4901-5000`) while the total is localised (`5,000`).
+   *
+   * Addressed by its text. `DataTablePagination` is shared across every table in
+   * the app and carries no `data-testid`, and the footer is a bare `<span>` with
+   * no role or label, so there is nothing more stable to select on. A
+   * `data-testid` belongs on that component — it is not added here for the reason
+   * `exportButton` below gives: these specs run against a pre-built deployment,
+   * where a front-end attribute added alongside them would not exist. The count
+   * assertion keeps the match honest — the sibling "Rows per page:" span has the
+   * same class, and a second paginator on the page would be a real ambiguity
+   * rather than something to silently take the first of.
+   */
+  async expectPaginationFooter(expected: string): Promise<void> {
+    await test.step(`the pagination footer reads "${expected}"`, async () => {
+      const footer = this.paginationFooter;
+      await expect(footer, 'exactly one pagination footer').toHaveCount(1);
+      await expect(footer, 'pagination footer').toHaveText(expected);
+    });
+  }
+
+  private get paginationFooter(): Locator {
+    return this.page.locator('span.comet-body-s').filter({ hasText: /^Showing / });
+  }
+
+  /**
+   * The "jump to last page" control — icon-only, no accessible name and no
+   * `data-testid`, so it is addressed by its Lucide icon class, the same idiom
+   * `exportButton` and `filtersButton` below already use for this shared
+   * component. Callers assert `toHaveCount(1)` before clicking.
+   */
+  private get lastPageButton(): Locator {
+    return this.page.locator('button:has(svg.lucide-chevron-last)');
   }
 
   async waitForResultsReady(): Promise<void> {
