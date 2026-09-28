@@ -57,6 +57,28 @@ describe("generateSyntaxHighlighterCode - YAML mode", () => {
   it("renders an empty object", () => {
     expect(toYaml({})).toBe("{}");
   });
+
+  it("renders missing data as an empty string", () => {
+    expect(toYaml(undefined as unknown as object)).toBe("");
+  });
+
+  it("keeps block style for strings with Windows line endings", () => {
+    const result = toYaml({
+      arg: "line1\r\nline2",
+      nested: { list: ["a\r\nb"] },
+    });
+
+    expect(result).toBe(
+      "arg: |-\n  line1\n  line2\nnested:\n  list:\n    - |-\n      a\n      b",
+    );
+  });
+
+  it.each(["yes", "no", "on", "off", "y", "2001-12-14"])(
+    "quotes %s so YAML 1.1 parsers keep it a string",
+    (value) => {
+      expect(toYaml({ arg: value })).toBe(`arg: "${value}"`);
+    },
+  );
 });
 
 describe("generateSyntaxHighlighterCode - pretty mode YAML fallback", () => {

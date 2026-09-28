@@ -7,10 +7,17 @@ import {
 import { PrettifyConfig, CodeOutput } from "@/shared/SyntaxHighlighter/types";
 
 // lineWidth 0 disables folding so long values stay on one line.
-const YAML_OPTIONS = { lineWidth: 0 } as const;
+// version 1.1 quotes yes/no/on/off and dates, so copied YAML keeps its
+// strings when loaded by 1.1 parsers such as PyYAML.
+const YAML_OPTIONS = { lineWidth: 0, version: "1.1" } as const;
 
+// A "\r" forces double-quoted style, collapsing Windows-authored text onto one line.
+const normalizeLineEndings = (_key: unknown, value: unknown) =>
+  typeof value === "string" ? value.replace(/\r\n/g, "\n") : value;
+
+// stringify returns undefined for undefined input (e.g. a trace with no output).
 const toYaml = (data: object): string =>
-  stringifyYaml(data, YAML_OPTIONS).trim();
+  (stringifyYaml(data, normalizeLineEndings, YAML_OPTIONS) ?? "").trim();
 
 export const generateSyntaxHighlighterCode = (
   data: object,
