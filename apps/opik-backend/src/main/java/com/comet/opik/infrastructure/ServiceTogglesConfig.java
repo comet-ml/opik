@@ -57,8 +57,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean ollieEnabled;
     @JsonProperty
     @NotNull boolean projectHomepageEnabled;
-    @JsonProperty
-    @NotNull boolean onlineScoringTracingEnabled;
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;
