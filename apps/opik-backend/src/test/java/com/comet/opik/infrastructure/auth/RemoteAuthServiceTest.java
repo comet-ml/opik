@@ -23,6 +23,7 @@ import io.dropwizard.client.JerseyClientBuilder;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MultivaluedHashMap;
@@ -73,6 +74,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -239,29 +241,38 @@ class RemoteAuthServiceTest {
         assertThat(requestContext).isEqualTo(contextAfterCacheMiss);
     }
 
+    /**
+     * The expected status is asserted alongside the exception class because {@link ClientErrorException}
+     * is the class of the 401, 403 and 400 branches alike: on its own it cannot tell them apart, so an
+     * edit that mapped one of them to the wrong status would still pass. The status is the entire point
+     * of the 404 row.
+     */
     static Stream<Arguments> unauthorizedArgs() {
         return Stream.of(
                 arguments(HttpStatus.SC_UNAUTHORIZED,
                         ClientErrorException.class,
-                        "test error message"),
+                        "test error message",
+                        HttpStatus.SC_UNAUTHORIZED),
                 arguments(HttpStatus.SC_FORBIDDEN,
                         ClientErrorException.class,
-                        NOT_ALLOWED_TO_ACCESS_WORKSPACE),
-                // EM answers 404 "User is not a member of organization" rather than 403. The caller
-                // authenticated and exists, so this is an entitlement failure, not a server fault — it used
-                // to fall through to InternalServerErrorException and reach the user as a 500 (OPIK-8554).
+                        NOT_ALLOWED_TO_ACCESS_WORKSPACE,
+                        HttpStatus.SC_FORBIDDEN),
+                // EM signals "user is not a member of organization" with 404; it maps to 403.
                 arguments(HttpStatus.SC_NOT_FOUND,
                         ClientErrorException.class,
-                        NOT_ALLOWED_TO_ACCESS_WORKSPACE),
+                        NOT_ALLOWED_TO_ACCESS_WORKSPACE,
+                        HttpStatus.SC_FORBIDDEN),
                 arguments(HttpStatus.SC_SERVER_ERROR,
                         InternalServerErrorException.class,
-                        "Unexpected error while authenticating user"));
+                        "Unexpected error while authenticating user",
+                        HttpStatus.SC_SERVER_ERROR));
     }
 
     @ParameterizedTest
     @MethodSource("unauthorizedArgs")
     void testUnauthorized(
-            int remoteAuthStatusCode, Class<? extends Exception> expectedExceptionClass, String expectedMessage) {
+            int remoteAuthStatusCode, Class<? extends Exception> expectedExceptionClass, String expectedMessage,
+            int expectedStatus) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var apiKey = "apiKey-" + UUID.randomUUID();
         WIRE_MOCK.server().stubFor(post("/opik/auth")
@@ -271,14 +282,17 @@ class RemoteAuthServiceTest {
                                 new ReactServiceErrorResponse("test error message",
                                         remoteAuthStatusCode)))));
 
-        assertThatThrownBy(() -> remoteAuthService.authenticate(
+        var thrown = catchThrowable(() -> remoteAuthService.authenticate(
                 getHeadersMock(workspaceName, apiKey), null,
                 ContextInfoHolder.builder()
                         .uriInfo(createMockUriInfo("/priv/something"))
                         .method("GET")
-                        .build()))
+                        .build()));
+
+        assertThat(thrown)
                 .isExactlyInstanceOf(expectedExceptionClass)
                 .hasMessage(expectedMessage);
+        assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
     }
 
     @Test

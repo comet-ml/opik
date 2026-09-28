@@ -523,22 +523,29 @@ class RemoteAuthService implements AuthService {
                 throw new ClientErrorException(USER_NOT_FOUND, Response.Status.UNAUTHORIZED);
             }
             return authResponse;
-        } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
+        }
+
+        int status = response.getStatus();
+
+        if (status == Response.Status.UNAUTHORIZED.getStatusCode()) {
             throw new ClientErrorException(readErrorMessage(response, NOT_LOGGED_USER),
                     Response.Status.UNAUTHORIZED);
-        } else
-            if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()
-                    || response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
-                        // EM never returns FORBIDDEN; it answers 404 "User is not a member of organization" instead.
-                        // The caller authenticated fine and exists — they are just not entitled to this organization —
-                        // so this is 403, not the 500 the fall-through below used to produce (OPIK-8554).
-                        throw new ClientErrorException(
-                                NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
-                    } else
-                if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-                    throw new ClientErrorException(readErrorMessage(response, MISSING_WORKSPACE),
-                            Response.Status.BAD_REQUEST);
-                }
+        } else if (status == Response.Status.FORBIDDEN.getStatusCode()) {
+            throw new ClientErrorException(
+                    NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+        } else if (status == Response.Status.NOT_FOUND.getStatusCode()) {
+            // EM signals "user is not a member of organization" with 404; that is an entitlement failure,
+            // not a server fault. Logged rather than mapped silently because a 404 is also what a wrong
+            // reactService URL or a renamed EM endpoint looks like, and that would otherwise present as
+            // every caller losing workspace access at once with nothing to diagnose it from.
+            log.warn("Not entitled to workspace, or react service endpoint is wrong; body: '{}'",
+                    readBodySafely(response));
+            throw new ClientErrorException(
+                    NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+        } else if (status == Response.Status.BAD_REQUEST.getStatusCode()) {
+            throw new ClientErrorException(readErrorMessage(response, MISSING_WORKSPACE),
+                    Response.Status.BAD_REQUEST);
+        }
         throw unexpectedRemoteError("authenticating user", response);
     }
 
