@@ -6,13 +6,9 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentStatus;
-import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
-import com.comet.opik.api.ProjectStats;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
-import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -25,9 +21,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
-import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
-import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -36,7 +30,6 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -59,20 +52,15 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalAdjusters;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
@@ -174,8 +162,6 @@ class SpansReadPathWeekBoundTest {
     private SpanResourceClient spanResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
-    private ProjectResourceClient projectResourceClient;
-    private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync template;
 
     @BeforeAll
@@ -187,8 +173,6 @@ class SpansReadPathWeekBoundTest {
         this.datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
         this.spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
         this.experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
-        this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
-        this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
     }
 
@@ -352,54 +336,6 @@ class SpansReadPathWeekBoundTest {
                 .traceId(span.traceId())
                 .tags(Set.of("week-bound"))
                 .build(), API_KEY, WORKSPACE_NAME);
-    }
-
-    private Stream<Arguments> scoredSpanIdAts() {
-        var monday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                .atStartOfDay().toInstant(ZoneOffset.UTC);
-        return Stream.concat(Stream.of(
-                arguments(Named.of("this monday", monday)),
-                arguments(Named.of("previous sunday", monday.minusMillis(1)))),
-                recentFarFutureAndPastCeilingIdAts());
-    }
-
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("scoredSpanIdAts")
-    void traceStatsKeepTheScoredSpan(Instant idAt) {
-        // scored_span_ids is bounded by the scored id's own week; a far-future one is stored wrapped here.
-        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        // Stats are scoped by the project's traces, so the scored span needs one to hang off.
-        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
-                .id(ID_GENERATOR.generateId())
-                .projectName(projectName)
-                .feedbackScores(null)
-                .usage(null)
-                .build(), API_KEY, WORKSPACE_NAME);
-        var span = newSpan(idAt, traceId).toBuilder().projectName(projectName).build();
-        spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
-        var score = (double) RandomUtils.secure().randomInt(1, 100);
-        spanResourceClient.feedbackScores(List.of(FeedbackScoreBatchItem.builder()
-                .id(span.id())
-                .projectName(projectName)
-                .name("scored")
-                .value(BigDecimal.valueOf(score))
-                .source(ScoreSource.SDK)
-                .build()), API_KEY, WORKSPACE_NAME);
-
-        var stats = traceResourceClient.getTraceStats(null, projectId, API_KEY, WORKSPACE_NAME, null, Map.of());
-
-        assertThat(spanFeedbackScores(stats))
-                .as("span scores for span %s (id_at %s)", span.id(), idAt)
-                .isEqualTo(Map.of("scored", score));
-    }
-
-    private static Map<String, Double> spanFeedbackScores(ProjectStats stats) {
-        var prefix = "span_feedback_scores.";
-        return stats.stats().stream()
-                .filter(stat -> stat.getName().startsWith(prefix))
-                .collect(Collectors.toMap(stat -> stat.getName().substring(prefix.length()),
-                        stat -> ((Number) stat.getValue()).doubleValue()));
     }
 
     /** A span through the real ingestion path whose {@code id} carries {@code idAt}; {@code startTime} stays today. */

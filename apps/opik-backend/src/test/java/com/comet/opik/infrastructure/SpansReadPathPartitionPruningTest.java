@@ -4,8 +4,8 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
-import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
@@ -25,6 +26,7 @@ import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -56,7 +58,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -123,9 +124,6 @@ class SpansReadPathPartitionPruningTest {
     private static final List<String> FILLER_WEEKS = FILLER_MONDAYS.stream()
             .map(SpansReadPathPartitionPruningTest::yyyymmdd)
             .toList();
-
-    /** Past 2106, where the two {@code id_at} column types disagree. */
-    private static final Instant FAR_FUTURE_ID_AT = Instant.parse("2200-01-01T00:00:00Z");
 
     /** The {@code spans} partitions the latest statement of an op, mentioning the given span id, read. */
     private static final String SPANS_PARTITIONS_READ = """
@@ -307,12 +305,21 @@ class SpansReadPathPartitionPruningTest {
 
     private Stream<Arguments> scoredSpanWeeks() {
         var thisMonday = THIS_MONDAY.atStartOfDay().toInstant(ZoneOffset.UTC);
+        // Anywhere a bad clock can put an id: past 2106 but inside DateTime64, and past 2300 where it saturates.
+        var farFuture = randomInstant(Instant.parse("2107-01-01T00:00:00Z"), Instant.parse("2299-12-01T00:00:00Z"));
+        var pastCeiling = randomInstant(PAST_CEILING_ID_AT, Instant.parse("2500-01-01T00:00:00Z"));
         return Stream.of(
                 arguments(Named.of("this monday", thisMonday), THIS_WEEK),
                 // The last millisecond of the previous week lands in the first filler week.
                 arguments(Named.of("previous sunday", thisMonday.minusMillis(1)), FILLER_WEEKS.getFirst()),
-                arguments(Named.of("far future", FAR_FUTURE_ID_AT), "21991230"),
-                arguments(Named.of("past ceiling", PAST_CEILING_ID_AT), "22991225"));
+                arguments(Named.of("far future", farFuture), yyyymmdd(farFuture.atZone(ZoneOffset.UTC).toLocalDate()
+                        .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)))),
+                arguments(Named.of("past ceiling", pastCeiling), "22991225"));
+    }
+
+    private static Instant randomInstant(Instant fromInclusive, Instant toExclusive) {
+        return Instant.ofEpochSecond(
+                RandomUtils.secure().randomLong(fromInclusive.getEpochSecond(), toExclusive.getEpochSecond()));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -335,31 +342,24 @@ class SpansReadPathPartitionPruningTest {
                 .toList(), API_KEY, WORKSPACE_NAME);
         var span = newSpan(idAt, traceId).toBuilder().projectName(projectName).build();
         spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
-        var score = (double) RandomUtils.secure().randomInt(1, 100);
+        var score = factory.manufacturePojo(FeedbackScore.class);
         spanResourceClient.feedbackScores(List.of(FeedbackScoreBatchItem.builder()
                 .id(span.id())
                 .projectName(projectName)
-                .name("scored")
-                .value(BigDecimal.valueOf(score))
+                .name(score.name())
+                .value(score.value())
                 .source(ScoreSource.SDK)
                 .build()), API_KEY, WORKSPACE_NAME);
+        var expected = traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY).toBuilder()
+                .spanFeedbackScores(List.of(FeedbackScore.builder().name(score.name()).value(score.value()).build()))
+                .build();
 
         var stats = traceResourceClient.getTraceStats(null, projectId, API_KEY, WORKSPACE_NAME, null, Map.of());
 
-        assertThat(spanFeedbackScores(stats))
-                .as("span scores for span %s (id_at %s)", span.id(), idAt)
-                .isEqualTo(Map.of("scored", score));
+        TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectTraceStatItems(List.of(expected)));
         assertThat(spansPartitionsRead("get_trace_stats_feedback_scores", projectId))
                 .as("partitions read for span %s (id_at %s, week %s)", span.id(), idAt, expectedWeek)
                 .containsExactly(expectedWeek);
-    }
-
-    private static Map<String, Double> spanFeedbackScores(ProjectStats stats) {
-        var prefix = "span_feedback_scores.";
-        return stats.stats().stream()
-                .filter(stat -> stat.getName().startsWith(prefix))
-                .collect(Collectors.toMap(stat -> stat.getName().substring(prefix.length()),
-                        stat -> ((Number) stat.getValue()).doubleValue()));
     }
 
     private void batchUpdateTags(Span span, Set<UUID> ids) {

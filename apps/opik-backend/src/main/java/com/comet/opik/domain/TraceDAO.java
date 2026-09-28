@@ -2931,11 +2931,11 @@ class TraceDAOImpl implements TraceDAO {
     //
     // scored_span_ids carries the spans partition key as an IN over the weeks of the scored span ids themselves, so
     // it prunes without assuming anything about where a span sits relative to its trace. The ids exist only inside
-    // ClickHouse here, so the set is a subquery rather than WeeklyPartitions.weeksOf. Each scored id is converted to
-    // both the DateTime64(0) id_at of spans_local_v2 and the 32-bit DateTime id_at of legacy spans, which wraps past
-    // 2106 (hence the deliberate narrow CAST), because either table may be the one queried. The set therefore holds
-    // the row's own partition value on both, past-2300 ids included, where DateTime64 saturates. Non-v7 ids never
-    // reach spans (ingestion rejects them). Widening the set only opens an extra partition, never drops a row.
+    // ClickHouse here, so the set is a subquery rather than WeeklyPartitions.weeksOf. Each scored id is cast exactly as
+    // spans_local_v2 materialises id_at (DateTime64(0), saturating past 2300), so the set holds the row's own partition
+    // value. Emitted only once spans is that partitioned successor (spans_partitioned): the legacy table has no
+    // partitions to prune, so there the subquery would be pure cost. Non-v7 ids never reach spans (ingestion rejects
+    // them).
     private static final String SELECT_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
             WITH spans_data AS (
@@ -3280,17 +3280,15 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND id IN (SELECT entity_id FROM span_scores)
+                <if(spans_partitioned)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                    SELECT arrayJoin([
-                        toYYYYMMDD(toDate32(v2_id_at) - toIntervalDay(toDayOfWeek(v2_id_at, 1))),
-                        toYYYYMMDD(toDate32(legacy_id_at) - toIntervalDay(toDayOfWeek(legacy_id_at, 1)))
-                    ])
+                    SELECT toYYYYMMDD(toDate32(scored_id_at) - toIntervalDay(toDayOfWeek(scored_id_at, 1)))
                     FROM (
-                        SELECT CAST(UUIDv7ToDateTime(toUUID(entity_id)) AS DateTime64(0, 'UTC')) AS v2_id_at,
-                               CAST(UUIDv7ToDateTime(toUUID(entity_id)) AS DateTime('UTC')) AS legacy_id_at
+                        SELECT CAST(UUIDv7ToDateTime(toUUID(entity_id)) AS DateTime64(0, 'UTC')) AS scored_id_at
                         FROM span_scores
                     )
                 )
+                <endif>
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 <if(filters_present)> AND trace_id IN (SELECT id FROM trace_final) <endif>
@@ -3588,6 +3586,17 @@ class TraceDAOImpl implements TraceDAO {
 
     private boolean traceColumnsNonNullable() {
         return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
+    }
+
+    /**
+     * Enables the spans week bounds, a pruning hint on the weekly-partitioned {@code spans} and pure cost on the
+     * unpartitioned legacy one. {@code spanColumnsNonNullable} flips with the EXCHANGE that puts the partitioned
+     * successor behind the name, which is how {@code SpanDAO#deleteBatch} already reads it.
+     */
+    private void addSpansPartitionedFlag(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()) {
+            template.add("spans_partitioned", true);
+        }
     }
 
     /**
@@ -4768,6 +4777,7 @@ class TraceDAOImpl implements TraceDAO {
             template.add("filters_present", true);
         }
         template.add("has_legacy_scores", hasLegacyScores);
+        addSpansPartitionedFlag(template);
         if (canDedupByArgMax(template)) {
             template.add("dedup_by_argmax", true);
         }
@@ -4791,6 +4801,7 @@ class TraceDAOImpl implements TraceDAO {
         var logComment = getLogComment("get_trace_stats_feedback_scores", workspaceId, "", projectIds.size());
         var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORES_STATS).add("log_comment", logComment);
         template.add("has_legacy_scores", hasLegacyScores);
+        addSpansPartitionedFlag(template);
         if (uuidFromTime != null) {
             template.add("uuid_from_time", true);
         }
