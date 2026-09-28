@@ -886,7 +886,6 @@ export class PlaygroundPage {
 
   /** Set the model for a variant — public wrapper for setModelForVariant. */
   async selectModel(index: number, modelDisplayName: string): Promise<void> {
-    assertAllowedModelDisplayName(modelDisplayName);
     return test.step(`select model "${modelDisplayName}" for variant ${index}`, async () => {
       await this.setModelForVariant(index, modelDisplayName);
     });
@@ -1469,6 +1468,11 @@ export class PlaygroundPage {
   }
 
   private async setModelForVariant(index: number, modelDisplayName: string): Promise<void> {
+    // The choke point: selectModel, configureVariant and
+    // runSimplePromptAndAwaitResponse all land here, so guarding the public
+    // wrapper alone would leave the two paths the daily specs actually use
+    // unchecked.
+    assertAllowedModelDisplayName(modelDisplayName);
     const listbox = this.page.getByRole('listbox');
     // The trigger occasionally swallows the first click as a hover (surfacing a
     // tooltip instead of opening the popover), so retry the click until the

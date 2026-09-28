@@ -21,11 +21,12 @@
 export const ALLOWED_MODEL_DISPLAY_NAMES = [
   'Claude Haiku 4.5',
   'GPT 4o Mini',
-  // Request-shape only. playground-model-parameters asserts on the request the
-  // browser SENDS and never awaits a completion, and Sonnet 4.6 is the one model
-  // exposing both controls under test (thinking effort AND the sampling toggle);
-  // its newer siblings set supportsSamplingParams: false. Costs an input token,
-  // not a generation — allowed for that reason and no other.
+  // ensureModelAvailable's OpenRouter fallback returns this id as the display
+  // name, because that is what the Custom Provider renders in the picker.
+  'openai/gpt-4o-mini',
+  // playground-model-parameters only: it is the one model exposing both
+  // controls under test (thinking effort AND the sampling toggle), and the spec
+  // now stubs the completion at the browser, so selecting it bills nothing.
   'Claude Sonnet 4.6',
 ] as const;
 
@@ -48,6 +49,19 @@ const FORBIDDEN = [
   'pro',
 ];
 
+/**
+ * Models that reach a provider the spec itself seeded as unreachable, so the
+ * request is refused at the socket and bills nothing. Named explicitly rather
+ * than pattern-matched: "looks like a fake model" is exactly the judgement an
+ * allowlist exists to avoid making.
+ */
+const UNREACHABLE_PROVIDER_MODELS = ['unreachable-model', 'unresponsive-model'] as const;
+
+/** True when the model belongs to a spec-seeded provider that cannot bill. */
+export function isUnreachableProviderModel(name: string): boolean {
+  return (UNREACHABLE_PROVIDER_MODELS as readonly string[]).includes((name ?? '').trim());
+}
+
 function reject(kind: string, value: string, reason: string): never {
   throw new Error(
     `[llm-model-policy] refusing to select ${kind} "${value}": ${reason}. ` +
@@ -61,29 +75,40 @@ function reject(kind: string, value: string, reason: string): never {
  * that selects a model, so an unpinned or drifted picker fails the spec instead
  * of running on the provider's newest model.
  */
-export function assertAllowedModelDisplayName(displayName: string): void {
-  const value = (displayName ?? '').trim();
-  if (!value) reject('model', displayName, 'empty selection would leave the picker on its default');
+function assertAllowed(
+  kind: string,
+  value: string,
+  allowed: readonly string[],
+  emptyReason: string,
+): void {
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) reject(kind, value, emptyReason);
 
-  const lowered = value.toLowerCase();
+  // A model on a provider the spec seeded as unreachable costs nothing.
+  if (isUnreachableProviderModel(trimmed)) return;
+
+  const lowered = trimmed.toLowerCase();
   const hit = FORBIDDEN.find((f) => lowered.includes(f));
-  if (hit) reject('model', value, `matches the forbidden fragment "${hit}"`);
+  if (hit) reject(kind, trimmed, `matches the forbidden fragment "${hit}"`);
 
-  if (!(ALLOWED_MODEL_DISPLAY_NAMES as readonly string[]).includes(value)) {
-    reject('model', value, 'not on the allowlist');
-  }
+  if (!allowed.includes(trimmed)) reject(kind, trimmed, 'not on the allowlist');
+}
+
+/**
+ * Assert a model display name is one the suite may drive. Call this in every POM
+ * that selects a model, so an unpinned or drifted picker fails the spec instead
+ * of running on the provider's newest model.
+ */
+export function assertAllowedModelDisplayName(displayName: string): void {
+  assertAllowed(
+    'model',
+    displayName,
+    ALLOWED_MODEL_DISPLAY_NAMES,
+    'empty selection would leave the picker on its default',
+  );
 }
 
 /** The id variant, for models handed to the SDK instead of picked in the UI. */
 export function assertAllowedModelId(modelId: string): void {
-  const value = (modelId ?? '').trim();
-  if (!value) reject('model id', modelId, 'empty');
-
-  const lowered = value.toLowerCase();
-  const hit = FORBIDDEN.find((f) => lowered.includes(f));
-  if (hit) reject('model id', value, `matches the forbidden fragment "${hit}"`);
-
-  if (!(ALLOWED_MODEL_IDS as readonly string[]).includes(value)) {
-    reject('model id', value, 'not on the allowlist');
-  }
+  assertAllowed('model id', modelId, ALLOWED_MODEL_IDS, 'empty');
 }
