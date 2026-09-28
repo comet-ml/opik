@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ThreadTimestamps;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.threads.TraceThreadService;
@@ -16,12 +17,13 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @EagerSingleton
@@ -121,6 +123,11 @@ public class TraceThreadListener {
      * set by a PATCH had no trace_threads row. The Threads list inner-joins that table whenever a time range is set,
      * so such a thread was missing from the list while direct-open, which left-joins, still resolved it.
      *
+     * The thread row is built from the event rather than read back from traces: a read-after-write on a lagging
+     * replica could return nothing and drop the thread for good, since the closing job only acts on existing rows.
+     * Going through the creation path also derives the thread model id from the earliest trace id and reopens a thread
+     * that was already closed, as a POST into it would.
+     *
      * The thread the traces moved away from is intentionally left untouched: it keeps its own traces and is closed by
      * the regular closing job.
      *
@@ -128,7 +135,8 @@ public class TraceThreadListener {
      */
     @Subscribe
     public void onTracesUpdated(@NonNull TracesUpdated event) {
-        String threadId = event.traceUpdate().threadId();
+        TraceUpdate traceUpdate = event.traceUpdate();
+        String threadId = traceUpdate.threadId();
 
         if (StringUtils.isBlank(threadId)) {
             return;
@@ -137,23 +145,31 @@ public class TraceThreadListener {
         log.info("Received TracesUpdated event for workspace: '{}', projectIds: '[{}]' with threadId set. "
                 + "Processing trace thread registration", event.workspaceId(), event.projectIds());
 
-        Set<UUID> projectIds = Optional.ofNullable(event.traceIdToProjectId())
-                .filter(traceIdToProjectId -> !traceIdToProjectId.isEmpty())
+        Map<UUID, Set<UUID>> traceIdsByProject = Optional.ofNullable(event.traceIdToProjectId())
                 .map(traceIdToProjectId -> event.traceIds().stream()
-                        .map(traceIdToProjectId::get)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toSet()))
-                .filter(ids -> !ids.isEmpty())
-                .orElseGet(event::projectIds);
+                        .filter(traceIdToProjectId::containsKey)
+                        .collect(Collectors.groupingBy(traceIdToProjectId::get, Collectors.toSet())))
+                .filter(grouped -> !grouped.isEmpty())
+                .orElseGet(() -> event.projectIds().stream()
+                        .collect(Collectors.toMap(Function.identity(), projectId -> event.traceIds())));
 
-        Flux.fromIterable(projectIds)
-                .flatMap(projectId -> traceThreadService.registerThreadsIfMissing(projectId, Set.of(threadId)))
+        Flux.fromIterable(traceIdsByProject.entrySet())
+                .flatMap(entry -> {
+                    // UUIDv7 ordering is chronological, so the minimum trace id carries the earliest timestamp.
+                    var timestamps = ThreadTimestamps.builder()
+                            .firstTraceId(Collections.min(entry.getValue()))
+                            .maxLastUpdatedAt(Instant.now())
+                            .firstTraceSource(traceUpdate.source())
+                            .firstTraceEnvironment(traceUpdate.environment())
+                            .build();
+                    return traceThreadService.processTraceThreads(Map.of(threadId, timestamps), entry.getKey());
+                })
                 .doOnError(error -> log.error(
                         "Fail to process TracesUpdated event for workspace: '{}', projectIds: '{}', error: '{}'",
-                        event.workspaceId(), projectIds, error.getMessage()))
+                        event.workspaceId(), traceIdsByProject.keySet(), error.getMessage()))
                 .doOnComplete(() -> log.info(
                         "Completed processing TracesUpdated event for workspace: '{}', projectIds: '{}'",
-                        event.workspaceId(), projectIds))
+                        event.workspaceId(), traceIdsByProject.keySet()))
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
                         .put(RequestContext.USER_NAME, event.userName()))
                 .subscribe();

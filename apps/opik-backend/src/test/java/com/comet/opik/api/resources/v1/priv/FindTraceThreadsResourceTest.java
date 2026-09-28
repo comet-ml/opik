@@ -2620,6 +2620,97 @@ class FindTraceThreadsResourceTest {
                         assertThat(actualPage.content()).extracting(TraceThread::id).contains(updatedThreadId);
                     });
         }
+
+        @Test
+        @DisplayName("when a backdated trace is moved to a new thread, then the thread is listed within the trace's time range")
+        void whenBackdatedTraceUpdateSetsThreadId__thenThreadIsFoundWithinTraceTimeRange() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var updatedThreadId = UUID.randomUUID().toString();
+
+            // The thread model id must carry the trace id's timestamp, not the insert time, or this window excludes it
+            var backdatedTime = Instant.now().minus(Duration.ofDays(30));
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(UUID.randomUUID().toString())
+                    .id(idGenerator.generateId(backdatedTime))
+                    .build();
+
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            traceResourceClient.updateTrace(trace.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(updatedThreadId)
+                    .build(), apiKey, workspaceName);
+
+            var projectId = projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var queryParams = Map.of(
+                                "from_time", backdatedTime.minus(Duration.ofMinutes(10)).toString(),
+                                "to_time", backdatedTime.plus(Duration.ofMinutes(10)).toString());
+
+                        var actualPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
+                                List.of(), List.of(), queryParams);
+
+                        assertThat(actualPage.content()).extracting(TraceThread::id).contains(updatedThreadId);
+                    });
+        }
+
+        @Test
+        @DisplayName("when a trace is moved into a closed thread, then the thread is reopened")
+        void whenTraceUpdateMovesTraceIntoClosedThread__thenThreadIsReopened() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var closedThreadId = UUID.randomUUID().toString();
+
+            var closedThreadTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(closedThreadId)
+                    .build();
+            var movedTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(UUID.randomUUID().toString())
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(closedThreadTrace, movedTrace), apiKey, workspaceName);
+
+            var projectId = projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+
+            traceResourceClient.closeTraceThread(closedThreadId, null, projectName, apiKey, workspaceName);
+
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(traceResourceClient
+                            .getTraceThread(closedThreadId, projectId, apiKey, workspaceName).status())
+                            .isEqualTo(TraceThreadStatus.INACTIVE));
+
+            traceResourceClient.updateTrace(movedTrace.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(closedThreadId)
+                    .build(), apiKey, workspaceName);
+
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(traceResourceClient
+                            .getTraceThread(closedThreadId, projectId, apiKey, workspaceName).status())
+                            .isEqualTo(TraceThreadStatus.ACTIVE));
+        }
     }
 
 }
