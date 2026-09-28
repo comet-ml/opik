@@ -679,6 +679,52 @@ class AlertResourceTest {
                     .containsEntry(WINDOW_CONFIG_KEY, "900");
         }
 
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("operatorValidationByEventType")
+        @DisplayName("update applies the same operator gating as create")
+        void updateAlert__operatorValidationIsScopedToTheEventTypesThatUseIt(
+                String name, AlertEventType eventType, String operator, int expectedCreateStatus) {
+            // validateThresholdConfigs runs on both paths, so the gating has to hold on both; an update is a
+            // full replacement and could regress independently of create.
+            var valid = generateAlert().toBuilder()
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(thresholdConfig("0.5", "3600")))
+                            .build()))
+                    .build();
+            var alertId = alertResourceClient.createAlert(valid, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var replacement = valid.toBuilder()
+                    .id(alertId)
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(eventType)
+                            .triggerConfigs(List.of(operatorConfig(eventType, operator)))
+                            .build()))
+                    .build();
+
+            // Create answers 201 where update answers 204; the rejection status is the same on both.
+            var expectedStatus = expectedCreateStatus == HttpStatus.SC_CREATED
+                    ? HttpStatus.SC_NO_CONTENT
+                    : expectedCreateStatus;
+            alertResourceClient.updateAlert(alertId, replacement, mock.getLeft(), mock.getRight(), expectedStatus);
+        }
+
+        private AlertTriggerConfig operatorConfig(AlertEventType eventType, String operator) {
+            var configValue = new HashMap<String, String>();
+            configValue.put(THRESHOLD_CONFIG_KEY, "0.5");
+            configValue.put(WINDOW_CONFIG_KEY, "900");
+            configValue.put(OPERATOR_CONFIG_KEY, operator);
+            if (eventType == AlertEventType.TRACE_FEEDBACK_SCORE
+                    || eventType == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
+                configValue.put(NAME_CONFIG_KEY, "quality");
+            }
+            return AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.thresholdTypeFor(eventType).orElseThrow())
+                    .configValue(configValue)
+                    .build();
+        }
+
         @Test
         @DisplayName("when a config is sent with the enum-name operator, then it is stored as the symbol")
         void createAlert__whenOperatorIsTheEnumName__thenStoredNormalized() {
@@ -735,23 +781,10 @@ class AlertResourceTest {
         @DisplayName("operator validation applies only where the job reads the operator")
         void createAlert__operatorValidationIsScopedToTheEventTypesThatUseIt(
                 String name, AlertEventType eventType, String operator, int expectedStatus) {
-            var configValue = new HashMap<String, String>();
-            configValue.put(THRESHOLD_CONFIG_KEY, "0.5");
-            configValue.put(WINDOW_CONFIG_KEY, "900");
-            configValue.put(OPERATOR_CONFIG_KEY, operator);
-            if (eventType == AlertEventType.TRACE_FEEDBACK_SCORE
-                    || eventType == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
-                configValue.put(NAME_CONFIG_KEY, "quality");
-            }
-
-            var config = AlertTriggerConfig.builder()
-                    .type(AlertTriggerConfigType.thresholdTypeFor(eventType).orElseThrow())
-                    .configValue(configValue)
-                    .build();
             var alert = generateAlert().toBuilder()
                     .triggers(List.of(AlertTrigger.builder()
                             .eventType(eventType)
-                            .triggerConfigs(List.of(config))
+                            .triggerConfigs(List.of(operatorConfig(eventType, operator)))
                             .build()))
                     .build();
 
