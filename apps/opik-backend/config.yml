@@ -257,8 +257,7 @@ customCharts:
   enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it every row keeps its raw id rather
-  #   than labelling some and not others. Production p99 is 2 datasets / 11 projects per workspace, worst case
-  #   4120, so this guards a pathological result set rather than limiting anyone.
+  #   than labelling some and not others.
   maxNameLookupIds: ${CUSTOM_CHARTS_MAX_NAME_LOOKUP_IDS:-5000}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health

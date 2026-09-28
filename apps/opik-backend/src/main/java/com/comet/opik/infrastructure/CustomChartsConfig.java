@@ -44,8 +44,7 @@ public class CustomChartsConfig {
 
     /**
      * Beyond this many distinct ids in one result, name enrichment resolves none and every row keeps its raw id,
-     * rather than labelling some rows and not others. Production p99 is 2 datasets and 11 projects per workspace
-     * against a worst case of 4,120, so the default guards a pathological result set rather than limiting anyone.
+     * rather than labelling some rows and not others.
      */
     @JsonProperty
     private @Min(1) @Max(50_000) int maxNameLookupIds = 5_000;
