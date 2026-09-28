@@ -9,6 +9,8 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Map;
+
 /**
  * Builds the {@code JSONEachRow} row for a feedback score, for the write path behind
  * {@code bulkInsert.v2ClientEnabled}.
@@ -21,7 +23,7 @@ import org.apache.commons.lang3.StringUtils;
 class FeedbackScoreJsonRowMapper {
 
     /**
-     * The row as {@code JSONEachRow}, rather than 8 named parameters per row — 10 for the authored
+     * The row as {@code JSONEachRow}, rather than 9 named parameters per row — 11 for the authored
      * table.
      *
      * <p>Which table it is destined for is the caller's choice, but the two are not independent:
@@ -51,6 +53,7 @@ class FeedbackScoreJsonRowMapper {
         node.put("value", score.value().toPlainString());
         node.put("reason", StringUtils.stripToEmpty(score.reason()));
         node.put("source", score.source().getValue());
+        node.put("metadata", serializeMetadata(score.metadata()));
 
         if (normalizedAuthor != null) {
             node.put("author", normalizedAuthor);
@@ -67,5 +70,17 @@ class FeedbackScoreJsonRowMapper {
         // a zero there would make every later score for the same key lose to the original row. This is
         // why the insert sets input_format_defaults_for_omitted_fields.
         return node;
+    }
+
+    /**
+     * The {@code metadata} cell. The R2DBC binder calls this too, so the two writers cannot drift apart
+     * on it: an absent or empty map is {@code ""}, the column DEFAULT and what rows written before the
+     * column existed hold, and anything else is the map as JSON.
+     */
+    String serializeMetadata(@Nullable Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return "";
+        }
+        return JsonUtils.writeValueAsString(metadata);
     }
 }

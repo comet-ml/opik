@@ -8,7 +8,6 @@ import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -30,7 +29,6 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -359,13 +357,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return scoreBatchOf(entityType, List.of(item), author);
     }
 
-    private String serializeMetadata(Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
-            return "";
-        }
-        return JsonUtils.writeValueAsString(metadata);
-    }
-
     @Override
     @WithSpan
     public Mono<Long> scoreBatchOf(@NonNull EntityType entityType,
@@ -411,7 +402,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     /**
      * The {@link #BULK_INSERT_FEEDBACK_SCORE} rows streamed as JSONEachRow through the v2 client rather
-     * than bound as 8 named parameters per row — 10 for the authored table.
+     * than bound as 9 named parameters per row — 11 for the authored table.
      *
      * <p>Batch size here is not capped the way the other bulk paths are: a feedback score batch is 1000
      * items at most on its own endpoints, but {@code ExperimentItemBulkIngestionService} accumulates up
@@ -460,7 +451,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("name" + i, feedbackScoreBatchItem.name())
                     .bind("value" + i, feedbackScoreBatchItem.value().toString())
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
-                    .bind("metadata" + i, serializeMetadata(feedbackScoreBatchItem.metadata()))
+                    .bind("metadata" + i,
+                            FeedbackScoreJsonRowMapper.serializeMetadata(feedbackScoreBatchItem.metadata()))
                     .bind("reason" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.reason()))
                     .bind("category_name" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.categoryName()));
 
