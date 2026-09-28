@@ -15,9 +15,21 @@ const YAML_OPTIONS = { lineWidth: 0, version: "1.1" } as const;
 const normalizeLineEndings = (_key: unknown, value: unknown) =>
   typeof value === "string" ? value.replace(/\r\n/g, "\n") : value;
 
+// yaml double-quotes any string containing DEL or a C1 control but emits the
+// character raw, which PyYAML rejects (DEL) or reads as a line break (NEL).
+// Double quotes are the only place they can appear, so escaping is always valid.
+const escapeDelAndC1 = (yaml: string) =>
+  yaml.replace(/[\x7f-\x9f]/g, (char) =>
+    char === "\x85"
+      ? "\\N"
+      : `\\x${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
 // stringify returns undefined for undefined input (e.g. a trace with no output).
 const toYaml = (data: object): string =>
-  (stringifyYaml(data, normalizeLineEndings, YAML_OPTIONS) ?? "").trim();
+  escapeDelAndC1(
+    stringifyYaml(data, normalizeLineEndings, YAML_OPTIONS) ?? "",
+  ).trim();
 
 export const generateSyntaxHighlighterCode = (
   data: object,
