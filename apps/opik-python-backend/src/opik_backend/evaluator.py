@@ -13,6 +13,12 @@ from opik_backend.score_validation import has_usable_score
 # Built-ins the scorer injects rather than resolving from a trace/span path.
 RESERVED_BUILT_INS = frozenset({"spans"})
 
+# The signature read parses user source in the shared web process, where ast.parse
+# holds the GIL for its whole duration. Skipped for a metric far larger than any real
+# one, which is the behaviour before the fill existed. Counted in characters: a byte
+# count would copy the source, and raises on a lone surrogate.
+MAX_CODE_LENGTH_FOR_SIGNATURE_READ = 64 * 1024
+
 # Environment variable to control execution strategy
 EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
 
@@ -86,7 +92,11 @@ def execute_evaluator_python():
     # `spans` is excluded because it is not path-resolved: the scorer injects it only
     # when the rule declares it, so its absence always means the rule never asked for
     # it -- a configuration error that should keep failing by name, not be filled.
-    if isinstance(data, dict) and payload_type != PayloadType.TRACE_THREAD.value:
+    if (
+        isinstance(data, dict)
+        and payload_type != PayloadType.TRACE_THREAD.value
+        and len(code) <= MAX_CODE_LENGTH_FOR_SIGNATURE_READ
+    ):
         for name in required_score_params(code):
             if name not in RESERVED_BUILT_INS:
                 data.setdefault(name, None)

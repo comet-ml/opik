@@ -1,6 +1,7 @@
 import pytest
 from opik_backend.executor_docker import DockerExecutor
 from opik_backend.executor_process import ProcessExecutor
+from opik_backend.evaluator import MAX_CODE_LENGTH_FOR_SIGNATURE_READ
 from opik_backend.payload_types import PayloadType
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
@@ -1030,3 +1031,18 @@ class RaisesHostile(base_metric.BaseMetric):
 
     assert response.status_code == 400
     assert "Hostile: my own message" in str(response.json["error"])
+
+
+# Past the size bound the signature is not read, so the call dispatches exactly as it
+# did before the fill: a missing required argument fails and names itself, rather
+# than being filled.
+@process_only
+def test_oversized_metric_dispatches_without_the_fill(client):
+    padding = "# " + "x" * MAX_CODE_LENGTH_FOR_SIGNATURE_READ + "\n"
+    response = client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": padding + REQUIRED_METADATA_METRIC
+    })
+
+    assert response.status_code == 400
+    assert "required positional argument: 'metadata'" in str(response.json["error"])
