@@ -460,7 +460,7 @@ class RemoteAuthServiceTest {
     @ParameterizedTest
     @MethodSource("unauthorizedArgs")
     void testSessionAuthUnauthorized(int remoteAuthStatusCode, Class<? extends Exception> expectedExceptionClass,
-            String expectedMessage) {
+            String expectedMessage, int expectedStatus) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var sessionTokenValue = "session-" + UUID.randomUUID();
         WIRE_MOCK.server().stubFor(post("/opik/auth-session")
@@ -470,15 +470,20 @@ class RemoteAuthServiceTest {
                                 new ReactServiceErrorResponse("test error message",
                                         remoteAuthStatusCode)))));
 
-        assertThatThrownBy(() -> remoteAuthService.authenticate(
+        var thrown = catchThrowable(() -> remoteAuthService.authenticate(
                 getHeadersMock(workspaceName, ""),
                 sessionCookie(sessionTokenValue),
                 ContextInfoHolder.builder()
                         .uriInfo(createMockUriInfo("/priv/something"))
                         .method("GET")
-                        .build()))
+                        .build()));
+
+        assertThat(thrown)
                 .isExactlyInstanceOf(expectedExceptionClass)
                 .hasMessage(expectedMessage);
+        // Asserted here too: /opik/auth-session is the route the production 404 arrived on, so leaving the
+        // session path on class-and-message alone would not have caught the status this PR exists to fix.
+        assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
     }
 
     static Stream<Arguments> nonJsonErrorBodyArgs() {

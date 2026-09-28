@@ -337,6 +337,14 @@ class RemoteAuthService implements AuthService {
      * or a stack trace, not necessarily our own JSON), so it must not be able to flood the logs or carry an unbounded
      * amount of upstream detail into them.
      */
+    /**
+     * Collapses line breaks so upstream-controlled text cannot forge extra records in a log that is read
+     * line by line. The value is already bounded — it is a parsed field, not the raw body.
+     */
+    private static String singleLine(String value) {
+        return value == null ? "" : value.replaceAll("[\\r\\n]+", " ");
+    }
+
     private static String readBodySafely(Response response) {
         try {
             if (!isEntityReadable(response)) {
@@ -535,11 +543,14 @@ class RemoteAuthService implements AuthService {
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         } else if (status == Response.Status.NOT_FOUND.getStatusCode()) {
             // EM signals "user is not a member of organization" with 404; that is an entitlement failure,
-            // not a server fault. Logged rather than mapped silently because a 404 is also what a wrong
+            // not a server fault. Logged rather than mapped silently because a 404 is equally what a wrong
             // reactService URL or a renamed EM endpoint looks like, and that would otherwise present as
             // every caller losing workspace access at once with nothing to diagnose it from.
-            log.warn("Not entitled to workspace, or react service endpoint is wrong; body: '{}'",
-                    readBodySafely(response));
+            //
+            // The parsed message, not the raw body: this branch is now reached by ordinary non-member
+            // traffic rather than only by faults, so it must not put arbitrary upstream bytes in a log line.
+            log.warn("React service answered 404 while authenticating, reason: '{}'",
+                    singleLine(readErrorMessage(response, NOT_ALLOWED_TO_ACCESS_WORKSPACE)));
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         } else if (status == Response.Status.BAD_REQUEST.getStatusCode()) {
