@@ -302,7 +302,7 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
 
     prompt = "Test video"
 
-    with pytest.raises(openai.OpenAIError) as exc_info:
+    with pytest.raises((openai.BadRequestError, openai.NotFoundError)) as exc_info:
         _ = wrapped_client.videos.create_and_poll(
             model="invalid-model-name",
             prompt=prompt,
@@ -311,8 +311,8 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
 
     opik.flush_tracker()
 
-    # OpenAI has changed the status code for an unknown video model before
-    # (400 -> 404), so assert the raised exception is recorded, not a fixed subclass.
+    # OpenAI has rejected an unknown video model with both 400 and 404, so accept
+    # either, but not auth/quota errors that would otherwise mask a broken setup.
     expected_exception_type = type(exc_info.value).__name__
 
     assert len(fake_backend.trace_trees) == 1
@@ -666,7 +666,7 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
 
     prompt = "Test video"
 
-    with pytest.raises(openai.OpenAIError) as exc_info:
+    with pytest.raises((openai.BadRequestError, openai.NotFoundError)) as exc_info:
         _ = await wrapped_client.videos.create_and_poll(
             model="invalid-model-name",
             prompt=prompt,
@@ -675,8 +675,8 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
 
     opik.flush_tracker()
 
-    # OpenAI has changed the status code for an unknown video model before
-    # (400 -> 404), so assert the raised exception is recorded, not a fixed subclass.
+    # OpenAI has rejected an unknown video model with both 400 and 404, so accept
+    # either, but not auth/quota errors that would otherwise mask a broken setup.
     expected_exception_type = type(exc_info.value).__name__
 
     assert len(fake_backend.trace_trees) == 1
