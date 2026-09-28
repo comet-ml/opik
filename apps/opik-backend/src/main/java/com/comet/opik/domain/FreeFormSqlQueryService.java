@@ -32,7 +32,7 @@ import java.util.concurrent.CompletableFuture;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * Orchestrates caller-supplied, read-only free-form SQL bounded to a single workspace/project. First account is the
+ * Orchestrates caller-supplied, read-only free-form SQL bounded to a single workspace/project. First consumer is the
  * Agent Insights subagent, but the service is intentionally feature-agnostic.
  *
  * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}); if any node is a

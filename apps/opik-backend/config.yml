@@ -251,12 +251,13 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 # those describe a database connection and keep the same shape as the account Agent Insights uses.
 customCharts:
   #  Default: empty (feature off everywhere)
-  #  Description: Comma-separated workspace ids allowed to use Custom Charts. Membership also routes the
-  #   workspace's free-form SQL to the wider ClickHouse account. Requires serviceToggles.ollieEnabled, which
+  #  Description: Comma-separated workspace ids allowed to call POST /v1/internal/analytics-queries, which runs as
+  #   the wider ClickHouse account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account
+  #   for every workspace. Requires serviceToggles.ollieEnabled, which
   #   gates the endpoint, and the account to be provisioned first (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
   enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
   #  Default: 5000
-  #  Description: Cap on distinct ids resolved to names in one result. Above it every row keeps its raw id rather
+  #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
   maxNameLookupIds: ${CUSTOM_CHARTS_MAX_NAME_LOOKUP_IDS:-5000}
 

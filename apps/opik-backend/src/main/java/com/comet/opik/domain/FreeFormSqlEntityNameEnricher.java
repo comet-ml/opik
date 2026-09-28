@@ -14,7 +14,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -51,29 +51,33 @@ public class FreeFormSqlEntityNameEnricher {
         this.customChartsConfig = customChartsConfig;
     }
 
+    /**
+     * Adds a name column only for ids that resolved. An id that did not (another workspace, deleted, or over
+     * {@code maxNameLookupIds}) gets no name column, so a consumer can tell a missing name from a real one.
+     */
     public List<JsonNode> enrich(@NonNull List<JsonNode> rows, @NonNull String workspaceId) {
-        Map<String, Map<UUID, String>> labelsByColumn = new HashMap<>();
+        Map<String, Set<UUID>> idsByColumn = new HashMap<>();
         ID_TO_NAME_COLUMNS.keySet().forEach(idColumnType -> {
-            Map<UUID, String> labels = rawLabels(rows, idColumnType);
-            if (!labels.isEmpty()) {
-                labelsByColumn.put(idColumnType, labels);
+            Set<UUID> ids = ids(rows, idColumnType);
+            if (!ids.isEmpty()) {
+                idsByColumn.put(idColumnType, ids);
             }
         });
-        if (labelsByColumn.isEmpty()) {
+        if (idsByColumn.isEmpty()) {
             return rows;
         }
 
-        resolveNames(labelsByColumn, workspaceId);
-        rows.forEach(row -> labelsByColumn.forEach((idColumn, labels) -> addName(row, idColumn, labels)));
+        Map<String, Map<UUID, String>> namesByColumn = resolveNames(idsByColumn, workspaceId);
+        rows.forEach(row -> namesByColumn.forEach((idColumn, names) -> addName(row, idColumn, names)));
         return rows;
     }
 
-    private void resolveNames(Map<String, Map<UUID, String>> labelsByColumn, String workspaceId) {
-        template.inTransaction(READ_ONLY, connection -> {
-            labelsByColumn.forEach(
-                    (idColumnType, namesByIds) -> namesByIds
-                            .putAll(names(connection, idColumnType, namesByIds.keySet(), workspaceId)));
-            return null;
+    private Map<String, Map<UUID, String>> resolveNames(Map<String, Set<UUID>> idsByColumn, String workspaceId) {
+        return template.inTransaction(READ_ONLY, connection -> {
+            Map<String, Map<UUID, String>> namesByColumn = new HashMap<>();
+            idsByColumn.forEach((idColumnType, ids) -> namesByColumn.put(idColumnType,
+                    names(connection, idColumnType, ids, workspaceId)));
+            return namesByColumn;
         });
     }
 
@@ -102,19 +106,18 @@ public class FreeFormSqlEntityNameEnricher {
         return nameById;
     }
 
-    private static Map<UUID, String> rawLabels(List<JsonNode> rows, String idColumnType) {
-        Map<UUID, String> labels = new LinkedHashMap<>();
-        rows.forEach(row -> parseId(row, idColumnType)
-                .ifPresent(id -> labels.putIfAbsent(id, row.get(idColumnType).asText())));
-        return labels;
+    private static Set<UUID> ids(List<JsonNode> rows, String idColumnType) {
+        Set<UUID> ids = new LinkedHashSet<>();
+        rows.forEach(row -> parseId(row, idColumnType).ifPresent(ids::add));
+        return ids;
     }
 
-    private static void addName(JsonNode row, String idColumn, Map<UUID, String> labels) {
+    private static void addName(JsonNode row, String idColumn, Map<UUID, String> names) {
         String nameColumn = ID_TO_NAME_COLUMNS.get(idColumn);
         if (!(row instanceof ObjectNode object) || row.has(nameColumn)) {
             return;
         }
-        parseId(row, idColumn).ifPresent(id -> object.put(nameColumn, labels.get(id)));
+        parseId(row, idColumn).map(names::get).ifPresent(name -> object.put(nameColumn, name));
     }
 
     private static Optional<UUID> parseId(JsonNode row, String idColumn) {

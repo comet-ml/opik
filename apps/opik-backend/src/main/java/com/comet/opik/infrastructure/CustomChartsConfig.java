@@ -43,7 +43,7 @@ public class CustomChartsConfig {
     }
 
     /**
-     * Beyond this many distinct ids in one result, name enrichment resolves none and every row keeps its raw id,
+     * Beyond this many distinct ids in one result, name enrichment resolves none and no row gets a name column,
      * rather than labelling some rows and not others.
      */
     @JsonProperty

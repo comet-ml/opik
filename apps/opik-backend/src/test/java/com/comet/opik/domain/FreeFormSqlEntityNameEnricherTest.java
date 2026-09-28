@@ -84,7 +84,8 @@ class FreeFormSqlEntityNameEnricherTest {
                 CALLER_WORKSPACE);
 
         assertThat(rows.get(0).get("dataset_name").asText()).isEqualTo("own dataset");
-        assertThat(rows.get(1).get("dataset_name").asText()).isEqualTo(foreignDataset.toString());
+        // Unresolved: no name column rather than the raw id posing as one.
+        assertThat(rows.get(1).has("dataset_name")).isFalse();
 
         var workspace = ArgumentCaptor.forClass(String.class);
         var ids = ArgumentCaptor.forClass(Set.class);
@@ -119,15 +120,14 @@ class FreeFormSqlEntityNameEnricherTest {
     }
 
     @Test
-    @DisplayName("above the cap the lookup is skipped and rows keep their raw ids")
+    @DisplayName("above the cap the lookup is skipped and rows get no name column")
     void aboveTheCapLookupIsSkipped() {
         var ids = idsFor(3);
 
         var rows = enricherWithCap(2).enrich(rowsFor(ids), CALLER_WORKSPACE);
 
         verify(datasetDAO, never()).findByIds(anySet(), anyString());
-        assertThat(rows).allSatisfy(row -> assertThat(row.get("dataset_name").asText())
-                .isEqualTo(row.get("dataset_id").asText()));
+        assertThat(rows).allSatisfy(row -> assertThat(row.has("dataset_name")).isFalse());
     }
 
     private FreeFormSqlEntityNameEnricher enricherWithCap(int maxNameLookupIds) {
