@@ -36,6 +36,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -43,6 +44,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -85,6 +87,11 @@ class SpansPostCutoverReadMappingTest {
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+    /** The two column encodings the successor changes, and the ones every assertion here reads back through. */
+    private static final Map<String, String> SUCCESSOR_ENCODINGS = Map.of(
+            "parent_span_id", "FixedString(36)",
+            "usage", "Map(String, Int64)");
 
     private final Network network = Network.newNetwork();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer(false,
@@ -294,32 +301,38 @@ class SpansPostCutoverReadMappingTest {
     }
 
     /**
-     * Puts the partitioned successor under the {@code spans} name the way the cutover's {@code EXCHANGE} step does: it
-     * has no public API, and the app has to boot against it. Idempotent, because the estate will change — once the
-     * cutover migration lands, {@code spans} <em>is</em> the successor and there is nothing to swap.
+     * Puts the successor under the {@code spans} name the way the cutover's {@code EXCHANGE} step does: it has no
+     * public API, and the app has to boot against it. Idempotent, because the estate will change — once the cutover
+     * migration lands, {@code spans} <em>is</em> the successor and there is nothing to swap.
      *
-     * <p>The postcondition is what keeps the suite honest: on the table the successor replaces, an absent parent is
-     * already {@code ''} and the counts are already {@code Int32}, so every assertion here would pass without
-     * exercising anything.
+     * <p>Both the skip and the postcondition read the column encodings themselves rather than a proxy for them, since
+     * they are what the suite exercises: on the table the successor replaces, an absent parent is already {@code ''}
+     * and the counts are already {@code Int32}, so every assertion here would pass without exercising anything.
      */
     private void installPartitionedSuccessorUnderSpans() {
-        if (!spansPartitionKey().contains("id_at")) {
+        if (!SUCCESSOR_ENCODINGS.equals(spansEncodings())) {
             execute("EXCHANGE TABLES spans AND spans_local_v2 ON CLUSTER '{cluster}'");
         }
 
-        assertThat(spansPartitionKey())
-                .as("`spans` must be the partitioned successor for this suite to assert against its row encoding")
-                .contains("id_at");
+        assertThat(spansEncodings())
+                .as("`spans` must be the successor, or every assertion here passes without exercising anything")
+                .isEqualTo(SUCCESSOR_ENCODINGS);
     }
 
-    private String spansPartitionKey() {
-        return template.nonTransaction(connection -> Mono
+    /** The stored type of each column in {@link #SUCCESSOR_ENCODINGS}, as ClickHouse renders it. */
+    private Map<String, String> spansEncodings() {
+        return template.nonTransaction(connection -> Flux
                 .from(connection.createStatement("""
-                        SELECT partition_key AS value
-                        FROM system.tables
-                        WHERE database = :database AND name = 'spans'
-                        """).bind("database", DATABASE_NAME).execute())
-                .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("value", String.class)))))
+                        SELECT name, type
+                        FROM system.columns
+                        WHERE database = :database AND table = 'spans' AND name IN :names
+                        """)
+                        .bind("database", DATABASE_NAME)
+                        .bind("names", SUCCESSOR_ENCODINGS.keySet().toArray(String[]::new))
+                        .execute())
+                .flatMap(result -> result.map(
+                        (row, ignored) -> Map.entry(row.get("name", String.class), row.get("type", String.class))))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue))
                 .block();
     }
 
