@@ -1111,6 +1111,27 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code experiment_items_array}. The {@code argMax} tiebreaker on
      * {@code dataset_version_id} matches single-branch's "latest version wins" semantic
      * ({@code dataset_items_(aggr_)resolved} orders by {@code dataset_version_id} DESC).
+     *
+     * <p><b>The raw paging scan is keyed once, not re-inlined per reference.</b>
+     * {@code top_dataset_items_raw} full-scans the experiment's {@code experiment_items},
+     * dedupes with {@code LIMIT 1 BY}, groups and applies the page limit. As a plain table CTE
+     * ClickHouse re-inlines it at every reference, and it is referenced by
+     * {@code experiment_items_scope} and by {@code experiment_items_trace_scope} — the latter
+     * referenced five more times — so the scan ran roughly six times per page. Both reference
+     * sites therefore key on
+     * {@code IN (SELECT arrayJoin((SELECT groupArray(dataset_item_id) FROM top_dataset_items_raw)))}:
+     * the inner scalar subquery is evaluated once and cached for the whole query. This is the
+     * same idiom {@code TraceDAO} and {@code SpanDAO} use for their {@code page_ids} aggregates
+     * (see {@code TraceDAO}'s {@code SELECT_BY_PROJECT_ID} javadoc) — keep the three in step.
+     * Verified on a 100k-item un-aggregated experiment: ~3.0x fewer rows read per page, and
+     * ~2.6x faster on a full paged read.
+     *
+     * <p>A ClickHouse upgrade must re-verify the behaviors this relies on (validated on 26.3):
+     * scalar-subquery caching (one evaluation reused across both reference sites — if the cache
+     * stops applying, results stay correct but every page silently regresses to re-running the
+     * whole paging scan per reference) and primary-key pruning of the materialized IN-set.
+     * Correctness does not depend on the caching; the entire benefit does, and nothing in the
+     * query or the test suite fails if it stops applying.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
             WITH legacy_dataset_item_aliases AS (
@@ -1184,7 +1205,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	LEFT JOIN legacy_dataset_item_aliases AS lookup_div ON lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
             	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
-            	<if(push_top_limit_raw)>AND ei.dataset_item_id IN (SELECT dataset_item_id FROM top_dataset_items_raw)<endif>
+            	<if(push_top_limit_raw)>AND ei.dataset_item_id IN (SELECT arrayJoin((SELECT groupArray(dataset_item_id) FROM top_dataset_items_raw)))<endif>
             	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
             	LIMIT 1 BY ei.id
             ), experiment_items_trace_scope AS (
@@ -1193,7 +1214,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
                 WHERE ei.workspace_id = :workspace_id
                 <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
-                <if(push_top_limit_raw)>AND ei.dataset_item_id IN (SELECT dataset_item_id FROM top_dataset_items_raw)<endif>
+                <if(push_top_limit_raw)>AND ei.dataset_item_id IN (SELECT arrayJoin((SELECT groupArray(dataset_item_id) FROM top_dataset_items_raw)))<endif>
             ), experiment_item_aggr_trace_scope AS (
                 SELECT DISTINCT trace_id
                 FROM experiment_item_aggregates ei
