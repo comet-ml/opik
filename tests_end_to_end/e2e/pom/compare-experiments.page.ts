@@ -169,6 +169,105 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * The output text as the row-detail panel renders it, with every inline image
+   * already replaced by its `[image_N]` placeholder.
+   *
+   * Read off the panel rather than the grid cell behind it: the grid shows a
+   * truncated projection, and the placeholder numbering is only meaningful next
+   * to the thumbnails, which render in the panel alone.
+   */
+  async readPanelOutputText(): Promise<string> {
+    return test.step('read the output text in the row-detail panel', async () => {
+      const output = this.panelOutputBlock;
+      // Count first: every thumbnail is also labelled with its placeholder, so a
+      // locator that widened to pick one of those up would return
+      // "Base64: [image_0]" and compare it happily against the output line.
+      await expect(output, 'the rendered output carrying image placeholders').toHaveCount(1);
+      await output.scrollIntoViewIfNeeded();
+      return ((await output.textContent()) ?? '').trim();
+    });
+  }
+
+  /**
+   * The rendered output line, in either of the two ways the panel can show it.
+   *
+   * `p` is the prettified view (the default, a markdown paragraph); `.cm-line`
+   * is the raw JSON view behind the same toggle. Matching both keeps the spec
+   * independent of which one a session happens to open in, and either way the
+   * element type is what excludes the thumbnail labels — those are spans, and
+   * they carry the very same `[image_N]` tokens.
+   */
+  private get panelOutputBlock(): Locator {
+    return this.rowPanel.locator('p, .cm-line').filter({ hasText: /\[image_\d+\]/ });
+  }
+
+  /**
+   * One inline-image thumbnail in the row-detail panel, addressed by the
+   * placeholder token it is labelled with.
+   *
+   * By placeholder, never by position. `AttachmentsList` re-sorts by media type
+   * and deduplicates by URL before rendering, so display order tracks neither
+   * the order the images appeared in the output nor the order they were
+   * numbered in — an index-based locator would be asserting on that sort. The
+   * alt text is the only thing tying a rendered picture back to the token in the
+   * text, which is exactly the mapping OPIK-4954 fixed.
+   */
+  panelMediaThumbnail(placeholder: string): Locator {
+    return this.rowPanel.locator(`img[alt="Base64: ${placeholder}"]`);
+  }
+
+  /** Every inline-image thumbnail in the row-detail panel. */
+  get panelMediaThumbnails(): Locator {
+    return this.rowPanel.locator('img[alt^="Base64: "]');
+  }
+
+  /**
+   * Assert one thumbnail resolves to one exact picture.
+   *
+   * `toHaveCount(1)` before reading the `src`, so an ambiguous match fails loudly
+   * instead of silently asserting against whichever element came first.
+   */
+  async expectThumbnailResolvesTo(placeholder: string, expectedUrl: string): Promise<void> {
+    await test.step(`${placeholder} resolves to its own picture`, async () => {
+      const thumbnail = this.panelMediaThumbnail(placeholder);
+      await expect(thumbnail, `exactly one thumbnail labelled ${placeholder}`).toHaveCount(1);
+      await expect(thumbnail, `the picture ${placeholder} resolves to`).toHaveAttribute(
+        'src',
+        expectedUrl,
+      );
+    });
+  }
+
+  /**
+   * The thumbnail actually decoded, rather than rendering as a broken image.
+   *
+   * A wrong `src` and an unreadable one both leave an `<img>` in the DOM, so the
+   * attribute assertion alone cannot tell "resolved to the right picture" from
+   * "resolved to a 404".
+   */
+  async expectThumbnailDecodes(placeholder: string): Promise<void> {
+    await test.step(`${placeholder} decodes`, async () => {
+      const thumbnail = this.panelMediaThumbnail(placeholder);
+      await expect(thumbnail, `${placeholder} is visible`).toBeVisible();
+      // Scrolled into view first: the thumbnails are `loading="lazy"`, so one
+      // that has never entered the viewport reports naturalWidth 0 whether its
+      // source is good or not.
+      await thumbnail.scrollIntoViewIfNeeded();
+      await expect
+        .poll(
+          async () => thumbnail.evaluate((img) => (img as HTMLImageElement).naturalWidth),
+          { message: `naturalWidth of the ${placeholder} thumbnail` },
+        )
+        .toBeGreaterThan(0);
+    });
+  }
+
+  /** The compare row-detail slide-over. */
+  private get rowPanel(): Locator {
+    return this.page.getByTestId('compare-experiments');
+  }
+
   async expectExperimentColumnsInConfiguration(experiments: { id: string; name: string }[]): Promise<void> {
     await test.step('each experiment is a named column on the Configuration tab', async () => {
       for (const exp of experiments) {
