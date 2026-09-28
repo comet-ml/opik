@@ -599,7 +599,7 @@ class AlertServiceImpl implements AlertService {
         }
     }
 
-    // The event types whose configs carry a meaningful operator, i.e. the ones MetricsAlertJob reads it for.
+    // The event types whose operator MetricsAlertJob reads.
     // Everywhere else it hardcodes GREATER_THAN and never looks at the stored value.
     private static final Set<AlertEventType> OPERATOR_BEARING_EVENT_TYPES = Set.of(
             AlertEventType.TRACE_FEEDBACK_SCORE, AlertEventType.TRACE_THREAD_FEEDBACK_SCORE);
@@ -610,7 +610,7 @@ class AlertServiceImpl implements AlertService {
     //
     // Blank counts as unrecognised, not as absent: normalizedOperator returns null for it, so a stored "  "
     // would reach Operator.fromString on a feedback-score alert and throw there on every run. Rejecting it
-    // here is the only point its author finds out.
+    // here is the only point at which its author finds out.
     private static void validateOperator(String operator, AlertTriggerConfigType type) {
         if (operator != null && AlertTriggerConfig.normalizedOperator(operator) == null) {
             throw new BadRequestException(
