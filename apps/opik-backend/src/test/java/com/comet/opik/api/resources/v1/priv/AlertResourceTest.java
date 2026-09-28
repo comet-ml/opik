@@ -683,7 +683,8 @@ class AlertResourceTest {
         @MethodSource("operatorValidationByEventType")
         @DisplayName("update applies the same operator gating as create")
         void updateAlert__operatorValidationIsScopedToTheEventTypesThatUseIt(
-                String name, AlertEventType eventType, String operator, int expectedCreateStatus) {
+                String name, AlertEventType eventType, String operator, int expectedCreateStatus,
+                int expectedUpdateStatus) {
             // validateThresholdConfigs runs on both paths, so the gating has to hold on both; an update is a
             // full replacement and could regress independently of create.
             var valid = generateAlert().toBuilder()
@@ -703,11 +704,8 @@ class AlertResourceTest {
                             .build()))
                     .build();
 
-            // Create answers 201 where update answers 204; the rejection status is the same on both.
-            var expectedStatus = expectedCreateStatus == HttpStatus.SC_CREATED
-                    ? HttpStatus.SC_NO_CONTENT
-                    : expectedCreateStatus;
-            alertResourceClient.updateAlert(alertId, replacement, mock.getLeft(), mock.getRight(), expectedStatus);
+            alertResourceClient.updateAlert(alertId, replacement, mock.getLeft(), mock.getRight(),
+                    expectedUpdateStatus);
         }
 
         private AlertTriggerConfig operatorConfig(AlertEventType eventType, String operator) {
@@ -760,27 +758,34 @@ class AlertResourceTest {
             return Stream.of(
                     // MetricsAlertJob reads the operator only for the feedback-score event types, so an
                     // unrecognised value there is the silent never-fires this validation exists to prevent.
+                    // Create and update are separate columns rather than one derived from the other: they are
+                    // two endpoint contracts, and their success statuses differ (201 vs 204).
                     Arguments.arguments("unknown operator on trace feedback score",
-                            AlertEventType.TRACE_FEEDBACK_SCORE, "sideways", HttpStatus.SC_BAD_REQUEST),
+                            AlertEventType.TRACE_FEEDBACK_SCORE, "sideways",
+                            HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_BAD_REQUEST),
                     Arguments.arguments("blank operator on trace feedback score",
-                            AlertEventType.TRACE_FEEDBACK_SCORE, "   ", HttpStatus.SC_BAD_REQUEST),
+                            AlertEventType.TRACE_FEEDBACK_SCORE, "   ",
+                            HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_BAD_REQUEST),
                     Arguments.arguments("unknown operator on trace thread feedback score",
-                            AlertEventType.TRACE_THREAD_FEEDBACK_SCORE, "sideways", HttpStatus.SC_BAD_REQUEST),
+                            AlertEventType.TRACE_THREAD_FEEDBACK_SCORE, "sideways",
+                            HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_BAD_REQUEST),
                     // Everywhere else the job hardcodes GREATER_THAN and never reads the stored value, so
                     // rejecting it would 400 released clients over a field that has never had any effect.
                     Arguments.arguments("inert operator on cost", AlertEventType.TRACE_COST, "sideways",
-                            HttpStatus.SC_CREATED),
+                            HttpStatus.SC_CREATED, HttpStatus.SC_NO_CONTENT),
                     Arguments.arguments("inert operator on latency", AlertEventType.TRACE_LATENCY, "sideways",
-                            HttpStatus.SC_CREATED),
+                            HttpStatus.SC_CREATED, HttpStatus.SC_NO_CONTENT),
                     Arguments.arguments("inert operator on errors", AlertEventType.TRACE_ERRORS, "sideways",
-                            HttpStatus.SC_CREATED));
+                            HttpStatus.SC_CREATED, HttpStatus.SC_NO_CONTENT));
         }
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("operatorValidationByEventType")
         @DisplayName("operator validation applies only where the job reads the operator")
         void createAlert__operatorValidationIsScopedToTheEventTypesThatUseIt(
-                String name, AlertEventType eventType, String operator, int expectedStatus) {
+                String name, AlertEventType eventType, String operator, int expectedCreateStatus,
+                int expectedUpdateStatus) {
+            // Each of the two tests reads its own status column; the other is unused here by design.
             var alert = generateAlert().toBuilder()
                     .triggers(List.of(AlertTrigger.builder()
                             .eventType(eventType)
@@ -788,7 +793,7 @@ class AlertResourceTest {
                             .build()))
                     .build();
 
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), expectedStatus);
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), expectedCreateStatus);
         }
 
         private AlertTriggerConfig thresholdConfig(String threshold, String window) {
