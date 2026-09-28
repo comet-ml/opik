@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
@@ -1467,6 +1468,11 @@ export class PlaygroundPage {
   }
 
   private async setModelForVariant(index: number, modelDisplayName: string): Promise<void> {
+    // The choke point: selectModel, configureVariant and
+    // runSimplePromptAndAwaitResponse all land here, so guarding the public
+    // wrapper alone would leave the two paths the daily specs actually use
+    // unchecked.
+    assertAllowedModelDisplayName(modelDisplayName);
     const listbox = this.page.getByRole('listbox');
     // The trigger occasionally swallows the first click as a hover (surfacing a
     // tooltip instead of opening the popover), so retry the click until the

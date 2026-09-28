@@ -13,6 +13,7 @@ import {
   deleteProviderKeyByName,
   notFoundProviderBaseUrl,
 } from '../core/provider-keys';
+import { registerUnbilledModel } from '../core/llm-model-policy';
 
 export interface OauthProviderSeed {
   providerName: string;
@@ -165,6 +166,8 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
     await use({
       async createOauth({ providerName, modelNames = ['mock-model'] }) {
         registered.push(providerName);
+        // The mock gateway answers these; nothing reaches a paid API.
+        for (const m of modelNames) registerUnbilledModel(m);
         await createProviderKey({
           provider: 'custom-llm',
           provider_name: providerName,
@@ -185,6 +188,7 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
       },
       async createUnreachable({ providerName, modelName = 'unreachable-model' }) {
         registered.push(providerName);
+        registerUnbilledModel(modelName);
         const model = `custom-llm/${providerName}/${modelName}`;
         await createProviderKey({
           provider: 'custom-llm',
@@ -199,6 +203,7 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
       },
       async createUnresponsive({ providerName, modelName = 'unresponsive-model' }) {
         registered.push(providerName);
+        registerUnbilledModel(modelName);
         const model = `custom-llm/${providerName}/${modelName}`;
         await createProviderKey({
           provider: 'custom-llm',
@@ -213,10 +218,12 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
       },
       async forceChatStatus(modelName, status) {
         forcedStatusModels.push(modelName);
+        registerUnbilledModel(modelName);
         await mockAuthForceChatStatus(modelName, status);
       },
       async createPermanentlyFailing({ providerName, modelName = 'always-404-model' }) {
         registered.push(providerName);
+        registerUnbilledModel(modelName);
         const qualifiedModel = `custom-llm/${providerName}/${modelName}`;
         await createProviderKey({
           provider: 'custom-llm',
