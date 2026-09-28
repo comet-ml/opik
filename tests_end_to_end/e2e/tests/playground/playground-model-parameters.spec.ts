@@ -172,6 +172,20 @@ test.describe(
         });
 
         const request = await test.step('Capture the outbound completion request', async () => {
+          // Short-circuit the request at the browser so it never reaches the
+          // backend proxy — every assertion below is on the request body, and
+          // letting it through would have Anthropic generate (and bill) a full
+          // completion with thinking that nothing reads.
+          await page.route(
+            (url) => isChatCompletion(url.toString()),
+            (route) =>
+              route.fulfill({
+                status: 200,
+                contentType: 'text/event-stream',
+                body: 'data: [DONE]\n\n',
+              }),
+          );
+
           // Armed before the click: the POST is in flight the moment Run is
           // pressed, so subscribing afterwards would race it.
           const sent = page.waitForRequest(
