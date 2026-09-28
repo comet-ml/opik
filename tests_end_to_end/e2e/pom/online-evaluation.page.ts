@@ -2,10 +2,13 @@ import { test, type Page, type Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
+/** Rule type picked from the "Create rule" menu. */
+export type RuleDialogType = 'LLM-as-judge' | 'Code metric';
+
 export interface CreateRuleDialogLLMJudgeFields {
   name: string;
   /** Canned-template label as shown in the dialog. */
-  template: 'Moderation' | 'Hallucination' | 'AnswerRelevance' | 'Custom LLM-as-judge';
+  template: 'Moderation' | 'Hallucination' | 'Answer relevance' | 'Custom LLM-as-judge';
   /** Model display name as shown in the model picker (e.g. "Claude Haiku 4.5"). */
   modelDisplayName: string;
 }
@@ -96,12 +99,18 @@ export class OnlineEvaluationPage {
    * ("Create your first rule") AND the toolbar button ("Create rule") that
    * appears once at least one rule exists.
    */
-  async openCreateRuleDialog(): Promise<void> {
+  async openCreateRuleDialog(type: RuleDialogType = 'LLM-as-judge'): Promise<void> {
     const toolbarButton = this.page.getByTestId('online-evaluation-create-rule-button');
     const emptyStateButton = this.page.getByRole('button', {
       name: 'Create your first rule',
     });
     await toolbarButton.or(emptyStateButton).first().click();
+    // The toolbar button opens a type menu (when code metrics are enabled);
+    // the empty-state CTA goes straight to an LLM-as-judge panel.
+    const typeItem = this.page.getByRole('menuitem', { name: type });
+    if (await typeItem.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await typeItem.click();
+    }
     await this.dialog.waitFor({ state: 'visible' });
   }
 
@@ -213,7 +222,7 @@ export class OnlineEvaluationPage {
     });
   }
 
-  /** The "Enable rule" switch inside the add/edit dialog. */
+  /** The "Enable rule" switch in the add/edit panel footer. */
   get enableRuleSwitch(): Locator {
     return this.dialog.getByRole('switch', { name: 'Enable rule' });
   }
@@ -395,13 +404,9 @@ export class OnlineEvaluationPage {
     const d = this.dialog;
     await d.getByRole('textbox', { name: 'Rule name' }).fill(fields.name);
 
-    // Pick the template FIRST — selecting it rebuilds the prompt + variable
-    // mapping section, so any prior tweaks would be wiped out.
-    const promptCombobox = d.getByRole('combobox').filter({
-      hasText: /^(Custom LLM-as-judge|Hallucination|Moderation|AnswerRelevance|Structured Output Compliance|Meaning Match)$/,
-    });
-    await promptCombobox.click();
-    await this.page.getByRole('option', { name: fields.template, exact: true }).click();
+    // Pick the template FIRST — it fills the prompt and the score definition;
+    // the chips are only offered while the prompt is still empty.
+    await d.getByTestId('llm-judge-template-chips').getByRole('button', { name: fields.template, exact: true }).click();
 
     // Pick the model.
     const modelCombobox = d.getByRole('combobox').filter({
@@ -424,11 +429,14 @@ export class OnlineEvaluationPage {
       await expect(modelCombobox).toContainText(fields.modelDisplayName, { timeout: 2_000 });
     }).toPass({ timeout: 30_000 });
 
-    // Change the output variable-mapping from default `output` to `output.output`
-    // so the engine extracts the bare string (per the JsonPath semantics in
-    // OnlineScoringEngine.toVariableMapping — dot-containing paths get
-    // `$.output`, bare paths get `$` which yields the whole JSON node).
-    await this.setVariableMapping('output', 'output.output');
+    // Variables are written inline as field paths. The template's `{{output}}`
+    // renders the whole JSON node; point the judge at the bare string as well
+    // (OnlineScoringEngine.toVariableMapping: dotted paths get `$.output`).
+    // `insertText` bypasses the editor's `{{` picker, which key-typing would open.
+    const editor = d.locator('.cm-content').first();
+    await editor.click();
+    await this.page.keyboard.press('ControlOrMeta+End');
+    await this.page.keyboard.insertText('\n\nText to score:\n{{output.output}}');
 
     await d.getByTestId('add-edit-rule-dialog-submit').click();
     await d.waitFor({ state: 'hidden' });
@@ -436,14 +444,13 @@ export class OnlineEvaluationPage {
 
   /**
    * Fill + submit the dialog for a Python-code rule using the deterministic
-   * Equals snippet. Toggles the TYPE radio to "Code metric" first.
+   * Equals snippet. Open the dialog with `openCreateRuleDialog('Code metric')`.
    */
   async fillAndSubmitCreateRuleDialogPythonEquals(
     fields: CreateRuleDialogPythonEqualsFields,
   ): Promise<void> {
     const d = this.dialog;
     await d.getByRole('textbox', { name: 'Rule name' }).fill(fields.name);
-    await d.getByRole('radio', { name: 'Code metric' }).click();
 
     // Replace the default Python template in the CodeMirror editor.
     const editor = d.locator('.cm-content').first();

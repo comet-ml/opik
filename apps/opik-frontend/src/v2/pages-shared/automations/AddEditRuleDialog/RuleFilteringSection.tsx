@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { Plus } from "lucide-react";
+import { Filter as FilterIcon, Plus, Trash } from "lucide-react";
 import uniqid from "uniqid";
 import round from "lodash/round";
 import isArray from "lodash/isArray";
 
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
+import IconBadge from "@/shared/IconBadge/IconBadge";
 import { FormErrorSkeleton, FormField, FormItem } from "@/ui/form";
 import {
   Accordion,
@@ -34,8 +35,6 @@ import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilt
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { EVAL_TRIGGER_SCOPE, EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { Description } from "@/ui/description";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -430,49 +429,23 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
     <Accordion
       type="single"
       collapsible
-      className="-mb-4 w-full border-t border-border"
+      className="w-full rounded-md border border-border"
+      data-testid="add-edit-rule-dialog-filtering-sampling"
     >
       <AccordionItem value="filtering-sampling" className="border-none">
         <AccordionTrigger
-          className="px-3 py-2 hover:no-underline"
+          className="h-10 px-3 py-2 hover:no-underline"
           data-testid="add-edit-rule-dialog-filtering-sampling-trigger"
         >
-          <div className="flex items-center gap-1">
-            <Label className="text-sm font-medium">Filtering & Sampling</Label>
-            <ExplainerIcon
-              className="mt-0.5"
-              description={
-                isTraceScope
-                  ? "Apply filters and sampling to select which traces will be evaluated by this rule"
-                  : isThreadScope
-                    ? "Use sampling rate to control how frequently this rule is applied to threads"
-                    : "Apply filters and sampling to select which spans will be evaluated by this rule"
-              }
-            />
+          <div className="flex items-center gap-2">
+            <IconBadge Icon={FilterIcon} color="green" />
+            <Label className="text-sm font-medium">
+              Filtering and sampling
+            </Label>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-3 pb-3">
           <div className="mb-8 space-y-4">
-            <Description>
-              Use sampling rate to control how frequently this rule is applied.
-              You can also add filters to select specific{" "}
-              {scope === EVALUATORS_RULE_SCOPE.trace
-                ? "traces"
-                : scope === EVALUATORS_RULE_SCOPE.thread
-                  ? "threads"
-                  : "spans"}{" "}
-              based on their properties. If nothing is defined, the rule will
-              evaluate all{" "}
-              {scope === EVALUATORS_RULE_SCOPE.trace
-                ? "traces"
-                : scope === EVALUATORS_RULE_SCOPE.thread
-                  ? "threads"
-                  : "spans"}
-              .
-              {isTraceScope &&
-                " Both apply to production traces only — traces from experiments, the playground and optimization runs ignore them."}
-            </Description>
-
             <FormField
               control={form.control}
               name="filters"
@@ -491,7 +464,11 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                           setFilters={setFilters}
                           columns={currentFilterColumns}
                           config={filtersConfig}
-                          className="py-0"
+                          RemoveIcon={Trash}
+                          // The shared rows assume a wide popover; in this column drop the
+                          // "Where/And" prefix and let the value input shrink so the delete
+                          // button stays on screen.
+                          className="py-0 [&_.min-w-40]:min-w-0 [&_table]:w-full [&_tr>td:first-child:not([colspan])]:hidden"
                         />
                       )}
 

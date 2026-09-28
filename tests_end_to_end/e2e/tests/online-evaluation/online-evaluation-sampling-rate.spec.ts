@@ -105,7 +105,7 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
 
-      await onlineEval.openCreateRuleDialog();
+      await onlineEval.openCreateRuleDialog('Code metric');
       await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
         name: partialRule,
         referenceValue: REFERENCE_OUTPUT,
@@ -115,7 +115,7 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
 
       // Left at the control's 100% default — set explicitly so the test states
       // the value it depends on rather than inheriting it.
-      await onlineEval.openCreateRuleDialog();
+      await onlineEval.openCreateRuleDialog('Code metric');
       await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
         name: fullRule,
         referenceValue: REFERENCE_OUTPUT,

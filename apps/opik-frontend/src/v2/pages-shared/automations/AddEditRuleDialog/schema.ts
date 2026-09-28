@@ -226,6 +226,35 @@ const LLMJudgeBaseSchema = z.object({
     .nullable(),
 });
 
+/**
+ * With no mapping UI, a variable is valid only when it is a field path the
+ * backend can read on its own ({@code input…}, {@code output…}, {@code metadata…})
+ * or a reserved sentinel. Anything else is reported on the message that uses
+ * it, where the user can fix it.
+ */
+const addUnmappedVariableIssues = (
+  data: {
+    messages: { content: LLMMessage["content"] }[];
+    variables: Record<string, string>;
+  },
+  ctx: z.RefinementCtx,
+  entity: "trace" | "span",
+) => {
+  Object.entries(data.variables).forEach(([name, value]) => {
+    if (value) return;
+    const index = data.messages.findIndex((m) =>
+      new RegExp(
+        `{{\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*}}`,
+      ).test(getTextFromMessageContent(m.content)),
+    );
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `{{${name}}} is not a ${entity} field. Type {{ to pick a field, for example {{input}} or {{metadata.${name}}}.`,
+      path: ["messages", Math.max(index, 0), "content"],
+    });
+  });
+};
+
 export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(
     z.string(),
@@ -236,11 +265,12 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       // bare sentinel like `spans` / `trace` — see RESERVED_TRACE_LLM_JUDGE_VARIABLES.
       // The backend's OnlineScoringEngine substitutes `spans` with the JSON-serialized
       // spans list and `trace` with the trace skeleton (ids + attachments) at render time.
-      .regex(/^(input|output|metadata)(\.|$)|^spans$|^trace$/, {
+      .regex(/^(input|output|metadata)(\.|\[|$)|^spans$|^trace$/, {
         message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), the reserved word "spans" to inject the trace's spans list, or "trace" to inject the trace skeleton with attachments`,
       }),
   ),
 }).superRefine((data, ctx) => {
+  addUnmappedVariableIssues(data, ctx, "trace");
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );
@@ -291,11 +321,12 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
       // bare sentinel `span` — see RESERVED_SPAN_LLM_JUDGE_VARIABLES. The backend's
       // OnlineScoringEngine substitutes `span` with the span structure (span id +
       // attachment file_names) at render time.
-      .regex(/^(input|output|metadata)(\.|$)|^span$/, {
+      .regex(/^(input|output|metadata)(\.|\[|$)|^span$/, {
         message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "span" to inject the span with its attachments`,
       }),
   ),
 }).superRefine((data, ctx) => {
+  addUnmappedVariableIssues(data, ctx, "span");
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );
@@ -336,39 +367,49 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
   }
 });
 
+export const THREAD_CONTEXT_VARIABLE_NAME = "context";
+export const THREAD_CONTEXT_VARIABLE = `{{${THREAD_CONTEXT_VARIABLE_NAME}}}`;
+
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
-  const contextCount = data.messages.filter((m) => {
-    const content = getTextFromMessageContent(m.content);
-    return content.includes("{{context}}");
-  }).length;
+  const contextMessageIndexes = data.messages.reduce<number[]>(
+    (acc, m, index) => {
+      const content = getTextFromMessageContent(m.content);
+      return content.includes(THREAD_CONTEXT_VARIABLE) ? [...acc, index] : acc;
+    },
+    [],
+  );
 
-  if (contextCount < 1) {
+  if (contextMessageIndexes.length < 1) {
+    // Nothing to point at, so anchor to the last message — that is where a
+    // missing variable is most naturally added.
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "At least one message should contain the {{context}} variable",
-      path: ["messages", data.messages.length - 1, "content"],
+      message: `Add ${THREAD_CONTEXT_VARIABLE} to one message so the judge receives the conversation`,
+      path: ["messages", Math.max(data.messages.length - 1, 0), "content"],
     });
   }
 
-  if (contextCount > 1) {
+  // Flag every duplicate on the message that carries it, not on the last
+  // message, so the error sits next to the text the user has to remove.
+  contextMessageIndexes.slice(1).forEach((index) => {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Only one message can contain the {{context}} variable.",
-      path: ["messages", data.messages.length - 1, "content"],
+      message: `Only one message can contain ${THREAD_CONTEXT_VARIABLE}. Remove it here or from the earlier message.`,
+      path: ["messages", index, "content"],
     });
-  }
+  });
 
   data.messages.forEach((message, index) => {
     const content = getTextFromMessageContent(message.content);
     const matches = content.match(/{{([^}]+)}}/g);
     if (matches) {
       matches.forEach((match) => {
-        if (match !== "{{context}}") {
+        if (match !== THREAD_CONTEXT_VARIABLE) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: `Template variable ${match} is not allowed. Only {{context}} is supported.`,
+            message: `Template variable ${match} is not allowed. Only ${THREAD_CONTEXT_VARIABLE} is supported.`,
             path: ["messages", index, "content"],
           });
         }

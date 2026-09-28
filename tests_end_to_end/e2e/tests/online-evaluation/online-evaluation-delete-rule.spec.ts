@@ -28,14 +28,14 @@ test.describe('Online Evaluation — delete rule', { tag: ['@t2-cuj', '@area:onl
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
 
-      await onlineEval.openCreateRuleDialog();
+      await onlineEval.openCreateRuleDialog('Code metric');
       await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
         name: targetRule,
         referenceValue: REFERENCE_OUTPUT,
       });
       await expect(onlineEval.ruleRow(targetRule)).toBeVisible();
 
-      await onlineEval.openCreateRuleDialog();
+      await onlineEval.openCreateRuleDialog('Code metric');
       await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
         name: controlRule,
         referenceValue: REFERENCE_OUTPUT,

@@ -12,6 +12,8 @@ type FiltersContentProps<TColumnData> = {
   columns: ColumnData<TColumnData>[];
   config?: { rowsMap: Record<string, FilterRowConfig> };
   className?: string;
+  /** Icon for the per-row remove button; defaults to the × the filter popovers use. */
+  RemoveIcon?: React.ComponentType<{ className?: string }>;
 };
 
 const FiltersContent = <TColumnData,>({
@@ -20,6 +22,7 @@ const FiltersContent = <TColumnData,>({
   columns,
   config,
   className,
+  RemoveIcon,
 }: FiltersContentProps<TColumnData>) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -89,6 +92,7 @@ const FiltersContent = <TColumnData,>({
           prefix={prefix}
           onRemove={onRemoveRow}
           onChange={onChangeRow}
+          RemoveIcon={RemoveIcon}
         />
       );
     });

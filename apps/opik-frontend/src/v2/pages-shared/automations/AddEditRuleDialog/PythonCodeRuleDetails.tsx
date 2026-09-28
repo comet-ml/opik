@@ -3,12 +3,13 @@ import { UseFormReturn } from "react-hook-form";
 import CodeMirror from "@uiw/react-codemirror";
 import { pythonLanguage } from "@codemirror/lang-python";
 import { EditorView } from "@codemirror/view";
+import { Code } from "lucide-react";
 import get from "lodash/get";
 
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import LLMPromptMessagesVariables from "@/v2/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariables";
 import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
-import { Label } from "@/ui/label";
+import { Tag } from "@/ui/tag";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
@@ -18,11 +19,13 @@ import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type PythonCodeRuleDetailsProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
+  projectId: string;
   datasetColumnNames?: string[];
 };
 
 const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
   form,
+  projectId,
   datasetColumnNames,
 }) => {
   const theme = useCodemirrorTheme({
@@ -43,19 +46,28 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
   const reservedVariables = reservedPythonMetricVariablesForScope(scope);
 
   return (
-    <>
+    <div className="flex flex-col gap-2">
       <FormField
         control={form.control}
         name="pythonCodeDetails.metric"
         render={({ field }) => {
           return (
             <FormItem>
-              <Label>Python code</Label>
               <FormControl>
-                <div className="rounded-md">
+                <div
+                  className="overflow-hidden rounded-md border border-border"
+                  data-testid="python-code-card"
+                >
+                  <div className="comet-body-s-accented flex h-10 items-center gap-2 border-b border-border bg-soft-background px-2">
+                    <Tag variant="yellow" size="sm" className="px-1">
+                      <Code className="size-3" />
+                    </Tag>
+                    Python code
+                  </div>
                   <CodeMirror
                     theme={theme}
                     value={field.value}
+                    minHeight="420px"
                     onChange={(value) => {
                       field.onChange(value);
 
@@ -118,7 +130,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
               <LLMPromptMessagesVariables
                 parsingError={parsingArgumentsError}
                 validationErrors={validationErrors}
-                projectId={form.watch("projectIds")[0] || ""}
+                projectId={projectId}
                 variables={field.value}
                 onChange={field.onChange}
                 description="All variables are automatically added based on the code snippet. They are extracted from the `score` method and are required."
@@ -132,7 +144,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
           }}
         />
       )}
-    </>
+    </div>
   );
 };
 
