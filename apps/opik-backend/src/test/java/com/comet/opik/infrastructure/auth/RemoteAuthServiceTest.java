@@ -457,6 +457,41 @@ class RemoteAuthServiceTest {
                 .hasMessage(MISSING_WORKSPACE);
     }
 
+    static Stream<Arguments> nonEmNotFoundArgs() {
+        return Stream.of(
+                // an ingress or proxy 404 — a wrong reactService URL, a missing route, a renamed endpoint
+                arguments("text/html", "<html><body>404 Not Found</body></html>"),
+                arguments("text/plain", "Not Found"),
+                // JSON, but not EM's error envelope, so it carries no membership verdict
+                arguments("application/json", "{\"detail\":\"no route\"}"));
+    }
+
+    /**
+     * The 404 -> 403 mapping is narrowed to EM's own error envelope on purpose. 403 counts as "not
+     * authenticated" in {@code authenticate()}, so a 404 mapped to it would let any endpoint in
+     * PUBLIC_ENDPOINTS continue with Visibility.PUBLIC — turning a misconfigured reactService URL into
+     * silent public-data serving instead of a loud failure. A 404 that did not come from EM must stay a 500.
+     */
+    @ParameterizedTest
+    @MethodSource("nonEmNotFoundArgs")
+    void auth__whenNotFoundIsNotFromEm__thenServerErrorRatherThanForbidden(String contentType, String body) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .willReturn(aResponse().withStatus(HttpStatus.SC_NOT_FOUND)
+                        .withHeader("Content-Type", contentType)
+                        .withBody(body)));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, apiKey), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(InternalServerErrorException.class)
+                .hasMessage("Unexpected error while authenticating user");
+    }
+
     @ParameterizedTest
     @MethodSource("unauthorizedArgs")
     void testSessionAuthUnauthorized(int remoteAuthStatusCode, Class<? extends Exception> expectedExceptionClass,

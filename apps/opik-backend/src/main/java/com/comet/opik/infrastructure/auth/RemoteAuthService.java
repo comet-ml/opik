@@ -337,14 +337,6 @@ class RemoteAuthService implements AuthService {
      * or a stack trace, not necessarily our own JSON), so it must not be able to flood the logs or carry an unbounded
      * amount of upstream detail into them.
      */
-    /**
-     * Collapses line breaks so upstream-controlled text cannot forge extra records in a log that is read
-     * line by line. The value is already bounded — it is a parsed field, not the raw body.
-     */
-    private static String singleLine(String value) {
-        return value == null ? "" : value.replaceAll("[\\r\\n]+", " ");
-    }
-
     private static String readBodySafely(Response response) {
         try {
             if (!isEntityReadable(response)) {
@@ -355,6 +347,34 @@ class RemoteAuthService implements AuthService {
             log.warn("Failed to read remote response body for debugging", e);
             return "";
         }
+    }
+
+    /**
+     * The message from EM's own JSON error envelope, or {@code null} when the response is not one — an HTML
+     * or empty body from a proxy, an ingress 404, anything that did not come from EM. Callers use the null to
+     * tell "EM answered" apart from "something else answered", which for a 404 is the difference between an
+     * entitlement decision and a misconfiguration. Safe to call twice: {@code isEntityReadable} buffers.
+     */
+    private static String emErrorMessage(Response response) {
+        if (!isEntityReadable(response) || !isJson(response.getMediaType())) {
+            return null;
+        }
+        try {
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            return errorResponse == null || StringUtils.isBlank(errorResponse.msg())
+                    ? null
+                    : errorResponse.msg().strip();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Collapses line breaks so upstream-controlled text cannot forge extra records in a log that is read
+     * line by line. The value is already bounded — it is a parsed field, not the raw body.
+     */
+    private static String singleLine(String value) {
+        return value == null ? "" : value.replaceAll("[\\r\\n]+", " ");
     }
 
     /**
@@ -541,16 +561,20 @@ class RemoteAuthService implements AuthService {
         } else if (status == Response.Status.FORBIDDEN.getStatusCode()) {
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
-        } else if (status == Response.Status.NOT_FOUND.getStatusCode()) {
+        } else if (status == Response.Status.NOT_FOUND.getStatusCode() && emErrorMessage(response) != null) {
             // EM signals "user is not a member of organization" with 404; that is an entitlement failure,
-            // not a server fault. Logged rather than mapped silently because a 404 is equally what a wrong
-            // reactService URL or a renamed EM endpoint looks like, and that would otherwise present as
-            // every caller losing workspace access at once with nothing to diagnose it from.
+            // not a server fault.
             //
-            // The parsed message, not the raw body: this branch is now reached by ordinary non-member
-            // traffic rather than only by faults, so it must not put arbitrary upstream bytes in a log line.
+            // Deliberately narrowed to EM's own error envelope rather than matching every 404. A bare 404 is
+            // equally a wrong reactService URL, a missing ingress route or a renamed endpoint, and mapping
+            // that to 403 would be worse than the 500 it used to give: 403 counts as "not authenticated" in
+            // authenticate(), so a request to any endpoint in PUBLIC_ENDPOINTS would quietly continue with
+            // Visibility.PUBLIC. A misconfiguration must fail loudly, not start serving public data.
+            //
+            // The parsed message, not the raw body: this branch is reached by ordinary non-member traffic
+            // rather than only by faults, so it must not put arbitrary upstream bytes into a log line.
             log.warn("React service answered 404 while authenticating, reason: '{}'",
-                    singleLine(readErrorMessage(response, NOT_ALLOWED_TO_ACCESS_WORKSPACE)));
+                    singleLine(emErrorMessage(response)));
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         } else if (status == Response.Status.BAD_REQUEST.getStatusCode()) {
