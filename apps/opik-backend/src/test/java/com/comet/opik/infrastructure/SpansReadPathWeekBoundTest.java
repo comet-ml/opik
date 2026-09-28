@@ -354,45 +354,44 @@ class SpansReadPathWeekBoundTest {
                 .build(), API_KEY, WORKSPACE_NAME);
     }
 
-    @Test
-    void traceStatsKeepEveryScoredSpan() {
-        // scored_span_ids is bounded by the scored ids' own weeks; the far-future one is stored wrapped here.
+    private Stream<Arguments> scoredSpanIdAts() {
+        var monday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                .atStartOfDay().toInstant(ZoneOffset.UTC);
+        return Stream.concat(Stream.of(
+                arguments(Named.of("this monday", monday)),
+                arguments(Named.of("previous sunday", monday.minusMillis(1)))),
+                recentFarFutureAndPastCeilingIdAts());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("scoredSpanIdAts")
+    void traceStatsKeepTheScoredSpan(Instant idAt) {
+        // scored_span_ids is bounded by the scored id's own week; a far-future one is stored wrapped here.
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        // Stats are scoped by the project's traces, so the scored spans need one to hang off.
+        // Stats are scoped by the project's traces, so the scored span needs one to hang off.
         var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
                 .id(ID_GENERATOR.generateId())
                 .projectName(projectName)
                 .feedbackScores(null)
                 .usage(null)
                 .build(), API_KEY, WORKSPACE_NAME);
-        var monday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                .atStartOfDay().toInstant(ZoneOffset.UTC);
-        var scoredAt = Map.of(
-                "now", Instant.now(),
-                "this_monday", monday,
-                "previous_sunday", monday.minusMillis(1),
-                "far_future", FAR_FUTURE_ID_AT,
-                "past_ceiling", PAST_CEILING_ID_AT);
-        var expected = scoredAt.keySet().stream()
-                .collect(Collectors.toMap(name -> name, _ -> (double) RandomUtils.secure().randomInt(1, 100)));
-        var spans = scoredAt.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> newSpan(entry.getValue(), traceId)
-                        .toBuilder().projectName(projectName).build()));
-        spanResourceClient.batchCreateSpans(List.copyOf(spans.values()), API_KEY, WORKSPACE_NAME);
-        spanResourceClient.feedbackScores(spans.entrySet().stream()
-                .<FeedbackScoreBatchItem>map(entry -> FeedbackScoreBatchItem.builder()
-                        .id(entry.getValue().id())
-                        .projectName(projectName)
-                        .name(entry.getKey())
-                        .value(BigDecimal.valueOf(expected.get(entry.getKey())))
-                        .source(ScoreSource.SDK)
-                        .build())
-                .toList(), API_KEY, WORKSPACE_NAME);
+        var span = newSpan(idAt, traceId).toBuilder().projectName(projectName).build();
+        spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
+        var score = (double) RandomUtils.secure().randomInt(1, 100);
+        spanResourceClient.feedbackScores(List.of(FeedbackScoreBatchItem.builder()
+                .id(span.id())
+                .projectName(projectName)
+                .name("scored")
+                .value(BigDecimal.valueOf(score))
+                .source(ScoreSource.SDK)
+                .build()), API_KEY, WORKSPACE_NAME);
 
         var stats = traceResourceClient.getTraceStats(null, projectId, API_KEY, WORKSPACE_NAME, null, Map.of());
 
-        assertThat(spanFeedbackScores(stats)).isEqualTo(expected);
+        assertThat(spanFeedbackScores(stats))
+                .as("span scores for span %s (id_at %s)", span.id(), idAt)
+                .isEqualTo(Map.of("scored", score));
     }
 
     private static Map<String, Double> spanFeedbackScores(ProjectStats stats) {

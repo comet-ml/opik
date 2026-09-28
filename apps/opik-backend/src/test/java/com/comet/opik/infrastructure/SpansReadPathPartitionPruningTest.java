@@ -38,6 +38,7 @@ import org.apache.http.HttpStatus;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -304,11 +305,22 @@ class SpansReadPathPartitionPruningTest {
         assertThat(spansPartitionsRead("bulk_update_spans", derivable.id())).containsAll(FILLER_WEEKS);
     }
 
-    @Test
-    void traceStatsReadOnlyTheWeeksOfTheScoredSpans() {
+    private Stream<Arguments> scoredSpanWeeks() {
+        var thisMonday = THIS_MONDAY.atStartOfDay().toInstant(ZoneOffset.UTC);
+        return Stream.of(
+                arguments(Named.of("this monday", thisMonday), THIS_WEEK),
+                // The last millisecond of the previous week lands in the first filler week.
+                arguments(Named.of("previous sunday", thisMonday.minusMillis(1)), FILLER_WEEKS.getFirst()),
+                arguments(Named.of("far future", FAR_FUTURE_ID_AT), "21991230"),
+                arguments(Named.of("past ceiling", PAST_CEILING_ID_AT), "22991225"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("scoredSpanWeeks")
+    void traceStatsReadOnlyTheWeekOfTheScoredSpan(Instant idAt, String expectedWeek) {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        // Stats are scoped by the project's traces, so the scored spans need one to hang off.
+        // Stats are scoped by the project's traces, so the scored span needs one to hang off.
         var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
                 .id(ID_GENERATOR.generateId())
                 .projectName(projectName)
@@ -321,34 +333,25 @@ class SpansReadPathPartitionPruningTest {
                         monday.atTime(12, 0).toInstant(ZoneOffset.UTC), ID_GENERATOR.generateId())
                         .toBuilder().projectName(projectName).build()))
                 .toList(), API_KEY, WORKSPACE_NAME);
-        var thisMonday = THIS_MONDAY.atStartOfDay().toInstant(ZoneOffset.UTC);
-        // The last millisecond of the previous week lands in the first filler week, which is therefore read.
-        var scoredAt = Map.of(
-                "this_monday", thisMonday,
-                "previous_sunday", thisMonday.minusMillis(1),
-                "far_future", FAR_FUTURE_ID_AT,
-                "past_ceiling", PAST_CEILING_ID_AT);
-        var expected = scoredAt.keySet().stream()
-                .collect(Collectors.toMap(name -> name, _ -> (double) RandomUtils.secure().randomInt(1, 100)));
-        var spans = scoredAt.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> newSpan(entry.getValue(), traceId)
-                        .toBuilder().projectName(projectName).build()));
-        spanResourceClient.batchCreateSpans(List.copyOf(spans.values()), API_KEY, WORKSPACE_NAME);
-        spanResourceClient.feedbackScores(spans.entrySet().stream()
-                .<FeedbackScoreBatchItem>map(entry -> FeedbackScoreBatchItem.builder()
-                        .id(entry.getValue().id())
-                        .projectName(projectName)
-                        .name(entry.getKey())
-                        .value(BigDecimal.valueOf(expected.get(entry.getKey())))
-                        .source(ScoreSource.SDK)
-                        .build())
-                .toList(), API_KEY, WORKSPACE_NAME);
+        var span = newSpan(idAt, traceId).toBuilder().projectName(projectName).build();
+        spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
+        var score = (double) RandomUtils.secure().randomInt(1, 100);
+        spanResourceClient.feedbackScores(List.of(FeedbackScoreBatchItem.builder()
+                .id(span.id())
+                .projectName(projectName)
+                .name("scored")
+                .value(BigDecimal.valueOf(score))
+                .source(ScoreSource.SDK)
+                .build()), API_KEY, WORKSPACE_NAME);
 
         var stats = traceResourceClient.getTraceStats(null, projectId, API_KEY, WORKSPACE_NAME, null, Map.of());
 
-        assertThat(spanFeedbackScores(stats)).isEqualTo(expected);
+        assertThat(spanFeedbackScores(stats))
+                .as("span scores for span %s (id_at %s)", span.id(), idAt)
+                .isEqualTo(Map.of("scored", score));
         assertThat(spansPartitionsRead("get_trace_stats_feedback_scores", projectId))
-                .containsExactlyInAnyOrder(THIS_WEEK, FILLER_WEEKS.getFirst(), "21991230", "22991225");
+                .as("partitions read for span %s (id_at %s, week %s)", span.id(), idAt, expectedWeek)
+                .containsExactly(expectedWeek);
     }
 
     private static Map<String, Double> spanFeedbackScores(ProjectStats stats) {

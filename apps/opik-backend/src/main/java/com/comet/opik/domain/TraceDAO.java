@@ -2931,10 +2931,11 @@ class TraceDAOImpl implements TraceDAO {
     //
     // scored_span_ids carries the spans partition key as an IN over the weeks of the scored span ids themselves, so
     // it prunes without assuming anything about where a span sits relative to its trace. The ids exist only inside
-    // ClickHouse here, so the set is a subquery rather than WeeklyPartitions.weeksOf. Each id contributes its id_at as
-    // BOTH column types would materialise it (DateTime64(0) on spans_local_v2, the 32-bit DateTime on legacy spans,
-    // which wraps; hence the deliberate narrow CAST), so the set holds the row's own partition value whichever table
-    // is live, including saturated past-2300 and epoch (non-v7) ids. Widening the set only opens an extra partition.
+    // ClickHouse here, so the set is a subquery rather than WeeklyPartitions.weeksOf. Each scored id is converted to
+    // both the DateTime64(0) id_at of spans_local_v2 and the 32-bit DateTime id_at of legacy spans, which wraps past
+    // 2106 (hence the deliberate narrow CAST), because either table may be the one queried. The set therefore holds
+    // the row's own partition value on both, past-2300 ids included, where DateTime64 saturates. Non-v7 ids never
+    // reach spans (ingestion rejects them). Widening the set only opens an extra partition, never drops a row.
     private static final String SELECT_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
             WITH spans_data AS (
