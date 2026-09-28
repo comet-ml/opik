@@ -4,7 +4,7 @@ import { TestSuiteItemsPage } from '@e2e/pom/test-suite-items.page';
 import { ensureModelAvailable } from '@e2e/pom/model-availability';
 import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
 
-test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites'] }, () => {
+test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@llm-daily', '@area:test-suites'] }, () => {
   /**
    * Test A — SDK-create + SDK-run + UI-verify.
    *
