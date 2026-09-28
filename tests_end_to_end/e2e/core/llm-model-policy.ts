@@ -28,6 +28,11 @@ export const ALLOWED_MODEL_DISPLAY_NAMES = [
   // controls under test (thinking effort AND the sampling toggle), and the spec
   // now stubs the completion at the browser, so selecting it bills nothing.
   'Claude Sonnet 4.6',
+  // The @provider-sanity matrix (data/playground-models.yaml) exists to prove
+  // each provider can still be reached, so a real call is the point of it. It
+  // runs on its own cadence, outside the t1/t2/t3 ladder, on a cheap model per
+  // provider.
+  'Gemini 2.5 Flash',
 ] as const;
 
 /** Fully-qualified ids passed to the SDK/LiteLLM rather than picked in the UI. */
@@ -50,16 +55,30 @@ const FORBIDDEN = [
 ];
 
 /**
- * Models that reach a provider the spec itself seeded as unreachable, so the
- * request is refused at the socket and bills nothing. Named explicitly rather
- * than pattern-matched: "looks like a fake model" is exactly the judgement an
- * allowlist exists to avoid making.
+ * Models a spec seeded on a provider that cannot bill — an unreachable base
+ * URL, or the local mock gateway. Populated at seed time by the helpers that
+ * create them (see fixtures/provider-key.fixture.ts), so the exemption covers
+ * exactly the models the run created and nothing else.
+ *
+ * A registry rather than a name pattern: "looks like a fake model" is precisely
+ * the judgement an allowlist exists to avoid making, and the seeded names are
+ * namespaced per run (`${testNamespace}-dead-model`), so no fixed list can
+ * anticipate them.
  */
-const UNREACHABLE_PROVIDER_MODELS = ['unreachable-model', 'unresponsive-model'] as const;
+const unbilledModels = new Set<string>();
 
-/** True when the model belongs to a spec-seeded provider that cannot bill. */
-export function isUnreachableProviderModel(name: string): boolean {
-  return (UNREACHABLE_PROVIDER_MODELS as readonly string[]).includes((name ?? '').trim());
+/**
+ * Declare that `name` runs on a provider that cannot reach a paid API, so the
+ * guard should let it through. Called by the seeding helpers, not by specs.
+ */
+export function registerUnbilledModel(name: string): void {
+  const trimmed = (name ?? '').trim();
+  if (trimmed) unbilledModels.add(trimmed);
+}
+
+/** True when a seeding helper registered this model as unable to bill. */
+export function isUnbilledModel(name: string): boolean {
+  return unbilledModels.has((name ?? '').trim());
 }
 
 function reject(kind: string, value: string, reason: string): never {
@@ -84,8 +103,8 @@ function assertAllowed(
   const trimmed = (value ?? '').trim();
   if (!trimmed) reject(kind, value, emptyReason);
 
-  // A model on a provider the spec seeded as unreachable costs nothing.
-  if (isUnreachableProviderModel(trimmed)) return;
+  // A model the run itself seeded on a provider that cannot bill.
+  if (isUnbilledModel(trimmed)) return;
 
   const lowered = trimmed.toLowerCase();
   const hit = FORBIDDEN.find((f) => lowered.includes(f));
