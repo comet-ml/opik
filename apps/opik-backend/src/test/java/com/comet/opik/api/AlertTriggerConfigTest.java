@@ -88,7 +88,7 @@ class AlertTriggerConfigTest {
         assertThat(AlertTriggerConfig.withNormalizedWindow(null)).isNull();
     }
 
-    static Stream<Arguments> operatorSpellings() {
+    static Stream<Arguments> operatorInputs() {
         return Stream.of(
                 arguments("<", "<"),
                 arguments(">", ">"),
@@ -103,13 +103,16 @@ class AlertTriggerConfigTest {
                 // Not operators; left for the validation to reject rather than guessed at here.
                 arguments("not_an_operator", null),
                 arguments("", null),
+                // Blank is unrecognised rather than absent: it reaches Operator.fromString on a
+                // feedback-score alert and throws there, so the write-side validation has to reject it.
+                arguments("   ", null),
                 arguments(null, null));
     }
 
     @ParameterizedTest
-    @MethodSource("operatorSpellings")
-    @DisplayName("every accepted operator spelling canonicalises to its symbol")
-    void normalizesOperatorSpellings(String stored, String expected) {
+    @MethodSource("operatorInputs")
+    @DisplayName("recognised operator inputs canonicalise to a symbol, the rest report unrecognised")
+    void normalizesRecognisedOperatorInputsAndLeavesOthersUnrecognised(String stored, String expected) {
         assertThat(AlertTriggerConfig.normalizedOperator(stored)).isEqualTo(expected);
     }
 
@@ -140,12 +143,21 @@ class AlertTriggerConfigTest {
     @Test
     @DisplayName("the combined helper applies both normalisations in one pass")
     void withNormalizedConfigValueAppliesBoth() {
+        // Asserted as a whole map, for the same reason as promotesTheLegacyWindowKey above: entry-wise
+        // checks would pass an implementation that normalised both keys and dropped everything else, which
+        // is the failure that would actually hurt on a config read out of persistence.
         var configValue = Map.of(
                 LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900",
-                OPERATOR_CONFIG_KEY, "less_than");
+                OPERATOR_CONFIG_KEY, "less_than",
+                THRESHOLD_CONFIG_KEY, "0.5",
+                NAME_CONFIG_KEY, "helpfulness");
 
         assertThat(AlertTriggerConfig.withNormalizedConfigValue(configValue))
-                .containsEntry(WINDOW_CONFIG_KEY, "900")
-                .containsEntry(OPERATOR_CONFIG_KEY, "<");
+                .containsExactlyInAnyOrderEntriesOf(Map.of(
+                        LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900",
+                        WINDOW_CONFIG_KEY, "900",
+                        OPERATOR_CONFIG_KEY, "<",
+                        THRESHOLD_CONFIG_KEY, "0.5",
+                        NAME_CONFIG_KEY, "helpfulness"));
     }
 }
