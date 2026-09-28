@@ -42,6 +42,8 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +89,14 @@ class SpansPostCutoverReadMappingTest {
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+    /**
+     * A sub-microsecond remainder added to the fixture's event timestamps, so the successor's {@code DateTime64(6)}
+     * columns always have something to truncate. Podam reads a clock whose resolution is the platform's —
+     * microseconds on macOS, nanoseconds on Linux — so without it the truncation is load-bearing on one platform and
+     * a no-op on the other, and a fixture that stopped accounting for it would pass locally and fail in CI.
+     */
+    private static final long SUB_MICROSECOND_NANOS = 999;
 
     /** The two column encodings the successor changes, and the ones every assertion here reads back through. */
     private static final Map<String, String> SUCCESSOR_ENCODINGS = Map.of(
@@ -291,13 +301,26 @@ class SpansPostCutoverReadMappingTest {
     }
 
     private Span newSpan(String projectName, UUID traceId, UUID parentSpanId) {
-        return factory.manufacturePojo(Span.class).toBuilder()
+        var span = factory.manufacturePojo(Span.class);
+
+        return span.toBuilder()
                 .projectName(projectName)
                 .traceId(traceId)
                 .parentSpanId(parentSpanId)
+                .startTime(asStored(span.startTime()))
+                .endTime(asStored(span.endTime()))
                 // Scores are written through their own endpoint, so a span create never persists them.
                 .feedbackScores(null)
                 .build();
+    }
+
+    /**
+     * An event timestamp as the successor stores it: {@code DateTime64(6)} (migration 000115), where the table it
+     * replaces keeps {@code DateTime64(9)}. Sub-microsecond digits are truncated, never rounded, so the expectation
+     * has to drop them — and {@link #SUB_MICROSECOND_NANOS} makes sure there are some to drop on every platform.
+     */
+    private static Instant asStored(Instant eventTime) {
+        return eventTime.plusNanos(SUB_MICROSECOND_NANOS).truncatedTo(ChronoUnit.MICROS);
     }
 
     /**
