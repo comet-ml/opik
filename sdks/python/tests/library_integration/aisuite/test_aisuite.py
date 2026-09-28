@@ -128,7 +128,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
     ]
 
     _ = wrapped_client.chat.completions.create(
-        model=llm_constants.AISUITE_ANTHROPIC_CLAUDE_SONNET,
+        model=llm_constants.AISUITE_ANTHROPIC_CLAUDE_HAIKU,
         messages=messages,
         max_tokens=10,
     )
@@ -160,7 +160,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
                 spans=[],
-                model=ANY_STRING.starting_with(llm_constants.ANTHROPIC_CLAUDE_SONNET),
+                model=ANY_STRING.starting_with(llm_constants.ANTHROPIC_CLAUDE_HAIKU),
                 provider="anthropic",
                 source="sdk",
             )

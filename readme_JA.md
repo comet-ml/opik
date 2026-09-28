@@ -346,6 +346,7 @@ opik configure
 | Spring AI | Spring AI フレームワークの呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/spring-ai?utm_source=opik&utm_medium=github&utm_content=spring_ai_link&utm_campaign=opik) |
 | Strands Agents | Strands agents の呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/strands-agents?utm_source=opik&utm_medium=github&utm_content=strands_agents_link&utm_campaign=opik) |
 | Together AI | Together AI の LLM 呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/together-ai?utm_source=opik&utm_medium=github&utm_content=together_ai_link&utm_campaign=opik) |
+| TypeSafe AI   | TypeSafe AI (Jev) の System One 呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/typesafe?utm_source=opik&utm_medium=github&utm_content=typesafe_link&utm_campaign=opik) |
 | Vercel AI SDK | Vercel AI SDK の呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/vercel-ai-sdk?utm_source=opik&utm_medium=github&utm_content=vercel_ai_sdk_link&utm_campaign=opik) |
 | VoltAgent | VoltAgent のエージェントフレームワークの呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/voltagent?utm_source=opik&utm_medium=github&utm_content=voltagent_link&utm_campaign=opik) |
 | WatsonX | IBM watsonx の LLM 呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/watsonx?utm_source=opik&utm_medium=github&utm_content=watsonx_link&utm_campaign=opik) |

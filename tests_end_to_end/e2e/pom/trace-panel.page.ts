@@ -1,4 +1,4 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 
 export class TracePanelPage {
   constructor(
@@ -29,6 +29,40 @@ export class TracePanelPage {
 
   get outputSection(): Locator {
     return this.root.getByRole('button', { name: 'Output', expanded: true });
+  }
+
+  /**
+   * A collapsible section header, whatever its state — the counterpart to
+   * {@link inputSection} and {@link outputSection}, which bake `expanded: true`
+   * into the locator and so cannot express "this section is collapsed".
+   *
+   * Matched on the accessible name, exactly: the shared `CodeBlock` renders
+   * every section identically and only the title tells them apart, and a
+   * substring match would let `Input` also address a future `Input schema`.
+   * The locator is left strict rather than reduced with `.first()`, so a title
+   * that stops being unique fails loudly instead of testing whichever section
+   * the DOM happened to put first.
+   */
+  sectionHeader(title: string): Locator {
+    return this.root.getByRole('button', { name: title, exact: true });
+  }
+
+  /**
+   * Click a section header and wait for its own `aria-expanded` to flip.
+   *
+   * Gated on the flip rather than on the body appearing: a collapsed section's
+   * body is hidden with a class, not unmounted, so "the content is in the DOM"
+   * is true in both states and would make the wait a no-op.
+   */
+  async toggleSection(title: string): Promise<void> {
+    return test.step(`Toggle the ${title} section`, async () => {
+      const header = this.sectionHeader(title);
+      const wasExpanded = (await header.getAttribute('aria-expanded')) === 'true';
+      await header.click();
+      await header
+        .and(this.root.locator(`[aria-expanded="${wasExpanded ? 'false' : 'true'}"]`))
+        .waitFor();
+    });
   }
 
   /** Heading-area locator for the trace name shown in the panel toolbar. */
@@ -266,6 +300,49 @@ export class TracePanelPage {
   }
 
   /**
+   * The panel's own next/previous-row control, which walks the table behind it.
+   *
+   * Two selectors, because the builds disagree and both are live targets for
+   * this suite. The OSS panel renders an icon-only button carrying
+   * `data-testid="side-panel-next"` and no accessible name — its label lives in
+   * a tooltip, which contributes nothing to the a11y tree. The cloud build
+   * renders a labelled button ("Next", plus a hotkey chip) and does not carry
+   * the testid. Neither locator alone resolves on both, and preferring the
+   * testid while silently having no fallback is how a cloud run spends its
+   * whole action budget waiting for an element that build never renders.
+   */
+  rowNavButton(direction: 'next' | 'previous'): Locator {
+    const label = direction === 'next' ? /^Next\b/ : /^Previous\b/;
+    return this.root
+      .getByTestId(`side-panel-${direction}`)
+      .or(this.root.getByRole('button', { name: label }));
+  }
+
+  /**
+   * Move to the adjacent table row using the panel's own arrows, and answer a
+   * page object for whichever trace it landed on.
+   *
+   * This, rather than navigating to the next trace's URL: the panel stays
+   * mounted across a row change and resets its per-node state from the id
+   * alone, so a reload would answer a question nobody asked. Which trace is
+   * adjacent depends on the table's sort, so the id is read back from the URL
+   * instead of assumed.
+   */
+  async goToAdjacentRow(direction: 'next' | 'previous'): Promise<TracePanelPage> {
+    return test.step(`Move to the ${direction} trace row`, async () => {
+      await this.rowNavButton(direction).click();
+      await this.page.waitForURL((url) => {
+        const shown = url.searchParams.get('trace') ?? '';
+        return shown !== '' && shown !== this.traceId;
+      });
+      const shown = new URL(this.page.url()).searchParams.get('trace') as string;
+      const panel = new TracePanelPage(this.page, shown);
+      await panel.waitForFullyLoaded();
+      return panel;
+    });
+  }
+
+  /**
    * The collapsible Error section header. Matched on its accessible name rather
    * than a testid: the shared CodeBlock renders every section the same way, and
    * only the title distinguishes them.
@@ -312,6 +389,116 @@ export class TracePanelPage {
     return test.step('Open the MCP hint popover', async () => {
       await this.mcpHintButton.hover();
       await this.mcpHintPopover.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Wait until the hint pill has stopped moving.
+   *
+   * The pill fades and slides in from a few pixels above its resting spot,
+   * after a delay held at the animation's first frame. Playwright calls it
+   * visible as soon as it has a non-empty box — which is true throughout that
+   * slide — so anything measuring its position has to wait for the box itself
+   * to settle. Two consecutive equal reads, not a timeout: the animation's
+   * duration is a stylesheet value this has no business encoding.
+   */
+  async waitForMcpHintSettled(): Promise<void> {
+    return test.step('Wait for the MCP hint pill to settle', async () => {
+      await this.waitForMcpHint();
+      let previousTop: number | null = null;
+      await expect
+        .poll(
+          async () => {
+            const box = await this.mcpHintButton.boundingBox();
+            const top = box?.y ?? null;
+            const settled = top !== null && top === previousTop;
+            previousTop = top;
+            return settled;
+          },
+          { message: 'the MCP hint pill should stop moving', timeout: 10_000 },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * The "Search" control of one section header — the icon that opens the
+   * section's find box.
+   *
+   * Addressed by its accessible name, which is what `CodeBlockSearch` gives it;
+   * there is no `data-testid` on this build, and adding one would leave the spec
+   * unrunnable against every deployment that predates it. Scoped to the
+   * section's own header row (the button's parent element) so it cannot resolve
+   * to a sibling section's icon.
+   */
+  sectionSearchButton(title: string): Locator {
+    return this.sectionHeader(title)
+      .locator('xpath=..')
+      .getByRole('button', { name: 'Search', exact: true });
+  }
+
+  /** The find box a section's Search icon opens. */
+  sectionSearchInput(title: string): Locator {
+    return this.sectionHeader(title).locator('xpath=..').getByPlaceholder('Search...');
+  }
+
+  /**
+   * The element the browser would actually deliver a click at `(x, y)` to,
+   * as a short descriptor: `TAG[data-testid]`, or `TAG[aria-label]` when the
+   * element has no testid.
+   *
+   * `document.elementFromPoint` rather than a Playwright click, because a click
+   * that lands on the wrong element reports as an actionability timeout — the
+   * right outcome, but it names Playwright's own machinery instead of naming
+   * the element that took the click. The descriptor walks up from the hit node
+   * to the nearest labelled ancestor, since the topmost element under a pointer
+   * is usually an unlabelled `<svg>` inside the control.
+   */
+  async hitTargetAt(x: number, y: number): Promise<string | null> {
+    return this.page.evaluate(
+      ([px, py]) => {
+        const hit = document.elementFromPoint(px, py);
+        if (!hit) return null;
+        const labelled = hit.closest('[data-testid], [aria-label]');
+        const target = labelled ?? hit;
+        const label = target.getAttribute('data-testid') ?? target.getAttribute('aria-label') ?? '';
+        return `${target.tagName}[${label}]`;
+      },
+      [x, y],
+    );
+  }
+
+  /**
+   * Scroll the data viewer's own overflow container to `top`, clamped to what
+   * it can actually reach, and answer the scrollTop it ended at.
+   *
+   * The container is found by walking up from the section header to the nearest
+   * scrollable ancestor rather than by selector: it carries neither a testid nor
+   * a stable class, and the alternative — a structural path down from the
+   * resizable panel — would break on any wrapper added between the two.
+   */
+  async scrollDataViewerTo(sectionTitle: string, top: number): Promise<number> {
+    return test.step(`Scroll the trace panel to ${Math.round(top)}px`, async () => {
+      const reached = await this.sectionHeader(sectionTitle).evaluate((element, requested) => {
+        let node: Element | null = element.parentElement;
+        while (node) {
+          const overflowY = getComputedStyle(node).overflowY;
+          if (/(auto|scroll)/.test(overflowY) && node.scrollHeight > node.clientHeight) {
+            node.scrollTop = Math.max(0, Math.min(requested, node.scrollHeight - node.clientHeight));
+            return node.scrollTop;
+          }
+          node = node.parentElement;
+        }
+        return null;
+      }, top);
+
+      if (reached === null) {
+        throw new Error(
+          'TracePanelPage.scrollDataViewerTo: the trace panel has no scrollable ancestor — ' +
+            'the seeded trace is not tall enough to overflow the viewer.',
+        );
+      }
+      return reached;
     });
   }
 

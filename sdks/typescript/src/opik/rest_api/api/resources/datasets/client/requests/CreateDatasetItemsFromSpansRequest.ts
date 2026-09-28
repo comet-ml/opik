@@ -16,4 +16,6 @@ export interface CreateDatasetItemsFromSpansRequest {
     /** Optional evaluators to apply to the created items */
     evaluators?: OpikApi.EvaluatorItem[];
     executionPolicy?: OpikApi.ExecutionPolicy;
+    /** Optional mapping of dataset item field name to a path into the span, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets. */
+    fieldMappings?: Record<string, string>;
 }

@@ -204,6 +204,17 @@ public class AlertResourceClient {
         }
     }
 
+    public Response testWebhookWithResponse(Alert alert, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("webhooks")
+                .path("tests")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.entity(toRequestNode(alert), MediaType.APPLICATION_JSON));
+    }
+
     public WebhookTestResult testWebhook(Alert alert, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("webhooks")

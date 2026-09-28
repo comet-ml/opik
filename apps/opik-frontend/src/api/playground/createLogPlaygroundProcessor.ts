@@ -6,6 +6,7 @@ import {
   LogExperiment,
   LogExperimentItem,
   LogExperimentPromptVersion,
+  LogErrorInfo,
   LogSpan,
   LogTrace,
   PromptLibraryMetadata,
@@ -27,7 +28,7 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
-import { parseCompletionOutput } from "@/lib/playground";
+import { parseCompletionError, parseCompletionOutput } from "@/lib/playground";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 
@@ -41,6 +42,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   providerMessages: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   promptLibraryMetadata?: PromptLibraryMetadata;
+  experimentName?: string;
   configs: LLMPromptConfigsType;
   selectedRuleIds: string[] | null;
   datasetItemData?: object;
@@ -131,11 +133,23 @@ const USAGE_FIELDS_TO_SEND = [
   "total_tokens",
 ];
 
+const getRunErrorInfo = (run: LogQueueParams): LogErrorInfo | undefined => {
+  const error = parseCompletionError(run);
+  if (!error) return undefined;
+
+  return {
+    exception_type: error.exceptionType,
+    message: error.message,
+  };
+};
+
 const getTraceFromRun = (
   run: LogQueueParams,
   projectName: string,
   source: LOGS_SOURCE,
 ): LogTrace => {
+  const errorInfo = getRunErrorInfo(run);
+
   const trace: LogTrace = {
     id: v7(),
     projectName,
@@ -146,6 +160,7 @@ const getTraceFromRun = (
       messages: run.providerMessages,
     },
     output: { output: parseCompletionOutput(run) },
+    ...(errorInfo && { errorInfo }),
     metadata: {
       created_from: "playground",
     },
@@ -190,6 +205,8 @@ const getSpanFromRun = (
   projectName: string,
   source: LOGS_SOURCE,
 ): LogSpan => {
+  const errorInfo = getRunErrorInfo(run);
+
   const spanOutput =
     run.choices && hasChoicesContent(run)
       ? { choices: run.choices }
@@ -212,6 +229,7 @@ const getSpanFromRun = (
       messages: run.providerMessages,
     },
     output: spanOutput,
+    ...(errorInfo && { errorInfo }),
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     model: spanModel,
     provider: spanProvider,
@@ -265,6 +283,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
     ...(run.datasetVersionId && {
       datasetVersionId: run.datasetVersionId,
     }),
+    ...(run.experimentName && { name: run.experimentName }),
     metadata: experimentMetadata,
     ...(run.promptLibraryVersions?.length && {
       prompt_versions: run.promptLibraryVersions,

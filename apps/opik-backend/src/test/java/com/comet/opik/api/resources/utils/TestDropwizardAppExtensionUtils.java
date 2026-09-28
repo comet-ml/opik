@@ -27,6 +27,7 @@ import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 @UtilityClass
 public class TestDropwizardAppExtensionUtils {
 
+    @Builder(toBuilder = true)
     public record CustomConfig(String key, String value) {
     }
 

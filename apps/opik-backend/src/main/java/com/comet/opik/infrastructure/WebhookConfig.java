@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -68,6 +69,14 @@ public class WebhookConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration connectionTimeout = Duration.seconds(5);
+
+    /**
+     * Defaults to {@code RELAXED} because self-hosted deployments legitimately point webhooks at
+     * internal services; cloud sets {@code STRICT}.
+     */
+    @Valid @JsonProperty
+    @Builder.Default
+    @NotNull private DestinationGuard.Mode destinationGuard = DestinationGuard.Mode.RELAXED;
 
     // Debouncing configuration
     @Valid @JsonProperty
@@ -144,5 +153,12 @@ public class WebhookConfig implements StreamConfiguration {
         @Valid @JsonProperty
         @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
         private Duration metricsAlertJobLockWaitTimeout = Duration.seconds(1);
+
+        // Window used for a threshold config persisted without one, from before the write side validated it.
+        // Matches DEFAULT_FEEDBACK_SCORE_CONDITION in the alerts form, so such a config evaluates over the
+        // same period an equivalent alert created today would get.
+        @Valid @JsonProperty
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration defaultAlertWindow = Duration.hours(24);
     }
 }

@@ -156,3 +156,50 @@ def test_validate_scorer_function_with_all_params():
 
     # Should not raise any exception
     validate_scorer_function(scorer_with_all_params)
+
+
+def test_wrap_scorer_functions__partial_and_callable_object__named_and_scored():
+    # Both are accepted by validate_scorer_function but have no __name__, which
+    # used to raise AttributeError while wrapping.
+    import functools
+
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    def length_above(
+        dataset_item: Dict[str, Any], task_outputs: Dict[str, Any], threshold: int
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name="length_above", value=float(len(task_outputs) > threshold)
+        )
+
+    class ExactMatch:
+        def __call__(
+            self, dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]
+        ) -> score_result.ScoreResult:
+            return score_result.ScoreResult(name="exact_match", value=1.0)
+
+    metrics = wrap_scorer_functions(
+        [functools.partial(length_above, threshold=0), ExactMatch()],
+        project_name=None,
+    )
+
+    assert [metric.name for metric in metrics] == ["length_above", "ExactMatch"]
+    for metric in metrics:
+        result = metric.score(dataset_item={}, task_outputs={"output": "x"})
+        assert result.value == 1.0
+
+
+def test_wrap_scorer_functions__non_string_name_attribute__falls_back_to_class_name():
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    class OddlyNamed:
+        __name__ = 123
+
+        def __call__(
+            self, dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]
+        ) -> score_result.ScoreResult:
+            return score_result.ScoreResult(name="odd", value=1.0)
+
+    [metric] = wrap_scorer_functions([OddlyNamed()], project_name=None)
+
+    assert metric.name == "OddlyNamed"

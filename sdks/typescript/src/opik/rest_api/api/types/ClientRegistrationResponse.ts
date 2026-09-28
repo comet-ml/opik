@@ -5,6 +5,9 @@ export interface ClientRegistrationResponse {
     clientIdIssuedAt?: number;
     clientName?: string;
     logoUri?: string;
+    softwareId?: string;
+    softwareVersion?: string;
+    clientUri?: string;
     redirectUris?: string[];
     tokenEndpointAuthMethod?: string;
     grantTypes?: string[];

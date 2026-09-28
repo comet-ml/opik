@@ -117,7 +117,23 @@ public class OAuthResourceClient {
      * for tests that want to drive the exchange through the service and inspect what it decided.
      */
     public Authorized authorizeArtifacts(String clientName) {
-        return reauthorize(registerClient(clientName));
+        return authorizeArtifacts(ClientRegistrationRequest.builder()
+                .clientName(clientName)
+                .redirectUris(Set.of(redirectUri))
+                .build());
+    }
+
+    /**
+     * Same, registering with the full RFC 7591 metadata the caller supplies (software_id, logo_uri, ...).
+     * Consent and the exchange are always driven with this helper's {@code redirectUri}, so the registration
+     * must list it — a registration that does not would be rejected at the consent context, one step later and
+     * less legibly.
+     */
+    public Authorized authorizeArtifacts(ClientRegistrationRequest registration) {
+        assertThat(registration.redirectUris())
+                .as("the helper consents and exchanges with its own redirect URI, so the registration must allow it")
+                .contains(redirectUri);
+        return reauthorize(registerClient(registration));
     }
 
     /** Walks consent + PKCE again for a client that is already registered — a host reusing its client_id. */
@@ -126,12 +142,7 @@ public class OAuthResourceClient {
         return new Authorized(clientId, authorize(clientId, codeVerifier), codeVerifier);
     }
 
-    private String registerClient(String clientName) {
-        var request = ClientRegistrationRequest.builder()
-                .clientName(clientName)
-                .redirectUris(Set.of(redirectUri))
-                .build();
-
+    private String registerClient(ClientRegistrationRequest request) {
         try (var response = client.target(baseURI + REGISTER_PATH).request().post(Entity.json(request))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             return response.readEntity(ClientRegistrationResponse.class).clientId();

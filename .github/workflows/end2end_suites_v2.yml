@@ -53,7 +53,7 @@ jobs:
       OPIK_WORKSPACE: default
       WORKERS: 2
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
 
     steps:
       - name: Checkout repo
@@ -67,7 +67,7 @@ jobs:
           cache-dependency-path: tests_end_to_end/e2e/package-lock.json
 
       - name: Setup uv & Python
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: '3.12'
 

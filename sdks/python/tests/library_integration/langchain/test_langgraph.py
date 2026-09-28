@@ -1465,3 +1465,51 @@ def test_langgraph__internal_span_classifier__only_meaningful_spans_stay_visible
     # Sanity: the feature is actually doing something (at least one span was hidden),
     # so the assertion above can't pass vacuously by tagging being disabled.
     assert hidden_spans
+
+
+def test_langgraph__graph_left_suspended_at_interrupt__per_run_state_is_released(
+    fake_backend,
+):
+    """A graph suspended at an interrupt must not pin the tracer's per-run state.
+
+    This is the one shape where a run legitimately never runs to completion: the
+    caller gets the interrupt payload back and may never resume. The tracer's
+    state is released from a root run's end callback, so this is where the
+    unbounded growth of #7516 would survive if it survived anywhere - and a
+    long-lived tracer in front of a human-in-the-loop graph is exactly where
+    unresumed threads accumulate."""
+
+    class _State(TypedDict, total=False):
+        question: str
+        choice: str
+        answer: str
+
+    def ask(state):
+        return {"choice": interrupt("pick one")}
+
+    def answer(state):
+        return {"answer": "ok " + state.get("choice", "")}
+
+    workflow = StateGraph(_State)
+    workflow.add_node("ask", ask)
+    workflow.add_node("answer", answer)
+    workflow.add_edge(START, "ask")
+    workflow.add_edge("ask", "answer")
+    workflow.add_edge("answer", END)
+    app = workflow.compile(checkpointer=MemorySaver())
+
+    tracer = OpikTracer()
+
+    for n in range(3):
+        config = {
+            "configurable": {"thread_id": f"suspended-{n}"},
+            "callbacks": [tracer],
+        }
+        result = app.invoke({"question": str(n)}, config=config)
+        # Left suspended on purpose: never resumed with Command(resume=...).
+        assert LANGGRAPH_INTERRUPT_OUTPUT_KEY in result
+
+    tracer.flush()
+
+    assert len(fake_backend.trace_trees) == 3
+    assert tracer._run_state.is_empty()

@@ -40,6 +40,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -51,6 +52,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.deserializeEventPayload;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.prepareWebhookPayload;
@@ -266,6 +269,7 @@ class AlertServiceImpl implements AlertService {
 
         validateNoProjectScopeConflict(alert);
         validateGroupIndices(alert);
+        validateThresholdConfigs(alert);
         var newAlert = prepareAlert(alert, userName, workspaceId);
 
         return EntityConstraintHandler
@@ -285,6 +289,7 @@ class AlertServiceImpl implements AlertService {
 
         validateNoProjectScopeConflict(alert);
         validateGroupIndices(alert);
+        validateThresholdConfigs(alert);
 
         alert = alert.toBuilder()
                 .createdBy(existingAlert.createdBy())
@@ -537,6 +542,84 @@ class AlertServiceImpl implements AlertService {
         }
     }
 
+    // A threshold config with no threshold or no window cannot be evaluated: MetricsAlertJob needs both to
+    // build a condition. Such an alert used to persist happily and then fail on every run of the job, so its
+    // owner saw an alert that simply never fired. Rejecting it here is the only point the user finds out.
+    //
+    // Scoped to exactly the configs the job would evaluate, via the same mapping the job uses, so this never
+    // rejects a config that is inert anyway (a threshold config left on a non-metrics trigger, say).
+    private static void validateThresholdConfigs(Alert alert) {
+        if (alert.triggers() == null) {
+            return;
+        }
+        for (AlertTrigger trigger : alert.triggers()) {
+            // A null element is a malformed request body, not a server fault: dereferencing it here would
+            // answer 5xx for something the caller sent.
+            if (trigger == null) {
+                throw new BadRequestException("'triggers' must not contain null entries");
+            }
+            if (trigger.triggerConfigs() == null || trigger.eventType() == null) {
+                continue;
+            }
+            var thresholdType = AlertTriggerConfigType.thresholdTypeFor(trigger.eventType());
+            if (thresholdType.isEmpty()) {
+                continue;
+            }
+            for (AlertTriggerConfig config : trigger.triggerConfigs()) {
+                if (config == null) {
+                    throw new BadRequestException("'trigger_configs' must not contain null entries");
+                }
+                if (config.type() != thresholdType.get()) {
+                    continue;
+                }
+                // Normalized so the legacy spelling counts, exactly as it does everywhere a config is read.
+                Map<String, String> configValue = Optional
+                        .ofNullable(AlertTriggerConfig.withNormalizedWindow(config.configValue()))
+                        .orElseGet(Map::of);
+                for (String key : List.of(THRESHOLD_CONFIG_KEY, WINDOW_CONFIG_KEY)) {
+                    if (StringUtils.isBlank(configValue.get(key))) {
+                        throw new BadRequestException(
+                                "Missing config value for key '%s' in trigger config of type '%s'"
+                                        .formatted(key, config.type().getValue()));
+                    }
+                }
+                // Present is not the same as usable. A value that does not parse fails inside the job on
+                // every run, which is the same silent never-fires this validation exists to prevent.
+                validateThreshold(configValue.get(THRESHOLD_CONFIG_KEY), config.type());
+                validateWindow(configValue.get(WINDOW_CONFIG_KEY), config.type());
+            }
+        }
+    }
+
+    private static void validateThreshold(String threshold, AlertTriggerConfigType type) {
+        try {
+            new BigDecimal(threshold.trim());
+        } catch (NumberFormatException e) {
+            throw new BadRequestException(
+                    "Config value for key '%s' in trigger config of type '%s' is not a number: '%s'"
+                            .formatted(THRESHOLD_CONFIG_KEY, type.getValue(), threshold));
+        }
+    }
+
+    private static void validateWindow(String window, AlertTriggerConfigType type) {
+        long windowSeconds;
+        try {
+            windowSeconds = Long.parseLong(window.trim());
+        } catch (NumberFormatException e) {
+            throw new BadRequestException(
+                    "Config value for key '%s' in trigger config of type '%s' is not a number of seconds: '%s'"
+                            .formatted(WINDOW_CONFIG_KEY, type.getValue(), window));
+        }
+        // Positive only. A non-positive window is not an interval at all, so it can never evaluate; a long
+        // one merely scans more, which is a cost question rather than a malformed config, and capping it at
+        // what the form happens to offer would reject both API clients and existing rows written above it.
+        if (windowSeconds <= 0) {
+            throw new BadRequestException(
+                    "Config value for key '%s' in trigger config of type '%s' must be a positive number of seconds, got '%d'"
+                            .formatted(WINDOW_CONFIG_KEY, type.getValue(), windowSeconds));
+        }
+    }
+
     private static void validateNoProjectScopeConflict(Alert alert) {
         if (alert.projectId() == null || alert.triggers() == null) {
             return;
@@ -617,6 +700,10 @@ class AlertServiceImpl implements AlertService {
 
         return config.toBuilder()
                 .id(triggerConfigId)
+                // Normalized on the way in as well as on the way out: validation already reads the legacy
+                // key, so without this a legacy-only payload passes and is written back unchanged, and the
+                // old spelling outlives every row that touches it.
+                .configValue(AlertTriggerConfig.withNormalizedWindow(config.configValue()))
                 .alertTriggerId(triggerId)
                 .createdBy(Optional.ofNullable(config.createdBy()).orElse(userName))
                 .createdAt(alert.createdAt()) // will be null for new alert, and not null for update

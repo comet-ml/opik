@@ -843,4 +843,95 @@ export class AnnotationQueuesClient {
             "/v1/private/annotation-queues/{id}/items/delete",
         );
     }
+
+    /**
+     * Returns queue membership metadata — how each item got into the queue — for the given item ids. A lookup rather than a listing: the caller renders the items table from the traces or threads API with its own sort and filters, so it asks for exactly the ids it is displaying. Ids that are not in the queue are omitted.
+     *
+     * @param {string} id
+     * @param {OpikApi.AnnotationQueueItemIdsPublic} request
+     * @param {AnnotationQueuesClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.annotationQueues.searchAnnotationQueueItems("id", {
+     *         ids: ["ids"]
+     *     })
+     */
+    public searchAnnotationQueueItems(
+        id: string,
+        request: OpikApi.AnnotationQueueItemIdsPublic,
+        requestOptions?: AnnotationQueuesClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.AnnotationQueueItemsPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__searchAnnotationQueueItems(id, request, requestOptions));
+    }
+
+    private async __searchAnnotationQueueItems(
+        id: string,
+        request: OpikApi.AnnotationQueueItemIdsPublic,
+        requestOptions?: AnnotationQueuesClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.AnnotationQueueItemsPublic>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/annotation-queues/${core.url.encodePathParam(id)}/items/search`,
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.AnnotationQueueItemIdsPublic.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.AnnotationQueueItemsPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/annotation-queues/{id}/items/search",
+        );
+    }
 }

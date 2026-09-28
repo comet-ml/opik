@@ -1,9 +1,12 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useActiveProjectId } from "@/store/AppStore";
 import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useDiagnosticsRunState from "@/hooks/useDiagnosticsRunState";
 import useDiagnosticsSeen from "@/hooks/useDiagnosticsSeen";
+import { AUTO_RUN_MAX_DURATION_MS } from "@/constants/diagnostics";
+import DiagnosticsReadyBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsReadyBadge";
 
 type DiagnosticsNavBadgeProps = {
   collapsed: boolean;
@@ -22,19 +25,41 @@ const DiagnosticsNavBadge: React.FC<DiagnosticsNavBadgeProps> = ({
 
   if (!projectId) return null;
 
-  const scanAt = job?.last_scan_at;
+  const scanMs = job?.last_scan_at ? Date.parse(job.last_scan_at) : 0;
+  const autoRunAt = job?.auto_first_run_at
+    ? Date.parse(job.auto_first_run_at)
+    : 0;
   const hasUnseen =
-    !isRunning &&
-    Boolean(scanAt) &&
-    (!lastSeen || Date.parse(scanAt!) > Date.parse(lastSeen));
+    !isRunning && scanMs > 0 && (!lastSeen || scanMs > Date.parse(lastSeen));
+
+  const isAutoFirstRunResult =
+    autoRunAt > 0 &&
+    scanMs >= autoRunAt &&
+    // A later manual run usually lands outside the window and gets the plain dot instead of the pulse.
+    scanMs - autoRunAt < AUTO_RUN_MAX_DURATION_MS;
 
   const showSpinner = isRunning && !collapsed;
   if (!showSpinner && !hasUnseen) return null;
 
+  // Only the free automatic run's report gets the Ready badge, which fits the expanded sidebar only; on the
+  // collapsed rail it pulses instead. Every other report gets the plain dot.
+  if (!showSpinner && isAutoFirstRunResult && !collapsed) {
+    return (
+      <span className="ml-auto flex shrink-0 items-center justify-center pl-1">
+        <DiagnosticsReadyBadge projectId={projectId} autoRunAt={autoRunAt} />
+      </span>
+    );
+  }
+
   const indicator = showSpinner ? (
     <Loader2 className="size-3 animate-spin text-primary" />
   ) : (
-    <span className="size-1.5 rounded-full bg-primary" />
+    <span
+      className={cn(
+        "size-1.5 rounded-full bg-primary",
+        isAutoFirstRunResult && "text-primary motion-safe:animate-beacon-pulse",
+      )}
+    />
   );
 
   return collapsed ? (

@@ -15,6 +15,10 @@ export const CreateDatasetItemsFromTracesRequest: core.serialization.Schema<
     enrichmentOptions: core.serialization.property("enrichment_options", TraceEnrichmentOptions),
     evaluators: core.serialization.list(EvaluatorItem).optional(),
     executionPolicy: core.serialization.property("execution_policy", ExecutionPolicy.optional()),
+    fieldMappings: core.serialization.property(
+        "field_mappings",
+        core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+    ),
 });
 
 export declare namespace CreateDatasetItemsFromTracesRequest {
@@ -23,5 +27,6 @@ export declare namespace CreateDatasetItemsFromTracesRequest {
         enrichment_options: TraceEnrichmentOptions.Raw;
         evaluators?: EvaluatorItem.Raw[] | null;
         execution_policy?: ExecutionPolicy.Raw | null;
+        field_mappings?: Record<string, string> | null;
     }
 }

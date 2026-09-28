@@ -111,7 +111,7 @@ public class CostIntelligenceIngestionListener {
         List<TraceIdentityRow> rows = event.traces().stream()
                 .filter(trace -> CipxMetadata.hasIdentity(trace.metadata()))
                 .map(trace -> TraceIdentityRow.from(trace.id(), trace.projectId(), trace.metadata(),
-                        trace.startTime(), event.cipxDeviceId()))
+                        trace.startTime(), event.cipxDeviceId(), event.createdAt()))
                 .toList();
         ingestIdentities(rows, event.workspaceId(), event.userName());
     }
@@ -135,7 +135,7 @@ public class CostIntelligenceIngestionListener {
                                     .filter(entry -> startTimes.containsKey(entry.getKey()))
                                     .map(entry -> TraceIdentityRow.from(entry.getKey(), entry.getValue(),
                                             update.metadata(), startTimes.get(entry.getKey()),
-                                            event.cipxDeviceId()))
+                                            event.cipxDeviceId(), event.createdAt()))
                                     .toList();
                             ingestIdentities(rows, event.workspaceId(), event.userName());
                         },

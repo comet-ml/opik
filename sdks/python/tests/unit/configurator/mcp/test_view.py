@@ -82,6 +82,51 @@ class TestLoggingInstallView:
         assert "Cursor" in logged
 
 
+class TestSingleCandidateMenu:
+    """One detected client, on a terminal that cannot host the picker.
+
+    It has always been a yes/no, and anything piping input into it sends Y, N or
+    a bare Enter — so those keep working. The numbers are what was missing: the
+    manual row existed only once two clients were detected, which left the user
+    it is for — one client found, and it is not theirs — with no way to reach it.
+    """
+
+    @staticmethod
+    def _answer(text):
+        with mock.patch("builtins.input", lambda prompt: text):
+            return mcp_view.numbered_menu(
+                "pick", [mcp_view.HostChoice("cursor", "Cursor")]
+            )
+
+    @pytest.mark.parametrize("answer", ["y", "Y", "yes", "", "1"])
+    def test_yes_in_any_of_its_old_spellings__installs(self, answer):
+        assert self._answer(answer) == ["cursor"]
+
+    @pytest.mark.parametrize("answer", ["n", "N", "no", "3"])
+    def test_no_in_any_of_its_old_spellings__installs_nothing(self, answer):
+        assert self._answer(answer) == []
+
+    def test_not_listed__is_reachable_with_one_client(self):
+        assert self._answer("2") == [mcp_view.MANUAL_SETUP]
+
+    def test_the_options_are_named_in_the_prompt(self):
+        seen = []
+        with mock.patch("builtins.input", lambda prompt: seen.append(prompt) or "y"):
+            mcp_view.numbered_menu("pick", [mcp_view.HostChoice("cursor", "Cursor")])
+
+        assert mcp_view.MANUAL_SETUP_LABEL in seen[0]
+        assert "Cursor" in seen[0]
+
+    def test_nonsense__asks_again_rather_than_guessing(self):
+        answers = iter(["maybe", "y"])
+        with mock.patch("builtins.input", lambda prompt: next(answers)):
+            chosen = mcp_view.numbered_menu(
+                "pick", [mcp_view.HostChoice("cursor", "Cursor")]
+            )
+
+        assert chosen == ["cursor"]
+
+
 class TestTargetResult:
     def test_short__prefers_the_summary(self):
         result = mcp_view.TargetResult(

@@ -585,3 +585,28 @@ def test_chat_prompt_template__format__jinja2_no_validation():
     # Should render successfully (Jinja2 handles missing variables gracefully)
     assert len(result) == 1
     assert result[0]["role"] == "user"
+
+
+def test_chat_prompt_template__format__multimodal_video_url_placeholders__validates_all():
+    """Placeholders in a video_url content part are validated like image_url parts."""
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe this {{object}}:"},
+                {"type": "video_url", "video_url": {"url": "{{video_url}}"}},
+            ],
+        }
+    ]
+
+    tested = ChatPromptTemplate(messages, validate_placeholders=True)
+
+    # Missing video_url placeholder
+    with pytest.raises(
+        exceptions.PromptPlaceholdersDontMatchFormatArguments
+    ) as exc_info:
+        tested.format({"object": "painting"})
+
+    assert exc_info.value.format_arguments == set(["object"])
+    assert exc_info.value.prompt_placeholders == set(["object", "video_url"])
+    assert exc_info.value.symmetric_difference == set(["video_url"])

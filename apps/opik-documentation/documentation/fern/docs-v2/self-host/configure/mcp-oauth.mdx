@@ -1,0 +1,46 @@
+---
+title: MCP OAuth
+headline: MCP OAuth | Opik Documentation
+og:title: MCP OAuth — Opik
+og:description: Turn on the MCP OAuth authorization server so coding agents can connect to a self-hosted Opik deployment with browser sign-in instead of a stored API key.
+og:site_name: Opik Documentation
+subtitle: Let coding agents sign in to your deployment through the browser
+---
+
+[Opik's MCP server](/mcp-server) lets a coding agent read and write your
+workspace. On Opik Cloud the agent signs in through the browser and stores no API
+key. A self-hosted deployment can offer the same thing, but the MCP OAuth
+authorization server is **off by default** — until you turn it on, the endpoint
+has no sign-in routes, and agents must use the local server with an API key in
+their config instead.
+
+## Turn it on
+
+Enable `mcpOAuth.enabled` in the Helm chart, together with these on the backend:
+
+| Setting | Value |
+|---|---|
+| `MCP_OAUTH_ENABLED` | `true` |
+| `OPIK_BASE_URL` | The public deployment root, **without** `/api` |
+
+<Warning>
+`OPIK_BASE_URL` must not end in `/api`. The server appends `/api/v1/mcp` to it to
+build the MCP resource URI, so a value that already ends in `/api` advertises the
+wrong one and sign-in fails. For a deployment at
+`https://opik.example.com/opik/api`, set it to `https://opik.example.com/opik`.
+</Warning>
+
+## Point clients at it
+
+Once it is on, the MCP server URL is your own Opik API base plus `/v1/mcp` — for
+the example above, `https://opik.example.com/opik/api/v1/mcp`. Users run
+`uvx opik mcp configure`, which detects the hosted server and registers it, or
+configure it by hand from
+[Advanced setup](/mcp-server/advanced-setup#hosted-server).
+
+<Note>
+Desktop clients such as Claude Desktop reach the server from the vendor's cloud
+rather than from the user's machine, so a deployment on `localhost` or behind a
+VPN is out of reach for them even with MCP OAuth on. Those users need the local
+server.
+</Note>

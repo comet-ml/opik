@@ -8,9 +8,17 @@ import org.redisson.api.stream.StreamAddArgs;
 public class RedisStreamUtils {
 
     public static <K, V> StreamAddArgs<K, V> buildAddArgs(K key, V value, StreamConfiguration config) {
+        return buildAddArgs(key, value, config.getStreamMaxLen(), config.getStreamTrimLimit());
+    }
+
+    /**
+     * For a producer whose configuration is not a {@link StreamConfiguration} — trimming needs only these two
+     * values, and the rest of that interface is the consumer's half.
+     */
+    public static <K, V> StreamAddArgs<K, V> buildAddArgs(K key, V value, int streamMaxLen, int streamTrimLimit) {
         return StreamAddArgs.<K, V>entry(key, value)
                 .trimNonStrict()
-                .maxLen(config.getStreamMaxLen())
-                .limit(config.getStreamTrimLimit());
+                .maxLen(streamMaxLen)
+                .limit(streamTrimLimit);
     }
 }

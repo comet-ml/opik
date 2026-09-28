@@ -22,6 +22,8 @@ import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Content;
@@ -926,6 +928,99 @@ class ChatCompletionsResourceTest {
         private jakarta.ws.rs.core.Response postChatCompletion(String workspaceName,
                 ChatCompletionRequest request) {
             return clientSupport.target(TestUtils.getBaseUrl(clientSupport) + CHAT_COMPLETIONS_PATH)
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request));
+        }
+    }
+
+    /// Claude rejects temperature and top_p in the same request; Bedrock answers
+    /// "temperature and top_p cannot both be specified for this model" (OPIK-8386).
+    /// The rule used to live only in the Anthropic provider's mapper, but a Claude
+    /// model reached through a custom gateway is dispatched by
+    /// OpenAICompatibleServiceProvider, which has no such rule. These assert on what
+    /// actually leaves Opik, through the real dispatch path.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Custom LLM provider — Claude sampling parameter exclusivity")
+    class CustomLlmClaudeSamplingParams {
+
+        private static final String PROVIDER_NAME = "claude-gw";
+        private static final String CLAUDE_MODEL = "custom-llm/" + PROVIDER_NAME + "/claude-opus-4-6";
+        private static final String OTHER_MODEL = "custom-llm/" + PROVIDER_NAME + "/mistral-large-2411";
+        private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
+        private static final String OK_BODY = """
+                {"id":"chatcmpl-x","object":"chat.completion","created":1,"model":"claude-opus-4-6",\
+                "choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}""";
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        @Test
+        @DisplayName("Claude through a custom gateway: temperature is forwarded, top_p is dropped")
+        void dropsTopPForClaude() {
+            var body = upstreamBodyFor(CLAUDE_MODEL);
+
+            assertThat(body.path("temperature").asDouble()).isEqualTo(0.7);
+            assertThat(body.has("top_p")).isFalse();
+        }
+
+        @Test
+        @DisplayName("A model without the constraint on the same gateway keeps both")
+        void keepsBothForOtherModels() {
+            var body = upstreamBodyFor(OTHER_MODEL);
+
+            assertThat(body.path("temperature").asDouble()).isEqualTo(0.7);
+            assertThat(body.path("top_p").asDouble()).isEqualTo(0.9);
+        }
+
+        private JsonNode upstreamBodyFor(String model) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+            createProviderFor(workspaceName, model);
+
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(OK_BODY)));
+
+            var request = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(model)
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .addUserMessage("ping")
+                    .build();
+
+            postChatCompletionFor(workspaceName, request);
+
+            var upstream = WIRE_MOCK.server().findAll(postRequestedFor(
+                    urlPathMatching(CHAT_COMPLETIONS_REGEX)));
+            assertThat(upstream).as("Opik should have forwarded the request upstream").isNotEmpty();
+            return JsonUtils.getJsonNodeFromString(upstream.getFirst().getBodyAsString());
+        }
+
+        private void createProviderFor(String workspaceName, String model) {
+            var providerApiKey = ProviderApiKey.builder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(PROVIDER_NAME)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl())
+                    .configuration(Map.of("provider_name", PROVIDER_NAME, "models", model))
+                    .build();
+            llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, API_KEY, workspaceName,
+                    HttpStatus.SC_CREATED);
+        }
+
+        private jakarta.ws.rs.core.Response postChatCompletionFor(String workspaceName,
+                ChatCompletionRequest request) {
+            return clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
                     .request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)

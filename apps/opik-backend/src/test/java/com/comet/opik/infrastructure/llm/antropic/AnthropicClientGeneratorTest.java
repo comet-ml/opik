@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -34,46 +35,99 @@ class AnthropicClientGeneratorTest {
     class SamplingParamsCapability {
 
         @ParameterizedTest
-        @ValueSource(strings = {"claude-sonnet-5", "claude-opus-4-7", "claude-opus-4-8"})
-        void supportsSamplingParamsReturnsFalseForAdaptiveThinkingModels(String modelName) {
-            assertThat(AnthropicModelName.supportsSamplingParams(modelName)).isFalse();
+        @ValueSource(strings = {"claude-sonnet-5", "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5",
+                "claude-fable-5", "claude-fable-5-1"})
+        void rejectsSamplingParamsForModelsNotMarkedCapable(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isTrue();
         }
 
         @ParameterizedTest
         @ValueSource(strings = {"claude-3-7-sonnet-20250219", "claude-haiku-4-5-20251001", "claude-sonnet-4-5",
                 "claude-opus-4-6"})
-        void supportsSamplingParamsReturnsTrueForNonAdaptiveModels(String modelName) {
-            assertThat(AnthropicModelName.supportsSamplingParams(modelName)).isTrue();
+        void acceptsSamplingParamsForTheModelsNamedCapable(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
         }
 
+        /**
+         * A name that is not an Anthropic id tells us nothing about the model behind it, so nothing is
+         * stripped: the proxy may be serving a capable Claude under a name of its own.
+         */
         @ParameterizedTest
-        @ValueSource(strings = {"some-unknown-model", "claude-future-99"})
-        void supportsSamplingParamsDefaultsTrueForUnknownModels(String modelName) {
-            assertThat(AnthropicModelName.supportsSamplingParams(modelName)).isTrue();
+        @ValueSource(strings = {"some-unknown-model", "custom-llm/gw/my-claude-deployment",
+                "custom-llm/claude-gw/mistral-large",
+                // Anthropic names models claude-<family>-<version>. These fit no family it ships, so
+                // they are someone's deployment name and say nothing about which Claude is behind it.
+                "custom-llm/gw/claude-prod", "custom-llm/gw/claude-internal-v3", "claude-future-99",
+                "claude-30-future"})
+        void staysPermissiveForNamesThatAreNotAnthropicIds(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
+        }
+
+        /**
+         * A floating alias has to be read as the model it resolves to. Haiku's newest member takes
+         * sampling params and the other three families' do not, so the aliases must not share one
+         * answer — and claude-haiku-latest must agree with claude-haiku-4-5 under its own id.
+         */
+        @ParameterizedTest
+        @CsvSource({
+                "~anthropic/claude-haiku-latest, false",
+                "~anthropic/claude-opus-latest, true",
+                "~anthropic/claude-sonnet-latest, true",
+                "~anthropic/claude-fable-latest, true"})
+        void readsAFloatingAliasAsTheFamilysNewestMember(String modelName, boolean rejects) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isEqualTo(rejects);
+        }
+
+        /**
+         * An Anthropic id we cannot place is assumed to take none. It is far more often a model newer
+         * than the capability list than an older one missing from it, and the floating aliases settle
+         * it: claude-opus-latest follows the newest model by definition.
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {"us.anthropic.claude-opus-9-v1:0", "claude-opus-99",
+                // A numeric segment is the next version, not a variant: an unlisted point release
+                // must not inherit claude-sonnet-4-6's capability.
+                "claude-sonnet-4-6-1"})
+        void assumesAnUnplaceableAnthropicIdTakesNone(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isTrue();
+        }
+
+        /** Claude 3 predates the constraint, and is recognised by shape rather than being listed. */
+        @ParameterizedTest
+        @ValueSource(strings = {"claude-3-haiku", "anthropic/claude-3.5-sonnet", "anthropic/claude-3.5-haiku",
+                "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+                // Claude 2 and Instant predate it too, and must survive the inference-profile strip
+                // rather than collapsing to the bare family word.
+                "anthropic.claude-v2:1", "anthropic.claude-instant-v1", "claude-2-1"})
+        void staysPermissiveForTheGenerationThatPredatesTheConstraint(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
         }
 
         @ParameterizedTest
         @NullAndEmptySource
         @ValueSource(strings = {"   "})
-        void supportsSamplingParamsDefaultsTrueForNullOrBlankModel(String modelName) {
-            assertThat(AnthropicModelName.supportsSamplingParams(modelName)).isTrue();
+        void staysPermissiveForNullOrBlankModel(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
         }
 
         /**
-         * Regression guard for #7526 / #7531 → #7582. The adaptive-thinking opt-out must NOT be
-         * encoded as a per-constant argument in the enum constant list, because that list is
-         * regenerated by the "sync provider model definitions" chore, which emits single-arg
-         * {@code NAME("value")} constants and silently drops any extra argument (that is how #7582
-         * reopened this bug). Driving this from {@link EnumSource} means renaming or removing one
-         * of these constants fails the test at discovery time, so the standalone opt-out set can't
-         * drift for a <em>known</em> adaptive model. It cannot catch a newly synced adaptive model
-         * that nobody added to the opt-out set — that remains a manual step.
+         * Regression guard for #7526 / #7531 → #7582. The capability opt-out must NOT be encoded as a
+         * per-constant argument in the enum constant list, because that list is regenerated by the
+         * "sync provider model definitions" chore, which emits single-arg {@code NAME("value")}
+         * constants and silently drops any extra argument (that is how #7582 reopened this bug).
+         * Driving this from {@link EnumSource} means renaming or removing one of these constants
+         * fails the test at discovery time.
+         *
+         * <p>Since the capability list was inverted to name the models that DO take sampling params,
+         * a newly synced model no longer needs adding here to be handled: anything recognised and
+         * unlisted is assumed to take none. That is what closed the fable-5-1 gap.
          */
         @ParameterizedTest
         @EnumSource(value = AnthropicModelName.class, names = {"CLAUDE_SONNET_5", "CLAUDE_OPUS_4_7",
-                "CLAUDE_OPUS_4_8"}, mode = EnumSource.Mode.INCLUDE)
-        void adaptiveThinkingModelsRejectSamplingParams(AnthropicModelName model) {
-            assertThat(AnthropicModelName.supportsSamplingParams(model.getValue())).isFalse();
+                "CLAUDE_OPUS_4_8", "CLAUDE_OPUS_5", "CLAUDE_FABLE_5",
+                "CLAUDE_FABLE_5_1"}, mode = EnumSource.Mode.INCLUDE)
+        void modelsTakingNoSamplingParamsRejectThem(AnthropicModelName model) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(model.getValue())).isTrue();
         }
     }
 

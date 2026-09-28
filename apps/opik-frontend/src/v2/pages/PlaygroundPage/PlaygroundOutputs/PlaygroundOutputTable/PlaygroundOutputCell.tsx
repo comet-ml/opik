@@ -11,6 +11,7 @@ import {
 import { DATASET_TYPE } from "@/types/datasets";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
+import PlaygroundOutputError from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputError";
 import PlaygroundOutputScoresContainer from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScoresContainer";
 import PlaygroundOutputAssertionStatus from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputAssertionStatus";
 import PlaygroundTestSuiteLastRunOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundTestSuiteLastRunOutput";
@@ -58,6 +59,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
   const isLoading = output?.isLoading ?? false;
   const stale = output?.stale ?? false;
   const traceId = output?.traceId ?? null;
+  const error = output?.error;
   const selectedRuleIds = output?.selectedRuleIds;
 
   const datasetType = useDatasetType();
@@ -106,7 +108,11 @@ const PlaygroundOutputCell: React.FunctionComponent<
   };
 
   const hasOutput =
-    !stale && (value !== null || isLoading || (isTestSuite && !!experimentId));
+    !stale &&
+    (value !== null ||
+      Boolean(error) ||
+      isLoading ||
+      (isTestSuite && !!experimentId));
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
       (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
@@ -116,6 +122,10 @@ const PlaygroundOutputCell: React.FunctionComponent<
   const renderContent = () => {
     if (isLoading && !value) {
       return <PlaygroundOutputLoader />;
+    }
+
+    if (error) {
+      return null;
     }
 
     return <MarkdownPreview>{value}</MarkdownPreview>;
@@ -142,7 +152,9 @@ const PlaygroundOutputCell: React.FunctionComponent<
             </TooltipWrapper>
           )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
-            {isTestSuite ? (
+            {error ? (
+              <PlaygroundOutputError message={error} />
+            ) : isTestSuite ? (
               <PlaygroundOutputAssertionStatus
                 experimentId={experimentId}
                 datasetItemId={originalRow.dataItemId}

@@ -7,8 +7,8 @@ import type * as serializers from "../index.js";
 export const AutomationRuleEvaluatorAction: core.serialization.Schema<
     serializers.AutomationRuleEvaluatorAction.Raw,
     OpikApi.AutomationRuleEvaluatorAction
-> = core.serialization.enum_(["evaluator"]);
+> = core.serialization.enum_(["evaluator", "annotation_queue_router"]);
 
 export declare namespace AutomationRuleEvaluatorAction {
-    export type Raw = "evaluator";
+    export type Raw = "evaluator" | "annotation_queue_router";
 }

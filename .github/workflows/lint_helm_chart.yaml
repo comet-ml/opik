@@ -87,6 +87,30 @@ jobs:
               helm unittest .
               cd -
 
+  # helm-unittest asserts rendered manifests only; it never executes the migration
+  # Job's embedded /bin/sh body. This runs that script's branches against a mocked
+  # kubectl so regressions in its control flow are caught in CI.
+  script-test-cold-tier-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+        - name: Checkout
+          uses: actions/checkout@v7
+          with:
+            # This job executes a script from the checked-out tree, which on a
+            # pull_request is PR-controlled. Do not leave github.token in
+            # .git/config where that script could read it.
+            persist-credentials: false
+
+        - name: Install Helm
+          uses: azure/setup-helm@v5.0.1
+          with:
+            version: v3.21.0
+
+        - name: Run cold-tier migration script tests
+          run: deployment/helm_chart/opik/tests/shell/cold_tier_migration_script_test.sh
+
   # Prove the chart renders equivalently under Helm 3.x and Helm 4.x so we can ship
   # Helm 4 support without changing behavior for Helm 3 users (DND-537). Each version
   # resolves its own dependencies (`helm dependency build`) and renders from scratch.

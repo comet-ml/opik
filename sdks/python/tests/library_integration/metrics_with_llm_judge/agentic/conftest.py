@@ -32,19 +32,20 @@ from tests import llm_constants
 #   canonical "doesn't call tools" failure mode (see
 #   `SupportedJudgeProvider.java`), so don't swap it in here without
 #   re-validating tool-use tests by hand.
-# - Anthropic `claude-sonnet-4-6` (native `AnthropicChatModel`): the
-#   Claude tier we run the agentic judge against. Haiku is cheaper but
-#   on the agentic path (tools in the request, so `response_format` is
-#   best-effort) it narrates in prose and wraps the verdict in a
-#   ```json fence rather than emitting the bare object the parser
-#   expects; Sonnet follows the structured-output contract reliably.
-# - Anthropic `claude-sonnet-4-6` *via LiteLLM* (`litellm_anthropic`):
-#   identical model string as the native row, but routed through the
-#   LiteLLM adapter by forcing `_should_use_anthropic_native=False`.
-#   This is the only parametrize entry that exercises Anthropic-by-
-#   LiteLLM; without it, the LiteLLM path for tool-use never gets
-#   touched by this suite (OpenAI uses LiteLLM too, but its provider
-#   quirks differ from Anthropic's).
+# - Anthropic `claude-haiku-4-5` (native `AnthropicChatModel`): the
+#   cheapest Claude tier. It was pinned to Sonnet for a while because on
+#   the agentic path Haiku sometimes wrapped the verdict in a ```json
+#   fence the strict parser rejects; if that resurfaces, harden
+#   `llm_judge/parsers.py` rather than paying for Sonnet.
+# - The same Haiku model *via LiteLLM* (`litellm_anthropic`): identical
+#   model string as the native row, but routed through the LiteLLM
+#   adapter by forcing `_should_use_anthropic_native=False`. This is the
+#   only parametrize entry that exercises Anthropic-by-LiteLLM; without
+#   it, the LiteLLM path for tool-use never gets touched by this suite
+#   (OpenAI uses LiteLLM too, but its provider quirks differ from
+#   Anthropic's). It only means something because the suite's
+#   requirements install the `anthropic` package — otherwise the factory
+#   falls back to LiteLLM for both rows anyway.
 #
 # The fixture-name lists materialize via `request.getfixturevalue` —
 # each wrapper either yields (creds present) or calls `pytest.skip`,
@@ -53,11 +54,11 @@ from tests import llm_constants
 _JUDGE_MODEL_PARAMS: List[Tuple[str, List[str]]] = [
     (llm_constants.OPENAI_GPT_4O_MINI, ["_skip_unless_openai_configured"]),
     (
-        f"{llm_constants.ANTHROPIC_CLAUDE_SONNET}",
+        llm_constants.ANTHROPIC_CLAUDE_HAIKU,
         ["_skip_unless_anthropic_configured"],
     ),
     (
-        f"{llm_constants.LITELLM_ANTHROPIC_CLAUDE_SONNET}",
+        llm_constants.LITELLM_ANTHROPIC_CLAUDE_HAIKU,
         ["_skip_unless_anthropic_configured", "_force_litellm_path"],
     ),
 ]

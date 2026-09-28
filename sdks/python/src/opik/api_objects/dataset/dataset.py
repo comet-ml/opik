@@ -31,7 +31,7 @@ from opik.message_processing.batching import sequence_splitter
 from opik import httpx_client, id_helpers, semantic_version
 import opik.exceptions as exceptions
 import opik.config as config
-from .. import constants
+from .. import constants, streaming_upload
 from . import (
     dataset_item,
     identifiers,
@@ -734,8 +734,14 @@ class Dataset(DatasetExportOperations):
         """Yield items, dropping ones whose content hash has already been seen.
 
         The hash state spans the whole pass, so a duplicate is caught however far apart
-        the two copies are. Hashes always use the standard library, so item identity does
-        not depend on which serialiser writes the request body.
+        the two copies are.
+
+        A digest is only ever compared with another this client computed: the ones a
+        sync reads back are recomputed here from the items themselves, never carried
+        from the backend. That is what makes identity stable, not the encoder -- orjson
+        and the standard library digest the same content differently, so a digest that
+        travelled would stop matching the moment the two ends disagreed about which
+        encoder they had. Keep it that way, or pin the encoder before sending one.
         """
         for item in items:
             if deduplication:
@@ -799,28 +805,23 @@ class Dataset(DatasetExportOperations):
     def _upload_transport(self) -> Tuple[httpx.Client, str]:
         """The HTTP client and base URL used to send prepared request bodies.
 
-        A `Dataset` always has a REST client, and the transport underneath it is the very
-        `OpikHttpxClient` the owning client holds -- the same object, carrying the same
-        auth, workspace headers and compression setting -- so a `Dataset` built from a REST
-        client alone resolves a transport like any other, as the read side already does in
-        `parallel_items_reader`. The constructor arguments win where they were supplied.
+        A `Dataset` always has a REST client, and the traversal down to its transport is
+        shared with the experiment upload -- see `httpx_client.upload_transport`, and
+        `parallel_items_reader` for the read side. The constructor arguments win where
+        they were supplied.
         """
-        httpx_client_ = self._rest_httpx_client
-        base_url = self._url_override
+        return httpx_client.upload_transport(
+            self._rest_client,
+            client=self._rest_httpx_client,
+            base_url=self._url_override,
+        )
 
-        if httpx_client_ is None:
-            httpx_client_ = self._rest_client._client_wrapper.httpx_client.httpx_client
-        if base_url is None:
-            base_url = self._rest_client._client_wrapper.get_base_url()
+    def _send_prepared_body(self, body: bytes, _payload: Any = None) -> None:
+        """Send one already-serialised request body.
 
-        if httpx_client_ is None or base_url is None:
-            raise exceptions.OpikException(
-                "The dataset's REST client exposes no HTTP transport to upload through"
-            )
-        return httpx_client_, base_url
-
-    def _send_prepared_body(self, body: bytes) -> None:
-        """Send one already-serialised request body."""
+        The pool hands a send whatever `submit` carried alongside the body; a dataset
+        batch carries nothing, because a rejected one is never re-split.
+        """
         httpx_client_, base_url = self._upload_transport()
 
         def send() -> None:
@@ -848,9 +849,9 @@ class Dataset(DatasetExportOperations):
 
     def _open_send_pool(
         self, num_threads: int, gzip_level: Optional[int]
-    ) -> streaming_writer.BoundedSendPool:
+    ) -> streaming_upload.BoundedSendPool:
         """Upload sink for one insert. Split out so the worker count is observable."""
-        return streaming_writer.BoundedSendPool(
+        return streaming_upload.BoundedSendPool(
             send=self._send_prepared_body,
             num_threads=num_threads,
             gzip_level=gzip_level,

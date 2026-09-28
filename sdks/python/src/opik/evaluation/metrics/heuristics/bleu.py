@@ -27,12 +27,17 @@ class BaseBLEU(base_metric.BaseMetric):
     Args:
         name: The name of the metric (e.g. "sentence_bleu_metric" or "corpus_bleu_metric").
         track: Whether to track the metric (depends on your system).
-        n_grams: Up to which n-gram order to use (1 through n_grams).
+        n_grams: Up to which n-gram order to use (1 through n_grams). Must be an integer >= 1.
         smoothing_method: One of NLTK's SmoothingFunction methods (e.g. "method0", "method1", etc.).
         weights: Optional custom weights for n-gram orders. Must sum to 1.0. If None,
                  defaults to uniform distribution across `n_grams`.
         project_name: Optional project name to track the metric in for the cases when
             there are no parent span/trace to inherit project name from.
+
+    Raises:
+        ValueError: If `n_grams` is not an integer or is less than 1, or if `weights`
+            does not have `n_grams` entries summing to 1.0.
+        ImportError: If NLTK is not installed.
     """
 
     def __init__(
@@ -45,6 +50,17 @@ class BaseBLEU(base_metric.BaseMetric):
         project_name: Optional[str],
     ):
         super().__init__(name=name, track=track, project_name=project_name)
+
+        # Validate the arguments before the environment: a bad n_grams is a bad
+        # n_grams whether or not NLTK happens to be installed. `bool` is a
+        # subclass of `int`, and `True` would otherwise quietly mean 1.
+        if not isinstance(n_grams, int) or isinstance(n_grams, bool):
+            raise ValueError(
+                f"n_grams must be an integer, got {type(n_grams).__name__}."
+            )
+
+        if n_grams < 1:
+            raise ValueError(f"n_grams must be at least 1, got {n_grams}.")
 
         if nltk_bleu_score is None:
             raise ImportError(
@@ -94,6 +110,10 @@ def _suppress_bleu_warnings() -> Iterator[None]:
 class SentenceBLEU(BaseBLEU):
     """
     Computes sentence-level BLEU for a single candidate string vs. one or more references.
+
+    Raises:
+        ValueError: At construction, if `n_grams` is not an integer or is less than 1,
+            or if `weights` is invalid. See `BaseBLEU`.
 
     Example:
         >>> from opik.evaluation.metrics.heuristics.bleu import SentenceBLEU
@@ -156,6 +176,10 @@ class SentenceBLEU(BaseBLEU):
             ref_lists = [reference.lower().split()]
         else:
             # List of reference strings
+            if not reference:
+                raise MetricComputationError(
+                    "Reference is empty (single-sentence BLEU)."
+                )
             ref_lists = []
             for ref_str in reference:
                 if not ref_str.strip():
@@ -194,6 +218,10 @@ class CorpusBLEU(BaseBLEU):
 
     Each element in `output` corresponds to one candidate. The parallel `reference`
     element can be either a single string or a list of reference strings for that candidate.
+
+    Raises:
+        ValueError: At construction, if `n_grams` is not an integer or is less than 1,
+            or if `weights` is invalid. See `BaseBLEU`.
 
     Example:
         >>> from opik.evaluation.metrics.heuristics.bleu import CorpusBLEU
@@ -255,6 +283,9 @@ class CorpusBLEU(BaseBLEU):
                 "Mismatch: number of candidates != number of references (corpus BLEU)."
             )
 
+        if not output:
+            raise MetricComputationError("Candidate list is empty (corpus BLEU).")
+
         all_candidates: List[List[str]] = []
         all_references: List[List[List[str]]] = []
 
@@ -271,6 +302,8 @@ class CorpusBLEU(BaseBLEU):
                 ref_lists = [ref_item.lower().split()]
             else:
                 # multiple references
+                if not ref_item:
+                    raise MetricComputationError("Reference is empty (corpus BLEU).")
                 ref_lists = []
                 for r_line in ref_item:
                     if not r_line.strip():

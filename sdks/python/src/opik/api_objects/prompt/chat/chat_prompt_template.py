@@ -175,6 +175,12 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
                         placeholders.update(
                             _extract_placeholders_from_string(url, template_type)
                         )
+                    # Extract from video_url parts
+                    if "video_url" in part and isinstance(part["video_url"], dict):
+                        url = str(part["video_url"].get("url", ""))
+                        placeholders.update(
+                            _extract_placeholders_from_string(url, template_type)
+                        )
         return placeholders
 
     @override

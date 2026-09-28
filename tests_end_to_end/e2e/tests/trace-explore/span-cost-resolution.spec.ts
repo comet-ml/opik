@@ -14,7 +14,7 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * too eagerly reads as some other model's price. Both render as a perfectly
  * ordinary number on a page people read to decide what their LLM spend is.
  *
- * The fixture logs twelve LLM spans with `usage` and **no** `total_cost`:
+ * The fixture logs fourteen LLM spans with `usage` and **no** `total_cost`:
  *
  *  - Five for id normalisation. Three carry ids that must resolve, covering
  *    four steps between them (provider-prefix strip, dot-normalising,
@@ -28,6 +28,11 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  *    price key the backend does not read is the same silent failure as a model
  *    id it cannot resolve: no cost chip on the span, and a trace total that
  *    still looks like a number.
+ *  - Two for audio INPUT tokens, on a `gemini-embedding-2*` row re-priced in
+ *    2.2.65, differing only in whether the audio count is there. Audio tokens
+ *    come out of the prompt bucket and bill at their own rate, so a backend
+ *    that ignored the key would price the pair identically — at a number that
+ *    is 86% too low and looks entirely ordinary.
  *
  * The expected amounts are the shipped price table's own numbers — see the
  * fixture. They are asserted at both surfaces because that is where the two can
@@ -274,6 +279,61 @@ test.describe('Span cost — server-side price resolution', { tag: ['@t2-cuj', '
         attributedCost(span!),
         `characters-absent: ${control!.zeroCostReason}`,
       ).toBe(0);
+    });
+  });
+
+  test('Audio input tokens bill at the audio rate and come out of the standard prompt bucket', { tag: ['@cap:traces.span-model-cost-tokens'] }, async ({
+    modelCostSpans,
+    project,
+    backendClient,
+  }) => {
+    // No page, for the same reason as the two tests above: the subject is which
+    // bucket the backend puts a prompt token in before multiplying. The panel's
+    // rendering of both these spans is covered by the UI test below, which walks
+    // every priced span — and both of these are priced, so both are walked.
+
+    const byName = await test.step('Read the seeded spans back once all of them are queryable', async () =>
+      readSeededSpans(backendClient, project.id, modelCostSpans));
+
+    const cost = (key: string) => costOf(byName, modelCostSpans, key);
+
+    await test.step('Each vector is priced at the hand-computed table amount', async () => {
+      // Absolute amounts first, from gemini/gemini-embedding-2-preview's own
+      // shipped rates ($2e-07/token in, $6.5e-06/audio token in, $0/token out)
+      // at the fixture's 1M prompt + 1M completion tokens. These are what pin
+      // the arithmetic to the price table rather than merely to itself.
+      expect(
+        cost('audio-input-priced'),
+        'audio-input-priced: 800k x $2e-07 (prompt less audio) + 200k x $6.5e-06 (audio)',
+      ).toBeCloseTo(1.46, 6);
+      expect(
+        cost('audio-input-absent'),
+        'audio-input-absent: 1.0M x $2e-07, and nothing for the 1.0M completion tokens — this model publishes output_cost_per_token: 0',
+      ).toBeCloseTo(0.2, 6);
+    });
+
+    await test.step('Audio tokens are billed at their own rate, not at the plain input rate', async () => {
+      // The discriminating comparison, and the reason the absent-key control is
+      // seeded. Both spans report identical prompt and completion totals, so a
+      // backend that never read input_cost_per_audio_token would price them
+      // the same. An absolute assertion alone could not tell that apart from
+      // the price table moving.
+      expect(
+        cost('audio-input-priced'),
+        'a span reporting audio input tokens must cost MORE than an identical one that reports none, because $6.5e-06/audio token is 32.5x the $2e-07 token rate',
+      ).toBeGreaterThan(cost('audio-input-absent'));
+    });
+
+    await test.step('Audio tokens are not billed twice — they leave the standard prompt bucket', async () => {
+      // The delta is the whole assertion: 200k tokens moved from the $2e-07
+      // bucket to the $6.5e-06 one is 200k x (6.5e-06 - 2e-07) = $1.26. Billing
+      // them at BOTH rates — the failure `nonAudioPromptTokens` exists to
+      // prevent — would put the delta at 200k x 6.5e-06 = $1.30 instead, which
+      // is a 3% difference on a page nobody re-derives by hand.
+      expect(
+        cost('audio-input-priced') - cost('audio-input-absent'),
+        'the premium for 200k audio tokens must be the RATE DIFFERENCE over those tokens, not the audio rate on top of the input rate',
+      ).toBeCloseTo(1.26, 6);
     });
   });
 

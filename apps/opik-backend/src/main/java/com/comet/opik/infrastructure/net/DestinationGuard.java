@@ -2,8 +2,8 @@ package com.comet.opik.infrastructure.net;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.Builder;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -16,18 +16,23 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 /**
  * Pre-flight check for outbound calls to user-supplied URLs (SSRF guard). In {@code STRICT} mode
- * (cloud) it requires HTTPS and resolves the hostname before anyone connects, refusing addresses
- * only our own network can reach: loopback, link-local (including the cloud metadata endpoint at
- * 169.254.169.254), RFC 1918 private ranges, IPv6 unique-local, multicast, and unresolvable hosts.
- * In {@code RELAXED} mode (self-hosted default) it is a no-op — internal gateways legitimately
- * live on private ranges there.
+ * (cloud) it resolves the hostname before anyone connects, refusing addresses only our own network
+ * can reach: loopback, link-local (including the cloud metadata endpoint at 169.254.169.254),
+ * RFC 1918 private ranges, IPv6 unique-local, multicast, and unresolvable hosts. In
+ * {@code RELAXED} mode (self-hosted default) it is a no-op — internal gateways legitimately live on
+ * private ranges there.
+ *
+ * <p>HTTPS enforcement is a separate control, requested per caller via {@link Scheme}. It protects
+ * the confidentiality of what we send, not the network we can reach, so callers whose payload
+ * carries a credential ({@link Scheme#HTTPS_ONLY}) opt in independently of the address filtering
+ * above. A caller passing {@link Scheme#PLAINTEXT_OR_TLS} still gets the full SSRF check.
  *
  * <p>Resolve-then-decide is the accepted level of protection here: the later connection resolves
  * again, so a DNS-rebinding attacker with a sub-TTL flip could theoretically pass the check. The
  * surfaces this guards are admin-configured (not anonymous input), which keeps that residual risk
  * acceptable; connection-time pinning would require a custom socket layer.
  */
-@RequiredArgsConstructor
+@Builder(toBuilder = true)
 public class DestinationGuard {
 
     public enum Mode {
@@ -52,7 +57,21 @@ public class DestinationGuard {
         }
     }
 
+    /**
+     * Whether the caller also requires TLS. Independent of {@link Mode}: this is about protecting
+     * the payload in transit, not about which networks we are willing to reach. Either way the
+     * destination must be http or https — the only schemes an HTTP client speaks.
+     */
+    public enum Scheme {
+        /** Accept http as well as https — for payloads where plaintext is the caller's own choice. */
+        PLAINTEXT_OR_TLS,
+        /** Refuse anything but https — for payloads carrying a credential. */
+        HTTPS_ONLY,
+    }
+
     private final @NonNull Mode mode;
+    @Builder.Default
+    private final @NonNull Scheme scheme = Scheme.HTTPS_ONLY;
 
     /**
      * @throws DestinationGuardException with a user-facing message when the destination is refused
@@ -66,15 +85,18 @@ public class DestinationGuard {
         try {
             uri = new URI(url);
         } catch (URISyntaxException exception) {
-            throw new DestinationGuardException("destination '%s' is not a valid URL".formatted(url));
+            throw new DestinationGuardException("destination is not a valid URL, url '%s'".formatted(url),
+                    exception);
         }
-        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+        // plaintext is the caller's choice, but the scheme must still be one an HTTP client speaks:
+        // file://, gopher:// and friends reach places it never should
+        if (!isSchemeAllowed(uri.getScheme())) {
             throw new DestinationGuardException(
-                    "destination '%s' was refused: only https URLs are allowed".formatted(url));
+                    "destination was refused, only %s URLs are allowed, url '%s'".formatted(allowedSchemes(), url));
         }
         String host = uri.getHost();
         if (isBlank(host)) {
-            throw new DestinationGuardException("destination '%s' has no valid host".formatted(url));
+            throw new DestinationGuardException("destination has no valid host, url '%s'".formatted(url));
         }
 
         InetAddress[] addresses;
@@ -82,17 +104,26 @@ public class DestinationGuard {
             addresses = InetAddress.getAllByName(host);
         } catch (UnknownHostException exception) {
             throw new DestinationGuardException(
-                    "destination host '%s' could not be resolved".formatted(host));
+                    "destination host could not be resolved, host '%s'".formatted(host), exception);
         }
         for (InetAddress address : addresses) {
             if (isNonPublic(address)) {
                 // deliberately not echoing the resolved address: the hostname is the user's own
                 // input, the address it maps to inside our network is not theirs to learn
                 throw new DestinationGuardException(
-                        "destination host '%s' was refused: it resolves to a private or internal address"
+                        "destination was refused, it resolves to a private or internal address, host '%s'"
                                 .formatted(host));
             }
         }
+    }
+
+    private boolean isSchemeAllowed(String uriScheme) {
+        return "https".equalsIgnoreCase(uriScheme)
+                || (scheme == Scheme.PLAINTEXT_OR_TLS && "http".equalsIgnoreCase(uriScheme));
+    }
+
+    private String allowedSchemes() {
+        return scheme == Scheme.HTTPS_ONLY ? "https" : "http and https";
     }
 
     private static boolean isNonPublic(InetAddress address) {

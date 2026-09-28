@@ -3,8 +3,7 @@ import pydantic
 import hashlib
 
 from ... import json_helpers
-from .. import constants, helpers
-from . import streaming_writer
+from .. import constants, helpers, streaming_upload
 
 
 class EvaluatorItem(pydantic.BaseModel):
@@ -111,7 +110,7 @@ class DatasetItem(pydantic.BaseModel):
             # The values reaching this branch are the flexible ones the upload accepts --
             # otherwise they were rejected here before the upload ever saw them.
             encoded = json_helpers.dumps(
-                content, default=streaming_writer.encode_flexible, sort_keys=True
+                content, default=streaming_upload.encode_flexible, sort_keys=True
             )
         hash_object = hashlib.sha256(encoded)
 

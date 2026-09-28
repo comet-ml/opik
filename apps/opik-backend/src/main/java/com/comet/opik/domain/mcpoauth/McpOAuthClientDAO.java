@@ -17,8 +17,10 @@ import java.util.Optional;
 interface McpOAuthClientDAO {
 
     @SqlUpdate("""
-            INSERT INTO mcp_oauth_clients (id, name, redirect_uris, logo_uri, owner_user_name)
-            VALUES (:bean.id, :bean.name, :bean.redirectUris, :bean.logoUri, :bean.ownerUserName)
+            INSERT INTO mcp_oauth_clients (id, name, redirect_uris, logo_uri, software_id, software_version,
+                client_uri, owner_user_name)
+            VALUES (:bean.id, :bean.name, :bean.redirectUris, :bean.logoUri, :bean.softwareId,
+                :bean.softwareVersion, :bean.clientUri, :bean.ownerUserName)
             """)
     void save(@BindMethods("bean") McpOAuthClient client);
 

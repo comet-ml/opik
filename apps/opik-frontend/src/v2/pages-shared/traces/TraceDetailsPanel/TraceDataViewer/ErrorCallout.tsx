@@ -37,6 +37,7 @@ const ErrorCallout: React.FunctionComponent<ErrorCalloutProps> = ({
       open={isExpanded}
       onOpenChange={onExpandedChange}
       className="mb-4 border-destructive"
+      testId="trace-error-callout"
     />
   );
 };

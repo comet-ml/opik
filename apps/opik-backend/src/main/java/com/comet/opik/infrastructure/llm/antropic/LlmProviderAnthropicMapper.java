@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
+import com.comet.opik.domain.llm.ModelCapabilities;
+import com.comet.opik.domain.llm.SamplingParamsNormalizer;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
@@ -32,7 +34,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 @Mapper
@@ -87,22 +88,8 @@ interface LlmProviderAnthropicMapper {
      * fail. Mirrors the judge-path logic in {@code AnthropicClientGenerator}.
      */
     private boolean samplingParamsAllowed(ChatCompletionRequest request) {
-        return AnthropicModelName.supportsSamplingParams(request.model()) && !thinkingEnabled(request);
-    }
-
-    /**
-     * Extended thinking counts as enabled only when the request's {@code custom_parameters.thinking.type} is an
-     * explicit, non-blank value other than {@code "disabled"} — so {@code "enabled"}, {@code "adaptive"}, and any
-     * future type gate sampling params off, while a missing/blank type (or absent block) leaves them untouched.
-     */
-    private boolean thinkingEnabled(ChatCompletionRequest request) {
-        if (request.customParameters() == null
-                || !(request.customParameters().get("thinking") instanceof Map<?, ?> thinking)) {
-            return false;
-        }
-        return thinking.get("type") instanceof String type
-                && StringUtils.isNotBlank(type)
-                && !"disabled".equalsIgnoreCase(type);
+        return !ModelCapabilities.rejectsSamplingParams(request.model())
+                && !SamplingParamsNormalizer.thinkingEnabled(request);
     }
 
     @Named("resolveMaxTokens")

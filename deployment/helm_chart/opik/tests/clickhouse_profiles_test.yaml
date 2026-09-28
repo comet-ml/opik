@@ -10,6 +10,14 @@ suite: clickhouse default settings profile (Distributed insert-queue settings)
 # `users.d/chop-generated-profiles.xml`, the last file the server reads, so it wins over both
 # the chart's `conf.d/profiles.xml` and the operator's own default profile.
 #
+# SCOPE OF THIS SUITE. These assertions stop at the rendered `ClickHouseInstallation` -- the
+# manifest the chart is responsible for. Everything after that is the Altinity operator's
+# behaviour: translating `spec.configuration.profiles` into `users.d/chop-generated-profiles.xml`,
+# and ClickHouse's own precedence between `conf.d`, the operator's `users.d` defaults and that
+# generated file. Neither is exercised here, and `helm unittest` cannot exercise them -- no
+# operator runs in chart CI. Treat the ordering described above as an external deployment
+# assumption, verified against a running cluster rather than by this suite (OPIK-8255).
+#
 # The cost is that Helm replaces lists wholesale rather than merging them, so any values file
 # declaring its own list drops the `default` entry unless it repeats it. This suite pins the
 # chart's default and asserts the drop, so a consumer's obligation is visible here rather than
@@ -27,6 +35,12 @@ tests:
       - equal:
           path: spec.configuration.profiles["default/distributed_background_insert_split_batch_on_failure"]
           value: 1
+      # Stated, never inherited: the Altinity operator ships 0 and vanilla ClickHouse ships 1, so
+      # leaving it unset makes the insert path depend on nothing but which flavour an installation
+      # runs. One value at every topology — 0, which is what production runs (OPIK-8255).
+      - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 0
 
   # The settings have to reach the *default* profile specifically: that is the profile the
   # backend's ClickHouse user inherits, and so the one the insert path runs under.
@@ -37,6 +51,7 @@ tests:
           value:
             default/distributed_background_insert_batch: 1
             default/distributed_background_insert_split_batch_on_failure: 1
+            default/prefer_localhost_replica: 0
 
   # The rendered key shape is `<profile>/<setting>`, which is what the Altinity operator
   # flattens into the users.d XML. Asserted separately so a template refactor that changed the
@@ -57,6 +72,7 @@ tests:
           settings:
             distributed_background_insert_batch: 1
             distributed_background_insert_split_batch_on_failure: 1
+            prefer_localhost_replica: 0
         - name: readonly_profile
           settings:
             readonly: 1
@@ -69,13 +85,19 @@ tests:
           path: spec.configuration.profiles["default/distributed_background_insert_split_batch_on_failure"]
           value: 1
       - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 0
+      - equal:
           path: spec.configuration.profiles["readonly_profile/readonly"]
           value: 1
 
   # The trap, asserted rather than only commented: a values file that declares its own list and
-  # omits `default` loses the queue settings entirely. Any consumer that overrides the list must
-  # repeat the `default` entry — which is what the test above covers.
-  - it: loses the settings when a consumer replaces the list without the default entry
+  # omits `default` loses the BATCHING settings entirely, because Helm replaces lists wholesale.
+  # Any consumer that overrides the list must repeat the `default` entry.
+  #
+  # prefer_localhost_replica rides in the same entry, so it is dropped by the same replacement.
+  # Asserted so the consequence of stating it in the list is pinned rather than discovered later.
+  - it: loses the default entry entirely when a consumer replaces the list without it
     set:
       clickhouse.additionalProfiles:
         - name: readonly_profile
@@ -86,6 +108,21 @@ tests:
           path: spec.configuration.profiles["default/distributed_background_insert_batch"]
       - notExists:
           path: spec.configuration.profiles["default/distributed_background_insert_split_batch_on_failure"]
+      - notExists:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+      - equal:
+          path: spec.configuration.profiles["readonly_profile/readonly"]
+          value: 1
+
+  # A consumer may legitimately clear the list. The whole `profiles:` key must then be omitted, not
+  # emitted empty: `profiles: null` in the rendered ClickHouseInstallation fails on apply.
+  - it: omits the profiles block entirely when nothing would populate it
+    set:
+      clickhouse.additionalProfiles: []
+      clickhouse.monitoring.enabled: false
+    asserts:
+      - notExists:
+          path: spec.configuration.profiles
 
   # The monitoring user's readonly flag shares the profiles block with these settings; it is
   # gated separately, so check the two coexist rather than one gate shadowing the other.

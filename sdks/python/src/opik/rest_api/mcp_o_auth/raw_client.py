@@ -252,6 +252,9 @@ class RawMcpOAuthClient:
         client_name: str,
         redirect_uris: typing.Sequence[str],
         logo_uri: typing.Optional[str] = OMIT,
+        software_id: typing.Optional[str] = OMIT,
+        software_version: typing.Optional[str] = OMIT,
+        client_uri: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ClientRegistrationResponse]:
         """
@@ -264,6 +267,12 @@ class RawMcpOAuthClient:
         redirect_uris : typing.Sequence[str]
 
         logo_uri : typing.Optional[str]
+
+        software_id : typing.Optional[str]
+
+        software_version : typing.Optional[str]
+
+        client_uri : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -280,6 +289,9 @@ class RawMcpOAuthClient:
                 "client_name": client_name,
                 "redirect_uris": redirect_uris,
                 "logo_uri": logo_uri,
+                "software_id": software_id,
+                "software_version": software_version,
+                "client_uri": client_uri,
             },
             headers={
                 "content-type": "application/json",
@@ -714,6 +726,9 @@ class AsyncRawMcpOAuthClient:
         client_name: str,
         redirect_uris: typing.Sequence[str],
         logo_uri: typing.Optional[str] = OMIT,
+        software_id: typing.Optional[str] = OMIT,
+        software_version: typing.Optional[str] = OMIT,
+        client_uri: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ClientRegistrationResponse]:
         """
@@ -726,6 +741,12 @@ class AsyncRawMcpOAuthClient:
         redirect_uris : typing.Sequence[str]
 
         logo_uri : typing.Optional[str]
+
+        software_id : typing.Optional[str]
+
+        software_version : typing.Optional[str]
+
+        client_uri : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -742,6 +763,9 @@ class AsyncRawMcpOAuthClient:
                 "client_name": client_name,
                 "redirect_uris": redirect_uris,
                 "logo_uri": logo_uri,
+                "software_id": software_id,
+                "software_version": software_version,
+                "client_uri": client_uri,
             },
             headers={
                 "content-type": "application/json",

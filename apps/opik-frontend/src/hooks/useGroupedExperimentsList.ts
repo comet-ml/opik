@@ -64,7 +64,7 @@ const PROJECTS_SORTING: Sorting = [
 
 const MAX_ENTITIES_FOR_SORTING = 1000;
 
-const EXPERIMENTS_LIST_POLLING_INTERVAL_MS = 10_000;
+export const EXPERIMENTS_LIST_POLLING_INTERVAL_MS = 10_000;
 
 const buildOrderMap = <T extends { id: string }>(
   data: T[] | undefined,

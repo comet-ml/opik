@@ -65,4 +65,59 @@ export class PlaygroundLogsSidebarPage {
       await this.traceDetailPanel().getByRole('tab', { name: 'Prompts' }).click();
     });
   }
+
+  /** The "Messages" tab. Absent when no format claims the trace's input or output. */
+  messagesTab(): Locator {
+    return this.traceDetailPanel().getByRole('tab', { name: 'Messages' });
+  }
+
+  async clickMessagesTab(): Promise<void> {
+    return test.step('click Messages tab', async () => {
+      await this.messagesTab().click();
+    });
+  }
+
+  /**
+   * Asserts the panel opened on Messages rather than falling back to Details, which is the
+   * half of the behaviour a click would mask.
+   */
+  async expectMessagesTabSelectedByDefault(): Promise<void> {
+    return test.step('expect Messages to be the default tab', async () => {
+      await expect(this.messagesTab()).toHaveAttribute('aria-selected', 'true');
+    });
+  }
+
+  /**
+   * The active tab's panel. Only the selected tab is mounted, so scoping to this
+   * keeps assertions off the raw JSON the Details tab renders.
+   */
+  activeTabPanel(): Locator {
+    return this.traceDetailPanel().getByRole('tabpanel');
+  }
+
+  /** The header of a rendered conversation turn, by role. */
+  messageRole(role: 'System' | 'User' | 'Assistant'): Locator {
+    return this.activeTabPanel().getByRole('heading', { name: role, exact: true });
+  }
+
+  /** The body of a rendered conversation turn, by role. */
+  messageBody(role: 'System' | 'User' | 'Assistant'): Locator {
+    return this.activeTabPanel().getByRole('region', { name: role, exact: true });
+  }
+
+  /** The collapsed error block, present only when the entity carries error_info. */
+  errorCallout(): Locator {
+    return this.traceDetailPanel().getByRole('button', { name: 'Error' });
+  }
+
+  async expandErrorCallout(): Promise<void> {
+    return test.step('expand the error callout', async () => {
+      await this.errorCallout().click();
+    });
+  }
+
+  /** The expanded error block, which renders error_info as a syntax-highlighted document. */
+  errorCalloutBody(): Locator {
+    return this.traceDetailPanel().getByTestId('trace-error-callout');
+  }
 }

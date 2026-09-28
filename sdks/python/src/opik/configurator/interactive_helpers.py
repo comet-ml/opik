@@ -1,6 +1,7 @@
 import enum
 import logging
 import sys
+from typing import Optional
 
 LOGGER = logging.getLogger(__name__)
 
@@ -132,22 +133,31 @@ class DeploymentType(enum.Enum):
         raise ValueError(f"No DeploymentType with value '{value}'")
 
 
-def ask_user_for_deployment_type() -> DeploymentType:
+def ask_user_for_deployment_type(prompt: Optional[str] = None) -> DeploymentType:
     """
     Asks the user to select a deployment type from the available Opik deployment options.
     Prompts the user until a valid selection is made.
 
+    ``prompt`` replaces the question this would otherwise print, for a caller that
+    has already rendered one — the CLI does, in colour. Only the wording moves:
+    the reading stays here, so every caller accepts the same answers (``1``,
+    ``2``, ``3``, or Enter for the default) and anything piping them in is
+    unaffected by how the question looked.
+
     Returns:
         DeploymentType: The user's selected deployment type.
     """
-    msg = ["Which Opik deployment do you want to log your traces to?"]
+    if prompt is not None:
+        message_string = prompt
+    else:
+        msg = ["Which Opik deployment do you want to log your traces to?"]
 
-    for deployment in DeploymentType:
-        msg.append(f"{deployment.value[0]} - {deployment.value[1]}")
+        for deployment in DeploymentType:
+            msg.append(f"{deployment.value[0]} - {deployment.value[1]}")
 
-    msg.append("\n> ")
+        msg.append("\n> ")
 
-    message_string = "\n".join(msg)
+        message_string = "\n".join(msg)
 
     while True:
         choice_str = input(message_string).strip()

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
@@ -10,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestContainersSetup;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -27,8 +29,10 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -102,6 +106,7 @@ class ProjectAlertsResourceTest {
                     var filteredConfigs = trigger.triggerConfigs().stream()
                             .filter(c -> c.type() != AlertTriggerConfigType.SCOPE_PROJECT)
                             .map(c -> c.toBuilder().createdBy(null).createdAt(null).build())
+                            .map(c -> withThresholdConfigValues(c, trigger.eventType()))
                             .toList();
                     return trigger.toBuilder()
                             .triggerConfigs(filteredConfigs.isEmpty() ? null : filteredConfigs)
@@ -118,6 +123,26 @@ class ProjectAlertsResourceTest {
                 .projectId(null)
                 .triggers(triggers)
                 .build();
+    }
+
+    /**
+     * Podam fills configValue with arbitrary entries, so a randomly generated metrics trigger would carry a
+     * threshold config with no threshold and no window — an alert the backend now rejects, and one that could
+     * never have fired anyway. These tests are about project scoping, so give such a config usable values.
+     */
+    private static AlertTriggerConfig withThresholdConfigValues(AlertTriggerConfig config,
+            AlertEventType eventType) {
+        if (eventType == null
+                || AlertTriggerConfigType.thresholdTypeFor(eventType).filter(config.type()::equals).isEmpty()) {
+            return config;
+        }
+        var configValue = new HashMap<>(Optional.ofNullable(config.configValue()).orElseGet(Map::of));
+        configValue.put(AlertTriggerConfig.THRESHOLD_CONFIG_KEY, "0.5");
+        configValue.put(AlertTriggerConfig.WINDOW_CONFIG_KEY, "3600");
+        configValue.putIfAbsent(AlertTriggerConfig.NAME_CONFIG_KEY, "quality");
+        configValue.putIfAbsent(AlertTriggerConfig.OPERATOR_CONFIG_KEY,
+                MetricsAlertJob.Operator.LESS_THAN.getValue());
+        return config.toBuilder().configValue(configValue).build();
     }
 
     @Nested

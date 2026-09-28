@@ -718,7 +718,9 @@ class TestWorkspaceAmbiguity:
 
         assert message is not None
         assert "acme" in message and "beta" in message
-        assert "opik configure" in message
+        # Names how to set the workspace, not "run `opik configure`": this fires
+        # from inside `opik configure` too, where that instruction is a loop.
+        assert "OPIK_WORKSPACE" in message
 
     def test_workspace_ambiguity__named_workspace__is_fine(self, monkeypatch):
         list_spy = mock.Mock()
@@ -927,7 +929,9 @@ class TestCandidateAndConfirm:
         candidates = [_target("codex", True, mock.Mock())]
 
         assert (
-            install._confirm_targets(candidates, ["codex"], False, RecordingView())
+            install._confirm_targets(
+                candidates, ["codex"], False, RecordingView()
+            ).targets
             == candidates
         )
 
@@ -938,7 +942,7 @@ class TestCandidateAndConfirm:
         candidates = [_target("codex", True, mock.Mock())]
 
         assert (
-            install._confirm_targets(candidates, None, True, RecordingView())
+            install._confirm_targets(candidates, None, True, RecordingView()).targets
             == candidates
         )
 
@@ -947,7 +951,7 @@ class TestCandidateAndConfirm:
         view = RecordingView()
         view.host_choice = []
 
-        assert install._confirm_targets(candidates, None, False, view) == []
+        assert install._confirm_targets(candidates, None, False, view).targets == []
         assert view.choose_calls
 
 
@@ -986,7 +990,7 @@ class TestTerminalRequired:
             view=view,
         )
 
-        assert result == []
+        assert result == install.NOTHING_INSTALLED
         install_spy.assert_not_called()
         assert view.skips, "the user is told why nothing happened"
 
@@ -1014,7 +1018,7 @@ class TestTerminalRequired:
             view=RecordingView(),
         )
 
-        assert result == ["cursor"]
+        assert result.registered == ("cursor",)
         install_spy.assert_called_once()
 
     def test_confirm_targets__terminal__still_asks(self, monkeypatch):
@@ -1023,7 +1027,7 @@ class TestTerminalRequired:
         view = RecordingView()
         view.host_choice = []
 
-        assert install._confirm_targets(candidates, None, False, view) == []
+        assert install._confirm_targets(candidates, None, False, view).targets == []
         assert view.choose_calls
 
 
@@ -1130,3 +1134,55 @@ def test_setup_mcp_server__no_tool_install__asks_nothing(monkeypatch):
 
     approval.assert_not_called()
     assert args["view"].notes == []
+
+
+class TestClientNotListed:
+    """ "My AI client is not listed" has to end in something actionable.
+
+    Without it, a client Opik cannot detect was a silent decline — the user had
+    no way out and the funnel counted them as a refusal.
+    """
+
+    def _run(self, monkeypatch, choice):
+        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+        monkeypatch.setattr(
+            install.mcp_targets,
+            "detected_targets",
+            lambda: [_target("cursor", True, mock.Mock())],
+        )
+        args = _make_args()
+        args["view"].host_choice = choice
+        return install.setup_mcp_server(**args), args["view"]
+
+    def test_not_listed__shows_the_manual_config_and_the_docs_link(self, monkeypatch):
+        _, view = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+
+        said = " ".join(view.problems)
+        assert "mcpServers" in said, "the block to paste"
+        assert install.MCP_DOCS_URL in said, "where the per-client instructions are"
+
+    def test_not_listed__installs_nothing_and_reports_declined(self, monkeypatch):
+        report, _ = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+
+        assert report.registered == ()
+        assert report.declined is True
+
+    def test_not_listed__is_reported_apart_from_a_plain_decline(self, monkeypatch):
+        """Both register nothing, but only one says the detected list is wrong.
+
+        Which matters past the server: the skill pack follows the registered
+        clients and otherwise falls back to every detected one, so without this
+        "none of these is mine" put the pack in all of them.
+        """
+        not_listed, _ = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+        skipped, _ = self._run(monkeypatch, [])
+
+        assert not_listed.manual is True
+        assert skipped.manual is False
+
+    def test_plain_skip__stays_quiet(self, monkeypatch):
+        """Nothing to paste when the user simply said no."""
+        _, view = self._run(monkeypatch, [])
+
+        assert view.problems == []
+        assert view.skips, "still says the step was skipped"

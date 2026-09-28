@@ -18,6 +18,12 @@ ANTHROPIC_CLAUDE_OPUS = "claude-opus-4-8"
 # so tests assert it never leaks into a run's traces.
 OPENAI_GPT_NANO = "gpt-5-nano"
 
+# OpenAI stand-in for the e2e task model when Anthropic is unavailable.
+# Deliberately NOT gpt-5-nano: that is the SDK default the leak assertion
+# guards against, so reusing it would make a correct fallback run and the
+# model-passing regression indistinguishable.
+OPENAI_GPT_MINI = "gpt-5-mini"
+
 # The studio routes every LLM call through the backend gateway, which litellm
 # addresses with an "openai/"-prefixed model id regardless of the real provider.
 GATEWAY_MODEL_PREFIX = "openai/"

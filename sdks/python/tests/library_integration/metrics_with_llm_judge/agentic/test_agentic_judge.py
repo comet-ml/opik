@@ -22,6 +22,8 @@ regression in the judge.
 
 from typing import Iterable, List, Tuple
 
+import pytest
+
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import models_factory
 from opik.evaluation.suite_evaluators import LLMJudge
@@ -91,58 +93,18 @@ def _make_recording_agentic_judge(
     return judge, recorder
 
 
-class TestAgenticJudgeBasicVerdicts:
-    """Assertions decidable from the trace I/O surface alone — these
-    should pass/fail crisply on every run. If one of these flakes, the
-    judge's overview rendering or prompt is the suspect, not the model.
-    """
-
-    def test_assertion_about_output__passes(self, judge_model_name):
-        trace = _seeding.make_trace(
-            input={"question": "What is the capital of France?"},
-            output={"answer": "The capital of France is Paris."},
-        )
-        ctx = _seeding.build_context(
-            trace, spans=[_seeding.make_span(span_id="s-1", name="answer_step")]
-        )
-
-        assertion = "The agent's output mentions Paris."
-        results = _make_judge(assertion, judge_model_name).score(
-            input=trace.input,
-            output=trace.output,
-            trace_tool_context=ctx,
-        )
-
-        result = _by_name(results, assertion)
-        assert result.scoring_failed is False
-        assert result.value is True
-        assert result.reason
-
-    def test_false_assertion__fails(self, judge_model_name):
-        trace = _seeding.make_trace(
-            input={"question": "What is the capital of France?"},
-            output={"answer": "The capital of France is Paris."},
-        )
-        ctx = _seeding.build_context(
-            trace, spans=[_seeding.make_span(span_id="s-1", name="answer_step")]
-        )
-
-        # Output clearly contradicts the assertion.
-        assertion = "The agent's output mentions Tokyo."
-        results = _make_judge(assertion, judge_model_name).score(
-            input=trace.input,
-            output=trace.output,
-            trace_tool_context=ctx,
-        )
-
-        result = _by_name(results, assertion)
-        assert result.scoring_failed is False
-        assert result.value is False
-        assert result.reason
+# Each parametrized run below is a paid multi-turn Sonnet call. Only the
+# tool-loop tests stay active: they are the behavior that makes the judge
+# agentic and the only ones the mocked unit suite cannot stand in for.
+_SKIP_FOR_COST = pytest.mark.skip(
+    reason="Cost: verdict correctness is covered by the mocked unit suite and "
+    "the one-shot test_llm_judge.py; only the tool-loop tests run live."
+)
 
 
+@_SKIP_FOR_COST
 class TestAgenticJudgeSpanStructure:
-    """Assertions decidable only from the span tree. A one-shot judge
+    """An assertion decidable only from the span tree. A one-shot judge
     seeing just trace input/output would have no signal to answer — a
     pass here is direct evidence the agentic overview was consulted.
     """
@@ -179,46 +141,14 @@ class TestAgenticJudgeSpanStructure:
         assert result.scoring_failed is False
         assert result.value is True
 
-    def test_assertion_about_child_span_error__passes(self, judge_model_name):
-        trace = _seeding.make_trace(
-            input={"question": "fetch and summarize"},
-            # Task output looks fine because the task caught the inner
-            # error; the only evidence of failure lives in the span tree.
-            output={"summary": "n/a"},
-        )
-        spans = [
-            _seeding.make_span(span_id="root", name="task"),
-            _seeding.make_span(
-                span_id="fetch",
-                name="fetch_remote",
-                start_offset_ms=1,
-                error_info={
-                    "exception_type": "ConnectionError",
-                    "message": "remote unreachable",
-                    "traceback": "Traceback (most recent call last): ...",
-                },
-            ),
-        ]
-        ctx = _seeding.build_context(
-            trace, spans=spans, parent_by_child={"root": None, "fetch": "root"}
-        )
 
-        assertion = "At least one span in the trace recorded an error."
-        results = _make_judge(assertion, judge_model_name).score(
-            input=trace.input,
-            output=trace.output,
-            trace_tool_context=ctx,
-        )
-
-        result = _by_name(results, assertion)
-        assert result.scoring_failed is False
-        assert result.value is True
-
-
+@_SKIP_FOR_COST
 class TestAgenticJudgeMultipleAssertions:
     """The judge returns one ScoreResult per assertion. Mixing a clearly-
     true and a clearly-false assertion in a single call verifies the
-    per-assertion parse and the result-name plumbing both work.
+    per-assertion parse and the result-name plumbing both work, and
+    doubles as the only true/false verdict check in this suite — every
+    extra run here is a paid multi-turn judge call.
     """
 
     def test_mixed_true_and_false_assertions__separate_verdicts(self, judge_model_name):
@@ -336,7 +266,7 @@ class TestAgenticJudgeToolUse:
     def test_absent_marker_with_truncated_span_input__verdict_false_after_lookup(
         self, judge_model_name, monkeypatch
     ):
-        """Negative-case companion to the buried-marker tests.
+        """Negative-case companion to the buried-marker test.
 
         A span's input is long enough to be truncated AND deliberately
         does not contain the asked-about marker — only an unrelated
@@ -404,50 +334,6 @@ class TestAgenticJudgeToolUse:
             "before declaring the marker absent; recorder captured no "
             "calls, suggesting the judge shortcutted to 'no' from the "
             "truncated overview"
-        )
-        assert {"read", "scan", "search"} & set(called), (
-            f"expected one of read/scan/search; got {called!r}"
-        )
-
-    def test_buried_marker_in_span_output__triggers_read(
-        self, judge_model_name, monkeypatch
-    ):
-        _pin_ladder_to_floor(monkeypatch)
-
-        # Same pattern but on a span field — verifies the truncation
-        # suffix's `entity_type='span'` anchor steers the judge into
-        # the right `read` argument shape, not just the trace one.
-        marker = "BURIED-IN-SPAN-512"
-        long_output = ("payload-line " * 50) + marker
-        assert len(long_output) > span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
-        trace = _seeding.make_trace(
-            input={"q": "look up something"},
-            output={"summary": "ok"},
-        )
-        spans = [
-            _seeding.make_span(
-                span_id="lookup",
-                name="lookup_step",
-                input={"q": "look up something"},
-                output={"data": long_output},
-            ),
-        ]
-        ctx = _seeding.build_context(trace, spans=spans)
-
-        assertion = (
-            f"The `lookup_step` span's output contains the literal token `{marker}`."
-        )
-        judge, recorder = _make_recording_agentic_judge([assertion], judge_model_name)
-
-        results = judge.score(ctx)
-
-        result = _by_name(results, assertion)
-        assert result.scoring_failed is False
-        assert result.value is True
-        called = recorder.tool_names_called()
-        assert called, (
-            "expected the judge to call at least one drill-in tool, "
-            "but the recorder captured no calls"
         )
         assert {"read", "scan", "search"} & set(called), (
             f"expected one of read/scan/search; got {called!r}"

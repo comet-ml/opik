@@ -500,18 +500,47 @@ _EXPERIMENT_IMPORT_FIELDS = [
     "last_updated_by",
 ]
 
+# Not a backend-gap field like the lists above, and so outside their TODO: import
+# always mints a new trace id rather than reusing the exported one, so the
+# exported id is preserved as _import_id. Once the local migration manifest is
+# gone, that is the only link from an imported trace back to the one it came
+# from.
+_TRACE_SOURCE_ID_FIELD = "id"
+
+
+def as_metadata_object(metadata: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """Resolve exported metadata to an object, nesting it when it is not one.
+
+    Metadata is an arbitrary JSON value on the wire, not necessarily an object:
+    a client writing through the REST API can store an array or a scalar there.
+    Everything downstream needs a mapping — the _import_* keys need somewhere to
+    live, and the SDK merges a span's usage into its metadata by unpacking it,
+    which raises on anything else — so those values are carried under
+    ``_import_metadata``.
+
+    Resolving unconditionally is deliberate: doing it only where a mapping is
+    strictly required would make an exported value's shape depend on whether its
+    span happens to carry usage, and would leave the raw value one new caller
+    away from the same failure.
+    """
+    if metadata is None or isinstance(metadata, dict):
+        return metadata
+    return {"_import_metadata": metadata}
+
 
 def build_import_metadata(
     source: Dict[str, Any],
     fields: List[str],
-    existing_metadata: Optional[Dict[str, Any]] = None,
+    existing_metadata: Optional[Any] = None,
 ) -> Optional[Dict[str, Any]]:
     """Return a metadata dict that includes import-preserved fields under _import_* keys.
 
     Only fields with non-None values are added. If there is nothing to add and
     existing_metadata is None, returns None so callers that had no metadata
-    continue to send no metadata.
+    continue to send no metadata. Non-object metadata is resolved by
+    :func:`as_metadata_object`.
     """
+    existing_metadata = as_metadata_object(existing_metadata)
     import_fields = {
         f"_import_{field}": source[field]
         for field in fields
@@ -522,6 +551,24 @@ def build_import_metadata(
     merged: Dict[str, Any] = dict(existing_metadata) if existing_metadata else {}
     merged.update(import_fields)
     return merged
+
+
+def sort_trace_files_chronologically(trace_files: List[Path]) -> List[Path]:
+    """Order exported trace files by the id they were exported under.
+
+    ``Path.glob`` yields filesystem order, which is arbitrary. Export names each
+    file ``trace_<id>.json`` and those ids are UUIDv7, whose leading bits encode
+    creation time, so sorting on the file name restores the order the source
+    project listed the traces in — the trace list and the thread view are both
+    ordered by id by default, not by start_time. Creating them in that order
+    carries the ordering over to the destination, since the new ids are minted
+    one after another and UUIDv7 generation is monotonic.
+
+    The guarantee is per run: a resumed import skips the files it already
+    completed, so one that failed and succeeds on the retry lands after the
+    traces that originally followed it.
+    """
+    return sorted(trace_files, key=lambda trace_file: trace_file.name)
 
 
 def sort_spans_topologically(spans_info: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

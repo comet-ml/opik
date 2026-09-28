@@ -60,8 +60,12 @@ def setup_skills(
     fail the surrounding configure run. Every outcome is described by the returned
     :class:`InstallResult`.
     """
+    # An empty request installs the pack without linking it anywhere — the
+    # shared copy is the whole answer for a client we do not know the layout of.
+    # Asking for clients and getting none placed is still a failure: that is a
+    # request we could not honour rather than one that named no client.
     supported = [key for key in host_keys if key in skills_roots.SUPPORTED_HOST_KEYS]
-    if len(supported) == 0:
+    if len(host_keys) > 0 and len(supported) == 0:
         return InstallResult(
             succeeded=False,
             error=(

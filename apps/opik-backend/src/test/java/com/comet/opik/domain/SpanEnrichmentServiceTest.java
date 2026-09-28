@@ -60,7 +60,8 @@ class SpanEnrichmentServiceTest {
             var options = SpanEnrichmentOptions.builder().build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService.enrichSpans(spanIds, options).block();
+            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService.enrichSpans(spanIds, options, Map.of())
+                    .block();
 
             // then
             assertThat(result).isEmpty();
@@ -83,7 +84,8 @@ class SpanEnrichmentServiceTest {
             var options = SpanEnrichmentOptions.builder().build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService.enrichSpans(Set.of(spanId), options)
+            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService
+                    .enrichSpans(Set.of(spanId), options, Map.of())
                     .block();
 
             // then
@@ -126,7 +128,8 @@ class SpanEnrichmentServiceTest {
                     .build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService.enrichSpans(Set.of(spanId), options)
+            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService
+                    .enrichSpans(Set.of(spanId), options, Map.of())
                     .block();
 
             // then
@@ -163,7 +166,7 @@ class SpanEnrichmentServiceTest {
 
             // when
             Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService
-                    .enrichSpans(Set.of(spanId1, spanId2), options).block();
+                    .enrichSpans(Set.of(spanId1, spanId2), options, Map.of()).block();
 
             // then
             assertThat(result).hasSize(2);
@@ -192,7 +195,8 @@ class SpanEnrichmentServiceTest {
                     .build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService.enrichSpans(Set.of(spanId), options)
+            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService
+                    .enrichSpans(Set.of(spanId), options, Map.of())
                     .block();
 
             // then
@@ -232,7 +236,8 @@ class SpanEnrichmentServiceTest {
                     .build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService.enrichSpans(Set.of(spanId), options)
+            Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService
+                    .enrichSpans(Set.of(spanId), options, Map.of())
                     .block();
 
             // then
@@ -243,6 +248,60 @@ class SpanEnrichmentServiceTest {
             assertMapKeysPresence(enrichedData,
                     Set.of("input", "expected_output"),
                     Set.of("tags", "feedback_scores", "comments", "usage", "metadata"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Field mappings:")
+    class FieldMappings {
+
+        private Span span(UUID spanId) {
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(spanId)
+                    .input(JsonUtils.getJsonNodeFromString(
+                            "{\"input_text\": \"bonjour\", \"bucket\": \"greeting\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"verdict\": \"correct\", \"score\": 0.94}"))
+                    .build();
+        }
+
+        @Test
+        @DisplayName("when a mapping is provided, then it overrides the field the options produced")
+        void enrichSpans__whenMappingProvided__thenItOverridesTheEnrichedField() {
+            // given
+            UUID spanId = UUID.randomUUID();
+            when(spanService.getByIds(Set.of(spanId))).thenReturn(Flux.just(span(spanId)));
+
+            // when
+            Map<String, JsonNode> enrichedData = spanEnrichmentService.enrichSpans(
+                    Set.of(spanId),
+                    SpanEnrichmentOptions.builder().build(),
+                    Map.of("input", "input.input_text", "expected_output", "output.verdict"))
+                    .block()
+                    .get(spanId);
+
+            // then
+            assertThat(enrichedData.get("input").asText()).isEqualTo("bonjour");
+            assertThat(enrichedData.get("expected_output").asText()).isEqualTo("correct");
+        }
+
+        @Test
+        @DisplayName("when a mapped path does not resolve, then the field is absent rather than enriched")
+        void enrichSpans__whenMappedPathDoesNotResolve__thenFieldIsAbsent() {
+            // given
+            UUID spanId = UUID.randomUUID();
+            when(spanService.getByIds(Set.of(spanId))).thenReturn(Flux.just(span(spanId)));
+
+            // when
+            Map<String, JsonNode> enrichedData = spanEnrichmentService.enrichSpans(
+                    Set.of(spanId),
+                    SpanEnrichmentOptions.builder().build(),
+                    Map.of("input", "input.missing"))
+                    .block()
+                    .get(spanId);
+
+            // then
+            assertThat(enrichedData).doesNotContainKey("input");
+            assertThat(enrichedData).containsKey("expected_output");
         }
     }
 }

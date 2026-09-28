@@ -9,6 +9,28 @@ from opik.evaluation.metrics.score_result import ScoreResult
 import opik.exceptions as exceptions
 
 
+def _attribute_scores(scores: List[ScoreResult]) -> Dict[str, float]:
+    """Key every vote, so the reported votes always match the averaged ones.
+
+    Judges routinely share a score name: ``GEval`` defaults to
+    ``"g_eval_metric"``, and running one preset over two models keeps a single
+    name. A ``{name: value}`` mapping would then keep only the last vote for
+    that name and report fewer judges than ``reason`` counts.
+    """
+    attributed: Dict[str, float] = {}
+    votes_per_name: Dict[str, int] = {}
+    for result in scores:
+        count = votes_per_name.get(result.name, 0) + 1
+        votes_per_name[result.name] = count
+        key = result.name if count == 1 else f"{result.name}#{count}"
+        while key in attributed:  # a score may itself be named ``foo#2``
+            count += 1
+            votes_per_name[result.name] = count
+            key = f"{result.name}#{count}"
+        attributed[key] = result.value
+    return attributed
+
+
 class LLMJuriesJudge(BaseMetric):
     """
     Aggregate multiple judge metrics into a consensus score.
@@ -41,6 +63,11 @@ class LLMJuriesJudge(BaseMetric):
             raise ValueError("LLMJuriesJudge requires at least one judge metric.")
 
     def score(self, *args: Any, **kwargs: Any) -> ScoreResult:
+        """
+        Returns:
+            A ``ScoreResult`` whose ``metadata["judge_scores"]`` holds one entry
+            per vote that contributed to the average.
+        """
         precomputed: Optional[Dict[BaseMetric, ScoreResult]] = kwargs.pop(
             "precomputed", None
         )
@@ -68,7 +95,7 @@ class LLMJuriesJudge(BaseMetric):
 
         average = sum(res.value for res in scores) / len(scores)
         metadata = {
-            "judge_scores": {res.name: res.value for res in scores},
+            "judge_scores": _attribute_scores(scores),
         }
         reason = f"Averaged {len(scores)} judge scores"
         return ScoreResult(

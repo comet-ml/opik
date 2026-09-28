@@ -186,9 +186,11 @@ The scores returned by the online evaluation rules will be stored as feedback sc
 
 You can also view the average feedback scores for all the traces in your project from the traces table.
 
+Because they are stored as ordinary feedback scores, the scores produced by your own custom rules can also drive [alerts](/production/alerts/alerts#alerting-on-custom-metrics) to Slack, PagerDuty or a webhook when the average crosses a threshold.
+
 ## Online thread evaluation rules
 
-It is also possible to define LLM as a Judge and Custome Python metrics that run on threads. This is useful to score the entire conversations and not just the individual traces.
+It is also possible to define LLM as a Judge and Custom Python metrics that run on threads. This is useful to score the entire conversations and not just the individual traces.
 
 <Frame>
   <img src="/img/production/online_evaluation_thread_rule.gif" />

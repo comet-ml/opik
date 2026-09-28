@@ -160,8 +160,14 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
-// Per-model Anthropic quirks. Add a row when a model deviates from defaults
-// (sampling params allowed, no thinking-effort UI).
+// Per-model Anthropic capabilities.
+//
+// `supportsSamplingParams` names the models that DO take temperature/top_p, so a Claude we recognise
+// without a row is assumed to take none. It was the inverse and that rotted twice: opus-5 and
+// fable-5 were classified here but never on the backend, and fable-5-1 was missed on both sides.
+// Newer Claude models increasingly take none, so this way a newly added model omits a parameter
+// rather than having the provider reject the request outright. A model id we cannot place at all
+// stays permissive — see supportsSamplingParams in lib/modelUtils.
 export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
@@ -172,30 +178,37 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   >
 > = {
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5]: {
-    supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
+    supportsSamplingParams: true,
     thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
+    supportsSamplingParams: true,
     thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5_20250929]: {
+    supportsSamplingParams: true,
   },
 };
 

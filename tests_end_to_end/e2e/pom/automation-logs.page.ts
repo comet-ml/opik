@@ -1,4 +1,4 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { expect, test, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
 /**
@@ -11,6 +11,18 @@ import { loadEnvConfig } from '../config/env.config';
  * genuinely render.
  */
 export type AutomationLogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG' | 'TRACE';
+
+/** One rendered row of the rule log table, as `readRows` reads it back. */
+export interface RenderedLogRow {
+  level: string;
+  /** The `trace_id` marker column — how the page attributes a line to a trace. */
+  traceId: string;
+  /**
+   * The message as displayed. Collapsed rows show only the first line of a
+   * multi-line message, which is what `expandRow` exists to reveal.
+   */
+  message: string;
+}
 
 /**
  * `/$workspaceName/automation-logs?rule_id=<id>` — the page behind an online
@@ -47,6 +59,24 @@ export class AutomationLogsPage {
         this.rows().first().waitFor({ state: 'visible' }),
         this.emptyState.waitFor({ state: 'visible' }),
       ]);
+    });
+  }
+
+  /**
+   * Poll until the table settles on exactly `expected` rows.
+   *
+   * `waitForReady` only proves the FIRST row arrived, and `readRows` is a
+   * one-shot DOM read with no retry of its own — so reading straight after it
+   * can catch a stream mid-render and silently compare a subset.
+   *
+   * Exact, never a lower bound, for the same reason as
+   * `TraceLogsSidebar.waitForTraceRows`: this page is read as the whole of one
+   * rule's stream, so a count above the expected one means another rule's lines
+   * leaked in, which is one of the failures this view exists to catch.
+   */
+  async waitForRowCount(expected: number, timeoutMs = 30_000): Promise<void> {
+    return test.step(`Wait for ${expected} rule log rows`, async () => {
+      await expect(this.rows()).toHaveCount(expected, { timeout: timeoutMs });
     });
   }
 
@@ -102,6 +132,47 @@ export class AutomationLogsPage {
       has: this.page.locator('td[data-cell-id$="_message"]', {
         hasText: new RegExp(`threadId '${escapeForRegExp(threadId)}'`),
       }),
+    });
+  }
+
+  /**
+   * Every rendered row, newest first — the order the page sorts them in.
+   *
+   * For callers that pin the WHOLE stream by exhaustion rather than filtering
+   * for the lines they expect: a `rowsWithMessage` count says nothing about a
+   * foreign rule's line also rendering. Read through `data-cell-id` suffixes
+   * for the same reason the locators above are, and never by column position.
+   */
+  async readRows(): Promise<RenderedLogRow[]> {
+    return test.step('Read the rendered log rows', async () => {
+      return this.rows().evaluateAll((rows) =>
+        rows.map((row) => {
+          const cellText = (columnId: string) =>
+            (
+              row.querySelector(`td[data-cell-id$="_${columnId}"]`) as HTMLElement | null
+            )?.innerText ?? '';
+          return {
+            level: cellText('level').trim(),
+            traceId: cellText('marker_trace_id').trim(),
+            // The Expand/Collapse control lives inside the message cell, so its
+            // label rides along in innerText; drop the trailing line it adds.
+            message: cellText('message').replace(/\n(Expand|Collapse)$/, '').trim(),
+          };
+        }),
+      );
+    });
+  }
+
+  /**
+   * Expand a row's message cell so the whole multi-line message renders.
+   *
+   * The collapsed cell shows only the first line, so anything a scorer appends
+   * after a newline — a provider's error body, for one — is invisible until
+   * this is clicked.
+   */
+  async expandRow(row: Locator): Promise<void> {
+    return test.step('Expand the row message', async () => {
+      await row.getByRole('button', { name: 'Expand' }).click();
     });
   }
 }

@@ -468,6 +468,13 @@ def import_traces(
     Reads the trace files exported under the source project's folder and
     recreates the traces and their spans in the destination project.
 
+    Traces and spans are recreated under new ids, so the same export can be
+    imported repeatedly and into any project or workspace without colliding with
+    the originals. Each trace keeps its original start_time and end_time, and its
+    source id is preserved in metadata as _import_id. The new ids carry the
+    current time, which also keeps the import inside the server's UUIDv7
+    ingestion window however old the exported data is.
+
     If a previous import was interrupted, re-running the same command automatically
     resumes from where it left off. Use --force to start over from scratch.
 

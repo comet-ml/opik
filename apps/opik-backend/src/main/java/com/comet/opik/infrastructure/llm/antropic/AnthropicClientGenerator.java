@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -75,7 +76,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         // (claude-sonnet-5, claude-opus-4-7/4-8) that report no sampling-param support, and (2) any model
         // once extended thinking is enabled per-rule via custom_parameters. Gate on both server-side so
         // API-created rules (which bypass the FE sanitizer) don't fail.
-        if (AnthropicModelName.supportsSamplingParams(modelParameters.name()) && !thinking.enabled()) {
+        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name()) && !thinking.enabled()) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
 

@@ -100,7 +100,7 @@ public class AuthTokenProvider {
         this.redisClient = redisClient;
         this.lockService = lockService;
         this.config = config;
-        this.destinationGuard = new DestinationGuard(config.getDestinationGuard());
+        this.destinationGuard = DestinationGuard.builder().mode(config.getDestinationGuard()).build();
         // Same posture as the LLM clients: HTTP/1.1 and no redirect following (a token endpoint
         // redirecting elsewhere is a misconfiguration or an attack, never a flow to honor).
         this.httpClient = HttpClient.newBuilder()

@@ -104,3 +104,10 @@ def dumps(
         # `default`, so such a value cannot be intercepted, only the whole value
         # re-encoded. The standard library takes them.
         return json.dumps(value, default=default, sort_keys=sort_keys).encode("utf-8")
+
+
+def loads(data: Any) -> Any:
+    """Parse JSON from bytes or str, using orjson where it is installed."""
+    if _orjson is not None:
+        return _orjson.loads(data)
+    return json.loads(data)

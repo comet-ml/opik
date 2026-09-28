@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -87,6 +87,13 @@ const useExperimentItemsState = ({
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  // Selection is keyed by row id, and these all change which rows are on screen. Keeping ids that are no longer
+  // loaded makes the selection invisible but still counted, which reads as "nothing selected" to anything
+  // working from the visible rows and as "something selected" to anything reading the keys.
+  useEffect(() => {
+    setRowSelection({});
+  }, [page, size, search, filters, sorting]);
 
   return {
     page,

@@ -218,6 +218,7 @@ public class AutomationRuleEvaluatorsResource {
     @Operation(operationId = "deleteAutomationRuleEvaluatorBatch", summary = "Delete automation rule evaluators", description = "Delete automation rule evaluators batch", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE)
     public Response deleteEvaluators(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete,
             @QueryParam("project_id") UUID projectId) {

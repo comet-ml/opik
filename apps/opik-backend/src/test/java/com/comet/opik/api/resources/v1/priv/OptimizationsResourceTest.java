@@ -49,6 +49,7 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -1414,6 +1415,158 @@ class OptimizationsResourceTest {
                         assertThat(page.content()).hasSize(1);
                         assertThat(page.content().getFirst().totalOptimizationCost())
                                 .isEqualByComparingTo(BigDecimal.ZERO);
+                    });
+        }
+
+        /**
+         * Tagged attribution is scoped to the projects of the runs in scope, on the traces read and on the spans read
+         * alike. A run created with neither {@code project_id} nor {@code project_name} resolves to no project at
+         * all, so that set is empty for it and there is no tagged spend to find - its cost stays trial-only, which
+         * for a run with no trials is zero.
+         * <p>
+         * The fixture is otherwise the one
+         * {@link #findAndGetById__whenOptimizationHasNoExperiments__taggedCostAgreesAndFollowsTheTag} charges in
+         * full, which is what makes the zero here the project's doing rather than a fixture that never landed.
+         */
+        @Test
+        void getByIdWhenRunHasNoProjectExcludesTaggedCost() {
+            var apiKey = "apiKey-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceName = "workspace-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "dataset-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // createPartialOptimization leaves both project fields unset, which is what resolves to no project.
+            var requestedOptimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .build();
+            var optimizationId = optimizationResourceClient.create(requestedOptimization, apiKey, workspaceName);
+
+            var generatedTrace = podamFactory.manufacturePojo(Trace.class);
+            var taggedTrace = generatedTrace.toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .tags(SetUtils.union(generatedTrace.tags(), Set.of(optimizationId.toString())))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            var expectedOptimization = requestedOptimization.toBuilder()
+                    .id(optimizationId)
+                    .numTrials(0L)
+                    .build();
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization)
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(expectedOptimization);
+                        assertThat(actualOptimization.totalOptimizationCost())
+                                .isEqualByComparingTo(BigDecimal.ZERO);
+                    });
+        }
+
+        /**
+         * The week floor the tagged scan carries is emitted only where {@code traces} is the weekly-partitioned
+         * successor. This suite runs on the estate the migrations produce, where it is not, and there a tagged trace
+         * whose week is below that floor must still be counted: the legacy {@code id_at} is a 32-bit
+         * {@code DateTime}, so a far-future id is filed under a wrapped past week that a floor would exclude, and
+         * those rows are legitimate. {@code OptimizationsTaggedCostWeekBoundTest} covers the bounded side.
+         * <p>
+         * The run's id is minted weeks ahead rather than the trace's weeks behind because ingestion validates a trace
+         * id against a window around now, while an optimization id is only checked for being a UUIDv7. Either way
+         * what it produces is the shape a floor would reject - a tagged trace older than the run's own week.
+         */
+        @Test
+        void getByIdWhenTracesAreUnpartitionedIncludesTaggedTraceOlderThanTheRun() {
+            var apiKey = "apiKey-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceName = "workspace-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "dataset-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var optimizationId = ID_GENERATOR.construct(Instant.now().plus(21, ChronoUnit.DAYS).toEpochMilli());
+            var requestedOptimization = optimizationResourceClient.createPartialOptimization()
+                    .id(optimizationId)
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .projectName(project.name())
+                    .build();
+            optimizationResourceClient.create(requestedOptimization, apiKey, workspaceName);
+
+            var generatedTrace = podamFactory.manufacturePojo(Trace.class);
+            var taggedTrace = generatedTrace.toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .tags(SetUtils.union(generatedTrace.tags(), Set.of(optimizationId.toString())))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            // The run page's view of a run with no experiments: its own row as written, plus the project its name
+            // resolved to. The cost is asserted apart from it because OPTIMIZATION_IGNORED_FIELDS excludes it - it is
+            // a Decimal whose scale the round-trip changes, so it needs comparison by value.
+            var expectedOptimization = requestedOptimization.toBuilder()
+                    .projectId(projectId)
+                    .numTrials(0L)
+                    .build();
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization)
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(expectedOptimization);
+                        assertThat(actualOptimization.totalOptimizationCost())
+                                .isEqualByComparingTo(span.totalEstimatedCost());
                     });
         }
 

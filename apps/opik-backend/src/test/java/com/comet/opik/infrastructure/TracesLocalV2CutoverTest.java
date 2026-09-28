@@ -10,6 +10,7 @@ import com.comet.opik.utils.template.TemplateUtils;
 import io.r2dbc.spi.Statement;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -3123,12 +3125,42 @@ class TracesLocalV2CutoverTest {
 
     private void seedTraces(List<CategorizedId> ids, String workspaceId, UUID projectId) {
         insertRows(ids, workspaceId, projectId, "seed", CategorizedId::createdAt);
+        awaitSeedVisible(ids, workspaceId, projectId);
+    }
+
+    /**
+     * Blocks until the rows just seeded are readable through `traces`, when `traces` is the Distributed wrapper.
+     *
+     * <p>The insert deliberately carries no settings the application does not use: post-cutover the backend writes
+     * through the wrapper, and with {@code prefer_localhost_replica = 0} (OPIK-8255) that write is serialised to a
+     * queue file and shipped by a background sender, so visibility is eventual. Forcing it synchronous would test a
+     * path production does not take. Waiting on the seeded ids asserts the guarantee the real path makes, and polls
+     * only this test's own rows -- nothing shared, so no interaction between tests.
+     *
+     * <p>Scoped by project as well as workspace: an id may be seeded into more than one project here, and a barrier
+     * keyed on {@code (workspace_id, id)} alone would count the earlier project's row and release before the rows
+     * this call wrote have landed.
+     */
+    private void awaitSeedVisible(List<CategorizedId> ids, String workspaceId, UUID projectId) {
+        if (ids.isEmpty() || !isDistributed("traces")) {
+            return;
+        }
+        var expected = idStrings(ids);
+        Awaitility.await("rows seeded through the Distributed wrapper become readable through it")
+                .atMost(30, TimeUnit.SECONDS)
+                .pollInterval(200, TimeUnit.MILLISECONDS)
+                .until(() -> liveCountScoped("traces", expected, workspaceId, projectId) == expected.size());
     }
 
     /**
      * Batch-insert rows following the {@code TraceDAO.BATCH_INSERT} shape: {@code created_at} is the row's minted time,
      * {@code last_updated_at} is whatever {@code lastUpdatedAt} yields (server-now for upserts, a backdated stamp to
      * exercise the delta's {@code created_at} arm).
+     *
+     * <p>The statement carries no settings the backend does not set, so once `traces` is the Distributed wrapper this
+     * write takes the same asynchronous path production does: with {@code prefer_localhost_replica = 0} (OPIK-8255) it
+     * is serialised to a queue file and shipped by a background sender, and is therefore visible eventually rather
+     * than on return. Callers needing the rows readable should seed via {@link #seedTraces}, which waits for them.
      */
     private void insertRows(List<CategorizedId> ids, String workspaceId, UUID projectId, String name,
             Function<CategorizedId, Instant> lastUpdatedAt) {

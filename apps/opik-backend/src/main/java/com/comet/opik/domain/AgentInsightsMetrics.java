@@ -28,6 +28,13 @@ public class AgentInsightsMetrics {
             .ofLongs()
             .build();
 
+    public static final LongHistogram AUTO_FIRST_RUN_DURATION_MS = METER
+            .histogramBuilder("auto_first_run_duration_ms")
+            .setDescription("Wall time of the auto-first-run sweep; _count by outcome gives run totals")
+            .setUnit("ms")
+            .ofLongs()
+            .build();
+
     public static final LongCounter REPORTS_ENQUEUED = METER
             .counterBuilder("reports_enqueued_total")
             .setDescription("Report run enqueue attempts onto the trigger queue, by trigger source and outcome")
@@ -53,6 +60,7 @@ public class AgentInsightsMetrics {
 
     public static final String SCHEDULED = "scheduled";
     public static final String MANUAL = "manual";
+    public static final String AUTO_FIRST_RUN = "auto_first_run";
     public static final String SUCCESS = "success";
     public static final String FAILURE = "failure";
 
@@ -64,4 +72,8 @@ public class AgentInsightsMetrics {
     public static final Attributes ENQUEUE_SCHEDULED_FAILURE = Attributes.of(TRIGGER, SCHEDULED, OUTCOME, FAILURE);
     public static final Attributes ENQUEUE_MANUAL_SUCCESS = Attributes.of(TRIGGER, MANUAL, OUTCOME, SUCCESS);
     public static final Attributes ENQUEUE_MANUAL_FAILURE = Attributes.of(TRIGGER, MANUAL, OUTCOME, FAILURE);
+    public static final Attributes ENQUEUE_AUTO_FIRST_RUN_SUCCESS = Attributes.of(TRIGGER, AUTO_FIRST_RUN, OUTCOME,
+            SUCCESS);
+    public static final Attributes ENQUEUE_AUTO_FIRST_RUN_FAILURE = Attributes.of(TRIGGER, AUTO_FIRST_RUN, OUTCOME,
+            FAILURE);
 }

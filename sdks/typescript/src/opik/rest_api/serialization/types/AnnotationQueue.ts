@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { AnnotationQueueAutomation } from "./AnnotationQueueAutomation.js";
 import { AnnotationQueueReviewer } from "./AnnotationQueueReviewer.js";
 import { AnnotationQueueScope } from "./AnnotationQueueScope.js";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage.js";
@@ -25,6 +26,7 @@ export const AnnotationQueue: core.serialization.ObjectSchema<
     ),
     annotatorsPerItem: core.serialization.property("annotators_per_item", core.serialization.number().optional()),
     lockTimeoutSeconds: core.serialization.property("lock_timeout_seconds", core.serialization.number().optional()),
+    automation: AnnotationQueueAutomation.optional(),
     reviewers: core.serialization.list(AnnotationQueueReviewer).optional(),
     feedbackScores: core.serialization.property(
         "feedback_scores",
@@ -50,6 +52,7 @@ export declare namespace AnnotationQueue {
         feedback_definition_names?: string[] | null;
         annotators_per_item?: number | null;
         lock_timeout_seconds?: number | null;
+        automation?: AnnotationQueueAutomation.Raw | null;
         reviewers?: AnnotationQueueReviewer.Raw[] | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
         items_count?: number | null;

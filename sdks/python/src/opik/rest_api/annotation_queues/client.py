@@ -4,6 +4,9 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.annotation_queue_automation import AnnotationQueueAutomation
+from ..types.annotation_queue_automation_write import AnnotationQueueAutomationWrite
+from ..types.annotation_queue_items_public import AnnotationQueueItemsPublic
 from ..types.annotation_queue_page_public import AnnotationQueuePagePublic
 from ..types.annotation_queue_public import AnnotationQueuePublic
 from ..types.annotation_queue_write import AnnotationQueueWrite
@@ -116,6 +119,7 @@ class AnnotationQueuesClient:
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
+        automation: typing.Optional[AnnotationQueueAutomationWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -143,6 +147,8 @@ class AnnotationQueuesClient:
 
         lock_timeout_seconds : typing.Optional[int]
 
+        automation : typing.Optional[AnnotationQueueAutomationWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -167,6 +173,7 @@ class AnnotationQueuesClient:
             feedback_definition_names=feedback_definition_names,
             annotators_per_item=annotators_per_item,
             lock_timeout_seconds=lock_timeout_seconds,
+            automation=automation,
             request_options=request_options,
         )
         return _response.data
@@ -268,6 +275,7 @@ class AnnotationQueuesClient:
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
+        automation: typing.Optional[AnnotationQueueAutomation] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -291,6 +299,8 @@ class AnnotationQueuesClient:
 
         lock_timeout_seconds : typing.Optional[int]
 
+        automation : typing.Optional[AnnotationQueueAutomation]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -313,6 +323,7 @@ class AnnotationQueuesClient:
             feedback_definition_names=feedback_definition_names,
             annotators_per_item=annotators_per_item,
             lock_timeout_seconds=lock_timeout_seconds,
+            automation=automation,
             request_options=request_options,
         )
         return _response.data
@@ -399,6 +410,35 @@ class AnnotationQueuesClient:
         client.annotation_queues.remove_items_from_annotation_queue(id='id', ids=['ids'], )
         """
         _response = self._raw_client.remove_items_from_annotation_queue(id, ids=ids, request_options=request_options)
+        return _response.data
+
+    def search_annotation_queue_items(
+        self, id: str, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> AnnotationQueueItemsPublic:
+        """
+        Returns queue membership metadata — how each item got into the queue — for the given item ids. A lookup rather than a listing: the caller renders the items table from the traces or threads API with its own sort and filters, so it asks for exactly the ids it is displaying. Ids that are not in the queue are omitted.
+
+        Parameters
+        ----------
+        id : str
+
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AnnotationQueueItemsPublic
+            Annotation queue items
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.annotation_queues.search_annotation_queue_items(id='id', ids=['ids'], )
+        """
+        _response = self._raw_client.search_annotation_queue_items(id, ids=ids, request_options=request_options)
         return _response.data
 
 
@@ -508,6 +548,7 @@ class AsyncAnnotationQueuesClient:
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
+        automation: typing.Optional[AnnotationQueueAutomationWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -534,6 +575,8 @@ class AsyncAnnotationQueuesClient:
         annotators_per_item : typing.Optional[int]
 
         lock_timeout_seconds : typing.Optional[int]
+
+        automation : typing.Optional[AnnotationQueueAutomationWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -562,6 +605,7 @@ class AsyncAnnotationQueuesClient:
             feedback_definition_names=feedback_definition_names,
             annotators_per_item=annotators_per_item,
             lock_timeout_seconds=lock_timeout_seconds,
+            automation=automation,
             request_options=request_options,
         )
         return _response.data
@@ -672,6 +716,7 @@ class AsyncAnnotationQueuesClient:
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
+        automation: typing.Optional[AnnotationQueueAutomation] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -694,6 +739,8 @@ class AsyncAnnotationQueuesClient:
         annotators_per_item : typing.Optional[int]
 
         lock_timeout_seconds : typing.Optional[int]
+
+        automation : typing.Optional[AnnotationQueueAutomation]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -720,6 +767,7 @@ class AsyncAnnotationQueuesClient:
             feedback_definition_names=feedback_definition_names,
             annotators_per_item=annotators_per_item,
             lock_timeout_seconds=lock_timeout_seconds,
+            automation=automation,
             request_options=request_options,
         )
         return _response.data
@@ -819,4 +867,36 @@ class AsyncAnnotationQueuesClient:
         _response = await self._raw_client.remove_items_from_annotation_queue(
             id, ids=ids, request_options=request_options
         )
+        return _response.data
+
+    async def search_annotation_queue_items(
+        self, id: str, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> AnnotationQueueItemsPublic:
+        """
+        Returns queue membership metadata — how each item got into the queue — for the given item ids. A lookup rather than a listing: the caller renders the items table from the traces or threads API with its own sort and filters, so it asks for exactly the ids it is displaying. Ids that are not in the queue are omitted.
+
+        Parameters
+        ----------
+        id : str
+
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AnnotationQueueItemsPublic
+            Annotation queue items
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.annotation_queues.search_annotation_queue_items(id='id', ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.search_annotation_queue_items(id, ids=ids, request_options=request_options)
         return _response.data

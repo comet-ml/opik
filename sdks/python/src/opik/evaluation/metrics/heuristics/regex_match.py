@@ -57,10 +57,19 @@ class RegexMatch(base_metric.BaseMetric):
         Returns:
             score_result.ScoreResult: A ScoreResult object with a value of 1.0 if the output
                 matches the regex pattern, 0.0 otherwise.
+
+        Raises:
+            MetricComputationError: If `output` is None or not a string.
         """
         if output is None:
             raise MetricComputationError(
                 "RegexMatch metric requires a non-None 'output' argument, got None"
+            )
+
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"RegexMatch metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
             )
 
         if self._regex_pattern.search(output):

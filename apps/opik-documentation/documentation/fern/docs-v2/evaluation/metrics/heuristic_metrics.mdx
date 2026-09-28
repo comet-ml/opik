@@ -403,6 +403,20 @@ print(score.value, score.reason)
 print(score.metadata)
 ```
 
+<Note>
+`positive_lexicon`, `negative_lexicon` and `forbidden_phrases` replace the built-in lists when you pass them. Leave one as `None` to keep the defaults, or pass an empty list to turn that check off. `PromptInjection` follows the same rule for `patterns` and `keywords`.
+
+```python
+from opik.evaluation.metrics import PromptInjection, Tone
+
+# keep the default sentiment lexicons, but skip the forbidden-phrase check
+metric = Tone(forbidden_phrases=[])
+
+# only run your own injection patterns, with no keyword check
+metric = PromptInjection(patterns=[r"reveal (?:the )?secret"], keywords=[])
+```
+</Note>
+
 ### Sentiment
 
 The Sentiment metric analyzes the sentiment of text using NLTK's VADER (Valence Aware Dictionary and sEntiment Reasoner) sentiment analyzer. It returns scores for positive, neutral, negative, and compound sentiment.

@@ -87,3 +87,13 @@ def validate_feedback_score(
         return None
 
     return cast(BatchFeedbackScoreDict, feedback_score)
+
+
+def validate_bounded_positive_int(
+    value: Any, name: str, maximum: Optional[int] = None
+) -> None:
+    """Raise ``ValueError`` unless ``value`` is a positive int within ``maximum``."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    if maximum is not None and value > maximum:
+        raise ValueError(f"{name} must not exceed {maximum}, got {value}")

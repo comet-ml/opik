@@ -565,7 +565,7 @@ public class DatasetsResource {
                 datasetId, request.traceIds().size(), workspaceId);
 
         itemService.createFromTraces(datasetId, request.traceIds(), request.enrichmentOptions(),
-                request.evaluators(), request.executionPolicy())
+                request.evaluators(), request.executionPolicy(), request.fieldMappings())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
@@ -592,7 +592,7 @@ public class DatasetsResource {
                 datasetId, request.spanIds().size(), workspaceId);
 
         itemService.createFromSpans(datasetId, request.spanIds(), request.enrichmentOptions(),
-                request.evaluators(), request.executionPolicy())
+                request.evaluators(), request.executionPolicy(), request.fieldMappings())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();

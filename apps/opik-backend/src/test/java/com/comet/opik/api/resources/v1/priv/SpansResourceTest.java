@@ -1604,6 +1604,13 @@ class SpansResourceTest {
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-haiku-4-5", "anthropic",
                             null, null),
+                    // TypeSafe AI (Jev): served version name as logged by track_typesafe; input-only billing
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "jev-1.13.0", "typesafe",
+                            JsonUtils.getJsonNodeFromString(
+                                    "{\"created_from\":\"typesafe\",\"type\":\"typesafe_system_one\"}"),
+                            null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-sonnet-4-5", "anthropic_vertexai",

@@ -116,7 +116,13 @@ class LanguageAdherenceMetric(BaseMetric):
             raise MetricComputationError(
                 "fastText model is not loaded. Ensure that LanguageAdherenceMetric was initialized with a valid model_path and fastText is installed."
             )
-        prediction = self._fasttext_model.predict(text)
+        # fastText's `predict` refuses any text containing a newline
+        # (`ValueError: predict processes one line at a time`), and model output
+        # is routinely multi-line. It splits words on whitespace anyway, so
+        # collapsing runs of whitespace into single spaces keeps the exact same
+        # tokens while giving it the single line it requires.
+        single_line = " ".join(text.split())
+        prediction = self._fasttext_model.predict(single_line)
         label = prediction[0][0] if prediction[0] else ""
         language = label.replace("__label__", "")
         confidence = float(prediction[1][0]) if prediction[1] else 0.0
