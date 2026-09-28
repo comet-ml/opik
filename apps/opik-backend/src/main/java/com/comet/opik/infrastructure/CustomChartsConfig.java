@@ -3,7 +3,9 @@ package com.comet.opik.infrastructure;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import lombok.AccessLevel;
 import lombok.Data;
+import lombok.Getter;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -19,11 +21,13 @@ public class CustomChartsConfig {
      *
      * <p>Held as a String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot
      * bind to a collection; {@link #enabledWorkspaceIds()} splits, strips and drops blanks.
-     */
-    /**
-     * Nullable rather than {@code @NotNull}: Null and blank both mean "no workspace allowlisted".
+     *
+     * <p>Nullable rather than {@code @NotNull}: Null and blank both mean "no workspace allowlisted".
+     *
+     * <p>No getter, so the raw string cannot be matched against directly; read it via {@link #enabledWorkspaceIds()}.
      */
     @JsonProperty
+    @Getter(AccessLevel.NONE)
     private String enabledWorkspaces;
 
     /**
