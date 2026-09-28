@@ -558,6 +558,52 @@ class TraceFilterEvaluationServiceTest {
             assertThat(traceFilterEvaluationService.matchesFilter(filter, trace)).isTrue();
         }
 
+        @Nested
+        @DisplayName("Ambiguous dotted metadata keys")
+        class AmbiguousDottedMetadataKeys {
+
+            @ParameterizedTest(name = "{0} metadata, operator {2}, expected {4}")
+            @MethodSource("ambiguousMetadataFilterCases")
+            void matchesFilterResolvesNestedAndFlatInterpretations(
+                    String metadataJson,
+                    String filterKey,
+                    Operator operator,
+                    String filterValue,
+                    boolean expected) {
+                var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .metadata(JsonUtils.getJsonNodeFromString(metadataJson))
+                        .build();
+                var filter = TraceFilter.builder()
+                        .field(TraceField.METADATA)
+                        .key(filterKey)
+                        .operator(operator)
+                        .value(filterValue)
+                        .build();
+
+                assertThat(traceFilterEvaluationService.matchesFilter(filter, trace)).isEqualTo(expected);
+            }
+
+            private static Stream<Arguments> ambiguousMetadataFilterCases() {
+                var workflowId = "019e7212-cbb2-7972-b061-0a703e19ef18";
+                var flatOnly = "{\"uni.workflow.id\":\"%s\"}".formatted(workflowId);
+                var nestedOnly = "{\"uni\":{\"workflow\":{\"id\":\"%s\"}}}".formatted(workflowId);
+                var absent = "{}";
+                var flatOther = "{\"uni.workflow.id\":\"other\"}";
+
+                return Stream.of(
+                        arguments(flatOnly, "uni.workflow.id", Operator.EQUAL, workflowId, true),
+                        arguments(nestedOnly, "uni.workflow.id", Operator.EQUAL, workflowId, true),
+                        arguments(absent, "uni.workflow.id", Operator.EQUAL, workflowId, false),
+                        arguments(flatOther, "uni.workflow.id", Operator.EQUAL, workflowId, false),
+                        arguments(flatOnly, "uni.workflow.id", Operator.NOT_EQUAL, workflowId, false),
+                        arguments(flatOther, "uni.workflow.id", Operator.NOT_EQUAL, workflowId, true),
+                        arguments(absent, "uni.workflow.id", Operator.IS_EMPTY, "", true),
+                        arguments(flatOnly, "uni.workflow.id", Operator.IS_EMPTY, "", false),
+                        arguments(nestedOnly, "uni.workflow.id", Operator.NOT_CONTAINS, "019e7212", false),
+                        arguments(absent, "uni.workflow.id", Operator.NOT_CONTAINS, "missing", true));
+            }
+        }
+
         @Test
         void matchesFilterWithCustomInputField() {
             // Given

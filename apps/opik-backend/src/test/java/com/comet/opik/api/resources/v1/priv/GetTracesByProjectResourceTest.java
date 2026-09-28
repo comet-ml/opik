@@ -1955,6 +1955,83 @@ class GetTracesByProjectResourceTest {
             assertThat(actualPage.total()).isEqualTo(1);
         }
 
+        @Test
+        @DisplayName("metadata filter matches a nested path when no flat dotted key exists")
+        void whenFilterMetadataOnNestedDottedKeyPath__thenReturnMatchingTrace() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var workflowId = "019e7212-cbb2-7972-b061-0a703e19ef18";
+            var matchingTrace = setCommonTraceDefaults(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni\":{\"workflow\":{\"id\":\"%s\"}},\"environment\":\"prod\"}".formatted(workflowId)))
+                    .build());
+            var otherTrace = setCommonTraceDefaults(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"environment\":\"prod\"}"))
+                    .build());
+            traceResourceClient.batchCreateTraces(List.of(matchingTrace, otherTrace), apiKey, workspaceName);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("uni.workflow.id")
+                    .value(workflowId)
+                    .build());
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, filters, null, 10, Map.of());
+
+            assertThat(actualPage.content()).singleElement().satisfies(returned -> {
+                assertThat(returned.id()).isEqualTo(matchingTrace.id());
+                assertThat(returned.metadata().at("/uni/workflow/id").asText()).isEqualTo(workflowId);
+            });
+            assertThat(actualPage.total()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("metadata not_equal on flat dotted key excludes traces that carry the value")
+        void whenFilterMetadataNotEqualOnFlatDottedKey__thenExcludeMatchingTrace() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var workflowId = "019e7212-cbb2-7972-b061-0a703e19ef18";
+            var excludedTrace = setCommonTraceDefaults(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni.workflow.id\":\"%s\"}".formatted(workflowId)))
+                    .build());
+            var includedTrace = setCommonTraceDefaults(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni.workflow.id\":\"other-workflow\"}"))
+                    .build());
+            traceResourceClient.batchCreateTraces(List.of(excludedTrace, includedTrace), apiKey, workspaceName);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.NOT_EQUAL)
+                    .key("uni.workflow.id")
+                    .value(workflowId)
+                    .build());
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, filters, null, 10, Map.of());
+
+            assertThat(actualPage.content()).singleElement().satisfies(returned -> {
+                assertThat(returned.id()).isEqualTo(includedTrace.id());
+                assertThat(returned.metadata().get("uni.workflow.id").asText()).isEqualTo("other-workflow");
+            });
+            assertThat(actualPage.total()).isEqualTo(1);
+        }
+
         @ParameterizedTest
         @ValueSource(strings = {"$..test", "$[abc]", "$.key with space", "[", "]", "[..]"})
         @DisplayName("a malformed or non-matching metadata path returns an empty page rather than failing")
