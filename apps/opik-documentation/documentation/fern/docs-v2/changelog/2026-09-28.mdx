@@ -1,0 +1,48 @@
+## Bug Fixes & Improvements
+
+- **Large threads no longer fail to load** — `threads/retrieve` had been intermittently returning a 500 since a ClickHouse join between traces and their aggregated spans could pick either side to build the join from; on a large thread it occasionally picked the multi-gigabyte side and ran out of memory. The join now always builds from the smaller, pre-aggregated side, so large threads load reliably.
+
+- **Diagnostics checks your credit balance before starting a run** — Starting a diagnostic run when a workspace was out of credits used to fail only after the run had already started. The run button now checks affordability upfront, and the page shows a clear out-of-credits state instead of a run that fails partway through.
+
+- **Image and other media in experiment output now renders in the comparison views** — The experiment comparison sidebar and the test-suite sidebar only extracted media (e.g. images) from a dataset item's input; a trace's output went straight into the raw JSON view with no media extraction, so an image an SDK logged as output never showed. Output media now renders the same way input media does, including images served from URLs with no file extension.
+
+- **Online evaluation rule duration filters now use the right unit** — A duration filter typed as "> 5" on a rule was compared against the underlying duration column in milliseconds, so on an LLM-as-judge rule it matched effectively every trace instead of only the slow ones. The rule dialog now converts the value the same way the traces table already does, and the duration column is labeled "Duration (s)" so the unit is clear.
+
+- **Bedrock and Mistral streaming integrations no longer lose parts of the response** — OpenAI models called through Bedrock's `invoke_model` (gpt-oss, GPT-5.x, GPT-6) stream text and stop-reason in a shape the aggregator didn't recognize, so those spans ended up with empty output and zero token usage. Bedrock's `converse_stream` sent a tool call's arguments as JSON fragments that got overwritten instead of merged, so a streamed tool call kept only its last fragment, and parallel tool calls collapsed into one. Mistral's reasoning models (Magistral) stream content as a list of thinking/text chunks rather than a string, which crashed the aggregator and left the whole span without output. All three now aggregate correctly.
+
+- **Judge calls to Bedrock-hosted GPT-5.x and GPT-6 models no longer fail** — Opik already dropped the `temperature` parameter for GPT-5-family judge models, since these models reject it, but only recognized them by their plain `gpt-5*` names. The same models routed through Bedrock (e.g. `bedrock/converse/us.openai.gpt-6-...`) keep a `bedrock/` prefix, weren't recognized, and had their judge calls rejected. They're now matched and handled the same way.
+
+- **Hallucination and SycEval judge reasons render as text, not a Python list** — Both metrics ask the judge for a list of reason strings, but the parser rendered that list with Python's `str()`, so the explanation shown to you (and uploaded with the score) was a literal `['reason 1', 'reason 2']` instead of readable prose. It's now joined into text the same way other list-based judge reasons already are.
+
+- **Context-precision and context-recall judges get the same prompt-injection hardening as last week's hallucination and G-Eval fix** — Content being evaluated by these metrics is now clearly namespaced from the rest of the judge prompt, so an input, output, or context that happens to contain something resembling an instruction or a closing delimiter can no longer influence the verdict.
+
+- **Several built-in metrics are more robust on edge-case input** — BLEU now rejects a non-positive or non-integer `n_grams` instead of silently scoring 0 or raising a raw `KeyError`; METEOR tokenizes its input before handing it to NLTK instead of raising `TypeError` on every call; ChrF now scores a candidate against each reference separately and keeps the best match instead of passing the whole reference list into NLTK's single-reference scorer (which scored a perfect match as low as 0.26); and VADER sentiment now downloads its lexicon on first use instead of failing with a bare `LookupError` on a fresh install.
+
+- **`@track` now logs `slots=True` dataclasses correctly** — Encoding a dataclass defined with `slots=True` read from `__dict__`, which such classes don't have, so the logged value was either the object's repr string or an empty object instead of its actual fields.
+
+- **Config files with `%` in a value no longer break `opik configure`** — `~/.opik.config` is read and written with Python's `ConfigParser`, which by default treats `%` as the start of an interpolation sequence; a value containing `%` (for example, in a URL) could fail to load or save. Interpolation is now disabled for this file.
+
+- **Custom scorers now get a real name in results instead of crashing** — Passing a `functools.partial`-wrapped function or a callable class instance as a scorer raised `AttributeError` because neither has a `__name__`. Both are now named sensibly (the wrapped function's name, or the class name as a fallback).
+
+- **Gemini usage without `candidates_token_count` is accepted** — A Gemini response that omits this field (for example, at content-filter length) is no longer rejected while building token usage; the count is treated as unknown rather than causing an error.
+
+- **19 more providers are priced correctly** — Hyperbolic, Baseten, Lambda AI, nscale, OCI, Replicate, watsonx, Cohere, Novita, Cloudflare, Anyscale, Scaleway, OVHcloud, GMI, Gradient AI, Libertai, Azure AI, Vercel AI Gateway, and OpenRouter are now registered as canonical providers, so calls through them resolve a model price instead of going unpriced.
+
+- **Large dataset batch uploads no longer exceed the configured size cap** — `StreamingBatchWriter` decided when to flush a batch based only on the serialized items' size, without counting the surrounding envelope (dataset name, project name, batch id, and JSON wrapper). Every flushed request body was slightly larger than the configured cap; the cap now accounts for the full request body.
+
+- **`video_url` placeholders in chat prompts are validated** — Placeholder validation (`validate_placeholders=True`) checked `{{...}}` templates inside `text` and `image_url` prompt parts but skipped `video_url`, even though it's rendered the same way, so a templated video URL could silently fail to substitute.
+
+- **Overlapping evaluations no longer leave your app's HTTP connections short-lived** — `evaluate()` temporarily patches httpcore's keep-alive behavior for the duration of a run and restores it afterwards. When two evaluations ran at the same time, the first one to finish could restore the patch early (disabling it for the run still in progress) or the last one to finish could restore the wrong thing, leaving the host application's own connections short-lived after both runs completed. The patch is now reference-counted so it's only removed once every overlapping run is done.
+
+## Performance Improvements
+
+- **Reading large experiments page by page is up to ~2.6x faster** — The query behind experiment item paging was re-evaluated up to six times per page because it's referenced from multiple places in the query plan; it's now evaluated once per page and the result reused. Measured on a 100k-item experiment at a page size of 2000: a 50-page read dropped from 14.48s to 5.56s.
+- **The experiment compare view no longer re-scans the whole experiment on every page** — Each page of the compare view re-resolved the same target-project lookup by reading the experiment's entire trace set, even though the answer is identical for every page of that read. The lookup is now cached per read, so its cost no longer scales with the size of the experiment.
+- **Trace and thread reads use less CPU and read less data** — `find_trace_stream` and `find_thread_by_id` deduplicated spans with a ClickHouse `FINAL` read, which is expensive. Both now use a pre-aggregated form instead, cutting CPU by 22–50% and roughly halving bytes read in production measurements, with identical results.
+- **Span-by-ID reads scan less data** — Reads that look up a span by ID now bound themselves to the week(s) that ID's timestamp resolves to, instead of scanning across all partitions.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.78...2.2.82)
+
+_Releases_: `2.2.79`, `2.2.80`, `2.2.81`, `2.2.82`
