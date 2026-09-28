@@ -820,6 +820,60 @@ class BulkInsertV2ClientIntegrationTest {
         return names;
     }
 
+    @Test
+    @DisplayName("a span whose row exceeds the parallel-parsing chunk size is still written")
+    void oversizedSpanRowIsWritten() {
+        // Regression: JSONEachRow rows are split across chunk boundaries by ClickHouse's parallel
+        // parser, which cannot carry one row across them and rejects the whole batch with code 117
+        // ("Size of JSON object at position N is extremely large") and written_rows = 0. Spans carry
+        // user-supplied input, so a row that large is an ordinary thing for a customer to send, and in
+        // production it silently dropped batches.
+        //
+        // The guard fires at 10x min_chunk_bytes_for_parallel_parsing, so 100 MiB at the 10 MiB
+        // default -- NOT at 10 MiB, which is what the error message's "Expected not greater than
+        // 10485760 bytes" misleadingly implies. Bisected on this suite's server image: 99 MiB is
+        // accepted, 100 MiB is not. The payload below has to clear that, so it cannot be trimmed to
+        // something cheaper without the test quietly ceasing to test anything.
+        //
+        // The DAO seam rather than HTTP: what has to be exercised is the payload reaching ClickHouse
+        // above that threshold, and routing it through the resource layer would additionally depend on
+        // the request size limits of the test server.
+        var projectName = "v2-oversized-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var trace = newTraceBuilder().projectName(projectName).build();
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+        // Past the 100 MiB cliff with margin, so the test does not sit on the boundary it is about.
+        var oversized = "x".repeat(110 * 1024 * 1024);
+        var span = factory.manufacturePojo(Span.class).toBuilder()
+                .projectId(projectId)
+                .projectName(projectName)
+                .traceId(trace.id())
+                .parentSpanId(null)
+                .feedbackScores(null)
+                .comments(null)
+                .errorInfo(null)
+                .input(TextNode.valueOf(oversized))
+                .build();
+
+        var written = spanDAO.batchInsert(List.of(span))
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        // The server's own count, so a batch rejected with written_rows = 0 fails here rather than
+        // passing on the strength of the call having returned.
+        assertThat(written).isEqualTo(1L);
+
+        var storedLength = queryOne(
+                "SELECT length(input) AS len FROM spans WHERE workspace_id = '%s' AND id = '%s' LIMIT 1"
+                        .formatted(WORKSPACE_ID, span.id()),
+                row -> row.get("len", Long.class));
+        // The quoted JSON string, so two bytes more than the payload itself.
+        assertThat(storedLength).isEqualTo(oversized.length() + 2L);
+    }
+
     // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
     // throw when the Mono is assembled rather than deferring a failure into the reactive chain. Covered
     // here rather than in the mapper tests because the guard is the DAO's, and it is the one place both
