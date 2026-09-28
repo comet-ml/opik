@@ -2633,8 +2633,9 @@ class FindTraceThreadsResourceTest {
 
             var updatedThreadId = UUID.randomUUID().toString();
 
-            // The thread model id must carry the trace id's timestamp, not the insert time, or this window excludes it
-            var backdatedTime = Instant.now().minus(Duration.ofDays(30));
+            // The thread model id must carry the trace id's timestamp, not the insert time, or this window excludes it.
+            // 12 hours stays inside the 24h ingestion window for trace ids while sitting well outside the query window.
+            var backdatedTime = Instant.now().minus(Duration.ofHours(12));
             var trace = createTrace().toBuilder()
                     .projectName(projectName)
                     .threadId(UUID.randomUUID().toString())
