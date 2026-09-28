@@ -302,7 +302,7 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
 
     prompt = "Test video"
 
-    with pytest.raises(openai.OpenAIError):
+    with pytest.raises(openai.OpenAIError) as exc_info:
         _ = wrapped_client.videos.create_and_poll(
             model="invalid-model-name",
             prompt=prompt,
@@ -310,6 +310,10 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
         )
 
     opik.flush_tracker()
+
+    # OpenAI has changed the status code for an unknown video model before
+    # (400 -> 404), so assert the raised exception is recorded, not a fixed subclass.
+    expected_exception_type = type(exc_info.value).__name__
 
     assert len(fake_backend.trace_trees) == 1
     trace_tree = fake_backend.trace_trees[0]
@@ -331,7 +335,7 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
         last_updated_at=ANY_BUT_NONE,
         project_name=OPIK_PROJECT_DEFAULT_NAME,
         error_info={
-            "exception_type": "BadRequestError",
+            "exception_type": expected_exception_type,
             "message": ANY_STRING,
             "traceback": ANY_STRING,
         },
@@ -356,7 +360,7 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
                 model=None,
                 provider=None,
                 error_info={
-                    "exception_type": "BadRequestError",
+                    "exception_type": expected_exception_type,
                     "message": ANY_STRING,
                     "traceback": ANY_STRING,
                 },
@@ -381,7 +385,7 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
                         model="invalid-model-name",
                         provider="openai",
                         error_info={
-                            "exception_type": "BadRequestError",
+                            "exception_type": expected_exception_type,
                             "message": ANY_STRING,
                             "traceback": ANY_STRING,
                         },
@@ -662,7 +666,7 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
 
     prompt = "Test video"
 
-    with pytest.raises(openai.OpenAIError):
+    with pytest.raises(openai.OpenAIError) as exc_info:
         _ = await wrapped_client.videos.create_and_poll(
             model="invalid-model-name",
             prompt=prompt,
@@ -670,6 +674,10 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
         )
 
     opik.flush_tracker()
+
+    # OpenAI has changed the status code for an unknown video model before
+    # (400 -> 404), so assert the raised exception is recorded, not a fixed subclass.
+    expected_exception_type = type(exc_info.value).__name__
 
     assert len(fake_backend.trace_trees) == 1
     trace_tree = fake_backend.trace_trees[0]
@@ -691,7 +699,7 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
         last_updated_at=ANY_BUT_NONE,
         project_name=OPIK_PROJECT_DEFAULT_NAME,
         error_info={
-            "exception_type": "BadRequestError",
+            "exception_type": expected_exception_type,
             "message": ANY_STRING,
             "traceback": ANY_STRING,
         },
@@ -716,7 +724,7 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
                 model=None,
                 provider=None,
                 error_info={
-                    "exception_type": "BadRequestError",
+                    "exception_type": expected_exception_type,
                     "message": ANY_STRING,
                     "traceback": ANY_STRING,
                 },
@@ -741,7 +749,7 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
                         model="invalid-model-name",
                         provider="openai",
                         error_info={
-                            "exception_type": "BadRequestError",
+                            "exception_type": expected_exception_type,
                             "message": ANY_STRING,
                             "traceback": ANY_STRING,
                         },
