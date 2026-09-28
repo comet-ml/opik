@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
@@ -885,6 +886,7 @@ export class PlaygroundPage {
 
   /** Set the model for a variant — public wrapper for setModelForVariant. */
   async selectModel(index: number, modelDisplayName: string): Promise<void> {
+    assertAllowedModelDisplayName(modelDisplayName);
     return test.step(`select model "${modelDisplayName}" for variant ${index}`, async () => {
       await this.setModelForVariant(index, modelDisplayName);
     });

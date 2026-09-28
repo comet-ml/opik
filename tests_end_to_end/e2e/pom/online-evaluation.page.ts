@@ -1,6 +1,7 @@
 import { test, type Page, type Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
 export interface CreateRuleDialogLLMJudgeFields {
   name: string;
@@ -403,7 +404,9 @@ export class OnlineEvaluationPage {
     await promptCombobox.click();
     await this.page.getByRole('option', { name: fields.template, exact: true }).click();
 
-    // Pick the model.
+    // Pick the model. Guarded: an unselected picker defaults to the
+    // provider's newest/most expensive entry.
+    assertAllowedModelDisplayName(fields.modelDisplayName);
     const modelCombobox = d.getByRole('combobox').filter({
       hasText: /Select an LLM model|claude|gpt|Claude|GPT/i,
     });
