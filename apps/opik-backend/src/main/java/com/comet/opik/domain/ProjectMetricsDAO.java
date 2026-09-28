@@ -953,14 +953,20 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
+    // Latest-version dedup instead of FINAL: alert windows hold few spans, so FINAL's per-part overhead dominated.
     private static final String GET_TOTAL_COST = """
             SELECT
                 sum(total_estimated_cost) AS total_cost
-            FROM spans final
-            WHERE workspace_id = :workspace_id
-                <if(project_ids)> AND project_id IN :project_ids <endif>
-                <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+            FROM (
+                SELECT id, total_estimated_cost
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                    <if(project_ids)> AND project_id IN :project_ids <endif>
+                    <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
             SETTINGS log_comment = '<log_comment>';
             """;
 
