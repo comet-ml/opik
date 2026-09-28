@@ -150,48 +150,46 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
      *
      * <p>Mirrors the {@code feedback_scores_deduped → grouped → final} chain used by the trace and span
      * searches, because the value a threshold is compared against must be the same value the UI shows.
-     * Two details carry that: rows are deduplicated to the latest version of each stored score, and where
-     * several authors scored the same name the effective value is their <em>average</em> — a single
-     * author's score is used as-is.
-     *
-     * <p>Each table is deduplicated on its own side of the union, by its own sort key plus
-     * {@code last_updated_at}: {@code (project_id, entity_id, name)} for {@code feedback_scores} and
-     * {@code (project_id, entity_id, author, name, source_queue_id)} for {@code authored_feedback_scores},
-     * which are the keys their {@code ReplacingMergeTree} engines merge on. Deduplicating after the union
-     * on one shared key would keep two unmerged versions of the same legacy row whenever they carry a
-     * different {@code last_updated_by}, and average the stale value into the current one.
-     *
-     * <p>Not filtered by {@code project_id}, which is the second column of both sort keys: the caller does
-     * not have it. This query is how it learns it — a score event names entity ids only, and on the batch
-     * path no project at all, because one batch may span several.
+     * Two details carry that: rows are deduplicated to the latest per
+     * {@code (entity_id, name, author, source_queue_id)}, and where several authors scored the same name
+     * the effective value is their <em>average</em> — a single author's score is used as-is.
      */
     private static final String SELECT_EFFECTIVE_SCORES_BY_ENTITY_IDS = """
-            WITH scores_deduped AS (
-                SELECT entity_id, project_id, name, value
-                FROM feedback_scores
-                WHERE workspace_id = :workspace_id
-                  AND entity_type = :entity_type
-                  AND entity_id IN :entity_ids
-                ORDER BY project_id, entity_id, name, last_updated_at DESC
-                LIMIT 1 BY project_id, entity_id, name
-            ), authored_scores_deduped AS (
-                SELECT entity_id, project_id, name, value
-                FROM authored_feedback_scores
-                WHERE workspace_id = :workspace_id
-                  AND entity_type = :entity_type
-                  AND entity_id IN :entity_ids
-                ORDER BY project_id, entity_id, author, name, source_queue_id, last_updated_at DESC
-                LIMIT 1 BY project_id, entity_id, author, name, source_queue_id
+            WITH deduped AS (
+                SELECT entity_id, project_id, name, value, author, source_queue_id, last_updated_at
+                FROM (
+                    SELECT entity_id,
+                           project_id,
+                           name,
+                           value,
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id,
+                           last_updated_at
+                    FROM feedback_scores
+                    WHERE workspace_id = :workspace_id
+                      AND entity_type = :entity_type
+                      AND entity_id IN :entity_ids
+                    UNION ALL
+                    SELECT entity_id,
+                           project_id,
+                           name,
+                           value,
+                           author,
+                           source_queue_id,
+                           last_updated_at
+                    FROM authored_feedback_scores
+                    WHERE workspace_id = :workspace_id
+                      AND entity_type = :entity_type
+                      AND entity_id IN :entity_ids
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY entity_id, name, author, source_queue_id
             )
             SELECT entity_id,
                    project_id,
                    name,
                    IF(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
-            FROM (
-                SELECT entity_id, project_id, name, value FROM scores_deduped
-                UNION ALL
-                SELECT entity_id, project_id, name, value FROM authored_scores_deduped
-            )
+            FROM deduped
             GROUP BY entity_id, project_id, name
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -595,9 +593,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Flux<EffectiveFeedbackScore> getEffectiveScores(@NonNull EntityType entityType,
-            @NonNull Set<UUID> entityIds) {
-        if (entityIds.isEmpty()) {
+    public Flux<EffectiveFeedbackScore> getEffectiveScores(@NonNull EntityType entityType, Set<UUID> entityIds) {
+        if (CollectionUtils.isEmpty(entityIds)) {
             return Flux.empty();
         }
 

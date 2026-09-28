@@ -1,7 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -25,7 +23,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -36,12 +33,13 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The two ClickHouse reads the annotation queue routing consumer makes, against a real database: the
- * effective scores a condition is evaluated against, and which of a batch's entities an SDK logged.
+ * The source filter the annotation queue routing consumer applies, against a real database: of the
+ * entities a message names, which ones an SDK logged.
  *
- * <p>Both are deduplication queries over {@code ReplacingMergeTree} tables, where a stale row survives
- * until the parts merge — which a test can reproduce because nothing here merges in between. Neither read
- * has a REST surface of its own, so the DAOs are driven directly with data written through the public API.
+ * <p>Both queries read the latest version of a row from a {@code ReplacingMergeTree}, where a stale
+ * version survives until the parts merge — which a test can reproduce, because nothing here merges in
+ * between. Neither read has a REST surface of its own, so the DAOs are driven directly, with the data
+ * written through the public API.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -61,14 +59,11 @@ class AnnotationQueueRoutingReadsTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private TraceResourceClient traceResourceClient;
-    private FeedbackScoreDAO feedbackScoreDAO;
     private TraceDAO traceDAO;
     private TraceThreadDAO traceThreadDAO;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, FeedbackScoreDAO feedbackScoreDAO, TraceDAO traceDAO,
-            TraceThreadDAO traceThreadDAO) {
-        this.feedbackScoreDAO = feedbackScoreDAO;
+    void setUpAll(ClientSupport client, TraceDAO traceDAO, TraceThreadDAO traceThreadDAO) {
         this.traceDAO = traceDAO;
         this.traceThreadDAO = traceThreadDAO;
 
@@ -81,57 +76,6 @@ class AnnotationQueueRoutingReadsTest {
     @AfterAll
     void tearDownAll() {
         setup.wireMock.server().stop();
-    }
-
-    @Test
-    @DisplayName("effective scores: the latest value of a name wins, and every name comes back with its project")
-    void effectiveScoresTakeTheLatestValuePerName() {
-        String projectName = randomName("project");
-        UUID traceId = createTrace(projectName, Source.SDK, null);
-        String rescored = randomName("relevance");
-        String other = randomName("tone");
-
-        score(projectName, traceId, rescored, 0.2);
-        score(projectName, traceId, other, 0.9);
-        // The same score again: a second row for the same replacing key, unmerged until ClickHouse says so.
-        score(projectName, traceId, rescored, 0.7);
-
-        var scores = effectiveScores(EntityType.TRACE, Set.of(traceId));
-
-        assertThat(scores)
-                .as("a re-scored name is worth its latest value, not the average of its versions")
-                .containsOnlyKeys(traceId);
-        assertThat(scores.get(traceId).scores())
-                .containsOnlyKeys(rescored, other)
-                .satisfies(values -> {
-                    assertThat(values.get(rescored)).isEqualByComparingTo(BigDecimal.valueOf(0.7));
-                    assertThat(values.get(other)).isEqualByComparingTo(BigDecimal.valueOf(0.9));
-                });
-        assertThat(scores.get(traceId).projectId()).isNotNull();
-    }
-
-    @Test
-    @DisplayName("effective scores: an entity with no scores is absent rather than empty")
-    void effectiveScoresSkipUnscoredEntities() {
-        String projectName = randomName("project");
-        UUID scored = createTrace(projectName, Source.SDK, null);
-        UUID unscored = createTrace(projectName, Source.SDK, null);
-        score(projectName, scored, randomName("relevance"), 0.5);
-
-        assertThat(effectiveScores(EntityType.TRACE, Set.of(scored, unscored))).containsOnlyKeys(scored);
-    }
-
-    @Test
-    @DisplayName("effective scores: entities of one batch come back together, each under its own id")
-    void effectiveScoresCoverTheWholeBatch() {
-        String projectName = randomName("project");
-        String name = randomName("relevance");
-        var traceIds = List.of(createTrace(projectName, Source.SDK, null), createTrace(projectName, Source.SDK, null),
-                createTrace(projectName, Source.SDK, null));
-        traceIds.forEach(traceId -> score(projectName, traceId, name, 0.4));
-
-        assertThat(effectiveScores(EntityType.TRACE, Set.copyOf(traceIds)))
-                .containsOnlyKeys(traceIds.toArray(UUID[]::new));
     }
 
     @Test
@@ -214,22 +158,6 @@ class AnnotationQueueRoutingReadsTest {
         assertThat(kept).containsExactly(threadModelIds.get(sdkThread));
     }
 
-    private Map<UUID, EntityFeedbackScores> effectiveScores(EntityType entityType, Set<UUID> entityIds) {
-        return feedbackScoreDAO.getEffectiveScores(entityType, entityIds)
-                .contextWrite(this::workspaceContext)
-                .collect(Collectors.groupingBy(EffectiveFeedbackScore::entityId))
-                .map(rows -> rows.entrySet().stream()
-                        .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey,
-                                entry -> EntityFeedbackScores.builder()
-                                        .entityId(entry.getKey())
-                                        .projectId(entry.getValue().getFirst().projectId())
-                                        .scores(entry.getValue().stream()
-                                                .collect(Collectors.toUnmodifiableMap(EffectiveFeedbackScore::name,
-                                                        EffectiveFeedbackScore::value)))
-                                        .build())))
-                .block();
-    }
-
     private UUID projectIdOf(UUID traceId) {
         return traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY).projectId();
     }
@@ -250,20 +178,6 @@ class AnnotationQueueRoutingReadsTest {
                 .feedbackScores(null)
                 .usage(null)
                 .build();
-    }
-
-    private void score(String projectName, UUID traceId, String name, double value) {
-        var item = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                .id(traceId)
-                .projectName(projectName)
-                .projectId(null)
-                .name(name)
-                .value(BigDecimal.valueOf(value))
-                .categoryName(null)
-                .source(ScoreSource.SDK)
-                .build();
-
-        traceResourceClient.feedbackScores(List.of(item), API_KEY, WORKSPACE_NAME);
     }
 
     private reactor.util.context.Context workspaceContext(reactor.util.context.Context context) {

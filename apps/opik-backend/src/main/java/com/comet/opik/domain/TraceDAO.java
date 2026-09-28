@@ -495,19 +495,19 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
+    private static final String[] LOGGING_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
+
     /**
      * Reads the latest row per id rather than matching on any row. An out-of-order create leaves an earlier row
      * holding 'unknown' until the real source arrives (see the merge in the batch insert), and matching on any
      * row would read that 'unknown' as SDK and route a playground trace.
      * <p>
      * Takes the latest source with {@code argMax} rather than deduplicating whole rows: one column is all this
-     * reads, and grouping by the table's own sort key keeps the aggregation in the order the parts are already in.
+     * reads, so a hash aggregate over the few rows the id list admits costs about what the sort it replaces did.
      * <p>
      * Carries the {@code <id_weeks>} week bound — see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} (OPIK-8332).
      */
-    /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
-    private static final String[] LOGGING_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
-
     private static final String SELECT_LOGGING_SOURCE_IDS = """
             SELECT id
             FROM (
