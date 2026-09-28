@@ -1,4 +1,4 @@
-export { test, expect } from './deep-paged-experiment.fixture';
+export { test, expect } from './trace-source.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -235,4 +235,9 @@ export type {
   DeepPagedExperimentRef,
   DeepPagedExperimentFixtures,
 } from './deep-paged-experiment.fixture';
+export type {
+  TraceSourceRef,
+  TraceSourcesRef,
+  TraceSourceFixtures,
+} from './trace-source.fixture';
 export type { ProjectRef } from '../core/backend';

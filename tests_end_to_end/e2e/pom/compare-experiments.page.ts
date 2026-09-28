@@ -703,6 +703,226 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * A row's Name cell — the experiment-name column, pinned left since opik#8510.
+   *
+   * `experiment_name` is the column id `ExperimentItemsTab` pins alongside
+   * `select`, so this is also the cell that carries `comet-pinned-last-left`.
+   */
+  experimentNameCell(datasetItemId: string): Locator {
+    return this.page.locator(`td[data-cell-id="${datasetItemId}_experiment_name"]`);
+  }
+
+  /**
+   * Every cell the table marks as the LAST left-pinned one — the column that has
+   * to draw the border separating the frozen columns from the scrolling ones.
+   *
+   * By the class rather than a geometric guess, because the class IS the
+   * contract: `getCommonPinningClasses` stamps `comet-pinned-last-left` on
+   * whichever pinned column is last, and `main.scss` hangs the inset box-shadow
+   * off it. Header row included, which is why callers assert a count of rows + 1.
+   */
+  get pinnedLastLeftCells(): Locator {
+    return this.page.locator('.comet-pinned-last-left');
+  }
+
+  /**
+   * The left edge of each named row's Name cell, in viewport coordinates.
+   *
+   * The left edge and not the whole box: width and height move with the row
+   * height and the column resizer, and neither is what pinning is about — a
+   * sticky column is one whose x does not change when the grid scrolls under it.
+   */
+  async readNameCellLeftEdges(datasetItemIds: string[]): Promise<number[]> {
+    return test.step('read the Name cells\' left edges', async () => {
+      const edges: number[] = [];
+      for (const id of datasetItemIds) {
+        const cell = this.experimentNameCell(id);
+        await expect(cell, `exactly one Name cell for row ${id}`).toHaveCount(1);
+        const box = await cell.boundingBox();
+        if (box === null) {
+          throw new Error(
+            `CompareExperimentsPage.readNameCellLeftEdges: the Name cell for row ${id} has no ` +
+              'layout box, so it is not rendered — there is no pinning to assert.',
+          );
+        }
+        edges.push(box.x);
+      }
+      return edges;
+    });
+  }
+
+  /**
+   * The column ids whose header is currently inside the grid's horizontal
+   * viewport, in document order.
+   *
+   * This is how a scroll is PROVEN rather than assumed. Asserting the Name cells
+   * held their x is vacuous on a grid that never moved — and a grid narrower
+   * than its container, or one whose columns all fit, never moves. Comparing the
+   * set of headers on screen before and after says the columns really slid past.
+   *
+   * A header counts as on screen when it overlaps the scroll container's own box,
+   * not the window's: the container is what scrolls, and the pinned columns sit
+   * inside it.
+   */
+  async readHeaderIdsInView(): Promise<string[]> {
+    return test.step('read the column headers currently in view', async () => {
+      const wrapper = this.gridWrapper;
+      await expect(wrapper, 'exactly one grid table wrapper').toHaveCount(1);
+      return wrapper.evaluate((el) => {
+        const scroller = findHorizontalScroller(el);
+        const bounds = scroller.getBoundingClientRect();
+        return Array.from(el.querySelectorAll<HTMLElement>('th[data-header-id]'))
+          .filter((header) => {
+            const box = header.getBoundingClientRect();
+            return box.width > 0 && box.right > bounds.left && box.left < bounds.right;
+          })
+          .map((header) => header.getAttribute('data-header-id') ?? '');
+
+        function findHorizontalScroller(from: Element): Element {
+          for (let node: Element | null = from.parentElement; node; node = node.parentElement) {
+            if (node.scrollWidth > node.clientWidth) return node;
+          }
+          throw new Error(
+            'CompareExperimentsPage: no horizontally scrollable ancestor above ' +
+              '[data-table-wrapper] — the grid has no overflow, so there is no scroll to drive.',
+          );
+        }
+      });
+    });
+  }
+
+  /**
+   * Scroll the grid all the way right, and report how far it actually went.
+   *
+   * Anchored on `[data-table-wrapper]` — the attribute
+   * `PageBodyStickyTableWrapper` sets, already the estate's handle for this grid
+   * (see `PlaygroundPage.hasBlankBandAboveRows`) — and then resolved to whichever
+   * ancestor actually overflows. The compare grid does NOT scroll inside a
+   * wrapper of its own: it is laid out `min-w-fit` and the whole PAGE BODY
+   * scrolls around it, and that container is an unlabelled `div`. Walking up to
+   * the first ancestor whose `scrollWidth` exceeds its `clientWidth` names it by
+   * the property under test instead of by a structural path that would break the
+   * next time the layout gains a wrapper.
+   *
+   * Driven by assigning `scrollLeft` rather than a wheel gesture: a wheel event
+   * has to land on the right element and its delta is a guess at how far the
+   * columns extend, whereas `scrollWidth` is the answer. The returned distance
+   * lets the caller fail loudly when the grid had nothing to scroll — which is
+   * the one way the pinning assertion could pass while testing nothing.
+   */
+  async scrollGridToEnd(): Promise<number> {
+    return test.step('scroll the grid to its right-hand end', async () => {
+      const wrapper = this.gridWrapper;
+      await expect(wrapper, 'exactly one grid table wrapper').toHaveCount(1);
+      const scrolled = await wrapper.evaluate((el) => {
+        for (let node = el.parentElement; node !== null; node = node.parentElement) {
+          if (node.scrollWidth > node.clientWidth) {
+            node.scrollLeft = node.scrollWidth;
+            return node.scrollLeft;
+          }
+        }
+        return 0;
+      });
+      if (scrolled > 0) {
+        // The assignment lands synchronously, but the page body's own
+        // `data-scrolled-right` flag — and with it the sticky columns' settled
+        // paint — is toggled in a requestAnimationFrame callback. Waiting on the
+        // flag is what keeps the geometry read below out of the same frame as the
+        // scroll.
+        await expect(
+          this.page.locator('[data-scrolled-right]'),
+          'the page body reports itself scrolled right',
+        ).toHaveCount(1);
+      }
+      return scrolled;
+    });
+  }
+
+  /** The grid's own wrapper element, inside whichever container scrolls it. */
+  private get gridWrapper(): Locator {
+    return this.page.locator('[data-table-wrapper]');
+  }
+
+  /**
+   * One experiment's band inside a row, as a public handle — the element
+   * `VerticallySplitCellWrapper` paints on hover.
+   *
+   * `columnId` defaults to the pinned Name column because that is where a
+   * reader's eye is when they hover a sub-row, and it is the cell whose border
+   * the hover background could paint over.
+   */
+  subRow(datasetItemId: string, experimentIndex: number, columnId = 'experiment_name'): Locator {
+    return this.splitBand(datasetItemId, experimentIndex, columnId);
+  }
+
+  /**
+   * Hover one experiment's sub-row and report the background colour of every
+   * band in the same cell, indexed by experiment position.
+   *
+   * Both at once because isolation is a comparison: the hovered band lighting up
+   * is only interesting next to a sibling that did not. Read as the COMPUTED
+   * style rather than the inline one the handler writes, so a value the browser
+   * refused (a bad custom property, say) fails here instead of being read back
+   * out of the attribute that set it.
+   */
+  async hoverSubRowAndReadBandColours(
+    datasetItemId: string,
+    experimentIndex: number,
+    experimentCount: number,
+  ): Promise<string[]> {
+    return test.step(
+      `hover sub-row #${experimentIndex} of row ${datasetItemId} and read every band's background`,
+      async () => {
+        const hovered = this.subRow(datasetItemId, experimentIndex);
+        await expect(hovered, `sub-row #${experimentIndex} of row ${datasetItemId}`).toHaveCount(1);
+        await hovered.hover();
+
+        const colours: string[] = [];
+        for (let index = 0; index < experimentCount; index++) {
+          const band = this.subRow(datasetItemId, index);
+          await expect(band, `sub-row #${index} of row ${datasetItemId}`).toHaveCount(1);
+          colours.push(
+            await band.evaluate((el) => getComputedStyle(el).backgroundColor),
+          );
+        }
+        return colours;
+      },
+    );
+  }
+
+  /**
+   * The computed `box-shadow` of a row's pinned Name cell AND of each
+   * experiment band inside it.
+   *
+   * Both, because the border they draw is the same border and only one of them
+   * is new. The `td` has carried the inset shadow since pinning existed; opik#8510
+   * extends the rule to `.comet-pinned-last-left [data-virtual-row-id]` as well,
+   * because an inset shadow paints BENEATH its element's children — so a hovered
+   * band with a background of its own would cover the cell's border unless the
+   * band draws one too. Reading only the `td` would assert the half that never
+   * changed.
+   */
+  async readNameCellBorders(
+    datasetItemId: string,
+    experimentCount: number,
+  ): Promise<{ cell: string; bands: string[] }> {
+    return test.step(`read the pinned Name column's borders for row ${datasetItemId}`, async () => {
+      const cell = this.experimentNameCell(datasetItemId);
+      await expect(cell, `exactly one Name cell for row ${datasetItemId}`).toHaveCount(1);
+      const bands: string[] = [];
+      for (let index = 0; index < experimentCount; index++) {
+        const band = this.subRow(datasetItemId, index);
+        await expect(band, `sub-row #${index} of row ${datasetItemId}`).toHaveCount(1);
+        bands.push(await band.evaluate((el) => getComputedStyle(el).boxShadow));
+      }
+      return {
+        cell: await cell.evaluate((el) => getComputedStyle(el).boxShadow),
+        bands,
+      };
+    });
+  }
+
   /** The rendered text of one dataset column's cell — what the user actually sees. */
   async readDatasetCellText(datasetItemId: string, field: string): Promise<string> {
     return test.step(`read the on-screen "${field}" cell for item ${datasetItemId}`, async () => {

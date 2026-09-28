@@ -401,6 +401,13 @@ export interface TraceDetail {
  * and any shaped type here would let a wrongly-shaped read compare equal.
  * `tags` is `string[] | null` because an untagged trace answers with the field
  * absent, which is a different answer from an empty list.
+ *
+ * `source` is here for the same reason as the rest: it is a stored column an
+ * update can silently rewrite, and the one whose value decides which online-
+ * evaluation rules sample the trace (`Source.isLoggingSource`). Nullable because
+ * the API omits the field rather than reporting a placeholder, and a caller that
+ * cares must assert it present rather than default it to the value it is looking
+ * for.
  */
 export interface TracePayload {
   id: string;
@@ -409,6 +416,7 @@ export interface TracePayload {
   output: unknown;
   metadata: unknown;
   tags: string[] | null;
+  source: string | null;
 }
 
 /**
@@ -2930,6 +2938,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           metadata: t.metadata ?? null,
           // Absent and empty are different answers here — see TracePayload.
           tags: t.tags ?? null,
+          source: t.source ?? null,
         };
       } catch (err) {
         if (isNotFoundError(err)) return null;
@@ -3302,6 +3311,35 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     }): Promise<void> {
       await opik.api.traces.updateTrace(args.traceId, {
         body: { projectName: args.projectName, tags: args.tags },
+      });
+    },
+
+    /**
+     * `PATCH /v1/private/traces/{id}` carrying a new `output` and, crucially,
+     * NO `source`.
+     *
+     * The omission is the subject, not a convenience. An update is persisted as
+     * a partial insert that merges over the stored row, and the merge keeps the
+     * old source only while the incoming one is not `'unknown'` — which is
+     * exactly what an absent `source` now binds as (opik#8514). So a caller has
+     * to be able to send an update that a real SDK would send, i.e. one that
+     * mentions `output` and nothing about provenance.
+     *
+     * `output` rather than tags because `updateTraceTags` above already covers
+     * the tags-only shape, and because a caller needs an update whose effect it
+     * can see: "the source survived" is only meaningful next to proof that the
+     * update landed at all.
+     *
+     * Scoped by `projectName` for the reason `updateTraceTags` gives — a bare
+     * id-only update falls back to the Default Project.
+     */
+    async updateTraceOutput(args: {
+      traceId: string;
+      projectName: string;
+      output: Record<string, unknown>;
+    }): Promise<void> {
+      await opik.api.traces.updateTrace(args.traceId, {
+        body: { projectName: args.projectName, output: args.output },
       });
     },
 
@@ -4049,6 +4087,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * The id is caller-supplied because `createTrace` returns 204 with no body,
      * and these tests assert on exact trace ids.
      *
+     * `source: null` means "write no `source` key at all" — the shape every
+     * pre-source-tracking row has, and the one `TraceDAO` now binds as
+     * `'unknown'` rather than a typed NULL (opik#8514). Spelled as an explicit
+     * `null` rather than an omitted argument so a caller has to state that the
+     * absence is the point; a defaulted `'sdk'` would quietly turn the legacy
+     * case into the ordinary one.
+     *
      * Written through `rawFetch` rather than the pinned SDK because the SDK
      * validates the request body against `JsonListStringWrite`, which admits an
      * object, an array OF OBJECTS, or a string — while the endpoint itself
@@ -4061,7 +4106,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       id: string;
       projectName: string;
       name: string;
-      source: 'sdk' | 'experiment' | 'playground' | 'optimization';
+      source: 'sdk' | 'experiment' | 'playground' | 'optimization' | null;
       input?: TraceJsonSection;
       output?: TraceJsonSection;
       metadata?: Record<string, unknown>;
@@ -4092,7 +4137,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         id: args.id,
         project_name: args.projectName,
         name: args.name,
-        source: args.source,
+        ...(args.source === null ? {} : { source: args.source }),
         ...(args.threadId ? { thread_id: args.threadId } : {}),
         start_time: (args.startTime ?? new Date()).toISOString(),
         ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
