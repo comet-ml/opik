@@ -526,14 +526,19 @@ class RemoteAuthService implements AuthService {
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
             throw new ClientErrorException(readErrorMessage(response, NOT_LOGGED_USER),
                     Response.Status.UNAUTHORIZED);
-        } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
-            // EM never returns FORBIDDEN as of now
-            throw new ClientErrorException(
-                    NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
-        } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            throw new ClientErrorException(readErrorMessage(response, MISSING_WORKSPACE),
-                    Response.Status.BAD_REQUEST);
-        }
+        } else
+            if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()
+                    || response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
+                        // EM never returns FORBIDDEN; it answers 404 "User is not a member of organization" instead.
+                        // The caller authenticated fine and exists — they are just not entitled to this organization —
+                        // so this is 403, not the 500 the fall-through below used to produce (OPIK-8554).
+                        throw new ClientErrorException(
+                                NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+                    } else
+                if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
+                    throw new ClientErrorException(readErrorMessage(response, MISSING_WORKSPACE),
+                            Response.Status.BAD_REQUEST);
+                }
         throw unexpectedRemoteError("authenticating user", response);
     }
 

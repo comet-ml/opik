@@ -247,6 +247,12 @@ class RemoteAuthServiceTest {
                 arguments(HttpStatus.SC_FORBIDDEN,
                         ClientErrorException.class,
                         NOT_ALLOWED_TO_ACCESS_WORKSPACE),
+                // EM answers 404 "User is not a member of organization" rather than 403. The caller
+                // authenticated and exists, so this is an entitlement failure, not a server fault — it used
+                // to fall through to InternalServerErrorException and reach the user as a 500 (OPIK-8554).
+                arguments(HttpStatus.SC_NOT_FOUND,
+                        ClientErrorException.class,
+                        NOT_ALLOWED_TO_ACCESS_WORKSPACE),
                 arguments(HttpStatus.SC_SERVER_ERROR,
                         InternalServerErrorException.class,
                         "Unexpected error while authenticating user"));
