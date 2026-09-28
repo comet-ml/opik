@@ -71,6 +71,8 @@ import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import { LOGS_TYPE } from "@/constants/traces";
 import useTracesList from "@/api/traces/useTracesList";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useQueueItemSources from "@/v2/pages-shared/annotation-queues/useQueueItemSources";
 import {
   createQueueItemSourceColumn,
@@ -447,7 +449,22 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
 
   const rows: Trace[] = useMemo(() => data?.content ?? [], [data]);
 
-  const sourceById = useQueueItemSources(annotationQueue.id, rows);
+  // With annotation queue automation off, the queue has no automated items, so the Source
+  // column has nothing to say and its per-page membership lookup is not made.
+  const isAutomationEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
+  );
+
+  const displayColumns = useMemo(
+    () => (isAutomationEnabled ? TRACE_DISPLAY_COLUMNS : TRACE_COLUMNS),
+    [isAutomationEnabled],
+  );
+
+  const sourceById = useQueueItemSources(
+    annotationQueue.id,
+    rows,
+    isAutomationEnabled,
+  );
 
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
@@ -516,7 +533,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
 
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Trace, Trace>(
-      withQueueItemSources(TRACE_DISPLAY_COLUMNS, sourceById),
+      withQueueItemSources(displayColumns, sourceById),
       {
         columnsOrder,
         selectedColumns,
@@ -551,6 +568,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     scoresColumnsOrder,
     annotationQueue.id,
     handleThreadIdClick,
+    displayColumns,
     sourceById,
   ]);
 
@@ -619,7 +637,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={TRACE_DISPLAY_COLUMNS}
+            columns={displayColumns}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

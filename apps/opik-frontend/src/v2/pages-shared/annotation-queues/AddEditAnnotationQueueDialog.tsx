@@ -40,6 +40,7 @@ import { Switch } from "@/ui/switch";
 import { ArrowUpRight } from "lucide-react";
 
 import {
+  AnnotationQueueAutomation,
   ANNOTATION_QUEUE_SCOPE,
   AnnotationQueue,
 } from "@/types/annotation-queues";
@@ -196,6 +197,49 @@ type AddEditAnnotationQueueDialogProps = {
   queue?: AnnotationQueue;
 };
 
+/**
+ * The automation field of a queue payload, or nothing at all.
+ *
+ * Three states, because the API reads three: an absent automation leaves what is stored alone, a
+ * present one without conditions reuses the stored conditions, and reusing them fails when there are
+ * none stored. So a queue that never had automation has to send nothing rather than a disabled
+ * automation — otherwise creating a queue, or editing one the SDK made, is rejected. With the feature
+ * off nothing is sent either, whatever the queue already holds.
+ */
+export const buildAutomationPayload = ({
+  isFeatureEnabled,
+  hasStoredAutomation,
+  enabled,
+  capEnabled,
+  maxItems,
+  groups,
+}: {
+  isFeatureEnabled: boolean;
+  hasStoredAutomation: boolean;
+  enabled: boolean;
+  capEnabled: boolean;
+  maxItems: string;
+  groups: FormData["automation_groups"];
+}): AnnotationQueueAutomation | undefined => {
+  if (!isFeatureEnabled) return undefined;
+
+  if (!enabled) return hasStoredAutomation ? { enabled: false } : undefined;
+
+  return {
+    enabled: true,
+    max_items_in_queue: capEnabled ? Number(maxItems) : null,
+    conditions: {
+      groups: groups.map((group) => ({
+        conditions: group.conditions.map((condition) => ({
+          score_name: condition.name,
+          operator: condition.operator,
+          value: Number(condition.threshold),
+        })),
+      })),
+    },
+  };
+};
+
 const AddEditAnnotationQueueDialog: React.FunctionComponent<
   AddEditAnnotationQueueDialogProps
 > = ({
@@ -212,6 +256,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   const [isNestedDialogOpen, setIsNestedDialogOpen] = useState(false);
 
+  const isAutomationEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
+  );
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -225,7 +273,12 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       lock_timeout_minutes:
         (defaultQueue?.lock_timeout_seconds ?? DEFAULT_LOCK_TIMEOUT_SECONDS) /
         60,
-      automation_enabled: defaultQueue?.automation?.enabled ?? false,
+      // With the feature off the form behaves as if automation never existed: the switch is never on,
+      // so no field the dialog does not render can fail validation on a queue configured while it was
+      // on. Nothing stored is touched — the payload carries no automation at all.
+      automation_enabled: isAutomationEnabled
+        ? defaultQueue?.automation?.enabled ?? false
+        : false,
       // conditions is nullable on the backend: a toggle-off request keeps them server-side but a
       // queue can still arrive with automation and no conditions.
       automation_cap_enabled:
@@ -252,9 +305,6 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     useAnnotationQueueUpdateMutation();
   const isSubmitting = isCreatePending || isUpdatePending;
 
-  const isAutomationEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
-  );
   const automationEnabled = form.watch("automation_enabled");
   const capEnabled = form.watch("automation_cap_enabled");
   const capError = get(
@@ -291,31 +341,16 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       name: formData.name.trim(),
       project_id: formData.project_id,
       lock_timeout_seconds: lock_timeout_minutes * 60,
-      // Omitted while the feature is off: the API reads an absent automation as "leave what is
-      // stored alone", so editing a queue cannot silently drop one the UI never showed. Switched off,
-      // only the switch travels — the form still holds a blank condition row to render, and sending it
-      // would overwrite the queue's stored conditions with an empty score name.
-      automation: !isAutomationEnabled
-        ? undefined
-        : automation_enabled
-          ? {
-              enabled: true,
-              max_items_in_queue: automation_cap_enabled
-                ? Number(automation_max_items)
-                : null,
-              conditions: {
-                groups: automation_groups.map((group) => ({
-                  conditions: group.conditions.map((condition) => ({
-                    score_name: condition.name,
-                    operator: condition.operator,
-                    value: Number(condition.threshold),
-                  })),
-                })),
-              },
-            }
-          : { enabled: false },
+      automation: buildAutomationPayload({
+        isFeatureEnabled: isAutomationEnabled,
+        hasStoredAutomation: Boolean(defaultQueue?.automation),
+        enabled: automation_enabled,
+        capEnabled: automation_cap_enabled,
+        maxItems: automation_max_items,
+        groups: automation_groups,
+      }),
     };
-  }, [form, isAutomationEnabled]);
+  }, [defaultQueue, form, isAutomationEnabled]);
 
   const onQueueCreatedEdited = useCallback(
     (queue: Partial<AnnotationQueue>) => {

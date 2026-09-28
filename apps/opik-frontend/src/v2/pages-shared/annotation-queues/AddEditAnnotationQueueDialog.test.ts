@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { formSchema } from "./AddEditAnnotationQueueDialog";
+import {
+  buildAutomationPayload,
+  formSchema,
+} from "./AddEditAnnotationQueueDialog";
 import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
 
 /**
@@ -75,5 +78,67 @@ describe("AddEditAnnotationQueueDialog form schema", () => {
         }),
       ).toHaveLength(0);
     });
+  });
+});
+
+describe("the automation payload", () => {
+  const groups = [
+    {
+      conditions: [
+        { name: "accuracy", operator: "<" as const, threshold: "0.5" },
+      ],
+    },
+  ];
+
+  const build = (overrides: Record<string, unknown> = {}) =>
+    buildAutomationPayload({
+      isFeatureEnabled: true,
+      hasStoredAutomation: false,
+      enabled: false,
+      capEnabled: false,
+      maxItems: "100",
+      groups,
+      ...overrides,
+    } as Parameters<typeof buildAutomationPayload>[0]);
+
+  it("sends nothing while the feature is off, whatever the queue holds", () => {
+    expect(build({ isFeatureEnabled: false })).toBeUndefined();
+    expect(
+      build({
+        isFeatureEnabled: false,
+        hasStoredAutomation: true,
+        enabled: true,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("sends nothing for a queue that never had automation", () => {
+    // The API rejects a disabled automation whose stored conditions it cannot find, which would turn
+    // creating a queue, or renaming one the SDK made, into a 400.
+    expect(build()).toBeUndefined();
+  });
+
+  it("turns a stored automation off without touching its conditions", () => {
+    expect(build({ hasStoredAutomation: true })).toEqual({ enabled: false });
+  });
+
+  it("sends the conditions and no ceiling when the cap is unticked", () => {
+    expect(build({ enabled: true })).toEqual({
+      enabled: true,
+      max_items_in_queue: null,
+      conditions: {
+        groups: [
+          {
+            conditions: [{ score_name: "accuracy", operator: "<", value: 0.5 }],
+          },
+        ],
+      },
+    });
+  });
+
+  it("sends the ceiling as a number when the cap is ticked", () => {
+    expect(build({ enabled: true, capEnabled: true, maxItems: "250" })).toEqual(
+      expect.objectContaining({ max_items_in_queue: 250 }),
+    );
   });
 });

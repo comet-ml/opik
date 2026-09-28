@@ -18,18 +18,23 @@ export type QueueItemSourceById = Record<string, ANNOTATION_QUEUE_ITEM_SOURCE>;
  * comes from getAnnotationQueueItemId because a thread is a queue item under its thread_model_id
  * rather than the id its table shows.
  *
- * Both items tables use this, so the lookup and the join stay in one place.
+ * Both items tables use this, so the lookup and the join stay in one place. It asks for nothing while
+ * the annotation queue automation feature is off, where there is no Source column to fill.
  */
 const useQueueItemSources = (
   annotationQueueId: string,
   rows: (Trace | Thread)[],
+  enabled: boolean,
 ): QueueItemSourceById => {
   const itemIds = useMemo(
     () => rows.map(getAnnotationQueueItemId).filter(Boolean),
     [rows],
   );
 
-  const { data } = useAnnotationQueueItems({ annotationQueueId, itemIds });
+  const { data } = useAnnotationQueueItems(
+    { annotationQueueId, itemIds },
+    { enabled },
+  );
 
   return useMemo(
     () =>

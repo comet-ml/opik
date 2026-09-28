@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { UserPen, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -56,7 +56,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   // The create dialog keeps its form state for as long as it is mounted, and this one stays mounted
   // while the sheet opens and closes. Remounting it per open is what the queues page does, so a second
   // "Create annotation queue" starts blank rather than on the last attempt's values.
-  const createDialogKeyRef = useRef(0);
+  const [createDialogKey, setCreateDialogKey] = useState(0);
 
   const { mutate } = useAnnotationQueueAddItemsMutation();
 
@@ -249,7 +249,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
                   onClick={() => {
                     setOpen(false);
                     setOpenDialog(true);
-                    createDialogKeyRef.current += 1;
+                    setCreateDialogKey((key) => key + 1);
                   }}
                   disabled={noValidRows}
                 >
@@ -282,7 +282,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
         </DialogContent>
       </Dialog>
       <AddEditAnnotationQueueDialog
-        key={createDialogKeyRef.current}
+        key={createDialogKey}
         open={openDialog}
         setOpen={setOpenDialog}
         onQueueCreated={onQueueCreated}

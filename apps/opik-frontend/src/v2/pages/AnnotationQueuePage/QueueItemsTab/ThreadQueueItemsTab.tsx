@@ -61,6 +61,8 @@ import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import { LOGS_TYPE } from "@/constants/traces";
 import useThreadsList from "@/api/traces/useThreadsList";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useQueueItemSources from "@/v2/pages-shared/annotation-queues/useQueueItemSources";
 import {
   createQueueItemSourceColumn,
@@ -384,7 +386,27 @@ const ThreadQueueItemsTab: React.FunctionComponent<
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);
 
-  const sourceById = useQueueItemSources(annotationQueue.id, rows);
+  // With annotation queue automation off, the queue has no automated items, so the Source
+  // column has nothing to say and its per-page membership lookup is not made.
+  const isAutomationEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
+  );
+
+  const displayColumns = useMemo(
+    () =>
+      isAutomationEnabled
+        ? DEFAULT_COLUMNS
+        : DEFAULT_COLUMNS.filter(
+            (column) => column.id !== QUEUE_ITEM_SOURCE_COLUMN.id,
+          ),
+    [isAutomationEnabled],
+  );
+
+  const sourceById = useQueueItemSources(
+    annotationQueue.id,
+    rows,
+    isAutomationEnabled,
+  );
 
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
@@ -435,7 +457,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
 
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Thread, Thread>(
-      withQueueItemSources(DEFAULT_COLUMNS, sourceById),
+      withQueueItemSources(displayColumns, sourceById),
       {
         columnsOrder,
         selectedColumns,
@@ -465,6 +487,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     scoresColumnsData,
     scoresColumnsOrder,
     annotationQueue.id,
+    displayColumns,
     sourceById,
   ]);
 
@@ -533,7 +556,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
             setType={setHeight}
           />
           <ColumnsButton
-            columns={DEFAULT_COLUMNS}
+            columns={displayColumns}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
