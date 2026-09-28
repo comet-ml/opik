@@ -860,17 +860,14 @@ class BulkInsertV2ClientIntegrationTest {
 
         spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
 
-        // Content, not just length: a same-length but corrupted value would satisfy a length check, and
-        // chunked parsing is exactly the kind of mechanism that could splice or truncate rather than
-        // fail outright. Without the fix this test fails at the POST above rather than here -- the
-        // rejection propagates on this synchronous path and the endpoint answers 500.
+        // The whole span, via the shared helper, rather than the two payload columns: splicing a row
+        // across a chunk boundary would not necessarily disturb the payloads themselves, so the small
+        // columns either side of them are where that would show. Without the fix this test fails at
+        // the POST above rather than here -- the rejection propagates on this synchronous path and
+        // the endpoint answers 500.
         var actual = spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
 
-        assertThat(actual.input()).isEqualTo(TextNode.valueOf(inputHalf));
-        assertThat(actual.output()).isEqualTo(TextNode.valueOf(outputHalf));
-        // A small column alongside the two large ones: splicing a row across a chunk boundary would
-        // not necessarily disturb the payloads themselves, and this is where it would show.
-        assertThat(actual.traceId()).isEqualTo(trace.id());
+        SpanAssertions.assertSpan(List.of(actual), List.of(span), USER);
     }
 
     // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
