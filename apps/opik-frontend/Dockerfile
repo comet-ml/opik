@@ -4,7 +4,6 @@ FROM node:20.19.6-alpine3.23 AS builder
 WORKDIR /opt/frontend
 
 COPY package*.json ./
-COPY patches ./patches
 RUN npm ci
 # Copy and build the application
 COPY . .
