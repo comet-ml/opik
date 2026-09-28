@@ -179,6 +179,19 @@ describe("experiments utilities", () => {
       );
     });
 
+    it("orders labels case-insensitively", () => {
+      expect(
+        formatExperimentPromptVersions(
+          experiment({
+            prompt_versions: [
+              promptVersion({ prompt_name: "Zeta" }),
+              promptVersion({ id: "pv2", prompt_name: "alpha" }),
+            ],
+          }),
+        ),
+      ).toBe("alpha (v1), Zeta (v1)");
+    });
+
     it("returns undefined when the experiment has no linked prompt", () => {
       expect(formatExperimentPromptVersions(experiment())).toBeUndefined();
       expect(

@@ -84,7 +84,10 @@ export const formatExperimentPromptVersions = (
   const promptVersions = experiment?.prompt_versions;
   if (!promptVersions?.length) return undefined;
 
-  return promptVersions.map(formatPromptVersionLabel).sort().join(", ");
+  return promptVersions
+    .map(formatPromptVersionLabel)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .join(", ");
 };
 
 export const isExperimentTerminal = (

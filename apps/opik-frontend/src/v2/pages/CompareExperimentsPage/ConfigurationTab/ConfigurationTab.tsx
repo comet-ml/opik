@@ -35,7 +35,8 @@ import { Separator } from "@/ui/separator";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
-const PROMPT_VERSION_ROW_NAME = "Prompt version";
+// Suffixed so it can't collide with a user metadata key named "Prompt version".
+const PROMPT_VERSION_ROW_NAME = "Prompt version (linked)";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: ["name"],
@@ -172,13 +173,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   }, [flattenExperimentMetadataMap, experimentsIds]);
 
   const filteredRows = useMemo(() => {
-    // A metadata key can legitimately be called "Prompt version"; keep the
-    // real one rather than rendering two indistinguishable rows.
-    const showPromptVersionRow =
-      promptVersionRow &&
-      !rows.some((row) => row.name === PROMPT_VERSION_ROW_NAME);
-
-    const allRows = showPromptVersionRow ? [promptVersionRow, ...rows] : rows;
+    const allRows = promptVersionRow ? [promptVersionRow, ...rows] : rows;
 
     return allRows.filter((row) => {
       if (isCompare && onlyDiff && !row.different) {

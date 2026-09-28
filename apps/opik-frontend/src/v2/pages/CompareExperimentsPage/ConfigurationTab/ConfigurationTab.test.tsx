@@ -101,6 +101,8 @@ const renderTab = (experiments: Experiment[]) =>
     />,
   );
 
+const PROMPT_VERSION_ROW = "Prompt version (linked)";
+
 const rowNames = () => screen.queryAllByTestId("row").map((r) => r.textContent);
 
 describe("ConfigurationTab prompt version row", () => {
@@ -116,7 +118,7 @@ describe("ConfigurationTab prompt version row", () => {
       }),
     ]);
 
-    expect(rowNames()).toContain("Prompt version");
+    expect(rowNames()).toContain(PROMPT_VERSION_ROW);
   });
 
   it("keeps the row when only some experiments have a linked prompt", () => {
@@ -125,24 +127,22 @@ describe("ConfigurationTab prompt version row", () => {
       experiment("e2"),
     ]);
 
-    expect(rowNames()).toContain("Prompt version");
+    expect(rowNames()).toContain(PROMPT_VERSION_ROW);
   });
 
   it("omits the row when no compared experiment has a linked prompt", () => {
     renderTab([experiment("e1"), experiment("e2")]);
 
-    expect(rowNames()).not.toContain("Prompt version");
+    expect(rowNames()).not.toContain(PROMPT_VERSION_ROW);
   });
 
   it("omits the row outside compare mode, where prompts render as tags", () => {
     renderTab([experiment("e1", { prompt_versions: [promptVersion()] })]);
 
-    expect(rowNames()).not.toContain("Prompt version");
+    expect(rowNames()).not.toContain(PROMPT_VERSION_ROW);
   });
 
-  // A metadata key of the same name would otherwise produce two rows that look
-  // identical in the table.
-  it("yields to a metadata key that is also named Prompt version", () => {
+  it("stays alongside a metadata key named Prompt version", () => {
     renderTab([
       experiment("e1", {
         prompt_versions: [promptVersion()],
@@ -151,8 +151,8 @@ describe("ConfigurationTab prompt version row", () => {
       experiment("e2", { prompt_versions: [promptVersion({ id: "pv2" })] }),
     ]);
 
-    expect(rowNames().filter((name) => name === "Prompt version")).toHaveLength(
-      1,
+    expect(rowNames()).toEqual(
+      expect.arrayContaining([PROMPT_VERSION_ROW, "Prompt version"]),
     );
   });
 
@@ -164,7 +164,7 @@ describe("ConfigurationTab prompt version row", () => {
       experiment("e2", { prompt_versions: [promptVersion({ id: "pv2" })] }),
     ]);
 
-    expect(rowNames()).not.toContain("Prompt version");
+    expect(rowNames()).not.toContain(PROMPT_VERSION_ROW);
   });
 
   it("keeps the row under 'show differences only' when the prompts differ", () => {
@@ -177,7 +177,7 @@ describe("ConfigurationTab prompt version row", () => {
       }),
     ]);
 
-    expect(rowNames()).toContain("Prompt version");
+    expect(rowNames()).toContain(PROMPT_VERSION_ROW);
   });
 
   it("is filtered out by a search that does not match its name", () => {
@@ -188,7 +188,7 @@ describe("ConfigurationTab prompt version row", () => {
       experiment("e2", { prompt_versions: [promptVersion({ id: "pv2" })] }),
     ]);
 
-    expect(rowNames()).not.toContain("Prompt version");
+    expect(rowNames()).not.toContain(PROMPT_VERSION_ROW);
   });
 
   it("is kept by a search that matches its name", () => {
@@ -199,7 +199,7 @@ describe("ConfigurationTab prompt version row", () => {
       experiment("e2", { prompt_versions: [promptVersion({ id: "pv2" })] }),
     ]);
 
-    expect(rowNames()).toContain("Prompt version");
+    expect(rowNames()).toContain(PROMPT_VERSION_ROW);
   });
 });
 
