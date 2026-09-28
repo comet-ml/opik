@@ -4,9 +4,13 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -18,7 +22,9 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -27,6 +33,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -48,6 +55,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -58,6 +66,7 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -81,6 +90,10 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * to rule the part out by id. A bounded read therefore touches only its own week, and an unbounded one, which is what
  * an id past the 2300 ceiling falls back to, touches every filler week. That second case is also what shows the
  * first one is not passing for another reason.
+ *
+ * <p>The trace stats' {@code scored_span_ids} is covered here too: its bound is a subquery over the scored span ids
+ * rather than a set bound from Java, so it has no fallback to observe, and instead is shown to read only the weeks of
+ * the spans that carry scores, far-future and past-ceiling ones included, while returning every one of their scores.
  *
  * <p>Rows, including far-future ids on the legacy table, are {@link SpansReadPathWeekBoundTest}'s job.
  */
@@ -109,6 +122,9 @@ class SpansReadPathPartitionPruningTest {
     private static final List<String> FILLER_WEEKS = FILLER_MONDAYS.stream()
             .map(SpansReadPathPartitionPruningTest::yyyymmdd)
             .toList();
+
+    /** Past 2106, where the two {@code id_at} column types disagree. */
+    private static final Instant FAR_FUTURE_ID_AT = Instant.parse("2200-01-01T00:00:00Z");
 
     /** The {@code spans} partitions the latest statement of an op, mentioning the given span id, read. */
     private static final String SPANS_PARTITIONS_READ = """
@@ -171,6 +187,8 @@ class SpansReadPathPartitionPruningTest {
 
     private SpanResourceClient spanResourceClient;
     private DatasetResourceClient datasetResourceClient;
+    private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync template;
 
     @BeforeAll
@@ -180,6 +198,8 @@ class SpansReadPathPartitionPruningTest {
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         this.spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
         this.datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
+        this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
+        this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
         // One batch, so each filler week is one part holding two traces the primary key cannot exclude by id.
         spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
@@ -284,6 +304,61 @@ class SpansReadPathPartitionPruningTest {
         assertThat(spansPartitionsRead("bulk_update_spans", derivable.id())).containsAll(FILLER_WEEKS);
     }
 
+    @Test
+    void traceStatsReadOnlyTheWeeksOfTheScoredSpans() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        // Stats are scoped by the project's traces, so the scored spans need one to hang off.
+        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.generateId())
+                .projectName(projectName)
+                .feedbackScores(null)
+                .usage(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+        // Unscored spans in every filler week, so only the bound can keep the read out of them.
+        spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
+                .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
+                        monday.atTime(12, 0).toInstant(ZoneOffset.UTC), ID_GENERATOR.generateId())
+                        .toBuilder().projectName(projectName).build()))
+                .toList(), API_KEY, WORKSPACE_NAME);
+        var thisMonday = THIS_MONDAY.atStartOfDay().toInstant(ZoneOffset.UTC);
+        // The last millisecond of the previous week lands in the first filler week, which is therefore read.
+        var scoredAt = Map.of(
+                "this_monday", thisMonday,
+                "previous_sunday", thisMonday.minusMillis(1),
+                "far_future", FAR_FUTURE_ID_AT,
+                "past_ceiling", PAST_CEILING_ID_AT);
+        var expected = scoredAt.keySet().stream()
+                .collect(Collectors.toMap(name -> name, _ -> (double) RandomUtils.secure().randomInt(1, 100)));
+        var spans = scoredAt.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> newSpan(entry.getValue(), traceId)
+                        .toBuilder().projectName(projectName).build()));
+        spanResourceClient.batchCreateSpans(List.copyOf(spans.values()), API_KEY, WORKSPACE_NAME);
+        spanResourceClient.feedbackScores(spans.entrySet().stream()
+                .<FeedbackScoreBatchItem>map(entry -> FeedbackScoreBatchItem.builder()
+                        .id(entry.getValue().id())
+                        .projectName(projectName)
+                        .name(entry.getKey())
+                        .value(BigDecimal.valueOf(expected.get(entry.getKey())))
+                        .source(ScoreSource.SDK)
+                        .build())
+                .toList(), API_KEY, WORKSPACE_NAME);
+
+        var stats = traceResourceClient.getTraceStats(null, projectId, API_KEY, WORKSPACE_NAME, null, Map.of());
+
+        assertThat(spanFeedbackScores(stats)).isEqualTo(expected);
+        assertThat(spansPartitionsRead("get_trace_stats_feedback_scores", projectId))
+                .containsExactlyInAnyOrder(THIS_WEEK, FILLER_WEEKS.getFirst(), "21991230", "22991225");
+    }
+
+    private static Map<String, Double> spanFeedbackScores(ProjectStats stats) {
+        var prefix = "span_feedback_scores.";
+        return stats.stats().stream()
+                .filter(stat -> stat.getName().startsWith(prefix))
+                .collect(Collectors.toMap(stat -> stat.getName().substring(prefix.length()),
+                        stat -> ((Number) stat.getValue()).doubleValue()));
+    }
+
     private void batchUpdateTags(Span span, Set<UUID> ids) {
         spanResourceClient.batchUpdateSpans(SpanBatchUpdate.builder()
                 .ids(ids)
@@ -339,16 +414,16 @@ class SpansReadPathPartitionPruningTest {
     }
 
     /** Polled: a query's {@code query_log} row is written asynchronously, flushed every 200 ms here. */
-    private Set<String> spansPartitionsRead(String queryName, UUID spanId) {
+    private Set<String> spansPartitionsRead(String queryName, UUID mentionedId) {
         var partitions = Awaitility.await()
-                .alias("query_log holds a %s statement mentioning id %s".formatted(queryName, spanId))
+                .alias("query_log holds a %s statement mentioning id %s".formatted(queryName, mentionedId))
                 .atMost(Duration.ofSeconds(30))
                 .pollInterval(Duration.ofMillis(200))
                 .until(() -> template.nonTransaction(connection -> Mono.from(connection
                         .createStatement(SPANS_PARTITIONS_READ)
                         .bind("prefix", PARTITION_PREFIX)
                         .bind("op", queryName)
-                        .bind("span_id", spanId.toString())
+                        .bind("span_id", mentionedId.toString())
                         .execute())
                         .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class)))))
                         .block(), Objects::nonNull);

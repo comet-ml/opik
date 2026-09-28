@@ -2928,6 +2928,13 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     // Split-B: per-project feedback-score and span-feedback-score aggregates.
+    //
+    // scored_span_ids carries the spans partition key as an IN over the weeks of the scored span ids themselves, so
+    // it prunes without assuming anything about where a span sits relative to its trace. The ids exist only inside
+    // ClickHouse here, so the set is a subquery rather than WeeklyPartitions.weeksOf. Each id contributes its id_at as
+    // BOTH column types would materialise it (DateTime64(0) on spans_local_v2, the 32-bit DateTime on legacy spans,
+    // which wraps; hence the deliberate narrow CAST), so the set holds the row's own partition value whichever table
+    // is live, including saturated past-2300 and epoch (non-v7) ids. Widening the set only opens an extra partition.
     private static final String SELECT_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
             WITH spans_data AS (
@@ -3272,6 +3279,17 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND id IN (SELECT entity_id FROM span_scores)
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT arrayJoin([
+                        toYYYYMMDD(toDate32(v2_id_at) - toIntervalDay(toDayOfWeek(v2_id_at, 1))),
+                        toYYYYMMDD(toDate32(legacy_id_at) - toIntervalDay(toDayOfWeek(legacy_id_at, 1)))
+                    ])
+                    FROM (
+                        SELECT CAST(UUIDv7ToDateTime(toUUID(entity_id)) AS DateTime64(0, 'UTC')) AS v2_id_at,
+                               CAST(UUIDv7ToDateTime(toUUID(entity_id)) AS DateTime('UTC')) AS legacy_id_at
+                        FROM span_scores
+                    )
+                )
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 <if(filters_present)> AND trace_id IN (SELECT id FROM trace_final) <endif>
