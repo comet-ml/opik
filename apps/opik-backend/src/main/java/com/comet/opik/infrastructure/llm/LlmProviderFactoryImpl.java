@@ -14,6 +14,7 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import dev.langchain4j.model.chat.ChatModel;
@@ -60,6 +61,11 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .map(provider -> provider.getService(config))
                 .orElseThrow(() -> new LlmProviderUnsupportedException(
                         "LLM provider not supported: %s".formatted(llmProvider)));
+    }
+
+    public LlmProviderClientApiConfig getClientApiConfig(@NonNull String workspaceId, @NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+        return buildConfig(getProviderApiKey(workspaceId, llmProvider, model), workspaceId);
     }
 
     private static final Set<LlmProvider> NAMED_PROVIDERS = Arrays.stream(LlmProvider.values())
@@ -141,7 +147,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.GEMINI;
         }
         if (model.startsWith("openrouter/")
-                || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
+                || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)
+                || OpenRouterDecisionModel.isDecisionModel(model)) {
             return LlmProvider.OPEN_ROUTER;
         }
 

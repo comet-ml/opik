@@ -18,6 +18,7 @@ import {
   setLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
+import { DECISION_MODELS } from "@/constants/decisionModels";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
@@ -84,6 +85,21 @@ const transformFetched = (
   return out;
 };
 
+// Decisions models (Jev) aren't in the registry, but persisted rules on them must still resolve to
+// OpenRouter. Added to the resolution map only: the dropdowns never list them unless a caller opts in.
+const withDecisionModels = (models: ProviderModelsMap): ProviderModelsMap => {
+  const openRouterModels = models[PROVIDER_TYPE.OPEN_ROUTER] ?? [];
+  const missing = DECISION_MODELS.filter(
+    (dm) => !openRouterModels.some((m) => m.value === dm.value),
+  );
+  return missing.length
+    ? {
+        ...models,
+        [PROVIDER_TYPE.OPEN_ROUTER]: [...openRouterModels, ...missing],
+      }
+    : models;
+};
+
 const buildFlagsIndex = (
   fetched: LlmModelsByProvider,
 ): Map<string, ModelFlags> => {
@@ -135,11 +151,11 @@ const useLLMProviderModelsData = () => {
     const fromApi = fetched
       ? transformFetched(fetched, { onlyVisible: false })
       : {};
-    return {
+    return withDecisionModels({
       ...MINIMAL_FALLBACK,
       ...fromApi,
       ...openAICompatibleModels,
-    } as ProviderModelsMap;
+    } as ProviderModelsMap);
   }, [fetched, openAICompatibleModels]);
 
   // Compat wrapper for callers that still expect a factory. Returns the
@@ -173,10 +189,12 @@ const useLLMProviderModelsData = () => {
           ...transformFetched(fetched, { onlyVisible: false }),
         }
       : getLatestProviderModelsSnapshot();
-    setLatestProviderModelsSnapshot({
-      ...base,
-      ...openAICompatibleModels,
-    });
+    setLatestProviderModelsSnapshot(
+      withDecisionModels({
+        ...base,
+        ...openAICompatibleModels,
+      }),
+    );
     if (fetched) {
       setLatestModelFlags(buildFlagsIndex(fetched));
     }
