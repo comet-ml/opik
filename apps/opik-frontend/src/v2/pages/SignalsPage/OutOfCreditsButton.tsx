@@ -9,13 +9,11 @@ import { Separator } from "@/ui/separator";
 type OutOfCreditsButtonProps = {
   label: string;
   description: string;
-  large?: boolean;
 };
 
 const OutOfCreditsButton: React.FC<OutOfCreditsButtonProps> = ({
   label,
   description,
-  large = false,
 }) => {
   const BillingLink = usePluginsStore((state) => state.BillingLink);
 
@@ -24,14 +22,14 @@ const OutOfCreditsButton: React.FC<OutOfCreditsButtonProps> = ({
       <HoverCardTrigger asChild>
         <Button
           variant="outline"
-          size={large ? "default" : "2xs"}
+          size="2xs"
           className={cn(
-            "cursor-default bg-[var(--tag-yellow-bg)] text-[var(--tag-yellow-text)] hover:bg-[var(--tag-yellow-bg)] hover:text-[var(--tag-yellow-text)] active:bg-[var(--tag-yellow-bg)] active:text-[var(--tag-yellow-text)]",
-            "dark:bg-muted-disabled dark:text-chart-yellow dark:hover:bg-muted-disabled dark:hover:text-chart-yellow dark:active:bg-muted-disabled",
-            large ? "gap-2" : "gap-1.5",
+            "cursor-default bg-chart-yellow-light text-[var(--tag-yellow-text)] hover:bg-chart-yellow-light hover:text-[var(--tag-yellow-text)] active:bg-chart-yellow-light active:text-[var(--tag-yellow-text)]",
+            "dark:text-chart-yellow dark:hover:text-chart-yellow",
+            "gap-1.5",
           )}
         >
-          <Coins className={large ? "size-4" : "size-3.5"} />
+          <Coins className="size-3.5" />
           {label}
         </Button>
       </HoverCardTrigger>

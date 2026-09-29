@@ -99,9 +99,7 @@ describe("DiagnosticsEmptyState", () => {
       render(<DiagnosticsEmptyState {...props} isOutOfCredits={true} />);
 
       expect(
-        screen.getByRole("button", {
-          name: /Add Ollie credits to run diagnostic/,
-        }),
+        screen.getByText("Add Ollie credits to run diagnostics"),
       ).toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: /Run your first diagnostic/ }),
