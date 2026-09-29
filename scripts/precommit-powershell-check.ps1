@@ -36,7 +36,8 @@ $ErrorActionPreference = 'Stop'
 # so an unexpected failure in here would otherwise be reported to the caller as a
 # pass. Trap it and exit 2 (distinct from 1 = genuine findings).
 trap {
-    Write-Host "PowerShell check script failed: $_"
+    # Inline rather than ConvertTo-LogLine: this can fire before that is defined.
+    Write-Host ("PowerShell check script failed: $_" -replace '[\r\n]+', ' ')
     exit 2
 }
 
@@ -67,16 +68,38 @@ if ($ExpectedAnalyzerVersion -and $ExpectedAnalyzerVersion -ne $RequiredAnalyzer
     exit 2
 }
 
+# Workflow-command escaping, per GitHub's rules (@actions/core): a raw `,` or `:`
+# in a path would truncate the annotation's file= property, and a CR/LF would end
+# the command early and start a new line that the runner parses on its own.
+function ConvertTo-AnnotationData {
+    param([string]$Value)
+    return $Value.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+}
+
+function ConvertTo-AnnotationProperty {
+    param([string]$Value)
+    return (ConvertTo-AnnotationData $Value).Replace(':', '%3A').Replace(',', '%2C')
+}
+
+# Plain log lines aren't commands, but the runner parses any line starting with
+# `::`, so a CR/LF in a path or message must not be able to start one.
+function ConvertTo-LogLine {
+    param([string]$Value)
+    return $Value -replace '[\r\n]+', ' '
+}
+
 if ($Paths.Count -gt 0) {
+    # -LiteralPath throughout: a plain path is a wildcard pattern, so a real file
+    # named a[1].ps1 would be reported missing.
     # Reject missing paths rather than filtering them out: a typo or a stale path
     # would otherwise fall through to "no files to check" and report success
     # without having validated anything.
-    $missing = @($Paths | Where-Object { -not (Test-Path $_) })
+    $missing = @($Paths | Where-Object { -not (Test-Path -LiteralPath $_) })
     if ($missing.Count -gt 0) {
-        foreach ($m in $missing) { Write-Host "Path not found: $m" }
+        foreach ($m in $missing) { Write-Host (ConvertTo-LogLine "Path not found: $m") }
         exit 2
     }
-    $targets = @($Paths | ForEach-Object { (Resolve-Path $_).Path })
+    $targets = @($Paths | ForEach-Object { (Resolve-Path -LiteralPath $_).Path })
 }
 else {
     $targets = @(
@@ -93,7 +116,7 @@ if ($targets.Count -eq 0) {
 
 function Get-RelativePath {
     param([string]$Path)
-    $full = (Resolve-Path $Path).Path
+    $full = (Resolve-Path -LiteralPath $Path).Path
     if ($full.StartsWith($repoRoot)) {
         return $full.Substring($repoRoot.Length).TrimStart('\', '/').Replace('\', '/')
     }
@@ -116,11 +139,11 @@ foreach ($file in $targets) {
             $line = $e.Extent.StartLineNumber
             $col = $e.Extent.StartColumnNumber
             if ($Annotate) {
-                Write-Host "::error file=$relative,line=$line,col=$col::[$engine] $($e.Message)"
+                Write-Host "::error file=$(ConvertTo-AnnotationProperty $relative),line=$line,col=$col::$(ConvertTo-AnnotationData "[$engine] $($e.Message)")"
             }
-            Write-Host "  ${relative}:${line}:${col} $($e.Message)"
+            Write-Host (ConvertTo-LogLine "  ${relative}:${line}:${col} $($e.Message)")
         }
-        Write-Host "FAIL $relative -- $($errors.Count) parse error(s)"
+        Write-Host (ConvertTo-LogLine "FAIL $relative -- $($errors.Count) parse error(s)")
     }
 }
 
@@ -175,7 +198,9 @@ if ($analyzeTargets.Count -eq 0) {
 # object whose .Count is $null, and the gate below would pass.
 $findings = @(
     foreach ($file in $analyzeTargets) {
-        Invoke-ScriptAnalyzer -Path $file -Settings $settingsFile
+        # -Path is a wildcard pattern and there is no -LiteralPath: unescaped, a
+        # file named a[1].ps1 matches nothing and is silently passed unanalyzed.
+        Invoke-ScriptAnalyzer -Path ([WildcardPattern]::Escape($file)) -Settings $settingsFile
     }
 )
 
@@ -183,9 +208,9 @@ foreach ($f in $findings) {
     $relative = Get-RelativePath $f.ScriptPath
     if ($Annotate) {
         $level = if ($f.Severity -eq 'Error') { 'error' } else { 'warning' }
-        Write-Host "::${level} file=${relative},line=$($f.Line),col=$($f.Column)::[$engine] [$($f.RuleName)] $($f.Message)"
+        Write-Host "::${level} file=$(ConvertTo-AnnotationProperty $relative),line=$($f.Line),col=$($f.Column)::$(ConvertTo-AnnotationData "[$engine] [$($f.RuleName)] $($f.Message)")"
     }
-    Write-Host "  ${relative}:$($f.Line) [$($f.RuleName)] $($f.Message)"
+    Write-Host (ConvertTo-LogLine "  ${relative}:$($f.Line) [$($f.RuleName)] $($f.Message)")
 }
 
 if ($findings.Count -gt 0) {

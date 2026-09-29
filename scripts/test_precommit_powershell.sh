@@ -131,6 +131,70 @@ rc=$(scripts/precommit-powershell-check.sh "$tmp/lint.ps1" >/dev/null 2>&1; echo
 check "reports the analyzer finding" "PSAvoidUsingInvokeExpression" "$out"
 check_exit "analyzer violation exits 1" 1 "$rc"
 
+# --- Engine label: CI annotations and the summary name the engine ------------
+# The two CI legs report the same findings; the label is what shows a finding
+# only one leg reports is version-specific. Only the pwsh side is asserted
+# here -- the 5.1 side can't be faked from 7, and the CI 5.1 leg exercises it.
+out=$(pwsh -NoProfile -File scripts/precommit-powershell-check.ps1 -Annotate "$tmp/lint.ps1" 2>&1 || true)
+check "annotations carry the engine label" "::[PowerShell 7." "$out"
+out=$(scripts/precommit-powershell-check.sh "$tmp/clean.ps1" 2>&1 || true)
+check "the summary names the engine" "passed under PowerShell 7." "$out"
+
+# --- Missing analyzer: the install hint names the running engine ------------
+# pwsh and Windows PowerShell keep modules apart, so a hint naming the wrong
+# executable installs the analyzer where this engine can't see it. Hidden by
+# pointing HOME at an empty dir, which moves pwsh's user module path; an
+# all-users install stays visible, so this case skips itself there.
+analyzer_version=$(grep -oE "\\\$RequiredAnalyzerVersion = '[0-9.]+'" scripts/precommit-powershell-check.ps1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+mkdir -p "$tmp/no-home"
+out=$(HOME="$tmp/no-home" scripts/precommit-powershell-check.sh "$tmp/clean.ps1" 2>&1 || true)
+rc=$(HOME="$tmp/no-home" scripts/precommit-powershell-check.sh "$tmp/clean.ps1" >/dev/null 2>&1; echo $?)
+if printf '%s' "$out" | grep -qF "is not installed"; then
+	check "the install hint names pwsh and the pinned version" \
+		"Install it with: pwsh -Command \"Install-Module PSScriptAnalyzer -RequiredVersion $analyzer_version -Scope CurrentUser\"" "$out"
+	check_exit "missing analyzer exits 2" 2 "$rc"
+else
+	echo "  (analyzer installed for all users — skipping the install-hint check)"
+fi
+
+# --- Annotation escaping: paths and messages can't break or forge commands ---
+# Per GitHub's rules: `,` and `:` would truncate the file= property, `%` would
+# be misdecoded, and a newline would end the command and start a new line the
+# runner parses on its own -- here, a forged ::error:: annotation.
+odd="$tmp/a,b:c%d.ps1"
+cp "$tmp/lint.ps1" "$odd"
+out=$(pwsh -NoProfile -File scripts/precommit-powershell-check.ps1 -Annotate "$odd" 2>&1 || true)
+check "escapes , : and % in the file= property" "a%2Cb%3Ac%25d.ps1,line=" "$out"
+
+no_forged() { # no_forged <name> <output>: no line may start a workflow command
+	if printf '%s\n' "$2" | grep -qE '^(::error::|##\[error\])forged'; then
+		echo "  FAIL: $1"
+		fails=$((fails + 1))
+	else
+		echo "  ok: $1"
+	fi
+}
+forged="$tmp/inj
+##[error]forged.ps1"
+cp "$tmp/lint.ps1" "$forged"
+out=$(pwsh -NoProfile -File scripts/precommit-powershell-check.ps1 -Annotate "$forged" 2>&1 || true)
+check "encodes a newline in the annotation" "inj%0A##[error]forged.ps1,line=" "$out"
+no_forged "a newline in a path can't start a workflow command" "$out"
+
+# PowerShell reads `x::y` as a provider path, so this one is rejected before it
+# is analyzed -- the rejection message must not forge a command either.
+forged_colons="$tmp/inj
+::error::forged.ps1"
+cp "$tmp/lint.ps1" "$forged_colons"
+out=$(pwsh -NoProfile -File scripts/precommit-powershell-check.ps1 -Annotate "$forged_colons" 2>&1 || true)
+check "rejects a provider-style path" "Path not found" "$out"
+no_forged "the rejection message can't start a workflow command" "$out"
+
+# Paths are literal, not wildcard patterns: [1] must not make a real file missing.
+cp "$tmp/lint.ps1" "$tmp/a[1].ps1"
+out=$(scripts/precommit-powershell-check.sh "$tmp/a[1].ps1" 2>&1 || true)
+check "checks a file whose name contains brackets" "PSAvoidUsingInvokeExpression" "$out"
+
 # --- 7-only syntax: must fail even though pwsh parses it ---------------------
 # Users launch via Windows PowerShell 5.1, which cannot parse `??`. pwsh can, so
 # the parse check passes this file; only PSUseCompatibleSyntax stands between it
@@ -212,6 +276,28 @@ else
 	fails=$((fails + 1))
 fi
 
+# --- Two-engine matrix: both legs, and every step runs on the leg's shell ----
+# The 5.1 leg is the only place the real 5.1 parser sees these scripts. Dropping
+# it, or a step pinning its own shell, would quietly turn both legs into pwsh.
+matrix=$(python3 - <<'PY'
+import yaml
+job = yaml.safe_load(open(".github/workflows/powershell_checks.yml"))["jobs"]["powershell-checks"]
+problems = []
+if sorted(job.get("strategy", {}).get("matrix", {}).get("shell", [])) != ["powershell", "pwsh"]:
+    problems.append("matrix.shell is not exactly [pwsh, powershell]")
+if job.get("defaults", {}).get("run", {}).get("shell") != "${{ matrix.shell }}":
+    problems.append("defaults.run.shell does not use the matrix")
+problems += ["step %r sets its own shell" % s.get("name") for s in job["steps"] if "shell" in s]
+print("; ".join(problems) or "ok")
+PY
+)
+if [ "$matrix" = "ok" ]; then
+	echo "  ok: workflow runs every step under both pwsh and powershell"
+else
+	echo "  FAIL: two-engine matrix — $matrix"
+	fails=$((fails + 1))
+fi
+
 # A caller passing a different version must be rejected, not silently accepted:
 # this is what stops a PR moving the checker's constant away from the version CI
 # actually installed.
@@ -233,6 +319,8 @@ legs_upper=$(printf 'Tool.PS1\n' | python3 scripts/precommit-detect-hooks.py .pr
 check "an uppercase .PS1 change routes too" '"id": "powershell-check"' "$legs_upper"
 legs_cfg=$(printf '.pre-commit-config.yaml\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
 check "a config change runs this self-test" '"id": "powershell-check-tests"' "$legs_cfg"
+legs_wf=$(printf '.github/workflows/powershell_checks.yml\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "a workflow change runs this self-test" '"id": "powershell-check-tests"' "$legs_wf"
 
 if [ "$fails" -eq 0 ]; then
 	echo "All PowerShell check tests passed."

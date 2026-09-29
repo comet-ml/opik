@@ -269,8 +269,10 @@ repos:
         # list because this hook's own `files:` regex is the routing contract:
         # editing it (or the powershell-check entry above) must run the tests
         # that assert routing, otherwise a config-only change could silently
-        # stop matching PowerShell and nothing would notice.
-        files: ^scripts/(precommit-powershell-check\.(sh|ps1)|test_precommit_powershell\.sh)$|^PSScriptAnalyzerSettings\.psd1$|^\.pre-commit-config\.yaml$
+        # stop matching PowerShell and nothing would notice. The workflow is in
+        # the list because the tests also assert its contract: the two-engine
+        # matrix and the analyzer version it pins.
+        files: ^scripts/(precommit-powershell-check\.(sh|ps1)|test_precommit_powershell\.sh)$|^PSScriptAnalyzerSettings\.psd1$|^\.pre-commit-config\.yaml$|^\.github/workflows/powershell_checks\.yml$
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
