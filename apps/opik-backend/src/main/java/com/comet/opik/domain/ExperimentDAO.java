@@ -354,9 +354,9 @@ public class ExperimentDAO {
                     AND id IN (SELECT trace_id FROM experiment_items_final)
                     <if(traces_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
                         FROM (
-                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
                             FROM experiment_items_final
                         )
                     )
@@ -460,9 +460,9 @@ public class ExperimentDAO {
                         AND id IN (SELECT trace_id FROM experiment_items_final)
                         <if(traces_partitioned)>
                         AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                            SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                            SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
                             FROM (
-                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
                                 FROM experiment_items_final
                             )
                         )
@@ -952,9 +952,9 @@ public class ExperimentDAO {
                     AND id IN (SELECT trace_id FROM experiment_items_final)
                     <if(traces_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
                         FROM (
-                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
                             FROM experiment_items_final
                         )
                     )
@@ -1149,9 +1149,9 @@ public class ExperimentDAO {
                         AND id IN (SELECT trace_id FROM experiment_items_final)
                         <if(traces_partitioned)>
                         AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                            SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                            SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
                             FROM (
-                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
                                 FROM experiment_items_final
                             )
                         )
@@ -1231,9 +1231,9 @@ public class ExperimentDAO {
                   AND id IN (SELECT trace_id FROM legacy_trace_scope)
                   <if(traces_partitioned)>
                   AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                      SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                      SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
                       FROM (
-                          SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                          SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
                           FROM legacy_trace_scope
                       )
                   )
@@ -1337,9 +1337,9 @@ public class ExperimentDAO {
                     AND id IN (SELECT trace_id FROM experiment_items_final)
                     <if(traces_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
                         FROM (
-                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
                             FROM experiment_items_final
                         )
                     )
@@ -1441,9 +1441,9 @@ public class ExperimentDAO {
                         AND id IN (SELECT trace_id FROM experiment_items_final)
                         <if(traces_partitioned)>
                         AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                            SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                            SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
                             FROM (
-                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
                                 FROM experiment_items_final
                             )
                         )
@@ -1706,9 +1706,9 @@ public class ExperimentDAO {
                     AND t.id IN (SELECT trace_id FROM experiment_items_trace_scope)
                     <if(traces_partitioned)>
                     AND toYYYYMMDD(toDate32(t.id_at) - toIntervalDay(toDayOfWeek(t.id_at, 1))) IN (
-                        SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
                         FROM (
-                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
                             FROM experiment_items_trace_scope
                         )
                     )

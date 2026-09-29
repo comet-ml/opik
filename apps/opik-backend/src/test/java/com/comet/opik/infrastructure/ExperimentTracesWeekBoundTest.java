@@ -201,7 +201,12 @@ class ExperimentTracesWeekBoundTest {
      */
     private static final String SEARCH_MARKER = "marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
 
-    /** The weeks seeded with traces the experiments do not reference, so there is something for the bound to prune. */
+    /**
+     * Weeks seeded with traces no experiment references, so the bound has something to prune and the pruning
+     * assertion has a number to hold it to. They start one week clear of the anchor because the week-boundary trace
+     * falls in the week before it: overlapping there would leave a week that is both seeded and referenced, and the
+     * assertion could no longer say that every one of these was excluded.
+     */
     private static final int UNREFERENCED_WEEKS = 5;
 
     private static final String LAST_STATEMENT_FOR = """
@@ -440,6 +445,12 @@ class ExperimentTracesWeekBoundTest {
      * A site whose bound went missing is a read that opens every weekly partition again, with no row-level symptom —
      * which is precisely what went unnoticed until this ticket.
      *
+     * <p>Held to a number rather than to "fewer than before": each seeded unreferenced week contributes at least
+     * one part, so a read that excluded every one of them selects at most {@code total - UNREFERENCED_WEEKS}. A bound
+     * that named weeks the experiment does not reference would select more and fail here, which "something was
+     * pruned" would not catch. The other direction - a bound that drops a week the experiment does reference - shows
+     * up as missing rows, and is what the row cases below assert.</p>
+     *
      * <p>Asserted over the {@code traces} reads the plan exposes, which is not all of them: a set built for an
      * {@code IN (SELECT ... FROM traces)} is resolved before planning and appears in no read node. So this pins that
      * every read the plan does show prunes, and that there is one to show.</p>
@@ -454,7 +465,7 @@ class ExperimentTracesWeekBoundTest {
         assertThat(actualReads).isNotEmpty();
         assertThat(actualReads).allSatisfy(read -> {
             var actualParts = partitionAnalysisOf(read);
-            assertThat(actualParts.selected()).isLessThan(actualParts.total());
+            assertThat(actualParts.selected()).isLessThanOrEqualTo(actualParts.total() - UNREFERENCED_WEEKS);
         });
     }
 
@@ -589,7 +600,7 @@ class ExperimentTracesWeekBoundTest {
      */
     private Fixture seed() {
         var project = createProject();
-        IntStream.rangeClosed(1, UNREFERENCED_WEEKS)
+        IntStream.rangeClosed(2, UNREFERENCED_WEEKS + 1)
                 .forEach(week -> createTrace(project, weekInstant(-week)));
 
         var traces = List.of(

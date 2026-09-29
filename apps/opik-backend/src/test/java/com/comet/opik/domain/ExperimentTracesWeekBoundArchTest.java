@@ -75,7 +75,7 @@ class ExperimentTracesWeekBoundArchTest {
             "\\bexperiment_items\\b|\\bexperiments\\b|\\boptimization", Pattern.CASE_INSENSITIVE);
 
     @ArchTest
-    final ArchRule every_traces_read_an_experiment_reaches_carries_a_week_bound = classes()
+    final ArchRule every_declared_experiment_traces_read_carries_a_week_bound = classes()
             .that().resideInAPackage("com.comet.opik.domain..")
             .and().haveSimpleNameContaining("DAO")
             .should(boundEveryTracesReadAnExperimentReaches());
