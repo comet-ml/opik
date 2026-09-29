@@ -95,7 +95,6 @@ describe("the playground and the optimizer", () => {
     expect(
       screen.getByTestId("maxConcurrentRequests-input"),
     ).toBeInTheDocument();
-    // Hidden on every surface until the backend forwards thinking_effort.
     expect(screen.queryByText("Thinking effort")).not.toBeInTheDocument();
     expect(screen.getByTestId("maxCompletionTokens-input")).toBeInTheDocument();
   });

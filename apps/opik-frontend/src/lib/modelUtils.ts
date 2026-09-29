@@ -35,26 +35,12 @@ export const getRoutableProviderModelValue = (
 };
 
 /**
- * Checks if a model is a reasoning model that requires temperature = 1.0.
- *
- * For OpenAI models with a row in OPENAI_MODEL_CAPABILITIES, the row is
- * authoritative — every gating decision (sampling sliders, effort dropdown,
- * request stripping) keys off the same map, so it must also answer the
- * umbrella question.
- *
- * Otherwise the backend-fetched registry wins (via the module-level flag
- * index populated by useLLMProviderModelsData), with the hardcoded
- * REASONING_MODELS list as a pre-fetch fallback.
+ * An OPENAI_MODEL_CAPABILITIES row wins; otherwise the backend registry flag,
+ * then the hardcoded REASONING_MODELS list.
  */
 export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
   if (!model) return false;
 
-  // OpenAI: a capability row wins over the BE flag, mirroring how Anthropic
-  // owns its supportsAnthropicThinkingEffort gating. Stops a BE YAML entry
-  // without `reasoning: true` from silently disabling the playground
-  // reasoning-effort dropdown. A model without a row (synced after this
-  // release) still falls through to the registry, so it is not sent the
-  // sampling params reasoning models reject.
   const declared = OPENAI_MODEL_CAPABILITIES[model]?.reasoning;
   if (
     declared !== undefined &&
@@ -688,8 +674,6 @@ export const resolveSamplingParams = (
     return {};
   }
 
-  // Google says to leave both at their defaults on Gemini 3: 3.6 Flash and 3.5 Flash-Lite already
-  // ignore them, and later generations will answer them with a 400.
   if (!supportsGeminiSamplingParams(model)) {
     return {};
   }
@@ -704,7 +688,6 @@ export const resolveSamplingParams = (
   return { temperature, topP };
 };
 
-// OpenAI reasoning models reject both penalties, as they reject top_p.
 export const supportsPenaltyParams = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean =>
@@ -793,8 +776,7 @@ export const sanitizeConfigForRequest = (
     delete sanitized.presencePenalty;
   }
 
-  // The backend's Vertex AI client reads only max_tokens, so max_completion_tokens alone never
-  // reaches the model.
+  // The Vertex backend reads max_tokens, not max_completion_tokens.
   if (
     isVertexModel(model) &&
     typeof sanitized.maxCompletionTokens === "number"

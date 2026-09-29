@@ -15,15 +15,12 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 
-// Pins the behaviour the Anthropic effort control gets back once the backend forwards it, so
-// flipping the constant is the whole change.
 vi.mock("@/constants/llm", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/constants/llm")>()),
   THINKING_CONTROLS_FORWARDED_BY_BACKEND: true,
 }));
 
 const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
-// Earlier releases stored it; it is no longer part of the type.
 const ADAPTIVE = "adaptive" as unknown as AnthropicThinkingEffort;
 
 describe("Anthropic thinking effort once the backend forwards it", () => {
@@ -98,8 +95,6 @@ describe("Anthropic thinking effort once the backend forwards it", () => {
   });
 
   it("replaces an Anthropic thinkingEffort the model does not offer", () => {
-    // updateProviderConfig coerces this on a model change, but a stored prompt whose model is still
-    // valid is never reconciled, so the wire needs its own answer.
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
         thinkingEffort: ADAPTIVE,

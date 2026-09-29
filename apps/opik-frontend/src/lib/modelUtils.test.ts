@@ -1804,7 +1804,6 @@ describe("Anthropic request contract while the backend drops thinking effort", (
     const config: LLMAnthropicConfigsType = {
       temperature: 0.5,
       maxCompletionTokens: 4000,
-      // Earlier releases stored it; it is no longer part of the type.
       thinkingEffort: "adaptive" as unknown as AnthropicThinkingEffort,
     };
 

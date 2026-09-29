@@ -29,11 +29,6 @@ import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
  * picked because it still renders the sampling toggle. Its newer siblings
  * (Sonnet 5, the Opus 4.7+ line) set `supportsSamplingParams: false` and render
  * no toggle at all.
- *
- * Only the sampling pair is covered: the backend proxy drops `thinking_effort`,
- * so the panel hides that control behind `THINKING_CONTROLS_FORWARDED_BY_BACKEND`,
- * and the Thinking effort steps (a non-default pick, asserted in the body) belong
- * back in this test once that constant flips to true.
  */
 
 const MODEL_DISPLAY_NAME = 'Claude Sonnet 4.6';

@@ -160,8 +160,6 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
-// The backend's chat-completions request DTO has no thinking_effort field and silently drops it, so
-// an Anthropic effort control would change nothing. Flip once the backend forwards it.
 export const THINKING_CONTROLS_FORWARDED_BY_BACKEND = false;
 
 // Per-model Anthropic capabilities.
@@ -221,9 +219,7 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
 // specify the exact set of effort values they accept — OpenAI families
 // differ: o-series → low/medium/high; gpt-5 → minimal/low/medium/high;
 // gpt-5.1/5.2 → none/low/medium/high; gpt-5.4+ adds xhigh. Sending an
-// unsupported value 400s. `max` is left out: Chat Completions rejects it, only
-// the Responses API takes it. A `reasoning: false` row pins a model the
-// registry could otherwise flag as reasoning.
+// unsupported value 400s.
 export const OPENAI_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
@@ -266,7 +262,6 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
     reasoning: true,
     reasoningEffortOptions: ["minimal", "low", "medium", "high"],
   },
-  // chat-latest models are non-reasoning: reasoning_effort 400s on them.
   [PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST]: { reasoning: false },
 
   // gpt-5.1+ — none replaces minimal
@@ -308,7 +303,6 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
-  // gpt-6-astra has no "none"
   [PROVIDER_MODEL_TYPE.GPT_6_ASTRA]: {
     reasoning: true,
     reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
