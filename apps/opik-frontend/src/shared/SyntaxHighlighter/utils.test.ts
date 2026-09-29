@@ -52,7 +52,7 @@ describe("generateSyntaxHighlighterCode - YAML mode", () => {
     ["DEL", "\u007F", "\\x7F"],
     ["NEL", "\u0085", "\\N"],
     ["a C1 control", "\u0080", "\\x80"],
-  ])("escapes %s inside the double-quoted value", (_label, char, escape) => {
+  ])("escapes %s in values and keys", (_label, char, escape) => {
     const value = `line1${char}x\nline2`;
 
     const result = toYaml({ arg: value, [`key${char}`]: "v" });
