@@ -1252,6 +1252,9 @@ class CostServiceTest {
                 Arguments.of("vercel_ai_gateway", "vercel_ai_gateway/alibaba/qwen-3-14b", "0.000128"),
                 // openrouter/anthropic/claude-3.5-sonnet: input 3e-06, output 1.5e-05
                 // -> 1000*3e-06 + 200*1.5e-05 = 0.006
-                Arguments.of("openrouter", "openrouter/anthropic/claude-3.5-sonnet", "0.006"));
+                Arguments.of("openrouter", "openrouter/anthropic/claude-3.5-sonnet", "0.006"),
+                // databricks/databricks-gpt-oss-120b: input 1.5000999999999998e-07, output 5.9997e-07
+                // -> 1000*1.5000999999999998e-07 + 200*5.9997e-07 = 0.00027000399999999998
+                Arguments.of("databricks", "databricks/databricks-gpt-oss-120b", "0.00027000399999999998"));
     }
 }
