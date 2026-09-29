@@ -24,7 +24,10 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import { Experiment } from "@/types/datasets";
 import PromptVersionTag from "@/v2/pages-shared/experiments/PromptVersionTag/PromptVersionTag";
-import { formatExperimentPromptVersions } from "@/lib/experiments";
+import {
+  formatExperimentPromptVersions,
+  sortPromptVersions,
+} from "@/lib/experiments";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
@@ -126,7 +129,9 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     experimentsIds.forEach((id: string) => {
       const experiment = find(experiments, (e) => e.id === id);
       data[id] = formatExperimentPromptVersions(experiment);
-      promptVersionsByExperimentId[id] = experiment?.prompt_versions;
+      promptVersionsByExperimentId[id] =
+        experiment?.prompt_versions &&
+        sortPromptVersions(experiment.prompt_versions);
     });
 
     if (Object.values(data).every(isUndefined)) return null;

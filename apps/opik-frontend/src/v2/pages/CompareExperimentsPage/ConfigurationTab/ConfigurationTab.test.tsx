@@ -3,15 +3,26 @@ import { render, screen } from "@testing-library/react";
 
 import ConfigurationTab from "./ConfigurationTab";
 import { Experiment, ExperimentPromptVersion } from "@/types/datasets";
+import { CompareConfig } from "@/v2/pages-shared/experiments/CompareExperimentsConfigCell/CompareExperimentsConfigCell";
 
 // The tab is exercised here for its row assembly, not its table chrome: the
 // DataTable, sticky containers and navigation tags all pull in routing and
 // virtualization that say nothing about which rows get built.
 vi.mock("@/shared/DataTable/DataTable", () => ({
-  default: ({ data }: { data: { name: string }[] }) => (
+  default: ({ data }: { data: CompareConfig[] }) => (
     <div data-testid="rows">
       {data.map((row) => (
-        <div key={row.name} data-testid="row">
+        <div
+          key={row.name}
+          data-testid="row"
+          data-prompt-version-ids={JSON.stringify(
+            row.promptVersionsByExperimentId,
+            (_, value) =>
+              Array.isArray(value)
+                ? value.map((pv: ExperimentPromptVersion) => pv.id)
+                : value,
+          )}
+        >
           {row.name}
         </div>
       ))}
@@ -155,6 +166,29 @@ describe("ConfigurationTab prompt version row", () => {
     expect(rowNames()).toEqual(
       expect.arrayContaining([PROMPT_VERSION_ROW, "Prompt version"]),
     );
+  });
+
+  // The cells render these as tags, so they must follow the same order as
+  // the sorted text the row diffs on.
+  it("orders each column's prompt versions like the row's sorted label", () => {
+    renderTab([
+      experiment("e1", {
+        prompt_versions: [
+          promptVersion({ id: "pv10", version_number: "v10" }),
+          promptVersion({ id: "pv2", version_number: "v2" }),
+          promptVersion({ id: "pvA", prompt_name: "alpha" }),
+        ],
+      }),
+      experiment("e2"),
+    ]);
+
+    const row = screen
+      .getAllByTestId("row")
+      .find((r) => r.textContent === PROMPT_VERSION_ROW);
+
+    expect(
+      JSON.parse(row?.getAttribute("data-prompt-version-ids") ?? "{}"),
+    ).toEqual({ e1: ["pvA", "pv2", "pv10"] });
   });
 
   it("hides the row under 'show differences only' when the prompts match", () => {

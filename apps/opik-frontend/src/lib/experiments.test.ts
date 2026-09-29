@@ -6,6 +6,7 @@ import {
   formatExperimentPromptVersions,
   formatPromptVersionLabel,
   getAvailableExperimentTabs,
+  sortPromptVersions,
   isExperimentTabId,
   suggestNextExperimentName,
 } from "./experiments";
@@ -235,6 +236,17 @@ describe("experiments utilities", () => {
           formatExperimentPromptVersions(experiment({ prompt_versions })),
         ).toBe("Deleted prompt, My Prompt (v1)");
       }
+    });
+
+    it("sorts the versions themselves in label order", () => {
+      expect(
+        sortPromptVersions([
+          promptVersion({ id: "pv10", version_number: "v10" }),
+          promptVersion({ id: "pvZ", prompt_name: "Zeta" }),
+          promptVersion({ id: "pv2", version_number: "v2" }),
+          promptVersion({ id: "pvA", prompt_name: "alpha" }),
+        ]).map((pv) => pv.id),
+      ).toEqual(["pvA", "pv2", "pv10", "pvZ"]);
     });
 
     it("returns undefined when the experiment has no linked prompt", () => {

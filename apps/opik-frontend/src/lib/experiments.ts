@@ -75,6 +75,22 @@ export const formatPromptVersionLabel = (
 };
 
 /**
+ * Prompt versions in label order: case-insensitive, with version numbers
+ * compared numerically so v2 comes before v10. The compare view renders these
+ * as tags alongside the text it diffs on, so both must share one order.
+ */
+export const sortPromptVersions = (
+  promptVersions: ExperimentPromptVersion[],
+): ExperimentPromptVersion[] =>
+  [...promptVersions].sort((a, b) =>
+    formatPromptVersionLabel(a).localeCompare(
+      formatPromptVersionLabel(b),
+      undefined,
+      { sensitivity: "base", numeric: true },
+    ),
+  );
+
+/**
  * Every prompt version linked to an experiment, as one comparable string
  * (e.g. "Guardrail (v1), My Prompt (v3)"). Returns undefined when the
  * experiment has no linked prompt, which the compare table renders as
@@ -90,11 +106,8 @@ export const formatExperimentPromptVersions = (
   const promptVersions = experiment?.prompt_versions;
   if (!promptVersions?.length) return undefined;
 
-  return promptVersions
+  return sortPromptVersions(promptVersions)
     .map(formatPromptVersionLabel)
-    .sort((a, b) =>
-      a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }),
-    )
     .join(", ");
 };
 
