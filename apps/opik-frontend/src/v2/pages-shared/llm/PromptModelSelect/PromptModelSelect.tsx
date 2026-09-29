@@ -21,6 +21,7 @@ import {
   PROVIDER_MODEL_TYPE,
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_TYPE,
+  ProviderModelsMap,
 } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ManageAIProviderDialog from "@/v2/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
@@ -29,6 +30,7 @@ import { parseComposedProviderType } from "@/lib/provider";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useModelOptions } from "./useModelOptions";
+import { mergeProviderModels } from "./mergeProviderModels";
 
 interface PromptModelSelectProps {
   value: PROVIDER_MODEL_TYPE | "";
@@ -43,6 +45,8 @@ interface PromptModelSelectProps {
   onDeleteProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   disabled?: boolean;
   compact?: boolean;
+  // Models to list on top of the registry ones, per provider — for models only some callers accept.
+  extraProviderModels?: ProviderModelsMap;
 }
 
 const STALE_TIME = 1000;
@@ -57,6 +61,7 @@ const PromptModelSelect = ({
   onDeleteProvider,
   disabled = false,
   compact = false,
+  extraProviderModels,
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,7 +70,11 @@ const PromptModelSelect = ({
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] =
     useState<COMPOSED_PROVIDER_TYPE | null>(null);
-  const { providerModels } = useLLMProviderModelsData();
+  const { providerModels: registryProviderModels } = useLLMProviderModelsData();
+  const providerModels = useMemo<ProviderModelsMap>(
+    () => mergeProviderModels(registryProviderModels, extraProviderModels),
+    [extraProviderModels, registryProviderModels],
+  );
 
   const {
     permissions: { canUpdateAIProviders },

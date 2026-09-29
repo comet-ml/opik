@@ -24,11 +24,15 @@ test.describe(
     test.use({ viewport: { width: 1600, height: 900 } });
 
     for (const { promptType, title, nameSuffix, promptText } of PROMPT_VARIANTS) {
-      test(title, async ({ project, page, registerPromptCleanup, testNamespace }) => {
+      test(title, async ({ project, page, providerKeys, registerPromptCleanup, testNamespace }) => {
         test.setTimeout(60_000);
 
         const promptName = `${testNamespace}-${nameSuffix}`;
         const playground = new PlaygroundPage(page, project.id);
+
+        await test.step('Give the workspace a provider so the Playground mounts', async () => {
+          await providerKeys.createUnreachable({ providerName: `${testNamespace}-unreachable` });
+        });
 
         await test.step('Navigate to Playground', async () => {
           await playground.goto();

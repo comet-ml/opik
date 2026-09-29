@@ -16,6 +16,8 @@ import {
 } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 
@@ -30,7 +32,8 @@ import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell
 import IdCell from "@/shared/DataTableCells/IdCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import TagCell from "@/shared/DataTableCells/TagCell";
+import AutomationCell from "@/v2/pages-shared/annotation-queues/AutomationCell";
+import ScopeCell from "@/v2/pages-shared/annotation-queues/ScopeCell";
 import AnnotateQueueCell from "@/v2/pages-shared/annotation-queues/AnnotateQueueCell";
 import AnnotationQueueProgressCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueProgressCell";
 import AnnotationQueueRowActionsCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
@@ -69,6 +72,8 @@ import {
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { capitalizeFirstLetter } from "@/lib/utils";
 
+const AUTOMATION_COLUMN_ID = "automation";
+
 const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
   {
     id: COLUMN_ID_ID,
@@ -86,7 +91,7 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     id: "scope",
     label: "Scope",
     type: COLUMN_TYPE.category,
-    cell: TagCell as never,
+    cell: ScopeCell as never,
     accessorFn: (row) => capitalizeFirstLetter(row.scope),
     customMeta: {
       colored: false,
@@ -121,6 +126,14 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     sortable: true,
   },
   ...SHARED_COLUMNS,
+  // Displayed only: the queues API has no automation filter field, so offering one would build a
+  // query it answers with a 400.
+  {
+    id: AUTOMATION_COLUMN_ID,
+    label: "Automation",
+    type: COLUMN_TYPE.category,
+    cell: AutomationCell as never,
+  },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Avg feedback scores",
@@ -174,6 +187,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "progress",
   COLUMN_FEEDBACK_SCORES_ID,
   "scope",
+  AUTOMATION_COLUMN_ID,
   "last_updated_at",
 ];
 
@@ -185,6 +199,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "progress",
   COLUMN_FEEDBACK_SCORES_ID,
   "scope",
+  AUTOMATION_COLUMN_ID,
   "last_updated_at",
   "created_at",
   "created_by",
@@ -193,6 +208,9 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 
 const SELECTED_COLUMNS_KEY = "workspace-annotation-queues-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
+// Bumped to surface the new Automation column to users whose v2 selection is already stored —
+// otherwise the persisted value wins and they never see it.
+const SELECTED_COLUMNS_KEY_V3 = `${SELECTED_COLUMNS_KEY}-v3`;
 const COLUMNS_WIDTH_KEY = "workspace-annotation-queues-columns-width";
 const COLUMNS_ORDER_KEY = "workspace-annotation-queues-columns-order";
 const COLUMNS_SORT_KEY = "workspace-annotation-queues-columns-sort";
@@ -249,12 +267,15 @@ export const AnnotationQueuesPage: React.FC = () => {
     defaultValue: ROW_HEIGHT.small,
   });
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
+    SELECTED_COLUMNS_KEY_V3,
     {
       defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
-        DEFAULT_SELECTED_COLUMNS,
-        [COLUMN_NAME_ID],
+        SELECTED_COLUMNS_KEY_V2,
+        migrateSelectedColumns(SELECTED_COLUMNS_KEY, DEFAULT_SELECTED_COLUMNS, [
+          COLUMN_NAME_ID,
+          AUTOMATION_COLUMN_ID,
+        ]),
+        ["automation"],
       ),
     },
   );
@@ -337,11 +358,27 @@ export const AnnotationQueuesPage: React.FC = () => {
     [navigate, workspaceName, projectId],
   );
 
+  const isAutomationEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
+  );
+
+  // A queue that populates itself is only a concept while the feature is on; with it off the column
+  // would read "Off" for every queue, and there would be nowhere to turn it on.
+  const visibleColumns = useMemo(
+    () =>
+      isAutomationEnabled
+        ? DEFAULT_COLUMNS
+        : DEFAULT_COLUMNS.filter(
+            (column) => column.id !== AUTOMATION_COLUMN_ID,
+          ),
+    [isAutomationEnabled],
+  );
+
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<AnnotationQueue>(),
       ...convertColumnDataToColumn<AnnotationQueue, AnnotationQueue>(
-        DEFAULT_COLUMNS,
+        visibleColumns,
         {
           columnsOrder,
           selectedColumns,
@@ -352,7 +389,8 @@ export const AnnotationQueuesPage: React.FC = () => {
         accessorKey: "annotate_queue",
         header: "",
         cell: AnnotateQueueCell,
-        size: 140,
+        // Fits "Annotator's view" plus its icon; at 140 the button overflowed the cell by 17px.
+        size: 180,
         enableResizing: false,
         enableHiding: false,
         enableSorting: false,
@@ -361,7 +399,7 @@ export const AnnotationQueuesPage: React.FC = () => {
         cell: AnnotationQueueRowActionsCell,
       }),
     ];
-  }, [sortableBy, columnsOrder, selectedColumns]);
+  }, [visibleColumns, sortableBy, columnsOrder, selectedColumns]);
 
   const sortConfig = useMemo(
     () => ({
@@ -444,7 +482,7 @@ export const AnnotationQueuesPage: React.FC = () => {
                 setType={setHeight}
               />
               <ColumnsButton
-                columns={DEFAULT_COLUMNS}
+                columns={visibleColumns}
                 selectedColumns={selectedColumns}
                 onSelectionChange={setSelectedColumns}
                 order={columnsOrder}

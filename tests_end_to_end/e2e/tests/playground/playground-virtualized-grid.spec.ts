@@ -8,8 +8,10 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  * body, or rows that cannot be reached by scrolling — none of which the 3-item smoke can
  * see, because 3 rows render fully either way.
  *
- * No model or provider key is needed: selecting a dataset paints the idle output rows from
- * the dataset-items query alone, which is the whole surface under test here.
+ * No model is needed: selecting a dataset paints the idle output rows from the dataset-items
+ * query alone, which is the whole surface under test here. A provider still has to exist, or
+ * the Playground mounts behind the setup modal (see playground-reset); the seeded one refuses
+ * every connection and nothing is ever run.
  *
  * Nothing here assumes a dataset ordering — the grid renders items newest-first, and that
  * is incidental to virtualization.
@@ -31,6 +33,7 @@ test.describe(
       project,
       testNamespace,
       page,
+      providerKeys,
     }) => {
       test.setTimeout(180_000);
 
@@ -53,6 +56,10 @@ test.describe(
       registerDatasetCleanup(created.id, datasetName);
 
       const playground = new PlaygroundPage(page, project.id);
+
+      await test.step('Give the workspace a provider so the Playground mounts', async () => {
+        await providerKeys.createUnreachable({ providerName: `${testNamespace}-unreachable` });
+      });
 
       await test.step('Load the dataset into the Playground', async () => {
         await playground.goto();
