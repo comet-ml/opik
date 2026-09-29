@@ -135,8 +135,6 @@ class Opik:
         Returns:
             None
         """
-        analytics.track_event("client", "init")
-
         config_ = opik_config.get_from_user_inputs(
             project_name=project_name,
             workspace=workspace,
@@ -337,6 +335,7 @@ class Opik:
             environment=environment,
         )
 
+    @analytics.internal
     def __internal_api__trace__(
         self,
         id: Optional[str] = None,
@@ -561,6 +560,7 @@ class Opik:
             source="sdk",
         )
 
+    @analytics.internal
     def __internal_api__span__(
         self,
         trace_id: Optional[str] = None,
