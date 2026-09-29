@@ -87,6 +87,15 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
      * {@code releaseAbandonedQuery}. Once the result is in hand it belongs to try-with-resources, which closes
      * it exactly once; routing a mapping failure through the abandonment path would register the handler on an
      * already-completed future, firing it inline and closing that same response a second time.
+     *
+     * <p>A single block with per-type catches can be made to work instead, but only by deciding, for every
+     * exception type, whether it can have come from the acquisition or from the mapping — and one of those
+     * calls is not ours to make. {@link AutoCloseable#close()} is declared {@code throws Exception}, as is
+     * {@code QueryResponse.close()}, so a failed close is indistinguishable by type from a failed
+     * {@code get()} and lands in the abandonment catch, closing a response that has just failed to close.
+     * Splitting the blocks decides it by control flow the compiler enforces, which is why the catch on the
+     * acquisition can stay broad: before a result is in hand there is nothing to close and a future that may
+     * still produce one, whatever was thrown.
      */
     protected <T extends AutoCloseable> Result executeProbe(CompletableFuture<T> queryFuture,
             Function<? super T, Result> onResult) {
@@ -131,7 +140,9 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
      * inline and closes a response the caller is already closing.
      *
      * <p>This used to call {@code queryFuture.cancel(true)}, which not only failed to help but caused the
-     * leak it looked like it was preventing. The v2 client builds this future with
+     * leak it looked like it was preventing, and made it unrecoverable: cancelling completes the future
+     * exceptionally, so the supplier's later {@code complete(response)} returns {@code false} and no handler
+     * registered here — then or afterwards — is ever handed the response to close. The v2 client builds this future with
      * {@code CompletableFuture.supplyAsync}, and {@link CompletableFuture#cancel} ignores
      * {@code mayInterruptIfRunning}: it cannot stop the supplier, so the HTTP round trip completes and
      * builds a {@code QueryResponse} regardless. Cancelling first completes the future exceptionally, so
@@ -142,6 +153,9 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
      * client's ten-second acquire timeout and failed. In production that left a pod permanently unready,
      * thousands of {@code ConnectionRequestTimeoutException} an hour, with ClickHouse itself healthy and
      * the other pods untouched — and liveness kept passing, so nothing ever restarted it (OPIK-8576).
+     *
+     * <p>Harmless on a future that was cancelled by someone else: the handler fires inline with no value,
+     * and {@code closeQuietly} ignores it. Nothing can be recovered in that case by any means.
      *
      * <p>Not cancelling costs nothing here: the probe already caps the query server-side with
      * {@code max_execution_time} in {@link #newQuerySettings()}, which is what actually bounds it. Stopping

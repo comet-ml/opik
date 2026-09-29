@@ -12,9 +12,11 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatcher;
 
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static com.comet.opik.infrastructure.db.healthchecks.AbstractClickHouseHealthCheck.SELECT_1_QUERY;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,6 +24,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -124,6 +127,45 @@ class AbstractClickHouseHealthCheckTest {
 
             assertResult(actualResult, HealthCheck.Result.unhealthy(failure));
             verify(response, times(1)).close();
+        }
+
+        /**
+         * {@code close()} is declared {@code throws Exception} on both {@link AutoCloseable} and
+         * {@code QueryResponse}, so a failed close carries no type that distinguishes it from a failed
+         * {@code get()}. Only the block structure keeps it out of the abandonment path, which would close the
+         * same response again.
+         */
+        @Test
+        void check__whenClosingTheResponseFails__thenTheResponseIsNotClosedAgain() throws Exception {
+            var closeException = new TimeoutException("Closing the response failed");
+            var response = mock(QueryResponse.class);
+            doThrow(closeException).when(response).close();
+            when(clickHouseClient.query(eq(SELECT_1_QUERY), argThat(maxExecutionTimeServerSetting())))
+                    .thenReturn(CompletableFuture.completedFuture(response));
+
+            var actualResult = healthCheck.execute();
+
+            // A probe that cannot release its connection is not healthy, whatever the query returned.
+            assertResult(actualResult, HealthCheck.Result.unhealthy(closeException));
+            verify(response).close();
+        }
+
+        /**
+         * Why {@code cancel(true)} was fatal rather than merely useless: cancelling completes the future
+         * exceptionally, and nothing registered on it afterwards is ever handed the response.
+         */
+        @Test
+        void releaseAbandonedQuery__whenTheFutureWasCancelled__thenTheResponseCanNeverBeRecovered()
+                throws Exception {
+            var response = mock(QueryResponse.class);
+            var queryFuture = new CompletableFuture<QueryResponse>();
+            queryFuture.cancel(true);
+
+            healthCheck.releaseAbandonedQuery(queryFuture, new CancellationException());
+
+            // The in-flight supplier finishes later and tries to publish its response; the future refuses it.
+            assertThat(queryFuture.complete(response)).isFalse();
+            verify(response, never()).close();
         }
 
         @Test
