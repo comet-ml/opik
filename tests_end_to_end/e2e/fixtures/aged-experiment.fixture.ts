@@ -1,6 +1,6 @@
 import { test as baseTest } from './optimization-run.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
-import { uuid7 } from '../core/backend';
+import { deleteTracesResilient, uuid7 } from '../core/backend';
 import { skipUnlessBackdatedIdsAccepted } from './uuid-window-guard';
 
 export interface AgedExperimentRef {
@@ -172,7 +172,7 @@ export const test = baseTest.extend<AgedExperimentFixtures>({
           );
         }
         if (traceIds.length > 0) {
-          await safe(`${traceIds.length} traces`, () => backendClient.deleteTraces(traceIds));
+          await deleteTracesResilient(backendClient, traceIds, 'agedExperiment fixture');
         }
         if (datasetId !== null) {
           const id = datasetId;

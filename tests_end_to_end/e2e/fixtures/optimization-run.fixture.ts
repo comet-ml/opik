@@ -1,6 +1,6 @@
 import { test as baseTest } from './filterable-traces.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
-import { uuid7 } from '../core/backend';
+import { deleteTracesResilient, uuid7 } from '../core/backend';
 
 export interface OptimizationTrialRef {
   /** Label the trials table renders for this candidate — "Baseline" or "Trial #N". */
@@ -213,9 +213,7 @@ export const test = baseTest.extend<OptimizationRunFixtures>({
           );
         }
         if (allTraceIds.length > 0) {
-          await safe(`${allTraceIds.length} traces`, () =>
-            backendClient.deleteTraces(allTraceIds),
-          );
+          await deleteTracesResilient(backendClient, allTraceIds, 'optimizationRun fixture');
         }
         if (datasetId !== null) {
           const id = datasetId;

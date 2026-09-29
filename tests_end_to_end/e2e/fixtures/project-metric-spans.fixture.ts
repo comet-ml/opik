@@ -1,6 +1,6 @@
 import { test as baseTest } from './bystander.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
-import { uuid7Moment } from '../core/backend';
+import { deleteTracesResilient, uuid7Moment } from '../core/backend';
 
 /** One seeded hour of the window: how far back it sits and what it should total. */
 export interface ProjectMetricHourSeed {
@@ -226,14 +226,8 @@ export const test = baseTest.extend<ProjectMetricSpansFixtures>({
       // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
       // keeps one meaning across the suite. Teardown deletes the traces rather
       // than relying on the project delete, which removes only the project row.
-      // The length check keeps a first-seed failure from issuing an empty
-      // delete: the endpoint requires at least one id.
-      if (!shouldLeaveArtifacts(testInfo) && seededTraceIds.length > 0) {
-        try {
-          await backendClient.deleteTraces(seededTraceIds);
-        } catch (err) {
-          console.warn('[projectMetricSpans fixture] trace delete warning:', err);
-        }
+      if (!shouldLeaveArtifacts(testInfo)) {
+        await deleteTracesResilient(backendClient, seededTraceIds, 'projectMetricSpans fixture');
       }
     }
   },

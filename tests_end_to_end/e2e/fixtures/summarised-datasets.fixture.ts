@@ -1,6 +1,6 @@
 import { test as baseTest } from './model-cost-spans.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
-import { uuid7 } from '../core/backend';
+import { deleteTracesResilient, uuid7 } from '../core/backend';
 
 /**
  * A dataset shape, chosen so no two datasets in the seed share a summary.
@@ -220,9 +220,7 @@ export const test = baseTest.extend<SummarisedDatasetsFixtures>({
             backendClient.deleteOptimization(optimizationId),
           );
         }
-        if (traceIds.length > 0) {
-          await safe(`${traceIds.length} traces`, () => backendClient.deleteTraces(traceIds));
-        }
+        await deleteTracesResilient(backendClient, traceIds, 'summarisedDatasets fixture');
         for (const id of datasetIds) {
           await safe(`dataset ${id}`, () => backendClient.deleteDataset(id));
         }
