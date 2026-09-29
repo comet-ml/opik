@@ -9,6 +9,9 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -140,6 +143,47 @@ class LlmModelRegistryServiceTest {
         assertThat(registry).containsKeys("openai", "anthropic", "gemini", "vertex-ai", "openrouter");
         assertThat(registry.get("openai")).isNotEmpty();
         assertThat(registry.get("openrouter")).isNotEmpty();
+    }
+
+    @ParameterizedTest(name = "{0} reasoning={1}")
+    @CsvSource({
+            "gpt-6-astra, true",
+            "gpt-6-luna, true",
+            "gpt-6-sol, true",
+            "gpt-5, true",
+            "gpt-5-mini, true",
+            "gpt-5-nano, true",
+            "gpt-5.1, true",
+            "gpt-5.2, true",
+            "gpt-5.4, true",
+            "gpt-5.4-mini, true",
+            "gpt-5.4-nano, true",
+            "gpt-5.5, true",
+            "gpt-5.6-luna, true",
+            "gpt-5.6-sol, true",
+            "gpt-5.6-terra, true",
+            "gpt-5-chat-latest, false",
+            "gpt-5.2-chat-latest, false",
+            "gpt-5.3-chat-latest, false"
+    })
+    void loadDefaultResourceFlagsOpenAiReasoningModels(String modelId, boolean reasoning) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(modelId).orElseThrow();
+
+        assertThat(result.provider()).isEqualTo(LlmProvider.OPEN_AI);
+        assertThat(result.model().reasoning()).isEqualTo(reasoning);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-6-astra", "gpt-6-luna", "gpt-6-sol"})
+    void loadDefaultResourceFlagsGpt6StructuredOutput(String modelId) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(modelId).orElseThrow();
+
+        assertThat(result.provider()).isEqualTo(LlmProvider.OPEN_AI);
+        assertThat(result.model().structuredOutput()).isTrue();
     }
 
     @Test

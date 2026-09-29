@@ -161,7 +161,7 @@ export const DEFAULT_CUSTOM_CONFIGS = {
 };
 
 // The backend chat-completions proxy has no field for the Anthropic effort and drops it; flip once
-// OPIK-8565 phase 2 forwards output_config.effort.
+// OPIK-8605 forwards output_config.effort.
 export const ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND = false;
 
 // Per-model Anthropic capabilities.
