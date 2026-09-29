@@ -82,16 +82,28 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
      * <p>When the deadline passes, try-with-resources never binds a result — there is nothing to close yet —
      * so the abandoned future has to be dealt with explicitly, or the response it later produces holds its
      * connection forever. See {@link #releaseAbandonedQuery}.
+     *
+     * <p>Acquisition and mapping are separate blocks precisely so that only the first can reach
+     * {@code releaseAbandonedQuery}. Once the result is in hand it belongs to try-with-resources, which closes
+     * it exactly once; routing a mapping failure through the abandonment path would register the handler on an
+     * already-completed future, firing it inline and closing that same response a second time.
      */
     protected <T extends AutoCloseable> Result executeProbe(CompletableFuture<T> queryFuture,
             Function<? super T, Result> onResult) {
-        try (var result = queryFuture.get(healthCheckTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
-            return onResult.apply(result);
+        T result;
+        try {
+            result = queryFuture.get(healthCheckTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return releaseAbandonedQuery(queryFuture, exception);
         } catch (Exception exception) {
             return releaseAbandonedQuery(queryFuture, exception);
+        }
+
+        try (result) {
+            return onResult.apply(result);
+        } catch (Exception exception) {
+            return Result.unhealthy(exception);
         }
     }
 
@@ -114,7 +126,9 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
     }
 
     /**
-     * Closes whatever the abandoned probe eventually produces, so its connection goes back to the pool.
+     * Closes whatever the abandoned probe eventually produces, so its connection goes back to the pool. Only for
+     * a probe whose result was never acquired: on a future that has already handed one over, the handler runs
+     * inline and closes a response the caller is already closing.
      *
      * <p>This used to call {@code queryFuture.cancel(true)}, which not only failed to help but caused the
      * leak it looked like it was preventing. The v2 client builds this future with

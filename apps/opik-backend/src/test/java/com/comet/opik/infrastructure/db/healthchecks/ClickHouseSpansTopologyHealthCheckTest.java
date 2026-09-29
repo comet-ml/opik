@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Behaviour of {@link ClickHouseSpansTopologyHealthCheck}: the flag↔topology assertion in both directions, plus the
- * timeout and cancellation contract inherited from {@link AbstractClickHouseHealthCheck}. The spans mirror of
+ * timeout and abandonment contract inherited from {@link AbstractClickHouseHealthCheck}. The spans mirror of
  * {@link ClickHouseTracesTopologyHealthCheckTest}.
  *
  * <p>The mismatch cases are the point of the check, so each asserts the actual message rather than merely that the
@@ -198,7 +198,7 @@ class ClickHouseSpansTopologyHealthCheckTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("failureModes")
-    void reportsUnhealthyAndCancelsTheQueryWhenItFails(String name, Exception failure) throws Exception {
+    void reportsUnhealthyWithoutCancellingTheQueryWhenItFails(String name, Exception failure) throws Exception {
         var failingFuture = mock(CompletableFuture.class);
         when(failingFuture.get(HEALTH_CHECK_TIMEOUT.toMilliseconds(), TimeUnit.MILLISECONDS)).thenThrow(failure);
         when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), eq(QUERY_PARAMS), argThat(probeServerSettings())))

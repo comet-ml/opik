@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -107,6 +108,25 @@ class AbstractClickHouseHealthCheckTest {
         }
 
         @Test
+        @DisplayName("a response the probe body already closed is not closed a second time")
+        void check__whenResultMappingFails__thenTheResponseIsClosedExactlyOnce() throws Exception {
+            // Reading the result is real work in the subclasses — iterating Records, pulling a column — so it
+            // can throw with the response in hand. try-with-resources has already closed it by the time the
+            // failure surfaces; the abandonment handler must stay out of that path or it closes the response
+            // again, on a completed future, inline.
+            var response = mock(QueryResponse.class);
+            var failure = new IllegalStateException("Malformed probe row");
+            when(clickHouseClient.query(eq(SELECT_1_QUERY), argThat(maxExecutionTimeServerSetting())))
+                    .thenReturn(CompletableFuture.completedFuture(response));
+            var healthCheck = new ThrowingProbeHealthCheck(clickHouseClient, HEALTH_CHECK_TIMEOUT, failure);
+
+            var actualResult = healthCheck.execute();
+
+            assertResult(actualResult, HealthCheck.Result.unhealthy(failure));
+            verify(response, times(1)).close();
+        }
+
+        @Test
         void check__whenQueryInterrupted__thenUnhealthyAndRestoresInterruptFlag() throws Exception {
             var interruptedException = new InterruptedException("Interrupted call unavailable");
             var failingFuture = mock(CompletableFuture.class);
@@ -156,6 +176,27 @@ class AbstractClickHouseHealthCheckTest {
             var actualResult = healthCheck.execute();
 
             assertResult(actualResult, HealthCheck.Result.healthy());
+        }
+    }
+
+    /**
+     * Probe whose result mapping always throws, standing in for the real subclasses' record reading.
+     */
+    private static final class ThrowingProbeHealthCheck extends AbstractClickHouseHealthCheck {
+
+        private final RuntimeException failure;
+
+        private ThrowingProbeHealthCheck(Client clickHouseClient, Duration healthCheckTimeout,
+                RuntimeException failure) {
+            super(clickHouseClient, healthCheckTimeout, "throwing-probe");
+            this.failure = failure;
+        }
+
+        @Override
+        protected HealthCheck.Result check() {
+            return executeProbe(clickHouseClient.query(SELECT_1_QUERY, newQuerySettings()), response -> {
+                throw failure;
+            });
         }
     }
 

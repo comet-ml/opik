@@ -129,7 +129,7 @@ class ClickHouseExistenceHealthCheckTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("checks")
-    void check__whenEnabledAndQueryFails__thenUnhealthyAndCancelsQuery(String name, String query,
+    void check__whenEnabledAndQueryFails__thenUnhealthyWithoutCancellingQuery(String name, String query,
             String notFoundMessage, String disabledMessage,
             BiFunction<Client, Boolean, AbstractClickHouseExistenceHealthCheck> factory) throws Exception {
         var causeException = new RuntimeException("ClickHouse unavailable");
