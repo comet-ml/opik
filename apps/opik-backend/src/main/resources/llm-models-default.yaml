@@ -114,27 +114,38 @@ openai:
   - id: "gpt-5-chat-latest"
   - id: "gpt-5-codex"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5-pro"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.1-chat-latest"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.1-codex"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.1-codex-max"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.1-codex-mini"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.2-chat-latest"
   - id: "gpt-5.2-codex"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.2-pro"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.3-chat-latest"
     structuredOutput: true
   - id: "gpt-5.3-codex"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.4-pro"
+    reasoning: true
   - id: "gpt-5.5-pro"
+    reasoning: true
   - id: "gpt-image-1"
   - id: "gpt-image-1-mini"
   - id: "gpt-image-1.5"

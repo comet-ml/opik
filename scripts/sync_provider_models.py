@@ -75,6 +75,9 @@ OPENAI_EXCLUDE_PATTERNS = [
 # Only these prefixes are chat/completion models usable in our playground.
 OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")
 
+# LiteLLM flags these as reasoning, but OpenAI rejects reasoning_effort on them ("Invalid 'reasoning_effort' for non-reasoning model") and the frontend pins them non-reasoning.
+OPENAI_NON_REASONING_MODELS = {"gpt-5-chat-latest", "gpt-5.2-chat-latest", "gpt-5.3-chat-latest"}
+
 ANTHROPIC_EXCLUDE_PATTERNS = [
     r"-latest$",
     r"^claude-3-",
@@ -989,6 +992,7 @@ def regenerate_llm_models_yaml(
     existing_content: str,
     models_by_provider: dict[str, list[ModelEntry]],
     dropdown_by_provider: dict[str, list[ModelEntry]] | None = None,
+    openai_reasoning: dict[str, bool] | None = None,
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
@@ -1001,12 +1005,18 @@ def regenerate_llm_models_yaml(
       curated order and carry their human-readable `label`; the remaining
       entries follow alphabetically with no label.
     - Preserves reasoning flags carried over from the existing file.
+    - In the openai section only, also emits `reasoning: true` for models
+      that `openai_reasoning` marks, except OPENAI_NON_REASONING_MODELS.
+      Other sections stay carry-over only: LiteLLM's flag means "can emit
+      reasoning tokens", which is broader than what the frontend treats as
+      a reasoning model, and nothing reads the flag for other providers.
     - Sections for providers not managed here (bedrock, ollama, opik-free,
       custom-llm) are preserved as-is if present.
     """
     # Carry over existing reasoning flags by provider/model-id
     reasoning_flags = _parse_yaml_reasoning_flags(existing_content)
     dropdown_by_provider = dropdown_by_provider or {}
+    openai_reasoning = openai_reasoning or {}
 
     lines: list[str] = []
 
@@ -1054,7 +1064,12 @@ def regenerate_llm_models_yaml(
 
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
-            if provider_reasoning.get(model_id):
+            seeded_reasoning = (
+                provider_key == "openai"
+                and openai_reasoning.get(model_id, False)
+                and model_id not in OPENAI_NON_REASONING_MODELS
+            )
+            if provider_reasoning.get(model_id) or seeded_reasoning:
                 lines.append("    reasoning: true")
 
     # Preserve any provider sections not managed by the sync script
@@ -1094,6 +1109,17 @@ def _build_structured_output_lookup(prices: dict) -> dict[str, bool]:
         if isinstance(info, dict):
             lookup[key] = bool(info.get("supports_response_schema", False))
     return lookup
+
+
+def _build_reasoning_lookup(prices: dict) -> dict[str, bool]:
+    return {
+        key: bool(info.get("supports_reasoning"))
+        for key, info in prices.items()
+        if isinstance(info, dict)
+        and info.get("litellm_provider") == "openai"
+        # LiteLLM files the Responses-API-only models (codex, -pro, deep-research) under mode "responses", not "chat".
+        and info.get("mode") in ("chat", "responses")
+    }
 
 
 def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
@@ -1261,6 +1287,7 @@ def main():
     llm_models_yaml_content = read_file(LLM_MODELS_YAML)
     new_llm_models_yaml = regenerate_llm_models_yaml(
         llm_models_yaml_content, models_by_provider, dropdown_by_provider,
+        openai_reasoning=_build_reasoning_lookup(prices),
     )
 
     # 5. Print summary
