@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
 
 import java.util.Optional;
@@ -70,6 +71,15 @@ public class AsyncUtils {
      * <p>Both live here on purpose. Leaving either to the call site means an operator that has to be
      * remembered at the right position in every chain, and forgetting it leaks silently — the response is
      * simply never closed, with nothing failing and nothing logged until the pool runs out.
+     *
+     * <p>The cleanup runs on {@link Schedulers#boundedElastic()} because closing is I/O:
+     * {@code QueryResponse.close()} closes the underlying HTTP response. On the completion path that would
+     * land on whichever thread the consumer terminated on, and on the cancellation path on whichever thread
+     * cancelled — neither is ours to block. ({@code InsertResponse.close()} is an empty method, so for the
+     * insert callers this costs a scheduler hop and saves nothing; it is the query callers that need it.)
+     *
+     * <p>{@code consume} is NOT moved to a scheduler here — the caller knows whether its own mapping blocks,
+     * and says so by handing back a {@link Mono} that carries its own {@code subscribeOn}.
      */
     public static <T extends AutoCloseable, R> Mono<R> usingClickHouseFuture(
             Supplier<? extends CompletableFuture<T>> futureSupplier,
@@ -78,7 +88,8 @@ public class AsyncUtils {
                 Mono.fromFuture(futureSupplier, true)
                         .doOnDiscard(AutoCloseable.class, AsyncUtils::closeQuietly),
                 consume,
-                response -> Mono.fromRunnable(() -> closeQuietly(response)));
+                response -> Mono.fromRunnable(() -> closeQuietly(response))
+                        .subscribeOn(Schedulers.boundedElastic()));
     }
 
     /**
