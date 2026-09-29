@@ -119,12 +119,14 @@ export interface ExperimentOutputColumn {
   types: DYNAMIC_COLUMN_TYPE[];
 }
 
+// The backend keeps the link to a deleted prompt but nulls its name, commit
+// and version number.
 export interface ExperimentPromptVersion {
   id: string;
-  commit: string;
-  version_number?: string;
+  commit: string | null;
+  version_number?: string | null;
   prompt_id: string;
-  prompt_name: string;
+  prompt_name: string | null;
 }
 
 export enum EXPERIMENT_TYPE {
