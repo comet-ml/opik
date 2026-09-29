@@ -108,12 +108,13 @@ interface AgentInsightsJobDAO {
 
     // Cross-workspace — used only by the auto-first-run sweep (system context). Projects enrolled in the
     // rollout that have not had a run enqueued yet. INNER JOIN projects so a deleted project drops out, as
-    // in findAllEnabled.
+    // in findAllEnabled. Oldest job first (ids are UUIDv7).
     @SqlQuery("""
             SELECT j.id, j.workspace_id, j.project_id
             FROM agent_insights_jobs j
             INNER JOIN projects p ON p.id = j.project_id AND p.workspace_id = j.workspace_id
             WHERE j.auto_first_run_enrolled AND j.auto_first_run_at IS NULL
+            ORDER BY j.id
             """)
     @RegisterConstructorMapper(EnabledJob.class)
     List<EnabledJob> findAwaitingFirstRun();
@@ -146,6 +147,45 @@ interface AgentInsightsJobDAO {
             WHERE project_id IN (<projectIds>) AND auto_first_run_enrolled
             """)
     int clearEnrolment(@BindList("projectIds") Collection<UUID> projectIds, @Bind("userName") String userName);
+
+    @SqlQuery("""
+            SELECT j.project_id
+            FROM agent_insights_jobs j
+            WHERE j.project_id IN (<projectIds>)
+                AND j.auto_first_run_at IS NOT NULL
+                AND (j.last_scan_at IS NULL OR j.last_scan_at < j.auto_first_run_at)
+                AND (j.auto_first_run_at < CURRENT_TIMESTAMP(6) - INTERVAL :timeoutSeconds SECOND
+                    OR EXISTS (
+                        SELECT 1 FROM report_failures f
+                        WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
+                            AND f.type = 'agent_insights' AND f.created_at >= j.auto_first_run_at
+                    ))
+            """)
+    Set<UUID> findUnfinishedAutoFirstRuns(@BindList("projectIds") Collection<UUID> projectIds,
+            @Bind("timeoutSeconds") long timeoutSeconds);
+
+    // Cross-workspace — used only by the auto-first-run sweep. Automatic runs that died without reporting:
+    // claimed longer ago than the timeout, with neither a scan nor a failure since the claim.
+    @SqlQuery("""
+            SELECT j.id, j.workspace_id, j.project_id
+            FROM agent_insights_jobs j
+            WHERE j.auto_first_run_at < CURRENT_TIMESTAMP(6) - INTERVAL :timeoutSeconds SECOND
+                AND (j.last_scan_at IS NULL OR j.last_scan_at < j.auto_first_run_at)
+                AND NOT EXISTS (
+                    SELECT 1 FROM report_failures f
+                    WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
+                        AND f.type = 'agent_insights' AND f.created_at >= j.auto_first_run_at
+                )
+            """)
+    @RegisterConstructorMapper(EnabledJob.class)
+    List<EnabledJob> findTimedOutAutoFirstRuns(@Bind("timeoutSeconds") long timeoutSeconds);
+
+    @SqlUpdate("""
+            UPDATE agent_insights_jobs SET auto_first_run_at = NULL, last_updated_by = :userName
+            WHERE project_id IN (<projectIds>)
+            """)
+    int clearAutoFirstRunClaim(@BindList("projectIds") Collection<UUID> projectIds,
+            @Bind("userName") String userName);
 
     // A run rejected before it started: clears its enqueue stamp, which would otherwise read as a run in flight
     // and then, once the rollout is cancelled around it, as a run that already happened.
