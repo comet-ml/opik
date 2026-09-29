@@ -4,6 +4,7 @@ import { FoldVertical, UnfoldVertical } from "lucide-react";
 import PrettyLLMMessage from "@/shared/PrettyLLMMessage";
 import {
   LLMBlockDescriptor,
+  LLMMapperResult,
   LLMMessageDescriptor,
   mapAndCombineMessages,
 } from "@/shared/PrettyLLMMessage/llmMessages";
@@ -24,19 +25,19 @@ function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
   return <Component key={key} {...descriptor.props} />;
 }
 
-const ExperimentMessagesViewer: React.FunctionComponent<
-  ExperimentMessagesViewerProps
-> = ({ input, output, actions }) => {
-  const { messages, usage } = useMemo(
-    () => mapAndCombineMessages(input, output),
-    [input, output],
-  );
+type MessagesListProps = LLMMapperResult & {
+  actions?: React.ReactNode;
+};
 
+const MessagesList: React.FunctionComponent<MessagesListProps> = ({
+  messages,
+  usage,
+  actions,
+}) => {
   const allMessageIds = useMemo(() => messages.map((m) => m.id), [messages]);
 
   // Not persisted: a stored choice would carry one row's collapsed state into
-  // every other row, hiding the content of short conversations. Callers key
-  // this viewer by row so the default is recomputed for each conversation.
+  // every other row, hiding the content of short conversations.
   const {
     isAllExpanded,
     expandedMessages,
@@ -94,6 +95,27 @@ const ExperimentMessagesViewer: React.FunctionComponent<
         </div>
       )}
     </div>
+  );
+};
+
+const ExperimentMessagesViewer: React.FunctionComponent<
+  ExperimentMessagesViewerProps
+> = ({ input, output, actions }) => {
+  const { messages, usage } = useMemo(
+    () => mapAndCombineMessages(input, output),
+    [input, output],
+  );
+
+  // The expand default is taken from the message count on mount, so remount
+  // when it changes, e.g. when the full payload replaces the truncated one.
+  // Callers also key this viewer by row.
+  return (
+    <MessagesList
+      key={messages.length}
+      messages={messages}
+      usage={usage}
+      actions={actions}
+    />
   );
 };
 

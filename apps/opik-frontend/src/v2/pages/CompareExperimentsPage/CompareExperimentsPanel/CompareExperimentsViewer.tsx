@@ -94,7 +94,15 @@ const CompareExperimentsViewer: React.FunctionComponent<
     [messagesOutput],
   );
 
-  const [showRawOutput, setShowRawOutput] = useState(false);
+  // Scoped to the item because columns are reused across rows: a plain boolean
+  // would open every following row in raw mode too.
+  const [rawOutputItemId, setRawOutputItemId] = useState<string | null>(null);
+  const showRawOutput = rawOutputItemId === experimentItem.id;
+
+  const outputText = useMemo(
+    () => JSON.stringify(experimentItem.output, null, 2),
+    [experimentItem.output],
+  );
 
   const onExpandClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -127,7 +135,9 @@ const CompareExperimentsViewer: React.FunctionComponent<
         <Button
           variant="outline"
           size="icon-2xs"
-          onClick={() => setShowRawOutput((value) => !value)}
+          onClick={() =>
+            setRawOutputItemId(showRawOutput ? null : experimentItem.id)
+          }
         >
           {showRawOutput ? <MessagesSquare /> : <Braces />}
         </Button>
@@ -178,7 +188,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
               <>
                 {rawToggle}
                 <CopyButton
-                  text={JSON.stringify(experimentItem.output, null, 2)}
+                  text={outputText}
                   message="Successfully copied output"
                   tooltipText="Copy output"
                   variant="outline"
