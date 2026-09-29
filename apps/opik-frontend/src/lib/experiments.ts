@@ -76,18 +76,23 @@ export const formatPromptVersionLabel = (
 
 /**
  * Prompt versions in label order: case-insensitive, with version numbers
- * compared numerically so v2 comes before v10. The compare view renders these
- * as tags alongside the text it diffs on, so both must share one order.
+ * compared numerically so v2 comes before v10. Ties (prompt names are only
+ * unique per project, and every deleted prompt reads the same) fall back to
+ * ids so the order never depends on the backend's. The compare view renders
+ * these as tags alongside the text it diffs on, so both must share one order.
  */
 export const sortPromptVersions = (
   promptVersions: ExperimentPromptVersion[],
 ): ExperimentPromptVersion[] =>
-  [...promptVersions].sort((a, b) =>
-    formatPromptVersionLabel(a).localeCompare(
-      formatPromptVersionLabel(b),
-      undefined,
-      { sensitivity: "base", numeric: true },
-    ),
+  [...promptVersions].sort(
+    (a, b) =>
+      formatPromptVersionLabel(a).localeCompare(
+        formatPromptVersionLabel(b),
+        undefined,
+        { sensitivity: "base", numeric: true },
+      ) ||
+      a.prompt_id.localeCompare(b.prompt_id) ||
+      a.id.localeCompare(b.id),
   );
 
 /**

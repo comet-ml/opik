@@ -249,6 +249,21 @@ describe("experiments utilities", () => {
       ).toEqual(["pvA", "pv2", "pv10", "pvZ"]);
     });
 
+    // Prompt names are only unique per project, so two linked prompts can
+    // share a label while linking to different prompts.
+    it("breaks label ties by prompt id, then version id", () => {
+      const sorted = (versions: ExperimentPromptVersion[]) =>
+        sortPromptVersions(versions).map((pv) => pv.id);
+      const inP2 = promptVersion({ id: "pv1", prompt_id: "p2" });
+      const inP1 = promptVersion({ id: "pv2", prompt_id: "p1" });
+      const deletedB = promptVersion({ id: "pvB", prompt_name: null });
+      const deletedA = promptVersion({ id: "pvA", prompt_name: null });
+
+      expect(sorted([inP2, inP1])).toEqual(["pv2", "pv1"]);
+      expect(sorted([inP1, inP2])).toEqual(["pv2", "pv1"]);
+      expect(sorted([deletedB, deletedA])).toEqual(["pvA", "pvB"]);
+    });
+
     it("returns undefined when the experiment has no linked prompt", () => {
       expect(formatExperimentPromptVersions(experiment())).toBeUndefined();
       expect(
