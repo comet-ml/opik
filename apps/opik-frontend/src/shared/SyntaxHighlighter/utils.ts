@@ -1,10 +1,35 @@
-import * as yml from "js-yaml";
+import { stringify as stringifyYaml } from "yaml";
 import { prettifyMessage } from "@/lib/traces";
 import {
   MODE_TYPE,
   DEFAULT_OPTIONS,
 } from "@/shared/SyntaxHighlighter/constants";
 import { PrettifyConfig, CodeOutput } from "@/shared/SyntaxHighlighter/types";
+
+// lineWidth 0 disables folding so long values stay on one line.
+// version 1.1 quotes yes/no/on/off and dates, so copied YAML keeps its
+// strings when loaded by 1.1 parsers such as PyYAML.
+const YAML_OPTIONS = { lineWidth: 0, version: "1.1" } as const;
+
+// A "\r" forces double-quoted style, collapsing Windows-authored text onto one line.
+const normalizeLineEndings = (_key: unknown, value: unknown) =>
+  typeof value === "string" ? value.replace(/\r\n/g, "\n") : value;
+
+// yaml double-quotes any string containing DEL or a C1 control but emits the
+// character raw, which PyYAML rejects (DEL) or reads as a line break (NEL).
+// Double quotes are the only place they can appear, so escaping is always valid.
+const escapeDelAndC1 = (yaml: string) =>
+  yaml.replace(/[\x7f-\x9f]/g, (char) =>
+    char === "\x85"
+      ? "\\N"
+      : `\\x${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
+// stringify returns undefined for undefined input (e.g. a trace with no output).
+const toYaml = (data: object): string =>
+  escapeDelAndC1(
+    stringifyYaml(data, normalizeLineEndings, YAML_OPTIONS) ?? "",
+  ).trim();
 
 export const generateSyntaxHighlighterCode = (
   data: object,
@@ -25,7 +50,7 @@ export const generateSyntaxHighlighterCode = (
   switch (mode) {
     case MODE_TYPE.yaml:
       return {
-        message: yml.dump(data, { lineWidth: -1 }).trim(),
+        message: toYaml(data),
         mode: MODE_TYPE.yaml,
         prettified: false,
         canBePrettified,
@@ -41,14 +66,14 @@ export const generateSyntaxHighlighterCode = (
       return {
         message: response.prettified
           ? (response.message as string)
-          : yml.dump(data, { lineWidth: -1 }).trim(),
+          : toYaml(data),
         mode: canBePrettified ? MODE_TYPE.pretty : MODE_TYPE.yaml,
         prettified: response.prettified,
         canBePrettified,
       };
     default:
       return {
-        message: yml.dump({}, { lineWidth: -1 }).trim(),
+        message: toYaml({}),
         mode: MODE_TYPE.yaml,
         prettified: false,
         canBePrettified: false,
