@@ -322,6 +322,18 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+            ), traces_final_thread_ids AS (
+                SELECT DISTINCT thread_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id \\<> ''
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -337,7 +349,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND thread_id IN (SELECT thread_id FROM traces_final)
+                -- The id range keeps the membership rule of the thread list in ThreadDAO.
+                -- The thread_id set is what actually prunes granules (measured 123/563 -> 69/563), so both stay.
+                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                AND thread_id IN (SELECT thread_id FROM traces_final_thread_ids)
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -407,7 +423,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
-                    t.start_time as thread_start_time,
+                    -- minIf returns the epoch default when every trace carries the sentinel start time.
+                    -- Without this fallback the thread fails the window bound below and disappears.
+                    if(equals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), UUIDv7ToDateTime(toUUID(tt.thread_model_id), 'UTC'), t.start_time) as thread_start_time,
                     t.end_time as end_time,
                     t.duration as duration,
                     t.first_message as first_message,
@@ -444,8 +462,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ) AS t
                 JOIN trace_threads_final AS tt ON t.id = tt.thread_id
                 WHERE workspace_id = :workspace_id
-                <if(uuid_from_time)> AND t.start_time >= UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')<endif>
-                <if(uuid_to_time)> AND t.start_time \\<= UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')<endif>
+                <if(uuid_from_time)> AND thread_start_time >= UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')<endif>
+                <if(uuid_to_time)> AND thread_start_time \\<= UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')<endif>
                 <if(thread_feedback_scores_filters)>
                 AND thread_model_id IN (
                     SELECT
@@ -1657,8 +1675,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                                 "toStartOfInterval(least(%s, %s), %s)".formatted(getTimeField(request.metricType()),
                                         fillTo, intervalToSql(request.interval()))))
                         .add("fill_from", pinBucket(
-                                "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
-                                        .formatted(intervalToSql(request.interval()))));
+                                "toStartOfInterval(%s, %s)".formatted(getFillAnchor(request.metricType()),
+                                        intervalToSql(request.interval()))));
             }
 
             // Add breakdown group expression if breakdown is enabled
@@ -1853,6 +1871,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             return "thread_start_time";
         }
         return SPAN_TIME_METRICS.contains(metricType) ? "span_time" : "trace_time";
+    }
+
+    private String getFillAnchor(MetricType metricType) {
+        return THREAD_METRICS.contains(metricType)
+                ? "UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')"
+                : "UUIDv7ToDateTime(toUUID(:uuid_from_time))";
     }
 
     private Publisher<Entry> rowToDataPoint(
