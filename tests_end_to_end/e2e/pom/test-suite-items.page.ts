@@ -64,12 +64,34 @@ export class TestSuiteItemsPage {
     });
   }
 
+  /** Every rendered test-case row — see `DatasetItemsPage.itemRows`. */
+  itemRows(): Locator {
+    return this.itemsTableBody.locator('tr[data-row-id]');
+  }
+
   itemRow(index: number): Locator {
     return this.itemsTableBody.locator('tr[data-row-id]').nth(index);
   }
 
   itemRowById(id: string): Locator {
     return this.itemsTableBody.locator(`tr[data-row-id="${id}"]`);
+  }
+
+  /**
+   * The test-suite item ids the grid is currently rendering, in row order.
+   *
+   * Mirrors `DatasetItemsPage.itemRowIds`. Identity matters more here than on
+   * the dataset page: the Test cases table renders only ID / Tags / Created,
+   * so two items with identical `data` are indistinguishable by cell text and
+   * `data-row-id` is the only thing that tells them apart. Single page only —
+   * the table paginates at 10 by default.
+   */
+  async itemRowIds(): Promise<string[]> {
+    return test.step('Read rendered test-suite item ids', async () => {
+      return this.itemsTableBody
+        .locator('tr[data-row-id]')
+        .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-row-id') ?? ''));
+    });
   }
 
   draftBadge(): Locator {

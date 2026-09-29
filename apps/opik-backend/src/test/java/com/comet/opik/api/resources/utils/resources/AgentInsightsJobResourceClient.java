@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.AgentInsightsEnrollment;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJobUpdate;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -9,12 +10,14 @@ import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.util.List;
 import java.util.UUID;
 
 @RequiredArgsConstructor
 public class AgentInsightsJobResourceClient {
 
     private static final String RESOURCE_PATH = "%s/v1/private/agent-insights/jobs";
+    private static final String ENROLLMENT_PATH = "%s/v1/internal/agent-insights/enrollment";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -41,6 +44,12 @@ public class AgentInsightsJobResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .method("PATCH", Entity.json(AgentInsightsJobUpdate.builder().status(status).build()));
+    }
+
+    public Response enrolInAutoFirstRun(boolean enrolled, List<UUID> projectIds) {
+        return client.target(ENROLLMENT_PATH.formatted(baseURI))
+                .request()
+                .post(Entity.json(new AgentInsightsEnrollment.Request(enrolled, projectIds)));
     }
 
     public Response trigger(UUID projectId, String apiKey, String workspaceName) {

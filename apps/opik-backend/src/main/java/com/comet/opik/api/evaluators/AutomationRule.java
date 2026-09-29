@@ -46,7 +46,16 @@ public sealed interface AutomationRule permits AutomationRuleEvaluator {
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
     enum AutomationRuleAction {
 
-        EVALUATOR("evaluator");
+        EVALUATOR("evaluator"),
+        /**
+         * Routes entities into an annotation queue when their feedback scores match. Named for what it
+         * does, like {@code evaluator}, rather than for the thing it writes to.
+         *
+         * <p>Storage-only for now: such a rule is created and edited through its queue's own endpoints, so
+         * it is deliberately not a subtype of {@link AutomationRule} and never serialised through the
+         * automation-rules API.
+         */
+        ANNOTATION_QUEUE_ROUTER("annotation_queue_router");
 
         @JsonValue
         private final String action;

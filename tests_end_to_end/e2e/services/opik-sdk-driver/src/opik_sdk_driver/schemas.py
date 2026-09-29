@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -144,12 +144,226 @@ class DatasetInsertItemsRequest(BaseModel):
     # both paths must land in ONE dataset version with identical counters.
     # Parallel upload needs a backend >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
     # (2.2.8); against an older one the SDK silently falls back to sequential.
+    #
+    # A plain int, not a constrained one, and for the same reason as on the read
+    # request: the SDK's own validation of it (0, negative) and its clamp at
+    # DATASET_ITEMS_WRITE_MAX_THREADS are part of what a caller reads this route
+    # to assert, so pydantic must not reject those values before the SDK sees
+    # them.
     num_threads: int = 1
+    # Mirrors Dataset.insert's own default. False bypasses the content-hash
+    # dedup path entirely: every item is sent as-is, so identical content
+    # inserted twice is stored twice.
+    deduplication: bool = True
+    # Whether the item batches are gzipped on the wire. None leaves the
+    # deployment's own setting in place; False selects the uncompressed upload
+    # arm, where the send pool joins and ships raw chunks instead of the writer
+    # emitting a compressed stream. Both arms must store identical items, and
+    # the response reports which one actually ran.
+    enable_json_request_compression: bool | None = None
     workspace: str | None = None
 
 
 class DatasetInsertItemsResponse(BaseModel):
     dataset_id: str
+    # Items handed to Dataset.insert(), not what the backend stored after
+    # deduplication. Zero when `value_error` is set — which is what the SDK
+    # rejecting the arguments means, but NOT what a ValueError raised partway
+    # through an upload would mean. Read the dataset back to learn what landed
+    # rather than inferring it from this.
+    inserted: int
+    # Whether this upload's bodies were gzipped, read back off the client that
+    # was built rather than echoed from the request. A caller comparing a
+    # compressed run against an uncompressed one has to be able to show the two
+    # arms genuinely differed; an echoed flag would agree with itself even if
+    # the override never reached the transport.
+    compression_enabled: bool
+    # The ValueError message when the SDK rejected the arguments, else None. The
+    # route answers 200 either way so the caller can assert on the message, the
+    # same contract as /datasets/read-items. Validation runs before any batch is
+    # sent, so a rejected insert leaves the dataset exactly as it was.
+    value_error: str | None = None
+
+
+class TypedValue(BaseModel):
+    """One dataset-item field, named by the Python type it must be built as.
+
+    Everything on `/datasets/insert-items` arrives as JSON, so by the time the
+    bridge sees it a `uuid.UUID` is already a string and a `set` is already a
+    list — which is exactly the normalisation the content-hash path exists to
+    perform, and therefore the thing a caller cannot test through that route.
+    This carries the *instruction* over the wire instead of the value, and the
+    bridge materialises the real Python object before `Dataset.insert` ever
+    sees it.
+
+    `value` is the JSON form the object is built FROM, not what it must store
+    as; the caller asserts the stored form against the backend afterwards.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["float", "uuid", "enum", "datetime", "set", "tuple"]
+    value: Any
+
+
+class DatasetInsertTypedItemRequest(BaseModel):
+    """Insert ONE item whose content carries non-JSON-native Python types.
+
+    `Dataset.insert` hashes an item's content to decide whether it has already
+    been stored, and a value the encoder cannot represent natively reaches that
+    digest through `streaming_writer.encode_flexible` — a UUID becomes a string,
+    an Enum its value, a set a canonically-ordered list. None of those survive
+    the round trip as themselves, so the digest of the live object has to equal
+    the digest of the JSON it becomes, or an item could never deduplicate
+    against its own stored form.
+
+    One insert per request, deliberately: the bridge builds a fresh client (and
+    therefore a `Dataset` whose hash cache starts unsynced) per request, so a
+    caller posting this twice gets the second insert's digest compared against
+    what the backend actually stored rather than against an in-process cache.
+    That is the comparison worth making, and a repeat loop inside one request
+    would quietly avoid it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    typed_content: dict[str, TypedValue]
+    deduplication: bool = True
+    workspace: str | None = None
+
+
+class DatasetInsertTypedItemResponse(BaseModel):
+    dataset_id: str
+    inserted: int
+    # Which JSON encoder answered in the process that computed the digest.
+    # Diagnostic only — the round trip must hold either way — but a caller
+    # reading a failure needs to know which one it was looking at, because the
+    # two do not produce identical bytes for every value.
+    accelerated: bool
+
+
+class DatasetInsertCall(BaseModel):
+    """One `Dataset.insert(...)` inside an insert-items-session request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]]
+    num_threads: int = 1
+    deduplication: bool = True
+
+
+class DatasetInsertItemsSessionRequest(BaseModel):
+    """Several inserts against ONE `Dataset` object, in one client session.
+
+    `/datasets/insert-items` builds a fresh client (and therefore a fresh
+    `Dataset`) per call, and a backend-fetched `Dataset` starts with its local
+    hash cache marked unsynced — so cross-call sequencing can never observe
+    what a `deduplication=False` insert does to that cache mid-session. This
+    route keeps one `Dataset` alive across the whole sequence, which is the
+    only way a spec can tell "the cache was invalidated and re-synced" apart
+    from "a brand new object synced because it always does".
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    inserts: list[DatasetInsertCall]
+    workspace: str | None = None
+
+
+class DatasetInsertItemsSessionResponse(BaseModel):
+    dataset_id: str
+    # One entry per insert in `inserts`, in order — the item count handed to
+    # that call, not what the backend stored after deduplication.
+    inserted: list[int]
+
+
+class DatasetReadItemsRequest(BaseModel):
+    """One `Dataset.get_items(...)` call, with its read knobs exposed verbatim.
+
+    `num_threads`/`chunk_size`/`nb_samples` are plain ints rather than
+    constrained ones on purpose: the SDK's own validation of them (0, negative,
+    over the chunk cap) is part of what a caller reads this route to assert, so
+    pydantic must not reject those values before the SDK sees them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    # Omitted keys are left to the SDK's defaults rather than restated here, so
+    # a caller asking for "the defaults" really gets them.
+    nb_samples: int | None = None
+    num_threads: int | None = None
+    chunk_size: int | None = None
+    filter_string: str | None = None
+    workspace: str | None = None
+
+
+class DatasetReadItemsResponse(BaseModel):
+    """What one read returned, or why the SDK refused to start it.
+
+    Items are reduced to their ids in dataset order: a caller comparing two
+    reads is asserting which items came back and in what order, and shipping
+    whole payloads back over the bridge for a few-thousand-item dataset is a
+    cost with no assertion behind it.
+    """
+
+    item_ids: list[str]
+    # The ValueError message when the SDK rejected the arguments, else None. The
+    # route answers 200 either way so the caller can assert on the message; a
+    # rejected read has no items, never an empty result that looks like one.
+    value_error: str | None = None
+
+
+class DatasetReadWithMidReadInsertRequest(BaseModel):
+    """A `stream_items()` read with an insert committed in the middle of it.
+
+    The interleaving is driven here rather than by racing two HTTP calls from
+    the caller: the reader consumes `pause_after_chunks` chunks, runs the insert
+    to completion, and only then consumes the rest. That makes the overlap
+    structural — every remaining page is fetched against a backend that already
+    holds the new items — where a timing race would leave the test asserting
+    whatever the network happened to order.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    items: list[dict[str, Any]]
+    chunk_size: int
+    num_threads: int = 1
+    # Must be >= 1 (so the read is genuinely in progress) and low enough that
+    # pages remain unfetched at the pause — see the route's docstring for the
+    # look-ahead the reader keeps in flight.
+    pause_after_chunks: int
+    workspace: str | None = None
+
+
+class DatasetReadWithMidReadInsertResponse(BaseModel):
+    """What the pinned read returned, and evidence the insert landed inside it.
+
+    `item_ids` is the whole read in the order it was reassembled — the pinned
+    result, which must be exactly the pre-insert dataset. The other three fields
+    exist to prove the scenario actually happened, because a read that finished
+    before the write started returns that same list and would pass on it alone.
+    """
+
+    item_ids: list[str]
+    # One entry per chunk the read yielded, in order. Short chunks before the
+    # last one, or fewer chunks than the dataset needs, mean the read did not
+    # cover the dataset the way the caller sized it for.
+    chunk_sizes: list[int]
+    # Chunks actually consumed at the moment the insert ran — observed by the
+    # route, not echoed from the request. Compared against the dataset's total
+    # chunk count it shows how many pages were still unfetched behind the write.
+    chunks_before_insert: int
+    # Items the mid-read insert sent. Zero means nothing was written, so a
+    # "nothing changed" result proves nothing.
     inserted: int
 
 
@@ -170,6 +384,51 @@ class ExperimentEvaluateRequest(BaseModel):
     items: list[ExperimentItemSeed]
     dataset_description: str | None = None
     workspace: str | None = None
+
+
+class ExperimentReadItemsRequest(BaseModel):
+    """One `Experiment.get_items()` call, with its paging knobs exposed.
+
+    `page_size` and `num_threads` are `None` by default so the route can tell
+    "the caller wants the SDK's default" from "the caller chose the value that
+    happens to equal it" — the whole point of the read is comparing the
+    defaults against explicit settings, and passing a hardcoded copy of the
+    default would compare a value against itself.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    experiment_id: str
+    max_results: int | None = None
+    page_size: int | None = None
+    num_threads: int | None = None
+    workspace: str | None = None
+
+
+class ExperimentItemFingerprint(BaseModel):
+    """The identity of one experiment item, in the order the read returned it.
+
+    Deliberately not the whole item: the assertion is that the SAME rows come
+    back in the SAME order under every paging knob, so what matters is the
+    identity triple and the caller-supplied index that says where the row
+    belongs. Returning the full `dataset_item_data` for thousands of rows would
+    make the response enormous for no extra discriminating power.
+    """
+
+    id: str
+    dataset_item_id: str
+    trace_id: str
+    # The monotonic `idx` the seed wrote onto the dataset item, or None when the
+    # row came back without one. Never defaulted to a number: an absent index is
+    # how a dropped or corrupted `dataset_item_data` would show, and coercing it
+    # to 0 would hide exactly that.
+    idx: int | None
+
+
+class ExperimentReadItemsResponse(BaseModel):
+    experiment_id: str
+    count: int
+    items: list[ExperimentItemFingerprint]
 
 
 class ExperimentItemScore(BaseModel):
@@ -275,11 +534,36 @@ class TestSuiteInsertItemsRequest(BaseModel):
     suite_name: str
     project_name: str
     items: list[TestSuiteItemSeed]
+    # Mirrors TestSuite.insert's own default; see DatasetInsertItemsRequest.
+    # Both routes funnel into the same
+    # `__internal_api__insert_items_as_dataclasses__`.
+    deduplication: bool = True
     workspace: str | None = None
+    # How the suite object being inserted into is obtained. The two factories
+    # build a suite whose local content-hash state differs, and dedup is decided
+    # from that state, so which one a caller went through is part of the
+    # scenario rather than an implementation detail:
+    #   get_or_create - get_test_suite(), falling back to create (the default,
+    #                   and what every other route uses)
+    #   list          - get_test_suites(), selecting the suite by name, and
+    #                   answering 404 when it matches other than exactly one
+    #                   suite. Deliberately no create fallback: a caller asking
+    #                   for the listing path is testing that path, so silently
+    #                   substituting another one would turn a real regression
+    #                   into a pass.
+    resolve_via: Literal["get_or_create", "list"] = "get_or_create"
 
 
 class TestSuiteInsertItemsResponse(BaseModel):
     suite_id: str
+    # Items handed to `suite.insert()`, NOT rows written. `insert` deduplicates
+    # on the suite's local content hashes, so a request repeating an item the
+    # suite already holds still reports it here. Anything asserting on what
+    # actually landed has to read the suite back — which is what
+    # test-suite-insert-dedup-listed-suite.spec.ts does, and why this field is
+    # left as the submitted count rather than given a meaning the SDK does not
+    # expose. (`inserted` carries the same "submitted" sense on the dataset
+    # routes; changing that is an estate-wide rename, not a per-route fix.)
     inserted: int
 
 

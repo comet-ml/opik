@@ -31,6 +31,8 @@ public class ErrorMetricsResolver {
     public static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
     public static final AttributeKey<String> WORKSPACE_NAME_KEY = AttributeKey.stringKey("workspace_name");
     public static final AttributeKey<String> USER_NAME_KEY = AttributeKey.stringKey("user_name");
+    /** Redis stream name. Shared so subscriber and reaper metrics label the dimension identically. */
+    public static final AttributeKey<String> STREAM_KEY = AttributeKey.stringKey("stream");
     public static final String UNKNOWN = "unknown";
 
     public static String errorType(Throwable throwable) {

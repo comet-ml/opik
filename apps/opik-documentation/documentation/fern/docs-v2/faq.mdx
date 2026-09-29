@@ -210,6 +210,16 @@ OpenTelemetry (Python & Ruby SDKs)
 **Other Tools:**
 Guardrails AI
 
+### Can my coding agent use Opik?
+
+Yes. Claude Code, Cursor, VS Code Copilot, Codex, opencode and any other MCP client
+can read your traces, score outputs and run evaluations through the
+[Opik MCP server](/mcp-server). One command sets it up and needs no SDK:
+
+```bash
+uvx opik mcp configure
+```
+
 ### What if Opik doesn't support my preferred framework or tool?
 
 If you don't see your preferred framework or tool listed in our integrations, we encourage you to:

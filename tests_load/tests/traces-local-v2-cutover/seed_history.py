@@ -20,12 +20,12 @@ install. Run `python seed_history.py --help` for options.
 
 import json
 import random
-import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import click
 
-from _common import LOGGER, DEFAULT_PROJECT, discover_workspace_and_project, make_ch_client, make_opik_client, mint_uuid7, utcnow
+from _common import (BAD_ID_INSTANT, DEFAULT_PROJECT, LOGGER, discover_workspace_and_project, json_payload,
+                     make_ch_client, make_opik_client, mint_uuid7, ns_ticks, random_text, us_ticks, utcnow)
 
 # Every base column the backfill copies (MATERIALIZED columns like id_at are recomputed by CH and excluded). Order
 # matches the tuple built in _row().
@@ -55,44 +55,20 @@ COLUMNS = [
     "environment",
 ]
 
-# A far-future instant matching the litellm UUIDv7 bug (ids whose embedded timestamp lands around the year 2201). Built
-# from a fixed date (not now().replace(year=2201)) so it never hits Feb 29 -> ValueError at import on a leap-day run.
-BAD_ID_INSTANT = datetime(2201, 6, 1, tzinfo=timezone.utc)
-
-_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _TAG_POOL = ["prod", "llm", "rag", "eval", "v1", "v2", "canary", "batch", "stream", "agent"]
 _SOURCES = ["sdk", "experiment", "playground", "optimization", "evaluator"]
 _ENVIRONMENTS = ["production", "staging", "dev", ""]
 _USERS = ["alice", "bob", "carol", "service-account", "ci-runner"]
 
 
-def _text(lo: int, hi: int) -> str:
-    return "".join(random.choices(string.ascii_letters + string.digits + " ", k=random.randint(lo, hi)))
-
-
-def _payload(kind: str) -> str:
-    return json.dumps({kind: _text(80, 240)})
-
-
-def _ns(dt: datetime) -> int:
-    """DateTime64(9) tick value (ns since epoch) with a random sub-microsecond remainder, so ns->us truncation runs."""
-    whole_us = int((dt - _EPOCH).total_seconds() * 1_000_000)  # microseconds (integer, no float-precision loss at 2^53)
-    return whole_us * 1_000 + random.randint(1, 999)
-
-
-def _us(dt: datetime) -> int:
-    """DateTime64(6) tick value (us since epoch)."""
-    return int((dt - _EPOCH).total_seconds() * 1_000_000)
-
-
 def _row(created_at_dt: datetime, id_instant: datetime, workspace_id: str, project_id: str) -> tuple:
     trace_id = mint_uuid7(id_instant)
-    created_ns = _ns(created_at_dt)
+    created_ns = ns_ticks(created_at_dt)
     # 30% leave end_time NULL (the "not ended" case -> epoch sentinel on the successor); else a real duration.
     end_ns = None if random.random() < 0.3 else created_ns + random.randint(5_000_000, 3_000_000_000)
     # 40% leave ttft NULL (-> NaN sentinel); else a plausible time-to-first-token in seconds.
     ttft = None if random.random() < 0.4 else round(random.uniform(0.005, 5.0), 6)
-    payload_in, payload_out = _payload("prompt"), _payload("completion")
+    payload_in, payload_out = json_payload("prompt"), json_payload("completion")
     return (
         trace_id,
         workspace_id,
@@ -106,11 +82,12 @@ def _row(created_at_dt: datetime, id_instant: datetime, workspace_id: str, proje
                     "temperature": round(random.random(), 3), "max_tokens": random.randint(16, 4000)}),
         random.sample(_TAG_POOL, random.randint(0, 4)),
         created_ns,  # created_at — the backfill slice column, at ns precision
-        _us(created_at_dt),  # last_updated_at (us) ~= created_at, so the delta never re-copies these historical rows
+        # last_updated_at (us) ~= created_at, so the delta never re-copies these historical rows
+        us_ticks(created_at_dt),
         random.choice(_USERS),
         random.choice(_USERS),
         "" if random.random() < 0.85 else json.dumps(
-            {"exception_type": "ValueError", "message": _text(10, 60), "traceback": _text(20, 80)}),
+            {"exception_type": "ValueError", "message": random_text(10, 60), "traceback": random_text(20, 80)}),
         "" if random.random() < 0.5 else "".join(random.choices("0123456789abcdef", k=16)),
         "hidden" if random.random() < 0.1 else "default",
         random.choice([10001, 20001]),

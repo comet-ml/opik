@@ -284,6 +284,66 @@ assertThat(actual)
 `containsExactly` asserts size and content together — `hasSize` plus per-index checks does not,
 and lets an extra element through.
 
+`hasSize` **on its own** is weaker still: it asserts a count and nothing about identity, so any
+bug that preserves the count passes. This bites hardest on de-duplication, merge, and upsert
+tests, where the count is exactly the thing a bug is most likely to keep right:
+
+```java
+// ❌ BAD - passes if the wrong revision survived, or if the duplicate was kept
+// and the distinct row dropped. Both keep the size at 2.
+assertThat(stored).hasSize(2);
+assertThat(version.itemsTotal()).isEqualTo(stored.size());
+
+// ✅ GOOD - names the rows that must survive, so a wrong-winner bug fails
+assertDatasetItemsInAnyOrder(stored, winningDuplicate, distinctItem);
+assertThat(version.itemsTotal()).isEqualTo(stored.size());
+```
+
+Asserting a derived counter against `stored.size()` is good — it ties the counter to reality
+rather than to a literal — but it is only as strong as the assertion on `stored` itself. Pin the
+contents first, then tie the counter to them.
+
+Reach for the assertion helper before the constant. Where a helper class or method already covers
+the entity, call it — reusing only its ignore-field constant still leaves the comparator chain
+re-derived at each call site, which is what drifts. The helpers live under
+`api/resources/utils/`: `TraceAssertions`, `SpanAssertions`, `DatasetItemAssertions`,
+`AlertAssertions`, `PromptTestAssertions` and `ExperimentTestAssertions`.
+
+```java
+// ❌ BAD - comparator chain re-derived; the next field to ignore has to be found here too
+assertThat(actualItems)
+    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+    .containsExactlyElementsOf(expectedItems);
+
+// ✅ GOOD - the helper owns both the ignore list and the comparison
+assertDatasetItemsInOrder(actualItems, expectedItems);
+```
+
+Each helper owns the ignore-field constant for the comparisons it covers, so those comparisons
+have exactly one declaration. Never re-declare that list locally and never import it from another
+test class: a second copy drifts silently, and the resulting failure reads like a product bug
+rather than a stale ignore list.
+
+A call site whose contract genuinely differs may still ignore a different set — but derive it from
+the shared constant rather than rebuilding the list, so the base set stays in one place:
+
+```java
+// ✅ GOOD - server generates the id, so the expected item cannot pin it
+.ignoringFields(ignoredFieldsPlus("id"))
+
+// ❌ BAD - a hand-written list that silently drifts from the shared one
+private static final String[] MY_IGNORED_FIELDS = {"id", "createdAt", /* ...9 more... */};
+```
+
+Two cases need care when consolidating. A field that one comparison ignores and another asserts is
+a real difference, not drift — folding it into the shared list quietly drops coverage, so keep the
+narrower set and assert that field explicitly where it matters. And `ignoredFieldsPlus` only fits
+where the helper's comparator semantics already apply; a call site needing a different comparison
+shape keeps its own chain.
+
+If no helper exists for the entity yet and more than one test class needs the assertion, add one
+under `api/resources/utils/` rather than hoisting a constant into a test class.
+
 These `containsExactly*` variants compare elements with the element type's own `equals`, which is
 what you want for exact-valued models. When the elements carry `BigDecimal` or `double`, the same
 exception that justifies a comparator on a single object applies per element — otherwise a

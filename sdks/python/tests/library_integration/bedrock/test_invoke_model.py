@@ -21,6 +21,7 @@ ANTHROPIC_MODEL = "us.anthropic.claude-sonnet-4-20250514-v1:0"  # Claude format 
 AMAZON_MODEL = "us.amazon.nova-pro-v1:0"  # Nova format
 META_MODEL = "us.meta.llama3-1-8b-instruct-v1:0"  # Llama format
 MISTRAL_MODEL = "us.mistral.pixtral-large-2502-v1:0"  # Mistral format
+OPENAI_MODEL = "openai.gpt-oss-20b-1:0"  # OpenAI chat completion format
 
 pytestmark = pytest.mark.usefixtures("ensure_aws_bedrock_configured")
 
@@ -648,3 +649,130 @@ def test_bedrock_invoke_model__mistral___streaming__happyflow(fake_backend):
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
+
+
+def test_bedrock_invoke_model__openai___streaming__happyflow(fake_backend):
+    """Test OpenAI (gpt-oss) streaming invoke_model_with_response_stream."""
+    client = boto3.client("bedrock-runtime", region_name="us-east-2")
+    tracked_client = track_bedrock(client)
+
+    request_body = {
+        "messages": [{"role": "user", "content": "Hello"}],
+        "max_completion_tokens": 200,
+    }
+
+    response = tracked_client.invoke_model_with_response_stream(
+        modelId=OPENAI_MODEL,
+        body=json.dumps(request_body),
+        contentType="application/json",
+        accept="application/json",
+    )
+
+    # Consume the stream
+    for _ in response["body"]:
+        pass
+
+    opik.flush_tracker()
+
+    # Native OpenAI chat completion format. ANY_DICT alone would also match the
+    # empty Claude-shaped body these streams got before they had an aggregator.
+    expected_output = {
+        "body": ANY_DICT.containing(
+            {
+                "object": "chat.completion",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": ANY_STRING},
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        )
+    }
+    expected_trace = TraceModel(
+        id=ANY_BUT_NONE,
+        name="bedrock_invoke_model_stream",
+        input={"body": request_body, "modelId": OPENAI_MODEL},
+        output=expected_output,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        tags=["bedrock", "invoke_model"],
+        metadata=ANY_DICT,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="bedrock_invoke_model_stream",
+                type="llm",
+                input={"body": request_body, "modelId": OPENAI_MODEL},
+                output=expected_output,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                tags=["bedrock", "invoke_model"],
+                metadata=ANY_DICT.containing({"created_from": "bedrock"}),
+                last_updated_at=ANY_BUT_NONE,
+                model=OPENAI_MODEL,
+                usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
+                provider="bedrock",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(expected_trace, fake_backend.trace_trees[0])
+
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.output["body"]["choices"][0]["message"]["content"]
+    assert span.usage["completion_tokens"] > 0
+
+
+def test_bedrock_invoke_model__untracked_client_read_after_tracked_call__payload_returned(
+    fake_backend,
+):
+    """Regression test for `return None` inside `finally`.
+
+    track_bedrock patches `read` on botocore's shared StreamingBody class, so
+    every response body in the process runs through the wrapper once a tracked
+    invoke_model call has been made - including bodies belonging to untracked
+    clients and to other AWS services. A `return` in `finally` overrides the
+    value returned by `try`, so an untracked read used to hand back None
+    instead of the payload.
+    """
+    request_body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 50,
+        "temperature": 0.1,
+        "messages": [{"role": "user", "content": "Hello, how are you?"}],
+    }
+
+    tracked_client = track_bedrock(
+        boto3.client("bedrock-runtime", region_name="us-east-1")
+    )
+    tracked_response = tracked_client.invoke_model(
+        modelId=ANTHROPIC_MODEL,
+        body=json.dumps(request_body),
+        contentType="application/json",
+        accept="application/json",
+    )
+    assert json.loads(tracked_response["body"].read())
+
+    untracked_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+    untracked_response = untracked_client.invoke_model(
+        modelId=ANTHROPIC_MODEL,
+        body=json.dumps(request_body),
+        contentType="application/json",
+        accept="application/json",
+    )
+
+    payload = untracked_response["body"].read()
+
+    assert payload is not None
+    assert json.loads(payload)
+
+    opik.flush_tracker()
+
+    # Only the tracked call is logged; the untracked one must not be.
+    assert len(fake_backend.trace_trees) == 1

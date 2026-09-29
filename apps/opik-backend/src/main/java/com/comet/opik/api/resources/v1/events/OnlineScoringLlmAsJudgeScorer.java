@@ -28,6 +28,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -58,8 +59,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
-import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.LLM_AS_JUDGE;
 import static com.comet.opik.infrastructure.log.LogContextAware.withMdc;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
@@ -78,7 +77,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
-    private final SpanService spanService;
     private final AgenticScoringService agenticScoringService;
     private final TraceCompressor traceCompressor;
     private final WorkspaceNameService workspaceNameService;
@@ -86,6 +84,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
     private final AttachmentService attachmentService;
+    private final DecisionScoringService decisionScoringService;
     private final LongCounter routingDecisions;
 
     @Inject
@@ -103,14 +102,14 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull WorkspaceNameService workspaceNameService,
             @NonNull OpikConfiguration opikConfiguration,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder,
-            @NonNull AttachmentService attachmentService) {
-        super(config, redisson, feedbackScoreService, traceService,
+            @NonNull AttachmentService attachmentService,
+            @NonNull DecisionScoringService decisionScoringService) {
+        super(config, redisson, feedbackScoreService, traceService, spanService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
-        this.spanService = spanService;
         this.agenticScoringService = agenticScoringService;
         this.traceCompressor = traceCompressor;
         this.workspaceNameService = workspaceNameService;
@@ -118,6 +117,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;
         this.attachmentService = attachmentService;
+        this.decisionScoringService = decisionScoringService;
         this.routingDecisions = GlobalOpenTelemetry.getMeter(ONLINE_SCORING_NAMESPACE)
                 .counterBuilder("online_scoring_agentic_routing_total")
                 .setDescription("Agentic vs inline routing decisions per evaluation, by trigger and workspace")
@@ -181,10 +181,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 UserLog.RULE_ID, message.ruleId().toString());
 
         // Spans are fetched here, in the reactive chain, only when they'll actually be consumed
-        // downstream — either to pre-seed the agentic-tools cache (provider supports tools AND
-        // experimentId branch OR size-based toggle is on) OR to substitute into a {{spans}}
-        // template variable on the inline path (sentinel: any variable mapped to the bare
-        // string "spans"). Skip the I/O otherwise. Keeping the fetch reactive and out of
+        // downstream — either to pre-seed the agentic-tools cache (provider supports tools) OR to
+        // substitute into a {{spans}} template variable on the inline path (sentinel: any variable
+        // mapped to the bare string "spans"). Skip the I/O otherwise. Keeping the fetch reactive and out of
         // evaluate() avoids the .block() pattern that pinned a workersScheduler thread for the
         // upstream wait (OPIK-6308).
         Mono<List<Span>> spansMono = shouldFetchSpans(message)
@@ -195,16 +194,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                 .put(RequestContext.USER_NAME, message.userName()))
                 : Mono.just(List.of());
 
-        // Presence of the {{trace}} variable is the declarative agentic trigger: it injects the
-        // trace structure (trace id, span ids, attachment file_names) into the prompt so the judge
-        // can call get_attachment with real ids instead of guessing. Gated by the agentic-tools
-        // toggle, same as the size-based path.
-        boolean referencesTrace = serviceTogglesConfig.isAgenticToolsEnabled()
-                && OnlineScoringEngine.templateReferencesTraceStructure(
-                        message.llmAsJudgeCode().messages(),
-                        message.llmAsJudgeCode().variables(),
-                        message.promptType());
-
         // Monitoring recorder for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
         // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then runs
         // exactly as before with no extra writes.
@@ -213,14 +202,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
                 : EvaluationRecorder.NOOP;
 
-        Mono<List<FeedbackScoreBatchItem>> scoring = spansMono
-                .flatMap(spans -> referencesTrace
-                        ? buildTraceStructure(trace, spans, message)
-                                .flatMap(structure -> evaluate(message, spans, structure.envelopeJson(),
-                                        structure.fullJson(), true, mdc, recorder))
-                        : evaluate(message, spans, null, null, false, mdc, recorder));
+        // Decisions models (Jev) have no chat, tools or structured output: one Decisions API call answers every
+        // score, so they skip the chat judge's agentic routing. Rule validation keeps {{trace}} out of their prompts.
+        boolean decisionModel = OpenRouterDecisionModel.isDecisionModel(message.llmAsJudgeCode().model().name());
+        Mono<List<FeedbackScoreBatchItem>> scoring = spansMono.flatMap(spans -> decisionModel
+                ? evaluateWithDecisionModel(message, spans, mdc, recorder)
+                : evaluateWithChatModel(message, spans, mdc, recorder));
 
         return recorder.monitor(scoring)
+                // Nothing to store when the evaluation was skipped or yielded no readable score; the skip or the
+                // response issues were already logged, so don't follow them with a success line.
+                .filter(scores -> !scores.isEmpty())
                 .flatMap(scores -> storeScores(scores, trace, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
@@ -230,6 +222,25 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                 Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
                                         .orElse(error.getMessage()))))
                 .then();
+    }
+
+    /**
+     * Scores with a chat judge. The {@code {{trace}}} variable is the declarative agentic trigger: it injects the
+     * trace structure (trace id, span ids, attachment file_names) into the prompt so the judge can call
+     * get_attachment with real ids instead of guessing.
+     */
+    private Mono<List<FeedbackScoreBatchItem>> evaluateWithChatModel(TraceToScoreLlmAsJudge message,
+            List<Span> spans, Map<String, String> mdc, EvaluationRecorder recorder) {
+        boolean referencesTrace = OnlineScoringEngine.templateReferencesTraceStructure(
+                message.llmAsJudgeCode().messages(),
+                message.llmAsJudgeCode().variables(),
+                message.promptType());
+        if (!referencesTrace) {
+            return evaluate(message, spans, null, null, false, mdc, recorder);
+        }
+        return buildTraceStructure(message.trace(), spans, message)
+                .flatMap(structure -> evaluate(message, spans, structure.envelopeJson(), structure.fullJson(), true,
+                        mdc, recorder));
     }
 
     /**
@@ -382,16 +393,83 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                 .withUserFacingNames(message.scoreNameMapping());
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "traceId", trace.id());
                         OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "traceId", trace.id());
-                        return parsed.scores().stream()
-                                .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
-                                        .categoryName(message.categoryName())
-                                        .id(trace.id())
-                                        .projectId(trace.projectId())
-                                        .projectName(trace.projectName())
-                                        .build())
-                                .toList();
+                        return toTraceScores(parsed, message);
                     }
                 });
+    }
+
+    /**
+     * Scores with a decisions model: the rendered prompt is the state and each score is a yes/no question,
+     * all answered by one call (see {@link DecisionScoringService}). Skipped with a user-facing warning when no
+     * Boolean score is left or the trace doesn't fit the model's context.
+     */
+    private Mono<List<FeedbackScoreBatchItem>> evaluateWithDecisionModel(TraceToScoreLlmAsJudge message,
+            List<Span> spans, Map<String, String> mdc, EvaluationRecorder recorder) {
+        var trace = message.trace();
+        var code = message.llmAsJudgeCode();
+        // A null from the callable (skipped evaluation) completes empty; it still emits an empty list so the
+        // monitoring recorder finalizes the evaluation, and score() stores nothing for it.
+        return Mono.fromCallable(() -> {
+            try (var _ = wrapWithMdc(mdc)) {
+                userFacingLogger.info("Evaluating with decision model traceId '{}' sampled by rule '{}'", trace.id(),
+                        message.ruleName());
+                var request = decisionScoringService.buildRequest(code.model().name(),
+                        OnlineScoringEngine.renderTraceMessages(code, trace, message.promptType(), spans, null),
+                        code.schema());
+                // Test-suite assertions key their scores as assertion_N; log the names the user configured.
+                var unsupported = DecisionScoringService.unsupportedScoreNames(code.schema()).stream()
+                        .map(name -> message.scoreNameMapping().getOrDefault(name, name))
+                        .toList();
+                if (!unsupported.isEmpty()) {
+                    userFacingLogger.warn("Skipped non-Boolean scores, decisions models only answer yes/no questions,"
+                            + " traceId '{}', scores '{}'", trace.id(), unsupported);
+                }
+                if (request.questions().isEmpty()) {
+                    return null;
+                }
+                int estimatedTokens = DecisionScoringService.estimateTokens(request,
+                        onlineScoringConfig.getAgenticToolsCharsPerToken());
+                recorder.recordPreparation(spans.size(), estimatedTokens, false);
+                if (DecisionScoringService.exceedsContext(estimatedTokens)) {
+                    userFacingLogger.warn("Skipped evaluation, the prompt is too large for the decision model,"
+                            + " traceId '{}', model '{}', estimated tokens '{}', limit '{}'", trace.id(),
+                            code.model().name(),
+                            estimatedTokens, DecisionScoringService.MAX_CONTEXT_TOKENS);
+                    return null;
+                }
+                userFacingLogger.info("Sending traceId '{}' to decision model '{}' with '{}' questions", trace.id(),
+                        code.model().name(), request.questions().size());
+                return request;
+            }
+        })
+                .subscribeOn(Schedulers.parallel())
+                .flatMap(request -> decisionScoringService
+                        .decide(request, message.workspaceId(), recorder)
+                        .map(response -> {
+                            try (var _ = wrapWithMdc(mdc)) {
+                                userFacingLogger.info("Received response from decision model for traceId '{}': '{}'",
+                                        trace.id(), DecisionScoringService.summarize(response, code.schema()));
+                                var parsed = DecisionScoringService.toFeedbackScores(response, code.schema())
+                                        .withUserFacingNames(message.scoreNameMapping());
+                                OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "traceId",
+                                        trace.id());
+                                return toTraceScores(parsed, message);
+                            }
+                        }))
+                .defaultIfEmpty(List.of());
+    }
+
+    private static List<FeedbackScoreBatchItem> toTraceScores(OnlineScoringEngine.ParsedFeedbackScores parsed,
+            TraceToScoreLlmAsJudge message) {
+        var trace = message.trace();
+        return parsed.scores().stream()
+                .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
+                        .categoryName(message.categoryName())
+                        .id(trace.id())
+                        .projectId(trace.projectId())
+                        .projectName(trace.projectName())
+                        .build())
+                .toList();
     }
 
     private PreparedEvaluation prepareEvaluation(TraceToScoreLlmAsJudge message, List<Span> spans,
@@ -522,57 +600,49 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      * Routing decision for whether to fetch the trace's spans before running the LLM call.
      * Spans are needed in two cases:
      * <ul>
-     *   <li>The agentic-tools path is possible (provider supports tools AND the experimentId
-     *       branch is on OR the size-based toggle is enabled) — spans pre-seed the read-tool
-     *       cache so the in-loop {@code get_trace_spans} call doesn't redo the fetch.
-     *   <li>The inline prompt template references {@code {{spans}}} — see
+     *   <li>The provider supports tool-calling, so the agentic-tools path is possible — spans
+     *       pre-seed the read-tool cache so the in-loop {@code get_trace_spans} call doesn't
+     *       redo the fetch.
+     *   <li>The inline prompt template references {@code {{spans}}} or {@code {{trace}}} — see
      *       {@link OnlineScoringEngine#templateReferencesSpans} for both opt-in shapes
-     *       (sentinel-valued variable AND implicit template reference). <strong>Gated by
-     *       {@code isAgenticToolsEnabled}</strong>: both pathways ship under the same flag.
+     *       (sentinel-valued variable AND implicit template reference).
      * </ul>
      *
-     * <p><strong>Toggle semantics — important and not symmetric:</strong> this method gates
-     * the {@code spanService.getByTraceIds} I/O. It does <em>not</em> gate the substitution
-     * itself — {@link OnlineScoringEngine#injectSpansIntoReplacements} runs unconditionally
-     * inside {@code prepareLlmRequest}. When the toggle is off and a rule still carries a
-     * sentinel-mapped {@code spans} variable (e.g. saved by an older FE before the toggle
-     * flipped), {@code {{spans}}} renders as the empty JSON array {@code []} via the empty
-     * spans list threaded through. We do <em>not</em> gate the substitution because doing so
-     * would let the sentinel value {@code "spans"} leak through {@code toReplacements}'
-     * literal-value fallback and render the bare word {@code spans} in the prompt — worse
-     * UX than {@code []}. Net behavior with toggle off:
-     * <ul>
-     *   <li>Existing rules with sentinel mapping → {@code Spans: []}
-     *   <li>New rules created via the FE → FE skips the auto-fill, user maps {@code spans}
-     *       like any other variable, BE renders whatever path they pick.
-     *   <li>Experiment-id (test-suite assertion) path → agentic-tools fires regardless, so
-     *       spans are still fetched and {@code {{spans}}} substitutes the actual JSON.
-     * </ul>
+     * <p><strong>Deliberately broader than {@link #shouldUseAgenticTools}</strong>, which also weighs
+     * the experimentId branch ({@link LlmAsJudgeToolsMode#shouldUseTools}), the size threshold and
+     * {@code {{trace}}}. Those cannot be consulted here: the size estimate is computed <em>from</em> the
+     * fetched spans, so the pre-fetch necessarily precedes the routing decision it feeds. Narrowing this
+     * gate to the experimentId branch would starve the two triggers that depend on the estimate — a trace
+     * over the token threshold would take the tools path with an unseeded read-tool cache.
+     *
+     * <p>This gates the {@code spanService.getByTraceIds} I/O only, not the substitution:
+     * {@link OnlineScoringEngine#injectSpansIntoReplacements} runs unconditionally inside
+     * {@code prepareLlmRequest}, so a trace whose spans were not fetched renders {@code {{spans}}}
+     * as the empty JSON array {@code []} rather than leaking the bare sentinel word {@code spans}
+     * through {@code toReplacements}' literal-value fallback.
      */
     // Package-private for unit tests.
     boolean shouldFetchSpans(TraceToScoreLlmAsJudge message) {
         String modelName = message.llmAsJudgeCode().model().name();
-        boolean agenticToolsPathPossible = agenticScoringService.supportsToolCalling(
-                llmProviderFactory.getLlmProvider(modelName))
-                && (LlmAsJudgeToolsMode.shouldUseTools(message)
-                        || serviceTogglesConfig.isAgenticToolsEnabled());
-        boolean templateNeedsSpans = serviceTogglesConfig.isAgenticToolsEnabled()
-                && (OnlineScoringEngine.templateReferencesSpans(
+        // Decisions models never take the agentic path, so only the template can need spans.
+        boolean agenticToolsPathPossible = !OpenRouterDecisionModel.isDecisionModel(modelName)
+                && agenticScoringService.supportsToolCalling(llmProviderFactory.getLlmProvider(modelName));
+        boolean templateNeedsSpans = OnlineScoringEngine.templateReferencesSpans(
+                message.llmAsJudgeCode().messages(),
+                message.llmAsJudgeCode().variables(),
+                message.promptType())
+                || OnlineScoringEngine.templateReferencesTraceStructure(
                         message.llmAsJudgeCode().messages(),
                         message.llmAsJudgeCode().variables(),
-                        message.promptType())
-                        || OnlineScoringEngine.templateReferencesTraceStructure(
-                                message.llmAsJudgeCode().messages(),
-                                message.llmAsJudgeCode().variables(),
-                                message.promptType()));
+                        message.promptType());
         return agenticToolsPathPossible || templateNeedsSpans;
     }
 
     /**
      * Routing decision for whether to attach tool specs + run the tool-call loop. Tools fire
      * when ANY of (a) the experimentId-driven branch applies (test-suite assertion), (b) the
-     * size-based branch applies (toggle on, context above threshold), or (c) the prompt references
-     * the {@code {{trace}}} skeleton variable (toggle on) — AND the provider supports tool-calling.
+     * context is above the size threshold, or (c) the prompt references the {@code {{trace}}}
+     * skeleton variable — AND the provider supports tool-calling.
      * Without the provider check, a non-tool-calling model (Ollama / Custom / OpikFree) selected
      * via {@code test_suite_model} metadata would crash inside the LangChain4j chat call when the
      * request carries {@code toolSpecifications}.
@@ -590,13 +660,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         boolean experimentIdPath = LlmAsJudgeToolsMode.shouldUseTools(message);
         boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
                 llmProviderFactory.getLlmProvider(modelName));
-        boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
-                && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
+        boolean overSizeThreshold = estimatedContextTokens >= onlineScoringConfig
+                .getAgenticToolsThresholdTokens();
         // The {{trace}} variable forces the agentic-tools path regardless of context size: the prompt
         // carries the trace skeleton (ids + attachment file_names) and the judge uses get_attachment /
-        // read to drill in. Gated by the same toggle as the size path.
-        boolean traceVariablePath = serviceTogglesConfig.isAgenticToolsEnabled() && referencesTrace;
-        boolean wantsTools = experimentIdPath || overSizeThreshold || traceVariablePath;
+        // read to drill in.
+        boolean wantsTools = experimentIdPath || overSizeThreshold || referencesTrace;
         boolean useTools = wantsTools && providerSupportsTools;
 
         if (experimentIdPath && !providerSupportsTools) {
@@ -615,7 +684,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             userFacingLogger.info(
                     "Trace context exceeds '{}' tokens; switching to agentic-tools mode for traceId '{}'",
                     onlineScoringConfig.getAgenticToolsThresholdTokens(), message.trace().id());
-        } else if (!experimentIdPath && !overSizeThreshold && traceVariablePath && !providerSupportsTools) {
+        } else if (!experimentIdPath && !overSizeThreshold && referencesTrace && !providerSupportsTools) {
             // Surface to the user: their prompt references {{trace}} (so they expect tool-driven
             // inspection of the trace skeleton / attachments) but the chosen model's provider can't
             // call tools — an actionable misconfiguration, unlike the purely-internal routing
@@ -626,12 +695,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             + " skeleton or load attachments. Pick a tool-calling provider"
                             + " (OpenAI / Anthropic / Gemini / OpenRouter / Vertex / Bedrock).",
                     message.trace().id(), modelName);
-        } else if (!experimentIdPath && !overSizeThreshold && traceVariablePath && useTools) {
-            log.debug("Trace '{}' rule references {{trace}}; switching to agentic-tools mode",
-                    message.trace().id());
+        } else if (!experimentIdPath && !overSizeThreshold && referencesTrace && useTools) {
+            log.debug("Agentic tools routing: rule references {{trace}}; switching to agentic-tools mode."
+                    + " traceId='{}'", message.trace().id());
         }
 
-        recordRoutingDecision(message, useTools, experimentIdPath, overSizeThreshold, traceVariablePath);
+        recordRoutingDecision(message, useTools, experimentIdPath, overSizeThreshold, referencesTrace);
         return useTools;
     }
 

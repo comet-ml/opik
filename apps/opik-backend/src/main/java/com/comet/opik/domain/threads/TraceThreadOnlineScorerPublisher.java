@@ -49,15 +49,15 @@ class TraceThreadOnlineScorerPublisher {
                         Set<String> threadIds = ruleIdToThreadIds.getValue();
 
                         log.info(
-                                "Enqueuing threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
-                                threadIds, ruleId, projectId, workspaceId);
+                                "Enqueuing trace threads: count='{}' ruleId='{}' projectId='{}' workspaceId='{}'",
+                                threadIds.size(), ruleId, projectId, workspaceId);
 
                         // Composed into the deferContextual chain so the enqueue inherits this workspace context.
                         return onlineScorePublisher.enqueueThreadMessage(List.copyOf(threadIds), ruleId, projectId,
                                 workspaceId, userName)
                                 .doOnSuccess(unused -> log.info(
-                                        "Enqueued threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
-                                        threadIds, ruleId, projectId, workspaceId));
+                                        "Enqueued trace threads: count='{}' ruleId='{}' projectId='{}' workspaceId='{}'",
+                                        threadIds.size(), ruleId, projectId, workspaceId));
                     })
                     .then();
         });

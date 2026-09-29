@@ -9,6 +9,7 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScore
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceSearchStreamRequest;
@@ -72,6 +73,7 @@ import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -4422,6 +4424,56 @@ class GetTracesByProjectResourceTest {
             }
         }
 
+        /**
+         * The cursor is whatever id the previous page ended on, so it can carry a far-future timestamp: a UUIDv7 minted
+         * by a broken clock (litellm BerriAI/litellm#31294) sorts above every real id, so it comes back first under
+         * {@code ORDER BY id DESC} and becomes the cursor for page two.
+         *
+         * <p>Each id-range bound in the read path carries a parallel week-start bound on {@code id_at}, a pruning hint
+         * that must never exclude a row the id-range admits. When that bound was {@code toMonday} it broke exactly here
+         * (OPIK-7456): {@code toMonday} returns a 16-bit {@code Date} that wraps past 2149, so a far-future cursor
+         * folded into a past week and every ordinary trace — whose week is later — failed {@code <=}. The page came
+         * back empty and pagination stopped dead.
+         *
+         * <p>No far-future trace is needed to reach it, which is why this belongs here rather than in a schema-level
+         * suite: {@code lastRetrievedId} is an unvalidated cursor on the request, so passing one is enough, and
+         * ingestion — which would reject such an id — is not involved. Asserts every seeded trace still streams back.
+         */
+        @Test
+        void whenStreamCursorCarriesAFarFutureTimestamp__thenTracesAreStillReturned() {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Sorts above every seeded id, so `id < :cursor` admits all of them and only the week bound can drop them.
+            var farFutureCursor = idGenerator.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .lastRetrievedId(farFutureCursor)
+                            .limit(traces.size())
+                            .build());
+
+            var expectedTraces = traces.stream()
+                    .sorted(Comparator.comparing(Trace::id).reversed())
+                    .toList();
+
+            TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
+        }
+
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
         void whenFilterByVisibilityScoreEqual__thenReturnTracesFiltered(boolean stream) {
@@ -5061,6 +5113,210 @@ class GetTracesByProjectResourceTest {
             var returnedTrace = actualPage.content().getFirst();
             assertThat(returnedTrace.name()).isEqualTo("AAA-updated-name");
             assertThat(returnedTrace.input()).isEqualTo(updatedInput);
+        }
+
+        @Test
+        void getTracesByProject__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var scenario = createTraceWithUpdatedSpan(projectName, apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, List.of(), List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(actualPage.content(), List.of(scenario.expectedTrace()), USER);
+            assertLatestSpanVersionAggregates(actualPage.content().getFirst(), scenario.latestSpan());
+        }
+
+        @Test
+        void getTracesByProject__whenSpanReinsertedWithDifferentParent__thenAggregatesCountItOnce() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Batch create skips the parent-mismatch check, so both versions land. The live sorting key still
+            // holds parent_span_id: FINAL keeps both rows and sums them, the id dedup keeps only the latest.
+            var staleSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(idGenerator.generateId())
+                    .type(SpanType.llm)
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(randomCost(0, 1))
+                    .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.MINUTES))
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
+            var latestSpan = staleSpan.toBuilder()
+                    .parentSpanId(idGenerator.generateId())
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(randomCost(1, 2))
+                    .lastUpdatedAt(Instant.now())
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(staleSpan), apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(List.of(latestSpan), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, List.of(), List.of(), 10, Map.of());
+
+            var expectedTrace = trace.toBuilder()
+                    .usage(toLongUsage(latestSpan.usage()))
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                            trace.endTime()))
+                    .build();
+            TraceAssertions.assertTraces(actualPage.content(), List.of(expectedTrace), USER);
+            assertLatestSpanVersionAggregates(actualPage.content().getFirst(), latestSpan);
+        }
+
+        private Stream<Arguments> searchStreamSpanUpdateFilters() {
+            return Stream.of(
+                    // No aggregate filter: aggregates are keyed on the page ids
+                    arguments(Named.of("no filter", (Function<SpanUpdateScenario, List<TraceFilter>>) s -> List.of())),
+                    // Aggregate filters select the page, so the other spans_deduped branches run
+                    arguments(Named.of("cost above the stale version",
+                            (Function<SpanUpdateScenario, List<TraceFilter>>) s -> List
+                                    .of(costFilter(Operator.GREATER_THAN, s)))));
+        }
+
+        /** Between the stale and the latest cost, so only one of the two versions can satisfy it. */
+        private TraceFilter costFilter(Operator operator, SpanUpdateScenario scenario) {
+            var midpoint = scenario.staleCost().add(scenario.latestSpan().totalEstimatedCost())
+                    .divide(BigDecimal.TWO, RoundingMode.HALF_UP);
+            return TraceFilter.builder()
+                    .field(TraceField.TOTAL_ESTIMATED_COST)
+                    .operator(operator)
+                    .value(midpoint.toPlainString())
+                    .build();
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("searchStreamSpanUpdateFilters")
+        void searchTracesStream__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly(
+                Function<SpanUpdateScenario, List<TraceFilter>> filters) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var scenario = createTraceWithUpdatedSpan(projectName, apiKey, workspaceName);
+
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .filters(filters.apply(scenario))
+                            .truncate(false)
+                            .build());
+
+            TraceAssertions.assertTraces(actualTraces, List.of(scenario.expectedTrace()), USER);
+            assertLatestSpanVersionAggregates(actualTraces.getFirst(), scenario.latestSpan());
+        }
+
+        @Test
+        void searchTracesStream__whenFilterMatchesStaleSpanVersionOnly__thenReturnNoTraces() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var scenario = createTraceWithUpdatedSpan(projectName, apiKey, workspaceName);
+
+            // Only the stale version's cost is below the midpoint
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .filters(List.of(costFilter(Operator.LESS_THAN, scenario)))
+                            .build());
+
+            assertThat(actualTraces).isEmpty();
+        }
+
+        /** A trace whose one span was updated: the latest version is what the aggregates must reflect. */
+        private record SpanUpdateScenario(Trace expectedTrace, Span latestSpan, BigDecimal staleCost) {
+        }
+
+        private SpanUpdateScenario createTraceWithUpdatedSpan(String projectName, String apiKey,
+                String workspaceName) {
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Stale cost below the latest by construction, so a cost filter can tell the two versions apart
+            var staleCost = randomCost(0, 1);
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(null)
+                    .type(SpanType.llm)
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(staleCost)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            // The update writes a second row version; the aggregates must dedup it without FINAL
+            var latestSpan = span.toBuilder()
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(staleCost.add(randomCost(1, 2)))
+                    .build();
+            spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .provider(latestSpan.provider())
+                    .usage(latestSpan.usage())
+                    .totalEstimatedCost(latestSpan.totalEstimatedCost())
+                    .build(), apiKey, workspaceName);
+
+            var expectedTrace = trace.toBuilder()
+                    .usage(toLongUsage(latestSpan.usage()))
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                            trace.endTime()))
+                    .build();
+            return new SpanUpdateScenario(expectedTrace, latestSpan, staleCost);
+        }
+
+        private Map<String, Integer> randomUsage() {
+            return Map.of(RandomStringUtils.secure().nextAlphanumeric(10), RandomUtils.secure().randomInt(1, 10_000));
+        }
+
+        private BigDecimal randomCost(double fromInclusive, double toExclusive) {
+            return BigDecimal.valueOf(RandomUtils.secure().randomDouble(fromInclusive, toExclusive))
+                    .setScale(6, RoundingMode.HALF_UP)
+                    .max(new BigDecimal("0.000001"));
+        }
+
+        private Map<String, Long> toLongUsage(Map<String, Integer> usage) {
+            return usage.entrySet().stream().collect(toMap(Map.Entry::getKey, e -> e.getValue().longValue()));
+        }
+
+        private void assertLatestSpanVersionAggregates(Trace actual, Span latestSpan) {
+            assertThat(actual.usage()).isEqualTo(toLongUsage(latestSpan.usage()));
+            assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(latestSpan.totalEstimatedCost());
+            assertThat(actual.spanCount()).isEqualTo(1);
+            assertThat(actual.llmSpanCount()).isEqualTo(1);
+            assertThat(actual.providers()).containsExactly(latestSpan.provider());
         }
 
         @ParameterizedTest

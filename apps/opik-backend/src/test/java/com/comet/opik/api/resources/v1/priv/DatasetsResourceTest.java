@@ -144,7 +144,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -181,6 +180,9 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZE
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItem;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.ignoredFieldsPlus;
 import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -216,8 +218,6 @@ class DatasetsResourceTest {
 
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments", "projectName", "traceMetadata"};
-    public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
-            "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId", "runSummariesByExperiment"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "projectName", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
             "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount",
@@ -2042,6 +2042,137 @@ class DatasetsResourceTest {
                 .status(ExperimentStatus.RUNNING)
                 .build();
         return experimentResourceClient.create(experiment, apiKey, workspaceName);
+    }
+
+    @Nested
+    @DisplayName("Experiment Summary Enrichment:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ExperimentSummaryEnrichment {
+
+        private UUID createExperimentWithItems(Dataset dataset, int itemCount, String apiKey, String workspaceName) {
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            var experimentItems = IntStream.range(0, itemCount)
+                    .mapToObj(i -> {
+                        var trace = factory.manufacturePojo(Trace.class);
+                        createTrace(trace, apiKey, workspaceName);
+                        return factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                                .experimentId(experimentId)
+                                .traceId(trace.id())
+                                .build();
+                    })
+                    .collect(toUnmodifiableSet());
+
+            createAndAssert(ExperimentItemsBatch.builder().experimentItems(experimentItems).build(), apiKey,
+                    workspaceName);
+
+            return experimentId;
+        }
+
+        private Map<String, Dataset> getDatasetsByName(String workspaceName, String apiKey) {
+            return datasetResourceClient.getDatasets(workspaceName, apiKey).content().stream()
+                    .collect(toMap(Dataset::name, Function.identity()));
+        }
+
+        @Test
+        @DisplayName("when dataset has experiments spread across many experiment ids, then count every experiment")
+        void experimentSummary__whenExperimentsSpreadAcrossManyIds__thenCountEveryExperiment() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var dataset = buildDataset();
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            int experimentCount = 12;
+            Instant beforeCreateExperimentItems = Instant.now();
+            IntStream.range(0, experimentCount)
+                    .forEach(i -> createExperimentWithItems(dataset, 2, apiKey, workspaceName));
+
+            var actualDataset = getDatasetsByName(workspaceName, apiKey).get(dataset.name());
+
+            assertThat(actualDataset.experimentCount()).isEqualTo(experimentCount);
+            assertThat(actualDataset.mostRecentExperimentAt()).isAfter(beforeCreateExperimentItems);
+        }
+
+        @Test
+        @DisplayName("when workspace experiments belong to other datasets, then dataset without experiments stays empty")
+        void experimentSummary__whenExperimentsBelongToOtherDatasets__thenDatasetWithoutExperimentsStaysEmpty() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var busyDataset = buildDataset();
+            createAndAssert(busyDataset, apiKey, workspaceName);
+            IntStream.range(0, 5).forEach(i -> createExperimentWithItems(busyDataset, 4, apiKey, workspaceName));
+
+            var emptyDataset = buildDataset();
+            createAndAssert(emptyDataset, apiKey, workspaceName);
+
+            var datasetsByName = getDatasetsByName(workspaceName, apiKey);
+
+            assertThat(datasetsByName.get(emptyDataset.name()).experimentCount()).isZero();
+            assertThat(datasetsByName.get(emptyDataset.name()).mostRecentExperimentAt()).isNull();
+            assertThat(datasetsByName.get(busyDataset.name()).experimentCount()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("when batch mixes datasets with and without experiments, then each gets its own summary")
+        void experimentSummary__whenBatchMixesDatasetsWithAndWithoutExperiments__thenEachGetsItsOwnSummary() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetWithThree = buildDataset();
+            createAndAssert(datasetWithThree, apiKey, workspaceName);
+            IntStream.range(0, 3).forEach(i -> createExperimentWithItems(datasetWithThree, 2, apiKey, workspaceName));
+
+            var datasetWithOne = buildDataset();
+            createAndAssert(datasetWithOne, apiKey, workspaceName);
+            createExperimentWithItems(datasetWithOne, 1, apiKey, workspaceName);
+
+            var datasetWithNone = buildDataset();
+            createAndAssert(datasetWithNone, apiKey, workspaceName);
+
+            var datasetsByName = getDatasetsByName(workspaceName, apiKey);
+
+            assertThat(datasetsByName.get(datasetWithThree.name()).experimentCount()).isEqualTo(3);
+            assertThat(datasetsByName.get(datasetWithOne.name()).experimentCount()).isEqualTo(1);
+            assertThat(datasetsByName.get(datasetWithNone.name()).experimentCount()).isZero();
+            assertThat(datasetsByName.get(datasetWithNone.name()).mostRecentExperimentAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("when another workspace has experiments for a same-named dataset, then counts stay isolated")
+        void experimentSummary__whenAnotherWorkspaceHasExperiments__thenCountsStayIsolated() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String otherWorkspaceName = UUID.randomUUID().toString();
+            String otherApiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(otherApiKey, otherWorkspaceName, UUID.randomUUID().toString());
+
+            String sharedDatasetName = "shared-dataset-" + UUID.randomUUID();
+
+            var dataset = buildDataset().toBuilder().name(sharedDatasetName).build();
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            var otherDataset = buildDataset().toBuilder().name(sharedDatasetName).build();
+            createAndAssert(otherDataset, otherApiKey, otherWorkspaceName);
+
+            IntStream.range(0, 4)
+                    .forEach(i -> createExperimentWithItems(otherDataset, 3, otherApiKey, otherWorkspaceName));
+
+            var actualDataset = getDatasetsByName(workspaceName, apiKey).get(sharedDatasetName);
+
+            assertThat(actualDataset.experimentCount()).isZero();
+            assertThat(actualDataset.mostRecentExperimentAt()).isNull();
+
+            var actualOtherDataset = getDatasetsByName(otherWorkspaceName, otherApiKey).get(sharedDatasetName);
+
+            assertThat(actualOtherDataset.experimentCount()).isEqualTo(4);
+        }
     }
 
     @Nested
@@ -4731,9 +4862,7 @@ class DatasetsResourceTest {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
         assertThat(actualEntity.id()).isEqualTo(expectedDatasetItem.id());
-        assertThat(actualEntity).usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
-                .isEqualTo(expectedDatasetItem);
+        assertDatasetItem(actualEntity, expectedDatasetItem);
 
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
@@ -6463,11 +6592,8 @@ class DatasetsResourceTest {
 
     private void assertPage(List<DatasetItem> expectedItems, List<DatasetItem> actualItems) {
 
-        List<String> ignoredFields = new ArrayList<>(Arrays.asList(IGNORED_FIELDS_DATA_ITEM));
-        ignoredFields.add("data");
-
         assertThat(actualItems)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredFields.toArray(String[]::new))
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredFieldsPlus("data"))
                 .isEqualTo(expectedItems);
 
         assertThat(actualItems).hasSize(expectedItems.size());
@@ -7366,6 +7492,102 @@ class DatasetsResourceTest {
             // Verify the experiment items are properly associated using assertion helper
             assertDatasetItemExperiments(actualPage, List.of(expectedDatasetItem),
                     List.of(expectedExperimentItemWithActualDuration));
+        }
+
+        /**
+         * Pins where the target projects come from: the traces, not the denormalized
+         * {@code experiment_items.project_id}. Reading them off the experiment item loses the project of any
+         * item written before its trace existed, and the compare view then returns that item with no trace
+         * data at all instead of failing.
+         */
+        @Test
+        void find__whenExperimentItemHasNoProjectId__thenTraceDataIsResolvedFromTheTrace() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).subList(0, 2);
+            putAndAssert(DatasetItemBatch.builder().items(datasetItems).datasetId(datasetId).build(), workspaceName,
+                    apiKey);
+
+            // This trace exists when its experiment item is written, so the item carries its project_id.
+            var existingTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphabetic(20))
+                    .build();
+            createAndAssert(existingTrace, workspaceName, apiKey);
+
+            // This one is written afterwards, and into another project, so its experiment item ends up with no
+            // project_id of its own.
+            var lateTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphabetic(20))
+                    .build();
+
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            var experimentItems = Set.of(
+                    buildExperimentItem(experimentId, datasetItems.getFirst(), existingTrace),
+                    buildExperimentItem(experimentId, datasetItems.getLast(), lateTrace));
+
+            createAndAssert(ExperimentItemsBatch.builder().experimentItems(experimentItems).build(), apiKey,
+                    workspaceName);
+
+            createAndAssert(lateTrace, workspaceName, apiKey);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(datasetId,
+                    List.of(experimentId), apiKey, workspaceName);
+
+            // The page comes back ordered by id descending, so line the expectations up the same way.
+            var expectedByItemId = Map.of(
+                    datasetItems.getFirst().id(), expectedFrom(experimentItems, datasetItems.getFirst(),
+                            existingTrace, actualPage),
+                    datasetItems.getLast().id(), expectedFrom(experimentItems, datasetItems.getLast(),
+                            lateTrace, actualPage));
+            var expectedDatasetItems = actualPage.content().stream()
+                    .map(item -> datasetItems.stream().filter(di -> di.id().equals(item.id())).findFirst()
+                            .orElseThrow())
+                    .toList();
+
+            assertDatasetItemExperiments(actualPage, expectedDatasetItems,
+                    expectedDatasetItems.stream().map(di -> expectedByItemId.get(di.id())).toList());
+        }
+
+        /**
+         * The experiment item as the API returns it: the one the fixture wrote, with the trace data the read
+         * resolves onto it. Duration is taken from the response because it is computed from the trace's
+         * timestamps rather than stored.
+         */
+        private ExperimentItem expectedFrom(Set<ExperimentItem> written, DatasetItem datasetItem, Trace trace,
+                DatasetItemPage actualPage) {
+            var item = written.stream().filter(ei -> ei.datasetItemId().equals(datasetItem.id())).findFirst()
+                    .orElseThrow();
+            var actual = actualPage.content().stream().filter(di -> di.id().equals(datasetItem.id())).findFirst()
+                    .orElseThrow().experimentItems().getFirst();
+            return item.toBuilder()
+                    .input(trace.input())
+                    .output(trace.output())
+                    .duration(actual.duration())
+                    .totalEstimatedCost(actual.totalEstimatedCost())
+                    .usage(actual.usage())
+                    .traceVisibilityMode(actual.traceVisibilityMode())
+                    .build();
+        }
+
+        private ExperimentItem buildExperimentItem(UUID experimentId, DatasetItem datasetItem, Trace trace) {
+            return factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .id(GENERATOR.generate())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .experimentId(experimentId)
+                    .traceVisibilityMode(VisibilityMode.DEFAULT)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
         }
 
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
@@ -8937,9 +9159,7 @@ class DatasetsResourceTest {
 
             // Compare the whole DatasetItem objects, in order - not just their ids - so the assertion proves
             // the bound key actually drives the ordering. Volatile/derived fields are ignored per suite convention.
-            assertThat(actualItems)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactlyElementsOf(expectedItems);
+            assertDatasetItemsInOrder(actualItems, expectedItems);
         }
 
         private List<DatasetItem> fetchDatasetItems(UUID datasetId, String experimentIdsParam, String sortField,

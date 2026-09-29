@@ -14,6 +14,9 @@ public final class GenAIMappingRules {
 
     public static final String SOURCE = "GenAI";
 
+    /** Current semantic-convention provider attribute; replaced the deprecated {@code gen_ai.system}. */
+    public static final String PROVIDER_NAME_ATTR = "gen_ai.provider.name";
+
     private static final List<OpenTelemetryMappingRule> RULES = List.of(
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.prompt").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
@@ -45,6 +48,19 @@ public final class GenAIMappingRules {
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.system").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.PROVIDER)
                     .spanType(SpanType.llm).build(),
+            // Replacement for the deprecated `gen_ai.system`. Instrumentations migrating to the
+            // current semconv emit this one (and often both). OpenTelemetryMapper keeps
+            // `gen_ai.system` authoritative when present; see PROVIDER_NAME_ATTR there.
+            //
+            // Deliberately carries no spanType, unlike `gen_ai.system`: the current semconv defines
+            // this attribute on `execute_tool` and `invoke_agent` spans as well as inference spans.
+            // enrichSpanWithAttributes applies spanType unconditionally as it walks the attributes,
+            // so claiming `llm` here would retype a fully-migrated `execute_tool` span (one emitting
+            // no `gen_ai.system`) as an LLM call. Inference spans still type themselves `llm` via
+            // their model/usage attributes.
+            OpenTelemetryMappingRule.builder()
+                    .rule(PROVIDER_NAME_ATTR).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.PROVIDER)
+                    .build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.usage.cost").source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.COST).spanType(SpanType.llm).build(),

@@ -19,6 +19,28 @@ export const SCREEN_ACCESS_CHECKS: ScreenAccessCheck[] = [
   { name: 'Alerts', path: (id) => `/projects/${id}/alerts` },
 ];
 
+/**
+ * Block until the authenticated app shell has rendered.
+ *
+ * Every check below navigates with `page.goto`, which reboots the SPA — bundle,
+ * auth, workspace resolution — before the route's own content can render. That
+ * cost lands inside the following assertion's budget, and on a slow night it
+ * spends the whole of it: the create-control sweep failed on a different screen
+ * on consecutive nightlies (Prompts, then Alerts) for no other reason.
+ *
+ * It also fixes a false pass, which is the more important half. Both sweeps have
+ * an absent/blocked case asserting something is NOT visible, and that holds
+ * trivially against a page that has not rendered yet — so without this gate a
+ * role granted too much access could read as correctly restricted.
+ *
+ * `<main>` is the layout's own landmark and sits inside the workspace guard, so
+ * it appears only once the shell is past auth. It does not wait for the route
+ * body; the assertion that follows does that, now with its full budget.
+ */
+async function waitForAppShell(member: WorkspaceRoleMember): Promise<void> {
+  await member.page.getByRole('main').waitFor({ state: 'visible' });
+}
+
 export async function checkScreenAccess(
   member: WorkspaceRoleMember,
   workspaceName: string,
@@ -29,6 +51,7 @@ export async function checkScreenAccess(
   return test.step(`${check.name}: ${expectedAccessible ? 'accessible' : 'blocked'}`, async () => {
     const env = loadEnvConfig();
     await member.page.goto(`${env.baseUrl}/${workspaceName}${check.path(projectId)}`);
+    await waitForAppShell(member);
     const deniedHeading = member.page.getByRole('heading', { name: 'Access denied' });
     if (expectedAccessible) {
       await expect.soft(deniedHeading).toBeHidden();
@@ -64,6 +87,7 @@ export async function checkCreateControlVisibility(
   return test.step(`${check.name}: create control ${expectedVisible ? 'visible' : 'absent'}`, async () => {
     const env = loadEnvConfig();
     await member.page.goto(`${env.baseUrl}/${workspaceName}${check.path(projectId)}`);
+    await waitForAppShell(member);
     const button = member.page.getByRole('button', { name: check.buttonName });
     if (expectedVisible) {
       await expect.soft(button.first()).toBeVisible();

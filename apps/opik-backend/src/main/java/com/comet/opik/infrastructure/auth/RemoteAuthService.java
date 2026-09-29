@@ -2,17 +2,23 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.WorkspaceUserPermissions;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.usagelimit.Quota;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -21,17 +27,23 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.Builder;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
@@ -39,7 +51,6 @@ import static com.comet.opik.api.ReactServiceErrorResponse.NOT_ALLOWED_TO_ACCESS
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_QUERY_PARAM;
 
-@RequiredArgsConstructor
 @Slf4j
 class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
@@ -51,6 +62,11 @@ class RemoteAuthService implements AuthService {
     // GenericType instances are thread-safe and expensive to build, so reuse a single instance.
     private static final GenericType<List<WorkspaceIdNameResponse>> WORKSPACE_LIST_TYPE = new GenericType<>() {
     };
+
+    // Cost Intelligence workspaces are named __ai_spend_{orgId}__ / __cc_{orgId}__. A user may technically belong to
+    // one, but it must never be targetable from an agent. Mirrors AI_SPEND_WORKSPACE_PATTERN in the frontend's
+    // plugins/comet/lib/aiSpend.ts, which hides the same workspaces from the workspace selector.
+    private static final Pattern INTERNAL_WORKSPACE_NAME = Pattern.compile("^__(?:ai_spend|cc)_.+__$");
 
     private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = new HashMap<>() {
         {
@@ -88,9 +104,53 @@ class RemoteAuthService implements AuthService {
     };
 
     private final @NonNull Client client;
+    private final @NonNull RetriableHttpClient retriableHttpClient;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
+    private final Duration requestTimeout;
+
+    /**
+     * Built once in the constructor. {@link Retry} is immutable and its inputs are fixed
+     * configuration, so there is nothing to defer and nothing to synchronise: a final field
+     * assigned during construction is safely published to every thread.
+     */
+    private final Retry retryPolicy;
+
+    private final @NonNull WorkspacePermissionsService workspacePermissionsService;
+
+    /**
+     * Whether the caller's workspace permissions are resolved at all.
+     * <p>
+     * Only read-time redaction needs them, and resolving them costs a call on the path every Opik request
+     * takes. So it happens only where something acts on the answer; with the feature off no permission lookup
+     * is made and the authentication call is exactly what it was before.
+     */
+    private final boolean resolvePermissions;
+
+    RemoteAuthService(@NonNull Client client,
+            @NonNull RetriableHttpClient retriableHttpClient,
+            @NonNull AuthenticationConfig.UrlConfig reactServiceUrl,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull CacheService cacheService,
+            Duration requestTimeout,
+            int requestMaxRetries,
+            @NonNull Duration requestRetryMinBackoff,
+            @NonNull Duration requestRetryMaxBackoff,
+            @NonNull WorkspacePermissionsService workspacePermissionsService,
+            boolean resolvePermissions) {
+        this.client = client;
+        this.retriableHttpClient = retriableHttpClient;
+        this.reactServiceUrl = reactServiceUrl;
+        this.requestContext = requestContext;
+        this.cacheService = cacheService;
+        this.requestTimeout = requestTimeout;
+        this.workspacePermissionsService = workspacePermissionsService;
+        this.resolvePermissions = resolvePermissions;
+        // The retry inputs are only ever needed to build this, so they are not kept as fields.
+        this.retryPolicy = RetryUtils.handleHttpErrors(requestMaxRetries, requestRetryMinBackoff,
+                requestRetryMaxBackoff);
+    }
 
     @Builder(toBuilder = true)
     record AuthRequest(String workspaceName, String path,
@@ -99,12 +159,12 @@ class RemoteAuthService implements AuthService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     @Builder(toBuilder = true)
-    record AuthResponse(
-            String user, String workspaceId, String workspaceName, List<Quota> quotas) {
+    record AuthResponse(String user, String workspaceId, String workspaceName, List<Quota> quotas) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record WorkspaceIdNameResponse(String workspaceId, String workspaceName) {
+    record WorkspaceIdNameResponse(String workspaceId, String workspaceName,
+            @JsonProperty("default") boolean isDefault) {
     }
 
     @Builder(toBuilder = true)
@@ -113,15 +173,17 @@ class RemoteAuthService implements AuthService {
             String userName,
             String workspaceId,
             String workspaceName,
-            List<Quota> quotas) {
+            List<Quota> quotas,
+            List<String> permissions) {
 
-        static ValidatedAuthCredentials from(AuthResponse authResponse) {
+        static ValidatedAuthCredentials from(AuthResponse authResponse, List<String> permissions) {
             return ValidatedAuthCredentials.builder()
                     .shouldCache(true)
                     .userName(authResponse.user())
                     .workspaceId(authResponse.workspaceId())
                     .workspaceName(authResponse.workspaceName())
                     .quotas(authResponse.quotas())
+                    .permissions(permissions)
                     .build();
         }
 
@@ -132,6 +194,7 @@ class RemoteAuthService implements AuthService {
                     .workspaceId(authCredentials.workspaceId())
                     .workspaceName(authCredentials.workspaceName())
                     .quotas(authCredentials.quotas())
+                    .permissions(authCredentials.permissions())
                     .build();
         }
 
@@ -141,6 +204,7 @@ class RemoteAuthService implements AuthService {
                     .workspaceId(workspaceId)
                     .workspaceName(workspaceName)
                     .quotas(quotas)
+                    .permissions(permissions)
                     .build();
         }
     }
@@ -203,10 +267,11 @@ class RemoteAuthService implements AuthService {
                 throw toSessionAuthException(response);
             }
             return response.readEntity(WORKSPACE_LIST_TYPE).stream()
-                    .filter(workspace -> !isDefaultWorkspace(workspace.workspaceName()))
+                    .filter(workspace -> isEligibleWorkspace(workspace.workspaceName()))
                     .map(workspace -> WorkspaceInfo.builder()
                             .id(workspace.workspaceId())
                             .name(workspace.workspaceName())
+                            .isDefault(workspace.isDefault())
                             .build())
                     .toList();
         }
@@ -215,47 +280,39 @@ class RemoteAuthService implements AuthService {
     @Override
     public void authorizeOAuth(@NonNull ValidatedToken token, @NonNull ContextInfoHolder contextInfo) {
         String path = contextInfo.uriInfo().getRequestUri().getPath();
-        try (var response = client.target(URI.create(reactServiceUrl.url()))
-                .path("opik")
-                .path("auth-by-username")
-                .request()
-                .accept(MediaType.APPLICATION_JSON)
-                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                .acceptEncoding("identity")
-                .header(OAUTH_USERNAME_HEADER, token.userName())
-                .post(Entity.json(AuthRequest.builder()
+        var credentials = authPost("auth-by-username",
+                builder -> builder.header(OAUTH_USERNAME_HEADER, token.userName()),
+                AuthRequest.builder()
                         .workspaceName(token.workspaceName())
                         .path(path)
                         .requiredPermissions(contextInfo.requiredPermissions())
-                        .build()))) {
-            var authResponse = verifyResponse(response);
-            var credentials = ValidatedAuthCredentials.from(authResponse);
-            setCredentialIntoContext(credentials, token.workspaceName(), null);
-        }
+                        .build(),
+                response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
+                        () -> workspacePermissionsService.getPermissionsByUsername(token.userName(),
+                                token.workspaceName()))));
+        setCredentialIntoContext(credentials, token.workspaceName(), null);
     }
 
     @Override
-    public UserWorkspace authorizeWorkspace(Cookie sessionToken, @NonNull String workspaceName) {
+    public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
         requireSession(sessionToken);
-        if (isDefaultWorkspace(workspaceName)) {
+        // Mirrors the filtering applied when listing: hiding a workspace from the consent screen is cosmetic unless a
+        // hand-crafted consent submission naming it is rejected too. The name comes straight from the consent form and
+        // may be absent, so it is not @NonNull: a missing name is just another ineligible one and must yield the same 403.
+        if (!isEligibleWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        try (var response = client.target(URI.create(reactServiceUrl.url()))
-                .path("opik")
-                .path("auth-session")
-                .request()
-                .accept(MediaType.APPLICATION_JSON)
-                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                .acceptEncoding("identity")
-                .cookie(sessionToken)
-                .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build()))) {
-            var authResponse = verifyResponse(response);
-            return UserWorkspace.builder()
-                    .userName(authResponse.user())
-                    .workspaceId(authResponse.workspaceId())
-                    .workspaceName(authResponse.workspaceName())
-                    .build();
-        }
+        return authPost("auth-session",
+                builder -> builder.cookie(sessionToken),
+                AuthRequest.builder().workspaceName(workspaceName).build(),
+                response -> {
+                    var authResponse = verifyResponse(response);
+                    return UserWorkspace.builder()
+                            .userName(authResponse.user())
+                            .workspaceId(authResponse.workspaceId())
+                            .workspaceName(authResponse.workspaceName())
+                            .build();
+                });
     }
 
     private void requireSession(Cookie sessionToken) {
@@ -299,6 +356,34 @@ class RemoteAuthService implements AuthService {
             log.warn("Failed to read remote response body for debugging", e);
             return "";
         }
+    }
+
+    /**
+     * Returns the message from EM's own JSON error envelope, or {@code null} when the response is not one — an
+     * HTML or empty body from a proxy, an ingress 404, anything that did not come from EM. Callers use the null to
+     * tell "EM answered" apart from "something else answered", which for a 404 is the difference between an
+     * entitlement decision and a misconfiguration. Safe to call twice: {@code isEntityReadable} buffers.
+     */
+    private static String emErrorMessage(Response response) {
+        if (!isEntityReadable(response) || !isJson(response.getMediaType())) {
+            return null;
+        }
+        try {
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            return errorResponse == null || StringUtils.isBlank(errorResponse.msg())
+                    ? null
+                    : errorResponse.msg().strip();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Collapses line breaks so upstream-controlled text cannot forge extra records in a log that is read
+     * line by line. The value is already bounded — it is a parsed field, not the raw body.
+     */
+    private static String singleLine(String value) {
+        return value == null ? "" : value.replaceAll("[\\r\\n]+", " ");
     }
 
     /**
@@ -388,23 +473,17 @@ class RemoteAuthService implements AuthService {
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        try (var response = client.target(URI.create(reactServiceUrl.url()))
-                .path("opik")
-                .path("auth-session")
-                .request()
-                .accept(MediaType.APPLICATION_JSON)
-                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                .acceptEncoding("identity")
-                .cookie(sessionToken)
-                .post(Entity.json(AuthRequest.builder()
+        var credentials = authPost("auth-session",
+                builder -> builder.cookie(sessionToken),
+                AuthRequest.builder()
                         .workspaceName(workspaceName)
                         .path(path)
                         .requiredPermissions(requiredPermissions)
-                        .build()))) {
-            var authResponse = verifyResponse(response);
-            var credentials = ValidatedAuthCredentials.from(authResponse);
-            setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
-        }
+                        .build(),
+                response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
+                        () -> workspacePermissionsService.getPermissionsBySession(sessionToken.getValue(),
+                                workspaceName))));
+        setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
     }
 
     private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName, String path,
@@ -428,25 +507,48 @@ class RemoteAuthService implements AuthService {
                 requiredPermissions);
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
-            try (var response = client.target(URI.create(reactServiceUrl.url()))
-                    .path("opik")
-                    .path("auth")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON)
-                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                    .acceptEncoding("identity")
-                    .header(HttpHeaders.AUTHORIZATION,
-                            apiKey)
-                    .post(Entity.json(AuthRequest.builder()
+            return authPost("auth",
+                    builder -> builder.header(HttpHeaders.AUTHORIZATION, apiKey),
+                    AuthRequest.builder()
                             .workspaceName(workspaceName)
                             .path(path)
                             .requiredPermissions(requiredPermissions)
-                            .build()))) {
-                var authResponse = verifyResponse(response);
-                return ValidatedAuthCredentials.from(authResponse);
-            }
+                            .build(),
+                    response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
+                            () -> workspacePermissionsService.getPermissions(apiKey, workspaceName))));
         } else {
             return ValidatedAuthCredentials.from(credentials.get());
+        }
+    }
+
+    /**
+     * The caller's granted permission names, or none.
+     * <p>
+     * Read from the permissions API rather than the authentication response, so the answer is data about what
+     * the caller may see and not a by-product of whether it could be authenticated. Skipped entirely when
+     * nothing acts on it.
+     * <p>
+     * A lookup that fails leaves the caller with no permissions, which redacts. That is the safe direction for
+     * a feature whose purpose is withholding, but it does mean a permissions outage reads as masked content
+     * rather than as an error, so it is logged at warn to stay diagnosable.
+     */
+    private List<String> grantedPermissions(Supplier<WorkspaceUserPermissions> lookup) {
+        if (!resolvePermissions) {
+            return List.of();
+        }
+
+        try {
+            var permissions = lookup.get().permissions();
+            return permissions == null
+                    ? List.of()
+                    : permissions.stream()
+                            .filter(permission -> Boolean.parseBoolean(permission.permissionValue()))
+                            .map(WorkspaceUserPermissions.Permission::permissionName)
+                            .toList();
+        } catch (RuntimeException lookupFailed) {
+            log.warn("Could not resolve workspace permissions, treating the caller as unprivileged",
+                    lookupFailed);
+            return List.of();
         }
     }
 
@@ -458,14 +560,35 @@ class RemoteAuthService implements AuthService {
                 throw new ClientErrorException(USER_NOT_FOUND, Response.Status.UNAUTHORIZED);
             }
             return authResponse;
-        } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
+        }
+
+        int status = response.getStatus();
+
+        if (status == Response.Status.UNAUTHORIZED.getStatusCode()) {
             throw new ClientErrorException(readErrorMessage(response, NOT_LOGGED_USER),
                     Response.Status.UNAUTHORIZED);
-        } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
-            // EM never returns FORBIDDEN as of now
+        } else if (status == Response.Status.FORBIDDEN.getStatusCode()) {
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
-        } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
+        } else if (status == Response.Status.NOT_FOUND.getStatusCode()) {
+            // EM signals "user is not a member of organization" with 404; that is an entitlement failure,
+            // not a server fault.
+            //
+            // Deliberately narrowed to EM's own error envelope rather than matching every 404. A bare 404 is
+            // equally a wrong reactService URL, a missing ingress route or a renamed endpoint, and mapping
+            // that to 403 would be worse than the 500 it used to give: 403 counts as "not authenticated" in
+            // authenticate(), so a request to any endpoint in PUBLIC_ENDPOINTS would quietly continue with
+            // Visibility.PUBLIC. A misconfiguration must fail loudly, not start serving public data. Anything
+            // that is not EM's envelope therefore falls through to unexpectedRemoteError below.
+            var emMessage = emErrorMessage(response);
+            if (emMessage != null) {
+                // The parsed message, not the raw body: this branch is reached by ordinary non-member
+                // traffic rather than only by faults, so it must not put arbitrary upstream bytes in a log.
+                log.warn("React service answered 404 while authenticating, reason: '{}'", singleLine(emMessage));
+                throw new ClientErrorException(
+                        NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+            }
+        } else if (status == Response.Status.BAD_REQUEST.getStatusCode()) {
             throw new ClientErrorException(readErrorMessage(response, MISSING_WORKSPACE),
                     Response.Status.BAD_REQUEST);
         }
@@ -483,6 +606,9 @@ class RemoteAuthService implements AuthService {
         requestContext.get().setWorkspaceName(workspaceName);
         requestContext.get().setQuotas(credentials.quotas());
         requestContext.get().setApiKey(apiKey);
+        requestContext.get().setPermissions(credentials.permissions() == null
+                ? Set.of()
+                : Set.copyOf(credentials.permissions()));
     }
 
     private boolean isEndpointPublic(ContextInfoHolder contextInfo) {
@@ -507,17 +633,92 @@ class RemoteAuthService implements AuthService {
         return ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName);
     }
 
-    private String getWorkspaceId(String workspaceName) {
-        try (var response = client.target(URI.create(reactServiceUrl.url()))
-                .path("workspaces")
-                .path("workspace-id")
-                .queryParam("name", workspaceName)
-                .request()
-                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                .acceptEncoding("identity")
-                .get()) {
+    /**
+     * Reports whether a workspace may be offered to, and consented for, an OAuth client. Blank names are rejected
+     * because the react service is the source of the list and a name is what identifies the workspace downstream.
+     */
+    private boolean isEligibleWorkspace(String workspaceName) {
+        return StringUtils.isNotBlank(workspaceName)
+                && !isDefaultWorkspace(workspaceName)
+                && !INTERNAL_WORKSPACE_NAME.matcher(workspaceName).matches();
+    }
 
-            return getWorkspaceIdFromResponse(response);
+    /**
+     * Resolves a workspace id by name for the public-endpoint fallback in
+     * {@link #authenticate}. This runs <em>after</em> an auth failure, so without the same timeout
+     * policy a stalled call here would block the request for the full 30s immediately after the
+     * auth call itself had already failed fast - leaving the fallback to dominate user-visible
+     * latency. It is a single-workspace lookup, so unlike {@code listEligibleWorkspaces} there is
+     * no large-payload case arguing for an exclusion.
+     */
+    private String getWorkspaceId(String workspaceName) {
+        return authCall("getting workspace id", RetriableHttpClient.Request.<String>builder()
+                .requestFunction(c -> c.target(URI.create(reactServiceUrl.url()))
+                        .path("workspaces")
+                        .path("workspace-id")
+                        .queryParam("name", workspaceName))
+                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                .requestCustomizer(builder -> builder.acceptEncoding("identity"))
+                .responseFunction(this::getWorkspaceIdFromResponse),
+                retriableHttpClient::executeGetWithRetry);
+    }
+
+    /**
+     * Issues an auth POST through the shared {@link RetriableHttpClient}, which owns the retry and
+     * timeout policy: the retriable set is {@link RetryUtils#handleHttpErrors} and the per-call read
+     * timeout overrides the shared jerseyClient timeout for this hop only.
+     * <p>
+     * {@code requestCustomizer} carries this hop's credentials, which {@code requestFunction} cannot
+     * express because it only reaches the {@code WebTarget}.
+     */
+    private <T> T authPost(String path, Consumer<Invocation.Builder> credentials, AuthRequest body,
+            Function<Response, T> responseFunction) {
+        return authCall("authenticating user", RetriableHttpClient.Request.<T>builder()
+                .requestFunction(target -> target.target(URI.create(reactServiceUrl.url()))
+                        .path("opik")
+                        .path(path))
+                .requestCustomizer(builder -> {
+                    builder.accept(MediaType.APPLICATION_JSON)
+                            // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                            .acceptEncoding("identity");
+                    credentials.accept(builder);
+                })
+                .body(Entity.json(body))
+                .responseFunction(responseFunction),
+                retriableHttpClient::executePostWithRetry);
+    }
+
+    /**
+     * Applies this hop's retry and timeout settings and runs the call.
+     * <p>
+     * {@code block()} is deliberate: authentication runs in a JAX-RS request filter that returns
+     * {@code void}, so there is no reactive pipeline to compose into. It blocks the request thread
+     * that was already going to wait for this call -- not a Reactor worker: {@link RetriableHttpClient}
+     * subscribes on {@code boundedElastic}, and that subscribe-side work is submit-only, so no
+     * scheduler thread is held for the round trip.
+     * <p>
+     * A {@code requestTimeout} of zero means "inherit the shared client timeout", expressed by
+     * leaving {@code readTimeout} unset rather than sending a zero.
+     */
+    private <T> T authCall(String operation, RetriableHttpClient.Request.RequestBuilder<T> request,
+            Function<RetriableHttpClient.Request<T>, Mono<T>> execute) {
+        try {
+            return execute.apply(request
+                    .retryPolicy(retryPolicy)
+                    .readTimeout(requestTimeout == null || requestTimeout.isZero() ? null : requestTimeout)
+                    .build())
+                    .block();
+        } catch (RetryUtils.RetryableHttpException retriesExhausted) {
+            // RetriableHttpClient converts 503/504 into this before the response reaches
+            // verifyResponse, so an exhausted retry would otherwise surface a different error shape
+            // than every other upstream failure on this path, and its message carries the upstream
+            // body -- which must not reach the caller of a credential-bearing request. Collapse it
+            // onto the same public error unexpectedRemoteError produces, keeping the status and
+            // body in the log and on the cause rather than in what the caller sees.
+            log.error("Auth service call failed: retries exhausted operation='{}'", operation,
+                    retriesExhausted);
+            throw new InternalServerErrorException("Unexpected error while " + operation,
+                    retriesExhausted);
         }
     }
 

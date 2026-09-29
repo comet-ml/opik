@@ -2,6 +2,7 @@
 
 export const AutomationRuleEvaluatorWriteAction = {
     Evaluator: "evaluator",
+    AnnotationQueueRouter: "annotation_queue_router",
 } as const;
 export type AutomationRuleEvaluatorWriteAction =
     (typeof AutomationRuleEvaluatorWriteAction)[keyof typeof AutomationRuleEvaluatorWriteAction];

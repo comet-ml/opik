@@ -9,6 +9,22 @@ public class LocalWorkspacePermissionsService implements WorkspacePermissionsSer
 
     @Override
     public WorkspaceUserPermissions getPermissions(@NonNull String apiKey, @NonNull String workspaceName) {
+        return noPermissions(workspaceName);
+    }
+
+    @Override
+    public WorkspaceUserPermissions getPermissionsBySession(@NonNull String sessionToken,
+            @NonNull String workspaceName) {
+        return noPermissions(workspaceName);
+    }
+
+    @Override
+    public WorkspaceUserPermissions getPermissionsByUsername(@NonNull String userName,
+            @NonNull String workspaceName) {
+        return noPermissions(workspaceName);
+    }
+
+    private static WorkspaceUserPermissions noPermissions(String workspaceName) {
         return WorkspaceUserPermissions.builder()
                 .userName(ProjectService.DEFAULT_USER)
                 .workspaceName(workspaceName)

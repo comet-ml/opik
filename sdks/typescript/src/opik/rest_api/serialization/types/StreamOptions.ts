@@ -6,11 +6,11 @@ import type * as serializers from "../index.js";
 
 export const StreamOptions: core.serialization.ObjectSchema<serializers.StreamOptions.Raw, OpikApi.StreamOptions> =
     core.serialization.object({
-        includeUsage: core.serialization.property("include_usage", core.serialization.boolean().optional()),
+        includeUsage: core.serialization.boolean().optional(),
     });
 
 export declare namespace StreamOptions {
     export interface Raw {
-        include_usage?: boolean | null;
+        includeUsage?: boolean | null;
     }
 }

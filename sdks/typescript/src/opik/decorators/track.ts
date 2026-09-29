@@ -152,6 +152,36 @@ function logSuccess({
   }
 }
 
+/**
+ * Turns whatever was thrown into the `ErrorInfo` the span and trace report. Nothing in here may
+ * propagate: this runs inside `executeTrack`'s catch, so an exception would replace the caller's
+ * own failure and skip both `end()` calls. Reading `message`/`name`/`stack` off a non-`Error` does
+ * that for `null`/`undefined`, and `String()` itself throws for a value that cannot be converted
+ * to a primitive (`Object.create(null)`) or whose `toString` throws.
+ */
+function toErrorInfo(error: unknown): {
+  message: string;
+  exceptionType: string;
+  traceback: string;
+} {
+  try {
+    const err = error instanceof Error ? error : new Error(String(error));
+    return {
+      message: err.message,
+      exceptionType: err.name,
+      // A coerced non-Error has no stack of its own, and the one `new Error()` would
+      // capture here points at this decorator rather than at the caller's code.
+      traceback: error instanceof Error ? (err.stack ?? "") : "",
+    };
+  } catch {
+    return {
+      message: "<thrown value could not be described>",
+      exceptionType: "Error",
+      traceback: "",
+    };
+  }
+}
+
 function logError({
   span,
   error,
@@ -161,38 +191,28 @@ function logError({
   error: any;
   trace?: Trace;
 }) {
+  const errorInfo = toErrorInfo(error);
+
   logger.error("Recording execution error:", {
     spanId: span.data.id,
     traceId: trace?.data.id,
+    // `errorInfo` is what the backend receives; the log line keeps its pre-existing
+    // { name, message, stack } shape so log consumers that match those keys still work.
     error:
       error instanceof Error
         ? {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
+            name: errorInfo.exceptionType,
+            message: errorInfo.message,
+            stack: errorInfo.traceback,
           }
         : error,
   });
 
-  if (error instanceof Error) {
-    span.update({
-      errorInfo: {
-        message: error.message,
-        exceptionType: error.name,
-        traceback: error.stack ?? "",
-      },
-    });
-  }
+  span.update({ errorInfo });
   span.end();
 
   if (trace) {
-    trace.update({
-      errorInfo: {
-        message: error.message,
-        exceptionType: error.name,
-        traceback: error.stack ?? "",
-      },
-    });
+    trace.update({ errorInfo });
     trace.end();
   }
 }

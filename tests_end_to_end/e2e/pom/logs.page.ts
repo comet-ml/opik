@@ -2,6 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
+import { AddToDatasetDialogPage } from './add-to-dataset-dialog.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
@@ -28,6 +29,240 @@ export class LogsPage {
       this.projectId = projectId;
       const env = loadEnvConfig();
       await this.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/logs`);
+    });
+  }
+
+  /**
+   * Open Logs with the Spans tab active, optionally at a chosen page size and
+   * date range.
+   *
+   * `size` and `timeRange` are the table's own URL query params (`size` and
+   * `time_range`, see TracesSpansTab and MetricDateRangeSelect). Both are also
+   * persisted in localStorage, so a spec that depends on either must state it
+   * rather than inherit whatever the profile last stored.
+   *
+   * There is deliberately no `page` option. The table reads `page` from the URL
+   * too, but `DataTablePagination` resets it to 1 whenever
+   * `(page - 1) * size > total` — and `total` is 0 until the count query lands,
+   * so a deep link to page 2 always bounces back to page 1. Paging is done by
+   * clicking, through `goToNextPage()`.
+   */
+  async gotoSpans(
+    projectId: string,
+    opts: { size?: number; timeRange?: string } = {},
+  ): Promise<void> {
+    return test.step(`Open Logs (Spans) for project ${projectId}`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      const params = new URLSearchParams({ logsType: 'spans' });
+      if (opts.size !== undefined) params.set('size', String(opts.size));
+      if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+      );
+    });
+  }
+
+  /** The Threads/Traces/Spans tab toggle for "Spans". */
+  get spansTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Spans' });
+  }
+
+  /**
+   * Switch the entity toggle from whatever is active to Spans, and wait until
+   * the toggle itself reports the change.
+   *
+   * Gated on `aria-checked` rather than on a row appearing: the two views share
+   * the same table, so "some row is visible" is satisfied by the view the test
+   * just navigated away from.
+   */
+  async switchToSpans(): Promise<void> {
+    return test.step('Switch the Logs entity toggle to Spans', async () => {
+      await this.spansTab.click();
+      await expect(this.spansTab, 'the Spans toggle is selected').toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+    });
+  }
+
+  /**
+   * A span row in the Spans view, keyed by span id. Same `data-row-id`
+   * contract the traces view uses — the shared DataTable stamps it from the
+   * row model — and named separately because a span id and a trace id are
+   * different things to assert on.
+   */
+  spanRow(spanId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${spanId}"]`);
+  }
+
+  /**
+   * The ids rendered on the current page of the table, in table order.
+   *
+   * A span row's `data-row-id` is the span id, the same contract the traces
+   * view uses for trace ids.
+   */
+  async readRowIdsOnPage(): Promise<string[]> {
+    return test.step('Read the row ids on the current page', async () => {
+      await this.traceRows.first().waitFor({ state: 'visible' });
+      const ids = await this.traceRows.evaluateAll((rows) =>
+        rows.map((row) => row.getAttribute('data-row-id') ?? ''),
+      );
+      if (ids.some((id) => id === '')) {
+        throw new Error('LogsPage.readRowIdsOnPage: a rendered row carried no data-row-id');
+      }
+      return ids;
+    });
+  }
+
+  /** The pagination footer's "Showing 1-25 of 130" label. */
+  private get paginationSummary(): Locator {
+    return this.page.getByText(/^Showing [\d,]+-[\d,]+ of [\d,]+$/);
+  }
+
+  /**
+   * The population the table's footer reports, or `null` while it reports none.
+   *
+   * `DataTablePagination` renders nothing at all when `total` is 0, so an
+   * absent footer is not a missing element — it is the table saying it has no
+   * rows, which is also what a caller sees while the list request is still in
+   * flight. Returned rather than waited on, so a caller polls for the number it
+   * expects instead of racing the fetch and reading whichever view answered
+   * first.
+   */
+  async readPaginationTotal(): Promise<number | null> {
+    return test.step('Read the population the table footer reports', async () => {
+      const summary = this.paginationSummary;
+      if ((await summary.count()) === 0) return null;
+      const text = ((await summary.textContent()) ?? '').trim();
+      const match = /of ([\d,]+)$/.exec(text);
+      return match ? Number(match[1].replace(/,/g, '')) : null;
+    });
+  }
+
+  /**
+   * The pagination footer's "Showing 1-25 of 130", parsed.
+   *
+   * `total` is what the table tells the user the population is, and it comes
+   * from the listing's own envelope rather than from the rows on screen — so a
+   * read that lost rows shows up here as a `total` the collected ids cannot
+   * account for. Rendered with `toLocaleString()`, hence the comma strip.
+   */
+  async readPaginationSummary(): Promise<{ from: number; to: number; total: number }> {
+    return test.step('Read the table pagination summary', async () => {
+      const summary = this.paginationSummary;
+      await summary.waitFor({ state: 'visible' });
+      const text = ((await summary.textContent()) ?? '').trim();
+      const match = /^Showing ([\d,]+)-([\d,]+) of ([\d,]+)$/.exec(text);
+      if (!match) {
+        throw new Error(`LogsPage.readPaginationSummary: could not parse "${text}"`);
+      }
+      const toNumber = (value: string) => Number(value.replace(/,/g, ''));
+      return {
+        from: toNumber(match[1]),
+        to: toNumber(match[2]),
+        total: toNumber(match[3]),
+      };
+    });
+  }
+
+  /**
+   * The shared pagination control's "next page" button.
+   *
+   * The four nav buttons in `DataTablePagination` are icon-only: no text, no
+   * accessible name, no `data-testid`, and identical class lists — so the icon
+   * is the only thing that tells them apart. They are addressed here by the
+   * lucide class the icon carries (`lucide-chevron-right`), scoped to the
+   * element holding the "Showing …" label so a chevron elsewhere on the page
+   * cannot match. **A `data-testid` belongs on these buttons**; it is not added
+   * in this change because these specs are verified against a deployed
+   * environment, which a front-end change in the same PR would not reach — so
+   * the spec could not be run before review.
+   */
+  private get nextPageButton(): Locator {
+    return this.paginationSummary
+      .locator('xpath=..')
+      .locator('button:has(svg.lucide-chevron-right)');
+  }
+
+  /**
+   * Advance the table one page, and wait until the rows on screen are actually
+   * the next page's.
+   *
+   * Both conditions are needed, and the second is the one that matters. The
+   * footer's "Showing 51-100" is derived from the page counter, so it flips the
+   * instant the click lands — while the table keeps rendering the previous
+   * page's rows until the new fetch resolves (`isPlaceholderData`, which is
+   * also what the loading overlay is driven from). Waiting on the footer alone
+   * reads the page you just left, so a caller collecting ids across pages
+   * counts it twice and never sees the page it missed. Observed as a ~1-in-4
+   * flake before this gate was added.
+   *
+   * The first row's id is the discriminator: two pages of a uniform table look
+   * alike, but no id appears on both.
+   */
+  async goToNextPage(): Promise<void> {
+    return test.step('Advance to the next page of the table', async () => {
+      const from = (await this.readPaginationSummary()).from;
+      const firstRowId = await this.traceRows.first().getAttribute('data-row-id');
+      const button = this.nextPageButton;
+      await expect(button, 'exactly one next-page control').toHaveCount(1);
+      await button.click();
+
+      await expect
+        .poll(
+          async () => {
+            const summary = await this.readPaginationSummary();
+            const firstRowNow = await this.traceRows.first().getAttribute('data-row-id');
+            return summary.from > from && firstRowNow !== firstRowId;
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * The value a metrics card renders, e.g. "0.5s" for Avg duration.
+   *
+   * `type` is the KPI metric key the card is keyed on — `count`, `errors`,
+   * `avg_duration`, `total_cost` (see MetricsSummary).
+   */
+  metricsCardValue(type: string): Locator {
+    return this.page.getByTestId(`metrics-card-${type}-value`);
+  }
+
+  /**
+   * The period-over-period delta a metrics card renders next to its value,
+   * e.g. "125%" or "25pp". Returns the bare magnitude+unit; the arrow direction
+   * is an icon, not text.
+   *
+   * The delta carries no test id of its own, but it is not merely "the card's
+   * trailing text" either: `MetricCard` renders it as the span immediately
+   * after the value span, both inside the same flex row, so it is addressed
+   * structurally. Subtracting the value's text from the card's instead would
+   * mis-parse whenever the value's characters also occur in the delta — a card
+   * reading `0` beside a `-100%` delta finds the `0` in `100` and returns
+   * `"%"`. The current seed happens to avoid that; the next one need not.
+   *
+   * Only rendered when each card is at least 240px wide (`getCardMode`), so a
+   * caller asserting on it must widen the viewport. `renderChange()` also
+   * returns nothing at all when the delta is undefined or non-finite, which is
+   * why an absent sibling is reported as such rather than read as "".
+   */
+  async readMetricsCardDelta(type: string): Promise<string> {
+    return test.step(`Read the "${type}" metrics card delta`, async () => {
+      const value = this.metricsCardValue(type);
+      await value.waitFor({ state: 'visible' });
+      const delta = value.locator('xpath=following-sibling::span[1]');
+      if ((await delta.count()) === 0) {
+        throw new Error(
+          `LogsPage.readMetricsCardDelta: card "${type}" rendered no delta beside its ` +
+            `value — the viewport may be too narrow (needs ~240px per card), or the ` +
+            `delta is undefined/non-finite`,
+        );
+      }
+      return ((await delta.innerText()) ?? '').replace(/\s+/g, ' ').trim();
     });
   }
 
@@ -87,6 +322,25 @@ export class LogsPage {
       const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?trace=${traceId}`;
       await this.page.goto(url);
       return new TracePanelPage(this.page, traceId);
+    });
+  }
+
+  /**
+   * Open a trace by clicking its row, the way a user reaches one.
+   *
+   * Distinct from {@link openTraceById}, which navigates to the trace's URL and
+   * so reloads the page: a spec about what the panel remembers between openings
+   * needs the in-app path, because a reload resets everything for free and
+   * would make the assertion pass without the panel doing anything.
+   */
+  async openTraceByRow(traceId: string): Promise<TracePanelPage> {
+    return test.step(`Open trace ${traceId} from its row`, async () => {
+      const row = this.traceRow(traceId);
+      await expect(row, 'exactly one row for this trace').toHaveCount(1);
+      await row.click();
+      const panel = new TracePanelPage(this.page, traceId);
+      await panel.waitForFullyLoaded();
+      return panel;
     });
   }
 
@@ -150,6 +404,25 @@ export class LogsPage {
   }
 
   /**
+   * Open the "Add to" dropdown in the traces actions panel and pick "Dataset".
+   *
+   * The dropdown offers Test suite / Dataset / Annotation queue from one
+   * trigger (`AddToDropdown`), so the menu item is matched exactly — "Dataset"
+   * as a substring would also match nothing else today, but the list is the
+   * kind that grows. Callers select rows first via `selectTrace()`; the
+   * trigger is disabled until at least one is ticked.
+   */
+  async openAddToDataset(): Promise<AddToDatasetDialogPage> {
+    return test.step('Open Add to → Dataset', async () => {
+      await this.page.getByRole('button', { name: 'Add to' }).click();
+      await this.page.getByRole('menuitem', { name: 'Dataset', exact: true }).click();
+      const dialog = new AddToDatasetDialogPage(this.page);
+      await expect(dialog.root, 'the Add to dataset dialog is open').toBeVisible();
+      return dialog;
+    });
+  }
+
+  /**
    * The bulk-delete (trash) button in the traces actions panel. It renders as an
    * icon-only button with no accessible name — the "Delete" label lives in a
    * hover tooltip portal — so the testid is the only stable handle.
@@ -175,6 +448,81 @@ export class LogsPage {
       await dialog.getByRole('button', { name: 'Delete traces' }).click();
       await dialog.waitFor({ state: 'hidden' });
     });
+  }
+
+  /**
+   * The "Selected: N" label in the selection action bar, which only renders
+   * while at least one row is ticked.
+   *
+   * Matched on text because the bar exposes no testid and no role of its own —
+   * it is a plain `<span>` inside a sticky container. The count is part of the
+   * match rather than something read back out of it, so asserting visibility
+   * asserts the number too: a selection that reached four rows renders
+   * "Selected: 4" and this locator finds nothing.
+   */
+  selectionCount(count: number): Locator {
+    return this.page.getByText(`Selected: ${count}`, { exact: true });
+  }
+
+  /**
+   * The "Manage tags" button in the traces actions panel, which opens the
+   * shared-tags dialog for the current selection.
+   */
+  get manageTagsButton(): Locator {
+    return this.page.getByRole('button', { name: 'Manage tags' });
+  }
+
+  /** The "Manage shared tags" dialog. */
+  get manageTagsDialog(): Locator {
+    return this.page.getByRole('dialog').filter({ hasText: 'Manage shared tags' });
+  }
+
+  /**
+   * Add one tag to every selected trace through the Manage shared tags dialog.
+   *
+   * `itemCount` is not a convenience: the confirm button is labelled
+   * "Update tags for N items", so passing the number the caller believes it
+   * selected makes the click itself an assertion that the dialog agrees. A
+   * dialog that had picked up a different row set would render a different
+   * label and this method would fail rather than quietly tag the wrong traces.
+   *
+   * The tag input is a bare `<input type="text">` that only mounts after the
+   * "Add tag" chip is clicked, and it has neither a testid nor a label — the
+   * textbox role inside the dialog is the most stable handle available. Enter
+   * commits it: the dialog's own Enter handler is guarded on `!isAdding`, so
+   * while the input is open it is the input that consumes the key.
+   */
+  async addSharedTagToSelection(tag: string, itemCount: number): Promise<void> {
+    return test.step(`Add shared tag "${tag}" to ${itemCount} selected traces`, async () => {
+      await this.manageTagsButton.click();
+      const dialog = this.manageTagsDialog;
+      await dialog.waitFor({ state: 'visible' });
+      await dialog.getByTestId('add-tag-button').click();
+      const input = dialog.getByRole('textbox');
+      await input.waitFor({ state: 'visible' });
+      await input.fill(tag);
+      await input.press('Enter');
+      const confirm = dialog.getByRole('button', {
+        name: `Update tags for ${itemCount} ${itemCount === 1 ? 'item' : 'items'}`,
+        exact: true,
+      });
+      await expect(confirm).toBeEnabled();
+      await confirm.click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The Duration cell of a trace row.
+   *
+   * Worth addressing directly because it is the one column that renders the
+   * difference between a finished trace and one that was never closed: the FE's
+   * `formatDuration` answers "NA" for a null duration, which is what a trace
+   * submitted without an `end_time` shows while otherwise looking entirely
+   * ordinary in the table.
+   */
+  durationCell(traceId: string): Locator {
+    return this.page.locator(`[data-cell-id="${traceId}_duration"]`);
   }
 
   /** The Errors/Duration/Estimated cost cell for a trace row, keyed by Ollie explain kind. */

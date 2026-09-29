@@ -4,17 +4,14 @@ import {
   Calendar,
   Clock,
   Coins,
-  Copy,
   Download,
   ArrowUpRight,
   Hash,
   MessagesSquare,
   MoreHorizontal,
   PenLine,
-  Share,
   Trash,
 } from "lucide-react";
-import copy from "clipboard-copy";
 import FileSaver from "file-saver";
 import { json2csv } from "json-2-csv";
 import get from "lodash/get";
@@ -39,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
+import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
 import useAppStore from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -622,7 +620,18 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     return (
       <ResizableSidePanelTopBar
         variant="info"
-        title="Thread"
+        title={
+          <TooltipWrapper content={`Thread ID: ${threadId}`}>
+            <span>Thread</span>
+          </TooltipWrapper>
+        }
+        titleSuffix={
+          <CopyEntityActions
+            className="pl-1"
+            entityId={threadId}
+            entityLabel="thread"
+          />
+        }
         leftIcon={
           <div className="relative flex size-4 shrink-0 items-center justify-center rounded bg-[var(--thread-icon-background)] text-[var(--thread-icon-text)]">
             <MessagesSquare className="size-2" />
@@ -638,31 +647,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem
-              onClick={() => {
-                toast({
-                  description: "URL successfully copied to clipboard",
-                });
-                copy(window.location.href);
-              }}
-            >
-              <Share className="mr-2 size-4" />
-              Share
-            </DropdownMenuItem>
-            <TooltipWrapper content={threadId} side="left">
-              <DropdownMenuItem
-                onClick={() => {
-                  toast({
-                    description: `Thread ID successfully copied to clipboard`,
-                  });
-                  copy(threadId);
-                }}
-              >
-                <Copy className="mr-2 size-4" />
-                Copy thread ID
-              </DropdownMenuItem>
-            </TooltipWrapper>
-            <DropdownMenuSeparator />
             {(["csv", "json"] as const).map((format) => {
               const handler =
                 format === "csv" ? handleExportCSV : handleExportJSON;

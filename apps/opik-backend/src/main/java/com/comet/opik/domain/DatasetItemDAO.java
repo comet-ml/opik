@@ -10,6 +10,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ErrorUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,6 +40,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -257,9 +259,31 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     /**
      * Counts dataset items only if there's a matching experiment item.
+     * <p>
+     * <b>{@code traces FINAL} stays, here and at the five other experiment-path sites (OPIK-8343).</b> Production
+     * runs {@code do_not_merge_across_partitions_select_final = 1}, so FINAL dedups per partition: before the week
+     * bound each of these paid a dedup on every weekly partition the read opened, which is how the missing bound and
+     * FINAL compounded. The bound removes the partitions and with them that cost, so none of these needs FINAL
+     * dropped to recover it.
+     * <p>
+     * Nor would dropping it be free. Five of the six read a mutable column outside the sort key - {@code output_keys},
+     * {@code end_time}, or a user filter over such a column - with no {@code LIMIT 1 BY} covering them, so a
+     * superseded row version would reach the result. This site is one: the read it guards exists only to apply
+     * {@code experiment_item_filters}, and a stale version could satisfy a filter the current one no longer does. The
+     * sixth is {@code ExperimentAggregatesDAO#FIND_COUNT_FROM_AGGREGATES}, the one that could drop it - see there.
+     * <p>
+     * Whether any should is the separate question the ticket leaves open (OPIK-7257, OPIK-7638); the per-site reason
+     * is recorded so that review starts from it. Noted while establishing it and deliberately not changed here:
+     * {@link #SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS}, this statement's page twin, applies the same filters with
+     * no FINAL at all, so the count and the page can disagree on which traces match.
      */
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
-            WITH feedback_scores_deduped AS (
+            WITH experiment_items_trace_scope AS (
+                SELECT DISTINCT trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN :experimentIds
+            ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -348,8 +372,31 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                 <endif>
                 WHERE workspace_id = :workspace_id
-                AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id AND experiment_id IN :experimentIds)
-                AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id AND experiment_id IN :experimentIds))
+                AND id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                        FROM experiment_items_trace_scope
+                    )
+                )
+                <endif>
+                AND project_id IN (
+                    SELECT DISTINCT project_id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_trace_scope
+                        )
+                    )
+                    <endif>
+                )
                 <if(experiment_item_filters)>
                 AND <experiment_item_filters>
                 <endif>
@@ -561,6 +608,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
                     WHERE workspace_id = :workspace_id
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_scope
+                        )
+                    )
+                    <endif>
                     <if(experiment_item_filters)>
                     AND <experiment_item_filters>
                     <endif>
@@ -669,6 +725,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_final
+                        )
+                    )
+                    <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS t
@@ -728,6 +793,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     public static final String DATASET_ITEMS = "dataset_items";
     public static final String CLICKHOUSE = "Clickhouse";
 
+    /**
+     * {@code traces FINAL} stays: the read is of {@code output_keys}, and a superseded version would contribute keys
+     * the trace no longer has - columns that then appear in the comparison. See
+     * {@link #SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT} for the decision and what the week bound changes
+     * about its cost (OPIK-8343).
+     */
     private static final String SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID = """
             WITH dataset_item_final AS (
                 SELECT
@@ -776,6 +847,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT trace_id FROM experiment_items_final)
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                        FROM experiment_items_final
+                    )
+                )
+                <endif>
             ) as t ON t.id = ei.trace_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -826,8 +906,19 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
             """;
 
+    /**
+     * {@code traces FINAL} stays at both of this statement's sites: one exists only to apply
+     * {@code experiment_item_filters}, the other derives {@code duration} from {@code start_time} / {@code end_time}
+     * and feeds an aggregate, where a second version of a trace is counted twice rather than merely read stale. See
+     * {@link #SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT} for the decision (OPIK-8343).
+     */
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = """
-            WITH experiment_items_filtered AS (
+            WITH experiment_items_trace_scope AS (
+                SELECT DISTINCT trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>
+            ), experiment_items_filtered AS (
                 SELECT
                     ei.id,
                     ei.experiment_id,
@@ -850,8 +941,31 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
                     SELECT id FROM traces FINAL WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>)
-                    AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>))
+                    AND id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_trace_scope
+                        )
+                    )
+                    <endif>
+                    AND project_id IN (
+                        SELECT DISTINCT project_id
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                        AND id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                        <if(traces_partitioned)>
+                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                            SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                            FROM (
+                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                                FROM experiment_items_trace_scope
+                            )
+                        )
+                        <endif>
+                    )
                     AND <experiment_item_filters>
                 )
                 <endif>
@@ -911,6 +1025,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM traces
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     WHERE workspace_id = :workspace_id
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_filtered
+                        )
+                    )
+                    <endif>
                     AND fsc.feedback_scores_count = 0
                 )
                 <endif>
@@ -948,6 +1071,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM traces final
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_final
+                        )
+                    )
+                    <endif>
                 ) AS t ON eif.trace_id = t.id
                 LEFT JOIN (
                     SELECT
@@ -1036,11 +1168,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ;
             """;
 
+    private static final String DATASET_ITEMS_TABLE = "dataset_items";
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @Override
     @WithSpan
@@ -1050,8 +1185,46 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(datasetId, items);
+        }
+
         return asyncTemplate.nonTransaction(connection -> mapAndInsert(
                 datasetId, items, connection, INSERT_DATASET_ITEM));
+    }
+
+    /**
+     * Same rows as {@link #INSERT_DATASET_ITEM}, streamed as JSONEachRow instead of bound as ~9 named
+     * parameters per row plus a shared workspace id.
+     *
+     * <p>Only {@code save} moves onto this path. {@code mapAndInsert} is also rendered with
+     * {@code BULK_UPDATE} by the bulk-update flow, which reads the pre-existing row to merge tags and
+     * so is not a plain row append.
+     *
+     * <p>{@code created_at} and {@code last_updated_at} stay absent from the row. The R2DBC template
+     * writes {@code now64(9)} for {@code created_at} and omits {@code last_updated_at}; both columns are
+     * declared {@code DEFAULT now64(9)}, so omitting them here produces the same server-stamped value --
+     * and {@code last_updated_at} is the ReplacingMergeTree version, so a client-supplied one would
+     * change which duplicate wins.
+     */
+    private Mono<Long> insertJsonEachRow(UUID datasetId, List<DatasetItem> items) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // Started inside the lambda, i.e. on subscription, as mapAndInsert does. Opening it during
+            // assembly would leak the span if the publisher is never subscribed, and would capture
+            // whatever Context.current() happened to be at assembly time as the parent.
+            //
+            // mapAndInsert opens and closes this segment on the R2DBC path, so without it here a v2 save
+            // disappears from the dataset-item instrumentation stream instead of showing up as a fast
+            // insert.
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_items");
+
+            return jsonBulkInsert.insert(
+                    DATASET_ITEMS_TABLE,
+                    getLogComment("save_dataset_items", workspaceId, userName, items.size()),
+                    items,
+                    item -> DatasetItemJsonRowMapper.toJsonRow(item, datasetId, userName, workspaceId))
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     private Mono<Long> mapAndInsert(
@@ -1208,6 +1381,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             var template = getSTWithLogComment(SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID,
                     "get_output_columns", workspaceId, userName, datasetId.toString());
+            addTracesPartitionedFlag(template);
 
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 template.add("experiment_ids", experimentIds);
@@ -1295,9 +1469,20 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         }));
     }
 
+    /**
+     * Enables the week bound on this DAO's {@code traces} reads - see
+     * {@code ExperimentDAO#addTracesPartitionedFlag} for what it is and why it is gated.
+     */
+    private void addTracesPartitionedFlag(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
+    }
+
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria, String queryName,
             String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
+        addTracesPartitionedFlag(template);
 
         Optional.ofNullable(datasetItemSearchCriteria.filters())
                 .ifPresent(filters -> {
@@ -1489,6 +1674,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS,
                     "get_experiment_items_stats", workspaceId, userName, experimentIds.size());
+            addTracesPartitionedFlag(template);
             template.add("dataset_id", datasetId);
             if (!experimentIds.isEmpty()) {
                 template.add("experiment_ids", true);

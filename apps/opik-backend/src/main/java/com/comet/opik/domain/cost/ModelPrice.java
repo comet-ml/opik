@@ -20,6 +20,7 @@ public record ModelPrice(
         @NonNull BigDecimal audioInputCharacterPrice,
         @NonNull BigDecimal inputAudioTokenPrice,
         @NonNull BigDecimal outputAudioTokenPrice,
+        @NonNull BigDecimal outputReasoningTokenPrice,
         @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator,
         @NonNull List<PromptTier> promptTiers) {
 
@@ -67,6 +68,7 @@ public record ModelPrice(
                 .audioInputCharacterPrice(BigDecimal.ZERO)
                 .inputAudioTokenPrice(BigDecimal.ZERO)
                 .outputAudioTokenPrice(BigDecimal.ZERO)
+                .outputReasoningTokenPrice(BigDecimal.ZERO)
                 .calculator(SpanCostCalculator::defaultCost)
                 .promptTiers(List.of());
     }

@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Provider;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
@@ -16,17 +17,14 @@ import java.util.Optional;
 public class AsyncUtils {
 
     public static Context setRequestContext(Context ctx, Provider<RequestContext> requestContext) {
-        return ctx.put(RequestContext.USER_NAME, requestContext.get().getUserName())
-                .put(RequestContext.WORKSPACE_ID, requestContext.get().getWorkspaceId())
-                .put(RequestContext.WORKSPACE_NAME, requestContext.get().getWorkspaceName())
-                .put(RequestContext.VISIBILITY,
-                        Optional.ofNullable(requestContext.get().getVisibility()).orElse(Visibility.PRIVATE));
+        return setRequestContext(ctx, requestContext.get());
     }
 
     public static Context setRequestContext(Context ctx, RequestContext requestContext) {
         return ctx.put(RequestContext.USER_NAME, requestContext.getUserName())
                 .put(RequestContext.WORKSPACE_ID, requestContext.getWorkspaceId())
                 .put(RequestContext.WORKSPACE_NAME, requestContext.getWorkspaceName())
+                .put(RequestContext.CIPX_DEVICE_ID, StringUtils.defaultString(requestContext.getCipxDeviceId()))
                 .put(RequestContext.VISIBILITY,
                         Optional.ofNullable(requestContext.getVisibility()).orElse(Visibility.PRIVATE));
     }

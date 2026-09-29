@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardType;
 import com.comet.opik.api.DashboardUpdate;
@@ -14,8 +15,11 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
 import com.comet.opik.api.resources.utils.resources.InsightsViewResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
@@ -26,15 +30,21 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -83,9 +93,12 @@ class InsightsViewsResourceTest {
         APP = newTestDropwizardAppExtension(contextConfig);
     }
 
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+
     private String baseURI;
     private InsightsViewResourceClient insightsViewClient;
     private DashboardResourceClient dashboardResourceClient;
+    private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport client) {
@@ -95,6 +108,7 @@ class InsightsViewsResourceTest {
 
         this.insightsViewClient = new InsightsViewResourceClient(client, baseURI);
         this.dashboardResourceClient = new DashboardResourceClient(client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, podamFactory);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID);
     }
@@ -192,6 +206,35 @@ class InsightsViewsResourceTest {
             assertThat(page.content()).hasSize(2);
             page.content().forEach(d -> assertThat(d.scope()).isEqualTo(DashboardScope.INSIGHTS));
         }
+
+        @Test
+        @DisplayName("Find insights views by project excludes other projects and keeps unassigned views")
+        void findInsightsViewsByProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+            var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            var projectViewId = insightsViewClient.create(
+                    insightsViewClient.createPartialInsightsView().projectId(projectId).build(), apiKey, workspaceName);
+            insightsViewClient.create(
+                    insightsViewClient.createPartialInsightsView().projectId(otherProjectId).build(), apiKey,
+                    workspaceName);
+
+            // Legacy views have no project and stay visible in every project
+            var unassignedViewId = insightsViewClient.create(apiKey, workspaceName);
+
+            var page = insightsViewClient.find(apiKey, workspaceName, 1, 10, null, projectId, null, null,
+                    HttpStatus.SC_OK);
+
+            assertThat(page.total()).isEqualTo(2);
+            assertThat(page.content()).extracting(Dashboard::id)
+                    .containsExactlyInAnyOrder(projectViewId, unassignedViewId);
+        }
     }
 
     @Nested
@@ -265,6 +308,53 @@ class InsightsViewsResourceTest {
 
             // Dashboard should still exist
             dashboardResourceClient.get(dashboardId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+        }
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RequiredPermissionsTest {
+
+        @ParameterizedTest(name = "{0} requires {1}")
+        @MethodSource
+        @DisplayName("Insights view endpoints return 403 when the permission is denied")
+        void insightsViewEndpointsRequirePermission(String endpoint, WorkspaceUserPermission permission,
+                BiConsumer<String, String> call) {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    permission.getValue());
+
+            call.accept(apiKey, workspaceName);
+        }
+
+        Stream<Arguments> insightsViewEndpointsRequirePermission() {
+            return Stream.of(
+                    Arguments.of("create", WorkspaceUserPermission.DASHBOARD_CREATE,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> {
+                                var view = insightsViewClient.createPartialInsightsView().build();
+                                try (var response = insightsViewClient.callCreate(view, apiKey, workspaceName)) {
+                                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+                                }
+                            }),
+                    Arguments.of("get by id", WorkspaceUserPermission.DASHBOARD_VIEW,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient
+                                    .get(UUID.randomUUID(), apiKey, workspaceName, HttpStatus.SC_FORBIDDEN)),
+                    Arguments.of("find", WorkspaceUserPermission.DASHBOARD_VIEW,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient
+                                    .find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_FORBIDDEN)),
+                    Arguments.of("update", WorkspaceUserPermission.DASHBOARD_EDIT,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient.update(
+                                    UUID.randomUUID(), DashboardUpdate.builder().name("Denied").build(), apiKey,
+                                    workspaceName, HttpStatus.SC_FORBIDDEN)),
+                    Arguments.of("delete", WorkspaceUserPermission.DASHBOARD_DELETE,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient
+                                    .delete(UUID.randomUUID(), apiKey, workspaceName, HttpStatus.SC_FORBIDDEN)),
+                    Arguments.of("delete batch", WorkspaceUserPermission.DASHBOARD_DELETE,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient.batchDelete(
+                                    Set.of(UUID.randomUUID()), apiKey, workspaceName, HttpStatus.SC_FORBIDDEN)));
         }
     }
 }

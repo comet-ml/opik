@@ -51,7 +51,7 @@ Clean up `$TMP` on exit.
 Apply the same logic as `/comet:create-pr` Step 6 (Extract Change Information) and Step 7 (Pre-fill PR Template). In particular:
 
 - Fill every `##` section defined in `.github/pull_request_template.md`. Sections not applicable to this PR get `N/A`, never get removed.
-- Re-derive the **Details** summary from the diff and commit messages.
+- Re-derive the **Details** section from the diff and commit messages in the style set by `/comet:create-pr` Step 7 — what changes for a user, short, bulleted, authoritative, no summary of the diff. Keep the shape the section already uses (Before / After, flat list, or a couple of lines) unless the change no longer fits it.
 - Re-derive the **Change checklist** from the file types changed (e.g., user-facing checked when UI files changed; documentation checked when `*.md` / `*.mdx` changed).
 - Keep the existing **Issues** ticket reference if present (e.g., `OPIK-6296`); if missing, infer from branch name.
 - Keep the existing **AI-WATERMARK** answers verbatim — never silently flip `yes`↔`no`.

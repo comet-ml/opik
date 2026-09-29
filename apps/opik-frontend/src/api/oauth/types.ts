@@ -1,6 +1,7 @@
 export type OAuthWorkspaceInfo = {
   id: string;
   name: string;
+  is_default: boolean;
 };
 
 export type OAuthAuthorizeContext = {

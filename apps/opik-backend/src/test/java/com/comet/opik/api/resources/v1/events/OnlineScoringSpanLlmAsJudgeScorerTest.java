@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.attachment.AttachmentInfo;
@@ -12,6 +13,7 @@ import com.comet.opik.api.resources.v1.events.tools.ToolExecutor;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
@@ -20,6 +22,11 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -34,6 +41,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -44,16 +53,19 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -74,12 +86,17 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     private ChatCompletionService aiProxyService;
     @Mock
     private TraceService traceService;
+    // Only reaches the base scorer's shared span-size helper, which this scorer never calls.
+    @Mock
+    private SpanService spanService;
     @Mock
     private LlmProviderFactory llmProviderFactory;
     @Mock
     private AttachmentService attachmentService;
     @Mock
     private OnlineEvaluationRecorder onlineEvaluationRecorder;
+    @Mock
+    private OpenRouterDecisionsClient decisionsClient;
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -89,6 +106,17 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
 
     // Evaluator whose prompt references {{span}} — the declarative agentic trigger for span scope. No
     // variable binds it, so the backend's implicit detection injects the span structure.
+    private static final String JEV_MODEL = "~typesafe/jev-latest";
+
+    private static final String JEV_EVALUATOR_JSON = """
+            {
+              "model": { "name": "~typesafe/jev-latest" },
+              "messages": [ { "role": "USER", "content": "Reply: {{reply}}" } ],
+              "schema": [ { "name": "greets", "type": "BOOLEAN", "description": "Does the reply greet the user?" } ],
+              "variables": { "reply": "output.reply" }
+            }
+            """;
+
     private static final String EVALUATOR_JSON_WITH_SPAN = """
             {
               "model": { "name": "gpt-test", "temperature": 0.3 },
@@ -161,10 +189,12 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 feedbackScoreService,
                 aiProxyService,
                 traceService,
+                spanService,
                 llmProviderFactory,
                 agenticScoringService,
                 attachmentService,
-                onlineEvaluationRecorder);
+                onlineEvaluationRecorder,
+                new DecisionScoringService(decisionsClient, llmProviderFactory));
     }
 
     @AfterEach
@@ -190,7 +220,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .fileName(fileName)
                 .build();
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(attachmentService.getAttachmentInfoByEntity(
@@ -228,7 +257,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var persistentAttachment = AttachmentInfo.builder()
                 .entityId(span.id()).entityType(EntityType.SPAN).fileName("diagram.png").build();
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(attachmentService.getAttachmentInfoByEntity(
@@ -254,7 +282,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var span = createSpan();
         var message = buildMessage(span, code);
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         // Attachment listing fails — onErrorReturn(List.of()) degrades to a structure without attachment
@@ -289,7 +316,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .fileName(fileName)
                 .build();
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         // Cold lookup: first subscription sees the not-yet-uploaded state (empty), the retry sees it land.
@@ -368,33 +394,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     }
 
     @Test
-    void spanVariableWithToggleOffRendersEmptyStructureWithoutToolsOrFetch() {
-        var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_SPAN, SpanLlmAsJudgeCode.class);
-        var span = createSpan();
-        var message = buildMessage(span, code);
-
-        // Agentic tools OFF, but the prompt references {{span}}. We must NOT fetch attachments or attach
-        // tools — yet {{span}} must still render (as "{}"), never the literal sentinel word "span".
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
-        when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
-        when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
-        ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
-        when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
-                .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
-        when(feedbackScoreService.scoreBatchOfSpans(any())).thenReturn(Mono.empty());
-
-        scorer.score(message).block();
-
-        assertThat(requestCaptor.getValue().toolSpecifications()).isNullOrEmpty();
-        verifyNoInteractions(attachmentService);
-        String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
-        assertThat(prompt).contains("Score this span: {}");
-        assertThat(prompt).doesNotContain("{{span}}");
-    }
-
-    @Test
     void spanVariableOnNonToolProviderCapsInjectedStructure() {
-        // {{span}} + agentic tools ON, but the provider can't call tools → inline fallback. The injected
+        // {{span}} + a provider that can't call tools → inline fallback. The injected
         // span structure (built from the full span) must be CAPPED so a large span can't overflow the
         // model's context window; without the cap the whole span input/output would be inlined verbatim.
         var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_SPAN, SpanLlmAsJudgeCode.class);
@@ -411,7 +412,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .build();
         var message = buildMessage(span, code);
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         // OLLAMA does not support tool-calling → the {{span}} rule falls back to the inline path.
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OLLAMA);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
@@ -441,7 +441,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var span = createSpan();
         var message = buildMessage(span, code);
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
@@ -454,6 +453,77 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         // No {{span}} → inline path: no tool specs, no attachment lookup.
         assertThat(requestCaptor.getValue().toolSpecifications()).isNullOrEmpty();
         verifyNoInteractions(attachmentService);
+    }
+
+    @ParameterizedTest(name = "response={0}")
+    @ValueSource(strings = {"{}", "{\"Quality\": {\"score\": null, \"reason\": \"unsure\"}}"})
+    void responseWithNoReadableScoreStoresNothing(String response) {
+        var message = buildMessage(createSpan(), JsonUtils.readValue(EVALUATOR_JSON_INLINE, SpanLlmAsJudgeCode.class));
+
+        lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+        when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
+        when(aiProxyService.scoreTrace(any(), any(), any()))
+                .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(response)).build());
+
+        // Completes without error, and with nothing to store there is no store call.
+        assertThatCode(() -> scorer.score(message).block()).doesNotThrowAnyException();
+        verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
+    }
+
+    @Test
+    void decisionModelScoresEveryBooleanScoreWithOneDecisionsCall() {
+        var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
+        var span = createSpan();
+        var message = buildMessage(span, code);
+        var clientConfig = LlmProviderClientApiConfig.builder()
+                .apiKey(RandomStringUtils.secure().nextAlphanumeric(16))
+                .build();
+
+        when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
+        when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL)).thenReturn(clientConfig);
+        var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+        when(decisionsClient.decide(requestCaptor.capture(), eq(clientConfig))).thenReturn(Mono.just(
+                DecisionsResponse.builder()
+                        .model("typesafe/jev-1.13-20260917")
+                        .answers(Map.of("q0", DecisionsResponse.Answer.builder()
+                                .type(DecisionsQuestion.NOUL_TYPE).noul(0.97).build()))
+                        .build()));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+        when(feedbackScoreService.scoreBatchOfSpans(scoresCaptor.capture())).thenReturn(Mono.empty());
+
+        scorer.score(message).block();
+
+        assertThat(requestCaptor.getValue().state()).isEqualTo("Reply: hello");
+        assertThat(requestCaptor.getValue().questions())
+                .containsExactly(Map.entry("q0", DecisionsQuestion.noul("Does the reply greet the user?")));
+        var score = scoresCaptor.getValue().getFirst();
+        assertThat(score.name()).isEqualTo("greets");
+        assertThat(score.id()).isEqualTo(span.id());
+        assertThat(score.value()).isEqualByComparingTo("1");
+        assertThat(score.reason()).isEqualTo("Probability: 0.97");
+        verifyNoInteractions(aiProxyService);
+    }
+
+    @Test
+    void decisionModelPromptOverContextLimitIsSkippedWithoutCallingTheModel() {
+        var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
+        // 4 chars per token: this reply alone is over Jev's 32k-token limit.
+        var span = createSpan().toBuilder()
+                .output(JsonUtils.valueToTree(Map.of("reply",
+                        RandomStringUtils.secure()
+                                .nextAlphanumeric(DecisionScoringService.MAX_CONTEXT_TOKENS * 4 + 1))))
+                .build();
+        when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
+        // A resolvable key, so the only thing keeping the request from the client is the context check.
+        lenient().when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL))
+                .thenReturn(LlmProviderClientApiConfig.builder().apiKey("key").build());
+
+        scorer.score(buildMessage(span, code)).block();
+
+        verifyNoInteractions(decisionsClient);
+        verifyNoInteractions(aiProxyService);
+        verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
     }
 
     // Podam manufactures a fully-populated Span; toBuilder then pins only the fields these tests assert on

@@ -4,6 +4,8 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from opik.types import LLMProvider
 from . import opik_usage
 
+LOGGER = logging.getLogger(__name__)
+
 
 # One provider can have multiple formats of usage dicts, so it can have more than 1 build function
 _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[
@@ -44,7 +46,16 @@ def build_opik_usage(
 
 def build_opik_usage_from_unknown_provider(
     usage: Dict[str, Any],
-) -> opik_usage.OpikUsage:
+) -> Optional[opik_usage.OpikUsage]:
+    """Best-effort usage parsing for a provider we have no builder for.
+
+    Never raises. This is the last resort behind every provider-specific builder and
+    every caller already treats a failure as "no usage", but the generic fallback was
+    the one unguarded step here: ``from_unknown_usage_dict`` ends in ``cls(**usage)``,
+    so a payload that is not a mapping at all raised straight out of a function whose
+    whole contract is best effort - taking down whatever the caller was doing
+    alongside the usage.
+    """
     for build_functions in _PROVIDER_TO_OPIK_USAGE_BUILDERS.values():
         for build_function in build_functions:
             try:
@@ -53,7 +64,19 @@ def build_opik_usage_from_unknown_provider(
             except Exception:
                 pass
 
-    return opik_usage.OpikUsage.from_unknown_usage_dict(usage)
+    try:
+        return opik_usage.OpikUsage.from_unknown_usage_dict(usage)
+    except Exception:
+        # Not debug: the usage is silently dropped, and nothing else reports it.
+        # Only the type is logged, never the value: this runs on whatever a caller
+        # passed to `Opik.span(usage=...)`, which is arbitrary and unbounded. The
+        # traceback carries the actual diagnosis.
+        LOGGER.error(
+            "Failed to parse token usage of an unknown provider (received %s)",
+            type(usage).__name__,
+            exc_info=True,
+        )
+        return None
 
 
 def try_build_opik_usage_or_log_error(

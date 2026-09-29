@@ -29,8 +29,8 @@
 -- replica still has the wrapper, that wrapper resolves `traces_local`, which the already-renamed replicas no longer
 -- have, so a query routed there can fail with UNKNOWN_TABLE (the wrap's own window is the same thing in reverse — a
 -- Distributed query reaching a node where `traces_local` does not exist YET). It is brief and fails loudly rather than
--- silently, and ../rollback.sh gates it behind --confirm-maintenance; quiescing reads, not just buffering writes, is
--- what actually covers it.
+-- silently, and ../rollback.sh gates it behind --confirm-maintenance; only quiescing reads as well as writes actually
+-- covers it — nothing on the ingestion side can.
 --
 -- Partial-failure recovery: if the RENAME succeeds and the DROP does not, the estate is already correct (`traces` is the
 -- successor) and only the data-less ex-wrapper lingers under `traces_dist_old`. Nothing needs re-running — --unwrap-only

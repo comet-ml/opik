@@ -1,5 +1,6 @@
 import { z } from "zod";
 import uniq from "lodash/uniq";
+import omit from "lodash/omit";
 import {
   LLMJudgeObject,
   EVALUATORS_RULE_SCOPE,
@@ -7,8 +8,16 @@ import {
   EVALUATORS_RULE_TYPE,
   EVAL_TRIGGER_SCOPE,
 } from "@/types/automations";
-import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { updateProviderConfig } from "@/lib/modelUtils";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  GeminiThinkingLevel,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
+import {
+  getThinkingLevelOptions,
+  resolveSamplingParams,
+  updateProviderConfig,
+} from "@/lib/modelUtils";
 import { getProviderFromModel } from "@/lib/provider";
 import {
   LLM_JUDGE,
@@ -20,9 +29,15 @@ import {
 import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
 import {
+  isDecisionModel,
   supportsImageInput,
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
+import {
+  DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE,
+  hasSingleUserMessage,
+  isTextOnlyMessage,
+} from "@/v2/pages-shared/automations/AddEditRuleDialog/decisionModelRule";
 import {
   hasImagesInContent,
   getTextFromMessageContent,
@@ -134,6 +149,71 @@ export const FiltersSchema = z
     });
   });
 
+type LLMJudgeRefineData = {
+  model: string;
+  messages: LLMMessage[];
+  variables: Record<string, string>;
+  schema: { type: LLM_SCHEMA_TYPE }[];
+};
+
+// Mirrors the backend's DecisionModelRuleValidator so a rule it would reject fails here first.
+const refineDecisionModelRule = (
+  data: LLMJudgeRefineData,
+  ctx: z.RefinementCtx,
+  scope: EVALUATORS_RULE_SCOPE,
+) => {
+  if (!isDecisionModel(data.model)) {
+    return;
+  }
+
+  if (!data.schema.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Jev needs at least one score",
+      path: ["schema"],
+    });
+  }
+
+  if (data.schema.some((score) => score.type !== LLM_SCHEMA_TYPE.BOOLEAN)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Jev only supports Boolean scores",
+      path: ["schema"],
+    });
+  }
+
+  if (!hasSingleUserMessage(data.messages)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Jev needs exactly one user message",
+      path: ["messages", Math.max(data.messages.length - 1, 0), "content"],
+    });
+  }
+
+  // The model-capability check only looks for images and videos; audio, or media kept from another model,
+  // would otherwise reach the backend.
+  data.messages.forEach((message, index) => {
+    if (!isTextOnlyMessage(message)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Jev only accepts text messages",
+        path: ["messages", index, "content"],
+      });
+    }
+  });
+
+  const forbiddenVariable = DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE[scope];
+  Object.entries(data.variables).forEach(([key, value]) => {
+    if (forbiddenVariable && value === forbiddenVariable) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Jev doesn't support the "${forbiddenVariable}" variable, map it to a trace or span field instead`,
+        path: ["variables", key],
+      });
+    }
+  });
+};
+
 const LLMJudgeBaseSchema = z.object({
   model: z
     .string({
@@ -149,6 +229,11 @@ const LLMJudgeBaseSchema = z.object({
       .optional()
       .nullable(),
     custom_parameters: z.record(z.string(), z.unknown()).optional().nullable(),
+    // Held as its own field so the shared model-config control can drive it, then folded into
+    // custom_parameters.thinking on save — the backend reads it from there.
+    thinkingLevel: z
+      .enum(["auto", "none", "off", "minimal", "low", "medium", "high"])
+      .optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -227,6 +312,8 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
+  refineDecisionModelRule(data, ctx, EVALUATORS_RULE_SCOPE.trace);
+
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );
@@ -282,6 +369,8 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
+  refineDecisionModelRule(data, ctx, EVALUATORS_RULE_SCOPE.span);
+
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );
@@ -325,6 +414,14 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
+  if (isDecisionModel(data.model)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Thread rules don't support Jev, choose a trace or span scope",
+      path: ["model"],
+    });
+  }
+
   const contextCount = data.messages.filter((m) => {
     const content = getTextFromMessageContent(m.content);
     return content.includes("{{context}}");
@@ -516,10 +613,18 @@ const convertProviderToLLMMessages = (
 
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   const model = data.model?.name ?? "";
+  const persistedCustomParameters = data.model?.custom_parameters ?? null;
+  const thinking = (
+    persistedCustomParameters as { thinking?: { level?: unknown } } | null
+  )?.thinking;
   const rawConfig = {
     temperature: data.model?.temperature,
     seed: data.model?.seed ?? null,
-    custom_parameters: data.model?.custom_parameters ?? null,
+    custom_parameters: persistedCustomParameters,
+    thinkingLevel:
+      typeof thinking?.level === "string"
+        ? (thinking.level as GeminiThinkingLevel)
+        : undefined,
   };
   // Normalize stale persisted configs (e.g. Opus 4.7 with `temperature: 0`
   // saved before this PR) so an unedited submit doesn't 400 on Anthropic.
@@ -549,12 +654,33 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsThreadFormType
     | LLMJudgeDetailsSpanFormType,
 ) => {
-  const { temperature, seed, custom_parameters } = data.config;
+  const { temperature, seed, custom_parameters, thinkingLevel } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
   };
 
-  if (temperature != null) {
+  // A decisions model takes no model settings and runs no agentic loop, so the settings and budget the
+  // form may still hold from another model are left out rather than sent.
+  if (isDecisionModel(data.model)) {
+    return {
+      model,
+      messages: convertLLMToProviderMessages(data.messages),
+      variables: data.variables,
+      schema: data.schema,
+      max_cost_usd: null,
+    };
+  }
+
+  // This path never reaches sanitizeConfigForRequest, so the capability check belongs here: the form
+  // keeps a temperature the user set on another model, and the providers that take none reject it at
+  // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
+  // a rule that never had a temperature does not gain the resolver's default.
+  const { temperature: resolvedTemperature } = resolveSamplingParams(
+    data.model as PROVIDER_MODEL_TYPE,
+    data.config,
+  );
+
+  if (temperature != null && resolvedTemperature != null) {
     model.temperature = temperature;
   }
 
@@ -562,8 +688,76 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     model.seed = seed;
   }
 
-  if (custom_parameters != null) {
-    model.custom_parameters = custom_parameters;
+  const persistedThinking = (
+    (custom_parameters ?? {}) as Record<string, unknown>
+  ).thinking as Record<string, unknown> | undefined;
+
+  // Merge rather than replace: budget_tokens and include_thoughts also live under `thinking` and
+  // are not represented in the form, so an unchanged load -> save must not drop them.
+  // "auto" is the absence of a setting — the model applies its own dynamic budget — so it is stored
+  // as no thinking block rather than as a level the backend would have to special-case.
+  const thinkingCustomParameters =
+    thinkingLevel != null &&
+    thinkingLevel !== "auto" &&
+    thinkingLevel !== "none" &&
+    getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).some(
+      (o) => o.value === thinkingLevel,
+    )
+      ? {
+          // "off" must clear any persisted budget_tokens: an explicit budget outranks the level
+          // server-side, so keeping both would leave thinking on while the UI reads "Off".
+          thinking: {
+            ...(thinkingLevel === "off"
+              ? omit(persistedThinking ?? {}, "budget_tokens")
+              : persistedThinking ?? {}),
+            level: thinkingLevel,
+          },
+        }
+      : undefined;
+
+  // On a model whose level control owns `thinking`, drop the persisted copy before re-adding the
+  // current selection: otherwise a level rejected above survives in the spread, and a stale "off"
+  // reaches a model that cannot disable thinking.
+  //
+  // Only for those models, though. `custom_parameters.thinking` is not Gemini-only — Anthropic reads
+  // `thinking.{type,budget_tokens}` for extended thinking — so omitting it unconditionally would
+  // silently disable extended thinking on an unedited save of an Anthropic rule. Same for a Gemini
+  // 2.5 rule holding an explicit budget_tokens, whose default level is "auto".
+  const persistedCustomParameters = (custom_parameters ?? {}) as Record<
+    string,
+    unknown
+  >;
+  // Strip the persisted `thinking` when the form is putting one back, and also when the form held a
+  // level this model rejects — a stale "off" carried onto a model that cannot disable thinking has
+  // to go, which is what the level check above is for.
+  //
+  // Otherwise carry the block through untouched. "auto", or no level at all, means "the form has no
+  // level of its own here", not "delete whatever else was in there": budget_tokens and
+  // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
+  // this same key for extended thinking.
+  // "none" is an explicit "do not think", so it removes a persisted thinking block rather than just
+  // declining to add one — otherwise a level saved earlier keeps being sent. "auto" is the weaker
+  // "let the model decide" and leaves the block alone, since it may hold fields the form cannot
+  // represent (budget_tokens, include_thoughts, or Anthropic's type).
+  const formClearsThinking = thinkingLevel === "none";
+  const formRejectedItsLevel =
+    thinkingLevel != null &&
+    thinkingLevel !== "auto" &&
+    thinkingLevel !== "none" &&
+    !thinkingCustomParameters;
+  const otherCustomParameters =
+    thinkingCustomParameters || formRejectedItsLevel || formClearsThinking
+      ? omit(persistedCustomParameters, "thinking")
+      : persistedCustomParameters;
+
+  if (
+    Object.keys(otherCustomParameters).length > 0 ||
+    thinkingCustomParameters
+  ) {
+    model.custom_parameters = {
+      ...otherCustomParameters,
+      ...thinkingCustomParameters,
+    };
   }
 
   return {

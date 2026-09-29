@@ -2462,54 +2462,55 @@ class TestConfigure:
         mock_update_session_config.assert_any_call("project_name", "new_project")
 
 
-class TestShouldSetupMcpServer:
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__install_mcp_false__returns_false(
-        self, mock_is_interactive
-    ):
-        configurator = OpikConfigurator(install_mcp=False)
-        assert configurator._should_setup_mcp_server() is False
+class TestTheLibraryPathDoesNotTouchAiClients:
+    """`opik.configure()` does not offer the MCP server or the skill pack.
 
-    @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_should_setup_mcp_server__non_interactive__returns_false(
-        self, mock_is_interactive
-    ):
-        configurator = OpikConfigurator(install_mcp=True)
-        assert configurator._should_setup_mcp_server() is False
+    It used to, with plain-text prompts of its own — and because the prompt no
+    longer named the detected clients while still forwarding
+    `assume_confirmed`, a bare Enter wrote into every one of them from a
+    question that named none. Registering a server and installing instruction
+    files edit files owned by Cursor, Claude Code and friends; a library call
+    has no business doing that. The step lives in the CLI, which is where the
+    consent, the picker and the reporting are.
+    """
 
     @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__install_mcp_true__returns_true(
-        self, mock_is_interactive
+    def test_no_renderer__does_nothing_and_asks_nothing(
+        self, mock_is_interactive, monkeypatch
     ):
-        configurator = OpikConfigurator(install_mcp=True)
-        assert configurator._should_setup_mcp_server() is True
+        asked = Mock(side_effect=AssertionError("must not prompt"))
+        monkeypatch.setattr("opik.configurator.configure.ask_user_for_approval", asked)
 
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__automatic_approvals__returns_false_without_prompt(
-        self, mock_is_interactive
-    ):
-        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=True)
-        assert configurator._should_setup_mcp_server() is False
+        OpikConfigurator()._setup_assistants()
 
-    @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
-        return_value=True,
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__interactive_prompt_yes__returns_true(
-        self, mock_is_interactive, mock_prompt
-    ):
-        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
-        assert configurator._should_setup_mcp_server() is True
-        mock_prompt.assert_called_once()
+        asked.assert_not_called()
 
-    @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
-        return_value=False,
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__interactive_prompt_no__returns_false(
-        self, mock_is_interactive, mock_prompt
-    ):
-        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
-        assert configurator._should_setup_mcp_server() is False
+    def test_renderer_supplied__is_handed_the_whole_step(self):
+        """The CLI injects one; everything about the step happens in there."""
+        seen = []
+        configurator = OpikConfigurator(
+            api_key="k",
+            workspace="ws",
+            install_mcp=True,
+            install_skills=False,
+            automatic_approvals=True,
+            assistant_setup=lambda *args: seen.append(args),
+        )
+
+        configurator._setup_assistants()
+
+        assert len(seen) == 1
+        params, install_mcp, install_skills, automatic = seen[0]
+        assert (install_mcp, install_skills, automatic) == (True, False, True)
+        assert params["api_key"] == "k" and params["workspace"] == "ws"
+
+    def test_the_assistant_helpers_are_gone(self):
+        """Nothing is left behind for a caller to reach into."""
+        for name in (
+            "_maybe_setup_mcp_server",
+            "_should_setup_mcp_server",
+            "_ask_about_mcp",
+            "_maybe_setup_skills",
+            "_skills_host_keys",
+        ):
+            assert not hasattr(OpikConfigurator, name), name

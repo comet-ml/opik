@@ -12,7 +12,6 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
@@ -60,13 +59,12 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 /**
- * Black-box coverage for the trace-thread LLM-as-judge online scorer with {@code agenticTools} enabled —
- * the route-before-fetch path added in OPIK-7454. Drives the public flow (create rule + create a thread
- * with traces/spans) end-to-end so the async scorer runs with the toggle on, exercising the real
- * {@code getSpansSizeByTraceIds} aggregate + the bounded span preload before scoring. The scorer's
- * user-facing "Evaluating threadId ..." log (emitted after the size aggregate resolves) is asserted via
- * the rule logs, proving the whole path executed. Complements the existing toggle-off scorer coverage and
- * leaves a reference test for the agentic-tools path.
+ * Black-box coverage for the trace-thread LLM-as-judge online scorer's agentic-tools path — the
+ * route-before-fetch flow added in OPIK-7454. Drives the public flow (create rule + create a thread with
+ * traces/spans) end-to-end so the async scorer exercises the real {@code getSpansSizeByTraceIds}
+ * aggregate + the bounded span preload before scoring. The scorer's user-facing "Evaluating threadId ..."
+ * log (emitted after the size aggregate resolves) is asserted via the rule logs, proving the whole path
+ * executed.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -134,8 +132,6 @@ class TraceThreadOnlineScoringAgenticToolsE2ETest {
                                         Mockito.mock(LlmProviderFactory.class, Mockito.RETURNS_DEEP_STUBS));
                             }
                         }))
-                        // The subject under test: run the trace-thread scorers with agentic tools on.
-                        .customConfigs(List.of(new CustomConfig("serviceToggles.agenticToolsEnabled", "true")))
                         .build());
     }
 
@@ -158,7 +154,7 @@ class TraceThreadOnlineScoringAgenticToolsE2ETest {
     }
 
     @Test
-    void runsSizeAggregateAndScoresThreadWhenAgenticToolsEnabled(LlmProviderFactory llmProviderFactory)
+    void runsSizeAggregateAndScoresThread(LlmProviderFactory llmProviderFactory)
             throws Exception {
         when(llmProviderFactory.getLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
                 .thenAnswer(invocation -> ChatResponse.builder().aiMessage(AiMessage.from(LLM_RESPONSE)).build());
@@ -246,6 +242,10 @@ class TraceThreadOnlineScoringAgenticToolsE2ETest {
             var threads = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY, WORKSPACE_NAME,
                     null, null, Map.of());
             assertThat(threads.content()).isNotEmpty();
+            // Assert before dereferencing: the "Evaluating threadId" log above is emitted before scoring
+            // finishes, so feedbackScores() is briefly null. An AssertionError is retried by
+            // untilAsserted; a raw NPE from .stream() would fail the test outright.
+            assertThat(threads.content().getFirst().feedbackScores()).isNotNull();
             var scoresByName = threads.content().getFirst().feedbackScores().stream()
                     .collect(toMap(FeedbackScore::name, FeedbackScore::value));
             assertThat(scoresByName).containsOnlyKeys("Relevance", "Conciseness");

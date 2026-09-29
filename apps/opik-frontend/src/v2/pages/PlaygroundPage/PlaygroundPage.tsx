@@ -10,6 +10,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { Separator } from "@/ui/separator";
 import { Skeleton } from "@/ui/skeleton";
 import PlaygroundOutputs from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
+import PlaygroundScrollContainer from "@/v2/pages/PlaygroundPage/PlaygroundScrollContainer";
 import PlaygroundAddVariant from "@/v2/pages/PlaygroundPage/PlaygroundAddVariant";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -31,7 +32,7 @@ import {
   useClearRunningMap,
   useResetDatasetFilters,
   useSetDatasetVariables,
-  useSetExperimentNamePrefix,
+  useSetExperimentName,
   useDatasetFilters,
   useDatasetPage,
   useDatasetSize,
@@ -44,6 +45,10 @@ import { transformDataColumnFilters } from "@/lib/filters";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
+import useLastPickedModel from "@/hooks/useLastPickedModel";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import { generateDefaultPrompt } from "@/lib/playground";
+import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 
 import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
 
@@ -89,7 +94,6 @@ const PlaygroundPage = () => {
   const triggerProviderValidation = useTriggerProviderValidation();
   const isRunning = useIsRunning();
   const promptCount = usePromptCount();
-  const ref = useRef<HTMLDivElement>(null);
 
   const { datasetId, versionName, versionHash, setDatasetId } =
     usePlaygroundDataset();
@@ -100,28 +104,63 @@ const PlaygroundPage = () => {
   const clearRunningMap = useClearRunningMap();
   const resetDatasetFilters = useResetDatasetFilters();
   const setDatasetVariables = useSetDatasetVariables();
-  const setExperimentNamePrefix = useSetExperimentNamePrefix();
+  const setExperimentName = useSetExperimentName();
   const lastActiveProjectId = useLastActiveProjectId();
   const setLastActiveProjectId = useSetLastActiveProjectId();
 
+  const { data: providerKeysData, isPending: isPendingProviderKeys } =
+    useProviderKeys({ workspaceName });
+
+  const providerKeys: COMPOSED_PROVIDER_TYPE[] = useMemo(() => {
+    return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
+  }, [providerKeysData]);
+
+  const [lastPickedModel] = useLastPickedModel({
+    key: PLAYGROUND_LAST_PICKED_MODEL,
+  });
+  const { calculateModelProvider, calculateDefaultModel } =
+    useLLMProviderModelsData();
+
+  const resetPrompts = useCallback(() => {
+    if (isPendingProviderKeys) {
+      setPromptMap([], {});
+      return;
+    }
+
+    const prompt = generateDefaultPrompt({
+      setupProviders: providerKeys,
+      lastPickedModel,
+      providerResolver: calculateModelProvider,
+      modelResolver: calculateDefaultModel,
+    });
+    setPromptMap([prompt.id], { [prompt.id]: prompt });
+  }, [
+    isPendingProviderKeys,
+    providerKeys,
+    lastPickedModel,
+    calculateModelProvider,
+    calculateDefaultModel,
+    setPromptMap,
+  ]);
+
   const resetPlayground = useCallback(() => {
-    setPromptMap([], {});
+    resetPrompts();
     setDatasetId(null);
     setSelectedRuleIds(null);
     clearCreatedExperiments();
     clearRunningMap();
     resetDatasetFilters();
     setDatasetVariables([]);
-    setExperimentNamePrefix(null);
+    setExperimentName(null);
   }, [
-    setPromptMap,
+    resetPrompts,
     setDatasetId,
     setSelectedRuleIds,
     clearCreatedExperiments,
     clearRunningMap,
     resetDatasetFilters,
     setDatasetVariables,
-    setExperimentNamePrefix,
+    setExperimentName,
   ]);
 
   useEffect(() => {
@@ -158,13 +197,6 @@ const PlaygroundPage = () => {
     confirmText: "Leave anyway",
     cancelText: "Stay and wait",
   });
-
-  const { data: providerKeysData, isPending: isPendingProviderKeys } =
-    useProviderKeys({ workspaceName });
-
-  const providerKeys: COMPOSED_PROVIDER_TYPE[] = useMemo(() => {
-    return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
-  }, [providerKeysData]);
 
   // Auto-open setup dialog when no providers configured (only on initial load)
   useEffect(() => {
@@ -244,8 +276,7 @@ const PlaygroundPage = () => {
     : `calc(${promptCount} * var(--max-prompt-width) + var(--add-variant-width))`;
 
   return (
-    <div
-      ref={ref}
+    <PlaygroundScrollContainer
       className="-mx-6 h-full overflow-y-auto overflow-x-hidden"
       style={
         {
@@ -259,7 +290,6 @@ const PlaygroundPage = () => {
         <div className="bg-gray-100">
           <PlaygroundHeader
             workspaceName={workspaceName}
-            providerKeys={providerKeys}
             datasetId={datasetId}
             datasetName={datasetName}
             versionName={versionName}
@@ -343,7 +373,7 @@ const PlaygroundPage = () => {
       />
 
       {DialogComponent}
-    </div>
+    </PlaygroundScrollContainer>
   );
 };
 

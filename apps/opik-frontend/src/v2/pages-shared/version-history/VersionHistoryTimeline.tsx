@@ -25,6 +25,16 @@ interface VersionHistoryTimelineProps {
   onSelect: (item: VersionHistoryItem) => void;
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
+  // Broader than isFetchingNextPage — also true during a background refetch
+  // (e.g. the 30s poll, or a mutation's invalidation of already-loaded
+  // pages). Used only to gate the auto-load trigger, not the spinner: firing
+  // onLoadMore while an unrelated fetch is in flight races it and can
+  // produce a duplicate/overlapping row once both resolve.
+  isFetching?: boolean;
+  // True once a page fetch has failed. hasNextPage still reflects the last
+  // *successful* page, so without this the sentinel retries a permanently
+  // failing request forever, the moment isFetching settles back to false.
+  hasError?: boolean;
   onLoadMore?: () => void;
   emptyTitle?: string;
 }
@@ -35,16 +45,18 @@ const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
   onSelect,
   hasNextPage = false,
   isFetchingNextPage = false,
+  isFetching = false,
+  hasError = false,
   onLoadMore,
   emptyTitle = "No version history",
 }) => {
   const { ref: sentinelRef, inView } = useInView();
 
   useEffect(() => {
-    if (inView && hasNextPage && !isFetchingNextPage && onLoadMore) {
+    if (inView && hasNextPage && !isFetching && !hasError && onLoadMore) {
       onLoadMore();
     }
-  }, [inView, hasNextPage, isFetchingNextPage, onLoadMore]);
+  }, [inView, hasNextPage, isFetching, hasError, onLoadMore]);
 
   if (items.length === 0) {
     return <DataTableNoData title={emptyTitle} />;

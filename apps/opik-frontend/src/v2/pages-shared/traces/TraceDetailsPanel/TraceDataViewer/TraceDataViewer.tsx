@@ -48,6 +48,13 @@ type TraceDataViewerProps = {
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
   search?: string;
+  isErrorExpanded?: boolean;
+  onErrorExpandedChange?: (expanded: boolean) => void;
+  /**
+   * Sits at the end of the header row. A slot rather than a component, so the
+   * panel keeps owning when it appears and this only decides where.
+   */
+  headerSlot?: React.ReactNode;
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
@@ -59,6 +66,9 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   setActiveSection,
   isSpansLazyLoading,
   search,
+  isErrorExpanded,
+  onErrorExpandedChange,
+  headerSlot,
 }) => {
   const {
     permissions: { canAnnotateTraceSpanThread, canViewPrompts },
@@ -164,6 +174,14 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           <AgentGraphTab data={graphData} />
         </div>
       )}
+      {/* Sticky, and no height of its own, so the pill keeps the spot the
+          design gives it in the header row and stays there while the panel
+          scrolls. Clicks pass through to the header items underneath. */}
+      {headerSlot && (
+        <div className="pointer-events-none sticky top-0 z-20 h-0">
+          <div className="flex justify-end px-4 pt-4">{headerSlot}</div>
+        </div>
+      )}
       <div className="min-w-[400px] max-w-full overflow-x-hidden p-4">
         <div className="mb-4 flex flex-col gap-1">
           <div className="comet-body-s flex w-full flex-wrap items-center gap-3 pl-1 text-foreground">
@@ -259,7 +277,12 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           />
         </div>
 
-        <ErrorCallout error={data.error_info} search={search} />
+        <ErrorCallout
+          error={data.error_info}
+          search={search}
+          isExpanded={isErrorExpanded}
+          onExpandedChange={onErrorExpandedChange}
+        />
 
         <Tabs
           defaultValue={defaultTab}

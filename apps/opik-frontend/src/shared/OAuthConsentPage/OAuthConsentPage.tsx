@@ -73,7 +73,11 @@ const OAuthConsentPage: React.FC = () => {
 
   const data: OAuthAuthorizeContext = contextQuery.data;
   const workspaces = data.workspaces ?? [];
-  const effectiveWorkspaceId = selectedWorkspaceId ?? workspaces[0]?.id ?? null;
+  const effectiveWorkspaceId =
+    selectedWorkspaceId ??
+    workspaces.find((w) => w.is_default)?.id ??
+    workspaces[0]?.id ??
+    null;
   const canAllow =
     !consent.isPending && workspaces.length > 0 && !!effectiveWorkspaceId;
 

@@ -13,7 +13,9 @@ interface CacheService {
             String userName,
             String workspaceId,
             String workspaceName,
-            List<Quota> quotas) {
+            List<Quota> quotas,
+            List<String> permissions,
+            String deviceId) {
     }
 
     void cache(

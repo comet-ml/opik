@@ -28,6 +28,36 @@ Follow-up commits (preferred):
 ## PR Title
 `[<TICKET-KEY>] [COMPONENT] <type>: description`
 
+## PR Body
+Follow `.github/pull_request_template.md` — read the FULL template file before drafting.
+CI (`pr-lint`) fails the PR if any of these exact headings is missing:
+`## Details`, `## Change checklist`, `## Issues`, `## Testing`, `## Documentation`.
+Fill in `## AI-WATERMARK` too (Tools, Model(s), Scope, Human verification).
+Never substitute your own structure (e.g. `## Summary` / `## Test Plan`).
+A section that does not apply gets `N/A` — never delete a heading.
+
+### `## Details` — style
+Write what changes for a user. A reviewer reads the diff for the code; this section
+tells them what is different when they use the product.
+
+- **Short.** Most PRs need 3–10 bullets. If it runs longer, the section is doing the
+  diff's job — cut it.
+- **Bullets, not prose paragraphs.** One behavior per bullet. Nest one level for sub-cases.
+- **Authoritative.** State what happens: "The run is scored once." Not "This should now
+  mean that the run will be scored once."
+- **No fluff.** No motivation paragraph, no "this PR …", no approach summary, no
+  benefits list, no restating the diff.
+- **Observable behavior first.** What the UI shows, what the API returns, what gets
+  scored, stored or logged. Name a class, method or file only when the behavior makes
+  no sense without it.
+
+Pick the shape that fits the change — do not force one:
+
+- **Before / After bullet lists** when a behavior changed and the contrast is the point.
+- **A flat bullet list** for a new capability, where there is no "before".
+- **One or two lines** when users cannot see the change (refactor, dependency bump) —
+  say what is unchanged and what improved, then stop.
+
 ## Jira Key References (commit messages & PR body)
 The GitHub for Jira app links a PR to a ticket's Development panel whenever it finds an issue key matching `[A-Z][A-Z0-9]+-\d+` (project key, literal hyphen, digits) in the branch name, PR title, PR body, or any commit message. It matches on the regex alone — it cannot tell "this PR resolves the ticket" from "this just mentions it" — and the resulting link cannot be removed afterward. So free text must only contain hyphenated keys for tickets the PR actually resolves.
 

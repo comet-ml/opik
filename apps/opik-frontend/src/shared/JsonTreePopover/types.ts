@@ -21,4 +21,9 @@ export interface JsonTreePopoverProps {
   onOpenChange: (open: boolean) => void;
   searchQuery?: string;
   onFocusedPathChange?: (path: string | null) => void;
+  header?: React.ReactNode;
+  emptyState?: React.ReactNode;
+  selectedPath?: string;
+  contentClassName?: string;
+  sideOffset?: number;
 }

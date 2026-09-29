@@ -16,7 +16,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-interface AutomationRuleProjectsDAO {
+public interface AutomationRuleProjectsDAO {
 
     @SqlBatch("INSERT INTO automation_rule_projects(rule_id, project_id, workspace_id) " +
             "VALUES (:bean.ruleId, :bean.projectId, :bean.workspaceId)")

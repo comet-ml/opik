@@ -6,7 +6,7 @@ Enforces the tag grammar in TESTING-TAGS.md against a taxonomy YAML:
   1. tier_and_area_required     every non-exempt e2e spec declares a tier tag
                                 and exactly one @area: tag. A spec carrying a
                                 valid suite selector (@provider-sanity,
-                                @t1-stsaas, @provider-sanity) may be
+                                @t1-stsaas, @llm-daily) may be
                                 tier-less — it runs on its own cadence, outside
                                 the t1/t2/t3 ladder. Tier *cardinality* is not
                                 enforced; see the note in lint_spec().
@@ -45,7 +45,7 @@ except ImportError:
 TIERS = {"@t1-smoke", "@t2-cuj", "@t3-nightly"}
 # Selectors are orthogonal to tier — they say WHERE a test runs, not how deep.
 # A spec may carry any number of these, including none.
-SUITES = {"@t1-stsaas", "@provider-sanity"}
+SUITES = {"@t1-stsaas", "@provider-sanity", "@llm-daily"}
 
 # Any `tag: [ ... ]` array, single or multi-line.
 TAG_BLOCK = re.compile(r"tag:\s*\[(.*?)\]", re.S)
@@ -181,10 +181,22 @@ def lint_spec(path: Path, rel: str, idx, retired: dict, *, visual: bool) -> list
 
 
 def lint_taxonomy(tax: dict, idx) -> list[Finding]:
-    """Rule 3: visual state values must be in the enum."""
+    """Rule 3: visual state values must be in the enum.
+    Rule 4: `specs:` lists stay sorted, so concurrent additions do not collide.
+    """
     _, _, _, states, _ = idx
     out = []
     for area, body in (tax.get("areas") or {}).items():
+        specs = (body or {}).get("specs") or []
+        if specs != sorted(specs):
+            # Appending puts every concurrent addition on the same last line, so
+            # two open spec PRs in one area always conflict here. Sorted
+            # insertion lands them on different lines and git merges them.
+            out.append(Finding(
+                "taxonomy.yaml", 1,
+                f"{area}.specs is not sorted — insert new specs in sorted "
+                f"position, not at the end (see the header)",
+            ))
         for vcap, spec in (body.get("visual") or {}).items():
             st = (spec or {}).get("state")
             if st is None:

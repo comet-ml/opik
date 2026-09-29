@@ -23,6 +23,8 @@ public record AgentInsightsJob(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY, requiredMode = Schema.RequiredMode.REQUIRED) UUID projectId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Status status,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) boolean autoFirstRunEnrolled,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant autoFirstRunAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastScanAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastFailureReason,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastFailureDetail,
@@ -31,6 +33,16 @@ public record AgentInsightsJob(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
+
+    public static class FailureReason {
+        // The trigger was rejected because the organization can't afford the run. No pod was allocated.
+        public static final String OUT_OF_CREDITS = "out_of_credits";
+        // The trigger never reached Ollie, so Ollie cannot report this itself.
+        public static final String DID_NOT_START = "did_not_start";
+        // Comet's free-run budget is spent, not the customer's credits. Not the customer's failure: it
+        // cancels the auto-first-run rollout instead of being recorded against their project.
+        public static final String FREE_POOL_EXHAUSTED = "free_pool_exhausted";
+    }
 
     @RequiredArgsConstructor
     @Getter

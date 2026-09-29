@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Type
@@ -32,6 +33,12 @@ LOGGER = logging.getLogger(__name__)
 # `suite_evaluators/agentic/loop.py` for why this hasn't surfaced via
 # the agentic judge (the loop pins `temperature=0`, which forces both
 # paths into the drop branch and hides the asymmetry).
+#
+# This is a ceiling, not the final answer: `filter_unsupported_params`
+# intersects it with what the installed SDK's `Messages.create()` actually
+# accepts, because the SDK removes parameters over time (1.7.0 dropped
+# `temperature`, `top_p` and `top_k`) and forwarding one it no longer
+# takes is a `TypeError` before the request is ever sent.
 _SUPPORTED_PARAMS: frozenset[str] = frozenset(
     {
         "model",
@@ -206,13 +213,32 @@ def strip_anthropic_prefix(model_name: str) -> str:
     return model_name
 
 
+def _sdk_accepted_params() -> Optional[frozenset[str]]:
+    """Parameter names the installed anthropic SDK's ``Messages.create()``
+    takes, or ``None`` when they cannot be determined (SDK missing or
+    replaced by a test stub), in which case the static allowlist stands.
+    """
+    try:
+        import anthropic
+
+        signature = inspect.signature(anthropic.resources.messages.Messages.create)
+    except Exception:
+        return None
+    return frozenset(signature.parameters)
+
+
 def filter_unsupported_params(
     params: Dict[str, Any],
     already_warned: Set[str],
 ) -> Dict[str, Any]:
+    supported = _SUPPORTED_PARAMS
+    sdk_params = _sdk_accepted_params()
+    if sdk_params is not None:
+        supported = supported & sdk_params
+
     filtered: Dict[str, Any] = {}
     for key, value in params.items():
-        if key in _SUPPORTED_PARAMS:
+        if key in supported:
             filtered[key] = value
         elif key not in already_warned:
             LOGGER.debug(

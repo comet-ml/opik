@@ -255,6 +255,24 @@ log.error("Failed for workspace: '{}'", workspaceId, exception);
 log.info("Created user: {}", userId);
 ```
 
+### Value Placement
+Put the message first and the interpolated values at the **end** of the sentence, as a trailing
+`name '{}'` list. This keeps a stable literal prefix that stays greppable during a production
+debugging session — a message whose values are interleaved has no fixed substring to search for.
+
+Applies to `log.*` format strings and to exception messages built with `.formatted(...)`.
+
+```java
+// ✅ GOOD - literal prefix first, values trailing
+log.warn("Alert name is required, workspaceId '{}'", workspaceId);
+log.debug("Webhook delivery failed, id '{}', status '{}'", eventId, status);
+throw new DestinationGuardException("destination has no valid host, url '%s'".formatted(url));
+
+// ❌ BAD - values interleaved, no greppable prefix
+log.debug("Webhook '{}' failed with status '{}'", eventId, status);
+throw new DestinationGuardException("destination '%s' has no valid host".formatted(url));
+```
+
 ### Never Log
 - Emails, passwords, tokens, API keys
 - PII, personal identifiers

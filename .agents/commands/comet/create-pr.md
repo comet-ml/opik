@@ -181,7 +181,20 @@ This workflow will:
   - **Fill every `##` section** in the template — the PR linter requires all sections to be present
   - If a section is not applicable, write "N/A" rather than removing it
 - **Section guidance**:
-  - **Details**: Implementation summary from git analysis (replace the HTML comment placeholder)
+  - **Details**: Replace the HTML comment placeholder with what changes for a user. A reviewer reads the diff for the code; this section tells them what is different when they use the product. Style:
+
+    - **Short.** Most PRs need 3–10 bullets. If it runs longer, the section is doing the diff's job — cut it.
+    - **Bullets, not prose paragraphs.** One behavior per bullet. Nest one level for sub-cases.
+    - **Authoritative.** State what happens: "The run is scored once." Not "This should now mean that the run will be scored once."
+    - **No fluff.** No motivation paragraph, no "this PR …", no approach summary, no benefits list, no restating the diff.
+    - **Observable behavior first.** What the UI shows, what the API returns, what gets scored, stored or logged. Name a class, method or file only when the behavior makes no sense without it.
+
+    Pick the shape that fits the change — do not force one:
+
+    - **Before / After bullet lists** when a behavior changed and the contrast is the point.
+    - **A flat bullet list** for a new capability, where there is no "before".
+    - **One or two lines** when users cannot see the change (refactor, dependency bump) — say what is unchanged and what improved, then stop.
+
   - **Change checklist**: Auto-check based on file types changed (user-facing for UI changes, documentation for docs)
   - **Issues**: Link to Jira ticket (e.g., `OPIK-2180`) or GitHub issue, or "NA" for hotfixes. List every ticket this PR **resolves** here with a normal hyphenated key.
   - **Jira key convention across the whole body** (see git-workflow rule): the GitHub for Jira app links any `OPIK-<digits>` it finds in the PR body to that ticket's Development panel, and the link can't be removed. So in **all** sections (Details, Testing, etc.) and in commit messages: tickets this PR **resolves** keep the hyphen (`OPIK-1234`) — links/URLs fine and wanted. Tickets **related but not resolved** here (escalations, references to older tickets — anything not in the title/branch) must be written with an underscore (`OPIK_7000`) and with **no** Jira URL (the URL contains the hyphenated key and links anyway). Apply this when generating every section below.

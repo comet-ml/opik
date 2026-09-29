@@ -31,8 +31,8 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     ollamaProviderEnabled: core.serialization.boolean(),
     ollieEnabled: core.serialization.boolean(),
     projectHomepageEnabled: core.serialization.boolean(),
-    agenticToolsEnabled: core.serialization.boolean(),
     onlineScoringTracingEnabled: core.serialization.boolean(),
+    annotationQueueAutomationEnabled: core.serialization.boolean(),
     defaultPageSize: core.serialization.number().optional(),
 });
 
@@ -61,8 +61,8 @@ export declare namespace ServiceTogglesConfig {
         ollamaProviderEnabled: boolean;
         ollieEnabled: boolean;
         projectHomepageEnabled: boolean;
-        agenticToolsEnabled: boolean;
         onlineScoringTracingEnabled: boolean;
+        annotationQueueAutomationEnabled: boolean;
         defaultPageSize?: number | null;
     }
 }

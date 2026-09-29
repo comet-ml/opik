@@ -6,6 +6,8 @@ import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts
 import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
+import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -20,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
@@ -27,10 +30,12 @@ import reactor.core.publisher.SignalType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -125,6 +130,15 @@ class ExperimentItemDAO {
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+            <if(traces_partitioned)>
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                FROM (
+                    SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                    FROM experiment_items_trace_scope
+                )
+            )
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -461,6 +475,15 @@ class ExperimentItemDAO {
                           WHERE workspace_id = :workspace_id
                           <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                           AND id IN (SELECT trace_id FROM experiment_items_ids)
+                          <if(traces_partitioned)>
+                          AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                              SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                              FROM (
+                                  SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                                  FROM experiment_items_ids
+                              )
+                          )
+                          <endif>
                           ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                           LIMIT 1 BY id
                       ) AS t
@@ -496,6 +519,14 @@ class ExperimentItemDAO {
             ;
             """;
 
+    /**
+     * The 'experiment_id IN (...)' predicate is what restricts the 'experiment_items' scan. Without it, the only
+     * predicate on the large table is 'workspace_id': 'experiment_items' has no 'dataset_id' column, so a
+     * 'dataset_id' filter on the joined side can only discard rows after they have been read, making the cost scale
+     * with total workspace experiment volume rather than with the requested datasets. 'experiment_id' is the second
+     * column of the sort key '(workspace_id, experiment_id, dataset_item_id, trace_id, id)', so filtering on it
+     * directly lets ClickHouse prune granules. The join is retained solely to project 'dataset_id' for the grouping.
+     */
     private static final String FIND_EXPERIMENT_SUMMARY_BY_DATASET_IDS = """
             SELECT
                 e.dataset_id,
@@ -503,8 +534,14 @@ class ExperimentItemDAO {
                 max(ei.last_updated_at) as most_recent_experiment_at
             FROM experiment_items ei
             JOIN experiments e ON ei.experiment_id = e.id AND e.workspace_id = ei.workspace_id
-            WHERE e.dataset_id in :dataset_ids
-            AND ei.workspace_id = :workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.experiment_id IN (
+                SELECT id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id IN :dataset_ids
+            )
+            AND e.dataset_id in :dataset_ids
             GROUP BY
                 e.dataset_id
             SETTINGS log_comment = '<log_comment>'
@@ -555,6 +592,7 @@ class ExperimentItemDAO {
             ;
             """;
 
+    /** The {@code spans} subquery carries the {@code <id_weeks>} bound; see {@code SpanDAO}. */
     private static final String GET_EXPERIMENT_REFS_BY_SPAN_IDS = """
             SELECT ei.experiment_id, ei.trace_id
             FROM experiment_items AS ei FINAL
@@ -567,6 +605,7 @@ class ExperimentItemDAO {
                 SELECT DISTINCT trace_id FROM spans
                 WHERE id IN :span_ids AND workspace_id = :workspace_id
                 <if(project_id)> AND project_id = :project_id <endif>
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             )
             AND ea.status IN :statuses
             SETTINGS log_comment = '<log_comment>'
@@ -583,9 +622,12 @@ class ExperimentItemDAO {
             ;
             """;
 
+    private static final String EXPERIMENT_ITEMS_TABLE = "experiment_items";
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
@@ -619,8 +661,26 @@ class ExperimentItemDAO {
             return Mono.just(0L);
         }
 
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(experimentItems);
+        }
+
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> insert(experimentItems, connection));
+    }
+
+    /**
+     * Same rows as {@link #INSERT}, streamed as JSONEachRow through the v2 client instead of bound as
+     * ~9 named parameters per row. The {@code log_comment} is rendered by the same
+     * {@code FilterUtils#getLogComment}, so a benchmark can compare the two paths in
+     * {@code system.query_log} on equal terms.
+     */
+    private Mono<Long> insertJsonEachRow(Collection<ExperimentItem> experimentItems) {
+        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
+                EXPERIMENT_ITEMS_TABLE,
+                getLogComment("insert_experiment_items", workspaceId, userName, experimentItems.size()),
+                experimentItems,
+                item -> ExperimentItemJsonRowMapper.toJsonRow(item, userName, workspaceId)));
     }
 
     private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {
@@ -708,11 +768,22 @@ class ExperimentItemDAO {
         return experimentAggregatesDAO.getAggregationBranchCounts(criteria);
     }
 
+    /**
+     * Enables the week bound on this DAO's {@code traces} reads - see
+     * {@code ExperimentDAO#addTracesPartitionedFlag} for what it is and why it is gated.
+     */
+    private void addTracesPartitionedFlag(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
+    }
+
     private Mono<List<UUID>> getTargetProjectIds(Set<UUID> experimentIds) {
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
                     var template = TemplateUtils.newST(SELECT_TARGET_PROJECTS);
                     template.add("log_comment", "get_target_project_ids_experiment_items");
+                    addTracesPartitionedFlag(template);
 
                     var statement = connection.createStatement(template.render())
                             .bind("experiment_ids", experimentIds.toArray(UUID[]::new));
@@ -736,6 +807,7 @@ class ExperimentItemDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(STREAM, "get_experiment_items_stream", workspaceId, userName,
                     experimentIds.size());
+            addTracesPartitionedFlag(template);
             if (lastRetrievedId != null) {
                 template.add("lastRetrievedId", lastRetrievedId);
             }
@@ -817,14 +889,14 @@ class ExperimentItemDAO {
     public Flux<ExperimentTraceRef> getExperimentRefsByTraceIds(@NonNull Set<UUID> traceIds,
             @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
         return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_TRACE_IDS, "get_experiment_refs_by_trace_ids",
-                "trace_ids", traceIds, statuses, projectId);
+                "trace_ids", traceIds, statuses, projectId, Optional.empty());
     }
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
             @NonNull Set<ExperimentStatus> statuses) {
         return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "get_experiment_refs_by_item_ids",
-                "item_ids", itemIds, statuses, null);
+                "item_ids", itemIds, statuses, null, Optional.empty());
     }
 
     @WithSpan
@@ -848,13 +920,17 @@ class ExperimentItemDAO {
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
             @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
+        // Array, not List: the driver renders a Collection as a tuple, and the bound is an IN over a set.
         return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "get_experiment_refs_by_span_ids",
-                "span_ids", spanIds, statuses, projectId);
+                "span_ids", spanIds, statuses, projectId,
+                WeeklyPartitions.weeksOf(spanIds).map(weeks -> weeks.toArray(Long[]::new)));
     }
 
+    // Only the span-id variant reads spans; the trace-id and item-id variants read experiment_items alone, which is not
+    // week-partitioned, so they pass no week bound.
     private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String queryName,
             @NonNull String idParamName, @NonNull Set<UUID> ids, @NonNull Set<ExperimentStatus> statuses,
-            UUID projectId) {
+            UUID projectId, @NonNull Optional<Long[]> idWeeks) {
         if (ids.isEmpty() || statuses.isEmpty()) {
             return Flux.empty();
         }
@@ -867,6 +943,8 @@ class ExperimentItemDAO {
                         template.add("project_id", projectId.toString());
                     }
 
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                     Statement statement = connection.createStatement(template.render())
                             .bind(idParamName, ids.stream().map(UUID::toString).toArray(String[]::new))
                             .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
@@ -874,6 +952,8 @@ class ExperimentItemDAO {
                     if (projectId != null) {
                         statement.bind("project_id", projectId.toString());
                     }
+
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     statement.bind("workspace_id", workspaceId);
 

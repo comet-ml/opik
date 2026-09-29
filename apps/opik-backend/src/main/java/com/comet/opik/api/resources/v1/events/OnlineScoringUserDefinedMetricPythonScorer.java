@@ -43,7 +43,6 @@ public class OnlineScoringUserDefinedMetricPythonScorer
 
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
-    private final SpanService spanService;
     private final Logger userFacingLogger;
 
     @Inject
@@ -54,10 +53,9 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull TraceService traceService,
             @NonNull SpanService spanService,
             @NonNull PythonEvaluatorService pythonEvaluatorService) {
-        super(config, redisson, feedbackScoreService, traceService, USER_DEFINED_METRIC_PYTHON,
+        super(config, redisson, feedbackScoreService, traceService, spanService, USER_DEFINED_METRIC_PYTHON,
                 Constants.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
-        this.spanService = spanService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);
     }
@@ -101,8 +99,13 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 .flatMap(data -> pythonEvaluatorService.evaluate(message.code().metric(), data))
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for traceId '{}':\n\n{}", trace.id(), scoreResults)))
-                .flatMap(scoreResults -> storeScores(toFeedbackScores(scoreResults, trace), trace,
-                        message.userName(), message.workspaceId()))
+                .flatMap(scoreResults -> {
+                    var pythonScores = OnlineScoringEngine.splitPythonScores(scoreResults);
+                    OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc, pythonScores,
+                            "traceId", trace.id());
+                    return storeScores(toFeedbackScores(pythonScores.storable(), trace), trace,
+                            message.userName(), message.workspaceId());
+                })
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger

@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.jobs;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
@@ -32,6 +33,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
@@ -82,6 +84,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             AlertEventType.TRACE_FEEDBACK_SCORE,
             AlertEventType.TRACE_THREAD_FEEDBACK_SCORE);
     private static final BigDecimal MILLISECONDS_PER_SECOND = BigDecimal.valueOf(1000);
+
     private volatile boolean interrupted = false;
 
     private final @NonNull WebhookConfig webhookConfig;
@@ -164,6 +167,13 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     private Mono<Void> processAlert(Alert alert) {
         if (isInterrupted()) {
             log.info("Skipping alert '{}' due to job interruption", alert.id());
+            return Mono.empty();
+        }
+        // Reactor's Context rejects null values, so without this a malformed row raises an NPE from the
+        // contextWrite below and fails the alert there instead of being skipped here.
+        if (alert.workspaceId() == null) {
+            log.warn("Skipping alert with missing workspaceId: name='{}' id='{}'", alert.name(), alert.id());
+            alertsSkipped.add(1);
             return Mono.empty();
         }
         // Create a unique lock key for this alert to prevent duplicate firing across instances
@@ -382,14 +392,9 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         Set<UUID> collected = AlertScopeUtils.collectProjectIds(projectId, trigger.triggerConfigs());
         List<UUID> projectIds = collected.isEmpty() ? null : List.copyOf(collected);
 
-        AlertTriggerConfigType thresholdConfigType = switch (trigger.eventType()) {
-            case TRACE_COST -> AlertTriggerConfigType.THRESHOLD_COST;
-            case TRACE_LATENCY -> AlertTriggerConfigType.THRESHOLD_LATENCY;
-            case TRACE_ERRORS -> AlertTriggerConfigType.THRESHOLD_ERRORS;
-            case TRACE_FEEDBACK_SCORE, TRACE_THREAD_FEEDBACK_SCORE -> AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE;
-            default -> throw new IllegalArgumentException(
-                    "Unsupported event type for metrics alerts: '%s'".formatted(trigger.eventType()));
-        };
+        AlertTriggerConfigType thresholdConfigType = AlertTriggerConfigType.thresholdTypeFor(trigger.eventType())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unsupported event type for metrics alerts: '%s'".formatted(trigger.eventType())));
 
         final List<UUID> finalProjectIds = projectIds;
         final AlertTriggerConfigType finalThresholdConfigType = thresholdConfigType;
@@ -415,7 +420,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         return groups;
     }
 
-    private TriggerConfig buildTriggerConfig(com.comet.opik.api.AlertTriggerConfig config, AlertEventType eventType,
+    private TriggerConfig buildTriggerConfig(AlertTriggerConfig config, AlertEventType eventType,
             List<UUID> projectIds, AlertTriggerConfigType thresholdConfigType) {
         var thresholdString = config.configValue().get(THRESHOLD_CONFIG_KEY);
         if (thresholdString == null) {
@@ -425,13 +430,18 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         }
         BigDecimal threshold = new BigDecimal(thresholdString);
 
-        var windowString = config.configValue().get(WINDOW_CONFIG_KEY);
-        if (windowString == null) {
-            throw new IllegalArgumentException(
-                    "Missing config value for key '%s' in trigger of type '%s'"
-                            .formatted(WINDOW_CONFIG_KEY, thresholdConfigType));
+        // Configs persisted before the write side validated them may carry no window at all. Throwing here
+        // only skipped the alert for good, leaving a permanently silent alert nobody was told about.
+        // Blank counts as absent, so a stored empty string falls back rather than failing Long.parseLong.
+        var windowString = AlertTriggerConfig.withNormalizedWindow(config.configValue()).get(WINDOW_CONFIG_KEY);
+        long windowSeconds;
+        if (StringUtils.isBlank(windowString)) {
+            windowSeconds = webhookConfig.getMetrics().getDefaultAlertWindow().toSeconds();
+            log.warn("Trigger config has no window, evaluating over the default: configId='{}' type='{}' "
+                    + "windowSeconds='{}'", config.id(), thresholdConfigType, windowSeconds);
+        } else {
+            windowSeconds = Long.parseLong(windowString.trim());
         }
-        long windowSeconds = Long.parseLong(windowString);
 
         String name = null;
         Operator operator = Operator.GREATER_THAN;
@@ -481,10 +491,22 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         @JsonValue
         private final String value;
 
+        /**
+         * Accepts either the symbol this enum serialises as ({@code >}, {@code <}) or the enum name
+         * ({@code GREATER_THAN}, {@code less_than}, case-insensitively), through
+         * {@link AlertTriggerConfig#normalizedOperator} so the accepted spellings are stated in one place
+         * rather than here and in the persistence normalisation separately.
+         * <p>
+         * Matching the symbol alone left stored configs written in the name form permanently unparseable:
+         * the job threw on every run, so the alert could never fire and nothing surfaced to its owner
+         * (OPIK-8555). Accepting both unbreaks those rows. It does not change what this enum serialises
+         * as, which is still the symbol.
+         */
         @JsonCreator
         public static Operator fromString(String value) {
+            var canonical = AlertTriggerConfig.normalizedOperator(value);
             return Arrays.stream(values())
-                    .filter(enumValue -> enumValue.value.equals(value))
+                    .filter(enumValue -> enumValue.value.equals(canonical))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown Operator '%s'".formatted(value)));
         }

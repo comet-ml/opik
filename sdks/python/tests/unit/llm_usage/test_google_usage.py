@@ -30,6 +30,42 @@ def test_google_gemini_usage_creation__no_cache_key__cached_content_token_count_
     assert usage.cached_content_token_count is None
 
 
+def test_google_gemini_usage_creation__no_candidates_key__candidates_token_count_is_None():
+    # Gemini leaves candidates_token_count out when nothing was generated (e.g. a
+    # blocked prompt), and ADK dumps usage with exclude_unset, so the key is absent.
+    usage_data = {"prompt_token_count": 10, "total_token_count": 10}
+
+    usage = GoogleGeminiUsage.from_original_usage_dict(usage_data)
+
+    assert usage.candidates_token_count is None
+    assert usage.prompt_token_count == 10
+
+
+def test_opik_usage__from_google_dict__no_candidates_key__completion_tokens_zero():
+    from opik.llm_usage.opik_usage import OpikUsage
+
+    usage = OpikUsage.from_google_dict(
+        {"prompt_token_count": 10, "total_token_count": 10}
+    )
+
+    assert usage.completion_tokens == 0
+    assert usage.prompt_tokens == 10
+
+
+@pytest.mark.parametrize("provider", ["google_ai", "google_vertexai"])
+def test_build_opik_usage__google__no_candidates_key__completion_tokens_zero(provider):
+    from opik import llm_usage
+    from opik.types import LLMProvider
+
+    usage = llm_usage.build_opik_usage(
+        provider=LLMProvider(provider),
+        usage={"prompt_token_count": 10, "total_token_count": 10},
+    )
+
+    assert usage.completion_tokens == 0
+    assert usage.prompt_tokens == 10
+
+
 def test_google_gemini_usage__to_backend_compatible_flat_dict__happyflow():
     usage_data = {
         "candidates_token_count": 100,

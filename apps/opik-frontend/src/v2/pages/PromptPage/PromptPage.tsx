@@ -27,7 +27,13 @@ const PromptPage: React.FunctionComponent = () => {
 
   const promptId = usePromptIdFromURL();
 
-  const { data: prompt } = usePromptById({ promptId }, { enabled: !!promptId });
+  // Cheap poll so the (unbounded) paginated version list can detect other
+  // users' changes without itself refetching every loaded page on a timer —
+  // see usePromptVersionHistory's version_count watcher.
+  const { data: prompt } = usePromptById(
+    { promptId },
+    { enabled: !!promptId, refetchInterval: 30000 },
+  );
   const promptName = prompt?.name || "";
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 

@@ -7,22 +7,19 @@ import { CompletionTokensDetails } from "./CompletionTokensDetails.js";
 import { PromptTokensDetails } from "./PromptTokensDetails.js";
 
 export const Usage: core.serialization.ObjectSchema<serializers.Usage.Raw, OpikApi.Usage> = core.serialization.object({
-    totalTokens: core.serialization.property("total_tokens", core.serialization.number().optional()),
-    promptTokens: core.serialization.property("prompt_tokens", core.serialization.number().optional()),
-    promptTokensDetails: core.serialization.property("prompt_tokens_details", PromptTokensDetails.optional()),
-    completionTokens: core.serialization.property("completion_tokens", core.serialization.number().optional()),
-    completionTokensDetails: core.serialization.property(
-        "completion_tokens_details",
-        CompletionTokensDetails.optional(),
-    ),
+    totalTokens: core.serialization.number().optional(),
+    promptTokens: core.serialization.number().optional(),
+    promptTokensDetails: PromptTokensDetails.optional(),
+    completionTokens: core.serialization.number().optional(),
+    completionTokensDetails: CompletionTokensDetails.optional(),
 });
 
 export declare namespace Usage {
     export interface Raw {
-        total_tokens?: number | null;
-        prompt_tokens?: number | null;
-        prompt_tokens_details?: PromptTokensDetails.Raw | null;
-        completion_tokens?: number | null;
-        completion_tokens_details?: CompletionTokensDetails.Raw | null;
+        totalTokens?: number | null;
+        promptTokens?: number | null;
+        promptTokensDetails?: PromptTokensDetails.Raw | null;
+        completionTokens?: number | null;
+        completionTokensDetails?: CompletionTokensDetails.Raw | null;
     }
 }

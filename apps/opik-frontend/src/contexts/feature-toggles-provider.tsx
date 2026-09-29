@@ -30,10 +30,10 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.DEMO_DATA_ENABLED]: true,
   [FeatureToggleKeys.OLLIE_ENABLED]: false,
   [FeatureToggleKeys.PROJECT_HOMEPAGE_ENABLED]: false,
+  [FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED]: false,
   [FeatureToggleKeys.COST_INTELLIGENCE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED]: false,
-  [FeatureToggleKeys.AGENTIC_TOOLS_ENABLED]: false,
   // LLM Provider feature flags - default false
   [FeatureToggleKeys.OPENAI_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED]: false,

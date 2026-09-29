@@ -31,6 +31,37 @@ export const MINE_TYPE_TO_ATTACHMENT_TYPE_MAP: Record<string, ATTACHMENT_TYPE> =
     "application/octet-stream": ATTACHMENT_TYPE.OTHER,
   };
 
+const TOP_LEVEL_TYPE_TO_ATTACHMENT_TYPE_MAP: Record<string, ATTACHMENT_TYPE> = {
+  image: ATTACHMENT_TYPE.IMAGE,
+  video: ATTACHMENT_TYPE.VIDEO,
+  audio: ATTACHMENT_TYPE.AUDIO,
+};
+
+/**
+ * Classifies an attachment by its mime type.
+ *
+ * Media types are case-insensitive per RFC 2045, and well-formed types outside
+ * the lookup table above (image/avif, video/ogg, ...) still render correctly,
+ * so they are classified by their top-level type rather than falling back to a
+ * generic file icon. Anything unusable resolves to OTHER instead of throwing —
+ * a malformed payload should degrade to a plain file entry, not break the list.
+ */
+export const getAttachmentTypeByMimeType = (
+  mimeType: string,
+): ATTACHMENT_TYPE => {
+  if (typeof mimeType !== "string") {
+    return ATTACHMENT_TYPE.OTHER;
+  }
+
+  const normalized = mimeType.trim().toLowerCase();
+
+  return (
+    MINE_TYPE_TO_ATTACHMENT_TYPE_MAP[normalized] ??
+    TOP_LEVEL_TYPE_TO_ATTACHMENT_TYPE_MAP[normalized.split("/")[0]] ??
+    ATTACHMENT_TYPE.OTHER
+  );
+};
+
 export const ATTACHMENT_ORDER_MAP: Record<ATTACHMENT_TYPE, number> = {
   [ATTACHMENT_TYPE.PDF]: 0,
   [ATTACHMENT_TYPE.TEXT]: 1,

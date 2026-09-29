@@ -1,4 +1,5 @@
 import json
+from typing import List
 from unittest import mock
 
 import pytest
@@ -452,3 +453,129 @@ def test_prompts__context_only_where_it_is_asked_for():
     )
     assert "SECRET-DOC" in with_documents_prompt
     assert "'context':" in with_documents_prompt
+
+
+def _graded_window_prompts(calls) -> List[str]:
+    """Prompts sent to grade a window, ignoring the call that writes the score reason."""
+    return [
+        call.kwargs["messages"][1]["content"]
+        for call in calls
+        if call.kwargs.get("response_format")
+        == schema.EvaluateConversationCoherenceResponse
+    ]
+
+
+def test_score__unanswered_turn_at_the_start__grades_only_the_answered_windows(
+    mock_model,
+):
+    """A window that ends with a user message has no assistant reply to grade.
+
+    The judge-call count is the contract: reverting the guard costs an extra call per
+    unanswered turn and lets those windows into the score denominator.
+    """
+    conversation = [
+        {"role": "user", "content": "Hello?"},  # never answered
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {"role": "assistant", "content": "It is 5% of the overdrawn amount."},
+        {"role": "user", "content": "How long do I have to repay?"},
+        {"role": "assistant", "content": "You can repay whenever you like."},
+    ]
+    mock_model.generate_chat_completion.side_effect = (
+        _all_relevant_responses_side_effect
+    )
+
+    metric = ConversationalCoherenceMetric(model=mock_model, track=False)
+    result = metric.score(conversation=conversation)
+
+    prompts = _graded_window_prompts(mock_model.generate_chat_completion.call_args_list)
+    assert len(prompts) == 2  # three windows are extracted
+    assert all("'role': 'assistant'" in prompt for prompt in prompts)
+    assert result.value == 1.0
+
+
+@pytest.mark.asyncio
+async def test_score__unanswered_turn_at_the_start__grades_only_the_answered_windows__async(
+    mock_model,
+):
+    conversation = [
+        {"role": "user", "content": "Hello?"},
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {"role": "assistant", "content": "It is 5% of the overdrawn amount."},
+        {"role": "user", "content": "How long do I have to repay?"},
+        {"role": "assistant", "content": "You can repay whenever you like."},
+    ]
+    mock_model.agenerate_chat_completion.side_effect = (
+        _all_relevant_responses_side_effect
+    )
+
+    metric = ConversationalCoherenceMetric(model=mock_model, track=False)
+    result = await metric.ascore(conversation=conversation)
+
+    prompts = _graded_window_prompts(
+        mock_model.agenerate_chat_completion.call_args_list
+    )
+    assert len(prompts) == 2
+    assert all("'role': 'assistant'" in prompt for prompt in prompts)
+    assert result.value == 1.0
+
+
+def test_score__alternating_thread__is_not_affected_by_the_guard(
+    mock_model, simple_conversation
+):
+    """Every window of a fully answered thread is graded, as before."""
+    mock_model.generate_chat_completion.side_effect = (
+        _all_relevant_responses_side_effect
+    )
+
+    ConversationalCoherenceMetric(model=mock_model, track=False).score(
+        conversation=simple_conversation
+    )
+
+    prompts = _graded_window_prompts(mock_model.generate_chat_completion.call_args_list)
+    assert len(prompts) == len(
+        conversation_helpers.extract_turns_windows_from_conversation(
+            conversation=simple_conversation, window_size=10
+        )
+    )
+
+
+def test_score__conversation_without_assistant_messages__raises_without_calling_the_model(
+    mock_model,
+):
+    """Nothing to grade is reported as a failure, not scored as maximally incoherent."""
+    conversation = [
+        {"role": "user", "content": "Hello?"},
+        {"role": "user", "content": "Anybody there?"},
+    ]
+    metric = ConversationalCoherenceMetric(
+        model=mock_model, include_reason=False, track=False
+    )
+
+    with pytest.raises(
+        exceptions.MetricComputationError,
+        match="Conversation contains no assistant messages",
+    ):
+        metric.score(conversation=conversation)
+
+    mock_model.generate_chat_completion.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_score__conversation_without_assistant_messages__raises_without_calling_the_model__async(
+    mock_model,
+):
+    conversation = [
+        {"role": "user", "content": "Hello?"},
+        {"role": "user", "content": "Anybody there?"},
+    ]
+    metric = ConversationalCoherenceMetric(
+        model=mock_model, include_reason=False, track=False
+    )
+
+    with pytest.raises(
+        exceptions.MetricComputationError,
+        match="Conversation contains no assistant messages",
+    ):
+        await metric.ascore(conversation=conversation)
+
+    mock_model.agenerate_chat_completion.assert_not_called()

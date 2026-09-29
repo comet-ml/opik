@@ -1,7 +1,6 @@
 package com.comet.opik.domain.mapping.otel;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -21,18 +20,14 @@ import java.util.Map;
  * The original {@code gen_ai.system} and {@code gen_ai.request.model} values are preserved
  * in the span metadata for traceability.
  */
-@UtilityClass
 @Slf4j
-public class ElasticInferenceServiceResolver {
+public class ElasticInferenceServiceResolver implements ProviderResolver {
 
     public static final String ELASTIC_SYSTEM = "elastic";
     public static final String METADATA_ORIGINAL_SYSTEM = "eis_original_system";
     public static final String METADATA_ORIGINAL_MODEL = "eis_original_model";
 
     private record EisRule(String opikProvider, boolean stripPrefix) {
-    }
-
-    public record Resolved(String model, String provider) {
     }
 
     // EIS model IDs follow the convention "<provider>-<model>" (except Elastic's own models like
@@ -49,23 +44,27 @@ public class ElasticInferenceServiceResolver {
             "microsoft", new EisRule("azure", true));
 
     /**
-     * If the given provider/model pair was emitted by Elastic Inference Service, returns the
-     * rewritten (underlying provider, underlying model) pair and records the originals in the
-     * given metadata. Otherwise, returns the inputs unchanged.
+     * Claims spans an EIS client emitted, which is only those reporting {@code elastic} alongside a
+     * model whose ID carries a routed provider prefix. Elastic's own models ({@code elser_model_2})
+     * have no prefix to read and are left alone.
      */
-    public static Resolved resolve(String model, String provider, ObjectNode metadata) {
-        if (StringUtils.isBlank(provider) || StringUtils.isBlank(model)) {
-            return new Resolved(model, provider);
-        }
-        if (!ELASTIC_SYSTEM.equalsIgnoreCase(provider)) {
-            return new Resolved(model, provider);
-        }
+    @Override
+    public boolean appliesTo(Resolution resolution) {
+        return StringUtils.isNotBlank(resolution.model())
+                && ELASTIC_SYSTEM.equalsIgnoreCase(resolution.provider())
+                && resolution.model().indexOf('-') > 0;
+    }
+
+    /**
+     * Returns the rewritten (underlying provider, underlying model) pair and records the originals
+     * in the given metadata.
+     */
+    @Override
+    public Resolution apply(Resolution resolution, ObjectNode metadata) {
+        String model = resolution.model();
+        String provider = resolution.provider();
 
         int dash = model.indexOf('-');
-        if (dash <= 0) {
-            return new Resolved(model, provider);
-        }
-
         String prefix = model.substring(0, dash).toLowerCase(Locale.ROOT);
         // Default: prefix IS the Opik provider, strip it from the model. Override per-prefix
         // when the underlying provider needs different handling.
@@ -77,6 +76,6 @@ public class ElasticInferenceServiceResolver {
         String rewrittenModel = rule.stripPrefix() ? model.substring(dash + 1) : model;
         log.debug("Rewrote EIS attributes: provider '{}' -> '{}', model '{}' -> '{}'",
                 provider, rule.opikProvider(), model, rewrittenModel);
-        return new Resolved(rewrittenModel, rule.opikProvider());
+        return new Resolution(rewrittenModel, rule.opikProvider());
     }
 }

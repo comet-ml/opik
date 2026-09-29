@@ -6,6 +6,7 @@ from . import (
     google_usage,
     anthropic_usage,
     mistral_usage,
+    typesafe_usage,
     unknown_usage,
     bedrock_usage,
     openai_responses_usage,
@@ -17,6 +18,7 @@ ProviderUsage = Union[
     google_usage.GoogleGeminiUsage,
     anthropic_usage.AnthropicUsage,
     mistral_usage.MistralUsage,
+    typesafe_usage.TypeSafeUsage,
     bedrock_usage.BedrockUsage,
     openai_responses_usage.OpenAIResponsesUsage,
     unknown_usage.UnknownUsage,
@@ -159,6 +161,25 @@ class OpikUsage(pydantic.BaseModel):
             completion_tokens=provider_usage.completion_tokens,
             prompt_tokens=provider_usage.prompt_tokens,
             total_tokens=provider_usage.total_tokens,
+            provider_usage=provider_usage,
+        )
+
+    @classmethod
+    def from_typesafe_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        provider_usage = typesafe_usage.TypeSafeUsage.from_original_usage_dict(usage)
+
+        prompt_tokens = provider_usage.input_tokens
+        completion_tokens = provider_usage.output_tokens
+        total_tokens = (
+            None
+            if prompt_tokens is None and completion_tokens is None
+            else (prompt_tokens or 0) + (completion_tokens or 0)
+        )
+
+        return cls(
+            completion_tokens=completion_tokens,
+            prompt_tokens=prompt_tokens,
+            total_tokens=total_tokens,
             provider_usage=provider_usage,
         )
 

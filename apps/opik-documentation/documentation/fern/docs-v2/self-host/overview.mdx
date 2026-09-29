@@ -78,6 +78,13 @@ os.environ["OPIK_BASE_URL"] = "http://localhost:5173/api"
 
 To learn more about how to manage you local Opik deployment, you can refer to our [local deployment guide](/self-host/local_deployment).
 
+<Tip>
+  **Connecting an AI coding assistant.** Self-hosted and local deployments use the local
+  [Opik MCP server](/mcp-server), run through `uvx` and pointed at your own instance — there is no
+  hosted server involved and no browser sign-in. `opik mcp configure` sets it up for your assistant
+  (Claude Code, Codex, Cursor and more).
+</Tip>
+
 ## SDK version compatibility
 
 For self-hosted deployments, we recommend keeping the Opik server and SDKs on the latest versions for best compatibility. The Python SDK (`opik`), TypeScript SDK (`opik`), and Opik Agent Optimizer SDK (`opik-optimizer`) are designed to work with the latest Opik server release. Older SDK versions may not support newer server features, and newer SDK versions may require a minimum server version. Check the [changelog](https://www.comet.com/docs/opik/changelog) for version-specific compatibility notes.

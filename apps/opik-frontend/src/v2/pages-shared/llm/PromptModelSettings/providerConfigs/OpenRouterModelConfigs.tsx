@@ -1,36 +1,65 @@
 import React from "react";
 import isUndefined from "lodash/isUndefined";
+import { resolveSamplingParams } from "@/lib/modelUtils";
+import ExclusiveSamplingParams, {
+  resolveSamplingPresentation,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
-import { LLMOpenRouterConfigsType } from "@/types/providers";
+import {
+  LLMOpenRouterConfigsType,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
 import { DEFAULT_OPEN_ROUTER_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
 interface OpenRouterModelConfigsProps {
   configs: LLMOpenRouterConfigsType;
   onChange: (configs: Partial<LLMOpenRouterConfigsType>) => void;
+  model?: PROVIDER_MODEL_TYPE | "";
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
 const OpenRouterModelConfigs = ({
   configs,
   onChange,
+  model,
+  unsupportedParams,
 }: OpenRouterModelConfigsProps) => {
+  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
+  const sampling = resolveSamplingPresentation(model);
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   return (
     <div className="flex w-72 flex-col gap-4">
-      {!isUndefined(configs.temperature) && (
-        <SliderInputControl
-          value={configs.temperature}
-          onChange={(v) => onChange({ temperature: v })}
-          id="temperature"
-          min={-1}
-          max={1}
-          step={0.01}
-          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
-          label="Temperature"
-          tooltip={
-            <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
-          }
+      {sampling === "none" ? null : sampling === "exclusive" ? (
+        <ExclusiveSamplingParams
+          temperature={temperature}
+          topP={topP}
+          temperatureDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
+          topPDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
+          temperatureMin={-1}
+          offerChoice={supports("topP")}
+          onChange={onChange}
         />
+      ) : (
+        <>
+          {!isUndefined(configs.temperature) && (
+            <SliderInputControl
+              value={configs.temperature}
+              onChange={(v) => onChange({ temperature: v })}
+              id="temperature"
+              min={-1}
+              max={1}
+              step={0.01}
+              defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
+              label="Temperature"
+              tooltip={
+                <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+              }
+            />
+          )}
+        </>
       )}
       {!isUndefined(configs.maxTokens) && (
         <SliderInputControl
@@ -47,21 +76,23 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.topP) && (
-        <SliderInputControl
-          value={configs.topP}
-          onChange={(v) => onChange({ topP: v })}
-          id="topP"
-          min={0}
-          max={1}
-          step={0.01}
-          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
-          label="Top P"
-          tooltip={
-            <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
-          }
-        />
-      )}
+      {sampling === "independent" &&
+        supports("topP") &&
+        !isUndefined(configs.topP) && (
+          <SliderInputControl
+            value={configs.topP}
+            onChange={(v) => onChange({ topP: v })}
+            id="topP"
+            min={0}
+            max={1}
+            step={0.01}
+            defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
+            label="Top P"
+            tooltip={
+              <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
+            }
+          />
+        )}
       {!isUndefined(configs.topK) && (
         <SliderInputControl
           value={configs.topK}
@@ -156,35 +187,39 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      <SliderInputControl
-        value={configs.throttling ?? DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
-        onChange={(v) => onChange({ throttling: v })}
-        id="throttling"
-        min={0}
-        max={10}
-        step={0.1}
-        defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
-        label="Throttling (seconds)"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
-        }
-      />
-      <SliderInputControl
-        value={
-          configs.maxConcurrentRequests ??
-          DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS
-        }
-        onChange={(v) => onChange({ maxConcurrentRequests: v })}
-        id="maxConcurrentRequests"
-        min={1}
-        max={20}
-        step={1}
-        defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS}
-        label="Max concurrent requests"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
-        }
-      />
+      {supports("throttling") && (
+        <SliderInputControl
+          value={configs.throttling ?? DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
+          onChange={(v) => onChange({ throttling: v })}
+          id="throttling"
+          min={0}
+          max={10}
+          step={0.1}
+          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
+          label="Throttling (seconds)"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+          }
+        />
+      )}
+      {supports("maxConcurrentRequests") && (
+        <SliderInputControl
+          value={
+            configs.maxConcurrentRequests ??
+            DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS
+          }
+          onChange={(v) => onChange({ maxConcurrentRequests: v })}
+          id="maxConcurrentRequests"
+          min={1}
+          max={20}
+          step={1}
+          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS}
+          label="Max concurrent requests"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+          }
+        />
+      )}
     </div>
   );
 };

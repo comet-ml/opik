@@ -124,10 +124,17 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     cell: OptimizationCostCell as never,
   },
   {
+    // The id stays "opt_cost" so saved column selection, order and width
+    // survive the rename.
     id: "opt_cost",
-    label: "Opt. cost",
+    // Named for what it measures — a whole run's one-time spend — and matching
+    // the run page's overview card. The former "Opt. cost" was an abbreviation
+    // that also read as the run page's per-case column, so one header stood for
+    // two different quantities a screen apart (OPIK-8060). Wider than its metric
+    // siblings because the unabbreviated label needs the room.
+    label: "Optimization cost",
     type: COLUMN_TYPE.cost,
-    size: DEFAULT_METRIC_COLUMN_WIDTH,
+    size: 160,
     accessorFn: (row) => row.total_optimization_cost,
     cell: OptimizationTotalCostCell as never,
   },

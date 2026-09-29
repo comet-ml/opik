@@ -12,6 +12,7 @@ import com.comet.opik.api.attachment.StartMultipartUploadResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.redaction.RedactionGuard;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -189,6 +190,8 @@ public class AttachmentResource {
             @QueryParam("entity_id") @NotNull UUID entityId,
             @QueryParam("file_name") @NotBlank String fileName,
             @QueryParam("mime_type") @NotBlank String mimeType) {
+        // Streams bytes that never become a JsonNode, so no serializer can reach the content.
+        RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Attachment download");
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

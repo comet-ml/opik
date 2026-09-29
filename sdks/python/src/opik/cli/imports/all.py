@@ -273,6 +273,11 @@ def import_all_command(
     Experiments depend on datasets, prompts, and traces being present,
     so earlier phases are always run first when included.
 
+    Traces and spans are recreated under new ids carrying the current time, which
+    keeps the import inside the server's UUIDv7 ingestion window however old the
+    exported data is; each trace keeps its original start_time and end_time and
+    records its source id in metadata as _import_id.
+
     \b
     Examples:
         # Import everything

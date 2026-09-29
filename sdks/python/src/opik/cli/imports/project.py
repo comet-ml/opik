@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import opik
-from opik import id_helpers
 from rich.console import Console
 
 from .._attachment_path import safe_attachment_path
@@ -17,10 +16,12 @@ from .utils import (
     clean_feedback_scores,
     clean_usage_for_import,
     sort_spans_topologically,
+    sort_trace_files_chronologically,
     debug_print,
     build_import_metadata,
     _TRACE_IMPORT_FIELDS,
     _SPAN_IMPORT_FIELDS,
+    _TRACE_SOURCE_ID_FIELD,
 )
 
 console = Console()
@@ -118,11 +119,20 @@ def import_traces_from_directory(
     files, when recreated, live in ``project_dir/experiments``. Everything is
     created in ``project_name``.
 
+    Traces and spans are recreated under freshly minted ids rather than their
+    original ones, which keeps ids unique across projects and workspaces;
+    ``start_time`` and ``end_time`` still carry the original timestamps, and the
+    source id is preserved in the trace metadata as ``_import_id``. Because a
+    fresh id embeds the current time, the import also stays inside the server's
+    UUIDv7 ingestion window no matter how old the exported data is.
+
     Returns:
         Dictionary with keys: 'projects', 'projects_skipped', 'projects_errors', 'traces', 'traces_errors'
     """
     try:
-        trace_files = list(project_dir.glob("trace_*.json"))
+        trace_files = sort_trace_files_chronologically(
+            list(project_dir.glob("trace_*.json"))
+        )
 
         if not trace_files and not dry_run:
             console.print(f"[yellow]No trace files found in {project_dir}[/yellow]")
@@ -186,7 +196,6 @@ def import_traces_from_directory(
                 )
 
                 trace = client.trace(
-                    id=id_helpers.generate_id(timestamp=original_start_time),
                     name=trace_info.get("name", "imported_trace"),
                     start_time=original_start_time,
                     end_time=(
@@ -200,7 +209,7 @@ def import_traces_from_directory(
                     output=trace_info.get("output", {}),
                     metadata=build_import_metadata(
                         trace_info,
-                        _TRACE_IMPORT_FIELDS,
+                        [*_TRACE_IMPORT_FIELDS, _TRACE_SOURCE_ID_FIELD],
                         trace_info.get("metadata"),
                     ),
                     tags=trace_info.get("tags"),

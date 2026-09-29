@@ -5,4 +5,5 @@ export interface ValidatedToken {
     workspaceId?: string;
     workspaceName?: string;
     resource?: string;
+    expiresAt?: Date;
 }

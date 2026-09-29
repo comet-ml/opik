@@ -23,6 +23,7 @@ import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.json.JsonNodeMessageBodyWriter;
+import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -76,7 +77,8 @@ class DatasetsResourceIntegrationTest {
                 .addResource(new DatasetsResource(
                         service, itemService, expansionService, versionService, () -> requestContext,
                         new FiltersFactory(new FilterQueryBuilder()),
-                        TestIdGeneratorFactory.create(), new Streamer(), sortingFactory, csvProcessor, jsonProcessor,
+                        TestIdGeneratorFactory.create(), new Streamer(RedactionService.disabled(), () -> null),
+                        sortingFactory, csvProcessor, jsonProcessor,
                         featureFlags, csvExportService, analyticsService))
                 .addProvider(JsonNodeMessageBodyWriter.class)
                 .addProvider(MultiPartFeature.class)

@@ -158,7 +158,7 @@ jobs:
           echo "- **Triggered by**: @${ACTOR}"
           echo ""
           if [ "${{ env.IS_RELEASE }}" == "true" ]; then
-            echo "✅ Package published to NPM: [opik-configure@${{ env.VERSION }}](https://www.npmjs.com/package/opik-configure/v/${{ env.VERSION }})"
+            echo "✅ Package published to NPM: [opik-ts@${{ env.VERSION }}](https://www.npmjs.com/package/opik-ts/v/${{ env.VERSION }})"
             echo "✅ Git tag created: configure-v${{ env.VERSION }}"
           else
             echo "ℹ️ Dry run completed - no changes published"
