@@ -302,6 +302,16 @@ areas:
       delete-traces:          { covered: true,  tier: t2-cuj, note: "Logs bulk delete; also the span cascade behind it — a 5-deep span chain, asserted gone project-wide rather than only through a filter on the deleted trace_id, against a bystander trace that keeps its own spans, scores and comments" }
       delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table; also the span cascade behind DELETE /v1/private/traces/{id}, same shape as delete-traces" }
       update-trace-api:       { covered: true,  tier: t2-cuj, note: "PATCH /traces/{id} merges into the existing row rather than replacing it with a partial; asserted at the epoch-week, present and ~2201 id ages" }
+      # The SPAN counterpart of update-trace-api, and its own key rather than
+      # part of that one: what a span update has to get right is not what a
+      # trace update has to. `SpanService.update` carries a conflict guard no
+      # trace update has — an update whose `parent_span_id` disagrees with the
+      # stored one is refused with a 409 — and post-cutover (opik#8595) a root
+      # span's absent parent is a sentinel rather than a NULL, so "an update
+      # that says nothing about the parent leaves the root parentless" is a
+      # distinct statement from anything update-trace-api asserts. Not part of
+      # span-tree-expand either: that key is the panel's tree widget.
+      update-span-api:        { covered: false }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----
