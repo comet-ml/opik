@@ -375,17 +375,6 @@ class KpiCardDAOImpl implements KpiCardDAO {
                   AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                       \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
                   AND thread_id \\<> ''
-            ), traces_final_thread_ids AS (
-                SELECT DISTINCT thread_id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND thread_id \\<> ''
-                  AND id >= :uuid_from_time AND id \\<= :uuid_to_time
-                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                      >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
-                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                      \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -402,10 +391,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 -- The id range keeps the membership rule of the thread list in ThreadDAO.
-                -- The thread_id set is what actually prunes granules (measured 123/563 -> 69/563), so both stay.
+                -- A thread_id semi-join here was measured and dropped: building the set cost more than the granules it skipped (OPIK-8335).
                 AND id >= :uuid_from_time
                 AND id \\<= :uuid_to_time
-                AND thread_id IN (SELECT thread_id FROM traces_final_thread_ids)
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
