@@ -4,6 +4,7 @@ import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -393,7 +394,7 @@ public class CipxSpendBlockDAO {
     }
 
     private Mono<Long> insertChunk(List<BlockRow> rows, String workspaceId, String userName) {
-        return Mono.fromFuture(() -> {
+        return AsyncUtils.fromClickHouseFuture(() -> {
             StringBuilder body = new StringBuilder();
             for (BlockRow row : rows) {
                 appendJsonRow(body, workspaceId, row);
