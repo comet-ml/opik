@@ -794,13 +794,17 @@ export interface AlertTriggerConfigRef {
    * Which OR-group this config belongs to, for the condition builder opik#8481
    * moved into `pages-shared`. Same index = AND, different index = OR, and the
    * editor re-buckets the flat config list by it when it reopens an alert — so
-   * the index IS the group structure. `null` for a config the server stored
-   * without one (the pre-grouping "implicit OR" shape) and for every config
-   * type that has no groups, which is why it is not defaulted to 0: an
-   * ungrouped config presented as group 0 would read as an AND with whatever
-   * else landed there.
+   * the index IS the group structure.
+   *
+   * ABSENT, not 0, when the server stored no group — every `threshold:cost`,
+   * `threshold:latency` and `threshold:errors` config, and the pre-grouping
+   * "implicit OR" shape. Defaulting it to 0 would present an ungrouped config
+   * as AND-ed with whatever else landed in group 0. Optional rather than
+   * `| null` so that callers comparing a whole config map with `toEqual` — the
+   * shape `alert-threshold-config-validation.spec.ts` deliberately asserts on —
+   * are unaffected by a key that has nothing to say about their triggers.
    */
-  groupIndex: number | null;
+  groupIndex?: number;
 }
 
 /** One trigger of an alert, with its configs. */
@@ -1738,10 +1742,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           triggerConfigs: (trigger.trigger_configs ?? []).map((config) => ({
             type: String(config.type ?? ''),
             configValue: config.config_value ?? {},
-            // `?? null` rather than `?? 0`: the server omits the key entirely
-            // for a config that carries no group, and folding that into group 0
-            // would present an ungrouped config as AND-ed with the real one.
-            groupIndex: config.group_index ?? null,
+            // Carried only when the server sent one: a config with no group is
+            // not a config in group 0.
+            ...(config.group_index === null || config.group_index === undefined
+              ? {}
+              : { groupIndex: config.group_index }),
           })),
         })),
       };
