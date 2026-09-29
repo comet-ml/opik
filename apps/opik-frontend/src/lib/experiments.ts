@@ -47,11 +47,15 @@ export const suggestNextExperimentName = (
   return trimmed.replace(RUN_SUFFIX_RE, `_${next}`);
 };
 
+const DELETED_PROMPT_LABEL = "Deleted prompt";
+
 /**
  * Human-readable label for a prompt version linked to an experiment: the
  * prompt name plus its version (e.g. "My Prompt (v3)"). Prefers the sequential
  * version number, falls back to the commit hash when it's unavailable, and
- * omits the parenthetical entirely when neither is present (OPIK-6838).
+ * omits the parenthetical entirely when neither is present (OPIK-6838). A
+ * deleted prompt has no name, so it reads "Deleted prompt", matching
+ * ResourceLink's deleted state.
  *
  * Single source of truth so the experiments table, the single-experiment
  * Configuration tab, and the dashboard leaderboard widget stay consistent.
@@ -62,10 +66,36 @@ export const formatPromptVersionLabel = (
     "prompt_name" | "version_number" | "commit"
   >,
 ): string => {
+  if (!promptVersion.prompt_name) return DELETED_PROMPT_LABEL;
+
   const version = promptVersion.version_number ?? promptVersion.commit;
   return version
     ? `${promptVersion.prompt_name} (${version})`
     : promptVersion.prompt_name;
+};
+
+/**
+ * Every prompt version linked to an experiment, as one comparable string
+ * (e.g. "Guardrail (v1), My Prompt (v3)"). Returns undefined when the
+ * experiment has no linked prompt, which the compare table renders as
+ * "No value" like any other absent field.
+ *
+ * Labels are sorted so the compare view diffs on content rather than on the
+ * order the backend happened to return: two experiments linked to the same
+ * prompt versions must read as identical.
+ */
+export const formatExperimentPromptVersions = (
+  experiment: Pick<Experiment, "prompt_versions"> | undefined,
+): string | undefined => {
+  const promptVersions = experiment?.prompt_versions;
+  if (!promptVersions?.length) return undefined;
+
+  return promptVersions
+    .map(formatPromptVersionLabel)
+    .sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }),
+    )
+    .join(", ");
 };
 
 export const isExperimentTerminal = (
