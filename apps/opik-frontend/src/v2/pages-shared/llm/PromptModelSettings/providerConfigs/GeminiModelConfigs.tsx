@@ -5,6 +5,7 @@ import { LLMGeminiConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { DEFAULT_GEMINI_CONFIGS } from "@/constants/llm";
 import { GeminiThinkingLevel } from "@/types/providers";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import NoModelParameters from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/NoModelParameters";
 import isUndefined from "lodash/isUndefined";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
@@ -35,10 +36,22 @@ const GeminiModelConfigs = ({
   const thinkingLevelOptions = getThinkingLevelOptions(model);
   const defaultThinkingLevel = getDefaultThinkingLevel(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const showTemperature = !isUndefined(temperature);
+  const showMaxOutputTokens = !isUndefined(configs.maxCompletionTokens);
+  const showTopP = supports("topP") && !isUndefined(topP);
+  const hasNoControls =
+    !showTemperature &&
+    !showMaxOutputTokens &&
+    !showTopP &&
+    !hasThinkingLevel &&
+    !supports("throttling") &&
+    !supports("maxConcurrentRequests");
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {!isUndefined(temperature) && (
+      {hasNoControls && <NoModelParameters />}
+
+      {showTemperature && (
         <SliderInputControl
           value={temperature}
           onChange={(v) => onChange({ temperature: v })}
@@ -54,7 +67,7 @@ const GeminiModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.maxCompletionTokens) && (
+      {showMaxOutputTokens && (
         <SliderInputControl
           value={configs.maxCompletionTokens}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
@@ -70,7 +83,7 @@ const GeminiModelConfigs = ({
         />
       )}
 
-      {supports("topP") && !isUndefined(topP) && (
+      {showTopP && (
         <SliderInputControl
           value={topP}
           onChange={(v) => onChange({ topP: v })}

@@ -17,7 +17,7 @@ import {
 
 vi.mock("@/constants/llm", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/constants/llm")>()),
-  THINKING_CONTROLS_FORWARDED_BY_BACKEND: true,
+  ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND: true,
 }));
 
 const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;

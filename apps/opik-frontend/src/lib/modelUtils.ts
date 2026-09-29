@@ -7,11 +7,10 @@ import {
   ReasoningEffort,
 } from "@/types/providers";
 import {
+  ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND,
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
-  REASONING_MODELS,
-  THINKING_CONTROLS_FORWARDED_BY_BACKEND,
 } from "@/constants/llm";
 import {
   getProviderFromModel,
@@ -35,8 +34,7 @@ export const getRoutableProviderModelValue = (
 };
 
 /**
- * An OPENAI_MODEL_CAPABILITIES row wins; otherwise the backend registry flag,
- * then the hardcoded REASONING_MODELS list.
+ * An OPENAI_MODEL_CAPABILITIES row wins; otherwise the backend registry flag.
  */
 export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
   if (!model) return false;
@@ -49,13 +47,7 @@ export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
     return declared;
   }
 
-  const fetched = getLatestModelFlags(model);
-  if (fetched !== undefined) {
-    return fetched.reasoning;
-  }
-  return (REASONING_MODELS as readonly PROVIDER_MODEL_TYPE[]).includes(
-    model as PROVIDER_MODEL_TYPE,
-  );
+  return getLatestModelFlags(model)?.reasoning ?? false;
 };
 
 // Which thinking levels each Gemini model accepts, per Google's own support table
@@ -457,7 +449,7 @@ export const supportsSamplingParams = (
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean =>
-  THINKING_CONTROLS_FORWARDED_BY_BACKEND &&
+  ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND &&
   !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.thinkingEffortOptions;
 
@@ -763,16 +755,16 @@ export const sanitizeConfigForRequest = (
     delete sanitized.presencePenalty;
   }
 
-  // The Vertex backend reads max_tokens, not max_completion_tokens.
-  if (
-    isVertexModel(model) &&
-    typeof sanitized.maxCompletionTokens === "number"
-  ) {
-    sanitized.maxTokens = sanitized.maxCompletionTokens;
-  }
-
   if (provider === PROVIDER_TYPE.OPEN_ROUTER && sanitized.maxTokens === 0) {
     delete sanitized.maxTokens;
+  }
+
+  // Prompts stored while the Top K slider stepped by 0.01 can still carry a fraction.
+  if (
+    provider === PROVIDER_TYPE.OPEN_ROUTER &&
+    typeof sanitized.topK === "number"
+  ) {
+    sanitized.topK = Math.round(sanitized.topK);
   }
 
   if (

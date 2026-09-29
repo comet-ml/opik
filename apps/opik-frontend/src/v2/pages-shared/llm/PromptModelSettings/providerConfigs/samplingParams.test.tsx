@@ -36,7 +36,7 @@ const GEMINI_CONFIG: LLMGeminiConfigsType = {
 
 const VERTEX_AI_CONFIG: LLMVertexAIConfigsType = {
   temperature: 0.4,
-  maxCompletionTokens: 1024,
+  maxCompletionTokens: 4000,
   topP: 0.75,
 };
 
@@ -146,7 +146,7 @@ describe("Vertex AI sampling params", () => {
 
     expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
     expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
-    expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue("1024");
+    expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue("4000");
   });
 
   it("offers both sliders for Gemini 2.5", () => {

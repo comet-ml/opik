@@ -15,6 +15,7 @@ import {
   supportsGeminiSamplingParams,
   supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
+  supportsPenaltyParams,
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
   updateProviderConfig,
@@ -33,9 +34,12 @@ import {
 } from "@/types/providers";
 import { ANTHROPIC_MODEL_CAPABILITIES } from "@/constants/llm";
 import {
+  getLatestProviderModelsSnapshot,
   resetModelRegistryStoreForTesting,
   setLatestModelFlags,
+  setLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
+import { getProviderFromModel } from "@/lib/provider";
 
 const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
 const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
@@ -1656,6 +1660,12 @@ describe("OpenAI request contract", () => {
       request: REASONING_REQUEST,
     },
     {
+      model: PROVIDER_MODEL_TYPE.GPT_5_2,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
       model: PROVIDER_MODEL_TYPE.GPT_5_1,
       reasoning: true,
       effortOptions: ["none", "low", "medium", "high"],
@@ -1762,6 +1772,41 @@ describe("OpenAI request contract", () => {
         false,
       );
     });
+  });
+});
+
+describe("an OpenAI reasoning model reached through another provider", () => {
+  const SAMPLING: SamplingParams = { temperature: 0.7, topP: 0.9 };
+  const OPEN_ROUTER_ID = PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA;
+  const CUSTOM_ID = "custom-llm/my-gateway/gpt-6-astra" as PROVIDER_MODEL_TYPE;
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("keeps penalties and sampling on OpenRouter even when the registry flags it as reasoning", () => {
+    setLatestModelFlags(
+      new Map([[OPEN_ROUTER_ID, { reasoning: true, structuredOutput: true }]]),
+    );
+
+    expect(getProviderFromModel(OPEN_ROUTER_ID)).toBe(
+      PROVIDER_TYPE.OPEN_ROUTER,
+    );
+    expect(supportsPenaltyParams(OPEN_ROUTER_ID)).toBe(true);
+    expect(resolveSamplingParams(OPEN_ROUTER_ID, SAMPLING)).toEqual(SAMPLING);
+  });
+
+  it("keeps penalties and sampling behind a named custom gateway", () => {
+    setLatestProviderModelsSnapshot({
+      ...getLatestProviderModelsSnapshot(),
+      "custom-llm:my-gateway": [{ value: CUSTOM_ID, label: "gpt-6-astra" }],
+    });
+
+    // getProviderFromModel ignores the composed `custom-llm:<name>` key, so the id falls back to
+    // OpenAI; it keeps its params only because no capability row or registry flag names it.
+    expect(getProviderFromModel(CUSTOM_ID)).toBe(PROVIDER_TYPE.OPEN_AI);
+    expect(supportsPenaltyParams(CUSTOM_ID)).toBe(true);
+    expect(resolveSamplingParams(CUSTOM_ID, SAMPLING)).toEqual(SAMPLING);
   });
 });
 
@@ -1892,7 +1937,6 @@ describe("Gemini and Vertex AI request contract", () => {
   };
   const SAMPLING: SamplingParams = { temperature: 0.4, topP: 0.9 };
   const THINKING = { custom_parameters: { thinking: { level: "high" } } };
-  const VERTEX_MAX_TOKENS = { maxTokens: 2048 };
 
   describe.each<{
     model: PROVIDER_MODEL_TYPE;
@@ -1917,12 +1961,12 @@ describe("Gemini and Vertex AI request contract", () => {
     {
       model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
       sampling: {},
-      request: { ...BASE_REQUEST, ...VERTEX_MAX_TOKENS, ...THINKING },
+      request: { ...BASE_REQUEST, ...THINKING },
     },
     {
       model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
       sampling: {},
-      request: { ...BASE_REQUEST, ...VERTEX_MAX_TOKENS, ...THINKING },
+      request: { ...BASE_REQUEST, ...THINKING },
     },
     {
       model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
@@ -1932,12 +1976,7 @@ describe("Gemini and Vertex AI request contract", () => {
     {
       model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
       sampling: SAMPLING,
-      request: {
-        ...BASE_REQUEST,
-        ...SAMPLING,
-        ...VERTEX_MAX_TOKENS,
-        ...THINKING,
-      },
+      request: { ...BASE_REQUEST, ...SAMPLING, ...THINKING },
     },
     {
       model: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
@@ -1975,14 +2014,6 @@ describe("Gemini and Vertex AI request contract", () => {
     expect(supportsGeminiSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(
       true,
     );
-  });
-
-  it("adds no max tokens to a Vertex config that carries none", () => {
-    expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, {
-        temperature: 0.4,
-      }),
-    ).not.toHaveProperty("maxTokens");
   });
 });
 
@@ -2026,5 +2057,14 @@ describe("OpenRouter request contract", () => {
         request,
       );
     });
+  });
+
+  it("rounds a fractional Top K stored by the old 0.01 slider step", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
+        ...CONFIG,
+        topK: 39.6,
+      }).topK,
+    ).toBe(40);
   });
 });
