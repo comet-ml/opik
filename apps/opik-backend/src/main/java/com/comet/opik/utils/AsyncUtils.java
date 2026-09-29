@@ -2,6 +2,7 @@ package com.comet.opik.utils;
 
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Provider;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -100,7 +101,7 @@ public class AsyncUtils {
     public static <T extends AutoCloseable, R> Mono<R> usingClickHouseFuture(
             @NonNull Supplier<? extends CompletableFuture<T>> futureSupplier,
             @NonNull Function<? super T, ? extends R> consume,
-            Scheduler consumeScheduler) {
+            @Nullable Scheduler consumeScheduler) {
         Scheduler scheduler = Objects.requireNonNullElseGet(consumeScheduler, Schedulers::immediate);
         return Mono.usingWhen(
                 Mono.fromFuture(futureSupplier, true)
