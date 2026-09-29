@@ -5,6 +5,7 @@ import { DECISION_MODELS } from "@/constants/decisionModels";
 type ModelPricingEntry = {
   supports_vision?: boolean;
   supports_video_input?: boolean;
+  supports_audio_input?: boolean;
   [key: string]: unknown;
 };
 
@@ -145,6 +146,33 @@ export const supportsImageInput = (model?: string | null): boolean => {
 
   // Default to false if no match found
   return false;
+};
+
+const baseModelName = (modelName: string) => {
+  const normalized = normalizeModelName(modelName);
+  return normalized.slice(normalized.lastIndexOf("/") + 1).split(":")[0];
+};
+
+// The pricing data flags audio under only some of a model's names:
+// gemini-2.5-flash has no flag while gemini/gemini-2.5-flash does. An exact-name
+// lookup like supportsImageInput's would block audio on models that accept it,
+// so support is pooled across every provider-prefixed name of the same model.
+const AUDIO_CAPABLE_BASE_NAMES = new Set(
+  Object.entries(modelEntries)
+    .filter(([modelName, entry]) => modelName && entry?.supports_audio_input)
+    .map(([modelName]) => baseModelName(modelName)),
+);
+
+export const supportsAudioInput = (model?: string | null): boolean => {
+  if (!model) {
+    return false;
+  }
+
+  if (isCustomProviderModel(model)) {
+    return true;
+  }
+
+  return AUDIO_CAPABLE_BASE_NAMES.has(baseModelName(model));
 };
 
 /**
