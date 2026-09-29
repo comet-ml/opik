@@ -55,7 +55,6 @@ export const test = baseTest.extend<GroupedDatasetFixtures>({
     // Registered the moment the dataset exists: any failure in the read-back
     // and shape assertions below must still tear it down.
     let datasetId: string | null = null;
-    let ref: GroupedDatasetRef | null = null;
     try {
       const created = await sdkClient.python.createDataset({
         project_name: project.name,
@@ -99,7 +98,7 @@ export const test = baseTest.extend<GroupedDatasetFixtures>({
         );
       }
 
-      ref = {
+      const ref: GroupedDatasetRef = {
         id: created.id,
         name: created.name,
         projectId: project.id,
@@ -115,10 +114,11 @@ export const test = baseTest.extend<GroupedDatasetFixtures>({
 
       await use(ref);
     } finally {
-      // A fully built fixture follows shouldLeaveArtifacts; a partially built
-      // one is garbage that poisons later runs and is always removed. The
-      // dataset delete takes its items with it.
-      if (datasetId !== null && (ref === null || !shouldLeaveArtifacts(testInfo))) {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. The id is captured on create, so a
+      // failure in the read-back below still deletes the dataset. The dataset
+      // delete takes its items with it.
+      if (datasetId !== null && !shouldLeaveArtifacts(testInfo)) {
         try {
           await backendClient.deleteDataset(datasetId);
         } catch (err) {

@@ -136,7 +136,6 @@ export const test = baseTest.extend<ProjectMetricSpansFixtures>({
     // succeeded — backdated traces left behind are counted by later runs
     // against the same window.
     const seededTraceIds: string[] = [];
-    let ref: ProjectMetricSpansRef | null = null;
 
     try {
       for (const hour of HOUR_SEEDS) {
@@ -201,7 +200,7 @@ export const test = baseTest.extend<ProjectMetricSpansFixtures>({
         );
       }
 
-      ref = {
+      const ref: ProjectMetricSpansRef = {
         hours,
         totals: {
           spanCount: hours.reduce((acc, h) => acc + h.spanCount, 0),
@@ -224,12 +223,12 @@ export const test = baseTest.extend<ProjectMetricSpansFixtures>({
 
       await use(ref);
     } finally {
-      // A fully built fixture follows shouldLeaveArtifacts (keep failed-test
-      // resources for debugging); a partially built one is garbage that poisons
-      // later windows and is always removed. Teardown deletes the traces rather
-      // than relying on the project delete: a project delete does not take its
-      // traces with it.
-      if (ref === null || !shouldLeaveArtifacts(testInfo)) {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. Teardown deletes the traces rather
+      // than relying on the project delete, which removes only the project row.
+      // The length check keeps a first-seed failure from issuing an empty
+      // delete: the endpoint requires at least one id.
+      if (!shouldLeaveArtifacts(testInfo) && seededTraceIds.length > 0) {
         try {
           await backendClient.deleteTraces(seededTraceIds);
         } catch (err) {

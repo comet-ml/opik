@@ -59,11 +59,10 @@ export const test = baseTest.extend<ComparisonFixtures>({
     const datasetName = `${testNamespace}-cmp-ds`;
     const experimentNameA = `${testNamespace}-cmp-expA`;
     const experimentNameB = `${testNamespace}-cmp-expB`;
-    // Registered as soon as the seed call reports them: a failure in the
-    // mapping below must still tear down what already exists.
+    // Registered straight off the seed response, before any mapping: cleanup
+    // must not depend on the ref-building below completing.
+    const seededExperiments: Array<{ experimentId: string; experimentName: string }> = [];
     let datasetId: string | null = null;
-    let experiments: ComparisonExperimentRef[] | null = null;
-    let ref: ComparisonRef | null = null;
     try {
       const seeded = await sdkClient.python.compareSeed({
         project_name: project.name,
@@ -75,6 +74,12 @@ export const test = baseTest.extend<ComparisonFixtures>({
         ],
       });
       datasetId = seeded.dataset_id;
+      for (const exp of seeded.experiments) {
+        seededExperiments.push({
+          experimentId: exp.experiment_id,
+          experimentName: exp.experiment_name,
+        });
+      }
 
       // itemId per seed input, so tests can address a shared item by its input.
       const itemIdByInput: Record<string, string> = {};
@@ -86,7 +91,7 @@ export const test = baseTest.extend<ComparisonFixtures>({
       // experiment's per-item output from the seed arrays (aligned to SEED_ITEMS).
       const outputsBySeedIndex = [EXPERIMENT_A_OUTPUTS, EXPERIMENT_B_OUTPUTS];
 
-      experiments = seeded.experiments.map((exp, expIndex) => {
+      const experiments: ComparisonExperimentRef[] = seeded.experiments.map((exp, expIndex) => {
         const scoresByItemId = Object.fromEntries(exp.scores.map((s) => [s.dataset_item_id, s.score_value]));
         const outputsByItemId: Record<string, string> = {};
         SEED_ITEMS.forEach((item, i) => {
@@ -103,7 +108,7 @@ export const test = baseTest.extend<ComparisonFixtures>({
         };
       });
 
-      ref = {
+      const ref: ComparisonRef = {
         datasetId: seeded.dataset_id,
         datasetName,
         projectName: project.name,
@@ -120,10 +125,11 @@ export const test = baseTest.extend<ComparisonFixtures>({
 
       await use(ref);
     } finally {
-      // A fully built fixture follows shouldLeaveArtifacts; a partially built
-      // one is always removed. Experiments before the dataset they share.
-      if (ref === null || !shouldLeaveArtifacts(testInfo)) {
-        for (const exp of experiments ?? []) {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. Experiments before the dataset they
+      // share.
+      if (!shouldLeaveArtifacts(testInfo)) {
+        for (const exp of seededExperiments) {
           try {
             await backendClient.deleteExperiment(exp.experimentId);
           } catch (err) {

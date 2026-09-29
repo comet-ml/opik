@@ -49,11 +49,10 @@ export const test = baseTest.extend<ExperimentFixtures>({
   experiment: async ({ sdkClient, backendClient, project, testNamespace }, use, testInfo) => {
     const datasetName = `${testNamespace}-exp-ds`;
     const experimentName = `${testNamespace}-exp`;
-    // Both ids are registered as soon as the seed call reports them: a failure
-    // anywhere after that must tear down what already exists.
+    // Both ids are registered as soon as the seed call reports them, so a
+    // failure after the seed still tears down what exists.
     let experimentId: string | null = null;
     let datasetId: string | null = null;
-    let ref: ExperimentRef | null = null;
     try {
       const created = await sdkClient.python.evaluateExperiment({
         project_name: project.name,
@@ -73,7 +72,7 @@ export const test = baseTest.extend<ExperimentFixtures>({
         scoreValue: s.score_value,
       }));
 
-      ref = {
+      const ref: ExperimentRef = {
         experimentId: created.experiment_id,
         experimentName: created.experiment_name,
         datasetId: created.dataset_id,
@@ -92,11 +91,11 @@ export const test = baseTest.extend<ExperimentFixtures>({
 
       await use(ref);
     } finally {
-      // A fully built fixture follows shouldLeaveArtifacts; a partially built
-      // one is always removed. Teardown order: experiment first (it references
-      // the dataset), then dataset (it references the project). The project
-      // fixture handles its own delete.
-      if (ref === null || !shouldLeaveArtifacts(testInfo)) {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. Teardown order: experiment first (it
+      // references the dataset), then dataset (it references the project). The
+      // project fixture handles its own delete.
+      if (!shouldLeaveArtifacts(testInfo)) {
         if (experimentId !== null) {
           try {
             await backendClient.deleteExperiment(experimentId);

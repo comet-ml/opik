@@ -65,8 +65,10 @@ const DECOY_TRACE_COUNT = 7;
  *
  * Teardown is here rather than in the spec so it survives a mid-test failure,
  * and it deletes more than the project does: `ProjectService.delete` removes only
- * the project row, so traces do NOT cascade, and the run-prefix sweep in
- * global-teardown does not know about optimizations.
+ * the project row (no cascade, no event), so traces survive it. The run-prefix
+ * sweep in global-teardown covers experiments and optimizations by name, but it
+ * never sweeps traces, so the trace deletes below are the only thing that
+ * removes them.
  */
 export const test = baseTest.extend<OptimizationRunFixtures>({
   optimizationRun: async (
@@ -76,12 +78,15 @@ export const test = baseTest.extend<OptimizationRunFixtures>({
   ) => {
     const datasetName = `${testNamespace}-ds`;
     const optimizationId = uuid7();
+    // Only true once the backend accepted the optimization: the id is minted
+    // above (the REST writes echo no body), so the delete in `finally` must not
+    // fire on an id that was never written.
+    let optimizationCreated = false;
 
     const trials: OptimizationTrialRef[] = [];
     const decoyTraceIds: string[] = [];
     const allTraceIds: string[] = [];
     let datasetId: string | null = null;
-    let ref: OptimizationRunRef | null = null;
 
     // Experiments before the optimization they belong to, traces before the
     // dataset, so nothing is removed from under a still-referencing parent.
@@ -113,6 +118,7 @@ export const test = baseTest.extend<OptimizationRunFixtures>({
         objectiveName: OBJECTIVE,
         status: 'completed',
       });
+      optimizationCreated = true;
 
       const seedTraces = async (prefix: string, count: number): Promise<string[]> => {
         const ids: string[] = [];
@@ -154,6 +160,14 @@ export const test = baseTest.extend<OptimizationRunFixtures>({
             parent_candidate_ids: isBaseline ? [] : [`${testNamespace}-cand-baseline`],
           },
         });
+        // Registered on create, before the item link below: that link can throw,
+        // and the experiment row would then exist with nothing tracking it.
+        trials.push({
+          label: isBaseline ? 'Baseline' : `Trial #${t}`,
+          experimentId,
+          traceIds,
+        });
+
         await backendClient.createExperimentItems(
           traceIds.map((traceId, i) => ({
             experimentId,
@@ -161,17 +175,11 @@ export const test = baseTest.extend<OptimizationRunFixtures>({
             traceId,
           })),
         );
-
-        trials.push({
-          label: isBaseline ? 'Baseline' : `Trial #${t}`,
-          experimentId,
-          traceIds,
-        });
       }
 
       decoyTraceIds.push(...(await seedTraces('decoy', DECOY_TRACE_COUNT)));
 
-      ref = {
+      const ref: OptimizationRunRef = {
         optimizationId,
         datasetId,
         datasetName,
@@ -188,21 +196,27 @@ export const test = baseTest.extend<OptimizationRunFixtures>({
 
       await use(ref);
     } finally {
-      // A fully built fixture follows shouldLeaveArtifacts (keep failed-test
-      // resources for debugging); a partially built one is garbage the
-      // run-prefix sweep in global-teardown cannot see, so it is always removed.
-      if (ref === null || !shouldLeaveArtifacts(testInfo)) {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. Every delete is guarded by whether
+      // its resource was actually written, so a failed seed tears down what it
+      // made without 404 noise beside the original error. Traces last among the
+      // children, then the dataset they hang off.
+      if (!shouldLeaveArtifacts(testInfo)) {
         for (const trial of trials) {
           await safe(`experiment ${trial.experimentId}`, () =>
             backendClient.deleteExperiment(trial.experimentId),
           );
         }
-        await safe(`optimization ${optimizationId}`, () =>
-          backendClient.deleteOptimization(optimizationId),
-        );
-        await safe(`${allTraceIds.length} traces`, () =>
-          backendClient.deleteTraces(allTraceIds),
-        );
+        if (optimizationCreated) {
+          await safe(`optimization ${optimizationId}`, () =>
+            backendClient.deleteOptimization(optimizationId),
+          );
+        }
+        if (allTraceIds.length > 0) {
+          await safe(`${allTraceIds.length} traces`, () =>
+            backendClient.deleteTraces(allTraceIds),
+          );
+        }
         if (datasetId !== null) {
           const id = datasetId;
           await safe(`dataset ${datasetName}`, () =>

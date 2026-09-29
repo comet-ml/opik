@@ -54,106 +54,131 @@ export const test = baseTest.extend<AgedExperimentFixtures>({
   ) => {
     const datasetName = `${testNamespace}-ds`;
 
-    // The aged half of this fixture needs ids AGE_DAYS old, which ingestion
-    // refuses where id-timestamp validation runs in reject mode. Seeding valid
-    // ids is not an option: "older than the 30-day log window" is the whole
-    // subject. Probe before writing anything, so such an env skips with a reason
-    // instead of timing out on the bridge waiting for rows that never land.
-    await skipUnlessBackdatedIdsAccepted(backendClient, project.name, AGE_DAYS * 24 * 60 * 60 * 1000);
+    // Every id lands here the moment the backend reports it, so a failure
+    // partway through the seed still tears down what it made — a backdated trace
+    // left behind is counted by later runs against the same window.
+    let datasetId: string | null = null;
+    const experimentIds: string[] = [];
+    const traceIds: string[] = [];
 
-    const dataset = await sdkClient.python.createDataset({
-      project_name: project.name,
-      name: datasetName,
-      description: 'aged vs fresh experiment logs',
-      items: AGED_ITEMS as unknown as Array<Record<string, unknown>>,
-    });
-
-    const items = await backendClient.getDatasetItems(dataset.id);
-    const datasetItemIds = items.map((i) => i.id);
-
-    const agedTraceIds: string[] = [];
-    for (let i = 0; i < AGED_ITEMS.length; i++) {
-      const created = await sdkClient.python.createNestedTrace({
-        project_name: project.name,
-        name: `${testNamespace}-aged-${i + 1}`,
-        input: { question: AGED_ITEMS[i].input },
-        output: { answer: AGED_ITEMS[i].expected_output },
-        age_days: AGE_DAYS,
-        spans: [],
-      });
-      agedTraceIds.push(created.id);
-    }
-
-    const freshTraceIds: string[] = [];
-    for (let i = 0; i < FRESH_ITEM_COUNT; i++) {
-      const created = await sdkClient.python.createNestedTrace({
-        project_name: project.name,
-        name: `${testNamespace}-fresh-${i + 1}`,
-        input: { question: `fresh question ${i + 1}` },
-        output: { answer: `fresh answer ${i + 1}` },
-        spans: [],
-      });
-      freshTraceIds.push(created.id);
-    }
-
-    const agedExperimentId = uuid7();
-    const freshExperimentId = uuid7();
-
-    const linkExperiment = async (
-      experimentId: string,
-      name: string,
-      traceIds: string[],
-    ): Promise<void> => {
-      await backendClient.createExperiment({
-        id: experimentId,
-        name,
-        datasetName,
-        projectName: project.name,
-      });
-      await backendClient.createExperimentItems(
-        traceIds.map((traceId, i) => ({
-          experimentId,
-          datasetItemId: datasetItemIds[i],
-          traceId,
-        })),
-      );
+    const safe = async (what: string, fn: () => Promise<unknown>): Promise<void> => {
+      try {
+        await fn();
+      } catch (err) {
+        console.warn(`[agedExperiment fixture] delete warning for ${what}:`, err);
+      }
     };
 
-    await linkExperiment(agedExperimentId, `${testNamespace}-aged-exp`, agedTraceIds);
-    await linkExperiment(freshExperimentId, `${testNamespace}-fresh-exp`, freshTraceIds);
+    try {
+      // The aged half of this fixture needs ids AGE_DAYS old, which ingestion
+      // refuses where id-timestamp validation runs in reject mode. Seeding valid
+      // ids is not an option: "older than the 30-day log window" is the whole
+      // subject. Probe before writing anything, so such an env skips with a reason
+      // instead of timing out on the bridge waiting for rows that never land.
+      await skipUnlessBackdatedIdsAccepted(backendClient, project.name, AGE_DAYS * 24 * 60 * 60 * 1000);
 
-    const ref: AgedExperimentRef = {
-      agedExperimentId,
-      agedTraceIds,
-      freshExperimentId,
-      freshTraceIds,
-      datasetId: dataset.id,
-      datasetName,
-      ageDays: AGE_DAYS,
-    };
-    await testInfo.attach('opik.agedExperiment', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
+      const dataset = await sdkClient.python.createDataset({
+        project_name: project.name,
+        name: datasetName,
+        description: 'aged vs fresh experiment logs',
+        items: AGED_ITEMS as unknown as Array<Record<string, unknown>>,
+      });
+      datasetId = dataset.id;
 
-    await use(ref);
+      const items = await backendClient.getDatasetItems(dataset.id);
+      const datasetItemIds = items.map((i) => i.id);
 
-    if (!shouldLeaveArtifacts(testInfo)) {
-      const safe = async (what: string, fn: () => Promise<unknown>): Promise<void> => {
-        try {
-          await fn();
-        } catch (err) {
-          console.warn(`[agedExperiment fixture] delete warning for ${what}:`, err);
-        }
+      const agedTraceIds: string[] = [];
+      for (let i = 0; i < AGED_ITEMS.length; i++) {
+        const created = await sdkClient.python.createNestedTrace({
+          project_name: project.name,
+          name: `${testNamespace}-aged-${i + 1}`,
+          input: { question: AGED_ITEMS[i].input },
+          output: { answer: AGED_ITEMS[i].expected_output },
+          age_days: AGE_DAYS,
+          spans: [],
+        });
+        agedTraceIds.push(created.id);
+        traceIds.push(created.id);
+      }
+
+      const freshTraceIds: string[] = [];
+      for (let i = 0; i < FRESH_ITEM_COUNT; i++) {
+        const created = await sdkClient.python.createNestedTrace({
+          project_name: project.name,
+          name: `${testNamespace}-fresh-${i + 1}`,
+          input: { question: `fresh question ${i + 1}` },
+          output: { answer: `fresh answer ${i + 1}` },
+          spans: [],
+        });
+        freshTraceIds.push(created.id);
+        traceIds.push(created.id);
+      }
+
+      const agedExperimentId = uuid7();
+      const freshExperimentId = uuid7();
+
+      const linkExperiment = async (
+        experimentId: string,
+        name: string,
+        traceIdsForExperiment: string[],
+      ): Promise<void> => {
+        await backendClient.createExperiment({
+          id: experimentId,
+          name,
+          datasetName,
+          projectName: project.name,
+        });
+        // Registered on create, before the item link below: that link can throw,
+        // and the experiment row would then exist with nothing tracking it.
+        experimentIds.push(experimentId);
+        await backendClient.createExperimentItems(
+          traceIdsForExperiment.map((traceId, i) => ({
+            experimentId,
+            datasetItemId: datasetItemIds[i],
+            traceId,
+          })),
+        );
       };
-      // Experiments before the dataset they reference.
-      await safe(`experiment ${agedExperimentId}`, () =>
-        backendClient.deleteExperiment(agedExperimentId),
-      );
-      await safe(`experiment ${freshExperimentId}`, () =>
-        backendClient.deleteExperiment(freshExperimentId),
-      );
-      await safe(`dataset ${datasetName}`, () => backendClient.deleteDataset(dataset.id));
+
+      await linkExperiment(agedExperimentId, `${testNamespace}-aged-exp`, agedTraceIds);
+      await linkExperiment(freshExperimentId, `${testNamespace}-fresh-exp`, freshTraceIds);
+
+      const ref: AgedExperimentRef = {
+        agedExperimentId,
+        agedTraceIds,
+        freshExperimentId,
+        freshTraceIds,
+        datasetId: dataset.id,
+        datasetName,
+        ageDays: AGE_DAYS,
+      };
+      await testInfo.attach('opik.agedExperiment', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
+      });
+
+      await use(ref);
+    } finally {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. Children before parents: experiments,
+      // then traces, then the dataset they all reference. The traces are deleted
+      // here rather than left to the project fixture, which removes only the
+      // project row.
+      if (!shouldLeaveArtifacts(testInfo)) {
+        for (const experimentId of experimentIds) {
+          await safe(`experiment ${experimentId}`, () =>
+            backendClient.deleteExperiment(experimentId),
+          );
+        }
+        if (traceIds.length > 0) {
+          await safe(`${traceIds.length} traces`, () => backendClient.deleteTraces(traceIds));
+        }
+        if (datasetId !== null) {
+          const id = datasetId;
+          await safe(`dataset ${datasetName}`, () => backendClient.deleteDataset(id));
+        }
+      }
     }
   },
 });

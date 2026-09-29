@@ -99,7 +99,6 @@ export const test = baseTest.extend<SummarisedDatasetsFixtures>({
     const experimentIds: string[] = [];
     const optimizationIds: string[] = [];
     const datasetIds: string[] = [];
-    let ref: SummarisedDatasetsRef | null = null;
 
     const safe = async (what: string, fn: () => Promise<unknown>): Promise<void> => {
       try {
@@ -159,14 +158,14 @@ export const test = baseTest.extend<SummarisedDatasetsFixtures>({
             datasetName: name,
             projectName: project.name,
           });
-          // Registered only once the experiment row exists; without an
-          // experiment item the experiment does not count, so this is
-          // load-bearing rather than decoration.
+          // Registered the moment the row exists: the item link below is what
+          // makes the experiment countable, but a failed link must not leave the
+          // row behind with nothing tracking it.
+          experimentIds.push(experimentId);
+          shapeExperimentIds.push(experimentId);
           await backendClient.createExperimentItems([
             { experimentId, datasetItemId: datasetItemIds[e % datasetItemIds.length], traceId },
           ]);
-          experimentIds.push(experimentId);
-          shapeExperimentIds.push(experimentId);
         }
 
         const shapeOptimizationIds: string[] = [];
@@ -195,7 +194,7 @@ export const test = baseTest.extend<SummarisedDatasetsFixtures>({
         });
       }
 
-      ref = {
+      const ref: SummarisedDatasetsRef = {
         projectId: project.id,
         projectName: project.name,
         datasets,
@@ -207,12 +206,10 @@ export const test = baseTest.extend<SummarisedDatasetsFixtures>({
 
       await use(ref);
     } finally {
-      // A fully built fixture follows shouldLeaveArtifacts (keep failed-test
-      // resources for debugging); a partially built one is garbage the
-      // run-prefix sweep in global-teardown cannot see, so it is always
-      // removed. Children before parents: experiments, optimizations, traces,
-      // then the datasets.
-      if (ref === null || !shouldLeaveArtifacts(testInfo)) {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. Children before parents: experiments,
+      // optimizations, traces, then the datasets.
+      if (!shouldLeaveArtifacts(testInfo)) {
         for (const experimentId of experimentIds) {
           await safe(`experiment ${experimentId}`, () =>
             backendClient.deleteExperiment(experimentId),

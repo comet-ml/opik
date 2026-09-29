@@ -29,10 +29,9 @@ export const test = baseTest.extend<DatasetFixtures>({
   dataset: async ({ sdkClient, backendClient, project, testNamespace }, use, testInfo) => {
     const name = `${testNamespace}-ds`;
     const description = `seeded by ${testInfo.title}`;
-    // The id is registered the moment the dataset exists: a failure in the
-    // steps below must still tear it down, so it cannot wait for the ref.
+    // Registered the moment the dataset exists: a failure in the steps below
+    // must still tear it down, so it cannot wait for the ref.
     let datasetId: string | null = null;
-    let ref: DatasetRef | null = null;
     try {
       const created = await sdkClient.python.createDataset({
         project_name: project.name,
@@ -41,7 +40,7 @@ export const test = baseTest.extend<DatasetFixtures>({
         items: SEED_ITEMS as unknown as Array<Record<string, unknown>>,
       });
       datasetId = created.id;
-      ref = {
+      const ref: DatasetRef = {
         id: created.id,
         name: created.name,
         projectId: project.id,
@@ -55,10 +54,12 @@ export const test = baseTest.extend<DatasetFixtures>({
       });
       await use(ref);
     } finally {
-      // A fully built fixture follows shouldLeaveArtifacts (keep failed-test
-      // resources for debugging); a partially built one is garbage that
-      // poisons later runs' empty-state assertions and is always removed.
-      if (datasetId !== null && (ref === null || !shouldLeaveArtifacts(testInfo))) {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. The id is captured on create, so a
+      // seed that fails partway still deletes what it made; anything a
+      // leave-failures run keeps is still caught by global-teardown's run-prefix
+      // sweep, which covers datasets.
+      if (datasetId !== null && !shouldLeaveArtifacts(testInfo)) {
         /** Datasets don't cascade with project deletion — explicit delete required. */
         try {
           await backendClient.deleteDataset(datasetId);
