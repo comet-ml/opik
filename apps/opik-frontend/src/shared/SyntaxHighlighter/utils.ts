@@ -27,7 +27,7 @@ const escapeDelAndC1 = (yaml: string) =>
 
 // "=" and "<<" are the 1.1 value and merge keys, which yaml leaves plain and
 // PyYAML then refuses to load.
-const YAML_11_INDICATORS = new Set(["=", "<<"]);
+const YAML_11_VALUES_REQUIRING_QUOTES = new Set(["=", "<<"]);
 
 const toYaml = (data: object): string => {
   // A trace with no output passes undefined, which would otherwise print "null".
@@ -36,7 +36,7 @@ const toYaml = (data: object): string => {
   const doc = new Document(data, normalizeLineEndings, YAML_OPTIONS);
   visit(doc, {
     Scalar(_key, node) {
-      if (YAML_11_INDICATORS.has(node.value as string)) {
+      if (YAML_11_VALUES_REQUIRING_QUOTES.has(node.value as string)) {
         node.type = Scalar.QUOTE_SINGLE;
       }
     },
