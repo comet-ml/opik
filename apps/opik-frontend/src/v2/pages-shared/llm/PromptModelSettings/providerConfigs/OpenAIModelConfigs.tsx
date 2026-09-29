@@ -12,6 +12,7 @@ import {
   getOpenAIReasoningEffortOptions,
   resolveEffort,
   resolveSamplingParams,
+  supportsPenaltyParams,
 } from "@/lib/modelUtils";
 import isUndefined from "lodash/isUndefined";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -43,6 +44,7 @@ const OpenAIModelConfigs = ({
   // both sliders follow it rather than the config's own keys. Reasoning models tune neither.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const { reasoningEffort } = resolveEffort(model ?? "", configs);
+  const showPenalties = supportsPenaltyParams(model);
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -94,7 +96,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.frequencyPenalty) && (
+      {showPenalties && !isUndefined(configs.frequencyPenalty) && (
         <SliderInputControl
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
@@ -110,7 +112,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.presencePenalty) && (
+      {showPenalties && !isUndefined(configs.presencePenalty) && (
         <SliderInputControl
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}

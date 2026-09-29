@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import AnthropicModelConfigs from "./AnthropicModelConfigs";
+import GeminiModelConfigs from "./GeminiModelConfigs";
 import OpenAIModelConfigs from "./OpenAIModelConfigs";
+import VertexAIModelConfigs from "./VertexAIModelConfigs";
 import {
   LLMAnthropicConfigsType,
+  LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
+  LLMVertexAIConfigsType,
   PROVIDER_MODEL_TYPE,
 } from "@/types/providers";
 import { TooltipProvider } from "@/ui/tooltip";
@@ -22,6 +26,18 @@ const OPEN_AI_CONFIG: LLMOpenAIConfigsType = {
 const ANTHROPIC_CONFIG: LLMAnthropicConfigsType = {
   temperature: 0.4,
   maxCompletionTokens: 4000,
+};
+
+const GEMINI_CONFIG: LLMGeminiConfigsType = {
+  temperature: 0.4,
+  maxCompletionTokens: 4000,
+  topP: 0.75,
+};
+
+const VERTEX_AI_CONFIG: LLMVertexAIConfigsType = {
+  temperature: 0.4,
+  maxCompletionTokens: 1024,
+  topP: 0.75,
 };
 
 const renderPanel = (ui: React.ReactElement) =>
@@ -53,6 +69,97 @@ describe("OpenAI sampling params", () => {
 
     expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
     expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+  });
+
+  it("hides both penalty sliders for a reasoning model, which rejects them", () => {
+    renderPanel(
+      <OpenAIModelConfigs
+        configs={OPEN_AI_CONFIG}
+        model={PROVIDER_MODEL_TYPE.GPT_6_ASTRA}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("frequencyPenalty-input"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("presencePenalty-input"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers every sampling slider for a chat-latest model, which is not a reasoning model", () => {
+    renderPanel(
+      <OpenAIModelConfigs
+        configs={OPEN_AI_CONFIG}
+        model={PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("temperature-input")).toBeInTheDocument();
+    expect(screen.getByTestId("topP-input")).toBeInTheDocument();
+    expect(screen.getByTestId("frequencyPenalty-input")).toBeInTheDocument();
+    expect(screen.getByTestId("presencePenalty-input")).toBeInTheDocument();
+    expect(screen.queryByText("Reasoning effort")).not.toBeInTheDocument();
+  });
+});
+
+describe("Gemini sampling params", () => {
+  it("hides both sliders for a Gemini 3 model, which Google says to leave at its defaults", () => {
+    renderPanel(
+      <GeminiModelConfigs
+        configs={GEMINI_CONFIG}
+        model={PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
+    expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue("4000");
+  });
+
+  it("offers both sliders for Gemini 2.5", () => {
+    renderPanel(
+      <GeminiModelConfigs
+        configs={GEMINI_CONFIG}
+        model={PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
+    expect(screen.getByTestId("topP-input")).toHaveValue("0.75");
+  });
+});
+
+describe("Vertex AI sampling params", () => {
+  it("hides both sliders for a Gemini 3 model", () => {
+    renderPanel(
+      <VertexAIModelConfigs
+        configs={VERTEX_AI_CONFIG}
+        model={PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
+    expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue("1024");
+  });
+
+  it("offers both sliders for Gemini 2.5", () => {
+    renderPanel(
+      <VertexAIModelConfigs
+        configs={VERTEX_AI_CONFIG}
+        model={PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
+    expect(screen.getByTestId("topP-input")).toHaveValue("0.75");
   });
 });
 

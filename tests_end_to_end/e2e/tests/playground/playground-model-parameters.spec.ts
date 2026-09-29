@@ -10,12 +10,11 @@ import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
  * is silent by construction — neither surface can catch it alone:
  *
  *   - **API-only** cannot: a request carrying `temperature` when the panel is
- *     set to Top P, or carrying no `thinking_effort` at all, is a perfectly
- *     well-formed request. There is nothing wrong with it except that it is not
- *     what the user asked for.
+ *     set to Top P is a perfectly well-formed request. There is nothing wrong
+ *     with it except that it is not what the user asked for.
  *   - **UI-only** cannot either: the panel renders whatever its own config says,
- *     so a control showing "High (Default)" over a config the request builder
- *     then strips looks entirely correct on screen.
+ *     so a Top P toggle over a config the request builder still sends as
+ *     `temperature` looks entirely correct on screen.
  *
  * So the assertion is the panel's own displayed values compared against the
  * outbound `POST /v1/private/chat/completions` body. It costs money at the wrong
@@ -27,34 +26,17 @@ import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
  *
  * Anthropic-specific on purpose. The sampling pair is a single choice only
  * because Anthropic rejects a request carrying both, and `claude-sonnet-4-6` is
- * picked because it is the model that offers BOTH halves under test — a thinking
- * effort AND the sampling toggle. Its newer siblings (Sonnet 5, the Opus 4.7+
- * line) set `supportsSamplingParams: false` and render no toggle at all.
+ * picked because it still renders the sampling toggle. Its newer siblings
+ * (Sonnet 5, the Opus 4.7+ line) set `supportsSamplingParams: false` and render
+ * no toggle at all.
+ *
+ * Only the sampling pair is covered: the backend proxy drops `thinking_effort`,
+ * so the panel hides that control behind `THINKING_CONTROLS_FORWARDED_BY_BACKEND`,
+ * and the Thinking effort steps (a non-default pick, asserted in the body) belong
+ * back in this test once that constant flips to true.
  */
 
 const MODEL_DISPLAY_NAME = 'Claude Sonnet 4.6';
-
-/**
- * The effort this test switches the dropdown to. Deliberately NOT the default:
- * a request that carried the default would also pass on a build that ignored
- * the control entirely and let `resolveEffort` substitute "high".
- */
-const CHOSEN_EFFORT_LABEL = 'Low';
-
-/**
- * How the dropdown's labels map onto the values the request carries. Written out
- * rather than lower-cased from the label because the mapping is not mechanical —
- * "High (Default)" is `high` and "xHigh" is `xhigh` — and because an unknown
- * label must fail this test rather than quietly resolve to something.
- */
-const THINKING_EFFORT_VALUE_BY_LABEL: Record<string, string> = {
-  Adaptive: 'adaptive',
-  Low: 'low',
-  Medium: 'medium',
-  'High (Default)': 'high',
-  xHigh: 'xhigh',
-  Max: 'max',
-};
 
 /** The completion proxy, on both the `/opik/api` and bare `/api` mounts. */
 function isChatCompletion(url: string): boolean {
@@ -66,7 +48,7 @@ test.describe(
   { tag: ['@t2-cuj', '@area:playground'] },
   () => {
     test(
-      'The Anthropic model-parameters panel sends exactly the sampling parameter and thinking effort it displays',
+      'The Anthropic model-parameters panel sends exactly the sampling parameter it displays',
       { tag: ['@cap:playground.configure-model-settings'] },
       async ({ project, page }) => {
         test.setTimeout(180_000);
@@ -151,21 +133,6 @@ test.describe(
           },
         );
 
-        const expectedEffort = await test.step(
-          `Set Thinking effort to "${CHOSEN_EFFORT_LABEL}"`,
-          async () => {
-            const initial = (await playground.thinkingEffortSelect().textContent())?.trim() ?? '';
-            expect(
-              THINKING_EFFORT_VALUE_BY_LABEL,
-              `the dropdown opened on "${initial}", which this test has no request value for — ` +
-                'the label set changed and the mapping below is stale',
-            ).toHaveProperty(initial);
-
-            await playground.selectThinkingEffort(CHOSEN_EFFORT_LABEL);
-            return THINKING_EFFORT_VALUE_BY_LABEL[CHOSEN_EFFORT_LABEL];
-          },
-        );
-
         await test.step('Close the panel and run a one-line prompt', async () => {
           await playground.closeModelParameters();
           await playground.fillFirstMessage('Reply with the single word OK.');
@@ -175,7 +142,7 @@ test.describe(
           // Short-circuit the request at the browser so it never reaches the
           // backend proxy — every assertion below is on the request body, and
           // letting it through would have Anthropic generate (and bill) a full
-          // completion with thinking that nothing reads.
+          // completion that nothing reads.
           await page.route(
             (url) => isChatCompletion(url.toString()),
             (route) =>
@@ -211,9 +178,11 @@ test.describe(
             'no temperature alongside top_p — Anthropic refuses a request holding both',
           ).not.toContain('temperature');
           expect(
-            body.thinking_effort,
-            'the effort the dropdown displays is the effort the provider is asked for',
-          ).toBe(expectedEffort);
+            Object.keys(body),
+            'no thinking_effort — the effort control is hidden until the backend forwards ' +
+              '`output_config.effort` (OPIK-8565 phase 2), so carrying it would mean a control ' +
+              'the panel does not show leaked into the body',
+          ).not.toContain('thinking_effort');
         });
       },
     );

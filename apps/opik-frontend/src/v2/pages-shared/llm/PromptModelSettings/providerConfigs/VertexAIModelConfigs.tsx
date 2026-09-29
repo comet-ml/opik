@@ -15,6 +15,7 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import {
   getDefaultThinkingLevel,
   getThinkingLevelOptions,
+  resolveSamplingParams,
   supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -36,12 +37,13 @@ const VertexAIModelConfigs = ({
   const hasThinkingLevel = supportsVertexAIThinkingLevel(model);
   const thinkingLevelOptions = getThinkingLevelOptions(model);
   const defaultThinkingLevel = getDefaultThinkingLevel(model);
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {!isUndefined(configs.temperature) && (
+      {!isUndefined(temperature) && (
         <SliderInputControl
-          value={configs.temperature}
+          value={temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
           min={0}
@@ -71,9 +73,9 @@ const VertexAIModelConfigs = ({
         />
       )}
 
-      {supports("topP") && !isUndefined(configs.topP) && (
+      {supports("topP") && !isUndefined(topP) && (
         <SliderInputControl
-          value={configs.topP}
+          value={topP}
           onChange={(v) => onChange({ topP: v })}
           id="topP"
           min={0}

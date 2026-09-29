@@ -28,6 +28,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 6 Astra",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+      label: "GPT 6 Luna",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      label: "GPT 6 Sol",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_5_6_LUNA,
       label: "GPT 5.6 Luna",
     },
