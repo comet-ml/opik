@@ -71,6 +71,7 @@ declare module "@tanstack/react-table" {
     rowHeight: ROW_HEIGHT;
     rowHeightStyle: React.CSSProperties;
     onCommentsReply?: (row: TData, idx?: number) => void;
+    subRowHighlightColor?: string;
     aggregationMap?: Record<string, unknown>;
     projectId?: string;
     projectName?: string;

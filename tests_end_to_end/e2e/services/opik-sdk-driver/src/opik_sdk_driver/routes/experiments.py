@@ -12,7 +12,10 @@ from ..schemas import (
     ExperimentCompareSeedResponse,
     ExperimentEvaluateRequest,
     ExperimentEvaluateResponse,
+    ExperimentItemFingerprint,
     ExperimentItemScore,
+    ExperimentReadItemsRequest,
+    ExperimentReadItemsResponse,
 )
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
@@ -91,6 +94,68 @@ def evaluate_experiment(
         item_count=len(body.items),
         scored_item_count=len(result.test_results),
         scores=scores,
+    )
+
+
+@router.post(
+    "/read-items",
+    response_model=ExperimentReadItemsResponse,
+    status_code=200,
+)
+def read_experiment_items(
+    body: ExperimentReadItemsRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> ExperimentReadItemsResponse:
+    """Read an experiment's items back through `Experiment.get_items()`.
+
+    The estate writes experiment items (through the TS backend client) but has
+    never read them back through the Python SDK, which is the path OPIK-8274
+    rewrote into concurrent 2,000-item waves over raw JSON.
+
+    Only the knobs the caller actually set are forwarded, so an omitted
+    `page_size`/`num_threads`/`max_results` exercises the SDK's own default
+    rather than a copy of it pinned here — which would quietly stop testing the
+    default the day it changed.
+    """
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    try:
+        experiment = client.get_experiment_by_id(body.experiment_id)
+
+        kwargs: dict[str, int] = {}
+        if body.max_results is not None:
+            kwargs["max_results"] = body.max_results
+        if body.page_size is not None:
+            kwargs["page_size"] = body.page_size
+        if body.num_threads is not None:
+            kwargs["num_threads"] = body.num_threads
+
+        items = experiment.get_items(**kwargs)
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    fingerprints: list[ExperimentItemFingerprint] = []
+    for item in items:
+        data = item.dataset_item_data or {}
+        raw_idx = data.get("idx")
+        fingerprints.append(
+            ExperimentItemFingerprint(
+                id=str(item.id),
+                dataset_item_id=str(item.dataset_item_id),
+                trace_id=str(item.trace_id),
+                # Only a genuine integer counts. A missing or non-numeric idx
+                # comes back as None so the caller's contiguity assertion
+                # fails, rather than being coerced into a plausible number.
+                idx=raw_idx
+                if isinstance(raw_idx, int) and not isinstance(raw_idx, bool)
+                else None,
+            )
+        )
+
+    return ExperimentReadItemsResponse(
+        experiment_id=body.experiment_id,
+        count=len(fingerprints),
+        items=fingerprints,
     )
 
 

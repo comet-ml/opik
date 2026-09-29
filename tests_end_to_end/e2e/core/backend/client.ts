@@ -315,6 +315,15 @@ export interface TraceBatchSeed {
   output?: TraceJsonSection;
   startTime?: Date;
   endTime?: Date;
+  /**
+   * Groups this trace into a conversation, as `createTraceWithSource` does.
+   *
+   * Here because a seed that needs MANY threads needs them in few requests:
+   * `trace_threads` rows are materialised from the traces that share a
+   * `thread_id`, so seeding tens of threads one trace at a time is tens of
+   * round trips and the quickest route to the workspace ingestion rate limit.
+   */
+  threadId?: string;
 }
 
 /**
@@ -2317,6 +2326,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * only reachable surface of the tika dependency and the thing the
      * attachments spec asserts on.
      *
+     * When it IS supplied it goes on BOTH requests, which is not belt-and-braces.
+     * `AttachmentService` calls `getMimeType` twice over two different payloads:
+     * on `upload-start` the answer only reaches S3's `CreateMultipartUpload`,
+     * while the type actually STORED on the attachment row comes from the
+     * `upload-complete` request (`AttachmentService.java:171`). Sending it on
+     * start alone gets it silently discarded and tika re-derives from the file
+     * name — which turns a mime-type test into a no-op that passes for the wrong
+     * reason, because a name like `photo.PNG` resolves to `image/png` anyway.
+     *
      * Deployment-neutral. On S3 `upload-start` hands back a genuine presigned
      * URL, which must be PUT to with no `Authorization` header — adding one
      * breaks the signature. On MinIO (the OSS compose stack) it hands back a URL
@@ -2381,6 +2399,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           file_size: args.content.byteLength,
           upload_id: uploadId,
           uploaded_file_parts: [{ e_tag: eTag, part_number: 1 }],
+          // The request the stored mime type is read from — see the note above.
+          ...(args.mimeType === undefined ? {} : { mime_type: args.mimeType }),
         },
       });
       if (complete.status !== 204 && complete.status !== 200) {
@@ -3083,14 +3103,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     /**
      * Attach a feedback score to a trace, so a delete has a dependent row to
      * cascade to. `source: 'sdk'` matches how a logged score arrives.
+     *
+     * `reason` is the free-text justification an LLM-judge metric uploads
+     * beside its value — the same field the annotate textarea writes, but from
+     * the other author. Omitted entirely when not given, rather than sent as
+     * null: the two are distinguishable downstream, and every caller that
+     * predates this argument means "no reason", not "reason cleared".
      */
     async addTraceFeedbackScore(args: {
       traceId: string;
       name: string;
       value: number;
+      reason?: string;
     }): Promise<void> {
       await opik.api.traces.addTraceFeedbackScore(args.traceId, {
-        body: { name: args.name, value: args.value, source: 'sdk' },
+        body: {
+          name: args.name,
+          value: args.value,
+          source: 'sdk',
+          ...(args.reason === undefined ? {} : { reason: args.reason }),
+        },
       });
     },
 
@@ -4040,6 +4072,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             start_time: (trace.startTime ?? now).toISOString(),
             end_time: (trace.endTime ?? now).toISOString(),
             source: 'sdk' as const,
+            ...(trace.threadId ? { thread_id: trace.threadId } : {}),
             ...(trace.input === undefined ? {} : { input: trace.input }),
             ...(trace.output === undefined ? {} : { output: trace.output }),
           })),

@@ -3,6 +3,8 @@ export * as agentConfigs from "./agentConfigs/index.js";
 export * from "./agentInsights/client/requests/index.js";
 export * as agentInsights from "./agentInsights/index.js";
 export * from "./agentInsights/types/index.js";
+export * from "./agentInsightsEnrollment/client/requests/index.js";
+export * as agentInsightsEnrollment from "./agentInsightsEnrollment/index.js";
 export * from "./agentInsightsJobs/client/requests/index.js";
 export * as agentInsightsJobs from "./agentInsightsJobs/index.js";
 export * from "./agentInsightsJobs/types/index.js";

@@ -92,4 +92,27 @@ public class JsonRowValues {
             values.forEach(object::put);
         }
     }
+
+    /**
+     * Writes a {@code double} exactly as the R2DBC path does.
+     *
+     * <p>The two paths must produce the same cell, and the R2DBC driver renders a double with
+     * {@code String.valueOf(value)} ({@code ClickHouseDoubleValue#toSqlExpression}) — Java's shortest
+     * round-tripping form. Jackson's {@code writeNumber(double)} emits byte-identical text, so writing
+     * the double straight is parity, not an approximation of it.
+     *
+     * <p>Measured against a real ClickHouse: that text parses to the same {@code Float64} bits through
+     * {@code JSONEachRow} and through {@code FORMAT Values}, with
+     * {@code input_format_json_read_numbers_as_strings} on or off. An exact decimal expansion via
+     * {@code BigDecimal} is therefore not needed, and would cost ~28 bytes a row and lose the sign of
+     * {@code -0.0}, which {@code BigDecimal} cannot represent.
+     *
+     * <p>Non-finite values have no {@code BigDecimal} either way; Jackson quotes them, which is what the
+     * insert's {@code input_format_json_read_numbers_as_strings} accepts.
+     */
+    public void putDouble(@NonNull ObjectNode node, String field, double value) {
+        checkField(field);
+
+        node.put(field, value);
+    }
 }

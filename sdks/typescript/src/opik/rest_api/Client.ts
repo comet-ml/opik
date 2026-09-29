@@ -2,6 +2,7 @@
 
 import { AgentConfigsClient } from "./api/resources/agentConfigs/client/Client.js";
 import { AgentInsightsClient } from "./api/resources/agentInsights/client/Client.js";
+import { AgentInsightsEnrollmentClient } from "./api/resources/agentInsightsEnrollment/client/Client.js";
 import { AgentInsightsJobsClient } from "./api/resources/agentInsightsJobs/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
@@ -58,6 +59,7 @@ export declare namespace OpikApiClient {
 export class OpikApiClient {
     protected readonly _options: NormalizedClientOptions<OpikApiClient.Options>;
     protected _mcpOAuth: McpOAuthClient | undefined;
+    protected _agentInsightsEnrollment: AgentInsightsEnrollmentClient | undefined;
     protected _systemAnalyticsQueries: SystemAnalyticsQueriesClient | undefined;
     protected _systemUsage: SystemUsageClient | undefined;
     protected _agentConfigs: AgentConfigsClient | undefined;
@@ -105,6 +107,10 @@ export class OpikApiClient {
 
     public get mcpOAuth(): McpOAuthClient {
         return (this._mcpOAuth ??= new McpOAuthClient(this._options));
+    }
+
+    public get agentInsightsEnrollment(): AgentInsightsEnrollmentClient {
+        return (this._agentInsightsEnrollment ??= new AgentInsightsEnrollmentClient(this._options));
     }
 
     public get systemAnalyticsQueries(): SystemAnalyticsQueriesClient {

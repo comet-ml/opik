@@ -386,6 +386,51 @@ class ExperimentEvaluateRequest(BaseModel):
     workspace: str | None = None
 
 
+class ExperimentReadItemsRequest(BaseModel):
+    """One `Experiment.get_items()` call, with its paging knobs exposed.
+
+    `page_size` and `num_threads` are `None` by default so the route can tell
+    "the caller wants the SDK's default" from "the caller chose the value that
+    happens to equal it" — the whole point of the read is comparing the
+    defaults against explicit settings, and passing a hardcoded copy of the
+    default would compare a value against itself.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    experiment_id: str
+    max_results: int | None = None
+    page_size: int | None = None
+    num_threads: int | None = None
+    workspace: str | None = None
+
+
+class ExperimentItemFingerprint(BaseModel):
+    """The identity of one experiment item, in the order the read returned it.
+
+    Deliberately not the whole item: the assertion is that the SAME rows come
+    back in the SAME order under every paging knob, so what matters is the
+    identity triple and the caller-supplied index that says where the row
+    belongs. Returning the full `dataset_item_data` for thousands of rows would
+    make the response enormous for no extra discriminating power.
+    """
+
+    id: str
+    dataset_item_id: str
+    trace_id: str
+    # The monotonic `idx` the seed wrote onto the dataset item, or None when the
+    # row came back without one. Never defaulted to a number: an absent index is
+    # how a dropped or corrupted `dataset_item_data` would show, and coercing it
+    # to 0 would hide exactly that.
+    idx: int | None
+
+
+class ExperimentReadItemsResponse(BaseModel):
+    experiment_id: str
+    count: int
+    items: list[ExperimentItemFingerprint]
+
+
 class ExperimentItemScore(BaseModel):
     dataset_item_id: str
     input: str

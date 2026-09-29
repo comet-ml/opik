@@ -253,6 +253,30 @@ export interface PythonSdkClient {
       }>;
     }>;
   }>;
+  /**
+   * `Experiment.get_items()` — the SDK read the estate has never driven.
+   *
+   * Every knob is optional so an omitted one exercises the SDK's own default
+   * rather than a copy of it pinned in the suite. `idx` is the monotonic index
+   * the caller wrote onto each dataset item, echoed back so a read can be
+   * checked for order, gaps and duplicates without transferring whole rows.
+   */
+  readExperimentItems(args: {
+    experiment_id: string;
+    max_results?: number;
+    page_size?: number;
+    num_threads?: number;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    count: number;
+    items: Array<{
+      id: string;
+      dataset_item_id: string;
+      trace_id: string;
+      idx: number | null;
+    }>;
+  }>;
   createTextPrompt(args: {
     name: string;
     prompt: string;
@@ -567,6 +591,23 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           }>;
         }>;
       }>('POST', '/experiments/compare-seed', args);
+    },
+    async readExperimentItems(args) {
+      return request<{
+        experiment_id: string;
+        count: number;
+        items: Array<{
+          id: string;
+          dataset_item_id: string;
+          trace_id: string;
+          idx: number | null;
+        }>;
+      }>('POST', '/experiments/read-items', args, {
+        // A full read of a multi-page experiment against a cloud backend is
+        // several round trips deep, and the sequential arms (num_threads=1 at
+        // a small page size) are deliberately the slowest way to do it.
+        timeoutMs: 300_000,
+      });
     },
     async createTextPrompt(args) {
       return request<{ id: string; name: string }>('POST', '/prompts/text', args);

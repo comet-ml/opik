@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnalyticsQueriesClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -98,8 +99,10 @@ class AnalyticsQueriesResourceTest {
                         .redisUrl(REDIS.getRedisURI())
                         // The read-only free-form SQL user is provisioned globally on the ClickHouse container
                         // (users.xml) and wired by config-test.yml; the test only needs to flip the toggle on.
+                        // Only A is allowlisted, so B exercises the per-workspace gate of the scoped endpoint.
                         .customConfigs(List.of(
-                                new CustomConfig("serviceToggles.ollieEnabled", "true")))
+                                new CustomConfig("serviceToggles.ollieEnabled", "true"),
+                                new CustomConfig("customCharts.enabledWorkspaces", WORKSPACE_ID_A)))
                         .build());
     }
 
@@ -108,11 +111,16 @@ class AnalyticsQueriesResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private AnalyticsQueriesClient analyticsQueriesClient;
+    private ExperimentResourceClient experimentResourceClient;
 
     private UUID projectIdA;
+    private UUID projectIdA2;
     private UUID projectIdB;
     private UUID traceIdA;
+    private UUID traceIdA2;
     private UUID traceIdB;
+    private UUID experimentIdA;
+    private UUID experimentIdB;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -126,6 +134,7 @@ class AnalyticsQueriesResourceTest {
         projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         traceResourceClient = new TraceResourceClient(client, baseURI);
         analyticsQueriesClient = new AnalyticsQueriesClient(client, baseURI);
+        experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
 
         String projectNameA = UUID.randomUUID().toString();
         projectIdA = projectResourceClient.createProject(projectNameA, API_KEY_A, WORKSPACE_NAME_A);
@@ -134,6 +143,17 @@ class AnalyticsQueriesResourceTest {
         String projectNameB = UUID.randomUUID().toString();
         projectIdB = projectResourceClient.createProject(projectNameB, API_KEY_B, WORKSPACE_NAME_B);
         traceIdB = createTrace(projectNameB, API_KEY_B, WORKSPACE_NAME_B);
+
+        // A second project in A, so the scoped endpoint has something to narrow away.
+        String projectNameA2 = UUID.randomUUID().toString();
+        projectIdA2 = projectResourceClient.createProject(projectNameA2, API_KEY_A, WORKSPACE_NAME_A);
+        traceIdA2 = createTrace(projectNameA2, API_KEY_A, WORKSPACE_NAME_A);
+
+        // A's experiment sits in A2, so a query scoped to project A returning it shows experiments ignore the project.
+        experimentIdA = experimentResourceClient.create(
+                experimentResourceClient.createPartialExperiment().projectId(projectIdA2).build(),
+                API_KEY_A, WORKSPACE_NAME_A);
+        experimentIdB = experimentResourceClient.create(API_KEY_B, WORKSPACE_NAME_B);
     }
 
     @Test
@@ -196,6 +216,52 @@ class AnalyticsQueriesResourceTest {
                 """;
         assertScopedRows(analyticsQueriesClient.execute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A),
                 WORKSPACE_ID_A, projectIdA, traceIdA);
+    }
+
+    @Test
+    @DisplayName("scoped: without a project, returns every project of the bound workspace and nothing else")
+    void executeScopedQuery__whenNoProject__thenReturnsWholeWorkspace() {
+        var response = analyticsQueriesClient.executeScoped(null, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A);
+
+        assertThat(response.results())
+                .allSatisfy(node -> assertThat(node.get("workspace_id").asText()).isEqualTo(WORKSPACE_ID_A))
+                .extracting(node -> node.get("id").asText())
+                .containsExactlyInAnyOrder(traceIdA.toString(), traceIdA2.toString());
+    }
+
+    @Test
+    @DisplayName("scoped: a supplied project narrows the result to it")
+    void executeScopedQuery__whenProject__thenReturnsOnlyThatProject() {
+        assertScopedRows(analyticsQueriesClient.executeScoped(projectIdA, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A),
+                WORKSPACE_ID_A, projectIdA, traceIdA);
+    }
+
+    @Test
+    @DisplayName("scoped: a project from another workspace returns no rows")
+    void executeScopedQuery__whenProjectFromAnotherWorkspace__thenReturnsNoRows() {
+        assertNoRows(analyticsQueriesClient.executeScoped(projectIdB, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A));
+    }
+
+    @Test
+    @DisplayName("scoped: experiments cover the whole workspace even when a project is supplied")
+    void executeScopedQuery__whenExperimentsWithProject__thenNotNarrowedByProject() {
+        var query = "SELECT toJSONString(map('id', toString(id), 'workspace_id', workspace_id)) AS result FROM experiments";
+
+        var response = analyticsQueriesClient.executeScoped(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A);
+
+        assertThat(response.results())
+                .extracting(node -> node.get("id").asText())
+                .containsExactly(experimentIdA.toString())
+                .doesNotContain(experimentIdB.toString());
+    }
+
+    @Test
+    @DisplayName("scoped: a workspace not on the Custom Charts allowlist gets 501")
+    void executeScopedQuery__whenWorkspaceNotAllowlisted__thenNotImplemented() {
+        try (Response response = analyticsQueriesClient.callExecuteScoped(null, RESULT_QUERY, API_KEY_B,
+                WORKSPACE_NAME_B)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_IMPLEMENTED.getStatusCode());
+        }
     }
 
     private void assertBadRequest(String query) {
