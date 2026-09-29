@@ -120,12 +120,13 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     if (!isCompare) return null;
 
     const data: Record<string, CompareFiledValue> = {};
-    const promptVersionsById: CompareConfig["promptVersions"] = {};
+    const promptVersionsByExperimentId: CompareConfig["promptVersionsByExperimentId"] =
+      {};
 
     experimentsIds.forEach((id: string) => {
       const experiment = find(experiments, (e) => e.id === id);
       data[id] = formatExperimentPromptVersions(experiment);
-      promptVersionsById[id] = experiment?.prompt_versions;
+      promptVersionsByExperimentId[id] = experiment?.prompt_versions;
     });
 
     if (Object.values(data).every(isUndefined)) return null;
@@ -136,7 +137,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
       name: PROMPT_VERSION_ROW_NAME,
       base: experimentsIds[0],
       data,
-      promptVersions: promptVersionsById,
+      promptVersionsByExperimentId,
       different: !values.every((v) => values[0] === v),
     } as CompareConfig;
   }, [isCompare, experimentsIds, experiments]);

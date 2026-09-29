@@ -18,7 +18,10 @@ export type CompareConfig = {
   different: boolean;
   // Set on the prompt version row so its cells link to each version; the diff
   // view still compares the text labels in `data`.
-  promptVersions?: Record<string, ExperimentPromptVersion[] | undefined>;
+  promptVersionsByExperimentId?: Record<
+    string,
+    ExperimentPromptVersion[] | undefined
+  >;
 };
 
 type CustomMeta = {
@@ -46,7 +49,8 @@ const CompareExperimentsConfigCell: React.FC<
       return <span className="px-1.5 py-2.5 text-light-slate">No value</span>;
     }
 
-    const promptVersions = compareConfig.promptVersions?.[experimentId];
+    const promptVersions =
+      compareConfig.promptVersionsByExperimentId?.[experimentId];
     if (promptVersions && !showDiffView) {
       return (
         <div className="flex flex-wrap items-center gap-1 px-0.5 py-1">

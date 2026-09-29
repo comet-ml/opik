@@ -76,7 +76,7 @@ const promptRow = (
   name: "Prompt version (linked)",
   base: "e1",
   data: labels,
-  promptVersions: versions,
+  promptVersionsByExperimentId: versions,
   different: true,
 });
 
