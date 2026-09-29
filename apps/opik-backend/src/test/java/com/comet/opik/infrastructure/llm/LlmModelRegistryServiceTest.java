@@ -189,6 +189,8 @@ class LlmModelRegistryServiceTest {
                         .reasoning(true).build()),
                 openAiCase(LlmModelDefinition.builder().id("gpt-5.6-terra").label("GPT 5.6 Terra")
                         .reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.1-chat-latest").structuredOutput(true)
+                        .reasoning(true).build()),
                 openAiCase(LlmModelDefinition.builder().id("gpt-5-chat-latest").build()),
                 openAiCase(LlmModelDefinition.builder().id("gpt-5.2-chat-latest").build()),
                 openAiCase(LlmModelDefinition.builder().id("gpt-5.3-chat-latest").structuredOutput(true).build()));

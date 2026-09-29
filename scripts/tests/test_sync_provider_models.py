@@ -52,11 +52,11 @@ class RegenerateYamlReasoningTest(unittest.TestCase):
         "    reasoning: true\n"
     )
 
-    CHAT_LATEST = sorted(spm.OPENAI_NON_REASONING_MODELS)[0]
+    PINNED = sorted(spm.OPENAI_NON_REASONING_MODELS)
 
     def _regenerate(self, openai_reasoning):
         models = {
-            "openai": [_entry("gpt-carried"), _entry("gpt-new"), _entry("gpt-plain"), _entry(self.CHAT_LATEST)],
+            "openai": [_entry("gpt-carried"), _entry("gpt-new"), _entry("gpt-plain"), *(_entry(m) for m in self.PINNED)],
             "anthropic": [_entry("claude-carried"), _entry("claude-new")],
         }
         return spm.regenerate_llm_models_yaml(self.EXISTING_YAML, models, openai_reasoning=openai_reasoning)
@@ -72,10 +72,11 @@ class RegenerateYamlReasoningTest(unittest.TestCase):
 
         self.assertIn("gpt-carried", _reasoning_ids(yaml_text, "openai"))
 
-    def test_pinned_non_reasoning_model_is_never_flagged(self):
-        yaml_text = self._regenerate({self.CHAT_LATEST: True})
+    def test_pinned_non_reasoning_models_are_never_flagged(self):
+        yaml_text = self._regenerate({m: True for m in self.PINNED})
 
-        self.assertNotIn(self.CHAT_LATEST, _reasoning_ids(yaml_text, "openai"))
+        self.assertGreaterEqual(len(self.PINNED), 3)
+        self.assertTrue(set(self.PINNED).isdisjoint(_reasoning_ids(yaml_text, "openai")))
 
     def test_other_sections_are_not_seeded_from_lookup(self):
         yaml_text = self._regenerate({"claude-new": True, "gpt-new": True})
@@ -86,6 +87,20 @@ class RegenerateYamlReasoningTest(unittest.TestCase):
         yaml_text = self._regenerate(None)
 
         self.assertEqual(_reasoning_ids(yaml_text, "openai"), {"gpt-carried"})
+
+
+class ShouldWriteFilesTest(unittest.TestCase):
+    def test_new_models_write(self):
+        self.assertTrue(spm._should_write_files(2, False, False))
+
+    def test_a_changed_yaml_alone_writes(self):
+        self.assertTrue(spm._should_write_files(0, True, False))
+
+    def test_force_regen_writes_without_changes(self):
+        self.assertTrue(spm._should_write_files(0, False, True))
+
+    def test_nothing_changed_does_not_write(self):
+        self.assertFalse(spm._should_write_files(0, False, False))
 
 
 if __name__ == "__main__":

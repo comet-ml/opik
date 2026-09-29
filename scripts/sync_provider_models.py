@@ -1117,7 +1117,7 @@ def _build_reasoning_lookup(prices: dict) -> dict[str, bool]:
         for key, info in prices.items()
         if isinstance(info, dict)
         and info.get("litellm_provider") == "openai"
-        # LiteLLM files the Responses-API-only models (codex, -pro, deep-research) under mode "responses", not "chat".
+        # LiteLLM lists the Responses-API-only models (codex, -pro, deep-research) with mode "responses", not "chat".
         and info.get("mode") in ("chat", "responses")
     }
 
@@ -1145,6 +1145,11 @@ def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
         if k.startswith("vertex_ai/gemini-"):
             vertexai_all[k] = vertexai_all.get(k, False) or so
     return sorted(vertexai_all.items(), key=lambda x: x[0])
+
+
+def _should_write_files(total_added: int, yaml_changed: bool, force_regen: bool) -> bool:
+    # A seeded capability flag or a dropdown change can alter the YAML on a day without new models.
+    return total_added > 0 or yaml_changed or force_regen
 
 
 def main():
@@ -1289,6 +1294,7 @@ def main():
         llm_models_yaml_content, models_by_provider, dropdown_by_provider,
         openai_reasoning=_build_reasoning_lookup(prices),
     )
+    yaml_changed = new_llm_models_yaml != llm_models_yaml_content
 
     # 5. Print summary
     total_added = 0
@@ -1327,7 +1333,12 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if total_added == 0 and not args.force_regen:
+    if yaml_changed and total_added == 0:
+        print("### Registry")
+        print("- llm-models-default.yaml changed without new models (capability flags or dropdown membership)")
+        print()
+
+    if not _should_write_files(total_added, yaml_changed, args.force_regen):
         if total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
         else:
