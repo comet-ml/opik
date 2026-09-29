@@ -15,14 +15,20 @@ run-name: "🪟 PowerShell Checks ${{ github.ref_name }} by @${{ github.actor }}
 # authoritative gate: it is the only place the checks run on Windows, so
 # path-separator and filesystem behaviour match what the scripts actually meet.
 #
-# This runs PowerShell 7 (`shell: pwsh`), whereas README tells Windows users to
-# launch opik.ps1 via `powershell`, i.e. Windows PowerShell 5.1. The scripts must
-# work on both, so the settings file enables PSUseCompatibleSyntax and
-# PSUseCompatibleCommands against 5.1 and 7.0: 7-only syntax (??, ternary,
-# && / ||) and commands or parameters missing on either version (ForEach-Object
-# -Parallel, Get-WmiObject) fail this gate even though pwsh itself accepts them.
-# That coverage is static. Behaviour that differs between versions at runtime is
-# not exercised, since nothing here executes the scripts (see below).
+# The scripts must run on both Windows PowerShell 5.1 (README's documented
+# launch path, `powershell`) and PowerShell 7, so the job runs twice, once per
+# engine, via the `shell` matrix:
+#   powershell — the real 5.1 parser. Ground truth for "does 5.1 parse this", and
+#                proof that the checker itself (also used by the local hook's 5.1
+#                fallback) runs on 5.1.
+#   pwsh       — PowerShell 7, the engine the local hook uses on macOS/Linux.
+# Parsing alone can't tell whether a command or parameter exists on the other
+# engine, so the settings file also enables PSUseCompatibleSyntax and
+# PSUseCompatibleCommands against 5.1 and 7.0. Those catch 7-only syntax (??,
+# ternary, && / ||) and commands missing on either side (ForEach-Object
+# -Parallel, Get-WmiObject) under both legs, and on dev machines without 5.1.
+# Behaviour that differs between versions at runtime is still not exercised,
+# since nothing here executes the scripts (see below).
 #
 # This validates the scripts statically; it does NOT execute them. Running the
 # launcher needs Linux containers on a Windows host, which GitHub-hosted Windows
@@ -62,8 +68,18 @@ env:
 
 jobs:
   powershell-checks:
+    name: powershell-checks (${{ matrix.shell }})
     runs-on: windows-latest
     timeout-minutes: 10
+    strategy:
+      # Let both legs finish: a failure on only one engine is itself the signal.
+      fail-fast: false
+      matrix:
+        shell: [pwsh, powershell]
+    defaults:
+      run:
+        # Job-level, because a step's own `shell:` can't read the matrix context.
+        shell: ${{ matrix.shell }}
 
     steps:
       - name: Checkout
@@ -76,10 +92,10 @@ jobs:
           persist-credentials: false
 
       - name: Install PSScriptAnalyzer
-        shell: pwsh
         run: |
           # Preinstalled on windows-latest, but pinned explicitly so a runner
-          # image change can't silently move the rule set under us.
+          # image change can't silently move the rule set under us. Installed per
+          # leg: the two engines keep modules in separate directories.
           Install-Module -Name PSScriptAnalyzer -RequiredVersion $env:ANALYZER_VERSION `
               -Force -Scope CurrentUser -Repository PSGallery
           Write-Host "Installed PSScriptAnalyzer $env:ANALYZER_VERSION"
@@ -90,5 +106,4 @@ jobs:
       # -ExpectedAnalyzerVersion passes the version actually installed above, so
       # the checker fails loudly if a PR moved its own constant out of step.
       - name: Parse check + PSScriptAnalyzer
-        shell: pwsh
         run: ./scripts/precommit-powershell-check.ps1 -Annotate -ExpectedAnalyzerVersion $env:ANALYZER_VERSION

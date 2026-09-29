@@ -1,7 +1,8 @@
 # PSScriptAnalyzer configuration for the repo's PowerShell scripts
 # (opik.ps1, scripts/dev-runner.ps1). Enforced by:
 #   - scripts/precommit-powershell-check.sh   (pre-commit hook)
-#   - .github/workflows/powershell_checks.yml (windows-latest, authoritative)
+#   - .github/workflows/powershell_checks.yml (windows-latest under pwsh and
+#     Windows PowerShell 5.1, authoritative)
 #
 # Gate severity is Error + Warning. Information is excluded: it is dominated by
 # stylistic advice that would make the check noisy without catching the
@@ -27,9 +28,10 @@
 
     # The scripts must run on both Windows PowerShell 5.1 and PowerShell 7. The
     # documented launch path (README: `powershell -ExecutionPolicy ByPass -c
-    # ".\opik.ps1"`) is 5.1, but CI and the local hook run under pwsh (7), whose
-    # parser happily accepts 7-only constructs. These two rules close that gap
-    # statically. Both are off by default, and both survive the Severity filter
+    # ".\opik.ps1"`) is 5.1, but the local hook usually runs under pwsh (7),
+    # whose parser happily accepts 7-only constructs. These two rules catch that
+    # statically, on any OS. CI also runs the checker under real 5.1, which
+    # confirms the syntax half. Both are off by default, and both survive the Severity filter
     # above (Syntax is Error, Commands is Warning). Baseline on enabling: 0
     # findings in either launcher.
     Rules = @{

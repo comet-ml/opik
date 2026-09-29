@@ -44,7 +44,7 @@ echo "precommit-powershell-check.sh:"
 # PATH to run at all (its own shebang resolves through it).
 real_bin="$tmp/real-bin"
 mkdir -p "$real_bin"
-for t in bash sh env grep printf cat dirname pwd; do
+for t in bash sh env grep printf cat dirname pwd uname; do
 	p=$(command -v "$t" 2>/dev/null) && ln -sf "$p" "$real_bin/$t"
 done
 out=$(PATH="$real_bin" scripts/precommit-powershell-check.sh opik.ps1 2>&1 || true)
@@ -52,6 +52,38 @@ rc=$(PATH="$real_bin" scripts/precommit-powershell-check.sh opik.ps1 >/dev/null 
 check "skips when pwsh is absent" "skipping PowerShell checks locally" "$out"
 check "points at the CI gate instead" "windows-latest" "$out"
 check_exit "skip path exits 0" 0 "$rc"
+
+# --- Engine selection: pwsh first, Windows PowerShell 5.1 as the fallback ----
+# Stubs stand in for uname / pwsh / powershell.exe / cygpath, so the routing is
+# asserted on any OS without a real Windows shell. Each stub engine just prints
+# how it was invoked (printf, not echo: sh's echo would eat the \r in C:\repo).
+stub() { # stub <dir> <name> <body>
+	mkdir -p "$1"
+	printf '#!/bin/sh\n%s\n' "$3" >"$1/$2"
+	chmod +x "$1/$2"
+}
+win="$tmp/win-bin"
+stub "$win" uname 'echo MINGW64_NT-10.0-19045'
+stub "$win" powershell.exe 'printf "STUB powershell.exe %s\n" "$*"'
+stub "$win" cygpath "printf '%s\\n' 'C:\\repo\\scripts\\precommit-powershell-check.ps1'"
+
+out=$(PATH="$win:$real_bin" scripts/precommit-powershell-check.sh opik.ps1 2>&1 || true)
+check "falls back to powershell.exe on Windows" "STUB powershell.exe" "$out"
+check "passes it a Windows path to the checker" "-File C:\\repo\\scripts\\precommit-powershell-check.ps1 opik.ps1" "$out"
+check "bypasses the default Restricted policy" "-ExecutionPolicy Bypass" "$out"
+
+win_pwsh="$tmp/win-pwsh-bin"
+stub "$win_pwsh" pwsh 'printf "STUB pwsh %s\n" "$*"'
+out=$(PATH="$win_pwsh:$win:$real_bin" scripts/precommit-powershell-check.sh opik.ps1 2>&1 || true)
+check "prefers pwsh when both engines exist" "STUB pwsh" "$out"
+
+# WSL exposes the Windows host's powershell.exe on PATH, but it can't see Linux
+# paths; the wrapper must not pick it up there.
+wsl="$tmp/wsl-bin"
+stub "$wsl" uname 'echo Linux'
+stub "$wsl" powershell.exe 'printf "STUB powershell.exe %s\n" "$*"'
+out=$(PATH="$wsl:$real_bin" scripts/precommit-powershell-check.sh opik.ps1 2>&1 || true)
+check "ignores powershell.exe outside a Windows shell" "skipping PowerShell checks locally" "$out"
 
 if ! command -v pwsh >/dev/null 2>&1; then
 	echo "  (pwsh not installed — skipping the checks that need it)"

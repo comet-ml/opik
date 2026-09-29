@@ -1,8 +1,10 @@
 # Static validation for the repo's PowerShell scripts: parse check + PSScriptAnalyzer.
 #
 # One implementation, two callers:
-#   - scripts/precommit-powershell-check.sh  (pre-commit hook, PowerShell Core on Linux/macOS)
-#   - .github/workflows/powershell_checks.yml (windows-latest, PowerShell 7 via `shell: pwsh`)
+#   - scripts/precommit-powershell-check.sh  (pre-commit hook: pwsh, or Windows PowerShell 5.1 on Windows)
+#   - .github/workflows/powershell_checks.yml (windows-latest, once under pwsh and once under Windows PowerShell 5.1)
+#
+# So this script must itself run on both 5.1 and 7.
 #
 # Keeping the logic here rather than inline in the workflow means the local hook
 # and the CI gate cannot drift apart.
@@ -48,6 +50,13 @@ $settingsName = 'PSScriptAnalyzerSettings.psd1'
 # because the workflow copy is what CI installs and it must stay under branch
 # protection rather than being read out of a PR's worktree.
 $RequiredAnalyzerVersion = '1.25.0'
+
+# The two engines keep modules in separate directories, so the install hint must
+# name the one running this script. The engine label also tells the two CI legs'
+# annotations apart: a finding only one leg reports is version-specific.
+$engineExe = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell' }
+$engine = "PowerShell $($PSVersionTable.PSVersion)"
+$installHint = "Install it with: $engineExe -Command `"Install-Module PSScriptAnalyzer -RequiredVersion $RequiredAnalyzerVersion -Scope CurrentUser`""
 
 # Cross-check the two declarations. CI passes the version it installed; if a PR
 # edits the constant above, this fails instead of silently letting the gate
@@ -107,7 +116,7 @@ foreach ($file in $targets) {
             $line = $e.Extent.StartLineNumber
             $col = $e.Extent.StartColumnNumber
             if ($Annotate) {
-                Write-Host "::error file=$relative,line=$line,col=$col::$($e.Message)"
+                Write-Host "::error file=$relative,line=$line,col=$col::[$engine] $($e.Message)"
             }
             Write-Host "  ${relative}:${line}:${col} $($e.Message)"
         }
@@ -131,7 +140,7 @@ if ($parseFailures -gt 0) {
 # pwsh is present, the analyzer is required.
 if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
     Write-Host 'PSScriptAnalyzer is not installed, so the analyzer half of this check cannot run.'
-    Write-Host "Install it with: pwsh -Command `"Install-Module PSScriptAnalyzer -RequiredVersion $RequiredAnalyzerVersion -Scope CurrentUser`""
+    Write-Host $installHint
     exit 2
 }
 
@@ -146,7 +155,7 @@ if (-not $analyzerModule) {
     $found = (Get-Module -ListAvailable -Name PSScriptAnalyzer |
         ForEach-Object { $_.Version.ToString() }) -join ', '
     Write-Host "PSScriptAnalyzer $RequiredAnalyzerVersion is required; found: $found"
-    Write-Host "Install it with: pwsh -Command `"Install-Module PSScriptAnalyzer -RequiredVersion $RequiredAnalyzerVersion -Scope CurrentUser`""
+    Write-Host $installHint
     exit 2
 }
 
@@ -174,7 +183,7 @@ foreach ($f in $findings) {
     $relative = Get-RelativePath $f.ScriptPath
     if ($Annotate) {
         $level = if ($f.Severity -eq 'Error') { 'error' } else { 'warning' }
-        Write-Host "::${level} file=${relative},line=$($f.Line),col=$($f.Column)::[$($f.RuleName)] $($f.Message)"
+        Write-Host "::${level} file=${relative},line=$($f.Line),col=$($f.Column)::[$engine] [$($f.RuleName)] $($f.Message)"
     }
     Write-Host "  ${relative}:$($f.Line) [$($f.RuleName)] $($f.Message)"
 }
@@ -187,5 +196,5 @@ if ($findings.Count -gt 0) {
     exit 1
 }
 
-Write-Host "PowerShell checks passed ($($targets.Count) file(s): parse + PSScriptAnalyzer)."
+Write-Host "PowerShell checks passed under $engine ($($targets.Count) file(s): parse + PSScriptAnalyzer)."
 exit 0
