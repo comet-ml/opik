@@ -89,7 +89,8 @@ public class DatasetEventListener {
         Set<UUID> datasetIds = getDatasetIds(event, ExperimentType.REGULAR);
 
         if (datasetIds.isEmpty()) {
-            log.info("No datasets with regular experiments found for ExperimentsDeleted event '{}'", event);
+            // Routine here, unlike the anomalous empty-event guards below, so DEBUG rather than INFO.
+            log.debug("No datasets with regular experiments found for ExperimentsDeleted event '{}'", event);
             return;
         }
 
