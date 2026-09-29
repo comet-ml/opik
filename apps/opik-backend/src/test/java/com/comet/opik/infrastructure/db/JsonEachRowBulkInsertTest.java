@@ -126,7 +126,7 @@ class JsonEachRowBulkInsertTest {
         var response = mock(InsertResponse.class);
         var insertFuture = new CompletableFuture<InsertResponse>();
         var client = mock(Client.class);
-        when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
+        when(client.insert(eq("feedback_scores"), any(DataStreamWriter.class), eq(ClickHouseFormat.JSONEachRow),
                 any(InsertSettings.class))).thenReturn(insertFuture);
 
         var subscription = new JsonEachRowBulkInsert(client, MAPPER)
@@ -135,8 +135,8 @@ class JsonEachRowBulkInsertTest {
 
         // The body is serialized on boundedElastic, so wait for the call to reach the client before
         // cancelling - otherwise this races the serialization and cancels before there is a future at all.
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> verify(client).insert(any(String.class),
-                any(DataStreamWriter.class), any(ClickHouseFormat.class), any(InsertSettings.class)));
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> verify(client).insert(eq("feedback_scores"),
+                any(DataStreamWriter.class), eq(ClickHouseFormat.JSONEachRow), any(InsertSettings.class)));
         subscription.dispose();
 
         // Not cancelled: the client's HTTP round trip finishes regardless and must be able to hand its

@@ -254,23 +254,31 @@ class AbstractClickHouseHealthCheckTest {
     }
 
     /**
-     * Per-field comparison: {@link HealthCheck.Result#equals(Object)} folds in a construction
-     * timestamp, so a direct {@code isEqualTo} would never match.
+     * Whole-object comparison, minus the two fields that cannot match by construction:
+     * {@code time} is stamped at construction and {@code duration} is measured, so a literal
+     * {@code isEqualTo} would never pass. Everything else — {@code healthy}, {@code message},
+     * {@code details} and the {@code error} including its cause chain — is compared recursively, so a field
+     * added to {@link HealthCheck.Result} is covered without touching this helper.
      */
     private void assertResult(HealthCheck.Result actual, HealthCheck.Result expected) {
-        assertThat(actual.isHealthy()).isEqualTo(expected.isHealthy());
-        assertThat(actual.getMessage()).isEqualTo(expected.getMessage());
-        assertError(actual.getError(), expected.getError());
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringFields("time", "duration")
+                .withComparatorForType(AbstractClickHouseHealthCheckTest::compareThrowables, Throwable.class)
+                .isEqualTo(expected);
     }
 
-    private void assertError(Throwable actual, Throwable expected) {
-        if (expected == null) {
-            assertThat(actual).isNull();
-            return;
+    /**
+     * {@link Throwable} has no value equality and its stack trace never matches, so compare the identity a
+     * probe result actually carries: exact type, message and cause chain.
+     */
+    private static int compareThrowables(Throwable actual, Throwable expected) {
+        if (actual == null || expected == null) {
+            return actual == expected ? 0 : 1;
         }
-        assertThat(actual)
-                .isExactlyInstanceOf(expected.getClass())
-                .hasMessage(expected.getMessage())
-                .hasCause(expected.getCause() == null ? null : expected.getCause());
+        boolean same = actual.getClass() == expected.getClass()
+                && java.util.Objects.equals(actual.getMessage(), expected.getMessage())
+                && compareThrowables(actual.getCause(), expected.getCause()) == 0;
+        return same ? 0 : 1;
     }
 }

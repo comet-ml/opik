@@ -3,11 +3,13 @@ package com.comet.opik.utils;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Provider;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
 
@@ -63,46 +65,61 @@ public class AsyncUtils {
      * <ul>
      *   <li><b>It never arrives.</b> Cancellation lands before the future completes. Suppressing the cancel
      *       keeps the future able to accept the value, and the discard handler closes it when it turns up.
-     *       A discard handler on its own fixes nothing here: a cancelled future hands a value to nobody.</li>
+     *       A discard handler on its own fixes nothing here: a cancelled future hands a value to nobody.
+     *       {@code doOnDiscard} is the only hook that is handed that value — {@code doOnCancel} and
+     *       {@code doFinally} fire without it, and {@code doOnNext} never runs once cancelled.</li>
      *   <li><b>It arrives and then the subscriber goes away.</b> {@link Mono#usingWhen} owns the response
      *       from that point and runs the cleanup on completion, error <i>and</i> cancellation.</li>
      * </ul>
      *
-     * <p>Both live here on purpose. Leaving either to the call site means an operator that has to be
-     * remembered at the right position in every chain, and forgetting it leaks silently — the response is
-     * simply never closed, with nothing failing and nothing logged until the pool runs out.
+     * <p>{@code consume} is wrapped here rather than taken as a {@link Mono} so that every caller gets the
+     * same deferral instead of remembering it. It runs on the thread that delivered the response; a caller
+     * whose mapping blocks passes a {@link Scheduler} to the overload below.
      *
      * <p>The cleanup deliberately runs inline rather than on {@link Schedulers#boundedElastic()}. Closing is
-     * I/O, so dispatching it looks like the safe choice, but it buys nothing and costs something real:
-     * {@code InsertResponse.close()} is an empty method, so the insert callers gain no protection, and the
-     * query callers already terminate their consumer on {@code boundedElastic}, so the cleanup lands there
-     * anyway — the hop only adds a second dispatch onto the same scheduler. Meanwhile {@code boundedElastic}
-     * is shared with most blocking work in this service, including the JSONEachRow body serialization on the
-     * ingestion path, so queueing connection returns behind it couples releasing a connection to the very
-     * load that is consuming connections. Returning a connection must not wait on a queue.
-     *
-     * <p>{@code consume} is likewise NOT moved to a scheduler here — the caller knows whether its own mapping
-     * blocks, and says so by handing back a {@link Mono} carrying its own {@code subscribeOn}.
+     * I/O, so dispatching it looks like the safe choice, but {@code InsertResponse.close()} is an empty
+     * method and the query callers already map on {@code boundedElastic}, so it protects nobody — while
+     * {@code boundedElastic} is shared with most blocking work in this service, including the JSONEachRow
+     * body serialization on the ingestion path. Queueing connection returns behind that couples releasing a
+     * connection to the load consuming connections. Returning a connection must not wait on a queue.
      */
     public static <T extends AutoCloseable, R> Mono<R> usingClickHouseFuture(
-            Supplier<? extends CompletableFuture<T>> futureSupplier,
-            Function<? super T, ? extends Mono<R>> consume) {
-        return Mono.usingWhen(
-                Mono.fromFuture(futureSupplier, true)
-                        .doOnDiscard(AutoCloseable.class, AsyncUtils::closeQuietly),
-                consume,
-                response -> Mono.fromRunnable(() -> closeQuietly(response)));
+            @NonNull Supplier<? extends CompletableFuture<T>> futureSupplier,
+            @NonNull Function<? super T, ? extends R> consume) {
+        return usingClickHouseFuture(futureSupplier, consume, Schedulers.immediate());
     }
 
     /**
-     * Closes a response nobody is waiting for any more. Failing to close it would leak the connection this
-     * exists to return, so the exception is logged rather than propagated — there is no caller left to take it.
+     * As {@link #usingClickHouseFuture(Supplier, Function)}, with {@code consume} subscribed on
+     * {@code consumeScheduler}. For a mapping that blocks; the response lifecycle is unchanged.
      */
-    private static void closeQuietly(AutoCloseable response) {
-        try {
-            response.close();
-        } catch (Exception exception) {
-            log.warn("Failed to close a discarded ClickHouse response", exception);
+    public static <T extends AutoCloseable, R> Mono<R> usingClickHouseFuture(
+            @NonNull Supplier<? extends CompletableFuture<T>> futureSupplier,
+            @NonNull Function<? super T, ? extends R> consume,
+            @NonNull Scheduler consumeScheduler) {
+        return Mono.usingWhen(
+                Mono.fromFuture(futureSupplier, true)
+                        .doOnDiscard(AutoCloseable.class, response -> closeQuietly(response, "discarded")),
+                response -> Mono.<R>fromCallable(() -> consume.apply(response)).subscribeOn(consumeScheduler),
+                response -> Mono.fromRunnable(() -> closeQuietly(response, "released")));
+    }
+
+    /**
+     * Closes a ClickHouse v2 response nobody is waiting for any more, logging rather than propagating: there
+     * is no caller left to take the exception, and failing to close leaks the connection this exists to
+     * return. Shared with the callers that hold the v2 client outside Reactor — the ClickHouse health checks
+     * — so the closing rule lives in one place rather than being restated per call style.
+     *
+     * <p>Takes {@link Object} and type-checks because an abandoned future's value arrives untyped. The check
+     * is on {@link AutoCloseable}, which {@link java.io.Closeable} extends, so both are covered.
+     */
+    public static void closeQuietly(Object response, @NonNull String context) {
+        if (response instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception exception) {
+                log.warn("Failed to close a '{}' ClickHouse response", context, exception);
+            }
         }
     }
 

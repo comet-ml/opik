@@ -411,8 +411,7 @@ public class CipxSpendBlockDAO {
                     new ByteArrayInputStream(payload),
                     ClickHouseFormat.JSONEachRow,
                     settings);
-        }, response -> Mono.fromCallable(
-                () -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong()));
+        }, response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong());
     }
 
     private void appendJsonRow(StringBuilder out, String workspaceId, BlockRow row) {

@@ -3607,13 +3607,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_version_items");
             return AsyncUtils.usingClickHouseFuture(
                     () -> clickHouseClient.query(sql, params, settings),
-                    response -> Mono.fromCallable(() -> {
+                    response -> {
                         long written = response.getWrittenRows();
                         log.info(
                                 "Copied '{}' items from (dataset '{}', version '{}') to (dataset '{}', version '{}')",
                                 written, sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId);
                         return written;
-                    }).subscribeOn(Schedulers.boundedElastic()))
+                    },
+                    Schedulers.boundedElastic())
                     .doFinally(signalType -> endSegment(segment));
         });
     }
@@ -3785,8 +3786,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         return AsyncUtils.usingClickHouseFuture(
                 () -> clickHouseClient.query(sql, params, settings),
-                response -> Mono.fromCallable(response::getWrittenRows)
-                        .subscribeOn(Schedulers.boundedElastic()));
+                response -> response.getWrittenRows(),
+                Schedulers.boundedElastic());
     }
 
     /**

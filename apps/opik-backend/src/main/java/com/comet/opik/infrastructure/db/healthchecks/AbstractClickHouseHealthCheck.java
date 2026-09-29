@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.db.healthchecks;
 
 import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.query.QuerySettings;
+import com.comet.opik.utils.AsyncUtils;
 import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.NonNull;
@@ -162,17 +163,7 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
      * the query on the server needs the client's own cancellation API, not this future.
      */
     protected Result releaseAbandonedQuery(CompletableFuture<?> queryFuture, Exception exception) {
-        queryFuture.whenComplete((result, throwable) -> closeQuietly(result));
+        queryFuture.whenComplete((result, throwable) -> AsyncUtils.closeQuietly(result, "abandoned " + name));
         return Result.unhealthy(exception);
-    }
-
-    private void closeQuietly(Object result) {
-        if (result instanceof AutoCloseable closeable) {
-            try {
-                closeable.close();
-            } catch (Exception exception) {
-                log.warn("Failed to close abandoned '{}' probe response", name, exception);
-            }
-        }
     }
 }

@@ -148,8 +148,8 @@ public class JsonEachRowBulkInsert {
                     return AsyncUtils.usingClickHouseFuture(
                             () -> clickHouseClient.insert(
                                     table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)),
-                            response -> Mono.fromCallable(() -> response.getMetrics()
-                                    .getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong()))
+                            response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN)
+                                    .getLong())
                             .doFinally(signalType -> endSegment(segment));
                 })
                 // The throwable is passed as the cause, not formatted into the message: a failed bulk
