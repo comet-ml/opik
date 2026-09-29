@@ -21,12 +21,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -116,6 +118,33 @@ class JsonEachRowBulkInsertTest {
                 .thenReturn(CompletableFuture.completedFuture(response));
 
         return client;
+    }
+
+    @Test
+    @DisplayName("cancelled mid-insert: the response that arrives later is still closed, future left alone")
+    void cancelledInsertClosesTheLateResponse() {
+        var response = mock(InsertResponse.class);
+        var insertFuture = new CompletableFuture<InsertResponse>();
+        var client = mock(Client.class);
+        when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
+                any(InsertSettings.class))).thenReturn(insertFuture);
+
+        var subscription = new JsonEachRowBulkInsert(client, MAPPER)
+                .insert("feedback_scores", "log-comment", List.of(randomValue()), ROW_MAPPER)
+                .subscribe();
+
+        // The body is serialized on boundedElastic, so wait for the call to reach the client before
+        // cancelling - otherwise this races the serialization and cancels before there is a future at all.
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> verify(client).insert(any(String.class),
+                any(DataStreamWriter.class), any(ClickHouseFormat.class), any(InsertSettings.class)));
+        subscription.dispose();
+
+        // Not cancelled: the client's HTTP round trip finishes regardless and must be able to hand its
+        // response over, or nothing can close it and its pooled connection is lost (OPIK-8576).
+        assertThat(insertFuture.isCancelled()).isFalse();
+        assertThat(insertFuture.complete(response)).isTrue();
+
+        verify(response).close();
     }
 
     @Test

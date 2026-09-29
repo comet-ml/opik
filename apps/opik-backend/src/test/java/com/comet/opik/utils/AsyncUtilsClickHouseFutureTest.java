@@ -20,11 +20,11 @@ import static org.awaitility.Awaitility.await;
 class AsyncUtilsClickHouseFutureTest {
 
     private static final class CountingResponse implements AutoCloseable {
-        private final AtomicInteger closes = new AtomicInteger();
+        private final AtomicInteger closeCount = new AtomicInteger();
 
         @Override
         public void close() {
-            closes.incrementAndGet();
+            closeCount.incrementAndGet();
         }
     }
 
@@ -44,7 +44,7 @@ class AsyncUtilsClickHouseFutureTest {
         // The client's HTTP round trip finishes afterwards and publishes its response.
         assertThat(queryFuture.complete(response)).isTrue();
 
-        assertThat(response.closes).hasValue(1);
+        assertThat(response.closeCount).hasValue(1);
     }
 
     @Test
@@ -58,7 +58,7 @@ class AsyncUtilsClickHouseFutureTest {
         subscription.dispose();
 
         // The cleanup is dispatched to boundedElastic because closing is I/O, so this one is not immediate.
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(response.closes).hasValue(1));
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(response.closeCount).hasValue(1));
     }
 
     @Test
@@ -71,7 +71,7 @@ class AsyncUtilsClickHouseFutureTest {
                 .block();
 
         assertThat(written).isEqualTo(42L);
-        assertThat(response.closes).hasValue(1);
+        assertThat(response.closeCount).hasValue(1);
     }
 
     @Test
@@ -86,7 +86,26 @@ class AsyncUtilsClickHouseFutureTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("mapping failed");
 
-        assertThat(response.closes).hasValue(1);
+        assertThat(response.closeCount).hasValue(1);
+    }
+
+    @Test
+    @DisplayName("a close that fails does not fail the operation - the rows are already written")
+    void closeFailureDoesNotFailTheOperation() {
+        AutoCloseable failsToClose = () -> {
+            throw new IllegalStateException("close failed");
+        };
+
+        var written = AsyncUtils
+                .usingClickHouseFuture(() -> CompletableFuture.completedFuture(failsToClose), r -> Mono.just(7L))
+                .block();
+
+        // Deliberate: the server has already written the rows and getWrittenRows() has already read the
+        // count off the response. Failing here would turn a connection-cleanup problem into a spurious
+        // insert failure, which callers retry - and a retried bulk insert writes the rows twice. The
+        // failure is logged instead. The health check is the opposite case and treats it as unhealthy,
+        // because reporting connection health is that probe's entire job.
+        assertThat(written).isEqualTo(7L);
     }
 
     @Test
@@ -105,6 +124,6 @@ class AsyncUtilsClickHouseFutureTest {
         // complete() is refused by an already-cancelled future, so the response is unreachable.
         assertThat(queryFuture.complete(response)).isFalse();
         assertThat(closes).hasValue(0);
-        assertThat(response.closes).hasValue(0);
+        assertThat(response.closeCount).hasValue(0);
     }
 }
