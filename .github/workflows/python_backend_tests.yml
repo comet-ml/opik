@@ -9,6 +9,7 @@ env:
   PIP_RETRIES: 5
   PIP_DEFAULT_TIMEOUT: 60
   UV_HTTP_TIMEOUT: 60
+  UV_HTTP_RETRIES: 8
 
 on:
   pull_request:
