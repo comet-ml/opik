@@ -76,6 +76,26 @@ describe("generateSyntaxHighlighterCode - YAML mode", () => {
     },
   );
 
+  it.each(["0o17", "0o0", "-0o17", "+0o0"])(
+    "quotes %s so YAML 1.2 parsers keep it a string",
+    (value) => {
+      const data = { arg: value, [value]: "v", list: [value] };
+
+      const result = toYaml(data);
+
+      expect(result).toBe(
+        `arg: '${value}'\n'${value}': v\nlist:\n  - '${value}'`,
+      );
+      expect(parse(result)).toEqual(data);
+    },
+  );
+
+  it("leaves numbers and 0o-like text unquoted", () => {
+    expect(toYaml({ count: 15, a: "0o8", b: "0o17x" })).toBe(
+      "count: 15\na: 0o8\nb: 0o17x",
+    );
+  });
+
   it("keeps = and << unquoted inside longer text", () => {
     expect(toYaml({ a: "a = b", b: "<<x" })).toBe("a: a = b\nb: <<x");
   });

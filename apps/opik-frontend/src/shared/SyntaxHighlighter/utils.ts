@@ -29,6 +29,14 @@ const escapeDelAndC1 = (yaml: string) =>
 // PyYAML then refuses to load.
 const YAML_11_VALUES_REQUIRING_QUOTES = new Set(["=", "<<"]);
 
+// 1.1 has no 0o octal syntax, so yaml leaves "0o17" plain, but 1.2 parsers
+// such as js-yaml read it as a number.
+const YAML_12_OCTAL = /^[-+]?0o[0-7]+$/;
+
+const needsQuotes = (value: unknown) =>
+  typeof value === "string" &&
+  (YAML_11_VALUES_REQUIRING_QUOTES.has(value) || YAML_12_OCTAL.test(value));
+
 const toYaml = (data: object): string => {
   // A trace with no output passes undefined, which would otherwise print "null".
   if (data === undefined) return "";
@@ -36,7 +44,7 @@ const toYaml = (data: object): string => {
   const doc = new Document(data, normalizeLineEndings, YAML_OPTIONS);
   visit(doc, {
     Scalar(_key, node) {
-      if (YAML_11_VALUES_REQUIRING_QUOTES.has(node.value as string)) {
+      if (needsQuotes(node.value)) {
         node.type = Scalar.QUOTE_SINGLE;
       }
     },
