@@ -4,13 +4,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.awaitility.Awaitility.await;
 
 /**
  * The contract of {@link AsyncUtils#usingClickHouseFuture}: the ClickHouse v2 client's response is closed
@@ -57,8 +55,7 @@ class AsyncUtilsClickHouseFutureTest {
                 .subscribe();
         subscription.dispose();
 
-        // The cleanup is dispatched to boundedElastic because closing is I/O, so this one is not immediate.
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(response.closeCount).hasValue(1));
+        assertThat(response.closeCount).hasValue(1);
     }
 
     @Test

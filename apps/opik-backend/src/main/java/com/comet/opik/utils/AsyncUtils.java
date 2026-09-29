@@ -72,14 +72,17 @@ public class AsyncUtils {
      * remembered at the right position in every chain, and forgetting it leaks silently — the response is
      * simply never closed, with nothing failing and nothing logged until the pool runs out.
      *
-     * <p>The cleanup runs on {@link Schedulers#boundedElastic()} because closing is I/O:
-     * {@code QueryResponse.close()} closes the underlying HTTP response. On the completion path that would
-     * land on whichever thread the consumer terminated on, and on the cancellation path on whichever thread
-     * cancelled — neither is ours to block. ({@code InsertResponse.close()} is an empty method, so for the
-     * insert callers this costs a scheduler hop and saves nothing; it is the query callers that need it.)
+     * <p>The cleanup deliberately runs inline rather than on {@link Schedulers#boundedElastic()}. Closing is
+     * I/O, so dispatching it looks like the safe choice, but it buys nothing and costs something real:
+     * {@code InsertResponse.close()} is an empty method, so the insert callers gain no protection, and the
+     * query callers already terminate their consumer on {@code boundedElastic}, so the cleanup lands there
+     * anyway — the hop only adds a second dispatch onto the same scheduler. Meanwhile {@code boundedElastic}
+     * is shared with most blocking work in this service, including the JSONEachRow body serialization on the
+     * ingestion path, so queueing connection returns behind it couples releasing a connection to the very
+     * load that is consuming connections. Returning a connection must not wait on a queue.
      *
-     * <p>{@code consume} is NOT moved to a scheduler here — the caller knows whether its own mapping blocks,
-     * and says so by handing back a {@link Mono} that carries its own {@code subscribeOn}.
+     * <p>{@code consume} is likewise NOT moved to a scheduler here — the caller knows whether its own mapping
+     * blocks, and says so by handing back a {@link Mono} carrying its own {@code subscribeOn}.
      */
     public static <T extends AutoCloseable, R> Mono<R> usingClickHouseFuture(
             Supplier<? extends CompletableFuture<T>> futureSupplier,
@@ -88,8 +91,7 @@ public class AsyncUtils {
                 Mono.fromFuture(futureSupplier, true)
                         .doOnDiscard(AutoCloseable.class, AsyncUtils::closeQuietly),
                 consume,
-                response -> Mono.fromRunnable(() -> closeQuietly(response))
-                        .subscribeOn(Schedulers.boundedElastic()));
+                response -> Mono.fromRunnable(() -> closeQuietly(response)));
     }
 
     /**
