@@ -34,13 +34,24 @@ _SIZE_CORRELATED_ERRORS: Tuple[Type[Exception], ...] = (
 T = TypeVar("T")
 
 
+def _default_cursor_extractor(item: T) -> Optional[str]:
+    # Most endpoints paginate by the item's `id` field. Endpoints whose cursor
+    # is a different column (e.g. the trace-threads endpoint paginates by
+    # `thread_model_id`) pass their own extractor instead.
+    return item.id  # type: ignore
+
+
 def read_and_parse_full_stream(
     read_source: Callable[[int, Optional[str]], Iterable[bytes]],
     parsed_item_class: Type[T],
     max_results: Optional[int],
     max_endpoint_batch_size: int = MAX_ENDPOINT_BATCH_SIZE,
+    cursor_extractor: Optional[Callable[[T], Optional[str]]] = None,
 ) -> List[T]:
     result: List[T] = []
+    extract_cursor = (
+        cursor_extractor if cursor_extractor is not None else _default_cursor_extractor
+    )
     # Per-page page size, adaptively halved on size-correlated failures and
     # held at the shrunk value for the rest of the read (a backend that
     # couldn't serve N items is unlikely to serve N again later).
@@ -56,7 +67,7 @@ def read_and_parse_full_stream(
             # no more data to request
             break
 
-        last_retrieved_id = result[-1].id if len(result) > 0 else None  # type: ignore
+        last_retrieved_id = extract_cursor(result[-1]) if len(result) > 0 else None
         try:
             results_stream = read_source(current_batch_size, last_retrieved_id)
             parsed_items = read_and_parse_stream(
@@ -78,6 +89,28 @@ def read_and_parse_full_stream(
         result.extend(parsed_items)
 
         if current_batch_size > len(parsed_items):
+            break
+
+        # Stop when the backend gives us no cursor to advance past (a NULL
+        # cursor, e.g. a NULL thread_model_id from the LEFT JOIN on
+        # trace_threads_final), or repeats the previous one, so we never loop
+        # forever or re-request the same page. This is a hard stop, not a
+        # signal that the stream is exhausted: a full page ending without an
+        # advancing cursor means the returned list may be truncated, so log it
+        # instead of stopping silently.
+        next_cursor = extract_cursor(result[-1]) if len(result) > 0 else None
+        if next_cursor is None or next_cursor == last_retrieved_id:
+            if len(parsed_items) == current_batch_size:
+                reason = (
+                    "the last item carries no cursor"
+                    if next_cursor is None
+                    else "the cursor repeats the previous page's cursor"
+                )
+                LOGGER.warning(
+                    "Stopping paginated stream after a full page (%s); "
+                    "the returned list may be truncated.",
+                    reason,
+                )
             break
 
     return result

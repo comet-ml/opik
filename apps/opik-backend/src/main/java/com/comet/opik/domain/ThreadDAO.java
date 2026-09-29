@@ -487,7 +487,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(trace_thread_filters)>AND<trace_thread_filters><endif>
             <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id) <endif>
-            <if(last_retrieved_id)> AND thread_model_id > :last_retrieved_id<endif>
+            <if(last_received_id)> AND (thread_model_id < :last_received_id OR thread_model_id IS NULL)<endif>
             <if(stream)>
             ORDER BY workspace_id, project_id, thread_model_id DESC
             <else>
@@ -1436,7 +1436,7 @@ class ThreadDAOImpl implements ThreadDAO {
             "feedback_scores_filters", "feedback_scores_empty_filters",
             "span_feedback_scores_filters", "span_feedback_scores_empty_filters",
             "trace_aggregation_filters", "trace_thread_filters", "annotation_queue_filters",
-            "annotation_queue_id", "experiment_filters", "guardrails_filters", "last_retrieved_id",
+            "annotation_queue_id", "experiment_filters", "guardrails_filters", "last_received_id",
             "stream");
 
     /**
