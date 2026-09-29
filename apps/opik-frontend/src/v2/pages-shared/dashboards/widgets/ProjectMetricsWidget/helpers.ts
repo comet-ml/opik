@@ -4,7 +4,7 @@ import { ProjectMetricsWidget } from "@/types/dashboard";
 
 const DEFAULT_TITLE = "Project metrics";
 
-const METRIC_LABELS: Record<string, string> = {
+export const METRIC_LABELS: Record<string, string> = {
   [METRIC_NAME_TYPE.FEEDBACK_SCORES]: "Trace metrics",
   [METRIC_NAME_TYPE.TRACE_COUNT]: "Number of traces",
   [METRIC_NAME_TYPE.TRACE_DURATION]: "Trace duration",
