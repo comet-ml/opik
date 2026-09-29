@@ -37,9 +37,9 @@ opik-optimizer==3.2.0
 # <curr_param>/<side_info> template markers and the reflection_prompt_template
 # kwarg, neither of which exists on 0.0.x. See OPIK-7510 / OPIK-7639.
 gepa==0.1.4
-# Transitive via opik-optimizer, pinned because 1.94.1 builds from source: it publishes no
-# musllinux or pure-python wheel. The rustc floor for 1.95.0+ (1.94.1, for its aws-* crates)
-# is now met by the Alpine 3.24 builder's rustc 1.96.1, so the pin awaits a separate bump.
-litellm==1.94.1
+# Transitive via opik-optimizer, pinned for reproducibility. No longer built from source:
+# 1.94.2 was the first release publishing musllinux wheels, so the Alpine builder installs
+# a prebuilt abi3 wheel and the Rust toolchain no longer has to compile it.
+litellm==1.103.0
 pyrate-limiter>=3.0.0,<4.0.0
 python-jsonpath>=2.0.0,<3.0.0
