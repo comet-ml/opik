@@ -5,6 +5,7 @@ import com.clickhouse.client.api.query.QuerySettings;
 import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.installer.feature.health.NamedHealthCheck;
 
@@ -15,16 +16,17 @@ import java.util.function.Function;
 
 /**
  * Shared probe shape for ClickHouse v2 HTTP health checks: bounded {@code SELECT 1} with a
- * server-side {@code max_execution_time} cap aligned to the configured deadline, plus
- * interrupt-aware cancellation on failure.
+ * server-side {@code max_execution_time} cap aligned to the configured deadline, and the
+ * abandoned-future handling that keeps a timed-out probe from leaking its connection.
  *
  * <p>Subclasses pass their name via the constructor and may override {@link #check()} to
  * short-circuit before delegating to {@code super.check()} (e.g. when a feature toggle disables
  * the underlying capability), or override {@link #newQuerySettings()} when their user runs under
  * a profile that forbids per-query setting changes. Subclasses running a different query drive it
- * through {@link #executeProbe(CompletableFuture, Function)} so the timeout, cancellation and
+ * through {@link #executeProbe(CompletableFuture, Function)} so the timeout, abandonment and
  * {@code log_comment} handling live in one place.
  */
+@Slf4j
 abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
 
     protected static final String SELECT_1_QUERY = "SELECT 1";
@@ -45,9 +47,10 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
 
     /**
      * Server-side ceiling aligned with the call-site deadline so ClickHouse aborts a stuck probe
-     * within the same budget, even if {@code cancel(true)} is a no-op on the in-flight HTTP
-     * request. Whole seconds rounded up from {@link #healthCheckTimeout}, with a 1 s floor so the
-     * cap stays meaningful below sub-second timeouts.
+     * within the same budget. This is the only thing that actually bounds the query: nothing
+     * client-side can stop it once issued. Whole seconds rounded up from
+     * {@link #healthCheckTimeout}, with a 1 s floor so the cap stays meaningful below sub-second
+     * timeouts.
      */
     private final int queryMaxExecutionTimeSeconds;
 
@@ -71,11 +74,14 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
     }
 
     /**
-     * Runs a probe query under the shared deadline and cancellation contract: the caller-side
-     * {@code future.get(healthCheckTimeout)} bounds the wait, {@code onResult} maps the (auto-closed)
-     * result to a {@link Result}, and any interrupt/failure cancels the in-flight query so it doesn't
-     * keep running server-side. Subclasses supply the future (via {@link #newQuerySettings()}) and the
-     * result mapping; the flow lives here so timeout and cancellation fixes stay in one place.
+     * Runs a probe query under the shared deadline: the caller-side {@code future.get(healthCheckTimeout)}
+     * bounds the wait and {@code onResult} maps the (auto-closed) result to a {@link Result}. Subclasses
+     * supply the future (via {@link #newQuerySettings()}) and the result mapping; the flow lives here so
+     * fixes to the abandonment path stay in one place.
+     *
+     * <p>When the deadline passes, try-with-resources never binds a result — there is nothing to close yet —
+     * so the abandoned future has to be dealt with explicitly, or the response it later produces holds its
+     * connection forever. See {@link #releaseAbandonedQuery}.
      */
     protected <T extends AutoCloseable> Result executeProbe(CompletableFuture<T> queryFuture,
             Function<? super T, Result> onResult) {
@@ -83,9 +89,9 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
             return onResult.apply(result);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            return getUnhealthyAndCancelQuery(queryFuture, exception);
+            return releaseAbandonedQuery(queryFuture, exception);
         } catch (Exception exception) {
-            return getUnhealthyAndCancelQuery(queryFuture, exception);
+            return releaseAbandonedQuery(queryFuture, exception);
         }
     }
 
@@ -108,10 +114,37 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
     }
 
     /**
-     * Cancel on failure so the query doesn't keep running server-side.
+     * Closes whatever the abandoned probe eventually produces, so its connection goes back to the pool.
+     *
+     * <p>This used to call {@code queryFuture.cancel(true)}, which not only failed to help but caused the
+     * leak it looked like it was preventing. The v2 client builds this future with
+     * {@code CompletableFuture.supplyAsync}, and {@link CompletableFuture#cancel} ignores
+     * {@code mayInterruptIfRunning}: it cannot stop the supplier, so the HTTP round trip completes and
+     * builds a {@code QueryResponse} regardless. Cancelling first completes the future exceptionally, so
+     * that response is then discarded without ever being closed — and its connection is gone for good.
+     *
+     * <p>Each timed-out probe leaked one. The client's pool defaults to ten, readiness probes run
+     * continuously against a one-second deadline, and once ten were lost every query waited out the
+     * client's ten-second acquire timeout and failed. In production that left a pod permanently unready,
+     * thousands of {@code ConnectionRequestTimeoutException} an hour, with ClickHouse itself healthy and
+     * the other pods untouched — and liveness kept passing, so nothing ever restarted it (OPIK-8576).
+     *
+     * <p>Not cancelling costs nothing here: the probe already caps the query server-side with
+     * {@code max_execution_time} in {@link #newQuerySettings()}, which is what actually bounds it. Stopping
+     * the query on the server needs the client's own cancellation API, not this future.
      */
-    protected Result getUnhealthyAndCancelQuery(CompletableFuture<?> queryFuture, Exception exception) {
-        queryFuture.cancel(true);
+    protected Result releaseAbandonedQuery(CompletableFuture<?> queryFuture, Exception exception) {
+        queryFuture.whenComplete((result, throwable) -> closeQuietly(result));
         return Result.unhealthy(exception);
+    }
+
+    private void closeQuietly(Object result) {
+        if (result instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception exception) {
+                log.warn("Failed to close abandoned '{}' probe response", name, exception);
+            }
+        }
     }
 }

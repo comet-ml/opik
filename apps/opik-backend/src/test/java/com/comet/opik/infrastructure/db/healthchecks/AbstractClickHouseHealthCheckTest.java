@@ -7,6 +7,7 @@ import com.codahale.metrics.health.HealthCheck;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatcher;
@@ -17,10 +18,12 @@ import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.infrastructure.db.healthchecks.AbstractClickHouseHealthCheck.SELECT_1_QUERY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -75,7 +78,32 @@ class AbstractClickHouseHealthCheckTest {
             var actualResult = healthCheck.execute();
 
             assertResult(actualResult, HealthCheck.Result.unhealthy(executionException));
-            verify(failingFuture).cancel(true);
+            // Deliberately not cancel(true): see releaseAbandonedQuery. Cancelling completes the future
+            // exceptionally, so the response the supplier is still building is discarded unclosed.
+            verify(failingFuture, never()).cancel(anyBoolean());
+        }
+
+        @Test
+        @DisplayName("a probe abandoned at the deadline still closes the response it later produces")
+        void check__whenProbeTimesOut__thenTheLateResponseIsClosed() throws Exception {
+            // The leak behind OPIK-8576. try-with-resources never binds on timeout — there is nothing to
+            // close yet — so unless the abandoned future is handled, the QueryResponse it produces a moment
+            // later keeps its connection for the life of the process. Ten of those and the pool is gone.
+            var lateResponse = mock(QueryResponse.class);
+            var slowFuture = new CompletableFuture<QueryResponse>();
+            when(clickHouseClient.query(eq(SELECT_1_QUERY), argThat(maxExecutionTimeServerSetting())))
+                    .thenReturn(slowFuture);
+
+            var actualResult = healthCheck.execute();
+
+            assertThat(actualResult.isHealthy()).isFalse();
+            // Nothing to close while the query is still in flight.
+            verify(lateResponse, never()).close();
+
+            // The query the client never stopped now finishes, after the probe has walked away.
+            slowFuture.complete(lateResponse);
+
+            verify(lateResponse).close();
         }
 
         @Test
@@ -90,7 +118,7 @@ class AbstractClickHouseHealthCheckTest {
             var actualResult = healthCheck.execute();
 
             assertResult(actualResult, HealthCheck.Result.unhealthy(interruptedException));
-            verify(failingFuture).cancel(true);
+            verify(failingFuture, never()).cancel(anyBoolean());
             // The check must restore the interrupt status it consumed; Thread.interrupted() asserts and clears.
             assertThat(Thread.interrupted()).isTrue();
         }

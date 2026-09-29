@@ -24,9 +24,11 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -141,7 +143,9 @@ class ClickHouseExistenceHealthCheckTest {
         var actualResult = factory.apply(clickHouseClient, true).execute();
 
         assertResult(actualResult, HealthCheck.Result.unhealthy(executionException));
-        verify(failingFuture).cancel(true);
+        // Not cancelled: cancelling completes the future exceptionally, so the response the client is
+        // still building is discarded unclosed and its connection is leaked (OPIK-8576).
+        verify(failingFuture, never()).cancel(anyBoolean());
     }
 
     @ParameterizedTest(name = "{0}")
@@ -159,7 +163,9 @@ class ClickHouseExistenceHealthCheckTest {
         var actualResult = factory.apply(clickHouseClient, true).execute();
 
         assertResult(actualResult, HealthCheck.Result.unhealthy(interruptedException));
-        verify(failingFuture).cancel(true);
+        // Not cancelled: cancelling completes the future exceptionally, so the response the client is
+        // still building is discarded unclosed and its connection is leaked (OPIK-8576).
+        verify(failingFuture, never()).cancel(anyBoolean());
         assertThat(Thread.interrupted()).isTrue();
     }
 
