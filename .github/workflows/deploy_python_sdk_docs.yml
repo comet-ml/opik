@@ -1,6 +1,11 @@
 name: Deploy Opik Python SDK docs
 run-name: Deploy Python SDK docs ${{ github.ref_name }} to S3 ${{ inputs.environment || 'production' }} by @${{ github.actor }}
 
+env:
+  # Transient PyPI/network failures otherwise red the build on first error.
+  PIP_RETRIES: 5
+  PIP_DEFAULT_TIMEOUT: 60
+  UV_HTTP_TIMEOUT: 60
 on:
   workflow_dispatch:
     inputs:
