@@ -293,6 +293,16 @@ class DatasetsJsonUploadResourceTest {
     }
 
     @Test
+    @DisplayName("Nonexistent dataset with malformed JSON -> 404 before the file is parsed")
+    void uploadMalformedToNonexistentDataset__notFound() {
+        UUID datasetId = UUID.randomUUID();
+
+        try (var response = uploadJsonFile(datasetId, "[{\"input\":\"broken\",", "JSON")) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Test
     @DisplayName("Empty file -> 400 Bad Request")
     void uploadEmptyFile__rejected() {
         UUID datasetId = createDataset();

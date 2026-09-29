@@ -44,8 +44,8 @@ import java.util.UUID;
  * Processes JSON / JSONL files for dataset items.
  *
  * <p>Mirrors {@link CsvDatasetItemProcessor} via shared {@link DatasetItemUploadSupport}:
- * synchronously buffers the upload to a temp file, validates its structure, verifies that the
- * dataset exists, flips the dataset status to {@code PROCESSING}, returns 202 to the
+ * synchronously buffers the upload to a temp file, verifies that the dataset exists,
+ * validates the file's structure, flips the dataset status to {@code PROCESSING}, returns 202 to the
  * caller, then streams the file element-by-element on the {@code boundedElastic}
  * scheduler, flushing batches through {@link DatasetItemService#saveBatch(UUID, List)}.
  *
@@ -71,8 +71,8 @@ public class JsonDatasetItemProcessor {
     private final @NonNull IdGenerator idGenerator;
 
     /**
-     * Buffers an uploaded JSON/JSONL file, validates its structure, verifies that the
-     * dataset exists, then processes the remainder asynchronously.
+     * Buffers an uploaded JSON/JSONL file, verifies that the dataset exists, validates the
+     * file's structure, then processes the remainder asynchronously.
      *
      * @param inputStream    file input stream from the multipart upload
      * @param datasetId      dataset to write items to
@@ -97,8 +97,9 @@ public class JsonDatasetItemProcessor {
         }
 
         try {
-            validateStructure(tempFile, format);
+            // Cheap lookup first so a missing/inaccessible dataset doesn't pay for the full-file parse
             uploadSupport.verifyDatasetExists(datasetId, workspaceId, visibility);
+            validateStructure(tempFile, format);
             uploadSupport.markProcessing(datasetId, workspaceId);
         } catch (Exception e) {
             uploadSupport.deleteTempFile(tempFile);
@@ -161,16 +162,15 @@ public class JsonDatasetItemProcessor {
                         if (line.isBlank()) {
                             continue;
                         }
-                        JsonNode node;
-                        try {
-                            node = mapper.readTree(line);
-                        } catch (IOException e) {
-                            throw new BadRequestException(
-                                    "JSONL line %d is not valid JSON: %s".formatted(lineNumber, e.getMessage()));
-                        }
-                        if (node == null || !node.isObject()) {
-                            throw new BadRequestException(
-                                    "JSONL line %d is not a JSON object".formatted(lineNumber));
+                        try (JsonParser lineParser = mapper.getFactory().createParser(line)) {
+                            if (lineParser.nextToken() != JsonToken.START_OBJECT) {
+                                throw new BadRequestException(
+                                        "JSONL line %d is not a JSON object".formatted(lineNumber));
+                            }
+                            lineParser.skipChildren();
+                        } catch (JsonProcessingException e) {
+                            throw new BadRequestException("JSONL line %d is not valid JSON: %s"
+                                    .formatted(lineNumber, e.getOriginalMessage()));
                         }
                         hasItems = true;
                     }
