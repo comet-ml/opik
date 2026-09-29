@@ -78,6 +78,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.SentinelTranslation.emptyUuidToNullableUuid;
 import static com.comet.opik.utils.SentinelTranslation.epochToNull;
 import static com.comet.opik.utils.SentinelTranslation.nanToNull;
 import static com.comet.opik.utils.SentinelTranslation.nullToEpoch;
@@ -2804,10 +2805,10 @@ public class SpanDAO {
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
                 .traceId(row.get("trace_id", UUID.class))
-                .parentSpanId(Optional.ofNullable(row.get("parent_span_id", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(UUID::fromString)
-                        .orElse(null))
+                // Not an isBlank guard: on the partitioned successor the column is FixedString(36), whose empty
+                // (root-span) value reaches Java NUL-padded, and NUL is not whitespace. See
+                // SentinelTranslation#emptyUuidToNullableUuid.
+                .parentSpanId(emptyUuidToNullableUuid(row.get("parent_span_id", String.class)))
                 .name(StringUtils.defaultIfBlank(getValue(exclude, SpanField.NAME, row, "name", String.class),
                         null))
                 .type(SpanType.fromString(getValue(exclude, SpanField.TYPE, row, "type", String.class)))
@@ -2848,7 +2849,7 @@ public class SpanDAO {
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
-                .usage(getValue(exclude, SpanField.USAGE, row, "usage", Map.class))
+                .usage(UsageUtils.toIntegerUsage(getValue(exclude, SpanField.USAGE, row, "usage", Map.class)))
                 .comments(Optional
                         .ofNullable(getValue(exclude, SpanField.COMMENTS, row, "comments", List[].class))
                         .map(CommentResultMapper::getComments)

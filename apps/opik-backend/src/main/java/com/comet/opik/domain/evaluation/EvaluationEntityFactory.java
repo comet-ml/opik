@@ -9,6 +9,8 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.ResponseFormattingConfig;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -33,6 +35,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -80,6 +83,58 @@ class EvaluationEntityFactory {
         }
 
         return spanBuilder.build();
+    }
+
+    /**
+     * One {@code llm} span per Decisions API call. The model reported by the response (the dated slug that
+     * answered) wins over the configured alias, and the cost is the one OpenRouter reports: decisions models
+     * aren't in the price table under their OpenRouter slugs.
+     */
+    Span decisionSpan(EvaluationContext eval, DecisionsRequest request, DecisionsResponse response,
+            Throwable error, Instant start) {
+        var spanBuilder = Span.builder()
+                .id(idGenerator.generateId())
+                .traceId(eval.traceId())
+                .projectName(eval.projectName())
+                .type(SpanType.llm)
+                .name(SPAN_NAME)
+                .startTime(start)
+                .endTime(Instant.now())
+                .input(JsonUtils.valueToTree(request))
+                .model(eval.actualModel())
+                .provider(eval.provider())
+                .source(Source.EVALUATOR);
+
+        if (response != null) {
+            spanBuilder.output(JsonUtils.valueToTree(Map.of("answers", Objects.requireNonNullElse(
+                    response.answers(), Map.of()))));
+            if (response.model() != null) {
+                spanBuilder.model(response.model());
+            }
+            if (response.usage() != null) {
+                spanBuilder.usage(toUsageMap(response.usage()))
+                        .totalEstimatedCost(response.usage().cost());
+            }
+        }
+        if (error != null) {
+            spanBuilder.errorInfo(toErrorInfo(error));
+        }
+
+        return spanBuilder.build();
+    }
+
+    private static Map<String, Integer> toUsageMap(DecisionsResponse.Usage usage) {
+        var usageMap = new LinkedHashMap<String, Integer>();
+        if (usage.inputTokens() != null) {
+            usageMap.put("prompt_tokens", usage.inputTokens());
+        }
+        if (usage.outputTokens() != null) {
+            usageMap.put("completion_tokens", usage.outputTokens());
+        }
+        if (usage.inputTokens() != null && usage.outputTokens() != null) {
+            usageMap.put("total_tokens", usage.inputTokens() + usage.outputTokens());
+        }
+        return usageMap.isEmpty() ? null : usageMap;
     }
 
     /** One {@code tool} span per agentic tool execution. */
