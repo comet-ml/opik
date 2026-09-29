@@ -143,8 +143,11 @@ class ClickHouseExistenceHealthCheckTest {
         var actualResult = factory.apply(clickHouseClient, true).execute();
 
         assertResult(actualResult, HealthCheck.Result.unhealthy(executionException));
-        // Not cancelled: cancelling completes the future exceptionally, so the response the client is
-        // still building is discarded unclosed and its connection is leaked (OPIK-8576).
+        // The probe never cancels, on any path. Where that matters is the deadline: cancelling there
+        // completes the future exceptionally and the response the client is still building is discarded
+        // unclosed, leaking its connection (OPIK-8576) - covered end-to-end by
+        // ClickHouseHealthCheckConnectionReleaseTest. This future has already failed or is still pending,
+        // so the guard here is on the call itself, keeping the rule from creeping back in.
         verify(failingFuture, never()).cancel(anyBoolean());
     }
 
@@ -163,8 +166,11 @@ class ClickHouseExistenceHealthCheckTest {
         var actualResult = factory.apply(clickHouseClient, true).execute();
 
         assertResult(actualResult, HealthCheck.Result.unhealthy(interruptedException));
-        // Not cancelled: cancelling completes the future exceptionally, so the response the client is
-        // still building is discarded unclosed and its connection is leaked (OPIK-8576).
+        // The probe never cancels, on any path. Where that matters is the deadline: cancelling there
+        // completes the future exceptionally and the response the client is still building is discarded
+        // unclosed, leaking its connection (OPIK-8576) - covered end-to-end by
+        // ClickHouseHealthCheckConnectionReleaseTest. This future has already failed or is still pending,
+        // so the guard here is on the call itself, keeping the rule from creeping back in.
         verify(failingFuture, never()).cancel(anyBoolean());
         assertThat(Thread.interrupted()).isTrue();
     }
