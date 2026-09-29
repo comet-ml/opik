@@ -40,6 +40,8 @@ interface LLMJudgeScoreProps {
   score: LLMJudgeSchema;
   onRemoveScore: () => void;
   onChangeScore: (changes: Partial<LLMJudgeSchema>) => void;
+  // Restricts the type selector; all types when omitted.
+  allowedTypes?: LLM_SCHEMA_TYPE[];
 }
 
 const LLMJudgeScore = ({
@@ -48,6 +50,7 @@ const LLMJudgeScore = ({
   score,
   onChangeScore,
   onRemoveScore,
+  allowedTypes,
 }: LLMJudgeScoreProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [scoreData, setScoreData] = useState<ScoreFieldData>({
@@ -155,7 +158,13 @@ const LLMJudgeScore = ({
                 onUpdateField(value as LLM_SCHEMA_TYPE, "type")
               }
               disabled={!isEditing}
-              options={SCORE_TYPE_OPTIONS}
+              options={
+                allowedTypes
+                  ? SCORE_TYPE_OPTIONS.filter((option) =>
+                      allowedTypes.includes(option.value),
+                    )
+                  : SCORE_TYPE_OPTIONS
+              }
               className="h-8"
             />
 

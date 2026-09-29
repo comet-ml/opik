@@ -406,10 +406,6 @@ class SpansReadPathPartitionPruningTest {
                 .id(ID_GENERATOR.getTimeOrderedEpoch(idAt.toEpochMilli()))
                 .projectName(PROJECT_NAME)
                 .traceId(traceId)
-                // Not a root span and no usage: the successor stores an empty parent as NUL padding and usage as
-                // Int64, neither of which the read mapping accepts yet. Both are cutover concerns outside these bounds.
-                .parentSpanId(ID_GENERATOR.generateId())
-                .usage(null)
                 .startTime(Instant.now().truncatedTo(ChronoUnit.MILLIS))
                 .endTime(null)
                 .feedbackScores(null)
