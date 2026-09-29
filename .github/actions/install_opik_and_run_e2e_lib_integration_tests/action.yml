@@ -14,6 +14,13 @@ runs:
   steps:
     - name: Install OPIK, test requirements, and run tests for ${{ inputs.library_name }}
       shell: bash
+      # Set here as well as in the calling workflow: a composite action is
+      # reusable, so it must not depend on every future caller remembering these.
+      env:
+        PIP_RETRIES: 5
+        PIP_DEFAULT_TIMEOUT: 60
+        UV_HTTP_TIMEOUT: 60
+        UV_HTTP_RETRIES: 8
       run: |
         # create virtual environment
         uv venv ${{ inputs.library_name }}-env --python ${{ inputs.python_version }}
