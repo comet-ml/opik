@@ -51,8 +51,10 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
     PROVIDER_MODEL_TYPE.GPT_5,
     PROVIDER_MODEL_TYPE.GPT_O1,
   ])("seeds %s as a reasoning model with high effort", (model) => {
+    // Not 1: the request omits temperature for reasoning models anyway, and a seeded 1 would carry
+    // over to the next chat model the user picks.
     expect(defaults(model)).toMatchObject({
-      temperature: 1,
+      temperature: 0,
       reasoningEffort: "high",
     });
   });
@@ -60,7 +62,7 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
   it("seeds o1-mini as a reasoning model without an effort", () => {
     const config = defaults(PROVIDER_MODEL_TYPE.GPT_O1_MINI);
 
-    expect(config.temperature).toBe(1);
+    expect(config.temperature).toBe(0);
     expect(config).not.toHaveProperty("reasoningEffort");
   });
 

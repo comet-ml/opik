@@ -58,19 +58,6 @@ export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
   );
 };
 
-/**
- * Returns the default temperature for a given model
- * Reasoning models require temperature = 1.0, other models default to 0
- *
- * @param model - The model type
- * @returns 1.0 for reasoning models, 0 for all other models
- */
-export const getDefaultTemperatureForModel = (
-  model?: PROVIDER_MODEL_TYPE | "",
-): number => {
-  return isReasoningModel(model) ? 1 : 0;
-};
-
 // Which thinking levels each Gemini model accepts, per Google's own support table
 // (https://ai.google.dev/gemini-api/docs/thinking). The sets genuinely differ per model — 3.7 Flash
 // has no "minimal", 3.1 Flash Lite has only "minimal" and "high" — and sending a level a model does

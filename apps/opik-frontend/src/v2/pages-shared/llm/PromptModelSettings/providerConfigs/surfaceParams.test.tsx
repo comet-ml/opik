@@ -115,3 +115,48 @@ describe("the playground and the optimizer", () => {
     expect(screen.queryByTestId("throttling-input")).not.toBeInTheDocument();
   });
 });
+
+describe("a panel left with no control", () => {
+  const EMPTY_LINE = "This model has no adjustable parameters here.";
+
+  it("says so for a Claude model that takes no sampling params on a rule", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={ANTHROPIC_CONFIG}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5}
+        onChange={vi.fn()}
+        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+      />,
+    );
+
+    expect(screen.getByText(EMPTY_LINE)).toBeInTheDocument();
+  });
+
+  it("says so for an OpenAI reasoning model on a rule", () => {
+    // The OpenAI panel shows max output tokens whenever the config carries the key, and a rule's
+    // config never does: it holds only temperature and seed.
+    renderPanel(
+      <OpenAIModelConfigs
+        configs={{ temperature: 0.4 }}
+        model={PROVIDER_MODEL_TYPE.GPT_6_ASTRA}
+        onChange={vi.fn()}
+        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+      />,
+    );
+
+    expect(screen.getByText(EMPTY_LINE)).toBeInTheDocument();
+  });
+
+  it("stays quiet on the playground, where the same Claude model keeps its other controls", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={ANTHROPIC_CONFIG}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("maxCompletionTokens-input")).toBeInTheDocument();
+    expect(screen.queryByText(EMPTY_LINE)).not.toBeInTheDocument();
+  });
+});
