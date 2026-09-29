@@ -128,6 +128,9 @@ spec:
             runAsUser: 101
             runAsGroup: 101
             fsGroup: 101
+          {{- with .Values.clickhouse.terminationGracePeriodSeconds }}
+          terminationGracePeriodSeconds: {{ . }}
+          {{- end }}
           metadata:
             annotations:
               kubectl.kubernetes.io/default-container: clickhouse
@@ -151,6 +154,10 @@ spec:
             {{- if .Values.clickhouse.readinessProbe }}
             readinessProbe:
               {{- toYaml .Values.clickhouse.readinessProbe | nindent 14 }}
+            {{- end }}
+            {{- with .Values.clickhouse.lifecycle }}
+            lifecycle:
+              {{- toYaml . | nindent 14 }}
             {{- end }}
             {{- if or .Values.clickhouse.extraVolumeMounts .Values.clickhouse.tieredStorage.enabled }}
             volumeMounts:
