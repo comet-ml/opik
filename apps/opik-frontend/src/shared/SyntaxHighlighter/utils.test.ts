@@ -62,6 +62,24 @@ describe("generateSyntaxHighlighterCode - YAML mode", () => {
     expect(parse(result)).toEqual({ arg: value, [`key${char}`]: "v" });
   });
 
+  it.each(["=", "<<"])(
+    "quotes %s in values, keys and lists so YAML 1.1 parsers load it",
+    (value) => {
+      const data = { arg: value, [value]: "v", list: [value] };
+
+      const result = toYaml(data);
+
+      expect(result).toBe(
+        `arg: '${value}'\n'${value}': v\nlist:\n  - '${value}'`,
+      );
+      expect(parse(result, { version: "1.1" })).toEqual(data);
+    },
+  );
+
+  it("keeps = and << unquoted inside longer text", () => {
+    expect(toYaml({ a: "a = b", b: "<<x" })).toBe("a: a = b\nb: <<x");
+  });
+
   it("does not wrap long single-line values", () => {
     const value = "word ".repeat(40).trim();
 

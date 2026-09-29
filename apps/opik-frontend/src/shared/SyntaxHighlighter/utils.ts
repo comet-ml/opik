@@ -1,4 +1,4 @@
-import { stringify as stringifyYaml } from "yaml";
+import { Document, Scalar, visit } from "yaml";
 import { prettifyMessage } from "@/lib/traces";
 import {
   MODE_TYPE,
@@ -25,11 +25,25 @@ const escapeDelAndC1 = (yaml: string) =>
       : `\\x${char.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 
-// stringify returns undefined for undefined input (e.g. a trace with no output).
-const toYaml = (data: object): string =>
-  escapeDelAndC1(
-    stringifyYaml(data, normalizeLineEndings, YAML_OPTIONS) ?? "",
-  ).trim();
+// "=" and "<<" are the 1.1 value and merge keys, which yaml leaves plain and
+// PyYAML then refuses to load.
+const YAML_11_INDICATORS = new Set(["=", "<<"]);
+
+const toYaml = (data: object): string => {
+  // A trace with no output passes undefined, which would otherwise print "null".
+  if (data === undefined) return "";
+
+  const doc = new Document(data, normalizeLineEndings, YAML_OPTIONS);
+  visit(doc, {
+    Scalar(_key, node) {
+      if (YAML_11_INDICATORS.has(node.value as string)) {
+        node.type = Scalar.QUOTE_SINGLE;
+      }
+    },
+  });
+
+  return escapeDelAndC1(doc.toString(YAML_OPTIONS)).trim();
+};
 
 export const generateSyntaxHighlighterCode = (
   data: object,
