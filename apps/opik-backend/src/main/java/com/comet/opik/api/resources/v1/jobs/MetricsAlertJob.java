@@ -491,10 +491,22 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         @JsonValue
         private final String value;
 
+        /**
+         * Accepts either the symbol this enum serialises as ({@code >}, {@code <}) or the enum name
+         * ({@code GREATER_THAN}, {@code less_than}, case-insensitively), through
+         * {@link AlertTriggerConfig#normalizedOperator} so the accepted spellings are stated in one place
+         * rather than here and in the persistence normalisation separately.
+         * <p>
+         * Matching the symbol alone left stored configs written in the name form permanently unparseable:
+         * the job threw on every run, so the alert could never fire and nothing surfaced to its owner
+         * (OPIK-8555). Accepting both unbreaks those rows. It does not change what this enum serialises
+         * as, which is still the symbol.
+         */
         @JsonCreator
         public static Operator fromString(String value) {
+            var canonical = AlertTriggerConfig.normalizedOperator(value);
             return Arrays.stream(values())
-                    .filter(enumValue -> enumValue.value.equals(value))
+                    .filter(enumValue -> enumValue.value.equals(canonical))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown Operator '%s'".formatted(value)));
         }
