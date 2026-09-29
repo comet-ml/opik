@@ -35,7 +35,7 @@ const ChartVerticalLegend = React.forwardRef<
   return (
     <div
       ref={ref}
-      className="group -mt-2.5 flex max-h-full w-full flex-col items-start gap-1 overflow-y-auto overflow-x-hidden"
+      className="comet-no-scrollbar group -mt-2.5 flex max-h-full w-full flex-col items-start gap-1 overflow-y-auto overflow-x-hidden"
       onMouseLeave={handleMouseLeave}
     >
       {payload.map((item) => {

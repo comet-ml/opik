@@ -22,7 +22,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { DropdownOption } from "@/types/shared";
 
 type FeedbackScoresChartContainerProps = {
-  className: string;
+  className?: string;
   chartData?: ChartData;
   chartId: string;
   chartName?: string | DropdownOption<string>[];
