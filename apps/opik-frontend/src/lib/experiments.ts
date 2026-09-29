@@ -47,11 +47,15 @@ export const suggestNextExperimentName = (
   return trimmed.replace(RUN_SUFFIX_RE, `_${next}`);
 };
 
+const DELETED_PROMPT_LABEL = "Deleted prompt";
+
 /**
  * Human-readable label for a prompt version linked to an experiment: the
  * prompt name plus its version (e.g. "My Prompt (v3)"). Prefers the sequential
  * version number, falls back to the commit hash when it's unavailable, and
- * omits the parenthetical entirely when neither is present (OPIK-6838).
+ * omits the parenthetical entirely when neither is present (OPIK-6838). A
+ * deleted prompt has no name, so it reads "Deleted prompt", matching
+ * ResourceLink's deleted state.
  *
  * Single source of truth so the experiments table, the single-experiment
  * Configuration tab, and the dashboard leaderboard widget stay consistent.
@@ -62,6 +66,8 @@ export const formatPromptVersionLabel = (
     "prompt_name" | "version_number" | "commit"
   >,
 ): string => {
+  if (!promptVersion.prompt_name) return DELETED_PROMPT_LABEL;
+
   const version = promptVersion.version_number ?? promptVersion.commit;
   return version
     ? `${promptVersion.prompt_name} (${version})`
@@ -86,7 +92,9 @@ export const formatExperimentPromptVersions = (
 
   return promptVersions
     .map(formatPromptVersionLabel)
-    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }),
+    )
     .join(", ");
 };
 

@@ -116,6 +116,18 @@ describe("experiments utilities", () => {
         }),
       ).toBe("My Prompt");
     });
+
+    // The backend keeps the link to a deleted prompt but nulls its name,
+    // commit and version number.
+    it("labels a deleted prompt", () => {
+      expect(
+        formatPromptVersionLabel({
+          prompt_name: null,
+          version_number: undefined,
+          commit: null,
+        }),
+      ).toBe("Deleted prompt");
+    });
   });
 
   // The compare Configuration tab renders this as a table row, so an absent
@@ -190,6 +202,39 @@ describe("experiments utilities", () => {
           }),
         ),
       ).toBe("alpha (v1), Zeta (v1)");
+    });
+
+    it("orders version numbers numerically", () => {
+      expect(
+        formatExperimentPromptVersions(
+          experiment({
+            prompt_versions: [
+              promptVersion({ version_number: "v10" }),
+              promptVersion({ id: "pv2", version_number: "v2" }),
+            ],
+          }),
+        ),
+      ).toBe("My Prompt (v2), My Prompt (v10)");
+    });
+
+    // Whether a null label reaches the comparator depends on its position, so
+    // both orders are checked.
+    it("labels a deleted prompt alongside live ones, in any order", () => {
+      const deleted = promptVersion({
+        prompt_name: null,
+        commit: null,
+        version_number: undefined,
+      });
+      const live = promptVersion({ id: "pv2" });
+
+      for (const prompt_versions of [
+        [deleted, live],
+        [live, deleted],
+      ]) {
+        expect(
+          formatExperimentPromptVersions(experiment({ prompt_versions })),
+        ).toBe("Deleted prompt, My Prompt (v1)");
+      }
     });
 
     it("returns undefined when the experiment has no linked prompt", () => {

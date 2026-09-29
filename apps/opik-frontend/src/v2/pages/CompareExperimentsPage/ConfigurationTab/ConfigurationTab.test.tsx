@@ -39,11 +39,12 @@ vi.mock("@/shared/NavigationTag", () => ({
     search,
   }: {
     id: string;
-    name: string;
+    name?: string;
     search?: Record<string, unknown>;
   }) => (
     <span
       data-testid="prompt-tag"
+      data-deleted={String(name === undefined)}
       data-id={id}
       data-active-version={String(search?.activeVersionId ?? "")}
     >
@@ -240,6 +241,24 @@ describe("ConfigurationTab prompt tags", () => {
     const [tag] = tags();
     expect(tag).toHaveAttribute("data-id", "p1");
     expect(tag).toHaveAttribute("data-active-version", "pv1");
+  });
+
+  // Without a name, NavigationTag falls back to its disabled "Deleted prompt"
+  // state rather than an enabled blank link.
+  it("renders a deleted prompt in the tag's deleted state", () => {
+    renderTab([
+      experiment("e1", {
+        prompt_versions: [
+          promptVersion({
+            prompt_name: null,
+            commit: null,
+            version_number: undefined,
+          }),
+        ],
+      }),
+    ]);
+
+    expect(tags()[0]).toHaveAttribute("data-deleted", "true");
   });
 
   it("renders no tags in compare mode, where the row carries the versions", () => {

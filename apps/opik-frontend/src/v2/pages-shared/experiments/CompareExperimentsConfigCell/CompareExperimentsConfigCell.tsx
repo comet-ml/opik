@@ -6,6 +6,8 @@ import { ROW_HEIGHT } from "@/types/shared";
 import TextDiff from "@/shared/CodeDiff/TextDiff";
 import { toString } from "@/lib/utils";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
+import PromptVersionTag from "@/v2/pages-shared/experiments/PromptVersionTag/PromptVersionTag";
+import { ExperimentPromptVersion } from "@/types/datasets";
 
 export type CompareFiledValue = string | number | undefined | null;
 
@@ -14,6 +16,9 @@ export type CompareConfig = {
   data: Record<string, CompareFiledValue>;
   base: string;
   different: boolean;
+  // Set on the prompt version row so its cells link to each version; the diff
+  // view still compares the text labels in `data`.
+  promptVersions?: Record<string, ExperimentPromptVersion[] | undefined>;
 };
 
 type CustomMeta = {
@@ -39,6 +44,20 @@ const CompareExperimentsConfigCell: React.FC<
   const renderContent = () => {
     if (isUndefined(data)) {
       return <span className="px-1.5 py-2.5 text-light-slate">No value</span>;
+    }
+
+    const promptVersions = compareConfig.promptVersions?.[experimentId];
+    if (promptVersions && !showDiffView) {
+      return (
+        <div className="flex flex-wrap items-center gap-1 px-0.5 py-1">
+          {promptVersions.map((promptVersion) => (
+            <PromptVersionTag
+              key={promptVersion.id}
+              promptVersion={promptVersion}
+            />
+          ))}
+        </div>
+      );
     }
 
     return (

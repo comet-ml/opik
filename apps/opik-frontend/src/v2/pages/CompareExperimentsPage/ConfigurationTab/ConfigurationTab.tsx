@@ -22,13 +22,9 @@ import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodySt
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import NavigationTag from "@/shared/NavigationTag";
-import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
-import {
-  formatExperimentPromptVersions,
-  formatPromptVersionLabel,
-} from "@/lib/experiments";
+import PromptVersionTag from "@/v2/pages-shared/experiments/PromptVersionTag/PromptVersionTag";
+import { formatExperimentPromptVersions } from "@/lib/experiments";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
@@ -123,15 +119,14 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   const promptVersionRow = useMemo(() => {
     if (!isCompare) return null;
 
-    const data = experimentsIds.reduce<Record<string, CompareFiledValue>>(
-      (acc, id: string) => {
-        acc[id] = formatExperimentPromptVersions(
-          find(experiments, (e) => e.id === id),
-        );
-        return acc;
-      },
-      {},
-    );
+    const data: Record<string, CompareFiledValue> = {};
+    const promptVersionsById: CompareConfig["promptVersions"] = {};
+
+    experimentsIds.forEach((id: string) => {
+      const experiment = find(experiments, (e) => e.id === id);
+      data[id] = formatExperimentPromptVersions(experiment);
+      promptVersionsById[id] = experiment?.prompt_versions;
+    });
 
     if (Object.values(data).every(isUndefined)) return null;
 
@@ -141,6 +136,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
       name: PROMPT_VERSION_ROW_NAME,
       base: experimentsIds[0],
       data,
+      promptVersions: promptVersionsById,
       different: !values.every((v) => values[0] === v),
     } as CompareConfig;
   }, [isCompare, experimentsIds, experiments]);
@@ -217,13 +213,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             dimension="xs"
           ></SearchInput>
           {promptVersions.map((pv) => (
-            <NavigationTag
-              key={pv.id}
-              id={pv.prompt_id}
-              name={formatPromptVersionLabel(pv)}
-              resource={RESOURCE_TYPE.prompt}
-              search={{ activeVersionId: pv.id }}
-            />
+            <PromptVersionTag key={pv.id} promptVersion={pv} />
           ))}
         </div>
         <div className="flex items-center gap-2">

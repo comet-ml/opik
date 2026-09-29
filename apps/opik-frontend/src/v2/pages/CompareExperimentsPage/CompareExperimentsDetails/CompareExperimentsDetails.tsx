@@ -143,7 +143,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
               <NavigationTag
                 key={promptVersion.id}
                 id={promptVersion.prompt_id}
-                name={promptVersion.prompt_name}
+                name={promptVersion.prompt_name ?? undefined}
                 resource={RESOURCE_TYPE.prompt}
                 search={{ activeVersionId: promptVersion.id }}
                 prefix="Prompt"
