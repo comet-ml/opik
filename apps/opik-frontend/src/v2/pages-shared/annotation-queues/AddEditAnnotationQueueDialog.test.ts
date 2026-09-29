@@ -122,10 +122,11 @@ describe("the automation payload", () => {
     expect(build({ hasStoredAutomation: true })).toEqual({ enabled: false });
   });
 
-  it("sends the conditions and no ceiling when the cap is unticked", () => {
+  it("asks for the ceiling to be cleared when the cap is unticked", () => {
+    // A null ceiling would be indistinguishable from "leave the stored one alone".
     expect(build({ enabled: true })).toEqual({
       enabled: true,
-      max_items_in_queue: null,
+      clear_max_items_in_queue: true,
       conditions: {
         groups: [
           {
@@ -140,5 +141,12 @@ describe("the automation payload", () => {
     expect(build({ enabled: true, capEnabled: true, maxItems: "250" })).toEqual(
       expect.objectContaining({ max_items_in_queue: 250 }),
     );
+  });
+
+  it("never sends a ceiling and a clear together", () => {
+    const ticked = build({ enabled: true, capEnabled: true, maxItems: "250" });
+    expect(ticked).not.toHaveProperty("clear_max_items_in_queue");
+    const unticked = build({ enabled: true });
+    expect(unticked).not.toHaveProperty("max_items_in_queue");
   });
 });

@@ -205,6 +205,9 @@ type AddEditAnnotationQueueDialogProps = {
  * none stored. So a queue that never had automation has to send nothing rather than a disabled
  * automation — otherwise creating a queue, or editing one the SDK made, is rejected. With the feature
  * off nothing is sent either, whatever the queue already holds.
+ *
+ * The ceiling follows the same rule: an absent one is left alone, so unticking the cap sends
+ * clear_max_items_in_queue rather than a null the API could not tell from "leave it".
  */
 export const buildAutomationPayload = ({
   isFeatureEnabled,
@@ -227,7 +230,10 @@ export const buildAutomationPayload = ({
 
   return {
     enabled: true,
-    max_items_in_queue: capEnabled ? Number(maxItems) : null,
+    // Absent means "keep what is stored", so removing a ceiling has to be said outright.
+    ...(capEnabled
+      ? { max_items_in_queue: Number(maxItems) }
+      : { clear_max_items_in_queue: true }),
     conditions: {
       groups: groups.map((group) => ({
         conditions: group.conditions.map((condition) => ({
