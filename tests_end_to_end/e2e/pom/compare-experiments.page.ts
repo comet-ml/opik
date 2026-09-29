@@ -923,6 +923,57 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * Every metric that has a feedback-score COLUMN on the Results grid, in
+   * document order.
+   *
+   * Read off the headers rather than the cells because "the column exists" is
+   * the claim — a run whose metrics all wrote under one name, or under a name
+   * nobody expected, differs from a correct one by which columns are here, not
+   * by what any single cell holds.
+   */
+  async scoreColumnMetricNames(): Promise<string[]> {
+    return test.step('read the feedback-score column headers', async () => {
+      const prefix = 'feedback_scores_';
+      const ids = await this.page
+        .locator(`th[data-header-id^="${prefix}"]`)
+        .evaluateAll((headers) =>
+          headers.map((h) => h.getAttribute('data-header-id') ?? ''),
+        );
+      return ids.map((id) => id.slice(prefix.length));
+    });
+  }
+
+  /**
+   * One metric's score for one dataset item, in SINGLE-experiment mode.
+   *
+   * Separate from `readItemScore`, which addresses a vertically-split band and
+   * so only exists when two or more experiments share a row. With one
+   * experiment the grid renders an ordinary cell and there is no band to index.
+   *
+   * Counted rather than waited for visible, the way `readDatasetCellText` is:
+   * the grid scrolls horizontally, so a column further right than the viewport
+   * is in the DOM and correct while never being `toBeVisible()`. Requiring
+   * visibility here would fail on column position rather than on the score.
+   */
+  async readSingleExperimentItemScore(datasetItemId: string, metricName: string): Promise<number> {
+    return test.step(`read ${metricName} for item ${datasetItemId}`, async () => {
+      const cell = this.page.locator(
+        `td[data-cell-id="${datasetItemId}_feedback_scores_${metricName}"]`,
+      );
+      await expect(cell, `"${metricName}" score cell for item ${datasetItemId}`).toHaveCount(1);
+      const text = ((await cell.textContent()) ?? '').trim();
+      const value = parseFloat(text);
+      if (Number.isNaN(value)) {
+        throw new Error(
+          `CompareExperimentsPage.readSingleExperimentItemScore: could not parse "${text}" ` +
+            `as ${metricName} for item ${datasetItemId}`,
+        );
+      }
+      return value;
+    });
+  }
+
   /** The rendered text of one dataset column's cell — what the user actually sees. */
   async readDatasetCellText(datasetItemId: string, field: string): Promise<string> {
     return test.step(`read the on-screen "${field}" cell for item ${datasetItemId}`, async () => {

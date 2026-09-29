@@ -716,6 +716,22 @@ areas:
       compare-row-detail:      { covered: true,  tier: t2-cuj, note: "the row-detail panel off the compare grid; also inline images in an item's output, where what is asserted is the MAPPING rather than the render — each [image_N] placeholder in the rendered text resolved to the exact data URL it names, on a mixed png/gif seed whose document order and placeholder order deliberately disagree, plus the panel showing those thumbnails and no others, and a repeated image numbered twice but deduplicated to one tile" }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
+      # Whether a scoring metric in an evaluate() run computes with the LOCALE
+      # it was configured with, and rejects one it cannot honour. Its own
+      # capability rather than part of per-item-scores, which is about scores
+      # reaching an experiment's items and rendering against them — that key is
+      # satisfied by any number at all, whereas this one is about the number
+      # being RIGHT, and its failure mode is silent: before opik#8318 every
+      # Readability locale quietly scored as en_US, so a regression changes
+      # stored score values without any error. Scoped to the metric's own
+      # contract, asserted through the Python SDK: several locales scored in
+      # ONE evaluate() run (which is what reaches textstat's module-wide locale
+      # state from the scoring thread pool) stay distinct from each other AND
+      # equal to their own uncontended sequential score, and an unknown locale
+      # raises a MetricComputationError naming the language instead of pyphen's
+      # bare KeyError. Deliberately NOT asserted on absolute Flesch numbers,
+      # which drift with textstat/pyphen releases.
+      metric-locale-scoring:   { covered: false }
       # Reading an experiment's items back through the Python SDK
       # (`Experiment.get_items()`), as opposed to writing them or reading them
       # through the compare grid. Its own capability rather than part of

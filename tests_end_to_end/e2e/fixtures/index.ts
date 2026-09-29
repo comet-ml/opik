@@ -1,4 +1,4 @@
-export { test, expect } from './trace-source.fixture';
+export { test, expect } from './readability-locale-experiment.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -240,4 +240,10 @@ export type {
   TraceSourcesRef,
   TraceSourceFixtures,
 } from './trace-source.fixture';
+export type {
+  ReadabilityLocaleScore,
+  ReadabilityLocaleExperimentRef,
+  ReadabilityLocaleExperimentFixtures,
+} from './readability-locale-experiment.fixture';
+export { READABILITY_LANGUAGES } from './readability-locale-experiment.fixture';
 export type { ProjectRef } from '../core/backend';
