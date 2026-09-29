@@ -39,6 +39,8 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -686,14 +688,22 @@ class RemoteAuthServiceTest {
     }
 
     @Test
-    void testListEligibleWorkspaces__filtersDefaultWorkspaceAndMapsToWorkspaceInfo() throws JsonProcessingException {
+    void listEligibleWorkspaces__filtersDefaultAndInternalWorkspacesAndMapsToWorkspaceInfo()
+            throws JsonProcessingException {
         var sessionTokenValue = "session-" + UUID.randomUUID();
         var production = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(false).build();
         var staging = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(true).build();
-        var responseJson = OBJECT_MAPPER.writeValueAsString(Arrays.asList(
-                Map.of("workspaceId", production.id(), "workspaceName", production.name(), "default", false),
-                Map.of("workspaceId", "ws-default", "workspaceName", DEFAULT_WORKSPACE_NAME, "default", false),
-                Map.of("workspaceId", staging.id(), "workspaceName", staging.name(), "default", true)));
+        var defaultWorkspace = WorkspaceInfo.builder().id("ws-default").name(DEFAULT_WORKSPACE_NAME).build();
+        var aiSpend = WorkspaceInfo.builder().id("ws-ai-spend").name("__ai_spend_acme__").build();
+        var creditCard = WorkspaceInfo.builder().id("ws-cc").name("__cc_acme__").build();
+        // only the Cost Intelligence naming marks a workspace internal, other double-underscore names do not
+        var underscored = WorkspaceInfo.builder().id("ws-underscored").name("__internal__").build();
+        var prefixed = WorkspaceInfo.builder().id("ws-prefixed").name("__ai_spend_acme").build();
+        var suffixed = WorkspaceInfo.builder().id("ws-suffixed").name("ai_spend_acme__").build();
+        var responseJson = OBJECT_MAPPER.writeValueAsString(Stream
+                .of(production, defaultWorkspace, aiSpend, creditCard, underscored, prefixed, suffixed, staging)
+                .map(RemoteAuthServiceTest::workspaceEntry)
+                .toList());
         WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces"))
                 .withQueryParam("withoutExtendedData", equalTo("true"))
                 .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
@@ -701,7 +711,7 @@ class RemoteAuthServiceTest {
 
         var result = remoteAuthService.listEligibleWorkspaces(sessionCookie(sessionTokenValue));
 
-        assertThat(result).containsExactly(production, staging);
+        assertThat(result).containsExactly(production, underscored, prefixed, suffixed, staging);
     }
 
     @Test
@@ -774,12 +784,14 @@ class RemoteAuthServiceTest {
                 .hasMessage(NOT_LOGGED_USER);
     }
 
-    @Test
-    void testAuthorizeWorkspace__whenDefaultWorkspace__thenForbidden() {
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {DEFAULT_WORKSPACE_NAME, "__ai_spend_acme__", "__cc_acme__", "__ai_spend_a__", "  "})
+    void authorizeWorkspace__whenNotEligible__thenForbidden(String workspaceName) {
         var sessionTokenValue = "session-" + UUID.randomUUID();
 
         assertThatThrownBy(() -> remoteAuthService.authorizeWorkspace(
-                sessionCookie(sessionTokenValue), DEFAULT_WORKSPACE_NAME))
+                sessionCookie(sessionTokenValue), workspaceName))
                 .isExactlyInstanceOf(ClientErrorException.class)
                 .hasMessage(NOT_ALLOWED_TO_ACCESS_WORKSPACE);
     }
@@ -1061,6 +1073,11 @@ class RemoteAuthServiceTest {
                 .isInstanceOf(ClientErrorException.class);
 
         assertThat(authRequestCount()).isEqualTo(1);
+    }
+
+    private static Map<String, Object> workspaceEntry(WorkspaceInfo workspace) {
+        return Map.of("workspaceId", workspace.id(), "workspaceName", workspace.name(), "default",
+                workspace.isDefault());
     }
 
     private static Cookie sessionCookie(String value) {
