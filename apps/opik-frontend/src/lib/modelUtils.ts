@@ -11,6 +11,7 @@ import {
   DEFAULT_ANTHROPIC_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
   REASONING_MODELS,
+  THINKING_CONTROLS_FORWARDED_BY_BACKEND,
 } from "@/constants/llm";
 import {
   getProviderFromModel,
@@ -36,28 +37,32 @@ export const getRoutableProviderModelValue = (
 /**
  * Checks if a model is a reasoning model that requires temperature = 1.0.
  *
- * For OpenAI models, OPENAI_MODEL_CAPABILITIES is authoritative — every
- * gating decision (sampling sliders, effort dropdown, request stripping)
- * keys off the same map, so it must also answer the umbrella question.
+ * For OpenAI models with a row in OPENAI_MODEL_CAPABILITIES, the row is
+ * authoritative — every gating decision (sampling sliders, effort dropdown,
+ * request stripping) keys off the same map, so it must also answer the
+ * umbrella question.
  *
- * For other providers, the backend-fetched registry wins (via the module-
- * level flag index populated by useLLMProviderModelsData), with the
- * hardcoded REASONING_MODELS list as a pre-fetch fallback.
+ * Otherwise the backend-fetched registry wins (via the module-level flag
+ * index populated by useLLMProviderModelsData), with the hardcoded
+ * REASONING_MODELS list as a pre-fetch fallback.
  */
 export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
   if (!model) return false;
 
-  // OpenAI: capability map is the source of truth, mirroring how Anthropic
-  // owns its supportsAnthropicThinkingEffort gating without consulting the
-  // BE flag. Stops a BE YAML entry without `reasoning: true` from silently
-  // disabling the playground reasoning-effort dropdown.
+  // OpenAI: a capability row wins over the BE flag, mirroring how Anthropic
+  // owns its supportsAnthropicThinkingEffort gating. Stops a BE YAML entry
+  // without `reasoning: true` from silently disabling the playground
+  // reasoning-effort dropdown. A model without a row (synced after this
+  // release) still falls through to the registry, so it is not sent the
+  // sampling params reasoning models reject.
+  const declared = OPENAI_MODEL_CAPABILITIES[model]?.reasoning;
   if (
+    declared !== undefined &&
     getProviderFromModel(model as PROVIDER_MODEL_TYPE) === PROVIDER_TYPE.OPEN_AI
   ) {
-    return OPENAI_MODEL_CAPABILITIES[model]?.reasoning ?? false;
+    return declared;
   }
 
-  // Other providers: BE flag wins; fall back to hardcoded REASONING_MODELS.
   const fetched = getLatestModelFlags(model);
   if (fetched !== undefined) {
     return fetched.reasoning;
@@ -175,6 +180,13 @@ const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
 const isVertexModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean =>
   typeof model === "string" && model.startsWith("vertex_ai/");
 
+const GEMINI_3_GENERATION = /^gemini-3(?:[.-]|$)/;
+
+export const supportsGeminiSamplingParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  !GEMINI_3_GENERATION.test((model ?? "").replace(/^vertex_ai\//, ""));
+
 /**
  * Checks if a Gemini model supports thinking level parameter
  *
@@ -284,10 +296,9 @@ export const getDefaultThinkingLevel = (
   DEFAULT_THINKING_LEVEL_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? "high";
 
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
-  adaptive: "Adaptive",
   low: "Low",
   medium: "Medium",
-  high: "High (Default)",
+  high: "High",
   xhigh: "xHigh",
   max: "Max",
 };
@@ -473,23 +484,26 @@ export const supportsSamplingParams = (
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean =>
+  THINKING_CONTROLS_FORWARDED_BY_BACKEND &&
   !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.thinkingEffortOptions;
 
 export const getAnthropicThinkingEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): Array<{ label: string; value: AnthropicThinkingEffort }> =>
-  (
-    ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-      ?.thinkingEffortOptions ?? []
-  ).map((value) => ({ label: EFFORT_LABELS[value], value }));
+  supportsAnthropicThinkingEffort(model)
+    ? (
+        ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+          ?.thinkingEffortOptions ?? []
+      ).map((value) => ({ label: EFFORT_LABELS[value], value }))
+    : [];
 
 const OPENAI_EFFORT_LABELS: Record<ReasoningEffort, string> = {
   none: "None",
   minimal: "Minimal",
   low: "Low",
   medium: "Medium",
-  high: "High (Default)",
+  high: "High",
   xhigh: "xHigh",
   max: "Max",
 };
@@ -674,6 +688,12 @@ export const resolveSamplingParams = (
     return {};
   }
 
+  // Google says to leave both at their defaults on Gemini 3: 3.6 Flash and 3.5 Flash-Lite already
+  // ignore them, and later generations will answer them with a 400.
+  if (!supportsGeminiSamplingParams(model)) {
+    return {};
+  }
+
   // Claude rejects the pair wherever it is served from, not only under the Anthropic provider —
   // Bedrock answers "temperature and top_p cannot both be specified for this model". Temperature
   // wins, as it does in the Anthropic branch above.
@@ -683,6 +703,15 @@ export const resolveSamplingParams = (
 
   return { temperature, topP };
 };
+
+// OpenAI reasoning models reject both penalties, as they reject top_p.
+export const supportsPenaltyParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  !model ||
+  getProviderFromModel(model as PROVIDER_MODEL_TYPE) !==
+    PROVIDER_TYPE.OPEN_AI ||
+  !isReasoningModel(model);
 
 export type EffortParams = {
   reasoningEffort?: ReasoningEffort;
@@ -694,10 +723,10 @@ export type EffortParams = {
  * {@link resolveSamplingParams} for the effort dropdowns.
  *
  * Unlike the sampling pair this does substitute a default, because the dropdown has no empty state:
- * it renders "High (Default)" for a config holding nothing, which is also what a fresh config is
- * seeded with. Resolving to that same value is what stops the control claiming an effort the
- * request never carries — a model change into a reasoning model leaves the config's effort unset,
- * and the provider would then apply its own default rather than the high the panel showed.
+ * it renders "High" for a config holding nothing, which is also what a fresh config is seeded with.
+ * Resolving to that same value is what stops the control claiming an effort the request never
+ * carries — a model change into a reasoning model leaves the config's effort unset, and the
+ * provider would then apply its own default rather than the high the panel showed.
  *
  * "high" is offered by every model in both capability maps, so it is always a valid substitute.
  */
@@ -757,6 +786,24 @@ export const sanitizeConfigForRequest = (
     } else {
       sanitized[key] = sampling[key];
     }
+  }
+
+  if (!supportsPenaltyParams(model)) {
+    delete sanitized.frequencyPenalty;
+    delete sanitized.presencePenalty;
+  }
+
+  // The backend's Vertex AI client reads only max_tokens, so max_completion_tokens alone never
+  // reaches the model.
+  if (
+    isVertexModel(model) &&
+    typeof sanitized.maxCompletionTokens === "number"
+  ) {
+    sanitized.maxTokens = sanitized.maxCompletionTokens;
+  }
+
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER && sanitized.maxTokens === 0) {
+    delete sanitized.maxTokens;
   }
 
   if (

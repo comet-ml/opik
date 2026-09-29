@@ -38,7 +38,7 @@ const OpenRouterModelConfigs = ({
           topP={topP}
           temperatureDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
           topPDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
-          temperatureMin={-1}
+          temperatureMin={0}
           offerChoice={supports("topP")}
           onChange={onChange}
         />
@@ -49,8 +49,8 @@ const OpenRouterModelConfigs = ({
               value={configs.temperature}
               onChange={(v) => onChange({ temperature: v })}
               id="temperature"
-              min={-1}
-              max={1}
+              min={0}
+              max={2}
               step={0.01}
               defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
               label="Temperature"
@@ -72,7 +72,7 @@ const OpenRouterModelConfigs = ({
           defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS}
           label="Max tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. Set to 0 to use the provider's default. (One token is roughly 4 characters for standard English text)." />
           }
         />
       )}
@@ -100,7 +100,7 @@ const OpenRouterModelConfigs = ({
           id="topK"
           min={0}
           max={100}
-          step={0.01}
+          step={1}
           defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_K}
           label="Top K"
           tooltip={
