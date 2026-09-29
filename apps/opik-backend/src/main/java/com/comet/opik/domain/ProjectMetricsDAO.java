@@ -322,18 +322,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
-            ), traces_final_thread_ids AS (
-                SELECT DISTINCT thread_id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND thread_id \\<> ''
-                <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -350,10 +338,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 -- The id range keeps the membership rule of the thread list in ThreadDAO.
-                -- The thread_id set is what actually prunes granules (measured 123/563 -> 69/563), so both stay.
+                -- A thread_id semi-join here was measured and dropped: building the set cost more than the granules it skipped (OPIK-8335).
                 <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                AND thread_id IN (SELECT thread_id FROM traces_final_thread_ids)
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
