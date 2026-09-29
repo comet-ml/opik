@@ -29,6 +29,7 @@ import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -3604,7 +3605,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             "copy_version_items:%s:%s:%s".formatted(workspaceId, targetDatasetId, targetVersionId));
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_version_items");
-            return Mono.fromFuture(() -> clickHouseClient.query(sql, params, settings))
+            return AsyncUtils.fromClickHouseFuture(() -> clickHouseClient.query(sql, params, settings))
                     .flatMap(response -> Mono.fromCallable(() -> {
                         try (response) {
                             long written = response.getWrittenRows();
@@ -3614,6 +3615,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             return written;
                         }
                     }).subscribeOn(Schedulers.boundedElastic()))
+                    // The response crosses a scheduler hop before it is consumed; a cancel landing in that
+                    // window drops it downstream of the helper's own handler, which only covers the future.
+                    .doOnDiscard(AutoCloseable.class, AsyncUtils::closeQuietly)
                     .doFinally(signalType -> endSegment(segment));
         });
     }
@@ -3783,12 +3787,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .serverSetting("log_comment",
                         "edit_item_via_select_insert:%s:%s:%s".formatted(workspaceId, targetDatasetId, newVersionId));
 
-        return Mono.fromFuture(() -> clickHouseClient.query(sql, params, settings))
+        return AsyncUtils.fromClickHouseFuture(() -> clickHouseClient.query(sql, params, settings))
                 .flatMap(response -> Mono.fromCallable(() -> {
                     try (response) {
                         return response.getWrittenRows();
                     }
-                }).subscribeOn(Schedulers.boundedElastic()));
+                }).subscribeOn(Schedulers.boundedElastic()))
+                // Same scheduler-hop window as executeCopyVersionItems above.
+                .doOnDiscard(AutoCloseable.class, AsyncUtils::closeQuietly);
     }
 
     /**

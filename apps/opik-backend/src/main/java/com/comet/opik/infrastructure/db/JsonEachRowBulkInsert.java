@@ -5,6 +5,7 @@ import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
+import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -144,7 +145,7 @@ public class JsonEachRowBulkInsert {
                 .flatMap(payload -> {
                     Segment segment = startSegment(table, "Clickhouse", "batch_insert");
 
-                    return Mono.fromFuture(() -> clickHouseClient.insert(
+                    return AsyncUtils.fromClickHouseFuture(() -> clickHouseClient.insert(
                             table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)))
                             .doFinally(signalType -> endSegment(segment));
                 })
