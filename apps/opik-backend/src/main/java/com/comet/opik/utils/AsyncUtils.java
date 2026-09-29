@@ -12,6 +12,7 @@ import reactor.util.context.Context;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 @UtilityClass
@@ -44,31 +45,47 @@ public class AsyncUtils {
     }
 
     /**
-     * Wraps a ClickHouse v2 client future so that cancelling the subscriber cannot leak the response.
+     * Runs {@code consume} over a ClickHouse v2 client response and closes that response exactly once,
+     * whatever happens to the subscriber. <b>Callers must not close it themselves</b> — no
+     * try-with-resources around the response, or it is closed twice.
      *
-     * <p>Plain {@link Mono#fromFuture(Supplier)} cancels the future when the {@link Mono} is cancelled, and
-     * the v2 client builds its futures with {@link CompletableFuture#supplyAsync}, which ignores
-     * {@code mayInterruptIfRunning}. The HTTP round trip therefore runs to completion and produces a
-     * response either way — but a cancelled future refuses it ({@code complete} returns {@code false}), so
-     * nothing ever closes it and its pooled connection is gone for good. The client's pool defaults to ten
-     * and is shared by every v2 caller in the process, so a handful of cancellations is enough to wedge a
-     * pod permanently (OPIK-8576, the same defect the ClickHouse health checks carried).
+     * <p>Why this exists rather than a plain {@link Mono#fromFuture(Supplier)}: that cancels the future when
+     * the {@link Mono} is cancelled, and the v2 client builds its futures with
+     * {@link CompletableFuture#supplyAsync}, which ignores {@code mayInterruptIfRunning}. The HTTP round trip
+     * therefore runs to completion and produces a response either way — but a cancelled future refuses it
+     * ({@code complete} returns {@code false}), so nothing ever closes it and its pooled connection is gone
+     * for good. The pool defaults to ten and is shared by every v2 caller in the process, so a handful of
+     * cancellations wedges a pod permanently (OPIK-8576).
      *
-     * <p>Both halves below are required, in this order. Suppressing the cancel is what lets the response
-     * arrive at all; the discard handler is what closes it once it does. Adding only the handler fixes
-     * nothing — with the future cancelled, no value ever reaches it.
+     * <p>There are two ways to lose a response, and they need different mechanisms:
+     *
+     * <ul>
+     *   <li><b>It never arrives.</b> Cancellation lands before the future completes. Suppressing the cancel
+     *       keeps the future able to accept the value, and the discard handler closes it when it turns up.
+     *       A discard handler on its own fixes nothing here: a cancelled future hands a value to nobody.</li>
+     *   <li><b>It arrives and then the subscriber goes away.</b> {@link Mono#usingWhen} owns the response
+     *       from that point and runs the cleanup on completion, error <i>and</i> cancellation.</li>
+     * </ul>
+     *
+     * <p>Both live here on purpose. Leaving either to the call site means an operator that has to be
+     * remembered at the right position in every chain, and forgetting it leaks silently — the response is
+     * simply never closed, with nothing failing and nothing logged until the pool runs out.
      */
-    public static <T extends AutoCloseable> Mono<T> fromClickHouseFuture(
-            Supplier<? extends CompletableFuture<T>> futureSupplier) {
-        return Mono.fromFuture(futureSupplier, true)
-                .doOnDiscard(AutoCloseable.class, AsyncUtils::closeQuietly);
+    public static <T extends AutoCloseable, R> Mono<R> usingClickHouseFuture(
+            Supplier<? extends CompletableFuture<T>> futureSupplier,
+            Function<? super T, ? extends Mono<R>> consume) {
+        return Mono.usingWhen(
+                Mono.fromFuture(futureSupplier, true)
+                        .doOnDiscard(AutoCloseable.class, AsyncUtils::closeQuietly),
+                consume,
+                response -> Mono.fromRunnable(() -> closeQuietly(response)));
     }
 
     /**
      * Closes a response nobody is waiting for any more. Failing to close it would leak the connection this
      * exists to return, so the exception is logged rather than propagated — there is no caller left to take it.
      */
-    public static void closeQuietly(AutoCloseable response) {
+    private static void closeQuietly(AutoCloseable response) {
         try {
             response.close();
         } catch (Exception exception) {

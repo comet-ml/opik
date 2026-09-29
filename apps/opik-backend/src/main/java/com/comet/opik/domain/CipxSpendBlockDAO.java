@@ -394,7 +394,7 @@ public class CipxSpendBlockDAO {
     }
 
     private Mono<Long> insertChunk(List<BlockRow> rows, String workspaceId, String userName) {
-        return AsyncUtils.fromClickHouseFuture(() -> {
+        return AsyncUtils.usingClickHouseFuture(() -> {
             StringBuilder body = new StringBuilder();
             for (BlockRow row : rows) {
                 appendJsonRow(body, workspaceId, row);
@@ -411,11 +411,8 @@ public class CipxSpendBlockDAO {
                     new ByteArrayInputStream(payload),
                     ClickHouseFormat.JSONEachRow,
                     settings);
-        }).map(response -> {
-            try (response) {
-                return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
-            }
-        });
+        }, response -> Mono.fromCallable(
+                () -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong()));
     }
 
     private void appendJsonRow(StringBuilder out, String workspaceId, BlockRow row) {

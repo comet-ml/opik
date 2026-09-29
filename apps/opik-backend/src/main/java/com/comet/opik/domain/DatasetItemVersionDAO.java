@@ -3605,19 +3605,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             "copy_version_items:%s:%s:%s".formatted(workspaceId, targetDatasetId, targetVersionId));
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_version_items");
-            return AsyncUtils.fromClickHouseFuture(() -> clickHouseClient.query(sql, params, settings))
-                    .flatMap(response -> Mono.fromCallable(() -> {
-                        try (response) {
-                            long written = response.getWrittenRows();
-                            log.info(
-                                    "Copied '{}' items from (dataset '{}', version '{}') to (dataset '{}', version '{}')",
-                                    written, sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId);
-                            return written;
-                        }
+            return AsyncUtils.usingClickHouseFuture(
+                    () -> clickHouseClient.query(sql, params, settings),
+                    response -> Mono.fromCallable(() -> {
+                        long written = response.getWrittenRows();
+                        log.info(
+                                "Copied '{}' items from (dataset '{}', version '{}') to (dataset '{}', version '{}')",
+                                written, sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId);
+                        return written;
                     }).subscribeOn(Schedulers.boundedElastic()))
-                    // The response crosses a scheduler hop before it is consumed; a cancel landing in that
-                    // window drops it downstream of the helper's own handler, which only covers the future.
-                    .doOnDiscard(AutoCloseable.class, AsyncUtils::closeQuietly)
                     .doFinally(signalType -> endSegment(segment));
         });
     }
@@ -3787,14 +3783,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .serverSetting("log_comment",
                         "edit_item_via_select_insert:%s:%s:%s".formatted(workspaceId, targetDatasetId, newVersionId));
 
-        return AsyncUtils.fromClickHouseFuture(() -> clickHouseClient.query(sql, params, settings))
-                .flatMap(response -> Mono.fromCallable(() -> {
-                    try (response) {
-                        return response.getWrittenRows();
-                    }
-                }).subscribeOn(Schedulers.boundedElastic()))
-                // Same scheduler-hop window as executeCopyVersionItems above.
-                .doOnDiscard(AutoCloseable.class, AsyncUtils::closeQuietly);
+        return AsyncUtils.usingClickHouseFuture(
+                () -> clickHouseClient.query(sql, params, settings),
+                response -> Mono.fromCallable(response::getWrittenRows)
+                        .subscribeOn(Schedulers.boundedElastic()));
     }
 
     /**

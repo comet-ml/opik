@@ -145,14 +145,12 @@ public class JsonEachRowBulkInsert {
                 .flatMap(payload -> {
                     Segment segment = startSegment(table, "Clickhouse", "batch_insert");
 
-                    return AsyncUtils.fromClickHouseFuture(() -> clickHouseClient.insert(
-                            table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)))
+                    return AsyncUtils.usingClickHouseFuture(
+                            () -> clickHouseClient.insert(
+                                    table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)),
+                            response -> Mono.fromCallable(() -> response.getMetrics()
+                                    .getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong()))
                             .doFinally(signalType -> endSegment(segment));
-                })
-                .map(response -> {
-                    try (response) {
-                        return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
-                    }
                 })
                 // The throwable is passed as the cause, not formatted into the message: a failed bulk
                 // insert is diagnosable only from the stack and the cause chain, which say whether it
