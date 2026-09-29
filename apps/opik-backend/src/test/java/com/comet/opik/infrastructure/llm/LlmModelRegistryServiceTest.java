@@ -160,11 +160,11 @@ class LlmModelRegistryServiceTest {
     static Stream<Arguments> openAiCapabilityFlagCases() {
         return Stream.of(
                 openAiCase(LlmModelDefinition.builder().id("gpt-6-astra").label("GPT 6 Astra")
-                        .structuredOutput(true).reasoning(true).build()),
+                        .reasoning(true).build()),
                 openAiCase(LlmModelDefinition.builder().id("gpt-6-luna").label("GPT 6 Luna")
-                        .structuredOutput(true).reasoning(true).build()),
+                        .reasoning(true).build()),
                 openAiCase(LlmModelDefinition.builder().id("gpt-6-sol").label("GPT 6 Sol")
-                        .structuredOutput(true).reasoning(true).build()),
+                        .reasoning(true).build()),
                 openAiCase(LlmModelDefinition.builder().id("gpt-5").label("GPT 5")
                         .structuredOutput(true).reasoning(true).build()),
                 openAiCase(LlmModelDefinition.builder().id("gpt-5-mini").label("GPT 5 Mini")
