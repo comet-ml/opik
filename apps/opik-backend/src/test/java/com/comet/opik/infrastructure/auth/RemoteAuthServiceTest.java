@@ -23,6 +23,7 @@ import io.dropwizard.client.JerseyClientBuilder;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MultivaluedHashMap;
@@ -38,6 +39,8 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -73,6 +76,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -239,23 +243,38 @@ class RemoteAuthServiceTest {
         assertThat(requestContext).isEqualTo(contextAfterCacheMiss);
     }
 
+    /**
+     * The expected status is asserted alongside the exception class because {@link ClientErrorException}
+     * is the class of the 401, 403 and 400 branches alike: on its own it cannot tell them apart, so an
+     * edit that mapped one of them to the wrong status would still pass. The status is the entire point
+     * of the 404 row.
+     */
     static Stream<Arguments> unauthorizedArgs() {
         return Stream.of(
                 arguments(HttpStatus.SC_UNAUTHORIZED,
                         ClientErrorException.class,
-                        "test error message"),
+                        "test error message",
+                        HttpStatus.SC_UNAUTHORIZED),
                 arguments(HttpStatus.SC_FORBIDDEN,
                         ClientErrorException.class,
-                        NOT_ALLOWED_TO_ACCESS_WORKSPACE),
+                        NOT_ALLOWED_TO_ACCESS_WORKSPACE,
+                        HttpStatus.SC_FORBIDDEN),
+                // EM signals "user is not a member of organization" with 404; it maps to 403.
+                arguments(HttpStatus.SC_NOT_FOUND,
+                        ClientErrorException.class,
+                        NOT_ALLOWED_TO_ACCESS_WORKSPACE,
+                        HttpStatus.SC_FORBIDDEN),
                 arguments(HttpStatus.SC_SERVER_ERROR,
                         InternalServerErrorException.class,
-                        "Unexpected error while authenticating user"));
+                        "Unexpected error while authenticating user",
+                        HttpStatus.SC_SERVER_ERROR));
     }
 
     @ParameterizedTest
     @MethodSource("unauthorizedArgs")
     void testUnauthorized(
-            int remoteAuthStatusCode, Class<? extends Exception> expectedExceptionClass, String expectedMessage) {
+            int remoteAuthStatusCode, Class<? extends Exception> expectedExceptionClass, String expectedMessage,
+            int expectedStatus) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var apiKey = "apiKey-" + UUID.randomUUID();
         WIRE_MOCK.server().stubFor(post("/opik/auth")
@@ -265,14 +284,17 @@ class RemoteAuthServiceTest {
                                 new ReactServiceErrorResponse("test error message",
                                         remoteAuthStatusCode)))));
 
-        assertThatThrownBy(() -> remoteAuthService.authenticate(
+        var thrown = catchThrowable(() -> remoteAuthService.authenticate(
                 getHeadersMock(workspaceName, apiKey), null,
                 ContextInfoHolder.builder()
                         .uriInfo(createMockUriInfo("/priv/something"))
                         .method("GET")
-                        .build()))
+                        .build()));
+
+        assertThat(thrown)
                 .isExactlyInstanceOf(expectedExceptionClass)
                 .hasMessage(expectedMessage);
+        assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
     }
 
     @Test
@@ -437,10 +459,45 @@ class RemoteAuthServiceTest {
                 .hasMessage(MISSING_WORKSPACE);
     }
 
+    static Stream<Arguments> nonEmNotFoundArgs() {
+        return Stream.of(
+                // an ingress or proxy 404 — a wrong reactService URL, a missing route, a renamed endpoint
+                arguments("text/html", "<html><body>404 Not Found</body></html>"),
+                arguments("text/plain", "Not Found"),
+                // JSON, but not EM's error envelope, so it carries no membership verdict
+                arguments("application/json", "{\"detail\":\"no route\"}"));
+    }
+
+    /**
+     * The 404 -> 403 mapping is narrowed to EM's own error envelope on purpose. 403 counts as "not
+     * authenticated" in {@code authenticate()}, so a 404 mapped to it would let any endpoint in
+     * PUBLIC_ENDPOINTS continue with Visibility.PUBLIC — turning a misconfigured reactService URL into
+     * silent public-data serving instead of a loud failure. A 404 that did not come from EM must stay a 500.
+     */
+    @ParameterizedTest
+    @MethodSource("nonEmNotFoundArgs")
+    void auth__whenNotFoundIsNotFromEm__thenServerErrorRatherThanForbidden(String contentType, String body) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .willReturn(aResponse().withStatus(HttpStatus.SC_NOT_FOUND)
+                        .withHeader("Content-Type", contentType)
+                        .withBody(body)));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, apiKey), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(InternalServerErrorException.class)
+                .hasMessage("Unexpected error while authenticating user");
+    }
+
     @ParameterizedTest
     @MethodSource("unauthorizedArgs")
     void testSessionAuthUnauthorized(int remoteAuthStatusCode, Class<? extends Exception> expectedExceptionClass,
-            String expectedMessage) {
+            String expectedMessage, int expectedStatus) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var sessionTokenValue = "session-" + UUID.randomUUID();
         WIRE_MOCK.server().stubFor(post("/opik/auth-session")
@@ -450,15 +507,20 @@ class RemoteAuthServiceTest {
                                 new ReactServiceErrorResponse("test error message",
                                         remoteAuthStatusCode)))));
 
-        assertThatThrownBy(() -> remoteAuthService.authenticate(
+        var thrown = catchThrowable(() -> remoteAuthService.authenticate(
                 getHeadersMock(workspaceName, ""),
                 sessionCookie(sessionTokenValue),
                 ContextInfoHolder.builder()
                         .uriInfo(createMockUriInfo("/priv/something"))
                         .method("GET")
-                        .build()))
+                        .build()));
+
+        assertThat(thrown)
                 .isExactlyInstanceOf(expectedExceptionClass)
                 .hasMessage(expectedMessage);
+        // Asserted here too: /opik/auth-session is the route the production 404 arrived on, so leaving the
+        // session path on class-and-message alone would not have caught the status this PR exists to fix.
+        assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
     }
 
     static Stream<Arguments> nonJsonErrorBodyArgs() {
@@ -626,14 +688,22 @@ class RemoteAuthServiceTest {
     }
 
     @Test
-    void testListEligibleWorkspaces__filtersDefaultWorkspaceAndMapsToWorkspaceInfo() throws JsonProcessingException {
+    void listEligibleWorkspaces__filtersDefaultAndInternalWorkspacesAndMapsToWorkspaceInfo()
+            throws JsonProcessingException {
         var sessionTokenValue = "session-" + UUID.randomUUID();
         var production = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(false).build();
         var staging = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(true).build();
-        var responseJson = OBJECT_MAPPER.writeValueAsString(Arrays.asList(
-                Map.of("workspaceId", production.id(), "workspaceName", production.name(), "default", false),
-                Map.of("workspaceId", "ws-default", "workspaceName", DEFAULT_WORKSPACE_NAME, "default", false),
-                Map.of("workspaceId", staging.id(), "workspaceName", staging.name(), "default", true)));
+        var defaultWorkspace = WorkspaceInfo.builder().id("ws-default").name(DEFAULT_WORKSPACE_NAME).build();
+        var aiSpend = WorkspaceInfo.builder().id("ws-ai-spend").name("__ai_spend_acme__").build();
+        var creditCard = WorkspaceInfo.builder().id("ws-cc").name("__cc_acme__").build();
+        // only the Cost Intelligence naming marks a workspace internal, other double-underscore names do not
+        var underscored = WorkspaceInfo.builder().id("ws-underscored").name("__internal__").build();
+        var prefixed = WorkspaceInfo.builder().id("ws-prefixed").name("__ai_spend_acme").build();
+        var suffixed = WorkspaceInfo.builder().id("ws-suffixed").name("ai_spend_acme__").build();
+        var responseJson = OBJECT_MAPPER.writeValueAsString(Stream
+                .of(production, defaultWorkspace, aiSpend, creditCard, underscored, prefixed, suffixed, staging)
+                .map(RemoteAuthServiceTest::workspaceEntry)
+                .toList());
         WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces"))
                 .withQueryParam("withoutExtendedData", equalTo("true"))
                 .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
@@ -641,7 +711,7 @@ class RemoteAuthServiceTest {
 
         var result = remoteAuthService.listEligibleWorkspaces(sessionCookie(sessionTokenValue));
 
-        assertThat(result).containsExactly(production, staging);
+        assertThat(result).containsExactly(production, underscored, prefixed, suffixed, staging);
     }
 
     @Test
@@ -714,12 +784,14 @@ class RemoteAuthServiceTest {
                 .hasMessage(NOT_LOGGED_USER);
     }
 
-    @Test
-    void testAuthorizeWorkspace__whenDefaultWorkspace__thenForbidden() {
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {DEFAULT_WORKSPACE_NAME, "__ai_spend_acme__", "__cc_acme__", "__ai_spend_a__", "  "})
+    void authorizeWorkspace__whenNotEligible__thenForbidden(String workspaceName) {
         var sessionTokenValue = "session-" + UUID.randomUUID();
 
         assertThatThrownBy(() -> remoteAuthService.authorizeWorkspace(
-                sessionCookie(sessionTokenValue), DEFAULT_WORKSPACE_NAME))
+                sessionCookie(sessionTokenValue), workspaceName))
                 .isExactlyInstanceOf(ClientErrorException.class)
                 .hasMessage(NOT_ALLOWED_TO_ACCESS_WORKSPACE);
     }
@@ -1001,6 +1073,11 @@ class RemoteAuthServiceTest {
                 .isInstanceOf(ClientErrorException.class);
 
         assertThat(authRequestCount()).isEqualTo(1);
+    }
+
+    private static Map<String, Object> workspaceEntry(WorkspaceInfo workspace) {
+        return Map.of("workspaceId", workspace.id(), "workspaceName", workspace.name(), "default",
+                workspace.isDefault());
     }
 
     private static Cookie sessionCookie(String value) {

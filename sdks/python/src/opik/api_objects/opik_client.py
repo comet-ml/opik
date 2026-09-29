@@ -135,8 +135,6 @@ class Opik:
         Returns:
             None
         """
-        analytics.track_event("client", "init")
-
         config_ = opik_config.get_from_user_inputs(
             project_name=project_name,
             workspace=workspace,
@@ -337,6 +335,7 @@ class Opik:
             environment=environment,
         )
 
+    @analytics.internal
     def __internal_api__trace__(
         self,
         id: Optional[str] = None,
@@ -561,6 +560,7 @@ class Opik:
             source="sdk",
         )
 
+    @analytics.internal
     def __internal_api__span__(
         self,
         trace_id: Optional[str] = None,
@@ -2010,7 +2010,6 @@ class Opik:
             The flush outcome (including any data-loss detail) when ``flush`` is
             True; ``None`` when ``flush`` is False (nothing was flushed).
         """
-        analytics.track_event("client", "end")
         timeout = timeout if timeout is not None else self._flush_timeout
         marker = self._flush_reporter.marker()
         # Explicit teardown on a user thread, so close on the last reference
@@ -2054,7 +2053,6 @@ class Opik:
             True if all messages were delivered within the timeout with no data
             loss; False if the timeout was hit or any message was dropped.
         """
-        analytics.track_event("client", "flush")
         timeout = timeout if timeout is not None else self._flush_timeout
         try:
             marker = self._flush_reporter.marker()

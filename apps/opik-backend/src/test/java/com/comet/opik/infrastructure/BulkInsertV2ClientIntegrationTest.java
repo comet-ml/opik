@@ -820,6 +820,56 @@ class BulkInsertV2ClientIntegrationTest {
         return names;
     }
 
+    @Test
+    @DisplayName("a span whose row exceeds the parallel-parsing chunk size is still written")
+    void oversizedSpanRowIsWritten() {
+        // Regression: JSONEachRow rows are split across chunk boundaries by ClickHouse's parallel
+        // parser, which cannot carry one row across them and rejects the whole batch with code 117
+        // ("Size of JSON object at position N is extremely large") and written_rows = 0. Spans carry
+        // user-supplied input, so a row that large is an ordinary thing for a customer to send, and in
+        // production it silently dropped batches.
+        //
+        // The guard fires at 10x min_chunk_bytes_for_parallel_parsing, so 100 MiB at the 10 MiB
+        // default -- NOT at 10 MiB, which is what the error message's "Expected not greater than
+        // 10485760 bytes" misleadingly implies. Bisected on this suite's server image: 99 MiB is
+        // accepted, 100 MiB is not. The payload has to clear that, so it cannot be trimmed to
+        // something cheaper without the test quietly ceasing to test anything -- an earlier 12 MiB
+        // version of it passed with and without the fix.
+        //
+        // Split across two columns rather than one huge string, because one huge string is a shape
+        // production cannot produce: maxStringLength caps a single JSON string at 100 MiB there, so a
+        // row only reaches the ClickHouse cliff by summing several large columns -- which is what the
+        // rows rejected in production (~104.9 MB each) must have been. Each half here stays well under
+        // that cap while the row as a whole clears 100 MiB.
+        var projectName = "v2-oversized-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var trace = newTraceBuilder().projectName(projectName).build();
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+        var inputHalf = "x".repeat(60 * 1024 * 1024);
+        var outputHalf = "y".repeat(60 * 1024 * 1024);
+        var span = factory.manufacturePojo(Span.class).toBuilder()
+                .projectName(projectName)
+                .traceId(trace.id())
+                .parentSpanId(null)
+                .feedbackScores(null)
+                .comments(null)
+                .errorInfo(null)
+                .input(TextNode.valueOf(inputHalf))
+                .output(TextNode.valueOf(outputHalf))
+                .build();
+
+        spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
+
+        // The whole span, via the shared helper, rather than the two payload columns: splicing a row
+        // across a chunk boundary would not necessarily disturb the payloads themselves, so the small
+        // columns either side of them are where that would show. Without the fix this test fails at
+        // the POST above rather than here -- the rejection propagates on this synchronous path and
+        // the endpoint answers 500.
+        var actual = spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
+
+        SpanAssertions.assertSpan(List.of(actual), List.of(span), USER);
+    }
+
     // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
     // throw when the Mono is assembled rather than deferring a failure into the reactive chain. Covered
     // here rather than in the mapper tests because the guard is the DAO's, and it is the one place both

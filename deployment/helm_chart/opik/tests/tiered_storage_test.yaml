@@ -31,26 +31,34 @@ tests:
       - equal:
           path: spec.templates.volumeClaimTemplates[1].name
           value: s3-cache-vc-template
-      # Hot tier is ClickHouse's built-in `default` disk. Defining a custom local
-      # disk at the server data path is rejected by CH 26.x at startup ("Disk path
-      # cannot be equal to <path>. Use <default> disk instead."), so the hot volume
-      # must reference `default` and there must be no custom <hot> disk under <disks>.
+      # The hot VOLUME must be named `default`, matching the volume name in the
+      # built-in `default` policy. ClickHouse refuses MODIFY SETTING storage_policy
+      # unless the new policy carries a volume of the same name as the old one, and
+      # every table starts on `default` — so a volume named `hot` renders a policy
+      # that cannot be attached to anything (BAD_ARGUMENTS).
       - matchRegex:
           path: spec.configuration.files["conf.d/storage.xml"]
-          pattern: "<hot>\\s*<disk>default</disk>\\s*</hot>"
+          pattern: "<default>\\s*<disk>default</disk>\\s*</default>"
+      # It must reference the built-in `default` DISK, not a custom local one: CH 26.x
+      # rejects a disk whose <path> equals the server data path at startup ("Disk path
+      # cannot be equal to <path>. Use <default> disk instead."), so the disk stanza
+      # only tunes keep_free_space_bytes on `default`.
       - matchRegex:
           path: spec.configuration.files["conf.d/storage.xml"]
           pattern: "<default>\\s*<keep_free_space_bytes>"
-      # Negative guards: the custom <hot> DISK stanza (a <hot> wrapping
-      # keep_free_space_bytes or path) must never render — that is the exact
-      # shape CH 26.x rejects. Only the <hot> VOLUME (<hot><disk>default</disk>)
-      # is allowed, which the positive assertion above already pins.
+      # Negative guards on a real <hot> ELEMENT, not the word in a comment. As a DISK
+      # (wrapping keep_free_space_bytes or path) it is the shape CH 26.x rejects at
+      # startup; as a VOLUME (wrapping a <disk>) it is what made the policy
+      # unattachable to any table on `default`.
       - notMatchRegex:
           path: spec.configuration.files["conf.d/storage.xml"]
           pattern: "<hot>\\s*<keep_free_space_bytes>"
       - notMatchRegex:
           path: spec.configuration.files["conf.d/storage.xml"]
           pattern: "<hot>\\s*<path>"
+      - notMatchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<hot>\\s*<disk>"
 
   - it: omits <read_only> by default so the cold tier is writable
     set:

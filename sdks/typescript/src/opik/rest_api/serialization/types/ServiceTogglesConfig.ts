@@ -32,6 +32,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     ollieEnabled: core.serialization.boolean(),
     projectHomepageEnabled: core.serialization.boolean(),
     onlineScoringTracingEnabled: core.serialization.boolean(),
+    annotationQueueAutomationEnabled: core.serialization.boolean(),
     defaultPageSize: core.serialization.number().optional(),
 });
 
@@ -61,6 +62,7 @@ export declare namespace ServiceTogglesConfig {
         ollieEnabled: boolean;
         projectHomepageEnabled: boolean;
         onlineScoringTracingEnabled: boolean;
+        annotationQueueAutomationEnabled: boolean;
         defaultPageSize?: number | null;
     }
 }

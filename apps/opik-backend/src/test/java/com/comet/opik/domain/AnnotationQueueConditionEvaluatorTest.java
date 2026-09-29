@@ -11,6 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,7 +35,7 @@ class AnnotationQueueConditionEvaluatorTest {
     }
 
     private static Map<String, BigDecimal> scores(Object... nameValuePairs) {
-        var result = new java.util.HashMap<String, BigDecimal>();
+        var result = new HashMap<String, BigDecimal>();
         for (int i = 0; i < nameValuePairs.length; i += 2) {
             result.put((String) nameValuePairs[i], BigDecimal.valueOf((Double) nameValuePairs[i + 1]));
         }

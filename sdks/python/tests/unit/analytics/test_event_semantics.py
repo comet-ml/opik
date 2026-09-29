@@ -1,20 +1,20 @@
 """
-What `client__init` and `client__track` are each supposed to count.
+What each event is supposed to count.
 
-`client__init` means the user built a client. The SDK builds one for itself in
-`get_global_client`, and that lives in the same module as `Opik.__init__`, so the
-module test in `_reported_from_inside_the_sdk` cannot tell the two apart - which is
-why `get_global_client` is marked `@analytics.internal`. Without it a bare `@track`
-function reports `client__init` and the event counts everyone who touches the SDK.
+The recurring failure mode is an event that counts Opik rather than the user. Two
+mechanisms keep it honest, and these cover both:
 
-`client__track` is the other half: the decorator is the SDK's most-used entry point
-and had no event of its own, so nothing counted the people using it.
+- `@analytics.internal` marks a function whose callees are Opik using itself. It is
+  needed where the module test in `_reported_from_inside_the_sdk` cannot help - an
+  internal caller living in the same module as the thing it calls looks exactly like
+  a user calling it.
+- `BaseMetric` reports through a private helper in its own module, the case that must
+  keep working: a helper reporting on its caller's behalf is not an internal call.
 """
-
-import types
 
 import pytest
 
+import opik
 from opik.analytics import api
 
 
@@ -22,7 +22,7 @@ def test_internal__marked_caller__callee_does_not_report(recording_worker):
     """The marker's whole job: what it calls is Opik using itself."""
 
     def reports():
-        api.track_event("client", "init")
+        api.track_event("client", "create_dataset")
 
     @api.internal
     def sdk_builds_one_for_itself():
@@ -40,71 +40,80 @@ def test_internal__unmarked_caller__callee_reports(recording_worker):
     """The control: without the marker the same shape is a user's own call."""
 
     def reports():
-        api.track_event("client", "init")
+        api.track_event("client", "create_dataset")
 
-    def user_builds_one():
+    def user_creates_one():
         reports()
 
-    user_builds_one()
+    user_creates_one()
 
-    assert recording_worker.names == ["opik_python_sdk__client__init"]
-
-
-def test_track_decorator__used_by_a_user__reports_client_track(recording_worker):
-    import opik
-
-    @opik.track
-    def a_function_the_user_wrote(x):
-        return x + 1
-
-    # Called, not just decorated: a decorator that reported the event and then
-    # returned a broken wrapper would otherwise pass this.
-    assert a_function_the_user_wrote(1) == 2
-    assert "opik_python_sdk__client__track" in recording_worker.names
+    assert recording_worker.names == ["opik_python_sdk__client__create_dataset"]
 
 
-def test_track_decorator__used_by_an_integration__does_not_report(recording_worker):
-    """
-    Integrations decorate on the user's behalf from inside `opik.integrations.*`, so
-    their use of the decorator is Opik's, not a user reaching for `@track`.
-    """
-
-    entrypoint_module = types.ModuleType("opik.integrations.fake.opik_tracker")
-    exec(
-        compile(
-            "def track_fake(fn):\n    import opik\n    return opik.track(fn)\n",
-            "opik/integrations/fake/opik_tracker.py",
-            "exec",
-        ),
-        entrypoint_module.__dict__,
-    )
-
-    def user_enables_an_integration():
-        entrypoint_module.track_fake(lambda: None)
-
-    user_enables_an_integration()
-
-    assert "opik_python_sdk__client__track" not in recording_worker.names
-
-
-def test_get_global_client__builds_a_client_for_the_sdk__does_not_report_init(
-    recording_worker, monkeypatch
+def test_feedback_scores__carried_by_a_new_trace__not_reported(
+    recording_worker, fake_backend
 ):
     """
-    The real path, not a stand-in for it: `get_global_client` is what `@track` and
-    every other implicit consumer reach for, and the marker on it is the only thing
-    keeping `client__init` from counting them.
-    """
-    from opik.api_objects import opik_client
+    `client__log_traces_feedback_scores` must mean the user called that method.
 
-    monkeypatch.setattr(opik_client, "_global_singleton", None)
+    `__internal_api__trace__` hands scores supplied at creation to
+    `log_traces_feedback_scores`, and it is the trace-creation path behind `@track`,
+    every integration tracer, `opik_context` and the evaluation engine. Both live in
+    `opik_client`, so the module test cannot separate them - without the marker on the
+    internal API, every integration that attaches a score reports this event and it
+    counts Opik's plumbing instead of anyone's usage.
+    """
+    client = opik.Opik(batching=True)
 
     def user_code():
-        opik_client.get_global_client()
+        client.trace(name="t", feedback_scores=[{"name": "s", "value": 1.0}])
 
     user_code()
 
-    assert "opik_python_sdk__client__init" not in recording_worker.names
+    assert (
+        "opik_python_sdk__client__log_traces_feedback_scores"
+        not in recording_worker.names
+    )
+
+
+def test_feedback_scores__carried_by_a_new_span__not_reported(
+    recording_worker, fake_backend
+):
+    """The same, through `__internal_api__span__`."""
+    client = opik.Opik(batching=True)
+    trace = client.trace(name="t")
+
+    def user_code():
+        client.span(
+            trace_id=trace.id,
+            name="s",
+            feedback_scores=[{"name": "s", "value": 1.0}],
+        )
+
+    user_code()
+
+    assert (
+        "opik_python_sdk__client__log_spans_feedback_scores"
+        not in recording_worker.names
+    )
+
+
+def test_feedback_scores__logged_by_the_user__reported(recording_worker, fake_backend):
+    """
+    The other side, and the reason the marker goes on the internal API rather than on
+    the reporting method: a direct call still has to count.
+    """
+    client = opik.Opik(batching=True)
+    trace = client.trace(name="t")
+
+    def user_code():
+        client.log_traces_feedback_scores([{"id": trace.id, "name": "s", "value": 1.0}])
+
+    user_code()
+
+    assert (
+        "opik_python_sdk__client__log_traces_feedback_scores" in recording_worker.names
+    )
 
 
 def test_metric_created__construction_fails__still_reported(recording_worker):

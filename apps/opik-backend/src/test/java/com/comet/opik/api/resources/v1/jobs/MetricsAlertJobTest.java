@@ -42,6 +42,7 @@ import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -329,6 +330,32 @@ class MetricsAlertJobTest {
         verify(alertWebhookSender, after(NO_CALL_WINDOW_MS).never()).createAndSendWebhook(
                 any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
         verify(lockService, never()).lockUsingToken(any(), any(java.time.Duration.class));
+    }
+
+    static Stream<Arguments> operatorForms() {
+        return Stream.of(
+                // the symbol this enum serialises as
+                arguments("<", MetricsAlertJob.Operator.LESS_THAN),
+                arguments(">", MetricsAlertJob.Operator.GREATER_THAN),
+                // the enum-name form found in stored production configs, which used to be unparseable and
+                // left the alert throwing on every run, unable to ever fire (OPIK-8555)
+                arguments("less_than", MetricsAlertJob.Operator.LESS_THAN),
+                arguments("greater_than", MetricsAlertJob.Operator.GREATER_THAN),
+                arguments("LESS_THAN", MetricsAlertJob.Operator.LESS_THAN),
+                arguments("GREATER_THAN", MetricsAlertJob.Operator.GREATER_THAN));
+    }
+
+    @ParameterizedTest
+    @MethodSource("operatorForms")
+    void operatorAcceptsBothTheSymbolAndTheEnumName(String stored, MetricsAlertJob.Operator expected) {
+        assertThat(MetricsAlertJob.Operator.fromString(stored)).isEqualTo(expected);
+    }
+
+    @Test
+    void operatorStillRejectsAnUnknownValue() {
+        assertThatThrownBy(() -> MetricsAlertJob.Operator.fromString("not_an_operator"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Unknown Operator 'not_an_operator'");
     }
 
     // --- helpers ---------------------------------------------------------
