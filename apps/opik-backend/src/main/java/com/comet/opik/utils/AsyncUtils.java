@@ -13,6 +13,7 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
 
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -86,21 +87,25 @@ public class AsyncUtils {
     public static <T extends AutoCloseable, R> Mono<R> usingClickHouseFuture(
             @NonNull Supplier<? extends CompletableFuture<T>> futureSupplier,
             @NonNull Function<? super T, ? extends R> consume) {
-        return usingClickHouseFuture(futureSupplier, consume, Schedulers.immediate());
+        return usingClickHouseFuture(futureSupplier, consume, null);
     }
 
     /**
      * As {@link #usingClickHouseFuture(Supplier, Function)}, with {@code consume} subscribed on
      * {@code consumeScheduler}. For a mapping that blocks; the response lifecycle is unchanged.
+     *
+     * <p>{@code consumeScheduler} is optional: {@code null} means {@link Schedulers#immediate()}, i.e. the
+     * thread that delivered the response, so the choice stays optional whichever overload is called.
      */
     public static <T extends AutoCloseable, R> Mono<R> usingClickHouseFuture(
             @NonNull Supplier<? extends CompletableFuture<T>> futureSupplier,
             @NonNull Function<? super T, ? extends R> consume,
-            @NonNull Scheduler consumeScheduler) {
+            Scheduler consumeScheduler) {
+        Scheduler scheduler = Objects.requireNonNullElseGet(consumeScheduler, Schedulers::immediate);
         return Mono.usingWhen(
                 Mono.fromFuture(futureSupplier, true)
                         .doOnDiscard(AutoCloseable.class, response -> closeQuietly(response, "discarded")),
-                response -> Mono.<R>fromCallable(() -> consume.apply(response)).subscribeOn(consumeScheduler),
+                response -> Mono.<R>fromCallable(() -> consume.apply(response)).subscribeOn(scheduler),
                 response -> Mono.fromRunnable(() -> closeQuietly(response, "released")));
     }
 

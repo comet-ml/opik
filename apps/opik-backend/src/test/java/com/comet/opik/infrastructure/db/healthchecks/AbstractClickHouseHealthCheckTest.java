@@ -100,7 +100,7 @@ class AbstractClickHouseHealthCheckTest {
 
             var actualResult = healthCheck.execute();
 
-            assertThat(actualResult.isHealthy()).isFalse();
+            assertResult(actualResult, HealthCheck.Result.unhealthy(new TimeoutException()));
             // Nothing to close while the query is still in flight.
             verify(lateResponse, never()).close();
 
@@ -254,31 +254,25 @@ class AbstractClickHouseHealthCheckTest {
     }
 
     /**
-     * Whole-object comparison, minus the two fields that cannot match by construction:
-     * {@code time} is stamped at construction and {@code duration} is measured, so a literal
-     * {@code isEqualTo} would never pass. Everything else — {@code healthy}, {@code message},
-     * {@code details} and the {@code error} including its cause chain — is compared recursively, so a field
-     * added to {@link HealthCheck.Result} is covered without touching this helper.
+     * Per-field comparison: {@link HealthCheck.Result#equals(Object)} folds in a construction timestamp, so a
+     * direct {@code isEqualTo} would never match. Deliberately not a recursive comparison over the cause
+     * chain — {@link Throwable#getCause()} can cycle, which is why Guava's {@code getCausalChain} guards for
+     * it, and a test helper is the wrong place to carry that.
      */
     private void assertResult(HealthCheck.Result actual, HealthCheck.Result expected) {
-        assertThat(actual)
-                .usingRecursiveComparison()
-                .ignoringFields("time", "duration")
-                .withComparatorForType(AbstractClickHouseHealthCheckTest::compareThrowables, Throwable.class)
-                .isEqualTo(expected);
+        assertThat(actual.isHealthy()).isEqualTo(expected.isHealthy());
+        assertThat(actual.getMessage()).isEqualTo(expected.getMessage());
+        assertError(actual.getError(), expected.getError());
     }
 
-    /**
-     * {@link Throwable} has no value equality and its stack trace never matches, so compare the identity a
-     * probe result actually carries: exact type, message and cause chain.
-     */
-    private static int compareThrowables(Throwable actual, Throwable expected) {
-        if (actual == null || expected == null) {
-            return actual == expected ? 0 : 1;
+    private void assertError(Throwable actual, Throwable expected) {
+        if (expected == null) {
+            assertThat(actual).isNull();
+            return;
         }
-        boolean same = actual.getClass() == expected.getClass()
-                && java.util.Objects.equals(actual.getMessage(), expected.getMessage())
-                && compareThrowables(actual.getCause(), expected.getCause()) == 0;
-        return same ? 0 : 1;
+        assertThat(actual)
+                .isExactlyInstanceOf(expected.getClass())
+                .hasMessage(expected.getMessage())
+                .hasCause(expected.getCause() == null ? null : expected.getCause());
     }
 }
