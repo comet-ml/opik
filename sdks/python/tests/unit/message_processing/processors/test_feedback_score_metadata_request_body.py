@@ -11,7 +11,7 @@ metadata without an error.
 """
 
 import json
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, Generator, List, Optional, Type
 from unittest import mock
 
 import httpx
@@ -42,22 +42,23 @@ def transport() -> _RecordingTransport:
 @pytest.fixture
 def processor(
     transport: _RecordingTransport,
-) -> online_message_processor.OpikMessageProcessor:
-    rest_client = rest_api_client.OpikApi(
-        base_url="http://localhost:5173/api",
-        api_key="api-key",
-        workspace_name="workspace",
-        httpx_client=httpx.Client(transport=httpx.MockTransport(transport.handle)),
-    )
-    registry = mock.MagicMock(spec=permissions.UnauthorizedMessageTypeRegistry)
-    registry.is_authorized.return_value = True
-    return online_message_processor.OpikMessageProcessor(
-        rest_client=rest_client,
-        file_upload_manager=mock.MagicMock(),
-        fallback_replay_manager=mock.MagicMock(spec=replay_manager.ReplayManager),
-        unauthorized_message_types_registry=registry,
-        data_loss_tracker=data_loss.DataLossTracker(),
-    )
+) -> Generator[online_message_processor.OpikMessageProcessor, None, None]:
+    with httpx.Client(transport=httpx.MockTransport(transport.handle)) as httpx_client:
+        rest_client = rest_api_client.OpikApi(
+            base_url="http://localhost:5173/api",
+            api_key="api-key",
+            workspace_name="workspace",
+            httpx_client=httpx_client,
+        )
+        registry = mock.MagicMock(spec=permissions.UnauthorizedMessageTypeRegistry)
+        registry.is_authorized.return_value = True
+        yield online_message_processor.OpikMessageProcessor(
+            rest_client=rest_client,
+            file_upload_manager=mock.MagicMock(),
+            fallback_replay_manager=mock.MagicMock(spec=replay_manager.ReplayManager),
+            unauthorized_message_types_registry=registry,
+            data_loss_tracker=data_loss.DataLossTracker(),
+        )
 
 
 @pytest.mark.parametrize(
