@@ -41,9 +41,11 @@ public record AnnotationQueueAutomation(
 
         /**
          * Queue size at which automation stops adding: once the queue holds this many items, however they
-         * got there, automation adds no more. Items added by hand are never refused. Absent means no
-         * ceiling. Nullable for the same reason as conditions — a toggle-only request must not silently
-         * drop it.
+         * got there, automation adds no more. Items added by hand are never refused.
+         *
+         * <p>Null is read against the rest of the payload: on a toggle-only request, which carries no
+         * conditions, the stored ceiling is kept; on a request that states the conditions, null means no
+         * ceiling, which is how one is removed.
          */
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable @Positive Integer maxItemsInQueue) {

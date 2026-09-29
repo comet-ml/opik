@@ -178,11 +178,16 @@ public class AnnotationQueueAutomationService {
             throw new BadRequestException("An enabled annotation queue automation requires at least one condition");
         }
 
-        // Same "null means leave it alone" rule as conditions, so a toggle-only request cannot drop
-        // the ceiling as a side effect.
+        // The request's shape says which of the two a null ceiling means. A toggle-only request carries no
+        // conditions and must not drop the ceiling as a side effect, so it is carried over. A request that
+        // states the conditions states the whole automation, so a null ceiling there means no ceiling —
+        // otherwise a ceiling once set could never be removed, since the two cases are indistinguishable
+        // in JSON without a wrapper type this codebase does not use.
         Integer maxItemsInQueue = automation.maxItemsInQueue() != null
                 ? automation.maxItemsInQueue()
-                : existing.map(AutomationRuleAnnotationQueueRouterModel::maxItemsInQueue).orElse(null);
+                : automation.conditions() != null
+                        ? null
+                        : existing.map(AutomationRuleAnnotationQueueRouterModel::maxItemsInQueue).orElse(null);
 
         return Pair.of(conditions, maxItemsInQueue);
     }
