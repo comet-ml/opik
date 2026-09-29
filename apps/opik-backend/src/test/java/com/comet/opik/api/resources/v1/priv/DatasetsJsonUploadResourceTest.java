@@ -35,6 +35,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -340,8 +342,8 @@ class DatasetsJsonUploadResourceTest {
     }
 
     @Test
-    @DisplayName("JSON array with non-object element -> dataset transitions to FAILED")
-    void uploadJsonArray__nonObjectElement__failsAsync() {
+    @DisplayName("JSON array with non-object element past the first -> 400 Bad Request")
+    void uploadJsonArray__nonObjectElement__rejected() {
         UUID datasetId = createDataset();
 
         String jsonContent = """
@@ -353,12 +355,46 @@ class DatasetsJsonUploadResourceTest {
                 """;
 
         try (var response = uploadJsonFile(datasetId, jsonContent, "JSON")) {
-            // First element is a valid object, so the head validation passes and the
-            // async stream is what fails.
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class)).contains("index 1 is not an object");
         }
 
-        assertStatusEventually(datasetId, DatasetStatus.FAILED);
+        assertThat(getDatasetItems(datasetId)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @DisplayName("Truncated or malformed JSON array -> 400 Bad Request")
+    @ValueSource(strings = {
+            "[{\"input\":\"broken\",",
+            "[{\"input\":\"q1\"},",
+            "[{\"input\":\"q1\"}, {\"input\": }]"})
+    void uploadJsonArray__malformed__rejected(String jsonContent) {
+        UUID datasetId = createDataset();
+
+        try (var response = uploadJsonFile(datasetId, jsonContent, "JSON")) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        }
+
+        assertThat(getDatasetItems(datasetId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("JSONL with an invalid line past the first -> 400 Bad Request")
+    void uploadJsonl__invalidLaterLine__rejected() {
+        UUID datasetId = createDataset();
+
+        String jsonlContent = """
+                {"input": "q1", "expected_output": "a1"}
+                {"input": "q2",
+                {"input": "q3", "expected_output": "a3"}
+                """;
+
+        try (var response = uploadJsonFile(datasetId, jsonlContent, "JSONL")) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class)).contains("JSONL line 2");
+        }
+
+        assertThat(getDatasetItems(datasetId)).isEmpty();
     }
 
     @Test
