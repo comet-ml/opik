@@ -198,12 +198,63 @@ class _PagedSource:
         return self._pages.pop(0)
 
 
-def _read(source, max_endpoint_batch_size=2):
+class _RowSource:
+    """Serves rows the way the backend does: newest id first, filtered by cursor.
+
+    The backend pages with ``id < :last_received_id`` (SpanDAO, TraceDAO, and
+    ``dataset_item_id < :lastRetrievedId`` in DatasetItemVersionDAO), so a source
+    that hands out pre-baked pages can describe sequences the backend never
+    produces — re-serving a row the previous page already sent, for one. Rows
+    are ``(id, record)`` pairs; a ``record`` of ``bytes`` is emitted verbatim so
+    a row can be a line that never decodes.
+    """
+
+    def __init__(self, rows):
+        self._rows = sorted(rows, key=lambda row: row[0], reverse=True)
+        self.requested = []
+
+    def __call__(self, current_batch_size, last_retrieved_id):
+        self.requested.append((current_batch_size, last_retrieved_id))
+        rows = self._rows
+        if last_retrieved_id is not None:
+            rows = [row for row in rows if row[0] < last_retrieved_id]
+        lines = []
+        for _, record in rows[:current_batch_size]:
+            if isinstance(record, bytes):
+                lines.append(record)
+            else:
+                lines.append(json.dumps(record).encode("utf-8") + b"\r\n")
+        return lines
+
+
+def _row(span_id, *, bad=False, raw=None):
+    if raw is not None:
+        return (span_id, raw)
+    record = _record_without_start_time(span_id) if bad else _span_record(span_id)
+    return (span_id, record)
+
+
+def _rows(*specs):
+    """Build rows from ``("r06",)``, ``("r04", "bad")`` or ``("r02", "raw")`` specs."""
+    rows = []
+    for spec in specs:
+        span_id, kind = (spec + ("good",))[:2] if len(spec) == 1 else spec
+        if kind == "bad":
+            rows.append(_row(span_id, bad=True))
+        elif kind == "raw":
+            rows.append(_row(span_id, raw=b"{not json}\r\n"))
+        else:
+            rows.append(_row(span_id))
+    return rows
+
+
+def _read(source, max_endpoint_batch_size=2, strict=False):
     return rest_stream_parser.read_and_parse_full_stream(
         read_source=source,
         parsed_item_class=rest_api_types.SpanPublic,
         max_results=None,
         max_endpoint_batch_size=max_endpoint_batch_size,
+        strict=strict,
     )
 
 
@@ -211,18 +262,24 @@ def test_read_and_parse_full_stream__dropped_record_does_not_end_the_stream():
     # The backend served a full 2-record page both times; one record on each
     # page is unparseable, so only 1 item survives per page. A short page is
     # what ends the read -- a dropped record must not look like one.
-    source = _PagedSource(
-        pages=[
-            _ndjson(_record_without_start_time("bad-1"), _span_record("span-a")),
-            _ndjson(_span_record("span-b"), _record_without_start_time("bad-2")),
-            _ndjson(_span_record("span-c")),
-        ]
+    # The cursor is the last id the backend sent, so "bad-2" is not served again.
+    source = _RowSource(
+        _rows(
+            ("span-a",),
+            ("span-b",),
+            ("span-c",),
+            ("bad-1", "bad"),
+            ("bad-2", "bad"),
+        )
     )
 
     spans = _read(source)
 
-    assert [span.id for span in spans] == ["span-a", "span-b", "span-c"]
-    assert source.requested == [(2, None), (2, "span-a"), (2, "span-b")]
+    assert [span.id for span in spans] == ["span-c", "span-b", "span-a"]
+    # The third request carries "bad-2", the last id the backend sent. With the
+    # cursor taken from the last *parsed* record it would be "span-a", and the
+    # backend would serve bad-2 and bad-1 a second time.
+    assert source.requested == [(2, None), (2, "span-b"), (2, "bad-2")]
 
 
 def test_read_and_parse_full_stream__undecodable_line_does_not_end_the_stream():
@@ -261,23 +318,76 @@ def test_read_and_parse_full_stream__clean_pages_still_stop_at_a_short_page():
 
 
 def test_read_and_parse_full_stream__fully_dropped_page_stops_without_looping():
-    # A page whose records all fail to parse advances neither the cursor nor
-    # the result, so the next request would ask for exactly the same page.
-    # The read must stop there rather than spin.
-    source = _PagedSource(
-        pages=[
-            _ndjson(_span_record("span-a"), _span_record("span-b")),
-            _ndjson(
-                _record_without_start_time("bad-1"),
-                _record_without_start_time("bad-2"),
-            ),
-        ]
+    # Nothing on the page decodes, so there is no id to page on and the cursor
+    # cannot move: the next request would ask for exactly the same page. The
+    # read must stop there rather than spin.
+    source = _RowSource(_rows(("row-a", "raw"), ("row-b", "raw")))
+
+    spans = _read(source)
+
+    assert spans == []
+    assert len(source.requested) == 1
+
+
+def test_read_and_parse_full_stream__page_of_unreadable_records_does_not_end_the_read():
+    # The backend's position still moved, so the records behind an unreadable
+    # page are readable and must not be abandoned.
+    source = _RowSource(
+        _rows(
+            ("r06",),
+            ("r05",),
+            ("r04", "bad"),
+            ("r03", "bad"),
+            ("r02",),
+            ("r01",),
+        )
     )
 
     spans = _read(source)
 
-    assert [span.id for span in spans] == ["span-a", "span-b"]
-    assert len(source.requested) == 2
+    assert [span.id for span in spans] == ["r06", "r05", "r02", "r01"]
+    assert source.requested == [(2, None), (2, "r05"), (2, "r03"), (2, "r01")]
+
+
+def test_read_and_parse_full_stream__strict_raises_on_a_page_without_usable_records(
+    caplog,
+):
+    # The migrate callers turn a short read into deletions, so they ask for a
+    # failure instead of a truncated result.
+    source = _RowSource(
+        _rows(("r06",), ("r05",), ("r04", "bad"), ("r03", "bad"), ("r02",))
+    )
+
+    with caplog.at_level(logging.WARNING, logger="opik.api_objects.rest_stream_parser"):
+        with pytest.raises(ValueError, match="could not be parsed"):
+            _read(source, strict=True)
+
+
+def test_read_and_parse_full_stream__dropped_records_are_counted_once(caplog):
+    # Every fourth row is unreadable. A cursor taken from the last parsed record
+    # re-serves the unreadable tail of each page, so the aggregate warning used
+    # to report more dropped records than the backend ever sent.
+    specs = tuple(
+        (f"r{index:02d}", "bad" if index % 4 == 0 else "good")
+        for index in range(20, 0, -1)
+    )
+    source = _RowSource(_rows(*specs))
+
+    with caplog.at_level(logging.WARNING, logger="opik.api_objects.rest_stream_parser"):
+        spans = _read(source, max_endpoint_batch_size=4)
+
+    assert [span.id for span in spans] == [
+        f"r{index:02d}" for index in range(19, 0, -1) if index % 4 != 0
+    ]
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno >= logging.WARNING
+    ]
+    reported = re.findall(
+        r"finished with (\d+) record\(s\) dropped", "\n".join(warnings)
+    )
+    assert reported == ["5"], warnings
 
 
 def test_read_and_parse_full_stream__dropped_records_are_reported(caplog):

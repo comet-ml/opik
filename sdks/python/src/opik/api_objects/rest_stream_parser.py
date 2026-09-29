@@ -39,13 +39,26 @@ def read_and_parse_full_stream(
     parsed_item_class: Type[T],
     max_results: Optional[int],
     max_endpoint_batch_size: int = MAX_ENDPOINT_BATCH_SIZE,
+    strict: bool = False,
 ) -> List[T]:
+    """
+    Args:
+        strict: When True, a page that yields no usable record raises instead of
+            ending the read. Callers that turn a short read into deletions (the
+            migrate paths) must fail loudly rather than replay missing records
+            as deletions; search paths, where the caller can see the warning,
+            keep the default.
+    """
     result: List[T] = []
     # Per-page page size, adaptively halved on size-correlated failures and
     # held at the shrunk value for the rest of the read (a backend that
     # couldn't serve N items is unlikely to serve N again later).
     batch_size = max_endpoint_batch_size
     dropped_records_total = 0
+    # The backend pages with `id < :last_received_id`, so the cursor has to be
+    # the last id the backend *sent*, not the last one that parsed: a page that
+    # ends with unreadable records would otherwise be served again.
+    cursor: Optional[str] = None
     while True:
         if max_results is None:
             current_batch_size = batch_size
@@ -57,14 +70,16 @@ def read_and_parse_full_stream(
             # no more data to request
             break
 
-        last_retrieved_id = result[-1].id if len(result) > 0 else None  # type: ignore
+        last_retrieved_id = cursor
         dropped_records: Dict[str, int] = {"count": 0}
+        page_last_id: Dict[str, Optional[str]] = {"id": None}
         try:
             results_stream = read_source(current_batch_size, last_retrieved_id)
             parsed_items = read_and_parse_stream(
                 stream=results_stream,
                 item_class=parsed_item_class,
                 dropped_records_out=dropped_records,
+                last_id_out=page_last_id,
             )
         except _SIZE_CORRELATED_ERRORS as exc:
             if batch_size <= MIN_ENDPOINT_BATCH_SIZE:
@@ -81,6 +96,13 @@ def read_and_parse_full_stream(
 
         result.extend(parsed_items)
         dropped_records_total += dropped_records["count"]
+        cursor_before_page = cursor
+        if page_last_id["id"] is not None:
+            cursor = page_last_id["id"]
+        elif len(result) > 0:
+            # No line on this page decoded to an object with an id; fall back to
+            # the last record that parsed so the read still advances.
+            cursor = result[-1].id  # type: ignore
 
         # Records the backend sent but that failed to parse were still part of
         # this page, so they count towards it being full. Leaving them out makes
@@ -89,17 +111,31 @@ def read_and_parse_full_stream(
         records_received = len(parsed_items) + dropped_records["count"]
 
         if records_received >= current_batch_size and not parsed_items:
-            # A page of nothing but unreadable records advances neither the
-            # result nor the cursor, so the next request would ask for exactly
-            # the same page. Stop rather than loop.
+            if strict:
+                raise ValueError(
+                    f"All {dropped_records['count']} record(s) of the current page "
+                    f"could not be parsed as {parsed_item_class.__name__}, so the "
+                    f"result would be incomplete; refusing to return it."
+                )
+            if cursor == cursor_before_page:
+                # Neither the result nor the cursor moved, so the next request
+                # would ask for exactly the same page. Stop rather than loop.
+                LOGGER.warning(
+                    "Stream read stopped early: all %d record(s) of the current "
+                    "page could not be parsed as %s, so pagination could not "
+                    "advance.",
+                    dropped_records["count"],
+                    parsed_item_class.__name__,
+                )
+                break
+            # No usable record on this page, but the backend's position moved, so
+            # the next page is a different one. Keep reading.
             LOGGER.warning(
-                "Stream read stopped early: all %d record(s) of the current "
-                "page could not be parsed as %s, so pagination could not "
-                "advance.",
+                "Page of %d unreadable record(s) as %s; continuing after the last "
+                "id the backend sent.",
                 dropped_records["count"],
                 parsed_item_class.__name__,
             )
-            break
 
         if current_batch_size > records_received:
             break
@@ -120,16 +156,22 @@ def read_and_parse_stream(
     item_class: Type[T],
     nb_samples: Optional[int] = None,
     dropped_records_out: Optional[Dict[str, int]] = None,
+    last_id_out: Optional[Dict[str, Optional[str]]] = None,
 ) -> List[T]:
     """Parse an NDJSON stream into ``item_class`` instances.
 
     Records that cannot be decoded or validated are logged and skipped. When
     ``dropped_records_out`` is given, its ``"count"`` key is set to how many
     were skipped, which is what a paginating caller needs to tell a short page
-    (end of data) apart from a full page with unreadable records.
+    (end of data) apart from a full page with unreadable records. When
+    ``last_id_out`` is given, its ``"id"`` key is set to the ``id`` of the last
+    line that decoded to an object, even if that record failed validation: a
+    paginating caller needs the backend's own position, not the last record it
+    managed to use.
     """
     result: List[T] = []
     dropped_records = 0
+    last_id: Optional[str] = None
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
     buffer = b""
@@ -140,7 +182,9 @@ def read_and_parse_stream(
 
         # last record in chunk may be incomplete
         for line in lines[:-1]:
-            item = _parse_stream_line(line=line, item_class=item_class)
+            item, raw_id = _parse_stream_line(line=line, item_class=item_class)
+            if raw_id is not None:
+                last_id = raw_id
             if item is None:
                 dropped_records += 1
             else:
@@ -148,6 +192,7 @@ def read_and_parse_stream(
 
                 if nb_samples is not None and len(result) == nb_samples:
                     _report_dropped_records(dropped_records_out, dropped_records)
+                    _report_last_id(last_id_out, last_id)
                     return result
 
         # Keep the last potentially incomplete line in buffer
@@ -155,13 +200,16 @@ def read_and_parse_stream(
 
     # Process any remaining data in the buffer after the stream ends
     if buffer:
-        item = _parse_stream_line(line=buffer, item_class=item_class)
+        item, raw_id = _parse_stream_line(line=buffer, item_class=item_class)
+        if raw_id is not None:
+            last_id = raw_id
         if item is None:
             dropped_records += 1
         else:
             result.append(item)
 
     _report_dropped_records(dropped_records_out, dropped_records)
+    _report_last_id(last_id_out, last_id)
     return result
 
 
@@ -173,14 +221,31 @@ def _report_dropped_records(
         dropped_records_out["count"] = dropped_records
 
 
+def _report_last_id(
+    last_id_out: Optional[Dict[str, Optional[str]]],
+    last_id: Optional[str],
+) -> None:
+    if last_id_out is not None:
+        last_id_out["id"] = last_id
+
+
 def _parse_stream_line(
     line: bytes,
     item_class: Type[T],
-) -> Optional[T]:
+) -> Tuple[Optional[T], Optional[str]]:
+    """Parse one NDJSON line.
+
+    Returns the parsed item (or None when the record is unusable) together with
+    the ``id`` the record carried, which is reported even when validation of the
+    rest of the record failed.
+    """
+    raw_id: Optional[str] = None
     try:
         item_dict = json.loads(line.decode("utf-8"))
+        if isinstance(item_dict, dict):
+            raw_id = item_dict.get("id")
         item_obj = item_class(**item_dict)
-        return item_obj
+        return item_obj, raw_id
 
     except json.JSONDecodeError as e:
         LOGGER.error(f"Error decoding {item_class.__name__}, reason: {e}")
@@ -189,4 +254,4 @@ def _parse_stream_line(
     except Exception as e:
         LOGGER.error(f"Error decoding or parsing {item_class.__name__}, reason: {e}")
 
-    return None
+    return None, raw_id
