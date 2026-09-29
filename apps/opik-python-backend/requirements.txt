@@ -24,7 +24,7 @@ opentelemetry-instrumentation-requests==0.57b0
 opentelemetry-instrumentation-system-metrics==0.57b0
 opentelemetry-instrumentation-logging==0.57b0
 schedule==1.2.1
-tiktoken==0.9.0
+tiktoken==0.14.0
 redis==6.4.0
 rq==2.6.0
 opik-optimizer==3.2.0
@@ -34,9 +34,9 @@ opik-optimizer==3.2.0
 # <curr_param>/<side_info> template markers and the reflection_prompt_template
 # kwarg, neither of which exists on 0.0.x. See OPIK-7510 / OPIK-7639.
 gepa==0.1.4
-# Transitive via opik-optimizer, pinned because this image builds it from source: litellm
-# publishes no musllinux or pure-python wheel, and 1.95.0 raised its Rust dependencies to
-# aws-* crates requiring rustc 1.94.1, while the Alpine builder ships rustc 1.91.1.
+# Transitive via opik-optimizer, pinned because 1.94.1 builds from source: it publishes no
+# musllinux or pure-python wheel. The rustc floor for 1.95.0+ (1.94.1, for its aws-* crates)
+# is now met by the Alpine 3.24 builder's rustc 1.96.1, so the pin awaits a separate bump.
 litellm==1.94.1
 pyrate-limiter>=3.0.0,<4.0.0
 python-jsonpath>=2.0.0,<3.0.0
