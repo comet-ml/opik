@@ -99,6 +99,21 @@ rc=$(scripts/precommit-powershell-check.sh "$tmp/lint.ps1" >/dev/null 2>&1; echo
 check "reports the analyzer finding" "PSAvoidUsingInvokeExpression" "$out"
 check_exit "analyzer violation exits 1" 1 "$rc"
 
+# --- 7-only syntax: must fail even though pwsh parses it ---------------------
+# Users launch via Windows PowerShell 5.1, which cannot parse `??`. pwsh can, so
+# the parse check passes this file; only PSUseCompatibleSyntax stands between it
+# and a launcher that breaks for users.
+cat >"$tmp/ps7only.ps1" <<'PS'
+function Get-Port {
+    param([string]$Port)
+    return $Port ?? '5173'
+}
+PS
+out=$(scripts/precommit-powershell-check.sh "$tmp/ps7only.ps1" 2>&1 || true)
+rc=$(scripts/precommit-powershell-check.sh "$tmp/ps7only.ps1" >/dev/null 2>&1; echo $?)
+check "reports the 5.1 incompatibility" "PSUseCompatibleSyntax" "$out"
+check_exit "7-only syntax exits 1" 1 "$rc"
+
 # --- Missing path: must reject, not silently pass ---------------------------
 # A typo'd or stale path previously fell through to "nothing to check" and
 # reported success, which is the one failure mode a gate must never have.

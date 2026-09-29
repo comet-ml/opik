@@ -25,6 +25,34 @@
 @{
     Severity = @('Error', 'Warning')
 
+    # The scripts must run on both Windows PowerShell 5.1 and PowerShell 7. The
+    # documented launch path (README: `powershell -ExecutionPolicy ByPass -c
+    # ".\opik.ps1"`) is 5.1, but CI and the local hook run under pwsh (7), whose
+    # parser happily accepts 7-only constructs. These two rules close that gap
+    # statically. Both are off by default, and both survive the Severity filter
+    # above (Syntax is Error, Commands is Warning). Baseline on enabling: 0
+    # findings in either launcher.
+    Rules = @{
+        # Syntax 5.1 cannot parse: ??, ??=, ?., ternary, && / ||.
+        PSUseCompatibleSyntax   = @{
+            Enable         = $true
+            TargetVersions = @('5.1', '7.0')
+        }
+
+        # Commands and parameters missing on either side: ForEach-Object
+        # -Parallel or Get-Content -AsByteStream on 5.1, Get-WmiObject on 7. A
+        # parameter is not syntax, so PSUseCompatibleSyntax misses these. This
+        # rule rather than its predecessor PSUseCompatibleCmdlets, whose bundled
+        # profiles stop at core 6.1 and which does not check parameters.
+        PSUseCompatibleCommands = @{
+            Enable         = $true
+            TargetProfiles = @(
+                'win-48_x64_10.0.17763.0_5.1.17763.316_x64_4.0.30319.42000_framework', # Windows 10 Pro, PowerShell 5.1
+                'win-4_x64_10.0.18362.0_7.0.0_x64_3.1.2_core'                          # Windows 10 Enterprise, PowerShell 7.0
+            )
+        }
+    }
+
     ExcludeRules = @(
         # 23 findings. Wants -WhatIf/-Confirm support on every Start-/Stop-/New-/
         # Remove- function. These are internal helpers in a CLI launcher, not

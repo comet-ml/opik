@@ -15,13 +15,14 @@ run-name: "🪟 PowerShell Checks ${{ github.ref_name }} by @${{ github.actor }}
 # authoritative gate: it is the only place the checks run on Windows, so
 # path-separator and filesystem behaviour match what the scripts actually meet.
 #
-# Caveat worth knowing: this runs PowerShell 7 (`shell: pwsh`), whereas README
-# tells Windows users to launch opik.ps1 via `powershell`, i.e. Windows
-# PowerShell 5.1. So 5.1-only incompatibilities are NOT covered here. Switching
-# this job to `shell: powershell` would not be an improvement -- PSScriptAnalyzer
-# and the parse API are both better supported under 7, and 5.1 would narrow what
-# the gate can check. Closing that gap properly means adding a 5.1 leg, not
-# moving this one.
+# This runs PowerShell 7 (`shell: pwsh`), whereas README tells Windows users to
+# launch opik.ps1 via `powershell`, i.e. Windows PowerShell 5.1. The scripts must
+# work on both, so the settings file enables PSUseCompatibleSyntax and
+# PSUseCompatibleCommands against 5.1 and 7.0: 7-only syntax (??, ternary,
+# && / ||) and commands or parameters missing on either version (ForEach-Object
+# -Parallel, Get-WmiObject) fail this gate even though pwsh itself accepts them.
+# That coverage is static. Behaviour that differs between versions at runtime is
+# not exercised, since nothing here executes the scripts (see below).
 #
 # This validates the scripts statically; it does NOT execute them. Running the
 # launcher needs Linux containers on a Windows host, which GitHub-hosted Windows

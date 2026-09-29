@@ -73,7 +73,9 @@ PowerShell (`opik.ps1`, `scripts/dev-runner.ps1`) is checked two ways: a **parse
 
 Unlike the other linters here, this one needs a local dependency that pre-commit does **not** provision: [PowerShell](https://aka.ms/powershell) (`brew install powershell`, or your platform's package) plus the analyzer module, `pwsh -Command "Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser"`. Without `pwsh` the hook prints a note and skips, so you can still commit — the `🪟 PowerShell Checks` workflow is the authoritative gate and runs on a Windows runner regardless. With `pwsh` present but the analyzer missing, the hook fails rather than half-running.
 
-Rules suppressed in the settings file each carry a written reason; prefer fixing a finding over adding to that list. Note these scripts must stay **UTF-8 with a BOM**: the documented Windows launch path is `powershell` (Windows PowerShell 5.1), which reads a BOM-less file as ANSI and would mangle their non-ASCII output.
+Rules suppressed in the settings file each carry a written reason; prefer fixing a finding over adding to that list.
+
+The scripts must run on both **Windows PowerShell 5.1** (the documented launch path, `powershell`) and **PowerShell 7**. The checks themselves run under `pwsh` (7), so the settings file enables `PSUseCompatibleSyntax` and `PSUseCompatibleCommands` against both versions. That means 7-only syntax (`??`, ternary, `&&` / `||`) and commands or parameters that are missing on either version (`ForEach-Object -Parallel`, `Get-WmiObject`) fail the check. Note these scripts must also stay **UTF-8 with a BOM**: 5.1 reads a BOM-less file as ANSI and would mangle their non-ASCII output.
 
 ## SQL query construction (Java backend)
 Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.

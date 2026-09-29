@@ -2,7 +2,7 @@
 #
 # One implementation, two callers:
 #   - scripts/precommit-powershell-check.sh  (pre-commit hook, PowerShell Core on Linux/macOS)
-#   - .github/workflows/powershell_checks.yml (windows-latest, native PowerShell)
+#   - .github/workflows/powershell_checks.yml (windows-latest, PowerShell 7 via `shell: pwsh`)
 #
 # Keeping the logic here rather than inline in the workflow means the local hook
 # and the CI gate cannot drift apart.
