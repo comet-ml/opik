@@ -41,10 +41,14 @@ _INSTRUCTION_TARGET = (
 
 # Directive patterns built from the pieces above. Named so tests can refer to
 # them without depending on their position in the list.
-_IGNORE_PATTERN = rf"ignore\s+{_GAP}{_INSTRUCTION_TARGET}"
-_DISREGARD_PATTERN = (
-    rf"(?:disregard|forget|omit|remove|bypass|disable|neglect)\s+{_GAP}"
-    rf"(?:{_INSTRUCTION_TARGET}|content\b|inputs?\b)"
+# Right after the verb, these nouns need no qualifier: "ignore instructions".
+_BARE_TARGET = r"(?:instructions?|prompts?|guidelines?)\b"
+_IGNORE_PATTERN = rf"ignore\s+(?:{_BARE_TARGET}|{_GAP}{_INSTRUCTION_TARGET})"
+# disregard, forget, omit, remove, bypass, disable, neglect
+_DISMISS_PATTERN = (
+    rf"(?:(?:disregard|forget)\s+{_BARE_TARGET}"
+    rf"|(?:disregard|forget|omit|remove|bypass|disable|neglect)\s+{_GAP}"
+    rf"(?:{_INSTRUCTION_TARGET}|content\b|inputs?\b))"
 )
 _OVERRIDE_PATTERN = rf"override\s+{_GAP}(?:{_INSTRUCTION_TARGET}|system\b)"
 _PRETEND_PATTERN = (
@@ -65,7 +69,7 @@ _EXPOSE_PATTERN = (
 _INJECTION_PATTERNS = [
     r"ignore (?:the )?(?:previous|prior|above|earlier) (?:instructions|prompts|guidelines|messages|rules|content|inputs?)",
     _IGNORE_PATTERN,
-    _DISREGARD_PATTERN,
+    _DISMISS_PATTERN,
     r"(?:forget|ignore|disregard|bypass|remove|omit) (?:everything|(all )?(that|which) (i|you) (said|told|provided))",
     r"reset (?:all )?(?:instructions|prompts|settings|conversation|history)",
     _OVERRIDE_PATTERN,
