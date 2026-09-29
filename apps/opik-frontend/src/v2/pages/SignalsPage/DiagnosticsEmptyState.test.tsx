@@ -1,12 +1,18 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("@/contexts/theme-provider", () => ({
   useTheme: () => ({ themeMode: "light" }),
 }));
 
+const plugins = vi.hoisted(() => ({
+  BillingLink: undefined as
+    | ((props: { label?: string }) => JSX.Element)
+    | undefined,
+}));
+
 vi.mock("@/store/PluginsStore", () => ({
-  default: () => undefined,
+  default: (selector: (state: typeof plugins) => unknown) => selector(plugins),
 }));
 
 import DiagnosticsEmptyState from "./DiagnosticsEmptyState";
@@ -21,6 +27,10 @@ const props = {
 };
 
 describe("DiagnosticsEmptyState", () => {
+  beforeEach(() => {
+    plugins.BillingLink = undefined;
+  });
+
   describe("awaiting the automatic first run", () => {
     const awaiting = { ...props, awaitsAutoFirstRun: true };
 
@@ -104,6 +114,22 @@ describe("DiagnosticsEmptyState", () => {
       expect(
         screen.queryByRole("button", { name: /Run your first diagnostic/ }),
       ).not.toBeInTheDocument();
+      // Without the Comet plugin (OSS) there is nowhere to add credits, so no link.
+      expect(
+        screen.queryByRole("link", { name: /View billing/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("links to billing from the out-of-credits panel when the plugin provides it", () => {
+      plugins.BillingLink = function BillingLinkStub({ label }) {
+        return <a href="/billing">{label}</a>;
+      };
+
+      render(<DiagnosticsEmptyState {...props} isOutOfCredits={true} />);
+
+      expect(
+        screen.getByRole("link", { name: "View billing" }),
+      ).toBeInTheDocument();
     });
 
     it("explains the missing permission instead of showing nothing at all", () => {
