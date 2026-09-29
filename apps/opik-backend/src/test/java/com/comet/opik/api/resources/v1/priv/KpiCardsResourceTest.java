@@ -29,6 +29,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -906,10 +907,14 @@ class KpiCardsResourceTest {
         Instant ranAt = intervalStart.minus(30, ChronoUnit.SECONDS);
         int threadCount = 3;
 
-        createThreadsWithTraceIdsMintedAt(projectName, ranAt, intervalStart.plus(1, ChronoUnit.SECONDS),
-                threadCount);
+        List<String> threadIds = createThreadsWithTraceIdsMintedAt(projectName, ranAt,
+                intervalStart.plus(1, ChronoUnit.SECONDS), threadCount);
 
         Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
+
+        assertThat(threadIds)
+                .extracting(threadId -> getThreadRowMintedAt(threadId, projectId))
+                .allSatisfy(rowMintedAt -> assertThat(rowMintedAt).isBetween(intervalStart, intervalEnd));
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
                 .entityType(EntityType.THREADS)
@@ -920,17 +925,127 @@ class KpiCardsResourceTest {
         assertFilteredMetrics(response, EntityType.THREADS, 0, threadCount, 0, 0);
     }
 
-    private void createThreadsWithTraceIdsMintedAt(String projectName, Instant ranAt, Instant idsMintedAt,
-            int count) {
-        List<String> threadIds = new ArrayList<>();
+    @Test
+    @DisplayName("a thread whose row was written after the window end is not counted, matching the thread list")
+    void threadRowWrittenAfterWindowEndIsNotCounted() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant now = Instant.now();
+        Instant intervalStart = now.minus(60, ChronoUnit.SECONDS);
+        Instant ranAt = now.minus(30, ChronoUnit.SECONDS);
+        Instant intervalEnd = now.minus(1, ChronoUnit.SECONDS);
+
+        List<String> threadIds = createThreadsWithTraceIdsMintedAt(projectName, ranAt, ranAt,
+                mintThreadRowIdsNow(projectId, 3));
+
+        assertThat(threadIds)
+                .extracting(threadId -> getThreadRowMintedAt(threadId, projectId))
+                .allSatisfy(rowMintedAt -> assertThat(rowMintedAt).isAfter(intervalEnd));
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.THREADS, 0, 0, 0, 0);
+    }
+
+    @Test
+    @DisplayName("an epoch-sentinel trace does not stretch a thread's average duration")
+    void threadAvgDurationIgnoresEpochSentinelTrace() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        Instant ranAt = Instant.now();
+        String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+
+        createThreadWithCostOnFirstTrace(projectName, threadId, List.of(
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(idGenerator.generateId(ranAt))
+                        .projectName(projectName)
+                        .threadId(threadId)
+                        .startTime(ranAt)
+                        .endTime(ranAt.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
+                        .build(),
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(idGenerator.generateId(ranAt.plus(1, ChronoUnit.MILLIS)))
+                        .projectName(projectName)
+                        .threadId(threadId)
+                        .startTime(Instant.EPOCH)
+                        .endTime(ranAt.plus(FILTER_DURATION_MS * 4, ChronoUnit.MILLIS))
+                        .build()));
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.THREADS, 1, 0, 0, 0);
+    }
+
+    @Test
+    @DisplayName("a thread whose traces all carry the epoch sentinel counts in its row's period, with no duration")
+    void threadWithOnlyEpochSentinelTracesCountsInItsRowPeriod() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now().minus(1, ChronoUnit.SECONDS);
+        Instant ranAt = Instant.now();
+        String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+
+        createThreadWithCostOnFirstTrace(projectName, threadId, List.of(
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(idGenerator.generateId(ranAt))
+                        .projectName(projectName)
+                        .threadId(threadId)
+                        .startTime(Instant.EPOCH)
+                        .endTime(ranAt.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
+                        .build(),
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(idGenerator.generateId(ranAt.plus(1, ChronoUnit.MILLIS)))
+                        .projectName(projectName)
+                        .threadId(threadId)
+                        .startTime(Instant.EPOCH)
+                        .endTime(ranAt.plus(FILTER_DURATION_MS * 3, ChronoUnit.MILLIS))
+                        .build()));
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        assertThat(getThreadRowMintedAt(threadId, projectId)).isBetween(intervalStart, intervalEnd);
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertMetric(response, KpiMetricType.COUNT, 1.0, 0.0);
+        assertMetric(response, KpiMetricType.AVG_DURATION, null, null);
+        assertMetric(response, KpiMetricType.TOTAL_COST, FILTER_COST, 0.0);
+    }
+
+    private List<String> createThreadsWithTraceIdsMintedAt(String projectName, Instant ranAt,
+            Instant traceIdsMintedAt, int count) {
+        return createThreadsWithTraceIdsMintedAt(projectName, ranAt, traceIdsMintedAt,
+                Stream.generate(() -> RandomStringUtils.secure().nextAlphabetic(10)).limit(count).toList());
+    }
+
+    private List<String> createThreadsWithTraceIdsMintedAt(String projectName, Instant ranAt,
+            Instant traceIdsMintedAt, List<String> threadIds) {
         List<Trace> traces = new ArrayList<>();
         List<Span> spans = new ArrayList<>();
 
-        for (int i = 0; i < count; i++) {
-            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
-            threadIds.add(threadId);
-
-            Instant mintedAt = idsMintedAt.plus(i, ChronoUnit.MILLIS);
+        for (int i = 0; i < threadIds.size(); i++) {
+            Instant mintedAt = traceIdsMintedAt.plus(i, ChronoUnit.MILLIS);
 
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .id(idGenerator.generateId(mintedAt))
@@ -938,7 +1053,7 @@ class KpiCardsResourceTest {
                     .startTime(ranAt)
                     .endTime(ranAt.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
                     .errorInfo(null)
-                    .threadId(threadId)
+                    .threadId(threadIds.get(i))
                     .build();
             traces.add(trace);
 
@@ -958,6 +1073,43 @@ class KpiCardsResourceTest {
 
         Mono.delay(Duration.ofMillis(100)).block();
         traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+
+        return threadIds;
+    }
+
+    private void createThreadWithCostOnFirstTrace(String projectName, String threadId, List<Trace> traces) {
+        Instant spanStart = Instant.now();
+        Span span = factory.manufacturePojo(Span.class).toBuilder()
+                .id(idGenerator.generateId(spanStart))
+                .traceId(traces.getFirst().id())
+                .projectName(projectName)
+                .startTime(spanStart)
+                .endTime(spanStart.plus(50, ChronoUnit.MILLIS))
+                .totalEstimatedCost(BigDecimal.valueOf(FILTER_COST))
+                .errorInfo(null)
+                .build();
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
+
+        Mono.delay(Duration.ofMillis(100)).block();
+        traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
+    }
+
+    private List<String> mintThreadRowIdsNow(UUID projectId, int count) {
+        List<String> threadIds = Stream.generate(() -> RandomStringUtils.secure().nextAlphabetic(10))
+                .limit(count)
+                .toList();
+
+        threadIds.forEach(threadId -> traceResourceClient.openTraceThread(threadId, projectId, null, API_KEY,
+                WORKSPACE_NAME));
+
+        return threadIds;
+    }
+
+    private Instant getThreadRowMintedAt(String threadId, UUID projectId) {
+        return RetentionUtils.extractInstant(
+                traceResourceClient.getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId());
     }
 
     @Test
