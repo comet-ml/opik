@@ -697,6 +697,20 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     ) AS experiment_scores
                 FROM experiment_scores_parsed
                 GROUP BY experiment_id
+            ), experiment_trace_projects AS (
+                SELECT DISTINCT project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT trace_id FROM experiment_items_final)
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                        FROM experiment_items_final
+                    )
+                )
+                <endif>
             ), experiment_durations AS (
                 SELECT
                     ei.experiment_id,
@@ -713,7 +727,16 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
-                    AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT trace_id FROM experiment_items_final))
+                    AND project_id IN (SELECT project_id FROM experiment_trace_projects)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                            FROM experiment_items_final
+                        )
+                    )
+                    <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, id
                 ) AS t ON ei.trace_id = t.id
@@ -724,7 +747,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         FROM spans
                         WHERE workspace_id = :workspace_id
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
-                        AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT trace_id FROM experiment_items_final))
+                        AND project_id IN (SELECT project_id FROM experiment_trace_projects)
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, id
                     )
@@ -1475,6 +1498,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * is live: the EXCHANGE that makes those columns non-nullable is the same one that puts the partitioned successor
      * behind the name, so {@code TraceDAO#deleteBatch} already reads it as "the target is weekly partitioned". The
      * name says only its first duty and is deliberately not renamed - the env var is exposed.
+     * <p>
+     * It gates {@code FIND}'s experiment-path {@code traces} reads too (OPIK-8343), for the same reason and on the
+     * same flag. Those matter to this statement more than their own cost suggests: a query's partition count is the
+     * union over its accesses, and it is paid as planning before any pruning happens, so an unbounded read anywhere
+     * in {@code FIND} left the whole statement enumerating every partition however well the tagged scan pruned -
+     * which is why {@code FIND_WITHOUT_EXPERIMENTS}, having no experiment path, was the only shape this DAO's own
+     * bound moved.
      */
     private void addTracesPartitionedFlag(ST template) {
         if (configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {

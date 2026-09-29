@@ -33,6 +33,7 @@ import com.comet.opik.domain.experiments.aggregations.ExperimentSourceData.Trace
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -163,6 +164,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
     private final @NonNull Client clickHouseClient;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
+    private final @NonNull OpikConfiguration configuration;
 
     /**
      * Filter strategies used for experiment aggregates search binding.
@@ -282,15 +284,25 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      * partition pruning.
      */
     private static final String GET_PROJECT_IDS = """
-            SELECT groupUniqArrayIf(toString(project_id), project_id != '') AS project_ids
-            FROM traces
-            WHERE workspace_id = :workspace_id
-            AND id IN (
+            WITH experiment_trace_items AS (
                 SELECT DISTINCT trace_id
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
             )
+            SELECT groupUniqArrayIf(toString(project_id), project_id != '') AS project_ids
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND id IN (SELECT trace_id FROM experiment_trace_items)
+            <if(traces_partitioned)>
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                FROM (
+                    SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                    FROM experiment_trace_items
+                )
+            )
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -314,6 +326,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 INNER JOIN experiment_trace_items ON traces.id = experiment_trace_items.trace_id
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                        FROM experiment_trace_items
+                    )
+                )
+                <endif>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 by id
             )
@@ -746,6 +767,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     /**
      * Get trace data for an experiment-items batch, scoped to the projects the experiment
      * references so partition pruning is preserved across multi-project experiments.
+     * <p>
+     * Carries the week bound (OPIK-8343), derived from {@code :trace_ids} rather than from a relation because that is
+     * where this read's ids come from - see {@code ExperimentDAO#addTracesPartitionedFlag}. Project scoping prunes
+     * nothing on the partition axis by itself. {@code toUUIDOrZero} as at every other site: the driver renders a
+     * bound {@code UUID[]} as an array of strings.
      */
     private static final String GET_TRACES_DATA = """
             SELECT
@@ -762,6 +788,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             WHERE workspace_id = :workspace_id
             AND project_id IN :project_ids
             AND id IN :trace_ids
+            <if(traces_partitioned)>
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                FROM (
+                    SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                    FROM (SELECT arrayJoin(:trace_ids) AS trace_id)
+                )
+            )
+            <endif>
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
@@ -1060,6 +1095,23 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             ;
             """;
 
+    /**
+     * Carries the week bound on its {@code project_deleted} branch (OPIK-8343) - see
+     * {@code ExperimentDAO#addTracesPartitionedFlag}, and {@code ExperimentDAO#FIND_COUNT}, whose
+     * {@code experiment_projects_non_agg} is this branch on the raw tables and takes the same bound. The set is drawn
+     * from every {@code experiment_items} row in the workspace, because that is what the join admits here rather than
+     * one experiment's items.
+     * <p>
+     * Nothing reaches this statement from an endpoint yet: {@code countTotal} on the aggregates path has no caller
+     * outside its parity test. The bound is here so that wiring it up does not reintroduce an unbounded read.
+     * <p>
+     * This is the one experiment-path {@code traces FINAL} that could be dropped, and it is kept anyway. It cannot
+     * change the answer: {@code groupUniqArray} already collapses duplicates, and {@code project_id} - the only
+     * column read through the join - is part of the sort key, so ReplacingMergeTree never merges two versions that
+     * differ in it and FINAL has nothing to resolve. With no endpoint reaching the statement, dropping it would
+     * measure as nothing, so it belongs to the separate FINAL review rather than here. See
+     * {@code DatasetItemDAO#SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT} for the decision across the six sites.
+     */
     private static final String FIND_COUNT_FROM_AGGREGATES = """
             SELECT count(id) as count
             FROM experiment_aggregates FINAL
@@ -1074,6 +1126,16 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 AND traces.workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND traces.project_id IN :target_project_ids
+                <endif>
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(traces.id_at) - toIntervalDay(toDayOfWeek(traces.id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                        FROM experiment_items
+                        WHERE workspace_id = :workspace_id
+                    )
+                )
                 <endif>
                 GROUP BY experiment_id
             ) ep ON experiment_aggregates.id = ep.experiment_id
@@ -1471,6 +1533,22 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             """;
 
     private static final String SELECT_EXPERIMENT_AGGREGATION_COUNTS = """
+            <if(project_id)>
+            WITH non_aggregated_trace_scope AS (
+                SELECT trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                  AND experiment_id NOT IN (
+                      SELECT id
+                      FROM experiment_aggregates
+                      WHERE workspace_id = :workspace_id
+                      <if(experiment_ids)> AND id IN :experiment_ids <endif>
+                      <if(dataset_id)> AND dataset_id = :dataset_id <endif>
+                      <if(id)> AND id = :id <endif>
+                      <if(ids_list)> AND id IN :ids_list <endif>
+                  )
+            )
+            <endif>
             SELECT
                 countIf(has_aggregated) AS aggregated,
                 countIf(NOT has_aggregated AND in_project_scope) AS not_aggregated
@@ -1489,20 +1567,16 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                   FROM traces
                                   WHERE workspace_id = :workspace_id
                                     AND project_id = :project_id
-                                    AND id IN (
-                                        SELECT trace_id
-                                        FROM experiment_items
-                                        WHERE workspace_id = :workspace_id
-                                          AND experiment_id NOT IN (
-                                              SELECT id
-                                              FROM experiment_aggregates
-                                              WHERE workspace_id = :workspace_id
-                                              <if(experiment_ids)> AND id IN :experiment_ids <endif>
-                                              <if(dataset_id)> AND dataset_id = :dataset_id <endif>
-                                              <if(id)> AND id = :id <endif>
-                                              <if(ids_list)> AND id IN :ids_list <endif>
-                                          )
+                                    AND id IN (SELECT trace_id FROM non_aggregated_trace_scope)
+                                    <if(traces_partitioned)>
+                                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                                        SELECT toYYYYMMDD(toDate32(item_id_at) - toIntervalDay(toDayOfWeek(item_id_at, 1)))
+                                        FROM (
+                                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS item_id_at
+                                            FROM non_aggregated_trace_scope
+                                        )
                                     )
+                                    <endif>
                               )
                         )) AS in_project_scope
                     <else>
@@ -1645,6 +1719,16 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         });
     }
 
+    /**
+     * Enables the week bound on this DAO's {@code traces} reads - see
+     * {@code ExperimentDAO#addTracesPartitionedFlag} for what it is and why it is gated.
+     */
+    private void addTracesPartitionedFlag(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
+    }
+
     private Mono<ExperimentData> getExperimentData(UUID experimentId) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(GET_EXPERIMENT_DATA,
@@ -1679,6 +1763,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 workspaceId) -> {
             var template = getSTWithLogComment(GET_PROJECT_IDS,
                     "getProjectIds", workspaceId, userName, experimentId.toString());
+            addTracesPartitionedFlag(template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -1758,6 +1843,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             Function<Row, T> rowMapper) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(query, logName, workspaceId, userName, experimentId.toString());
+            addTracesPartitionedFlag(template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -1917,6 +2003,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
         return asyncTemplate.stream(connection -> {
             var template = getSTWithLogComment(sqlTemplate, methodName, workspaceId, "", experimentId.toString());
+            // Only the traces read declares the slot; the siblings are keyed by trace id but partitioned on ids of
+            // their own, so the flag is inert for them.
+            addTracesPartitionedFlag(template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -2573,6 +2662,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private ST buildCountTemplate(ExperimentSearchCriteria criteria, String workspaceId) {
         var template = getSTWithLogComment(FIND_COUNT_FROM_AGGREGATES, "count_experiments_from_aggregates",
                 workspaceId, "", "");
+        addTracesPartitionedFlag(template);
         Optional.ofNullable(criteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
@@ -2845,6 +2935,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
             var template = getSTWithLogComment(SELECT_EXPERIMENT_AGGREGATION_COUNTS,
                     "get_aggregation_branch_counts", workspaceId, "", criteria.datasetId());
+            addTracesPartitionedFlag(template);
 
             Optional.ofNullable(criteria.experimentIds())
                     .filter(CollectionUtils::isNotEmpty)
