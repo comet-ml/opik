@@ -311,6 +311,14 @@ export interface SpanBatchSeed {
    */
   source?: 'sdk' | 'experiment' | 'playground' | 'optimization';
   type?: 'general' | 'llm' | 'tool';
+  /**
+   * Parent of this span in the trace's span tree. Absent means a ROOT span, and
+   * that is the distinction opik#8595 is about: post-cutover the column is
+   * non-nullable, so a root's absent parent is stored as a zero-UUID sentinel
+   * and mapped back to null on read. A batch that can only write children can
+   * never seed the row whose read mapping is under test.
+   */
+  parentSpanId?: string;
   startTime?: Date;
   endTime?: Date;
   model?: string;
@@ -319,6 +327,40 @@ export interface SpanBatchSeed {
   usage?: Record<string, number>;
   /** Set to make the span count toward the error rate. */
   errorInfo?: { exceptionType: string; message: string; traceback: string };
+}
+
+/**
+ * One span as `GET /v1/private/spans` returns it, with the fields the
+ * post-cutover read mapping can get wrong.
+ *
+ * `parentSpanId` is `null` for a root span — not absent, not a zero UUID. Null
+ * and a sentinel are different answers, so the mapping is only observable if
+ * the caller can tell them apart.
+ *
+ * `usage` and `totalEstimatedCost` are the loud half of opik#8595: the widening
+ * to `Int64` fails at serialisation time, so a response carrying a span with
+ * usage does not come back at all rather than coming back wrong.
+ */
+export interface SpanReadRef {
+  id: string;
+  name: string;
+  parentSpanId: string | null;
+  /** Null, not `{}`, when the span carries no usage — an absent map is not an empty one. */
+  usage: Record<string, number> | null;
+  totalEstimatedCost: number | null;
+}
+
+/**
+ * One page of `GET /v1/private/spans`, envelope included.
+ *
+ * `total` is the assertion, not decoration. The silent failure mode opik#8595
+ * guards is a row whose mapping throws being DISCARDED by the driver: the
+ * endpoint still answers 200, but with `total` greater than `content.length`.
+ * A reader that only collected the rows could not see that at all.
+ */
+export interface SpanReadPage {
+  total: number;
+  spans: SpanReadRef[];
 }
 
 /**
@@ -748,6 +790,17 @@ export interface AlertTriggerConfigRef {
   /** e.g. `threshold:cost`. */
   type: string;
   configValue: Record<string, string>;
+  /**
+   * Which OR-group this config belongs to, for the condition builder opik#8481
+   * moved into `pages-shared`. Same index = AND, different index = OR, and the
+   * editor re-buckets the flat config list by it when it reopens an alert — so
+   * the index IS the group structure. `null` for a config the server stored
+   * without one (the pre-grouping "implicit OR" shape) and for every config
+   * type that has no groups, which is why it is not defaulted to 0: an
+   * ungrouped config presented as group 0 would read as an AND with whatever
+   * else landed there.
+   */
+  groupIndex: number | null;
 }
 
 /** One trigger of an alert, with its configs. */
@@ -1209,6 +1262,25 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     );
   };
 
+  /**
+   * Shared reader for the two `.../feedback-scores/names` endpoints, which
+   * answer the same `{ scores: [{ name }] }` shape from different tables.
+   *
+   * Sorted so a caller can compare against the whole answer rather than hunting
+   * its own name inside it — a picker that also listed a decoy is exactly the
+   * bug such a check exists to catch, and ordering is not part of the contract.
+   */
+  const feedbackScoreNames = async (path: string, projectId: string): Promise<string[]> => {
+    const { status, message, json } = await rawFetch('GET', path, {
+      query: new URLSearchParams({ project_id: projectId }),
+    });
+    if (status !== 200) {
+      throw new Error(`${path} for project ${projectId}: expected 200, got ${status}: ${message}`);
+    }
+    const body = json as { scores?: Array<{ name?: string }> };
+    return (body.scores ?? []).map((s) => String(s.name ?? '')).sort();
+  };
+
   /** Authorization + workspace headers, for calls that bypass `rawFetch`. */
   const workspaceHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Comet-Workspace': env.workspace };
@@ -1642,7 +1714,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         enabled?: boolean;
         triggers?: Array<{
           event_type?: string;
-          trigger_configs?: Array<{ type?: string; config_value?: Record<string, string> }>;
+          trigger_configs?: Array<{
+            type?: string;
+            config_value?: Record<string, string>;
+            group_index?: number | null;
+          }>;
         }>;
       };
       // Not defaulted: an alert that reads back without an `enabled` flag is a
@@ -1662,6 +1738,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           triggerConfigs: (trigger.trigger_configs ?? []).map((config) => ({
             type: String(config.type ?? ''),
             configValue: config.config_value ?? {},
+            // `?? null` rather than `?? 0`: the server omits the key entirely
+            // for a config that carries no group, and folding that into group 0
+            // would present an ungrouped config as AND-ed with the real one.
+            groupIndex: config.group_index ?? null,
           })),
         })),
       };
@@ -3033,6 +3113,101 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * One page of `GET /v1/private/spans` for a trace, envelope and all.
+     *
+     * Distinct from `listSpanRefs`, which pages the whole project through
+     * `fetchAllPages` and therefore throws the envelope away. The envelope is
+     * the subject here: opik#8595's silent failure is the driver DISCARDING a
+     * row whose parent mapping threw, which leaves `total` greater than the
+     * number of rows returned on a 200 response. A reader that only collected
+     * rows sees a trace that lost its root span and nothing else.
+     *
+     * Through `rawFetch` rather than the pinned SDK so the parent arrives
+     * exactly as the server spells it. The generated client types
+     * `parentSpanId` as an optional string, which cannot distinguish "the
+     * server said null" from "the server omitted the key" — and post-cutover
+     * that distinction is the whole read mapping.
+     */
+    async listSpansPage(args: {
+      projectId: string;
+      traceId: string;
+      size?: number;
+    }): Promise<SpanReadPage> {
+      const { status, message, json } = await rawFetch('GET', '/v1/private/spans', {
+        query: new URLSearchParams({
+          project_id: args.projectId,
+          trace_id: args.traceId,
+          page: '1',
+          size: String(args.size ?? 100),
+        }),
+      });
+      if (status !== 200) {
+        throw new Error(`listSpansPage(trace ${args.traceId}): expected 200, got ${status}: ${message}`);
+      }
+      const page = json as {
+        total?: number;
+        content?: Array<{
+          id?: string;
+          name?: string;
+          parent_span_id?: string | null;
+          usage?: Record<string, number> | null;
+          total_estimated_cost?: number | null;
+        }>;
+      };
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          `listSpansPage(trace ${args.traceId}): 200 response carried no numeric 'total' — ` +
+            'the envelope is what a dropped row shows up in, so it cannot be assumed.',
+        );
+      }
+      return {
+        total: page.total,
+        spans: (page.content ?? []).map((s) => ({
+          id: String(s.id ?? ''),
+          name: String(s.name ?? ''),
+          // A root span's parent reads back as null post-cutover; the key is
+          // absent pre-cutover. Both mean "no parent" and must map to null,
+          // while any other value is a real parent.
+          parentSpanId: s.parent_span_id ? String(s.parent_span_id) : null,
+          usage: s.usage ?? null,
+          totalEstimatedCost: s.total_estimated_cost ?? null,
+        })),
+      };
+    },
+
+    /**
+     * `PATCH /v1/private/spans/{id}`, reporting the status instead of throwing.
+     *
+     * The rejection IS the contract: `SpanService.update` refuses an update
+     * whose `parent_span_id` disagrees with the stored one with a 409, and
+     * opik#8595's silent failure mode skips that guard entirely — so a spec has
+     * to be able to send the conflicting update and read the refusal, which the
+     * pinned SDK turns into a thrown error with the body discarded.
+     *
+     * `parentSpanId` is deliberately three-valued. Omitted sends no key at all,
+     * which is what an ordinary SDK update looks like and what must leave a
+     * root's parent alone; a string sends that parent, which is what the guard
+     * exists to refuse.
+     */
+    async updateSpan(args: {
+      spanId: string;
+      projectName: string;
+      traceId: string;
+      parentSpanId?: string;
+      output?: TraceJsonSection;
+    }): Promise<RawApiResult> {
+      const { status, message } = await rawFetch('PATCH', `/v1/private/spans/${args.spanId}`, {
+        body: {
+          project_name: args.projectName,
+          trace_id: args.traceId,
+          ...(args.parentSpanId === undefined ? {} : { parent_span_id: args.parentSpanId }),
+          ...(args.output === undefined ? {} : { output: args.output }),
+        },
+      });
+      return { status, message };
+    },
+
+    /**
      * `POST /v1/private/spans/batch` — many spans in one request.
      *
      * The only way to seed a span population large enough to page. Writing them
@@ -3069,6 +3244,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             name: span.name,
             source: span.source ?? 'sdk',
             type: span.type ?? 'general',
+            ...(span.parentSpanId === undefined ? {} : { parent_span_id: span.parentSpanId }),
             start_time: (span.startTime ?? now).toISOString(),
             end_time: (span.endTime ?? now).toISOString(),
             ...(span.model === undefined ? {} : { model: span.model }),
@@ -3212,6 +3388,100 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       });
     },
 
+    /**
+     * `PUT /v1/private/traces/feedback-scores` — many scores, many traces, one
+     * request.
+     *
+     * Not a convenience over `addTraceFeedbackScore`: that one addresses the
+     * trace by id through `POST /v1/private/traces/{id}/feedback-scores`, which
+     * 404s until the trace itself is readable — so a seed that scores a trace
+     * it wrote moments ago is a race, and the failure lands on the seeding step
+     * rather than on anything a spec is asserting. The batch endpoint scopes by
+     * `project_name` and the write merges, so it is stable immediately after
+     * the trace write and needs no poll.
+     */
+    async setTraceFeedbackScores(args: {
+      projectName: string;
+      scores: Array<{ traceId: string; name: string; value: number; reason?: string }>;
+    }): Promise<void> {
+      const { status, message } = await rawFetch('PUT', '/v1/private/traces/feedback-scores', {
+        body: {
+          scores: args.scores.map((score) => ({
+            id: score.traceId,
+            project_name: args.projectName,
+            name: score.name,
+            value: score.value,
+            source: 'sdk',
+            ...(score.reason === undefined ? {} : { reason: score.reason }),
+          })),
+        },
+      });
+      if (status !== 204) {
+        throw new Error(
+          `setTraceFeedbackScores into '${args.projectName}': expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * `PUT /v1/private/traces/threads/feedback-scores` — the THREAD-level
+     * counterpart.
+     *
+     * A score on a thread is not a score on any of its traces: the two live in
+     * different tables and surface through different name endpoints, which is
+     * exactly what makes them usable as a discriminator — a picker offering
+     * thread definitions must not be offering trace ones.
+     *
+     * The thread must be CLOSED first (`closeThreads`); an open thread rejects
+     * the write.
+     */
+    async setThreadFeedbackScores(args: {
+      projectName: string;
+      scores: Array<{ threadId: string; name: string; value: number }>;
+    }): Promise<void> {
+      const { status, message } = await rawFetch(
+        'PUT',
+        '/v1/private/traces/threads/feedback-scores',
+        {
+          body: {
+            scores: args.scores.map((score) => ({
+              thread_id: score.threadId,
+              project_name: args.projectName,
+              name: score.name,
+              value: score.value,
+              source: 'sdk',
+            })),
+          },
+        },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `setThreadFeedbackScores into '${args.projectName}': expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * The trace feedback score names a project has, sorted.
+     *
+     * This is the endpoint behind the score picker in a `trace:feedback_score`
+     * alert trigger (`useTracesFeedbackScoresNames`), which is why a spec about
+     * that picker reads it: an empty dropdown and a dropdown filtered wrong look
+     * identical in the browser, and only one of them is a defect.
+     */
+    async listTraceFeedbackScoreNames(projectId: string): Promise<string[]> {
+      return feedbackScoreNames('/v1/private/traces/feedback-scores/names', projectId);
+    },
+
+    /**
+     * The THREAD feedback score names a project has, sorted — a different table
+     * and a different endpoint from the trace names above, which is what makes
+     * the two usable as a discriminator for `scoreSource`.
+     */
+    async listThreadFeedbackScoreNames(projectId: string): Promise<string[]> {
+      return feedbackScoreNames('/v1/private/traces/threads/feedback-scores/names', projectId);
+    },
+
     /** The span-level counterpart of `addTraceFeedbackScore`. */
     async addSpanFeedbackScore(args: {
       spanId: string;
@@ -3340,6 +3610,30 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     }): Promise<void> {
       await opik.api.traces.updateTrace(args.traceId, {
         body: { projectName: args.projectName, output: args.output },
+      });
+    },
+
+    /**
+     * `PATCH /v1/private/traces/{id}` carrying a `thread_id` and nothing else.
+     *
+     * The subject of opik#8529. Before it, only the trace CREATE path published
+     * the event that materialises a `trace_threads` row, so a thread first named
+     * by an update existed in `traces` and nowhere else — and the Threads list
+     * inner-joins `trace_threads` whenever a time range is set, which is how the
+     * thread went missing from the filtered list while direct-open still
+     * resolved it. Setting the id through an update is therefore not one way of
+     * reaching this path, it is the only one.
+     *
+     * Scoped by `projectName` for the reason `updateTraceTags` gives: a bare
+     * id-only update falls back to the Default Project.
+     */
+    async updateTraceThreadId(args: {
+      traceId: string;
+      projectName: string;
+      threadId: string;
+    }): Promise<void> {
+      await opik.api.traces.updateTrace(args.traceId, {
+        body: { projectName: args.projectName, threadId: args.threadId },
       });
     },
 

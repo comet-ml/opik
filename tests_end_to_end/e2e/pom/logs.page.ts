@@ -284,15 +284,30 @@ export class LogsPage {
     });
   }
 
-  /** Open Logs with the Threads tab active for the given project. */
-  async gotoThreads(projectId: string): Promise<void> {
-    return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {
-      this.projectId = projectId;
-      const env = loadEnvConfig();
-      await this.page.goto(
-        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=threads`,
-      );
-    });
+  /**
+   * Open Logs with the Threads tab active for the given project.
+   *
+   * `timeRange` is the page's own `time_range` query param, the same one
+   * `gotoSpans` takes. Two reasons a spec states it rather than inheriting the
+   * default: the value is also persisted in localStorage and the URL is what
+   * outranks it, so an unstated range is whatever the profile last stored; and
+   * it decides whether the read is windowed at all — `alltime` sends no
+   * `from_time`, and only a windowed read takes the `trace_threads` inner-join
+   * branch. A spec about that branch has to say which range it means.
+   */
+  async gotoThreads(projectId: string, opts: { timeRange?: string } = {}): Promise<void> {
+    return test.step(
+      `Open Logs (Threads) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'threads' });
+        if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+      },
+    );
   }
 
   async waitForReady(): Promise<void> {

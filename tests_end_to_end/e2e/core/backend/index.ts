@@ -31,6 +31,8 @@ export {
   type PromptVersionRef,
   type SpanCostRef,
   type SpanRef,
+  type SpanReadRef,
+  type SpanReadPage,
   type SpanBatchSeed,
   type TraceBatchSeed,
   type SpanIdPage,
