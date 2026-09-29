@@ -1,4 +1,5 @@
 import omit from "lodash/omit";
+import isEmpty from "lodash/isEmpty";
 import {
   detectLLMMessages,
   mapAndCombineMessages,
@@ -14,18 +15,35 @@ const NOT_MESSAGES: OutputMessagesSplit = {
   remainingOutput: {},
 };
 
-// The playground `{ output }` and OpenAI custom `{ text }` shapes are matched on
-// a single key, so any sibling keys a task returns would never reach the
-// messages view. Full provider responses (`choices`, LangChain) are shown whole.
-const getKeysShownAsMessages = (
+// Only the keys each mapper actually renders are dropped, so anything else a
+// task returns (e.g. a LangGraph state's final `output` beside its `messages`)
+// still shows below the conversation.
+const getRemainingOutput = (
   output: Record<string, unknown>,
   format: string | undefined,
-): string[] | null => {
-  if (format === "playground") return ["output"];
-  if (format === "openai" && !Array.isArray(output.choices)) {
-    return ["text", "usage", "finish_reason"];
+): Record<string, unknown> => {
+  if (format === "playground") return omit(output, "output");
+
+  if (format === "openai") {
+    return Array.isArray(output.choices)
+      ? omit(output, ["choices", "usage"])
+      : omit(output, ["text", "usage", "finish_reason"]);
   }
-  return null;
+
+  if (format === "langchain") {
+    if (Array.isArray(output.messages)) return omit(output, "messages");
+
+    const remaining = omit(output, ["generations", "llm_output"]);
+    const llmOutput = omit(
+      (output.llm_output as Record<string, unknown>) ?? {},
+      "token_usage",
+    );
+    return isEmpty(llmOutput)
+      ? remaining
+      : { ...remaining, llm_output: llmOutput };
+  }
+
+  return output;
 };
 
 export const splitOutputForMessages = (
@@ -44,13 +62,11 @@ export const splitOutputForMessages = (
     return NOT_MESSAGES;
   }
 
-  const record = output as Record<string, unknown>;
-  const keysShownAsMessages = getKeysShownAsMessages(record, detection.format);
-
   return {
     rendersAsMessages: true,
-    remainingOutput: keysShownAsMessages
-      ? omit(record, keysShownAsMessages)
-      : {},
+    remainingOutput: getRemainingOutput(
+      output as Record<string, unknown>,
+      detection.format,
+    ),
   };
 };

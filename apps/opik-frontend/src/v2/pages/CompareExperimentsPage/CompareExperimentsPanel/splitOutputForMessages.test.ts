@@ -73,7 +73,7 @@ describe("splitOutputForMessages", () => {
   });
 
   describe("full provider responses", () => {
-    it("renders an OpenAI chat completion without a remainder", () => {
+    it("keeps OpenAI chat completion metadata but not choices or usage", () => {
       expect(
         splitOutputForMessages({
           id: "chatcmpl-1",
@@ -85,6 +85,47 @@ describe("splitOutputForMessages", () => {
               finish_reason: "stop",
             },
           ],
+          usage: { total_tokens: 3 },
+        }),
+      ).toEqual({
+        rendersAsMessages: true,
+        remainingOutput: { id: "chatcmpl-1", model: "gpt-4o" },
+      });
+    });
+
+    it("keeps a LangGraph final answer next to its messages", () => {
+      expect(
+        splitOutputForMessages({
+          output: "FINAL ANSWER",
+          messages: [{ type: "ai", content: "Looking it up" }],
+        }),
+      ).toEqual({
+        rendersAsMessages: true,
+        remainingOutput: { output: "FINAL ANSWER" },
+      });
+    });
+
+    it("keeps LangChain generation metadata but not token usage", () => {
+      expect(
+        splitOutputForMessages({
+          generations: [[{ text: "Yes" }]],
+          llm_output: {
+            token_usage: { total_tokens: 3 },
+            model_name: "gpt-4o",
+          },
+          run: null,
+        }),
+      ).toEqual({
+        rendersAsMessages: true,
+        remainingOutput: { llm_output: { model_name: "gpt-4o" }, run: null },
+      });
+    });
+
+    it("reports nothing remaining for bare LangChain generations", () => {
+      expect(
+        splitOutputForMessages({
+          generations: [[{ text: "Yes" }]],
+          llm_output: { token_usage: { total_tokens: 3 } },
         }),
       ).toEqual({ rendersAsMessages: true, remainingOutput: {} });
     });

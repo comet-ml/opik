@@ -55,10 +55,7 @@ const ExperimentDatasetItems = ({
   const messagesViewer = (
     <MediaProvider media={unifiedMedia}>
       <div className="flex flex-col gap-2">
-        <ExperimentMessagesViewer
-          input={messageData}
-          preserveKey="compare-experiment-input-messages"
-        />
+        <ExperimentMessagesViewer input={messageData} />
         {hasRemaining && (
           <SyntaxHighlighter
             data={remainingData}

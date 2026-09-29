@@ -1,8 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import sortBy from "lodash/sortBy";
 import isFunction from "lodash/isFunction";
 import isEmpty from "lodash/isEmpty";
-import { FlaskConical, ListTree } from "lucide-react";
+import { Braces, FlaskConical, ListTree, MessagesSquare } from "lucide-react";
 
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
 import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
@@ -11,6 +11,7 @@ import { useExperimentItemMedia } from "@/hooks/useExperimentItemMedia";
 import ExperimentMessagesViewer from "@/v2/pages-shared/experiments/ExperimentMessagesViewer/ExperimentMessagesViewer";
 import ExperimentFeedbackScoresViewer from "@/v2/pages-shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import CopyButton from "@/shared/CopyButton/CopyButton";
 import NoData from "@/shared/NoData/NoData";
 import useExperimentById from "@/api/datasets/useExperimentById";
 import { TraceFeedbackScore } from "@/types/traces";
@@ -93,6 +94,8 @@ const CompareExperimentsViewer: React.FunctionComponent<
     [messagesOutput],
   );
 
+  const [showRawOutput, setShowRawOutput] = useState(false);
+
   const onExpandClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (isFunction(openTrace) && experimentItem.trace_id) {
@@ -117,7 +120,21 @@ const CompareExperimentsViewer: React.FunctionComponent<
       return null;
     }
 
-    if (!rendersAsMessages) {
+    const rawToggle = (
+      <TooltipWrapper
+        content={showRawOutput ? "Show as messages" : "Show raw JSON"}
+      >
+        <Button
+          variant="outline"
+          size="icon-2xs"
+          onClick={() => setShowRawOutput((value) => !value)}
+        >
+          {showRawOutput ? <MessagesSquare /> : <Braces />}
+        </Button>
+      </TooltipWrapper>
+    );
+
+    if (!rendersAsMessages || showRawOutput) {
       const highlighter = (
         <SyntaxHighlighter
           data={transformedOutput as object}
@@ -126,17 +143,26 @@ const CompareExperimentsViewer: React.FunctionComponent<
         />
       );
 
-      if (!media.length) {
-        return highlighter;
-      }
-
-      return (
+      const content = media.length ? (
         <MediaProvider media={media}>
           <div className="flex flex-col gap-2">
             <AttachmentsList media={media} />
             {highlighter}
           </div>
         </MediaProvider>
+      ) : (
+        highlighter
+      );
+
+      if (!rendersAsMessages) {
+        return content;
+      }
+
+      return (
+        <div className="flex flex-col">
+          <div className="flex justify-end pb-1">{rawToggle}</div>
+          {content}
+        </div>
       );
     }
 
@@ -145,9 +171,21 @@ const CompareExperimentsViewer: React.FunctionComponent<
         <div className="flex flex-col gap-2">
           {media.length > 0 && <AttachmentsList media={media} />}
           <ExperimentMessagesViewer
+            key={experimentItem.id}
             input={messagesInput}
             output={messagesOutput}
-            preserveKey={`compare-experiment-messages-${sectionIdx}`}
+            actions={
+              <>
+                {rawToggle}
+                <CopyButton
+                  text={JSON.stringify(experimentItem.output, null, 2)}
+                  message="Successfully copied output"
+                  tooltipText="Copy output"
+                  variant="outline"
+                  size="icon-2xs"
+                />
+              </>
+            }
           />
           {!isEmpty(remainingOutput) && (
             <SyntaxHighlighter

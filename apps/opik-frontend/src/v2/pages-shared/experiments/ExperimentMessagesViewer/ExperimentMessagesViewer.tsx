@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 type ExperimentMessagesViewerProps = {
   input?: unknown;
   output?: unknown;
-  preserveKey: string;
+  actions?: React.ReactNode;
 };
 
 function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
@@ -26,7 +26,7 @@ function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
 
 const ExperimentMessagesViewer: React.FunctionComponent<
   ExperimentMessagesViewerProps
-> = ({ input, output, preserveKey }) => {
+> = ({ input, output, actions }) => {
   const { messages, usage } = useMemo(
     () => mapAndCombineMessages(input, output),
     [input, output],
@@ -34,12 +34,15 @@ const ExperimentMessagesViewer: React.FunctionComponent<
 
   const allMessageIds = useMemo(() => messages.map((m) => m.id), [messages]);
 
+  // Not persisted: a stored choice would carry one row's collapsed state into
+  // every other row, hiding the content of short conversations. Callers key
+  // this viewer by row so the default is recomputed for each conversation.
   const {
     isAllExpanded,
     expandedMessages,
     handleToggleAll,
     handleValueChange,
-  } = useLLMMessagesExpandAll(allMessageIds, preserveKey);
+  } = useLLMMessagesExpandAll(allMessageIds);
 
   const renderMessage = useCallback(
     (message: LLMMessageDescriptor) => (
@@ -62,7 +65,8 @@ const ExperimentMessagesViewer: React.FunctionComponent<
 
   return (
     <div className="flex flex-col">
-      <div className="flex justify-end pb-1">
+      <div className="flex justify-end gap-1 pb-1">
+        {actions}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button onClick={handleToggleAll} variant="outline" size="icon-2xs">
