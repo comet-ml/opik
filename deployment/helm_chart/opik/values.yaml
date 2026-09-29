@@ -919,6 +919,7 @@ clickhouse:
   # while the pod leaves the service; the grace period must cover that plus
   # shutdown_wait_unfinished. E.g. lifecycle: {preStop: {sleep: {seconds: 15}}} with 60.
   lifecycle: {}
+  # -- (int) Pod termination grace period in seconds. Unset keeps the Kubernetes default (30).
   terminationGracePeriodSeconds: null
   configuration:
     files:
