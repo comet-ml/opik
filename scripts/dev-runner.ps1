@@ -237,7 +237,7 @@ function Test-LocalBe {
 }
 
 # Function to build backend
-function Build-Backend {
+function Invoke-BackendBuild {
     Test-CommandExists "mvn"
     Write-LogInfo "Building backend (skipping tests)..."
     Write-LogDebug "Backend directory: $script:BACKEND_DIR"
@@ -278,7 +278,7 @@ function Build-Backend {
 }
 
 # Function to build frontend
-function Build-Frontend {
+function Invoke-FrontendBuild {
     Test-CommandExists "npm"
     Write-LogInfo "Building frontend..."
     
@@ -389,7 +389,7 @@ function Invoke-DbMigrations {
         $jarFile = Find-JarFiles
         if (-not $jarFile) {
             Write-LogWarning "No backend JAR file found in target directory. Building backend automatically..."
-            Build-Backend
+            Invoke-BackendBuild
             
             # Re-scan for JAR files after build
             $jarFile = Find-JarFiles
@@ -527,7 +527,7 @@ function Start-Backend {
         $jarFile = Find-JarFiles
         if (-not $jarFile) {
             Write-LogWarning "No backend JAR file found in target directory. Building backend automatically..."
-            Build-Backend
+            Invoke-BackendBuild
             
             # Re-scan for JAR files after build
             $jarFile = Find-JarFiles
@@ -1033,7 +1033,7 @@ function Invoke-Migrations {
     Write-LogInfo "Step 1/3: Starting Docker services..."
     Start-LocalBeFe
     Write-LogInfo "Step 2/3: Building backend..."
-    Build-Backend
+    Invoke-BackendBuild
     Write-LogInfo "Step 3/3: Running DB migrations..."
     Invoke-DbMigrations
     Write-LogSuccess "=== Migrations Complete ==="
@@ -1051,9 +1051,9 @@ function Restart-Services {
     Write-LogInfo "Step 4/10: Starting Docker services..."
     Start-LocalBeFe
     Write-LogInfo "Step 5/10: Building backend..."
-    Build-Backend
+    Invoke-BackendBuild
     Write-LogInfo "Step 6/10: Building frontend..."
-    Build-Frontend
+    Invoke-FrontendBuild
     Write-LogInfo "Step 7/10: Running DB migrations..."
     Invoke-DbMigrations
     Write-LogInfo "Step 8/10: Starting backend process..."
@@ -1087,7 +1087,7 @@ function Invoke-QuickRestart {
     Write-LogInfo "Step 3/7: Stopping backend..."
     Stop-Backend
     Write-LogInfo "Step 4/7: Building backend..."
-    Build-Backend
+    Invoke-BackendBuild
     Write-LogInfo "Step 5/7: Starting backend..."
     Start-Backend
     
@@ -1116,7 +1116,7 @@ function Invoke-QuickRestart {
     }
     
     if ($needsInstall) {
-        Build-Frontend
+        Invoke-FrontendBuild
     }
     
     Write-LogInfo "Step 7/7: Starting frontend..."
@@ -1161,7 +1161,7 @@ function Restart-BeOnlyServices {
     Write-LogInfo "Step 3/7: Starting Docker services..."
     Start-LocalBe
     Write-LogInfo "Step 4/7: Building backend..."
-    Build-Backend
+    Invoke-BackendBuild
     Write-LogInfo "Step 5/7: Running DB migrations..."
     Invoke-DbMigrations
     Write-LogInfo "Step 6/7: Starting backend process..."
@@ -1242,10 +1242,10 @@ if ($script:DEBUG_MODE) {
 # Main script logic
 switch ($Action.ToLower()) {
     "--build-be" {
-        Build-Backend
+        Invoke-BackendBuild
     }
     "--build-fe" {
-        Build-Frontend
+        Invoke-FrontendBuild
     }
     "--migrate" {
         Invoke-Migrations
