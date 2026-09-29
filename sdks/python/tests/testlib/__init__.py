@@ -9,7 +9,7 @@ from .backend_emulator_message_processor import BackendEmulatorMessageProcessor
 from .concurrency_helpers import ThreadSafeCounter
 from .project_naming import generate_project_name
 from .models import AttachmentModel, FeedbackScoreModel, SpanModel, TraceModel
-from .patch_helpers import patch_environ
+from .patch_helpers import patch_environ, patch_submodule
 
 __all__ = [
     "ANY",
@@ -29,4 +29,5 @@ __all__ = [
     "assert_equal",
     "generate_project_name",
     "patch_environ",
+    "patch_submodule",
 ]
