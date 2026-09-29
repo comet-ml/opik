@@ -375,6 +375,17 @@ class KpiCardDAOImpl implements KpiCardDAO {
                   AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                       \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
                   AND thread_id \\<> ''
+            ), traces_final_thread_ids AS (
+                SELECT DISTINCT thread_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND thread_id \\<> ''
+                  AND id >= :uuid_from_time AND id \\<= :uuid_to_time
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -390,7 +401,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND thread_id IN (SELECT thread_id FROM traces_final)
+                -- The id range keeps the membership rule of the thread list in ThreadDAO.
+                -- The thread_id set is what actually prunes granules (measured 123/563 -> 69/563), so both stay.
+                AND id >= :uuid_from_time
+                AND id \\<= :uuid_to_time
+                AND thread_id IN (SELECT thread_id FROM traces_final_thread_ids)
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -460,7 +475,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
-                    t.start_time as start_time,
+                    -- minIf returns the epoch default when every trace carries the sentinel start time.
+                    -- Without this fallback the thread lands in neither KPI period and disappears.
+                    if(equals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), UUIDv7ToDateTime(toUUID(tt.thread_model_id), 'UTC'), t.start_time) as start_time,
                     t.duration as duration,
                     if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id
                 FROM (
