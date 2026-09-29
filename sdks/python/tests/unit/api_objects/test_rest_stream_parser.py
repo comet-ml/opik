@@ -363,6 +363,42 @@ def test_read_and_parse_full_stream__strict_raises_on_a_page_without_usable_reco
             _read(source, strict=True)
 
 
+def test_read_and_parse_full_stream__strict_raises_on_one_dropped_record_among_good_ones(
+    caplog,
+):
+    # 20 rows, one of them unreadable, page size 4. The read returns 19 items
+    # and the caller has no way to tell item 7 is missing, so `strict` has to
+    # fail: the migrate paths would otherwise replay it as a deletion.
+    specs = tuple(
+        (f"r{index:02d}", "bad") if index == 6 else (f"r{index:02d}",)
+        for index in range(20, 0, -1)
+    )
+    source = _RowSource(_rows(*specs))
+
+    with caplog.at_level(logging.WARNING, logger="opik.api_objects.rest_stream_parser"):
+        with pytest.raises(ValueError, match="1 of the 4 record"):
+            _read(source, max_endpoint_batch_size=4, strict=True)
+
+    # It stopped on the page that dropped r06, four rows in, instead of
+    # reading the four pages behind it.
+    assert len(source.requested) == 4
+
+
+def test_read_and_parse_full_stream__a_dropped_record_among_good_ones_keeps_the_rest_without_strict():
+    # The same page without `strict`: 19 items and a warning, which is what the
+    # search paths ask for.
+    specs = tuple(
+        (f"r{index:02d}", "bad") if index == 6 else (f"r{index:02d}",)
+        for index in range(20, 0, -1)
+    )
+    source = _RowSource(_rows(*specs))
+
+    spans = _read(source, max_endpoint_batch_size=4)
+
+    assert len(spans) == 19
+    assert "r06" not in [span.id for span in spans]
+
+
 def test_read_and_parse_full_stream__dropped_records_are_counted_once(caplog):
     # Every fourth row is unreadable. A cursor taken from the last parsed record
     # re-serves the unreadable tail of each page, so the aggregate warning used

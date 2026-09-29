@@ -43,11 +43,11 @@ def read_and_parse_full_stream(
 ) -> List[T]:
     """
     Args:
-        strict: When True, a page that yields no usable record raises instead of
-            ending the read. Callers that turn a short read into deletions (the
-            migrate paths) must fail loudly rather than replay missing records
-            as deletions; search paths, where the caller can see the warning,
-            keep the default.
+        strict: When True, a page that drops any record raises instead of
+            returning a short result. Callers that turn a short read into
+            deletions (the migrate paths) must fail loudly rather than replay
+            missing records as deletions; search paths, where the caller can see
+            the warning, keep the default.
     """
     result: List[T] = []
     # Per-page page size, adaptively halved on size-correlated failures and
@@ -110,13 +110,24 @@ def read_and_parse_full_stream(
         # every remaining page.
         records_received = len(parsed_items) + dropped_records["count"]
 
-        if records_received >= current_batch_size and not parsed_items:
-            if strict:
+        if strict and dropped_records["count"] > 0:
+            # A single unreadable record leaves a hole just as wide as a page
+            # that failed entirely: the caller cannot tell the two apart, and
+            # the migrate paths would turn the hole into a deletion.
+            if not parsed_items:
                 raise ValueError(
                     f"All {dropped_records['count']} record(s) of the current page "
                     f"could not be parsed as {parsed_item_class.__name__}, so the "
                     f"result would be incomplete; refusing to return it."
                 )
+            raise ValueError(
+                f"{dropped_records['count']} of the {records_received} record(s) "
+                f"of the current page could not be parsed as "
+                f"{parsed_item_class.__name__}, so the result would be "
+                f"incomplete; refusing to return it."
+            )
+
+        if records_received >= current_batch_size and not parsed_items:
             if cursor == cursor_before_page:
                 # Neither the result nor the cursor moved, so the next request
                 # would ask for exactly the same page. Stop rather than loop.
