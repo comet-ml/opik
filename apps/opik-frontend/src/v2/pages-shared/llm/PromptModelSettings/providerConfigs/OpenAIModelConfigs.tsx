@@ -2,6 +2,7 @@ import React from "react";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import NoModelParameters from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/NoModelParameters";
 import {
   LLMOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
@@ -12,6 +13,7 @@ import {
   getOpenAIReasoningEffortOptions,
   resolveEffort,
   resolveSamplingParams,
+  supportsPenaltyParams,
 } from "@/lib/modelUtils";
 import isUndefined from "lodash/isUndefined";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -43,9 +45,28 @@ const OpenAIModelConfigs = ({
   // both sliders follow it rather than the config's own keys. Reasoning models tune neither.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const { reasoningEffort } = resolveEffort(model ?? "", configs);
+  const showPenalties = supportsPenaltyParams(model);
+  const showTopP = supports("topP") && !isUndefined(topP);
+  const showFrequencyPenalty =
+    showPenalties && !isUndefined(configs.frequencyPenalty);
+  const showPresencePenalty =
+    showPenalties && !isUndefined(configs.presencePenalty);
+  const showReasoningEffort =
+    supports("reasoningEffort") && reasoningEffort !== undefined;
+  const hasNoControls =
+    isUndefined(temperature) &&
+    isUndefined(configs.maxCompletionTokens) &&
+    !showTopP &&
+    !showFrequencyPenalty &&
+    !showPresencePenalty &&
+    !showReasoningEffort &&
+    !supports("throttling") &&
+    !supports("maxConcurrentRequests");
 
   return (
     <div className="flex w-72 flex-col gap-6">
+      {hasNoControls && <NoModelParameters />}
+
       {!isUndefined(temperature) && (
         <SliderInputControl
           value={temperature}
@@ -78,7 +99,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {supports("topP") && !isUndefined(topP) && (
+      {showTopP && (
         <SliderInputControl
           value={topP}
           onChange={(v) => onChange({ topP: v })}
@@ -94,7 +115,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.frequencyPenalty) && (
+      {showFrequencyPenalty && (
         <SliderInputControl
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
@@ -110,7 +131,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.presencePenalty) && (
+      {showPresencePenalty && (
         <SliderInputControl
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
@@ -126,7 +147,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {supports("reasoningEffort") && reasoningEffort !== undefined && (
+      {showReasoningEffort && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="reasoningEffort" className="text-sm font-medium">

@@ -9,6 +9,7 @@ import {
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
+import NoModelParameters from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/NoModelParameters";
 import {
   getAnthropicThinkingEffortOptions,
   resolveEffort,
@@ -40,9 +41,19 @@ const AnthropicModelConfigs = ({
   // carry, and it guarantees exactly one half is live, which is what the choice below reflects.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const { thinkingEffort } = resolveEffort(model ?? "", configs);
+  const showThinkingEffort =
+    supports("thinkingEffort") && thinkingEffort !== undefined;
+  const hasNoControls =
+    !showSamplingParams &&
+    !supports("maxCompletionTokens") &&
+    !supports("throttling") &&
+    !supports("maxConcurrentRequests") &&
+    !showThinkingEffort;
 
   return (
     <div className="flex w-72 flex-col gap-6">
+      {hasNoControls && <NoModelParameters />}
+
       {showSamplingParams && (
         <ExclusiveSamplingParams
           temperature={temperature}
@@ -108,7 +119,7 @@ const AnthropicModelConfigs = ({
         />
       )}
 
-      {supports("thinkingEffort") && thinkingEffort !== undefined && (
+      {showThinkingEffort && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingEffort" className="text-sm font-medium">

@@ -8,6 +8,7 @@ import {
 } from "@/types/providers";
 import { DEFAULT_VERTEX_AI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import NoModelParameters from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/NoModelParameters";
 import isUndefined from "lodash/isUndefined";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
@@ -15,6 +16,7 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import {
   getDefaultThinkingLevel,
   getThinkingLevelOptions,
+  resolveSamplingParams,
   supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -36,12 +38,25 @@ const VertexAIModelConfigs = ({
   const hasThinkingLevel = supportsVertexAIThinkingLevel(model);
   const thinkingLevelOptions = getThinkingLevelOptions(model);
   const defaultThinkingLevel = getDefaultThinkingLevel(model);
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const showTemperature = !isUndefined(temperature);
+  const showMaxOutputTokens = !isUndefined(configs.maxCompletionTokens);
+  const showTopP = supports("topP") && !isUndefined(topP);
+  const hasNoControls =
+    !showTemperature &&
+    !showMaxOutputTokens &&
+    !showTopP &&
+    !hasThinkingLevel &&
+    !supports("throttling") &&
+    !supports("maxConcurrentRequests");
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {!isUndefined(configs.temperature) && (
+      {hasNoControls && <NoModelParameters />}
+
+      {showTemperature && (
         <SliderInputControl
-          value={configs.temperature}
+          value={temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
           min={0}
@@ -55,7 +70,7 @@ const VertexAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.maxCompletionTokens) && (
+      {showMaxOutputTokens && (
         <SliderInputControl
           value={configs.maxCompletionTokens}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
@@ -71,9 +86,9 @@ const VertexAIModelConfigs = ({
         />
       )}
 
-      {supports("topP") && !isUndefined(configs.topP) && (
+      {showTopP && (
         <SliderInputControl
-          value={configs.topP}
+          value={topP}
           onChange={(v) => onChange({ topP: v })}
           id="topP"
           min={0}
