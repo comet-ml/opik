@@ -158,10 +158,11 @@ def test_opik_usage__from_bedrock_dict__no_cache_tokens__counts_input_tokens_onl
     assert usage_with_zero_cache.total_tokens == 300
 
 
-def test_opik_usage__bedrock_and_anthropic__same_call__agree_on_token_counts():
+def test_opik_usage__equivalent_bedrock_and_anthropic_usage__agree_on_token_counts():
     # Bedrock runs the same Claude models as the Anthropic API and reports the
-    # same two cache counters under different names, so both paths must produce
-    # the same numbers for the same underlying call.
+    # same two cache counters under different names, so two usage records that
+    # describe the same call must normalise to the same numbers. These are two
+    # separately written dicts, not a captured pair of responses.
     anthropic_usage = OpikUsage.from_anthropic_dict(
         {
             "input_tokens": 12,
