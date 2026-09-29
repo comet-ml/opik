@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_TYPESCRIPT_SDK_TESTS }}
 
 jobs:
   check_secrets:
@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Detect available provider keys
         id: check
-        run: echo "has_anthropic_key=${{ secrets.ANTHROPIC_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
+        run: echo "has_anthropic_key=${{ secrets.ANTHROPIC_API_KEY_TYPESCRIPT_SDK_TESTS != '' }}" >> "$GITHUB_OUTPUT"
 
   vercel:
     name: opik-vercel (Vercel AI SDK / eve)

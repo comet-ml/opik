@@ -91,6 +91,9 @@ const SDK_REASONING_KEY = 'original_usage.completion_tokens_details.reasoning_to
 /** The bare OTel GenAI key the backend falls back to when the prefixed one is absent. */
 const OTEL_REASONING_KEY = 'completion_tokens_details.reasoning_tokens';
 
+/** The `usage` key SDK 1.6.0+ logs audio INPUT tokens under. */
+const SDK_AUDIO_INPUT_KEY = 'original_usage.prompt_tokens_details.audio_tokens';
+
 /**
  * Five vectors over one model, covering reasoning-token billing
  * (`SpanCostCalculator.textGenerationCost`).
@@ -223,11 +226,67 @@ const CHARACTER_PRICE_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
 ];
 
 /**
- * Twelve LLM spans: five that exercise server-side price resolution from the
+ * Two vectors over one model that publishes `input_cost_per_audio_token`
+ * (`SpanCostCalculator.textGenerationCost`, the audio-input branch).
+ *
+ * Audio input tokens are a SUBSET of `prompt_tokens`, so the calculator bills
+ * them at `input_cost_per_audio_token` and subtracts them from the standard
+ * prompt bucket rather than billing them at both rates — the same shape as
+ * reasoning tokens on the completion side, and the same silent failure if the
+ * key is not read: the span prices at the plain token rate and the difference
+ * is a number nobody can sanity-check by eye.
+ *
+ * `gemini/gemini-embedding-2-preview` is the vector 2.2.65 made testable. Its
+ * price row is one of the six `gemini-embedding-2*` rows that release re-priced,
+ * and it is the one this assertion can reach: `litellm_provider: "gemini"` maps
+ * to `google_ai` in `CostService.PROVIDERS_MAPPING`, it publishes no cache rate
+ * (a cache rate routes to `textGenerationWithCacheCostGoogle`, which does not
+ * read the audio key at all), and its audio rate is 32.5x its token rate, so the
+ * split is arithmetically visible rather than a rounding difference.
+ *
+ *   gemini/gemini-embedding-2-preview  $2e-07/token in, $6.5e-06/audio token in,
+ *                                      $0/token out
+ *
+ * At 1M prompt + 1M completion tokens that gives, per vector:
+ *
+ *   200k audio  800k x 2e-07 + 200k x 6.5e-06   -> $1.46
+ *   no audio    1.0M x 2e-07                    -> $0.20
+ *
+ * The pair is discriminating in both directions. Both carry the identical 1M
+ * prompt + 1M completion tokens and differ ONLY in the audio count, so a backend
+ * that ignored `input_cost_per_audio_token` would price them the same $0.20; and
+ * the $1.26 delta between them is exactly the rate this release added, so a
+ * table row that moved fails here rather than drifting unnoticed. The control
+ * pins one more thing on its own: 1M completion tokens must bill nothing,
+ * because this model publishes `output_cost_per_token: 0`.
+ */
+const AUDIO_TOKEN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
+  {
+    key: 'audio-input-priced',
+    model: 'gemini/gemini-embedding-2-preview',
+    provider: 'google_ai',
+    usageExtras: { [SDK_AUDIO_INPUT_KEY]: 200_000 },
+    expectedCost: 1.46,
+    writer: 'python-sdk',
+  },
+  {
+    key: 'audio-input-absent',
+    model: 'gemini/gemini-embedding-2-preview',
+    provider: 'google_ai',
+    // Not a zero-cost control: the same 1M prompt tokens still bill at the
+    // plain input rate. What must be absent is the $1.26 audio premium.
+    expectedCost: 0.2,
+    writer: 'python-sdk',
+  },
+];
+
+/**
+ * Fourteen LLM spans: five that exercise server-side price resolution from the
  * model id — three ids that must resolve, covering four normalisation steps
  * between them, and two controls for the two ways it could go wrong — five
- * that cover reasoning-token billing over a single model, and two over a model
- * priced per input character rather than per token.
+ * that cover reasoning-token billing over a single model, two over a model
+ * priced per input character rather than per token, and two over a model that
+ * prices audio input tokens at their own rate.
  *
  * Costs are the shipped price table's own numbers at 1M prompt + 1M completion
  * tokens (`model_prices_and_context_window.json` / `model_prices_overrides.json`):
@@ -241,7 +300,8 @@ const CHARACTER_PRICE_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
  * them would silently bill another model's rate, and the failure would look
  * exactly like an ordinary cost.
  *
- * See REASONING_SEEDS and CHARACTER_PRICE_SEEDS above for the other two halves.
+ * See REASONING_SEEDS, CHARACTER_PRICE_SEEDS and AUDIO_TOKEN_SEEDS above for
+ * the other three groups.
  */
 const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
   {
@@ -292,10 +352,11 @@ const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
   },
   ...REASONING_SEEDS,
   ...CHARACTER_PRICE_SEEDS,
+  ...AUDIO_TOKEN_SEEDS,
 ];
 
 /**
- * One trace carrying twelve LLM spans that report `usage` and **no**
+ * One trace carrying fourteen LLM spans that report `usage` and **no**
  * `total_cost`, so the backend has to price them itself.
  *
  * Every other cost fixture in the estate (`tracedAgent`, the thread seeds)
@@ -306,7 +367,7 @@ const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
  * Most spans go through the bridge; the ones whose usage key the SDK would
  * normalise or drop are written straight to `POST /v1/private/spans`
  * afterwards, because that key is exactly what they exist to test. Both land on
- * the same trace, so the rolled-up total covers all twelve either way.
+ * the same trace, so the rolled-up total covers all fourteen either way.
  *
  * Teardown deletes the trace (and with it its spans) here rather than in the
  * test: an assertion failure must not leave priced spans behind, since the

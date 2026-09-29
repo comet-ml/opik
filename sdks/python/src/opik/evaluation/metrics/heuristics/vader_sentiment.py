@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from opik.evaluation.metrics.base_metric import BaseMetric
+from opik.evaluation.metrics.heuristics import _vader_lexicon
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.exceptions import MetricComputationError
 
@@ -12,6 +13,20 @@ try:  # pragma: no cover - optional dependency
     from nltk.sentiment import SentimentIntensityAnalyzer
 except ImportError:  # pragma: no cover - optional dependency
     SentimentIntensityAnalyzer = None  # type: ignore
+
+
+_LEXICON_ERROR = (
+    "VADER sentiment metric requires the NLTK corpus 'vader_lexicon'. "
+    "Install manually via `python -m nltk.downloader vader_lexicon`, "
+    "or provide a custom analyzer."
+)
+
+
+def _build_analyzer() -> Any:
+    """Return a ``SentimentIntensityAnalyzer``, fetching its lexicon if needed."""
+    return _vader_lexicon.build_analyzer(
+        SentimentIntensityAnalyzer, error_message=_LEXICON_ERROR
+    )
 
 
 class VADERSentiment(BaseMetric):
@@ -38,7 +53,7 @@ class VADERSentiment(BaseMetric):
         >>> metric = VADERSentiment()
         >>> result = metric.score("I absolutely love this experience!")  # doctest: +SKIP
         >>> round(result.value, 2)  # doctest: +SKIP
-        0.94
+        0.85
     """
 
     def __init__(
@@ -60,7 +75,7 @@ class VADERSentiment(BaseMetric):
                     "VADER sentiment metric requires the optional 'nltk' package. Install via"
                     " `pip install nltk` or provide a custom analyzer."
                 )
-            self._analyzer = SentimentIntensityAnalyzer()
+            self._analyzer = _build_analyzer()
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
         if not output or not output.strip():

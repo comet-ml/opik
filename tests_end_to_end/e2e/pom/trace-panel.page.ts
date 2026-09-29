@@ -1,4 +1,14 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
+
+/**
+ * Where to send the pointer to get it off a hover target inside the panel.
+ *
+ * Hard left of the viewport: the trace panel is a right-hand sheet, so nothing
+ * it renders — including a tooltip anchored to one of its cells — reaches this
+ * far, whatever side Radix chose to open on. Deliberately not (0, 0), which is
+ * the corner of the app nav and raises a tooltip of its own.
+ */
+const PANEL_POINTER_PARK = { x: 4, y: 300 } as const;
 
 export class TracePanelPage {
   constructor(
@@ -29,6 +39,40 @@ export class TracePanelPage {
 
   get outputSection(): Locator {
     return this.root.getByRole('button', { name: 'Output', expanded: true });
+  }
+
+  /**
+   * A collapsible section header, whatever its state — the counterpart to
+   * {@link inputSection} and {@link outputSection}, which bake `expanded: true`
+   * into the locator and so cannot express "this section is collapsed".
+   *
+   * Matched on the accessible name, exactly: the shared `CodeBlock` renders
+   * every section identically and only the title tells them apart, and a
+   * substring match would let `Input` also address a future `Input schema`.
+   * The locator is left strict rather than reduced with `.first()`, so a title
+   * that stops being unique fails loudly instead of testing whichever section
+   * the DOM happened to put first.
+   */
+  sectionHeader(title: string): Locator {
+    return this.root.getByRole('button', { name: title, exact: true });
+  }
+
+  /**
+   * Click a section header and wait for its own `aria-expanded` to flip.
+   *
+   * Gated on the flip rather than on the body appearing: a collapsed section's
+   * body is hidden with a class, not unmounted, so "the content is in the DOM"
+   * is true in both states and would make the wait a no-op.
+   */
+  async toggleSection(title: string): Promise<void> {
+    return test.step(`Toggle the ${title} section`, async () => {
+      const header = this.sectionHeader(title);
+      const wasExpanded = (await header.getAttribute('aria-expanded')) === 'true';
+      await header.click();
+      await header
+        .and(this.root.locator(`[aria-expanded="${wasExpanded ? 'false' : 'true'}"]`))
+        .waitFor();
+    });
   }
 
   /** Heading-area locator for the trace name shown in the panel toolbar. */
@@ -140,6 +184,86 @@ export class TracePanelPage {
   /** The file name as the thumbnail renders it. */
   attachmentLabel(fileName: string): Locator {
     return this.root.getByText(fileName, { exact: true });
+  }
+
+  /**
+   * One attachment's tile.
+   *
+   * `AttachmentThumbnail` renders an `<img>` for a media type it classified as
+   * IMAGE and a lucide icon for everything else, and the two never coexist — so
+   * telling those branches apart needs a scope that is exactly one tile.
+   *
+   * Scoped by the download link that carries the file name, which is the only
+   * attribute unique to a single tile (see `attachmentThumbnail`). The `div.group`
+   * outer selector is a CSS class rather than a `data-testid` because the tile
+   * has none, and these specs run against a pre-built deployment where an
+   * attribute added alongside them would not exist. `group` is load-bearing
+   * rather than cosmetic — the hover controls key off it via `group-hover:` — and
+   * every caller asserts a count, so a structural change fails loudly instead of
+   * silently widening the scope.
+   */
+  private attachmentTile(fileName: string): Locator {
+    return this.root
+      .locator('div.group')
+      .filter({ has: this.page.locator(`a[download="${fileName}"]`) });
+  }
+
+  /**
+   * The `<img>` preview for one attachment — present only for an IMAGE type.
+   *
+   * Addressed by `alt`, which `AttachmentThumbnail` sets to the file name, so
+   * this is an identity match and not a positional one.
+   */
+  attachmentImage(fileName: string): Locator {
+    return this.root.locator(`img[alt="${fileName}"]`);
+  }
+
+  /**
+   * Every attachment preview the panel rendered as an image.
+   *
+   * A DIRECT child of the tile, which is what makes this "classified as IMAGE"
+   * rather than "has a picture in it somewhere": the IMAGE branch renders its
+   * `<img>` straight into the tile, while the VIDEO branch renders a
+   * `VideoThumbnail` whose poster `<img>` sits one container deeper. A
+   * descendant selector would count a video's poster as an image and quietly
+   * satisfy a count that is meant to exclude it.
+   */
+  get attachmentImages(): Locator {
+    return this.root.locator('div.group > img');
+  }
+
+  /**
+   * The generic file icon one attachment fell back to.
+   *
+   * `lucide-file` exactly, not a prefix match: `lucide-file-text`,
+   * `lucide-file-image` and friends are separate class tokens for the PDF, TEXT,
+   * AUDIO and VIDEO branches, and a spec that accepted any of them would stop
+   * distinguishing "classified as OTHER" from "classified as something else that
+   * also is not an image".
+   */
+  attachmentGenericIcon(fileName: string): Locator {
+    return this.attachmentTile(fileName).locator('svg.lucide-file');
+  }
+
+  /**
+   * The attachment rendered a real, decoded picture.
+   *
+   * `naturalWidth` rather than visibility: a broken `<img>` is still visible, so
+   * visibility alone would pass for a tile whose source never loaded.
+   */
+  async expectAttachmentDecodes(fileName: string): Promise<void> {
+    return test.step(`${fileName} renders a decoded image`, async () => {
+      const image = this.attachmentImage(fileName);
+      await expect(image, `exactly one <img> for ${fileName}`).toHaveCount(1);
+      // Lazy-loaded: an `<img>` that never entered the viewport reports
+      // naturalWidth 0 whether or not its source is good.
+      await image.scrollIntoViewIfNeeded();
+      await expect
+        .poll(async () => image.evaluate((img) => (img as HTMLImageElement).naturalWidth), {
+          message: `naturalWidth of the ${fileName} preview`,
+        })
+        .toBeGreaterThan(0);
+    });
   }
 
   /** Opens the Attachments section if it is collapsed. Idempotent. */
@@ -266,6 +390,49 @@ export class TracePanelPage {
   }
 
   /**
+   * The panel's own next/previous-row control, which walks the table behind it.
+   *
+   * Two selectors, because the builds disagree and both are live targets for
+   * this suite. The OSS panel renders an icon-only button carrying
+   * `data-testid="side-panel-next"` and no accessible name — its label lives in
+   * a tooltip, which contributes nothing to the a11y tree. The cloud build
+   * renders a labelled button ("Next", plus a hotkey chip) and does not carry
+   * the testid. Neither locator alone resolves on both, and preferring the
+   * testid while silently having no fallback is how a cloud run spends its
+   * whole action budget waiting for an element that build never renders.
+   */
+  rowNavButton(direction: 'next' | 'previous'): Locator {
+    const label = direction === 'next' ? /^Next\b/ : /^Previous\b/;
+    return this.root
+      .getByTestId(`side-panel-${direction}`)
+      .or(this.root.getByRole('button', { name: label }));
+  }
+
+  /**
+   * Move to the adjacent table row using the panel's own arrows, and answer a
+   * page object for whichever trace it landed on.
+   *
+   * This, rather than navigating to the next trace's URL: the panel stays
+   * mounted across a row change and resets its per-node state from the id
+   * alone, so a reload would answer a question nobody asked. Which trace is
+   * adjacent depends on the table's sort, so the id is read back from the URL
+   * instead of assumed.
+   */
+  async goToAdjacentRow(direction: 'next' | 'previous'): Promise<TracePanelPage> {
+    return test.step(`Move to the ${direction} trace row`, async () => {
+      await this.rowNavButton(direction).click();
+      await this.page.waitForURL((url) => {
+        const shown = url.searchParams.get('trace') ?? '';
+        return shown !== '' && shown !== this.traceId;
+      });
+      const shown = new URL(this.page.url()).searchParams.get('trace') as string;
+      const panel = new TracePanelPage(this.page, shown);
+      await panel.waitForFullyLoaded();
+      return panel;
+    });
+  }
+
+  /**
    * The collapsible Error section header. Matched on its accessible name rather
    * than a testid: the shared CodeBlock renders every section the same way, and
    * only the title distinguishes them.
@@ -312,6 +479,116 @@ export class TracePanelPage {
     return test.step('Open the MCP hint popover', async () => {
       await this.mcpHintButton.hover();
       await this.mcpHintPopover.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Wait until the hint pill has stopped moving.
+   *
+   * The pill fades and slides in from a few pixels above its resting spot,
+   * after a delay held at the animation's first frame. Playwright calls it
+   * visible as soon as it has a non-empty box — which is true throughout that
+   * slide — so anything measuring its position has to wait for the box itself
+   * to settle. Two consecutive equal reads, not a timeout: the animation's
+   * duration is a stylesheet value this has no business encoding.
+   */
+  async waitForMcpHintSettled(): Promise<void> {
+    return test.step('Wait for the MCP hint pill to settle', async () => {
+      await this.waitForMcpHint();
+      let previousTop: number | null = null;
+      await expect
+        .poll(
+          async () => {
+            const box = await this.mcpHintButton.boundingBox();
+            const top = box?.y ?? null;
+            const settled = top !== null && top === previousTop;
+            previousTop = top;
+            return settled;
+          },
+          { message: 'the MCP hint pill should stop moving', timeout: 10_000 },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * The "Search" control of one section header — the icon that opens the
+   * section's find box.
+   *
+   * Addressed by its accessible name, which is what `CodeBlockSearch` gives it;
+   * there is no `data-testid` on this build, and adding one would leave the spec
+   * unrunnable against every deployment that predates it. Scoped to the
+   * section's own header row (the button's parent element) so it cannot resolve
+   * to a sibling section's icon.
+   */
+  sectionSearchButton(title: string): Locator {
+    return this.sectionHeader(title)
+      .locator('xpath=..')
+      .getByRole('button', { name: 'Search', exact: true });
+  }
+
+  /** The find box a section's Search icon opens. */
+  sectionSearchInput(title: string): Locator {
+    return this.sectionHeader(title).locator('xpath=..').getByPlaceholder('Search...');
+  }
+
+  /**
+   * The element the browser would actually deliver a click at `(x, y)` to,
+   * as a short descriptor: `TAG[data-testid]`, or `TAG[aria-label]` when the
+   * element has no testid.
+   *
+   * `document.elementFromPoint` rather than a Playwright click, because a click
+   * that lands on the wrong element reports as an actionability timeout — the
+   * right outcome, but it names Playwright's own machinery instead of naming
+   * the element that took the click. The descriptor walks up from the hit node
+   * to the nearest labelled ancestor, since the topmost element under a pointer
+   * is usually an unlabelled `<svg>` inside the control.
+   */
+  async hitTargetAt(x: number, y: number): Promise<string | null> {
+    return this.page.evaluate(
+      ([px, py]) => {
+        const hit = document.elementFromPoint(px, py);
+        if (!hit) return null;
+        const labelled = hit.closest('[data-testid], [aria-label]');
+        const target = labelled ?? hit;
+        const label = target.getAttribute('data-testid') ?? target.getAttribute('aria-label') ?? '';
+        return `${target.tagName}[${label}]`;
+      },
+      [x, y],
+    );
+  }
+
+  /**
+   * Scroll the data viewer's own overflow container to `top`, clamped to what
+   * it can actually reach, and answer the scrollTop it ended at.
+   *
+   * The container is found by walking up from the section header to the nearest
+   * scrollable ancestor rather than by selector: it carries neither a testid nor
+   * a stable class, and the alternative — a structural path down from the
+   * resizable panel — would break on any wrapper added between the two.
+   */
+  async scrollDataViewerTo(sectionTitle: string, top: number): Promise<number> {
+    return test.step(`Scroll the trace panel to ${Math.round(top)}px`, async () => {
+      const reached = await this.sectionHeader(sectionTitle).evaluate((element, requested) => {
+        let node: Element | null = element.parentElement;
+        while (node) {
+          const overflowY = getComputedStyle(node).overflowY;
+          if (/(auto|scroll)/.test(overflowY) && node.scrollHeight > node.clientHeight) {
+            node.scrollTop = Math.max(0, Math.min(requested, node.scrollHeight - node.clientHeight));
+            return node.scrollTop;
+          }
+          node = node.parentElement;
+        }
+        return null;
+      }, top);
+
+      if (reached === null) {
+        throw new Error(
+          'TracePanelPage.scrollDataViewerTo: the trace panel has no scrollable ancestor — ' +
+            'the seeded trace is not tall enough to overflow the viewer.',
+        );
+      }
+      return reached;
     });
   }
 
@@ -383,6 +660,99 @@ export class TracePanelPage {
     return this.feedbackScoresTabPanel.locator(
       `td[data-cell-id="${scoreName}_value"]`,
     );
+  }
+
+  /**
+   * The Reason cell of one row — `<rowId>_reason`, the sibling of
+   * {@link feedbackScoreValueCell}. `reason` is the column id
+   * `FeedbackScoreTableColumns.REASON` declares, so this is stable against the
+   * column reordering the Reason/Score/Author columns are configurable for.
+   *
+   * The cell itself only ever shows ONE line: its `<span>` carries `truncate`,
+   * which is `white-space: nowrap` plus an ellipsis. The full reason lives in
+   * the hover tooltip — see {@link feedbackScoreReasonTooltipText}.
+   */
+  feedbackScoreReasonCell(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.locator(
+      `td[data-cell-id="${scoreName}_reason"]`,
+    );
+  }
+
+  /**
+   * Hover a score's Reason cell and read back the tooltip's RENDERED text.
+   *
+   * `innerText` rather than `textContent` is the whole point of this method.
+   * `textContent` returns the source string, so it reports a `\n` the browser
+   * may have collapsed to a space and a caller asserting on it would pass
+   * whatever the CSS did. `innerText` is defined over the rendered text and
+   * applies white-space processing, so the line breaks it returns are the line
+   * breaks a reader sees — which is the only way to tell
+   * `whitespace-pre-line` from `white-space: normal` without reaching into the
+   * class attribute of the element under test.
+   *
+   * The returned string is the WHOLE tooltip, header included: it opens with an
+   * `author (value) <time ago>` row whose parts are separate block-level boxes,
+   * so how many `innerText` lines they occupy is a layout detail no caller
+   * should depend on. The reason is always the tail, so assert on it from the
+   * END of the string rather than by dropping a fixed number of leading lines.
+   *
+   * Radix portals the content out of the panel, so the tooltip cannot be found
+   * by descending from the cell. It is resolved through `aria-describedby`
+   * instead of by a page-scoped `getByRole('tooltip')`, which is what
+   * `PlaygroundPage.outputErrorTooltipText` does: that page has one tooltip at a
+   * time, this table has one per row, and reading whichever is open the instant
+   * a second cell is hovered is a race — the previous row's tooltip is still
+   * closing, and taking `.first()` would read the wrong reason and still pass
+   * shape checks. Radix stamps the open content's id on its own trigger, so
+   * this always reads the tooltip belonging to the cell just hovered.
+   *
+   * The span, not the cell, is what gets hovered: the span is the trigger Radix
+   * wrapped, and for a short reason it covers only part of a wide cell, so
+   * hovering the cell's centre can miss it entirely.
+   */
+  async feedbackScoreReasonTooltipText(scoreName: string): Promise<string> {
+    return test.step(`hover the reason for "${scoreName}" and read its tooltip`, async () => {
+      // Park the pointer and let any previous row's tooltip close first. This
+      // is not tidiness: the open content is a real box laid out next to its
+      // own cell, it keeps its pointer events, and it covers the neighbouring
+      // rows — so hovering a second reason without closing the first fails as
+      // "subtree intercepts pointer events", not as a wrong read.
+      //
+      // `steps` is load-bearing, and this is the whole reason the parking move
+      // exists as its own line rather than a bare `mouse.move`. Radix keeps
+      // hoverable tooltip content open across a "grace area" between trigger
+      // and content, and it only reconsiders on a pointermove it actually
+      // observes. A default single-step move teleports the cursor and the
+      // tooltip stays open (`data-state="delayed-open"`) indefinitely, however
+      // far away it lands — so the wait below would never resolve.
+      //
+      // The wait is scoped to THIS table's reason cells rather than to
+      // `getByRole('tooltip')` at page scope: the parking position is over the
+      // app nav, which raises a tooltip of its own, and waiting for zero
+      // tooltips anywhere would never resolve.
+      await this.page.mouse.move(PANEL_POINTER_PARK.x, PANEL_POINTER_PARK.y, { steps: 12 });
+      await expect(
+        this.feedbackScoresTabPanel.locator('td[data-cell-id$="_reason"] [aria-describedby]'),
+        'no reason tooltip left open by a previous hover',
+      ).toHaveCount(0);
+
+      const trigger = this.feedbackScoreReasonCell(scoreName).locator('span').first();
+      await trigger.hover();
+
+      // `aria-describedby` is present only while the content is open, so this
+      // is also the wait for the tooltip's open timer.
+      await expect(trigger, 'the reason cell raised its tooltip').toHaveAttribute(
+        'aria-describedby',
+        /.+/,
+        { timeout: 10_000 },
+      );
+      const contentId = await trigger.getAttribute('aria-describedby');
+      // Attribute-matched rather than `#id`: Radix ids look like `radix-:r7:`,
+      // and the colons are not valid in a CSS id selector.
+      const tooltip = this.page.locator(`[id="${contentId}"]`);
+      await expect(tooltip).toBeVisible({ timeout: 10_000 });
+      return (await tooltip.innerText()).trim();
+    });
   }
 
   /**

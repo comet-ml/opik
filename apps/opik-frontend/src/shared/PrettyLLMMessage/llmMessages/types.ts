@@ -10,7 +10,12 @@ import {
 } from "@/shared/PrettyLLMMessage/types";
 
 // Format types
-export type LLMMessageFormat = "openai" | "langchain" | "anthropic" | "google";
+export type LLMMessageFormat =
+  | "openai"
+  | "langchain"
+  | "anthropic"
+  | "google"
+  | "playground";
 
 // Detection result
 export interface LLMMessageFormatDetectionResult {

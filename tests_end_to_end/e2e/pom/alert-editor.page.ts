@@ -81,6 +81,46 @@ export class AlertEditorPage {
     return this.page.getByRole('switch', { name: 'Enable alert' });
   }
 
+  /**
+   * "Test connection", on the Endpoint URL row.
+   *
+   * By role rather than a testid: the button renders its own literal copy and
+   * nothing else on the form carries that accessible name. The per-trigger
+   * "Test trigger" buttons are separate controls on the trigger blocks and go
+   * through the same `useWebhookTest` hook, so they are NOT this locator.
+   */
+  get testConnectionButton(): Locator {
+    return this.page.getByRole('button', { name: 'Test connection' });
+  }
+
+  /**
+   * Clicks "Test connection". Assertions on what came back — the toast, the
+   * mutation's response — belong to the caller, as they do for the AI
+   * provider dialog's own test button.
+   */
+  async clickTestConnection(): Promise<void> {
+    return test.step('click Test connection', async () => {
+      await this.testConnectionButton.click();
+    });
+  }
+
+  /**
+   * A toast carrying `text`, scoped to the notifications region.
+   *
+   * Scoped rather than a bare `getByText`, for the reason
+   * `PlaygroundPage.completionToast` documents: Radix also renders a
+   * visually-hidden `role="status"` announcer carrying the same copy, so an
+   * unscoped lookup matches twice and trips strict mode instead of asserting
+   * anything. Radix auto-dismisses on its own 5s default, so assert on a toast
+   * as soon as the action that raises it has settled.
+   */
+  toast(text: string | RegExp): Locator {
+    return this.page
+      .getByRole('region', { name: 'Notifications (F8)' })
+      .getByRole('status')
+      .filter({ hasText: text });
+  }
+
   /** The toggle group renders its options as radios, one per destination. */
   destinationOption(destination: AlertDestination): Locator {
     return this.page.getByRole('radio', { name: destination });
@@ -94,9 +134,10 @@ export class AlertEditorPage {
   /**
    * A selected trigger's config block.
    *
-   * Scoped by testid rather than by the trigger's visible title: the title also
-   * appears in the Test-alert panel's accordion, so a text lookup resolves
-   * there instead and finds none of the config controls.
+   * Scoped by testid rather than by the trigger's visible title: the titles are
+   * not unique enough to select on — the "Add trigger" popover lists every
+   * event type under the same copy, so a text lookup made while it is open
+   * resolves there instead of on the block holding the config controls.
    */
   triggerConfig(eventType: AlertEventType): Locator {
     // Mirrors `alertTriggerTestId` in the alerts page helpers: the wire values
@@ -131,6 +172,29 @@ export class AlertEditorPage {
   async fillName(name: string): Promise<void> {
     return test.step(`fill the alert name "${name}"`, async () => {
       await this.nameInput.fill(name);
+    });
+  }
+
+  /**
+   * The validation message under the Name field.
+   *
+   * Zod's message rather than a testid: `FormMessage` renders no stable hook
+   * of its own, and the copy is what a user actually reads.
+   */
+  get nameError(): Locator {
+    return this.page.getByText('Alert name is required');
+  }
+
+  /**
+   * Empties the name field.
+   *
+   * Distinct from `fillName('')` only in intent: the form treats an empty name
+   * as untouched and resumes suggesting one from the triggers, so this is the
+   * step that hands naming back rather than a way to blank the field.
+   */
+  async clearName(): Promise<void> {
+    return test.step('clear the alert name', async () => {
+      await this.nameInput.fill('');
     });
   }
 

@@ -10,6 +10,8 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_e2e_tests.yml'
+          - 'opik.sh'
+          - 'opik.ps1'
     push:
         branches:
           - 'main'
@@ -17,6 +19,8 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_e2e_tests.yml'
+          - 'opik.sh'
+          - 'opik.ps1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -115,7 +119,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.1.0
 
         - name: Run latest Opik server
           env:
@@ -123,6 +127,9 @@ jobs:
             # Avoid Buildx Bake concurrent image export collisions in CI.
             COMPOSE_BAKE: false
             TOGGLE_RUNNERS_ENABLED: "true"
+            # Match how the server runs in production: ids whose embedded UUIDv7
+            # timestamp is outside the ingestion window are rejected, not accepted.
+            UUID_VALIDATION_ENABLED: "true"
             OPIK_BACKEND_PULL_POLICY: never
             PYTHON_BACKEND_PULL_POLICY: never
             OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never

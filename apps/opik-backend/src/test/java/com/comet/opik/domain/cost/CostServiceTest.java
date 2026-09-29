@@ -1151,4 +1151,107 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Registers {@code typesafe} as a canonical provider so the LiteLLM rows tagged
+     * {@code litellm_provider: "typesafe"} ({@code jev-latest}, {@code jev-preview} and the
+     * served version names such as {@code jev-1.13.0}) load instead of being dropped at startup.
+     * TypeSafe bills input tokens only (output tokens are free), and the rows use
+     * {@code mode: "evaluation"}, which falls back to the default text-generation calculator.
+     * The Opik TypeSafe integration logs the served model name returned by the API
+     * ({@code jev-1.13.0}), not the requested alias, so that name must price directly.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideTypeSafeProviderCases")
+    void calculateCostHandlesTypeSafeModels(String description, String model, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 200,
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, "typesafe", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideTypeSafeProviderCases() {
+        // typesafe/jev-*: input 4.2e-8, output 0 -> 1000 * 4.2e-8 + 200 * 0 = 0.000042
+        return Stream.of(
+                Arguments.of("served version name as logged by the SDK", "jev-1.13.0", "0.000042"),
+                Arguments.of("requested alias", "jev-latest", "0.000042"),
+                Arguments.of("preview alias with provider prefix", "typesafe/jev-preview", "0.000042"));
+    }
+
+    /**
+     * Covers registering the canonical providers added here, plus the {@code cohere_chat} alias that
+     * maps onto {@code cohere}, so that their entries in
+     * {@code model_prices_and_context_window.json} load instead of being silently dropped at startup.
+     * Each case pins one representative token-priced model routed through
+     * {@link SpanCostCalculator#textGenerationCost}. Image, duration and per-second priced models
+     * under these providers use pricing shapes that calculator does not cover and stay out of scope.
+     */
+    @ParameterizedTest(name = "provider={0}, model={1}")
+    @MethodSource("provideNewlyRegisteredProviderCases")
+    void calculateCostHandlesNewlyRegisteredProviderModels(String provider, String model, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideNewlyRegisteredProviderCases() {
+        return Stream.of(
+                // hyperbolic/Qwen/QwQ-32B: input 2e-07, output 2e-07 -> 1000*2e-07 + 200*2e-07 = 0.00024
+                Arguments.of("hyperbolic", "hyperbolic/Qwen/QwQ-32B", "0.00024"),
+                // baseten/zai-org/GLM-5: input 9.5e-07, output 3.15e-06 -> 1000*9.5e-07 + 200*3.15e-06 = 0.00158
+                Arguments.of("baseten", "baseten/zai-org/GLM-5", "0.00158"),
+                // lambda_ai/lfm-7b: input 2.5e-08, output 4e-08 -> 1000*2.5e-08 + 200*4e-08 = 0.000033
+                Arguments.of("lambda_ai", "lambda_ai/lfm-7b", "0.000033"),
+                // nscale/Qwen/QwQ-32B: input 1.8e-07, output 2e-07 -> 1000*1.8e-07 + 200*2e-07 = 0.00022
+                Arguments.of("nscale", "nscale/Qwen/QwQ-32B", "0.00022"),
+                // oci/xai.grok-3: input 3e-06, output 1.5e-05 -> 1000*3e-06 + 200*1.5e-05 = 0.006
+                Arguments.of("oci", "oci/xai.grok-3", "0.006"),
+                // replicate/openai/o1: input 1.5e-05, output 6e-05 -> 1000*1.5e-05 + 200*6e-05 = 0.027
+                Arguments.of("replicate", "replicate/openai/o1", "0.027"),
+                // watsonx/openai/gpt-oss-120b: input 1.59e-07, output 6.36e-07
+                // -> 1000*1.59e-07 + 200*6.36e-07 = 0.0002862
+                Arguments.of("watsonx", "watsonx/openai/gpt-oss-120b", "0.0002862"),
+                // command: input 1e-06, output 2e-06 -> 1000*1e-06 + 200*2e-06 = 0.0014
+                Arguments.of("cohere", "command", "0.0014"),
+                // The price file splits Cohere across two litellm_provider values: `cohere` (15 rows) and
+                // `cohere_chat` (7 rows, including command-r and command-r-plus). Registering only `cohere`
+                // left the chat rows dropped at load time, so this case pins the alias.
+                // command-r: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("cohere", "command-r", "0.00027"),
+                // novita/zai-org/autoglm-phone-9b-multilingual: input 3.5e-08, output 1.38e-07
+                // -> 1000*3.5e-08 + 200*1.38e-07 = 0.0000626
+                Arguments.of("novita", "novita/zai-org/autoglm-phone-9b-multilingual", "0.0000626"),
+                // cloudflare/@cf/meta/llama-2-7b-chat-fp16: input 1.923e-06, output 1.923e-06
+                // -> 1000*1.923e-06 + 200*1.923e-06 = 0.0023076
+                Arguments.of("cloudflare", "cloudflare/@cf/meta/llama-2-7b-chat-fp16", "0.0023076"),
+                // anyscale/HuggingFaceH4/zephyr-7b-beta: input 1.5e-07, output 1.5e-07
+                // -> 1000*1.5e-07 + 200*1.5e-07 = 0.00018
+                Arguments.of("anyscale", "anyscale/HuggingFaceH4/zephyr-7b-beta", "0.00018"),
+                // scaleway/qwen/qwen3.5-397b-a17b: input 6e-07, output 3.6e-06 -> 1000*6e-07 + 200*3.6e-06 = 0.00132
+                Arguments.of("scaleway", "scaleway/qwen/qwen3.5-397b-a17b", "0.00132"),
+                // ovhcloud/DeepSeek-R1-Distill-Llama-70B: input 6.7e-07, output 6.7e-07
+                // -> 1000*6.7e-07 + 200*6.7e-07 = 0.000804
+                Arguments.of("ovhcloud", "ovhcloud/DeepSeek-R1-Distill-Llama-70B", "0.000804"),
+                // gmi/anthropic/claude-opus-4.5: input 5e-06, output 2.5e-05 -> 1000*5e-06 + 200*2.5e-05 = 0.01
+                Arguments.of("gmi", "gmi/anthropic/claude-opus-4.5", "0.01"),
+                // gradient_ai/anthropic-claude-3-opus: input 1.5e-05, output 7.5e-05
+                // -> 1000*1.5e-05 + 200*7.5e-05 = 0.03
+                Arguments.of("gradient_ai", "gradient_ai/anthropic-claude-3-opus", "0.03"),
+                // libertai/hermes-3-8b-tee: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("libertai", "libertai/hermes-3-8b-tee", "0.00027"),
+                // azure_ai/gpt-oss-120b: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("azure_ai", "azure_ai/gpt-oss-120b", "0.00027"),
+                // vercel_ai_gateway/alibaba/qwen-3-14b: input 8e-08, output 2.4e-07
+                // -> 1000*8e-08 + 200*2.4e-07 = 0.000128
+                Arguments.of("vercel_ai_gateway", "vercel_ai_gateway/alibaba/qwen-3-14b", "0.000128"),
+                // openrouter/anthropic/claude-3.5-sonnet: input 3e-06, output 1.5e-05
+                // -> 1000*3e-06 + 200*1.5e-05 = 0.006
+                Arguments.of("openrouter", "openrouter/anthropic/claude-3.5-sonnet", "0.006"));
+    }
 }

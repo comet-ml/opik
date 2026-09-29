@@ -199,19 +199,27 @@ def configure(
 
     # Running this command *is* the consent for the server — that is what the
     # command does — so only the skill pack is still a question here.
+    detected = mcp_targets.detected_targets()
+    detected_clients = len(detected)
+
+    # The same block `opik configure` shows, from the same renderer. Both commands
+    # write into the same files and only one of them used to say what it was about
+    # to do; a client named with `--ai-client` is the one case that needs no
+    # introduction, because the user already named it.
+    if not host_keys:
+        install_view.render_mcp_intro()
     skills_verdict = consent.resolve(
         skills_flag,
         # No `-y` on this command, and nothing to detect-or-not: a named client
         # counts as something to install into even when it was not auto-detected.
         assume_yes=False,
         interactive=interactive_helpers.is_interactive(),
-        anything_detected=bool(host_keys) or len(mcp_targets.detected_targets()) > 0,
+        anything_detected=bool(host_keys) or detected_clients > 0,
     )
     if skills_verdict.reason is consent.Reason.NO_TERMINAL:
-        install_view.console.print(
-            "  Skipping the Opik skill pack: no terminal to ask in. Pass --skills "
-            "to install it without being asked.",
-            style="yellow",
+        install_view.render_note(
+            "Skipping the Opik skill pack: no terminal to ask in. Pass --skills "
+            "to install it without being asked."
         )
 
     outcome = assistants.setup(
@@ -231,7 +239,26 @@ def configure(
         "mcp_configure",
         "result",
         clients_written=outcome.clients,
+        clients_failed=outcome.failed_clients,
         skills_installed=outcome.skills,
+        # The same properties that make a zero readable on `opik configure`, in
+        # the same vocabulary so one query reads both. Here running the command
+        # *is* the consent for the server, so `mcp_decision` is always a request
+        # and a zero is never a refusal — which is what makes this the control
+        # group. The pack is still a real question, so its answer is reported.
+        detected_clients=detected_clients,
+        mcp_decision=consent.Reason.REQUESTED.value,
+        skills_decision=outcome.skills_decision,
+        verification_succeeded=outcome.verified,
+        # Same shape as `opik configure`, so one query counts client popularity
+        # across both commands.
+        clients_detected=",".join(sorted(target.key for target in detected)),
+        clients_registered=",".join(sorted(outcome.registered_clients)),
+        # `mcp_decision` is always a request here — running the command is the
+        # permission — so this is the only thing that can say a run still wrote
+        # nothing because the user chose no client in the picker.
+        picker_skipped=outcome.mcp_declined,
+        interactive=interactive_helpers.is_interactive(),
         # Resolved again, not reused: this command can run `opik configure` on the
         # way through, which is what turns an unconfigured run into an attributed
         # one.

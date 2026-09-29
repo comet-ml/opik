@@ -4,6 +4,9 @@ import isFunction from "lodash/isFunction";
 import { FlaskConical, ListTree } from "lucide-react";
 
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
+import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
+import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
+import { useExperimentItemMedia } from "@/hooks/useExperimentItemMedia";
 import ExperimentFeedbackScoresViewer from "@/v2/pages-shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import NoData from "@/shared/NoData/NoData";
@@ -40,6 +43,12 @@ const CompareExperimentsViewer: React.FunctionComponent<
 
   const name = data?.name || experimentId;
 
+  const { media, transformedOutput } = useExperimentItemMedia({
+    output: experimentItem.output,
+    traceId: experimentItem.trace_id,
+    projectId: data?.project_id,
+  });
+
   const feedbackScores: TraceFeedbackScore[] = useMemo(
     () => sortBy(experimentItem.feedback_scores || [], "name"),
     [experimentItem.feedback_scores],
@@ -70,17 +79,30 @@ const CompareExperimentsViewer: React.FunctionComponent<
       );
     }
 
-    if (experimentItem.output) {
-      return (
-        <SyntaxHighlighter
-          data={experimentItem.output}
-          prettifyConfig={{ fieldType: "output" }}
-          preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
-        />
-      );
+    if (!experimentItem.output) {
+      return null;
     }
 
-    return null;
+    const highlighter = (
+      <SyntaxHighlighter
+        data={transformedOutput as object}
+        prettifyConfig={{ fieldType: "output" }}
+        preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
+      />
+    );
+
+    if (!media.length) {
+      return highlighter;
+    }
+
+    return (
+      <MediaProvider media={media}>
+        <div className="flex flex-col gap-2">
+          <AttachmentsList media={media} />
+          {highlighter}
+        </div>
+      </MediaProvider>
+    );
   };
 
   return (

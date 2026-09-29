@@ -14,6 +14,7 @@ class PromptVariant(UniversalBaseModel):
     messages: typing.List[Message]
     configs: typing.Optional[typing.Dict[str, JsonNode]] = None
     prompt_versions: typing.Optional[typing.List[PromptVersionLink]] = None
+    experiment_name: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

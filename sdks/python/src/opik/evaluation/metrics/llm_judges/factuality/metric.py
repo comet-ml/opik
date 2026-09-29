@@ -55,7 +55,11 @@ class Factuality(base_metric.BaseMetric):
         )
 
         self._init_model(model)
-        self.few_shot_examples = few_shot_examples or template.FEW_SHOT_EXAMPLES
+        self.few_shot_examples = (
+            template.FEW_SHOT_EXAMPLES
+            if few_shot_examples is None
+            else few_shot_examples
+        )
 
     def _init_model(
         self, model: Optional[Union[str, base_model.OpikBaseModel]]

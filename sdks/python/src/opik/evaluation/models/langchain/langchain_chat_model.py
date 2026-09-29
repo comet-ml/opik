@@ -104,7 +104,8 @@ class LangchainChatModel(base_model.OpikBaseModel):
         """
         langchain_messages = message_converters.convert_to_langchain_messages(messages)
 
-        opik_monitoring.add_opik_tracer_to_params(kwargs)
+        if self._track:
+            opik_monitoring.add_opik_tracer_to_params(kwargs)
         response = self._engine.invoke(langchain_messages, **kwargs)
 
         return response
@@ -170,7 +171,8 @@ class LangchainChatModel(base_model.OpikBaseModel):
         """
         langchain_messages = message_converters.convert_to_langchain_messages(messages)
 
-        opik_monitoring.add_opik_tracer_to_params(kwargs)
+        if self._track:
+            opik_monitoring.add_opik_tracer_to_params(kwargs)
         response = await self._engine.ainvoke(langchain_messages, **kwargs)
 
         return response

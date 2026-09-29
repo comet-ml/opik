@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
+import com.comet.opik.infrastructure.db.healthchecks.ClickHouseSpansTopologyHealthCheck;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaCodeUnit;
@@ -15,6 +16,7 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
+import static com.tngtech.archunit.core.domain.JavaConstructor.CONSTRUCTOR_NAME;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 
@@ -42,6 +44,14 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
  * of that name satisfy the exemption — an {@code OtherDao#selectSpansMutationTable} reading the config directly would
  * have passed, which is precisely the second reader this rule exists to forbid.
  *
+ * <p><b>The one other permitted reader is {@link ClickHouseSpansTopologyHealthCheck}, and only because it routes
+ * nothing.</b> What the first rule protects is the routing decision: a second place that branches on the flag is a
+ * second place that can name the wrong table. The probe branches on it to <em>assert</em> it against the live
+ * {@code system.tables} topology and report a mismatch at readiness — it issues no mutation and picks no table, so it
+ * cannot get the read/mutate split wrong. It is exempted by name on its own class, like the resolver, so this is an
+ * allowlist of two rather than a loosened rule; a third reader still fails the build. The exemption is on its
+ * constructor because the flag is read once at injection.
+ *
  * <p><b>Deliberately no {@code allowEmptyShould}</b>, unlike {@link SpanDeletionEventArchTest}: these rules select the
  * guarded member rather than its callers, so an empty selection means it was renamed or removed and the rule is no
  * longer guarding anything. Failing then is the point.
@@ -62,19 +72,24 @@ class SpanMutationRoutingArchTest {
     }
 
     /**
-     * The flag is read only where the table name is bound, so the physical table a mutation targets is decided once. A
-     * second reader is a second place that can get the read/mutate split wrong — which post-cutover means a failed
-     * delete on every cut-over install, and pre-cutover a delete against a table that does not exist.
+     * The flag is read where the table name is bound, so the physical table a mutation targets is decided once, and by
+     * the readiness probe that asserts it against the live topology. A third reader is a third place that can get the
+     * read/mutate split wrong — which post-cutover means a failed delete on every cut-over install, and pre-cutover a
+     * delete against a table that does not exist. {@code byCodeUnitsThat} rather than {@code byMethodsThat} because the
+     * probe reads the flag in its constructor, and a constructor is not a {@code JavaMethod} — so the method-only form
+     * could never have admitted it, only reported it.
      */
     @ArchTest
-    static final ArchRule the_wrap_flag_is_read_only_where_the_mutation_table_is_bound = methods()
+    static final ArchRule the_wrap_flag_is_read_only_where_the_mutation_table_is_bound_and_by_the_readiness_probe = methods()
             .that().areDeclaredIn(DatabaseAnalyticsDataModelConfig.class)
             .and().haveName(CONFIG_FLAG)
-            .should().onlyBeCalled().byCodeUnitsThat(only(SpanDAO.class, RESOLVER))
+            .should().onlyBeCalled().byCodeUnitsThat(only(SpanDAO.class, RESOLVER)
+                    .or(only(ClickHouseSpansTopologyHealthCheck.class, CONSTRUCTOR_NAME)))
             .because("""
                     the sharding-readiness wrap flag must be read only by SpanDAO#selectSpansMutationTable, whose \
                     Javadoc documents what the two topologies imply for reads, mutations and migrations, so there is \
-                    exactly one line to audit when the topology changes
+                    exactly one line to audit when the topology changes, and by ClickHouseSpansTopologyHealthCheck, \
+                    which asserts the flag against the live `spans` engine and routes nothing
                     """);
 
     /**

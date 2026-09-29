@@ -5,7 +5,6 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -21,10 +20,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.db.TracesSchemaParity.BACKUP;
-import static com.comet.opik.db.TracesSchemaParity.SHADOW;
-import static com.comet.opik.db.TracesSchemaParity.SHARD;
-import static com.comet.opik.db.TracesSchemaParity.TRACES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -55,15 +50,24 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@DisplayName("Traces Schema Parity - Post-cutover")
 class TracesSchemaParityPostCutoverTest {
+
+    private static final CutoverSchemaParity PARITY = CutoverSchemaParity.TRACES;
+    private static final CutoverDdlReferenceFixture FIXTURE = CutoverDdlReferenceFixture.TRACES;
+
+    private static final String TRACES = PARITY.getLive();
+    private static final String SHADOW = PARITY.getShadow();
+    private static final String SHARD = PARITY.getShard();
+    private static final String BACKUP = PARITY.getBackup();
 
     /**
      * The migration the changelog stops after so the cutover transform lands where it does in production: the last
      * migration that shapes the shadow table, and therefore the last one that runs pre-cutover on an install that then
-     * cuts over. Everything after it must tolerate both topologies.
+     * cuts over. Everything after it must tolerate both topologies. Taken from the lint rather than restated, because
+     * the boundary this splices at and the boundary the lint starts checking at are the same fact.
      */
-    private static final String CUTOVER_SPLICE_POINT = "000114_recreate_traces_local_v2_id_at_datetime64.sql";
+    private static final String CUTOVER_SPLICE_POINT = CutoverMigrationPreconditionLint.TRACES
+            .getCutoverSplicePoint();
 
     /** The temp name the gapless wrap builds the wrapper under before the atomic rotation. */
     private static final String TEMP_WRAPPER = "traces_dist";
@@ -105,7 +109,6 @@ class TracesSchemaParityPostCutoverTest {
 
     @Test
     @Order(1)
-    @DisplayName("the spliced cutover leaves the post-cutover topology")
     void spliceLeavesPostCutoverTopology() throws Exception {
         assertThat(tableExists(TRACES)).as("`%s` must exist as the wrapper", TRACES).isTrue();
         assertThat(tableExists(SHARD)).as("`%s` must exist as the shard", SHARD).isTrue();
@@ -119,7 +122,6 @@ class TracesSchemaParityPostCutoverTest {
 
     @Test
     @Order(2)
-    @DisplayName("the whole changelog applies cleanly on the post-cutover topology")
     void changelogAppliesCleanlyOnPostCutoverTopology() {
         assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse))
                 .as("""
@@ -131,9 +133,8 @@ class TracesSchemaParityPostCutoverTest {
 
     @Test
     @Order(3)
-    @DisplayName("the Distributed wrapper exposes exactly the shard's columns")
     void wrapperExposesShardColumns() throws Exception {
-        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+        PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -143,7 +144,6 @@ class TracesSchemaParityPostCutoverTest {
      */
     @Test
     @Order(4)
-    @DisplayName("every shard column is readable through the wrapper")
     void everyShardColumnIsReadableThroughTheWrapper() throws Exception {
         var shardColumns = TableSchema.read(connection, DATABASE_NAME, SHARD).columnNames();
 
@@ -159,19 +159,18 @@ class TracesSchemaParityPostCutoverTest {
      */
     @Test
     @Order(5)
-    @DisplayName("the reference migration takes its post-cutover branch and records the other as MARK_RAN")
-    void referenceMigrationTakesThePostCutoverBranch() throws Exception {
-        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+    void referenceMigrationTakesThePostCutoverBranchAndMarksTheOtherRan() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, FIXTURE.getChangelog());
 
-        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.POST_CUTOVER_CHANGESET))
+        assertThat(FIXTURE.execType(connection, FIXTURE.getPostCutoverChangeSet()))
                 .as("on a cut-over install the post-cutover branch must run")
-                .isEqualTo(TracesDdlReferenceFixture.EXECUTED);
-        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.PRE_CUTOVER_CHANGESET))
+                .isEqualTo(CutoverDdlReferenceFixture.EXECUTED);
+        assertThat(FIXTURE.execType(connection, FIXTURE.getPreCutoverChangeSet()))
                 .as("""
                         the pre-cutover branch must be recorded MARK_RAN: its statements name traces_local_v2, which no \
                         longer exists here, so running them would fail the migration on every cut-over install\
                         """)
-                .isEqualTo(TracesDdlReferenceFixture.MARK_RAN);
+                .isEqualTo(CutoverDdlReferenceFixture.MARK_RAN);
 
         var wrapper = TableSchema.read(connection, DATABASE_NAME, TRACES);
         var shard = TableSchema.read(connection, DATABASE_NAME, SHARD);
@@ -181,27 +180,27 @@ class TracesSchemaParityPostCutoverTest {
         assertReferenceFieldContract(shard, "the read-facing field must reach the shard, which stores it");
         assertReferenceFieldContract(wrapper, "...and the wrapper, which resolves it for reads");
 
-        assertThat(shard.skipIndicesByName().get(TracesDdlReferenceFixture.STORAGE_INDEX))
+        assertThat(shard.skipIndicesByName().get(CutoverDdlReferenceFixture.STORAGE_INDEX))
                 .as("the storage-only index must reach the shard, defined as declared")
-                .isEqualTo(TracesDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
+                .isEqualTo(CutoverDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
         assertThat(wrapper.skipIndexNames())
                 .as("...and must NOT be attempted on the Distributed wrapper, which stores no data to index")
-                .doesNotContain(TracesDdlReferenceFixture.STORAGE_INDEX);
+                .doesNotContain(CutoverDdlReferenceFixture.STORAGE_INDEX);
 
-        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
-        selectColumns(List.of(TracesDdlReferenceFixture.DERIVED_COLUMN));
+        PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
+        selectColumns(List.of(CutoverDdlReferenceFixture.DERIVED_COLUMN));
         assertDerivedFieldComputesThroughTheWrapper();
     }
 
     private void assertReferenceFieldContract(TableSchema schema, String description) {
-        var column = schema.columnsByName().get(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        var column = schema.columnsByName().get(CutoverDdlReferenceFixture.DERIVED_COLUMN);
         assertThat(column).as(description).isNotNull();
         assertThat(column.type()).as("reference field type on `%s`", schema.table())
-                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_TYPE);
+                .isEqualTo(CutoverDdlReferenceFixture.DERIVED_COLUMN_TYPE);
         assertThat(column.defaultKind()).as("reference field default kind on `%s`", schema.table())
-                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
+                .isEqualTo(CutoverDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
         assertThat(column.defaultExpression()).as("reference field expression on `%s`", schema.table())
-                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_EXPRESSION);
+                .isEqualTo(CutoverDdlReferenceFixture.DERIVED_COLUMN_EXPRESSION);
     }
 
     /**
@@ -227,7 +226,7 @@ class TracesSchemaParityPostCutoverTest {
                 """.formatted(DATABASE_NAME, TRACES, traceId, java.util.UUID.randomUUID(), name));
 
         var sql = "SELECT %s FROM %s.%s WHERE id = '%s'"
-                .formatted(TracesDdlReferenceFixture.DERIVED_COLUMN, DATABASE_NAME, TRACES, traceId);
+                .formatted(CutoverDdlReferenceFixture.DERIVED_COLUMN, DATABASE_NAME, TRACES, traceId);
         Awaitility.await("the probe row written through the wrapper becomes readable through it")
                 .atMost(30, TimeUnit.SECONDS)
                 .pollInterval(200, TimeUnit.MILLISECONDS)
@@ -237,7 +236,7 @@ class TracesSchemaParityPostCutoverTest {
                                 .isTrue();
                         assertThat(resultSet.getLong(1))
                                 .as("`%s` is MATERIALIZED length(name), so it must compute the probe name's length",
-                                        TracesDdlReferenceFixture.DERIVED_COLUMN)
+                                        CutoverDdlReferenceFixture.DERIVED_COLUMN)
                                 .isEqualTo(name.length());
                     }
                 });
@@ -245,15 +244,14 @@ class TracesSchemaParityPostCutoverTest {
 
     @Test
     @Order(6)
-    @DisplayName("re-applying the reference migration is a no-op")
     void reApplyingTheReferenceMigrationIsANoOp() throws Exception {
-        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+        MigrationUtils.runClickhouseChangelog(clickHouse, FIXTURE.getChangelog());
 
-        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse, TracesDdlReferenceFixture.CHANGELOG))
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse, FIXTURE.getChangelog()))
                 .as("both branches stay recorded as applied, so nothing is left to run")
                 .isEmpty();
 
-        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+        PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -262,24 +260,23 @@ class TracesSchemaParityPostCutoverTest {
      */
     @Test
     @Order(7)
-    @DisplayName("an unguarded traces migration applies cleanly and leaves wrapper-only drift the gate rejects")
-    void unguardedMigrationIsRejected() throws Exception {
-        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
+    void unguardedMigrationAppliesCleanlyAndIsRejected() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, FIXTURE.getUnguardedChangelog());
 
         assertThat(TableSchema.read(connection, DATABASE_NAME, TRACES).columnNames())
                 .as("the unguarded ALTER reaches the wrapper, so it applies without error")
-                .contains(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+                .contains(CutoverDdlReferenceFixture.UNGUARDED_COLUMN);
         assertThat(TableSchema.read(connection, DATABASE_NAME, SHARD).columnNames())
                 .as("...and never reaches the shard that would have to store it")
-                .doesNotContain(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+                .doesNotContain(CutoverDdlReferenceFixture.UNGUARDED_COLUMN);
 
-        assertThatThrownBy(() -> TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME))
+        assertThatThrownBy(() -> PARITY.assertPostCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
-                .hasMessageContaining(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+                .hasMessageContaining(CutoverDdlReferenceFixture.UNGUARDED_COLUMN);
 
         execute("ALTER TABLE %s.%s DROP COLUMN %s"
-                .formatted(DATABASE_NAME, TRACES, TracesDdlReferenceFixture.UNGUARDED_COLUMN));
-        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+                .formatted(DATABASE_NAME, TRACES, CutoverDdlReferenceFixture.UNGUARDED_COLUMN));
+        PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -289,7 +286,6 @@ class TracesSchemaParityPostCutoverTest {
      */
     @Test
     @Order(8)
-    @DisplayName("applying the fixtures leaves the shipped changelog intact")
     void applyingTheFixturesLeavesTheShippedChangelogIntact() {
         assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse))
                 .as("the shipped changelog must remain fully applied, with nothing pending or invalidated")
@@ -309,11 +305,10 @@ class TracesSchemaParityPostCutoverTest {
      */
     @Test
     @Order(10)
-    @DisplayName("drift is caught: a shard-only column is unreadable until the wrapper is altered too")
     void shardOnlyColumnIsUnreadableUntilTheWrapperIsAlteredToo() throws Exception {
         execute("ALTER TABLE %s.%s ADD COLUMN drift_shard_only String".formatted(DATABASE_NAME, SHARD));
 
-        assertThatThrownBy(() -> TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME))
+        assertThatThrownBy(() -> PARITY.assertPostCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("drift_shard_only");
 
@@ -324,12 +319,12 @@ class TracesSchemaParityPostCutoverTest {
         // The remedy: the wrapper takes the same ADD COLUMN as metadata only, and the column then reads.
         execute("ALTER TABLE %s.%s ADD COLUMN drift_shard_only String".formatted(DATABASE_NAME, TRACES));
 
-        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+        PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
         selectColumns(List.of("drift_shard_only"));
 
         execute("ALTER TABLE %s.%s DROP COLUMN drift_shard_only".formatted(DATABASE_NAME, TRACES));
         execute("ALTER TABLE %s.%s DROP COLUMN drift_shard_only".formatted(DATABASE_NAME, SHARD));
-        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+        PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -339,20 +334,19 @@ class TracesSchemaParityPostCutoverTest {
      */
     @Test
     @Order(11)
-    @DisplayName("drift is caught: a materialized column whose expression differs between shard and wrapper")
     void materializedExpressionDriftIsCaught() throws Exception {
         execute("ALTER TABLE %s.%s ADD COLUMN drift_expression UInt64 MATERIALIZED length(name)"
                 .formatted(DATABASE_NAME, SHARD));
         execute("ALTER TABLE %s.%s ADD COLUMN drift_expression UInt64 MATERIALIZED length(thread_id)"
                 .formatted(DATABASE_NAME, TRACES));
 
-        assertThatThrownBy(() -> TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME))
+        assertThatThrownBy(() -> PARITY.assertPostCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("drift_expression");
 
         execute("ALTER TABLE %s.%s DROP COLUMN drift_expression".formatted(DATABASE_NAME, TRACES));
         execute("ALTER TABLE %s.%s DROP COLUMN drift_expression".formatted(DATABASE_NAME, SHARD));
-        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+        PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
 
     /**
@@ -361,16 +355,15 @@ class TracesSchemaParityPostCutoverTest {
      */
     @Test
     @Order(12)
-    @DisplayName("drift is caught: a column added to the wrapper alone")
     void wrapperOnlyColumnIsCaught() throws Exception {
         execute("ALTER TABLE %s.%s ADD COLUMN drift_wrapper_only String".formatted(DATABASE_NAME, TRACES));
 
-        assertThatThrownBy(() -> TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME))
+        assertThatThrownBy(() -> PARITY.assertPostCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("drift_wrapper_only");
 
         execute("ALTER TABLE %s.%s DROP COLUMN drift_wrapper_only".formatted(DATABASE_NAME, TRACES));
-        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+        PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
 
     /** Cutover step 3, exchange block — mirrors 000003_exchange_and_wrap.sql. */

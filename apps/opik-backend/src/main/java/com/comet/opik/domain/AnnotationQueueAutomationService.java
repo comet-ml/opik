@@ -11,7 +11,10 @@ import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterModel;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleProjectsDAO;
+import com.comet.opik.infrastructure.cache.CacheEvict;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.utils.JsonUtils;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -61,6 +64,7 @@ public class AnnotationQueueAutomationService {
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull IdGenerator idGenerator;
 
+    @CacheEvict(name = "annotation_queue_automations", key = "$workspaceId + '-*'", keyUsesPatternMatching = true)
     public void save(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID queueId,
             @NonNull UUID projectId, @NonNull AnnotationQueue.AnnotationScope scope,
             @NonNull String queueName, @NonNull AnnotationQueueAutomation automation) {
@@ -113,6 +117,7 @@ public class AnnotationQueueAutomationService {
      * carrying the old one. The update names only that column, so a rename racing a save cannot write
      * back a stale copy of the fields it never meant to touch.
      */
+    @CacheEvict(name = "annotation_queue_automations", key = "$workspaceId + '-*'", keyUsesPatternMatching = true)
     public void renameRule(@NonNull String workspaceId, @NonNull UUID queueId, @NonNull String queueName) {
         transactionTemplate.inTransaction(WRITE, handle -> {
             var routerDao = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class);
@@ -262,25 +267,38 @@ public class AnnotationQueueAutomationService {
     /**
      * Whether anything could route for this event, as the listener's guard.
      *
-     * <p>This is the project-scoped form, used when the event names its project.
+     * <p>A null {@code projectId} is the batch score path, which cannot name a project because one batch
+     * may span several. The question then widens to whether the workspace has any router at all, which is
+     * a pre-filter only: the project scope is enforced by {@link #findEnabledByProjects} once the consumer
+     * learns each entity's project from its scores. Both forms are an index seek on an equality prefix of
+     * {@code automation_rules_workspace_action_enabled_idx}, not a scan.
+     *
+     * <p>One method rather than two overloads so that callers, which receive the project id already
+     * nullable from the event, do not each have to branch on it.
+     *
+     * <p>Cached, following {@code AutomationRuleEvaluatorService#findAll}: this is a database round trip on
+     * the busiest event in the system, and the answer is no for most workspaces most of the time. The
+     * writes below evict the whole workspace by prefix, because one rule change can flip the answer for
+     * the workspace-wide key and every project key at once.
+     *
+     * <p>Eviction is not the only thing keeping this fresh, and must not be: a rule can also be disabled by
+     * a write this class never sees, and a stale {@code false} is silent - the events it turns away are
+     * dropped at the guard, and there is no backfill to route them later. The TTL is the floor under that,
+     * which is why it is short and configurable rather than left to the cache manager's default.
      */
-    public boolean hasEnabledAutomation(@NonNull String workspaceId, @NonNull UUID projectId,
+    // workspaceId first because it is the coarsest entity: every eviction is per workspace, so a prefix
+    // beats a glob with a leading wildcard. CacheInterceptor substitutes "" for a null argument before
+    // evaluating the expression, so the batch path's absent project becomes the literal 'all' rather than
+    // an empty segment, and the two forms cannot collide.
+    @Cacheable(name = "annotation_queue_automations", key = "$workspaceId + '-' + ($projectId == '' ? 'all' : $projectId) + '-' + $scope", returnType = Boolean.class)
+    public boolean hasEnabledAutomation(@NonNull String workspaceId, @Nullable UUID projectId,
             @NonNull AnnotationQueue.AnnotationScope scope) {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
-                        .existsEnabledByProject(workspaceId, projectId, scope.getValue()));
-    }
-
-    /**
-     * The same guard for the batch score path, which cannot name a project because one batch may span
-     * several. A pre-filter only: it answers whether the workspace has any router at all, and the project
-     * scope is enforced by {@link #findEnabledByProjects} once the consumer knows the entities' projects.
-     */
-    public boolean hasEnabledAutomation(@NonNull String workspaceId,
-            @NonNull AnnotationQueue.AnnotationScope scope) {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
-                        .existsEnabledByWorkspace(workspaceId, scope.getValue()));
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class);
+            return projectId == null
+                    ? dao.existsEnabledByWorkspace(workspaceId, scope.getValue())
+                    : dao.existsEnabledByProject(workspaceId, projectId, scope.getValue());
+        });
     }
 
     /**
@@ -289,6 +307,7 @@ public class AnnotationQueueAutomationService {
     public record QueueAutomation(UUID queueId, UUID projectId, Conditions conditions) {
     }
 
+    @CacheEvict(name = "annotation_queue_automations", key = "$workspaceId + '-*'", keyUsesPatternMatching = true)
     public void deleteByQueueIds(@NonNull String workspaceId, List<UUID> queueIds) {
         if (CollectionUtils.isEmpty(queueIds)) {
             return;
