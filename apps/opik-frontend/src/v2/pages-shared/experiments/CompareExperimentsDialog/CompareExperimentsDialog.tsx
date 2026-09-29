@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { JsonParam, useQueryParam } from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import {
@@ -11,7 +10,6 @@ import {
   DialogTitle,
 } from "@/ui/dialog";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
-import { useDatasetIdFromCompareExperimentsURL } from "@/v2/pages/CompareExperimentsPage/useDatasetIdFromCompareExperimentsURL";
 import Loader from "@/shared/Loader/Loader";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -28,26 +26,23 @@ const DEFAULT_SIZE = 5;
 export type CompareExperimentsDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
+  datasetId: string;
+  experimentsIds: string[];
+  onCompare: (experimentsIds: string[]) => void;
 };
 
 const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
   open,
   setOpen,
+  datasetId,
+  experimentsIds,
+  onCompare,
 }) => {
-  const datasetId = useDatasetIdFromCompareExperimentsURL();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
-
-  const [experimentsIds = [], setExperimentsIds] = useQueryParam(
-    "experiments",
-    JsonParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
 
   const [selectedExperimentsIds, setSelectedExperimentsIds] =
     useState<string[]>(experimentsIds);
@@ -163,7 +158,7 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
             <Button
               type="submit"
               disabled={selectedExperimentsIds.length === 0}
-              onClick={() => setExperimentsIds(selectedExperimentsIds)}
+              onClick={() => onCompare(selectedExperimentsIds)}
             >
               Compare {selectedExperimentsIds.length}{" "}
               {selectedExperimentsIds.length === 1
