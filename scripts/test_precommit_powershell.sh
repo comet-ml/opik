@@ -114,6 +114,35 @@ rc=$(scripts/precommit-powershell-check.sh "$tmp/ps7only.ps1" >/dev/null 2>&1; e
 check "reports the 5.1 incompatibility" "PSUseCompatibleSyntax" "$out"
 check_exit "7-only syntax exits 1" 1 "$rc"
 
+# --- Version-specific commands: must fail on either target profile ----------
+# A parameter or command is not syntax, so PSUseCompatibleSyntax passes these;
+# only PSUseCompatibleCommands catches them. One fixture per target profile, so
+# dropping either profile from the settings file fails a test. The assertions
+# pin the profile version, not just the rule name: Get-WmiObject also trips
+# PSAvoidUsingWMICmdlet, so exit 1 alone would not prove this rule fired.
+cat >"$tmp/ps7cmd.ps1" <<'PS'
+function Invoke-Each {
+    param([int[]]$Items)
+    $Items | ForEach-Object -Parallel { $_ * 2 }
+}
+PS
+out=$(scripts/precommit-powershell-check.sh "$tmp/ps7cmd.ps1" 2>&1 || true)
+rc=$(scripts/precommit-powershell-check.sh "$tmp/ps7cmd.ps1" >/dev/null 2>&1; echo $?)
+check "flags a 7-only parameter against the 5.1 profile" \
+	"[PSUseCompatibleCommands] The parameter 'Parallel' is not available for command 'ForEach-Object' by default in PowerShell version '5.1" "$out"
+check_exit "7-only parameter exits 1" 1 "$rc"
+
+cat >"$tmp/ps51cmd.ps1" <<'PS'
+function Get-OsName {
+    return (Get-WmiObject -Class Win32_OperatingSystem).Caption
+}
+PS
+out=$(scripts/precommit-powershell-check.sh "$tmp/ps51cmd.ps1" 2>&1 || true)
+rc=$(scripts/precommit-powershell-check.sh "$tmp/ps51cmd.ps1" >/dev/null 2>&1; echo $?)
+check "flags a 5.1-only command against the 7.0 profile" \
+	"[PSUseCompatibleCommands] The command 'Get-WmiObject' is not available by default in PowerShell version '7.0" "$out"
+check_exit "5.1-only command exits 1" 1 "$rc"
+
 # --- Missing path: must reject, not silently pass ---------------------------
 # A typo'd or stale path previously fell through to "nothing to check" and
 # reported success, which is the one failure mode a gate must never have.
