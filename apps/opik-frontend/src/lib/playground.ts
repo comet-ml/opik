@@ -32,10 +32,12 @@ import {
 } from "@/types/providers";
 import {
   generateDefaultLLMPromptMessage,
+  hasAudiosInContent,
   hasImagesInContent,
   hasVideosInContent,
 } from "@/lib/llm";
 import {
+  supportsAudioInput,
   supportsImageInput,
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
@@ -260,10 +262,14 @@ export const hasUnsupportedMedia = (
   const hasVideos = prompt.messages.some((message) =>
     hasVideosInContent(message.content),
   );
+  const hasAudios = prompt.messages.some((message) =>
+    hasAudiosInContent(message.content),
+  );
 
   return (
     (hasImages && !supportsImageInput(prompt.model)) ||
-    (hasVideos && !supportsVideoInput(prompt.model))
+    (hasVideos && !supportsVideoInput(prompt.model)) ||
+    (hasAudios && !supportsAudioInput(prompt.model))
   );
 };
 
