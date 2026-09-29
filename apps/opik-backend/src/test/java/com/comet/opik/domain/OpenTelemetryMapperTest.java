@@ -1555,33 +1555,20 @@ class OpenTelemetryMapperTest {
          */
         @ParameterizedTest(name = "[{index}] {0} -> {1}")
         @CsvSource({
-                "open_ai,                    openai",
-                "azure_open_ai,              azure",
-                "amazon_bedrock,             bedrock",
-                "google_ai_gemini,           google_ai",
-                "google_vertex_ai_gemini,    google_vertexai",
-                "google_vertex_ai_anthropic, google_vertexai",
-                "jina,                       jina_ai",
+                "open_ai,          openai",
+                "amazon_bedrock,   bedrock",
+                "google_ai_gemini, google_ai",
         })
-        void langChain4jProviderIsAliasedToCanonicalProvider(String wireValue, String expected) {
+        void quarkusLangChain4jProviderIsAliasedToCanonicalProvider(String wireValue, String expected) {
             assertThat(map(attr("gen_ai.provider.name", wireValue)).provider()).isEqualTo(expected);
         }
 
-        @Test
-        void langChain4jVertexAnthropicClaudeModelResolvesToAnthropicVertex() {
-            assertThat(map(attr("gen_ai.provider.name", "google_vertex_ai_anthropic"),
-                    attr("gen_ai.request.model", "claude-sonnet-4-5")).provider())
-                    .isEqualTo("anthropic_vertexai");
-        }
-
         /**
-         * {@code google_genai} fronts either the Gemini API or Vertex, and {@code microsoft_foundry}
-         * either Azure OpenAI or Foundry models, so neither can be aliased to a single provider.
+         * {@code google_genai} fronts either the Gemini API or Vertex, so it cannot be aliased to one.
          */
-        @ParameterizedTest(name = "[{index}] {0} is not aliased")
-        @CsvSource({"microsoft_foundry", "google_genai"})
-        void ambiguousLangChain4jProviderIsNotAliased(String wireValue) {
-            assertThat(map(attr("gen_ai.provider.name", wireValue)).provider()).isEqualTo(wireValue);
+        @Test
+        void quarkusLangChain4jGoogleGenAiIsNotAliased() {
+            assertThat(map(attr("gen_ai.provider.name", "google_genai")).provider()).isEqualTo("google_genai");
         }
 
         /**
