@@ -10,8 +10,8 @@ import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -145,45 +146,56 @@ class LlmModelRegistryServiceTest {
         assertThat(registry.get("openrouter")).isNotEmpty();
     }
 
-    @ParameterizedTest(name = "{0} reasoning={1}")
-    @CsvSource({
-            "gpt-6-astra, true",
-            "gpt-6-luna, true",
-            "gpt-6-sol, true",
-            "gpt-5, true",
-            "gpt-5-mini, true",
-            "gpt-5-nano, true",
-            "gpt-5.1, true",
-            "gpt-5.2, true",
-            "gpt-5.4, true",
-            "gpt-5.4-mini, true",
-            "gpt-5.4-nano, true",
-            "gpt-5.5, true",
-            "gpt-5.6-luna, true",
-            "gpt-5.6-sol, true",
-            "gpt-5.6-terra, true",
-            "gpt-5-chat-latest, false",
-            "gpt-5.2-chat-latest, false",
-            "gpt-5.3-chat-latest, false"
-    })
-    void loadDefaultResourceFlagsOpenAiReasoningModels(String modelId, boolean reasoning) {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("openAiCapabilityFlagCases")
+    void loadDefaultResourceCarriesOpenAiCapabilityFlags(String modelId,
+            LlmModelRegistryService.ModelLookupResult expected) {
         var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
 
-        var result = service.findModel(modelId).orElseThrow();
+        var actual = service.findModel(modelId).orElseThrow();
 
-        assertThat(result.provider()).isEqualTo(LlmProvider.OPEN_AI);
-        assertThat(result.model().reasoning()).isEqualTo(reasoning);
+        assertThat(actual).isEqualTo(expected);
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"gpt-6-astra", "gpt-6-luna", "gpt-6-sol"})
-    void loadDefaultResourceFlagsGpt6StructuredOutput(String modelId) {
-        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+    static Stream<Arguments> openAiCapabilityFlagCases() {
+        return Stream.of(
+                openAiCase(LlmModelDefinition.builder().id("gpt-6-astra").label("GPT 6 Astra")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-6-luna").label("GPT 6 Luna")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-6-sol").label("GPT 6 Sol")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5").label("GPT 5")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5-mini").label("GPT 5 Mini")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5-nano").label("GPT 5 Nano")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.1").label("GPT 5.1")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.2").label("GPT 5.2")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.4").label("GPT 5.4")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.4-mini").label("GPT 5.4 Mini")
+                        .reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.4-nano").label("GPT 5.4 Nano")
+                        .reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.5").label("GPT 5.5")
+                        .structuredOutput(true).reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.6-luna").label("GPT 5.6 Luna")
+                        .reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.6-sol").label("GPT 5.6 Sol")
+                        .reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.6-terra").label("GPT 5.6 Terra")
+                        .reasoning(true).build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5-chat-latest").build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.2-chat-latest").build()),
+                openAiCase(LlmModelDefinition.builder().id("gpt-5.3-chat-latest").structuredOutput(true).build()));
+    }
 
-        var result = service.findModel(modelId).orElseThrow();
-
-        assertThat(result.provider()).isEqualTo(LlmProvider.OPEN_AI);
-        assertThat(result.model().structuredOutput()).isTrue();
+    private static Arguments openAiCase(LlmModelDefinition model) {
+        return Arguments.of(model.id(), new LlmModelRegistryService.ModelLookupResult(LlmProvider.OPEN_AI, model));
     }
 
     @Test
