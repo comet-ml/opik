@@ -2854,6 +2854,36 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The two fields of an experiment that decide how the compare route renders
+     * it, read off the raw response.
+     *
+     * Neither is on `ExperimentRefDetail`, and neither is incidental:
+     * `evaluation_method` selects the Items tab's sidebar
+     * (`isTestSuiteExperiment`), and `project_id` is what both sidebars hand to
+     * `useExperimentItemMedia` as the project to look attachments up under. A
+     * fixture that seeds for either needs to prove they actually landed —
+     * missing, both fail silently, as a panel that renders with no media rather
+     * than as an error.
+     *
+     * `null` for absent rather than a default: "the server did not send one" is
+     * exactly the state a caller here is checking for.
+     */
+    async getExperimentRenderFields(
+      id: string,
+    ): Promise<{ evaluationMethod: string | null; projectId: string | null }> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/experiments/${id}`);
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/experiments/${id} -> ${status}: ${message}`);
+      }
+      const body = (json ?? {}) as { evaluation_method?: unknown; project_id?: unknown };
+      return {
+        evaluationMethod:
+          typeof body.evaluation_method === 'string' ? body.evaluation_method : null,
+        projectId: typeof body.project_id === 'string' ? body.project_id : null,
+      };
+    },
+
+    /**
      * `POST /v1/private/experiments/execute` — the write path a test-suite run
      * takes, and the one that carries a per-variant `experiment_name`
      * (OPIK-3268). The pinned SDK has no binding for it, so this goes through
@@ -4642,7 +4672,41 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * the run used, and a prompt id here silently links nothing.
        */
       promptVersionIds?: string[];
+      /**
+       * `evaluation_method`, which decides which SIDEBAR the compare route's
+       * Items tab mounts: `isTestSuiteExperiment` reads it off the first
+       * experiment, and `evaluation_suite` selects `TestSuiteExperimentPanel`
+       * over `CompareExperimentsPanel`.
+       *
+       * Sent through a raw POST rather than the typed SDK call below, which has
+       * no field for it and would silently drop it — leaving the experiment on
+       * the default `dataset` method and the route rendering the other panel
+       * entirely. Reaching the suite panel any other way means running a real
+       * test suite, which judges its assertions with an LLM and so is neither
+       * deterministic nor free.
+       */
+      evaluationMethod?: 'dataset' | 'evaluation_suite';
     }): Promise<string> {
+      if (args.evaluationMethod !== undefined) {
+        await postSeedWrite(
+          '/v1/private/experiments',
+          `create experiment ${args.name} (evaluation_method=${args.evaluationMethod})`,
+          {
+            id: args.id,
+            name: args.name,
+            dataset_name: args.datasetName,
+            project_name: args.projectName,
+            evaluation_method: args.evaluationMethod,
+            ...(args.type ? { type: args.type } : {}),
+            ...(args.optimizationId ? { optimization_id: args.optimizationId } : {}),
+            ...(args.metadata ? { metadata: args.metadata } : {}),
+            ...(args.promptVersionIds?.length
+              ? { prompt_versions: args.promptVersionIds.map((id) => ({ id })) }
+              : {}),
+          },
+        );
+        return args.id;
+      }
       await opik.api.experiments.createExperiment({
         id: args.id,
         name: args.name,

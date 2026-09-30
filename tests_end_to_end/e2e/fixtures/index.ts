@@ -1,4 +1,4 @@
-export { test, expect } from './readability-locale-experiment.fixture';
+export { test, expect } from './suite-experiment-run-media.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -246,4 +246,14 @@ export type {
   ReadabilityLocaleExperimentFixtures,
 } from './readability-locale-experiment.fixture';
 export { READABILITY_LANGUAGES } from './readability-locale-experiment.fixture';
+export type {
+  OutputAttachmentItemRef,
+  ExperimentOutputAttachmentRef,
+  ExperimentOutputAttachmentFixtures,
+} from './experiment-output-attachment.fixture';
+export type {
+  SuiteRunSeed,
+  SuiteExperimentRunMediaRef,
+  SuiteExperimentRunMediaFixtures,
+} from './suite-experiment-run-media.fixture';
 export type { ProjectRef } from '../core/backend';
