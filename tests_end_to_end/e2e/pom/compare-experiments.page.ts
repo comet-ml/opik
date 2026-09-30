@@ -1058,6 +1058,27 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * The rendered text of one trace-sourced column's cell, in SINGLE-experiment
+   * mode.
+   *
+   * Not `readItemOutput`, which addresses a `data-virtual-row-id` band inside
+   * the cell: the grid splits a cell into one band per compared experiment only
+   * when there is more than one, so with a single experiment that band does not
+   * exist and the value is rendered directly in the `td`. Calling the band
+   * reader here fails on a missing element against a perfectly healthy grid.
+   *
+   * `columnId` is the table's own column id — `output_output`, `duration`,
+   * `total_estimated_cost` — as stamped into `data-cell-id`.
+   */
+  async readSingleExperimentCellText(datasetItemId: string, columnId: string): Promise<string> {
+    return test.step(`read the "${columnId}" cell for item ${datasetItemId}`, async () => {
+      const cell = this.page.locator(`td[data-cell-id="${datasetItemId}_${columnId}"]`);
+      await expect(cell, `"${columnId}" cell for item ${datasetItemId}`).toHaveCount(1);
+      return ((await cell.textContent()) ?? '').trim();
+    });
+  }
+
   /** The rendered text of one dataset column's cell — what the user actually sees. */
   async readDatasetCellText(datasetItemId: string, field: string): Promise<string> {
     return test.step(`read the on-screen "${field}" cell for item ${datasetItemId}`, async () => {

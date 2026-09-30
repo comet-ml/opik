@@ -2373,6 +2373,93 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The compare read projected to each row's TRACE-SOURCED fields.
+     *
+     * `compareItemsPage` keeps the dataset item's `data` and
+     * `compareItemsPairedPage` keeps the row → trace pairing; neither carries
+     * `input`, `output`, `duration` or `total_estimated_cost`, which come from
+     * the trace rather than from the dataset item and are precisely what the
+     * read's project pruning can silently blank.
+     *
+     * That pruning is the reason this projection exists. The compare query
+     * narrows `traces` / `spans` / `comments` to a set of target projects, and
+     * a project missing from that set does not error — it drops the trace's
+     * data and leaves an otherwise well-formed row with empty cells. Only a
+     * read that can see these fields can tell that apart from a healthy
+     * response.
+     *
+     * `truncate: false`, unlike the two readers above: truncation shortens
+     * string values, and a caller here is comparing an output against what it
+     * seeded.
+     */
+    async compareItemsTraceData(args: {
+      datasetId: string;
+      experimentIds: string[];
+      page?: number;
+      size?: number;
+    }): Promise<{
+      total: number;
+      rows: Array<{
+        id: string;
+        experimentItems: Array<{
+          experimentId: string;
+          traceId: string;
+          input: unknown;
+          output: unknown;
+          duration: number | null;
+          totalEstimatedCost: number | null;
+        }>;
+      }>;
+    }> {
+      const query = new URLSearchParams({
+        experiment_ids: JSON.stringify(args.experimentIds),
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+        truncate: 'false',
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/items/experiments/items`,
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `GET compare items (dataset ${args.datasetId}) -> ${status}: ${message}`,
+        );
+      }
+      const body = (json ?? {}) as {
+        total?: unknown;
+        content?: Array<Record<string, unknown>>;
+      };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `compareItemsTraceData: dataset ${args.datasetId} answered without a total — ` +
+            'cannot tell a fully ingested comparison from a partial one.',
+        );
+      }
+      return {
+        total: body.total,
+        rows: (body.content ?? []).map((item) => ({
+          id: String(item.id ?? ''),
+          experimentItems: ((item.experiment_items ?? []) as Array<Record<string, unknown>>).map(
+            (ei) => ({
+              experimentId: String(ei.experiment_id ?? ''),
+              traceId: String(ei.trace_id ?? ''),
+              // Left as the server sent them, `null` for absent: "the field
+              // came back empty" is the answer under test, and any default
+              // here would hide it.
+              input: ei.input ?? null,
+              output: ei.output ?? null,
+              duration: typeof ei.duration === 'number' ? ei.duration : null,
+              totalEstimatedCost:
+                typeof ei.total_estimated_cost === 'number' ? ei.total_estimated_cost : null,
+            }),
+          ),
+        })),
+      };
+    },
+
+    /**
      * The same page again, projected to the row → trace pairing instead of to
      * `data`.
      *
@@ -4803,17 +4890,30 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * deterministic nor free.
        */
       evaluationMethod?: 'dataset' | 'evaluation_suite';
+      /**
+       * The experiment's lifecycle status.
+       *
+       * `ExperimentStatus.fromString` defaults an unrecognised or absent value
+       * to `completed`, so "running" is only reachable by sending it — and it
+       * is what a seed wants when the experiment must look like one still being
+       * written to. Like `evaluationMethod`, the pinned SDK has no field for
+       * it, so setting either takes the raw write.
+       */
+      status?: 'running' | 'completed' | 'cancelled';
     }): Promise<string> {
-      if (args.evaluationMethod !== undefined) {
+      if (args.evaluationMethod !== undefined || args.status !== undefined) {
         await postSeedWrite(
           '/v1/private/experiments',
-          `create experiment ${args.name} (evaluation_method=${args.evaluationMethod})`,
+          `create experiment ${args.name}`,
           {
             id: args.id,
             name: args.name,
             dataset_name: args.datasetName,
             project_name: args.projectName,
-            evaluation_method: args.evaluationMethod,
+            ...(args.evaluationMethod === undefined
+              ? {}
+              : { evaluation_method: args.evaluationMethod }),
+            ...(args.status === undefined ? {} : { status: args.status }),
             ...(args.type ? { type: args.type } : {}),
             ...(args.optimizationId ? { optimization_id: args.optimizationId } : {}),
             ...(args.metadata ? { metadata: args.metadata } : {}),
@@ -4844,8 +4944,44 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * experiment's scope, and therefore what the entity-scoped Logs views read.
      */
     async createExperimentItems(
-      items: Array<{ experimentId: string; datasetItemId: string; traceId: string }>,
+      items: Array<{
+        experimentId: string;
+        datasetItemId: string;
+        traceId: string;
+        /**
+         * The project the ITEM names, which is not necessarily where its trace
+         * was logged.
+         *
+         * `ExperimentItemService` fills `experiment_items.project_id` from the
+         * trace only when the item named no project of its own, so the two can
+         * legitimately disagree — and the compare read derives the projects it
+         * prunes traces, spans and comments by from the TRACES table rather
+         * than from that denormalized column. Setting this is the only way to
+         * seed the disagreement and show which of the two the read uses.
+         */
+        projectName?: string;
+      }>,
     ): Promise<void> {
+      // The typed SDK call has no `projectName`, so an item that needs one
+      // goes through the raw write — sending it via the typed call would
+      // silently drop it, and the seed would be the very thing it is not
+      // supposed to be: an item whose named project agrees with its trace's.
+      if (items.some((item) => item.projectName !== undefined)) {
+        await postSeedWrite(
+          '/v1/private/experiments/items',
+          `createExperimentItems of ${items.length}`,
+          {
+            experiment_items: items.map((item) => ({
+              experiment_id: item.experimentId,
+              dataset_item_id: item.datasetItemId,
+              trace_id: item.traceId,
+              ...(item.projectName === undefined ? {} : { project_name: item.projectName }),
+            })),
+          },
+          204,
+        );
+        return;
+      }
       await opik.api.experiments.createExperimentItems({ experimentItems: items });
     },
 

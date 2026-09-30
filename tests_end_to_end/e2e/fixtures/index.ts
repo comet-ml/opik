@@ -1,4 +1,4 @@
-export { test, expect } from './id-aged-spans.fixture';
+export { test, expect } from './raw-branch-experiment.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -261,4 +261,14 @@ export type {
   IdAgedSpansRef,
   IdAgedSpansFixtures,
 } from './id-aged-spans.fixture';
+export type {
+  MismatchedItemRef,
+  CompareProjectMismatchRef,
+  CompareProjectMismatchFixtures,
+} from './compare-project-mismatch.fixture';
+export type {
+  RawBranchExperimentRef,
+  RawBranchExperimentFixtures,
+} from './raw-branch-experiment.fixture';
+export { RAW_ITEM_COUNT } from './raw-branch-experiment.fixture';
 export type { ProjectRef } from '../core/backend';
