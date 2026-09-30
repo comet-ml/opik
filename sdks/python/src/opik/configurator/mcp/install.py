@@ -334,9 +334,11 @@ def _remove_stale_tool_install(display: mcp_view.InstallView) -> str:
     0.2.13 report a resolved login on zero of their 18,592 events, while every
     version from 0.2.23 reports one.
 
-    Silent when it works: this restores the behaviour the user already asked for
-    by running the command. Loud when it does not, because then the server really
-    will keep starting the old version and only they can fix it.
+    Said either way. On success because a deletion nobody is told about is one
+    nobody can undo, and the person the old prompt was really protecting — the
+    rare one who installed a version deliberately — is exactly who needs to know.
+    On failure because the server really will keep starting the old version and
+    only they can fix it.
 
     Returns ``absent``, ``removed`` or ``removal_failed``.
     """
@@ -346,6 +348,11 @@ def _remove_stale_tool_install(display: mcp_view.InstallView) -> str:
 
     succeeded, detail = uv_tool.uninstall()
     if succeeded:
+        display.note(
+            f"Removed opik-mcp {installed}, which an older Opik SDK installed as "
+            "a uv tool — it was pinning this server to that version. Run `uv tool "
+            f"install opik-mcp=={installed}` to put it back."
+        )
         return "removed"
 
     display.problem(

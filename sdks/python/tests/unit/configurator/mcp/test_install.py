@@ -1054,8 +1054,12 @@ def test_setup_mcp_server__stale_tool_install__is_removed_without_asking(monkeyp
     assert report.stale_tool == "removed"
 
 
-def test_setup_mcp_server__stale_tool_removed__says_nothing_about_it(monkeypatch):
-    """Silent on success: this restores what running the command already asked for."""
+def test_setup_mcp_server__stale_tool_removed__says_what_it_removed(monkeypatch):
+    """A deletion nobody is told about is one nobody can undo.
+
+    The removal is no longer offered, so this is what is left of the consent the
+    prompt used to carry: the version that went, and how to put it back.
+    """
     _stale_install(monkeypatch)
     monkeypatch.setattr(install.uv_tool, "uninstall", lambda: (True, "removed"))
     monkeypatch.setattr("builtins.input", lambda message: "y")
@@ -1063,7 +1067,9 @@ def test_setup_mcp_server__stale_tool_removed__says_nothing_about_it(monkeypatch
     args = _make_args()
     install.setup_mcp_server(**args)
 
-    assert not any("opik-mcp 0.2.12" in note for note in args["view"].notes)
+    said = " ".join(args["view"].notes)
+    assert "Removed opik-mcp 0.2.12" in said
+    assert "uv tool install opik-mcp==0.2.12" in said
 
 
 def test_setup_mcp_server__stale_tool_cannot_be_removed__says_so(monkeypatch):
