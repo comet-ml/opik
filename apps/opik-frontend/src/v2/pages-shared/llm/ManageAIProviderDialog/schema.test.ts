@@ -88,7 +88,7 @@ describe("CloudAIProviderDetailsFormSchema headers", () => {
     ]);
   });
 
-  it("treats header keys case-insensitively when checking uniqueness", () => {
+  it("keeps uniqueness case-sensitive so stored case-variant keys stay editable", () => {
     const result = CloudAIProviderDetailsFormSchema.safeParse(
       cloudForm(PROVIDER_TYPE.OPEN_ROUTER, [
         header("X-Title", "a"),
@@ -96,7 +96,7 @@ describe("CloudAIProviderDetailsFormSchema headers", () => {
       ]),
     );
 
-    expect(issueMessages(result)).toEqual(["Header key must be unique"]);
+    expect(result.success).toBe(true);
   });
 
   it("surfaces the reserved-header issue through the provider form union", () => {

@@ -30,7 +30,6 @@ import {
   AIProviderFormType,
   DEFAULT_OPENAI_PIPELINE_MODE,
   normalizeOpenAiPipelineMode,
-  supportsProviderHeaders,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
@@ -46,6 +45,7 @@ import {
   AuthConfigFormValues,
   EMPTY_AUTH_FORM_VALUES,
   authConfigToFormValues,
+  builtInProviderHeadersForAPI,
   configStringToQueryParamsArray,
   convertHeadersForAPI,
   formValuesToAuthConfig,
@@ -335,13 +335,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
     const isEditingCustomProvider =
       isCustomLike && !!(providerKey || calculatedProviderKey);
-    const sendsHeaders = isCustomLike || supportsProviderHeaders(provider);
-    const headers = sendsHeaders
-      ? convertHeadersForAPI(
+    const headers = isCustomLike
+      ? convertHeadersForAPI(headersArray, isEditingCustomProvider)
+      : builtInProviderHeadersForAPI(
+          provider,
           headersArray,
           !!(providerKey || calculatedProviderKey),
-        )
-      : undefined;
+        );
 
     const storedProvider = providerKey ?? calculatedProviderKey;
     const authConfig = isCustomLike

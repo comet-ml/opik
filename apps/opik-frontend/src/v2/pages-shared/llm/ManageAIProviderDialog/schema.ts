@@ -7,10 +7,18 @@ import {
   OpenAiPipelineMode,
   PROVIDER_TYPE,
 } from "@/types/providers";
-import { AUTH_MODE_VALUES } from "./customProviderConfig";
+import {
+  AUTH_MODE_VALUES,
+  PROVIDERS_WITH_HEADERS,
+  supportsProviderHeaders,
+} from "./customProviderConfig";
 
 export type { OpenAiPipelineMode };
-export { OPENAI_PIPELINE_MODE_VALUES };
+export {
+  OPENAI_PIPELINE_MODE_VALUES,
+  PROVIDERS_WITH_HEADERS,
+  supportsProviderHeaders,
+};
 
 // Default pipeline mode applied as a fallback in form defaults, resets, and save payloads.
 // Centralised here so changing the default requires editing only one place.
@@ -35,20 +43,6 @@ export const normalizeOpenAiPipelineMode = (
     ? (lowered as OpenAiPipelineMode)
     : DEFAULT_OPENAI_PIPELINE_MODE;
 };
-
-// Built-in providers whose backend client applies the stored static `headers` map to every
-// upstream call (OpenAIClientGenerator serves both). Other built-in providers ignore `headers`,
-// so the field is only offered for these.
-export const PROVIDERS_WITH_HEADERS: readonly PROVIDER_TYPE[] = [
-  PROVIDER_TYPE.OPEN_AI,
-  PROVIDER_TYPE.OPEN_ROUTER,
-];
-
-export const supportsProviderHeaders = (
-  provider: PROVIDER_TYPE | string | undefined | null,
-): boolean =>
-  Boolean(provider) &&
-  (PROVIDERS_WITH_HEADERS as readonly string[]).includes(provider as string);
 
 // Built-in providers take the key from the API key field; a custom header with one of these
 // names would override it and surface as a confusing auth error.
@@ -96,15 +90,16 @@ const validateHeaders = (
     }
 
     if (hasKey) {
-      // HTTP header names are case-insensitive
-      const normalizedKey = header.key.trim().toLowerCase();
-      if (reservedKeys.includes(normalizedKey)) {
+      const trimmedKey = header.key.trim();
+      // Reserved names match case-insensitively (HTTP header names are case-insensitive).
+      // Uniqueness stays case-sensitive so stored maps with case-variant keys remain editable.
+      if (reservedKeys.includes(trimmedKey.toLowerCase())) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Use the API key field instead of this header",
           path: ["headers", index, "key"],
         });
-      } else if (headerKeys.includes(normalizedKey)) {
+      } else if (headerKeys.includes(trimmedKey)) {
         // Check for duplicate header keys
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -112,7 +107,7 @@ const validateHeaders = (
           path: ["headers", index, "key"],
         });
       } else {
-        headerKeys.push(normalizedKey);
+        headerKeys.push(trimmedKey);
       }
     }
   });
