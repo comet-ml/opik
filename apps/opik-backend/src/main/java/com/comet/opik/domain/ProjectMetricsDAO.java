@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.BreakdownQueryBuilder;
 import com.comet.opik.api.metrics.MetricType;
@@ -24,6 +25,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -316,6 +318,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id \\<> ''
+                -- Thread source/environment filters act on traces, as in the thread list (ThreadDAO traces_final_ids).
+                <if(trace_filters)> AND <trace_filters> <endif>
                 <if(uuid_from_time)> AND id >= :uuid_from_time
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
@@ -393,6 +397,23 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
+            <if(annotation_queue_filters)>
+            thread_annotation_queue_ids AS (
+                 SELECT thread_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'thread'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
+                 ) AS annotation_queue_ids_with_thread_id
+                 GROUP BY thread_id
+            ),
+            <endif>
             <if(thread_feedback_scores_empty_filters)>
                fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -448,6 +469,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
                 JOIN trace_threads_final AS tt ON t.id = tt.thread_id
+                <if(annotation_queue_filters)>
+                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(uuid_from_time)> AND thread_start_time >= UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')<endif>
                 <if(uuid_to_time)> AND thread_start_time \\<= UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')<endif>
@@ -473,6 +497,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 )
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             )
             """;
 
@@ -1697,9 +1722,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             if (THREAD_METRICS.contains(metricType)) {
                 Optional.ofNullable(request.threadFilters())
                         .ifPresent(filters -> {
+                            addTraceFilters(template, filters);
                             FilterQueryBuilder.toAnalyticsDbFilters(
                                     filters, FilterStrategy.TRACE_THREAD, traceColumnsNonNullable())
                                     .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_AGGREGATION)
+                                    .ifPresent(annotationQueueFilters -> template.add("annotation_queue_filters",
+                                            annotationQueueFilters));
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                                     .ifPresent(
                                             scoresFilters -> template.add("thread_feedback_scores_filters",
@@ -1730,9 +1759,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             } else {
                 Optional.ofNullable(request.traceFilters())
                         .ifPresent(filters -> {
-                            FilterQueryBuilder.toAnalyticsDbFilters(
-                                    filters, FilterStrategy.TRACE, traceColumnsNonNullable())
-                                    .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
+                            addTraceFilters(template, filters);
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                                     .ifPresent(
                                             scoresFilters -> template.add("trace_feedback_scores_filters",
@@ -1782,7 +1809,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             if (THREAD_METRICS.contains(metricType)) {
                 Optional.ofNullable(request.threadFilters())
                         .ifPresent(filters -> {
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                             filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
                             filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                             filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                         });
@@ -1807,6 +1836,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             return Mono.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    private void addTraceFilters(ST template, List<? extends Filter> filters) {
+        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
+                .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
     }
 
     private boolean traceColumnsNonNullable() {
