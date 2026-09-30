@@ -895,8 +895,14 @@ class FindTraceThreadsResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // Wait for thread to be created
-            Mono.delay(Duration.ofMillis(250)).block();
+            // Thread rows are created asynchronously from the trace batch, so the model id is only
+            // available once the row lands; a fixed delay makes this flaky on a loaded runner.
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(traceResourceClient
+                            .getTraceThread(threadId, projectId, apiKey, workspaceName)
+                            .threadModelId()).isNotNull());
 
             var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName);
 

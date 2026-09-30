@@ -56,22 +56,15 @@ const ResourceListCell = (context: CellContext<unknown, unknown>) => {
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const isEmpty = !Array.isArray(items) || items.length === 0;
-  const sortedList = useMemo(
-    () =>
-      isEmpty
-        ? []
-        : [...items]
-            .filter((item) => get(item, idKey))
-            .sort((a, b) =>
-              String(get(a, nameKey, "")).localeCompare(
-                String(get(b, nameKey, "")),
-              ),
-            ),
-    [items, isEmpty, idKey, nameKey],
+  // Order comes from the API (AnnotationQueueReferenceMapper sorts it), so every client shows the
+  // same order and it is not re-sorted per view.
+  const itemList = useMemo(
+    () => (isEmpty ? [] : items.filter((item) => get(item, idKey))),
+    [items, isEmpty, idKey],
   );
 
   const { cellRef, visibleItems, onMeasure } = useVisibleItemsByWidth(
-    sortedList,
+    itemList,
     CELL_CONFIG,
   );
 
@@ -101,7 +94,7 @@ const ResourceListCell = (context: CellContext<unknown, unknown>) => {
     />
   );
 
-  if (isEmpty || sortedList.length === 0) {
+  if (isEmpty || itemList.length === 0) {
     return (
       <CellWrapper
         metadata={context.column.columnDef.meta}
@@ -112,8 +105,8 @@ const ResourceListCell = (context: CellContext<unknown, unknown>) => {
     );
   }
 
-  const displayedItems = sortedList.slice(0, maxVisibleItems);
-  const hiddenItems = sortedList.slice(maxVisibleItems);
+  const displayedItems = itemList.slice(0, maxVisibleItems);
+  const hiddenItems = itemList.slice(maxVisibleItems);
   const hiddenCount = hiddenItems.length;
 
   return (
@@ -136,7 +129,7 @@ const ResourceListCell = (context: CellContext<unknown, unknown>) => {
           )}
         >
           <ChildrenWidthMeasurer onMeasure={onMeasure}>
-            {sortedList.map((item) => (
+            {itemList.map((item) => (
               <div key={itemKey(item)} className="shrink-0">
                 {renderTag(item)}
               </div>

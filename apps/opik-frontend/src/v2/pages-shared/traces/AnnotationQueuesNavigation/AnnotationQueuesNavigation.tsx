@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowUpRight, ChevronDown } from "lucide-react";
 
@@ -23,12 +23,10 @@ const AnnotationQueuesNavigation: React.FC<AnnotationQueuesNavigationProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
 
-  const sortedQueues = useMemo(
-    () => [...(queues ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
-    [queues],
-  );
+  // Order comes from the API; see AnnotationQueueReferenceMapper.
+  const queueList = queues ?? [];
 
-  if (sortedQueues.length === 0 || !activeProjectId) {
+  if (queueList.length === 0 || !activeProjectId) {
     return null;
   }
 
@@ -46,12 +44,12 @@ const AnnotationQueuesNavigation: React.FC<AnnotationQueuesNavigationProps> = ({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="2xs">
-          Queues ({sortedQueues.length})
+          Queues ({queueList.length})
           <ChevronDown className="ml-1 size-3.5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        {sortedQueues.map((queue) => (
+        {queueList.map((queue) => (
           <DropdownMenuItem key={queue.id} onClick={() => goToQueue(queue)}>
             <span className="truncate">{queue.name}</span>
             <ArrowUpRight className="ml-auto size-3.5 shrink-0" />

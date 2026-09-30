@@ -820,7 +820,9 @@ class TraceDAOImpl implements TraceDAO {
                 ) e ON ei.experiment_id = e.id
                 ORDER BY trace_id, experiment_id DESC
                 LIMIT 1 BY trace_id
-            ), trace_scope_queues AS (
+            )
+            <if(include_annotation_queues)>
+            , trace_scope_queues AS (
                 SELECT id, name
                 FROM annotation_queues
                 WHERE workspace_id = :workspace_id
@@ -845,6 +847,7 @@ class TraceDAOImpl implements TraceDAO {
                 ) AS queues_with_trace_id
                 GROUP BY trace_id
             )
+            <endif>
             SELECT
                 t.*,
                 t.id as id,
@@ -862,8 +865,8 @@ class TraceDAOImpl implements TraceDAO {
                 eaag.experiment_id as experiment_id,
                 eaag.experiment_name as experiment_name,
                 eaag.experiment_dataset_id as experiment_dataset_id,
-                eaag.experiment_dataset_item_id as experiment_dataset_item_id,
-                taq.annotation_queues as annotation_queues
+                eaag.experiment_dataset_item_id as experiment_dataset_item_id
+                <if(include_annotation_queues)>, taq.annotation_queues as annotation_queues<endif>
             FROM (
                 SELECT
                     *,
@@ -878,7 +881,7 @@ class TraceDAOImpl implements TraceDAO {
             ) AS t
             LEFT JOIN spans_agg s ON t.id = s.trace_id
             LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
-            LEFT JOIN trace_annotation_queues taq ON taq.trace_id = t.id
+            <if(include_annotation_queues)>LEFT JOIN trace_annotation_queues taq ON taq.trace_id = t.id<endif>
             LEFT JOIN (
                 SELECT
                     entity_id,
@@ -1434,7 +1437,7 @@ class TraceDAOImpl implements TraceDAO {
                         WHERE workspace_id = :workspace_id
                           AND project_id = :project_id
                           AND queue_id IN (SELECT id FROM trace_scope_queues)
-                          <if(page_keyed_aggregates)> AND item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                          <if(annotation_queues_page_keyed)> AND item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
                           <elseif(trace_id_prefilter)> AND item_id IN (SELECT id FROM trace_id_prefilter)
                           <else>
                           <if(uuid_from_time)> AND item_id >= :uuid_from_time <endif>
@@ -3973,7 +3976,7 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
-        return findByIds(List.of(id), connection)
+        return findByIds(List.of(id), connection, true)
                 .collectList()
                 .flatMap(traces -> Mono.deferContextual(ctx -> Mono.justOrEmpty(
                         firstOrLogFanOut(traces, id, ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown")))));
@@ -3998,6 +4001,16 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Flux<Trace> findByIds(@NonNull List<UUID> ids, @NonNull Connection connection) {
+        return findByIds(ids, connection, false);
+    }
+
+    /**
+     * Annotation-queue membership is read only by the single-trace lookup behind the details panel.
+     * The batch callers of {@link #findByIds(List, Connection)} never read it, and one of them
+     * ({@code OnlineScoringSampler.onTracesUpdated}) runs on every trace update that sets an end
+     * time, so the two extra subqueries stay off that path (OPIK-5592 review).
+     */
+    private Flux<Trace> findByIds(List<UUID> ids, Connection connection, boolean includeAnnotationQueues) {
         Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
         log.info("Finding traces by IDs in batch, count '{}'", ids.size());
 
@@ -4010,6 +4023,10 @@ class TraceDAOImpl implements TraceDAO {
 
                     if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                         template.add("has_target_projects", true);
+                    }
+
+                    if (includeAnnotationQueues) {
+                        template.add("include_annotation_queues", true);
                     }
 
                     var idWeeks = idWeeks(ids);
@@ -4418,6 +4435,16 @@ class TraceDAOImpl implements TraceDAO {
             template.add("page_keyed_aggregates", true);
         } else if (shouldUseTraceIdPrefilter(criteria, template) && !sortHasFeedbackScores) {
             template.add("trace_id_prefilter", true);
+        }
+
+        // Without a queue filter the annotation-queue CTE is display-only: it is joined at the final
+        // SELECT over page_wide and never feeds page selection, so it can be keyed to page_ids even
+        // when the other aggregates cannot be (e.g. sorting by feedback score or experiment). With a
+        // queue filter it drives traces_deduped, so keying it to page_ids would be circular
+        // (OPIK-5592 review).
+        if (template.getAttribute("annotation_queue_filters") == null
+                && template.getAttribute("annotation_queue_id") == null) {
+            template.add("annotation_queues_page_keyed", true);
         }
     }
 
