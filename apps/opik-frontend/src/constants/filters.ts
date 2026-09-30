@@ -222,4 +222,4 @@ export const OPERATORS_MAP: Record<
 };
 
 export const CUSTOM_FILTER_VALIDATION_REGEXP =
-  /^((\$\.)?input|\$?input\[\d+\]|(\$\.)?output|\$?output\[\d+\])(\.[^.]+)*$/;
+  /^((\$\.)?input|\$?input\[\d+\]|(\$\.)?output|\$?output\[\d+\])(\.[^.]+)*(\.\[.+\])?$/;

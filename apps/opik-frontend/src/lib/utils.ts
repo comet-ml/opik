@@ -143,37 +143,66 @@ export const safelyParseJSON = (string: string, silent = false) => {
   }
 };
 
+export type JSONPathPart = { key: string } | { index: number };
+
+const PATH_SYNTAX_CHARS = /[.[\]]/;
+
+const quoteKey = (key: string): string =>
+  `['${key.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}']`;
+
+const isIndex = (part: JSONPathPart): part is { index: number } =>
+  "index" in part;
+
+export enum JSON_PATH_FORMAT {
+  dot = "dot",
+  bracket = "bracket",
+}
+
+export const buildJSONPath = (
+  parts: JSONPathPart[],
+  format: JSON_PATH_FORMAT,
+  root = "",
+): string => {
+  const bracketKeys =
+    format === JSON_PATH_FORMAT.bracket &&
+    parts.some((part) => !isIndex(part) && PATH_SYNTAX_CHARS.test(part.key));
+  let out = "";
+  for (const part of parts) {
+    if (isIndex(part)) {
+      out += `[${part.index}]`;
+    } else if (bracketKeys) {
+      out += quoteKey(part.key);
+    } else {
+      out += out ? `.${part.key}` : part.key;
+    }
+  }
+  if (!root || !parts.length) return root || out;
+  return isIndex(parts[0]) ? `${root}${out}` : `${root}.${out}`;
+};
+
 export const getJSONPaths = (
   node: JsonNode,
   previousPath: string = "",
   results: string[] = [],
   includeIntermediateNodes: boolean = false,
+  format: JSON_PATH_FORMAT = JSON_PATH_FORMAT.dot,
 ) => {
-  if (isObject(node) || isArray(node)) {
-    for (const key in node) {
-      const value = get(node, key);
-      const path = previousPath
-        ? isArray(node)
-          ? `${previousPath}[${key}]`
-          : `${previousPath}.${key}`
-        : key;
-
-      if (isArray(value)) {
-        if (includeIntermediateNodes) {
-          results.push(path);
-        }
-        getJSONPaths(value, path, results, includeIntermediateNodes);
-      } else if (isObject(value)) {
-        if (includeIntermediateNodes) {
-          results.push(path);
-        }
-        getJSONPaths(value, path, results, includeIntermediateNodes);
-      } else {
-        results.push(path);
+  const walk = (current: JsonNode, parts: JSONPathPart[]) => {
+    if (!isObject(current) && !isArray(current)) return;
+    for (const key in current) {
+      const value = get(current, key);
+      const nextParts = [
+        ...parts,
+        isArray(current) ? { index: Number(key) } : { key },
+      ];
+      const isNode = isObject(value) || isArray(value);
+      if (!isNode || includeIntermediateNodes) {
+        results.push(buildJSONPath(nextParts, format, previousPath));
       }
+      if (isNode) walk(value, nextParts);
     }
-  }
-
+  };
+  walk(node, []);
   return results;
 };
 

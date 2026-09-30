@@ -593,6 +593,46 @@ describe("helpers.ts", () => {
 
           expect(filterFunction(mockTrace, filter)).toBe(true);
         });
+
+        it.each([
+          { key: "['a.b']", value: "2", expected: true },
+          { key: "['a.b']", value: "1", expected: false },
+          { key: "a.b", value: "1", expected: true },
+          { key: "a.b", value: "2", expected: false },
+        ])(
+          "matches bracket-quoted flat key vs nested path ($key = $value)",
+          ({ key, value, expected }) => {
+            const trace = { ...mockTrace, metadata: { a: { b: 1 }, "a.b": 2 } };
+            const filter: Filters = [
+              {
+                id: "filter-1",
+                field: "metadata",
+                operator: "=",
+                value,
+                type: COLUMN_TYPE.dictionary,
+                key,
+              },
+            ];
+
+            expect(filterFunction(trace, filter)).toBe(expected);
+          },
+        );
+
+        it("matches a bracket-quoted dotted key in a custom input filter", () => {
+          const span = { ...mockSpan, input: { "req.lang": "es" } };
+          const filter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "contains",
+              value: "es",
+              type: COLUMN_TYPE.dictionary,
+              key: "input.['req.lang']",
+            },
+          ];
+
+          expect(filterFunction(span, filter)).toBe(true);
+        });
       });
 
       // Test tags (list) column
