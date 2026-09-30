@@ -44,7 +44,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -56,6 +55,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 @DisplayName("OnlineScoringSpanUserDefinedMetricPythonScorer Tests")
 class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
+
+    /**
+     * Independently restated: the constant sentence leads and every value trails, so this text is the fixed
+     * prefix an operator greps on. Byte-identical to the span scorer's copy — that is what makes one search
+     * catch both scorers, so a divergence here should fail this test rather than pass quietly.
+     */
+    private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
+            + " so there is no data to evaluate. Check the declared paths against the input, output and"
+            + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
 
     @Mock
     private OnlineScoringConfig onlineScoringConfig;
@@ -348,7 +356,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
             verify(pythonEvaluatorService, never()).evaluate(any(), anyMap());
             verify(userFacingLogger).warn(
-                    contains("none of the metric's declared arguments resolved"),
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
                     eq("spanId"),
                     eq(spanId),
                     eq(ruleName),

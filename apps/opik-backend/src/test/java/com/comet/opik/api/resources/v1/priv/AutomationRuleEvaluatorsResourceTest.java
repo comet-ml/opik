@@ -1778,10 +1778,12 @@ class AutomationRuleEvaluatorsResourceTest {
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            var expectedMessage = ("Not scoring traceId '%s' with rule '%s': none of the metric's declared arguments"
-                    + " resolved, so there is no data to evaluate. Unresolved arguments:"
-                    + " 'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'. Check these"
-                    + " against the input, output and metadata actually present.").formatted(trace.id(), ruleName);
+            // Constant sentence first, every value trailing, so the leading text is a fixed prefix an operator
+            // can grep on. Asserted as the fully rendered line, which is what actually lands in the table.
+            var expectedMessage = ("None of the metric's declared arguments resolved, so there is no data to"
+                    + " evaluate. Check the declared paths against the input, output and metadata present on the"
+                    + " entity. traceId '%s', rule '%s', unresolved arguments: 'expects_sql' ->"
+                    + " 'input.expects_sql', 'plan' -> 'output.execution_plan'").formatted(trace.id(), ruleName);
 
             Awaitility.await().untilAsserted(() -> {
                 var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);

@@ -86,6 +86,16 @@ public class OnlineScoringEngine {
     private static final int MAX_REPORTED_FIELD_NAMES = 10;
     private static final int MAX_LOGGED_VALUE_CHARS = 100;
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
+    /**
+     * Constant sentence first, every interpolated value trailing, so the leading text is a fixed prefix an
+     * operator can grep or filter on and catch every occurrence. The entity label ("traceId" / "spanId")
+     * is one of the trailing values rather than part of the sentence, so the prefix is byte-identical for
+     * the trace and span scorers and one search finds both. Both sinks share this single constant, so they
+     * cannot drift apart.
+     */
+    private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
+            + " so there is no data to evaluate. Check the declared paths against the input, output and"
+            + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
 
     private static final Map<String, Boolean> PASS_FAIL_SCORES = Map.of(
             "pass", true, "passed", true, "fail", false, "failed", false);
@@ -1562,14 +1572,8 @@ public class OnlineScoringEngine {
         // Routing is by logger identity, not by MDC — the ClickHouse appender is attached only to the
         // "<Class>.UserFacingLog" logger, so this does not duplicate the internal line into that sink.
         try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
-            userFacingLogger.warn(
-                    "Not scoring {} '{}' with rule '{}': none of the metric's declared arguments resolved, so there"
-                            + " is no data to evaluate. Unresolved arguments: {}. Check these against the input,"
-                            + " output and metadata actually present.",
-                    entityLabel, entityId, safeRuleName, renderedArguments);
-            internalLogger.warn(
-                    "Not scoring {} '{}' with rule '{}': none of the declared arguments resolved, unresolved: {}",
-                    entityLabel, entityId, safeRuleName, renderedArguments);
+            userFacingLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
+            internalLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
         }
     }
 

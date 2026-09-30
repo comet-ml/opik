@@ -56,6 +56,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class OnlineScoringUserDefinedMetricPythonScorerTest {
 
+    /**
+     * Independently restated: the constant sentence leads and every value trails, so this text is the fixed
+     * prefix an operator greps on. Byte-identical to the span scorer's copy — that is what makes one search
+     * catch both scorers, so a divergence here should fail this test rather than pass quietly.
+     */
+    private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
+            + " so there is no data to evaluate. Check the declared paths against the input, output and"
+            + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
+
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Mock
@@ -343,7 +352,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
             verify(pythonEvaluatorService, never()).evaluate(any(), any());
             verify(userFacingLogger).warn(
-                    contains("none of the metric's declared arguments resolved"),
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
                     eq("traceId"),
                     eq(traceId),
                     eq(ruleName),
@@ -365,7 +374,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
             var reported = ArgumentCaptor.forClass(String.class);
             verify(userFacingLogger).warn(
-                    contains("none of the metric's declared arguments resolved"),
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
                     eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
 
             // Whole rendered string, not fragments: separator, ordering, truncation point and the absence
@@ -386,7 +395,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
             var reported = ArgumentCaptor.forClass(String.class);
             verify(userFacingLogger).warn(
-                    contains("none of the metric's declared arguments resolved"),
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
                     eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
 
             // Built independently from the same inputs so ordering, separator, which ten survive the cap
