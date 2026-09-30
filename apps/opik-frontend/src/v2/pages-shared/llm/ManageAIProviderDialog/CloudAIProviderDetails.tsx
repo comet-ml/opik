@@ -111,7 +111,11 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
         <div className="mt-2">
           <CustomHeadersField
             form={form}
-            description={`Added to every request sent to ${providerName.trim()}, e.g. HTTP-Referer and X-OpenRouter-Title for OpenRouter app attribution.`}
+            description={
+              provider === PROVIDER_TYPE.OPEN_ROUTER
+                ? "Added to every request sent to OpenRouter, e.g. HTTP-Referer and X-OpenRouter-Title for app attribution."
+                : `Added to every request sent to ${providerName.trim()} as key-value pairs.`
+            }
           />
         </div>
       )}

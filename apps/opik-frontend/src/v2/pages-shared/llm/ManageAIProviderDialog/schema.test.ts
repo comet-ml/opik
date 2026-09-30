@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { PROVIDER_TYPE } from "@/types/providers";
 import {
   CloudAIProviderDetailsFormSchema,
+  createAIProviderFormSchema,
   createCustomProviderDetailsFormSchema,
   supportsProviderHeaders,
 } from "./schema";
@@ -84,6 +85,31 @@ describe("CloudAIProviderDetailsFormSchema headers", () => {
       "Header key is required",
       "Header value is required",
       "Header key must be unique",
+    ]);
+  });
+
+  it("treats header keys case-insensitively when checking uniqueness", () => {
+    const result = CloudAIProviderDetailsFormSchema.safeParse(
+      cloudForm(PROVIDER_TYPE.OPEN_ROUTER, [
+        header("X-Title", "a"),
+        header("x-title", "b"),
+      ]),
+    );
+
+    expect(issueMessages(result)).toEqual(["Header key must be unique"]);
+  });
+
+  it("surfaces the reserved-header issue through the provider form union", () => {
+    const result = createAIProviderFormSchema().safeParse(
+      cloudForm(PROVIDER_TYPE.OPEN_ROUTER, [header("Authorization", "x")]),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        message: "Use the API key field instead of this header",
+        path: ["headers", 0, "key"],
+      }),
     ]);
   });
 

@@ -96,14 +96,15 @@ const validateHeaders = (
     }
 
     if (hasKey) {
-      const trimmedKey = header.key.trim();
-      if (reservedKeys.includes(trimmedKey.toLowerCase())) {
+      // HTTP header names are case-insensitive
+      const normalizedKey = header.key.trim().toLowerCase();
+      if (reservedKeys.includes(normalizedKey)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Use the API key field instead of this header",
           path: ["headers", index, "key"],
         });
-      } else if (headerKeys.includes(trimmedKey)) {
+      } else if (headerKeys.includes(normalizedKey)) {
         // Check for duplicate header keys
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -111,7 +112,7 @@ const validateHeaders = (
           path: ["headers", index, "key"],
         });
       } else {
-        headerKeys.push(trimmedKey);
+        headerKeys.push(normalizedKey);
       }
     }
   });
