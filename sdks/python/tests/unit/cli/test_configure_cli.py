@@ -1108,6 +1108,48 @@ class TestPickerSkippedSeparatesTheTwoRefusals:
         assert event["picker_skipped"] is False
 
 
+class TestTheRedirectCarriesTheFlags:
+    """What `opik configure` was told has to survive the handover.
+
+    The MCP flow installs the skill pack unless refused, so a refusal that does
+    not reach it becomes "never said" — and the pack is written into the user's
+    AI client anyway.
+    """
+
+    @staticmethod
+    def _redirected(*args):
+        from opik.cli import mcp as mcp_cli
+
+        def flow(**kwargs):
+            kwargs["progress"].redirect_to_mcp = True
+            return assistants.Outcome(clients=0, skills=False)
+
+        runner = CliRunner()
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli, "run_interactive_configure", side_effect=flow
+            ),
+            mock.patch.object(configure_cli.analytics, "track_event"),
+            mock.patch.object(mcp_cli, "run_configure") as run_configure,
+        ):
+            result = runner.invoke(cli, ["configure", "--use-local", *args])
+            assert result.exit_code == 0, result.output
+        return run_configure.call_args.kwargs
+
+    def test_a_refusal__reaches_the_mcp_flow(self):
+        assert self._redirected("--no-install-skills")["skills_flag"] is False
+
+    def test_a_request__reaches_it_too(self):
+        assert self._redirected("--install-skills")["skills_flag"] is True
+
+    def test_saying_nothing__stays_nothing(self):
+        """Which is what lets the MCP flow install the pack by default."""
+        assert self._redirected()["skills_flag"] is None
+
+
 class TestTheRedirectReportsTheWholeFlow:
     """The redirect must emit `opik mcp configure`'s events, not just run its code.
 
@@ -1130,8 +1172,17 @@ class TestTheRedirectReportsTheWholeFlow:
 
         class Recorder:
             def enqueue(self, event):
-                # The run context is merged by the worker at send time, so a
-                # recorder that skipped it would not see what is actually posted.
+                # Mirrors the real worker: the run context is snapshotted here,
+                # at enqueue, and the cached session properties are added when
+                # the batch is sent. A recorder that merged the context later
+                # would show every event the last value set, which is the bug
+                # this ordering exists to avoid.
+                event = event._replace(
+                    properties={
+                        **environment_details.run_context(),
+                        **event.properties,
+                    }
+                )
                 recorded.append(
                     (
                         event.name,

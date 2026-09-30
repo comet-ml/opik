@@ -96,18 +96,33 @@ def traced_project(
         return None
 
     try:
-        content = response.json().get("content", [])
+        body = response.json()
     except ValueError:
+        return None
+
+    # Shape-checked rather than trusted: this runs just before the result event,
+    # and an `AttributeError` here would take the command down without reporting
+    # anything. A body that is not what we expect means "no project", like every
+    # other failure in this function.
+    if not isinstance(body, dict):
+        return None
+    content = body.get("content", [])
+    if not isinstance(content, list):
         return None
 
     return _first_traced_project(content)
 
 
 def _first_traced_project(projects: List[dict]) -> Optional[str]:
-    """The most recently traced project that is the user's own.
+    """The most recently traced project of the user's own, within ``projects``.
 
     ``last_updated_trace_at`` is the field that says a project has traces at all;
     it stays null until the first one arrives.
+
+    Within the page the caller fetched, not within the workspace: past a hundred
+    projects the newest traced one can fall outside it. The cost of being wrong
+    is naming an older project of the user's own in the closing prompt, which is
+    still a project with traces in it — not worth paginating a workspace for.
     """
     candidates = [
         project

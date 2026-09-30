@@ -357,6 +357,43 @@ class TestInstallCodex:
         assert add_cmd[1:3] == ["mcp", "add"]
         assert "opik-mcp" in add_cmd
 
+    def test_install_codex__hosted__reports_the_sign_in_it_performed(self, monkeypatch):
+        """`codex mcp add --url` signs in as part of the add, and said nothing.
+
+        So a hosted Codex run reported `not_attempted` — and then printed the
+        closing hint telling the user to expect a browser prompt that had
+        already been and gone.
+        """
+        monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/codex")
+        monkeypatch.setattr(
+            targets.subprocess,
+            "run",
+            mock.Mock(
+                return_value=subprocess.CompletedProcess([], 0, stdout="", stderr="")
+            ),
+        )
+
+        result = targets._install_codex(REMOTE_SERVER_SPEC)
+
+        assert result.succeeded is True
+        assert result.sign_in_attempted is True
+        assert result.sign_in_failed is False
+
+    def test_install_codex__local__has_nothing_to_sign_in_to(self, monkeypatch):
+        """The API key is already in the config the add writes."""
+        monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/codex")
+        monkeypatch.setattr(
+            targets.subprocess,
+            "run",
+            mock.Mock(
+                return_value=subprocess.CompletedProcess([], 0, stdout="", stderr="")
+            ),
+        )
+
+        result = targets._install_codex(SERVER_SPEC)
+
+        assert result.sign_in_attempted is False
+
     def test_install_codex__add_fails__reports_failure(self, monkeypatch):
         monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/codex")
 

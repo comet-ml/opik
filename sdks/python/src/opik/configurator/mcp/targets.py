@@ -444,6 +444,11 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         return InstallResult(
             target_display_name="Codex",
             succeeded=True,
+            # Unlike Claude Code, the sign-in is inside the add and cannot be
+            # separated from it, so a zero exit is the whole step succeeding.
+            # Only for the hosted server: a local one authenticates with the API
+            # key already in the config and has nothing to sign in to.
+            sign_in_attempted=isinstance(server_spec, mcp_spec.RemoteServerSpec),
             detail=(
                 f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "
                 f"`codex mcp add`"

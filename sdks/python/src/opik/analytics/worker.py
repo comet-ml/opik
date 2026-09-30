@@ -38,10 +38,6 @@ def session_properties() -> Dict[str, PropertyValue]:
         "sdk_language": "python",
         **environment_details.collect_tags_once(),
         **environment_details.collect_context_once(),
-        # Last, and the one collector here that is NOT cached: it carries what a
-        # run learned about itself after its first event, such as `opik configure`
-        # handing over to the MCP flow.
-        **environment_details.run_context(),
     }
 
     return properties
@@ -89,7 +85,18 @@ class Worker(threading.Thread):
         self._stopped = threading.Event()
 
     def enqueue(self, event: Event) -> bool:
-        """False when the queue was full and the event was dropped."""
+        """False when the queue was full and the event was dropped.
+
+        The run context is read here rather than in :meth:`_enrich`, which runs
+        on the worker thread when a batch is sent. It is the one property source
+        that changes during a run — `opik configure` sets `invoked_via` when it
+        hands over to the MCP flow — so reading it at send time wrote the later
+        value onto events queued before it, and `opik configure`'s own events
+        came out labelled as the flow they handed to.
+        """
+        event = event._replace(
+            properties={**environment_details.run_context(), **event.properties}
+        )
         try:
             self._queue.put_nowait(event)
             return True

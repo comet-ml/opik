@@ -134,3 +134,42 @@ def test_worker__queue_full__events_dropped_instead_of_blocking():
     finally:
         release.set()
         worker.close(timeout=5)
+
+
+def test_worker__run_context__is_fixed_when_the_event_is_enqueued(
+    worker_factory, monkeypatch
+):
+    """Not when the batch is sent, which is a different moment and a later one.
+
+    The run context is the one property source that changes during a run:
+    `opik configure` sets `invoked_via` when it hands over to the MCP flow. Read
+    at send time, that value landed on the events queued before it too, so
+    `opik configure`'s own pair came out labelled as the flow it handed to.
+    """
+    sent = []
+    worker = worker_factory(sent.extend)
+    monkeypatch.setattr(environment_details, "_RUN_CONTEXT", {})
+    environment_details.set_run_context(invoked_via="direct")
+
+    worker.enqueue(_event("before_the_handover"))
+    environment_details.set_run_context(invoked_via="opik_configure")
+    worker.enqueue(_event("after_the_handover"))
+    assert worker.flush(timeout=5)
+
+    assert [event.properties["invoked_via"] for event in sent] == [
+        "direct",
+        "opik_configure",
+    ]
+
+
+def test_worker__event_properties__beat_the_run_context(worker_factory, monkeypatch):
+    """The run context is a default, not an override of what a call site said."""
+    sent = []
+    worker = worker_factory(sent.extend)
+    monkeypatch.setattr(environment_details, "_RUN_CONTEXT", {})
+    environment_details.set_run_context(invoked_via="direct")
+
+    worker.enqueue(_event(invoked_via="something_the_caller_knows_better"))
+    assert worker.flush(timeout=5)
+
+    assert sent[0].properties["invoked_via"] == "something_the_caller_knows_better"

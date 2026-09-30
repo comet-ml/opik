@@ -46,10 +46,6 @@ class InstallReport(NamedTuple):
 
     registered: Tuple[str, ...]
     failed: Tuple[str, ...] = ()
-    #: The user pressed Ctrl-C or Escape at the picker. A cancel is not a
-    #: decision about the server, it is "stop" — so the caller must not carry on
-    #: to the skill pack, which is the same step continuing under another name.
-    cancelled: bool = False
     verified: Optional[bool] = None
     declined: bool = False
     #: Which server was registered: `remote` for the Comet-hosted one, reached
@@ -71,6 +67,14 @@ class InstallReport(NamedTuple):
     #: decline the server, but only this one says the detected clients are the
     #: wrong ones — which is a claim about more than the server.
     manual: bool = False
+    #: The user pressed Ctrl-C or Escape at the picker. A cancel is not a
+    #: decision about the server, it is "stop" — so the caller must not carry on
+    #: to the skill pack, which is the same step continuing under another name.
+    #:
+    #: Appended rather than slotted in beside `declined`, where it belongs by
+    #: meaning: this is a NamedTuple, so a field added in the middle silently
+    #: changes what a positional read of the ones after it returns.
+    cancelled: bool = False
 
 
 NOTHING_INSTALLED = InstallReport(registered=())
