@@ -1038,17 +1038,19 @@ def test_setup_mcp_server__stale_tool_install__is_removed_without_asking(monkeyp
     _stale_install(monkeypatch)
     uninstall = mock.Mock(return_value=(True, "removed"))
     monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
-    approval = mock.Mock()
-    monkeypatch.setattr(
-        install.interactive_helpers, "ask_user_for_approval_default_no", approval
-    )
-    monkeypatch.setattr("builtins.input", lambda message: "y")
+    asked = mock.Mock(return_value="y")
+    monkeypatch.setattr("builtins.input", asked)
 
     args = _make_args()
     report = install.setup_mcp_server(**args)
 
     uninstall.assert_called_once()
-    approval.assert_not_called()
+    # Nothing the user was shown mentions the tool install — a guard on what is
+    # actually on screen, rather than on one helper not being called, which went
+    # on passing after that helper stopped being what would have asked.
+    prompts = " ".join(str(call.args[0]) for call in asked.call_args_list)
+    assert "uv tool" not in prompts
+    assert "opik-mcp" not in prompts
     assert report.stale_tool == "removed"
 
 

@@ -87,8 +87,9 @@ class OpikConfigurator:
 
         # if there is already cached Opik client instance
         if get_current_client_raw() is not None:
-            LOGGER.info(
-                'Existing Opik clients will not use updated values for "url", "api_key", "workspace".'
+            self._announce(
+                'Existing Opik clients will not use updated values for "url", '
+                '"api_key", "workspace".'
             )
 
         if not self.use_local:
@@ -163,9 +164,9 @@ class OpikConfigurator:
                 workspace=self.workspace,
                 project_name=self.project_name,
             )
-            LOGGER.info(
-                "Opik is already configured. You can check the settings by viewing the config file at %s",
-                self.current_config.config_file_fullpath,
+            self._announce(
+                "Opik is already configured. You can check the settings by viewing "
+                f"the config file at {self.current_config.config_file_fullpath}"
             )
 
         self._log_project_configuration_message()
@@ -194,7 +195,7 @@ class OpikConfigurator:
                 not self.force
                 and self.current_config.url_override == OPIK_BASE_URL_LOCAL
             ):
-                LOGGER.info(
+                self._announce(
                     f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
                 )
                 self._update_config_local_mode(save_to_file=False)
@@ -210,7 +211,7 @@ class OpikConfigurator:
                 True
                 if self.automatic_approvals
                 else ask_user_for_approval(
-                    f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+                    f"Found a local Opik instance at {OPIK_BASE_URL_LOCAL}. Use it?"
                 )
             )
 
@@ -323,7 +324,7 @@ class OpikConfigurator:
             )
 
         while retries > 0:
-            user_input_api_key = getpass.getpass("Please enter your Opik API key:")
+            user_input_api_key = getpass.getpass("  Opik API key: ")
 
             extracted_base_url = _extract_base_url_from_api_key(user_input_api_key)
             if extracted_base_url is None and self.self_hosted_comet:
@@ -379,9 +380,7 @@ class OpikConfigurator:
         use_default_workspace = (
             True
             if self.automatic_approvals
-            else ask_user_for_approval(
-                f'Do you want to use "{default_workspace}" workspace? (Y/n)'
-            )
+            else ask_user_for_approval(f'Use the "{default_workspace}" workspace?')
         )
 
         if use_default_workspace:
@@ -446,9 +445,7 @@ class OpikConfigurator:
             )
 
         while retries > 0:
-            user_input_workspace = input(
-                "Please enter your Opik instance workspace name: "
-            )
+            user_input_workspace = input("  Workspace name: ")
             if opik_rest_helpers.is_workspace_name_correct(
                 api_key=self.api_key, workspace=user_input_workspace, url=self.base_url
             ):
@@ -496,7 +493,7 @@ class OpikConfigurator:
             True
             if self.automatic_approvals
             else ask_user_for_approval(
-                f'Do you want to use "{default_project_name}" project name? (Y/n)'
+                f'Use "{default_project_name}" as the project name?'
             )
         )
 
@@ -528,7 +525,7 @@ class OpikConfigurator:
             return urllib.parse.urljoin(self.base_url, "/api/")
 
     def _ask_for_project_name(self) -> None:
-        user_input_project_name = input("Please enter the project name: ")
+        user_input_project_name = input("  Project name: ")
         if user_input_project_name == "":
             raise ConfigurationError(
                 "The project name cannot be empty. Please enter a valid project name. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
@@ -574,9 +571,10 @@ class OpikConfigurator:
         """
         project_name = self.project_name
 
-        LOGGER.info(
-            f"Configuration completed successfully. Traces will be logged to '{project_name}' project. "
-            "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name"
+        self._announce(
+            f"Configuration completed successfully. Traces will be logged to "
+            f"'{project_name}' project. To change the destination project, see: "
+            "https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name"
         )
 
     def _ask_for_url(self) -> None:
@@ -589,7 +587,7 @@ class OpikConfigurator:
         """
         retries = 3
         while retries > 0:
-            user_input_opik_url = input("Please enter your Opik instance URL:")
+            user_input_opik_url = input("  Opik instance URL: ")
 
             if user_input_opik_url == "":
                 raise ConfigurationError(

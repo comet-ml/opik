@@ -754,7 +754,7 @@ class TestSmartProjectDefault:
         assert result is True
         assert configurator.project_name == "My Onboarding Agent"
         mock_ask_approval.assert_called_once_with(
-            'Do you want to use "My Onboarding Agent" project name? (Y/n)'
+            'Use "My Onboarding Agent" as the project name?'
         )
 
     @patch(
@@ -1098,7 +1098,7 @@ class TestGetWorkspace:
         assert needs_update is True
         mock_get_default_workspace.assert_called_once_with()
         mock_ask_user_for_approval.assert_called_once_with(
-            'Do you want to use "default_workspace" workspace? (Y/n)'
+            'Use the "default_workspace" workspace?'
         )
 
     @patch("opik.configurator.configure.opik.config.OpikConfig")
@@ -1164,7 +1164,7 @@ class TestGetWorkspace:
         assert needs_update is True
         mock_get_default_workspace.assert_called_once_with()
         mock_ask_user_for_approval.assert_called_once_with(
-            'Do you want to use "default_workspace" workspace? (Y/n)'
+            'Use the "default_workspace" workspace?'
         )
         mock_ask_for_workspace.assert_called_once_with()
 
@@ -1267,15 +1267,18 @@ class TestConfigureCloud:
         # Check config file wasn't overwritten, but session updated
         mock_update_config.assert_called_once_with(save_to_file=False)
 
-        # Check the logging messages - should be called twice
+        # Both go through `_announce`, which defaults to this logger and which
+        # the CLI replaces so these land in the same styling as everything
+        # around them rather than as `OPIK:` lines amid it.
         expected_calls = [
             (
-                "Opik is already configured. You can check the settings by viewing the config file at %s",
-                Path("/some/path/.opik.config"),
+                "Opik is already configured. You can check the settings by viewing "
+                "the config file at /some/path/.opik.config",
             ),
             (
-                "Configuration completed successfully. Traces will be logged to 'valid_project_name' project. "
-                "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
+                "Configuration completed successfully. Traces will be logged to "
+                "'valid_project_name' project. To change the destination project, "
+                "see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
             ),
         ]
         assert mock_logger_info.call_count == 2
@@ -1607,7 +1610,7 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_called_once_with(
-            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+            f"Found a local Opik instance at {OPIK_BASE_URL_LOCAL}. Use it?"
         )
         mock_update_config.assert_called_once_with(save_to_file=True)
 
@@ -1727,7 +1730,7 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_called_once_with(
-            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+            f"Found a local Opik instance at {OPIK_BASE_URL_LOCAL}. Use it?"
         )
         mock_ask_for_url.assert_called_once()
         mock_update_config.assert_called_once()

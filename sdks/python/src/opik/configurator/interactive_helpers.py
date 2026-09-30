@@ -77,40 +77,25 @@ def _in_colab_environment() -> bool:
     return "google.colab" in str(ipy)
 
 
-def ask_user_for_approval(message: str) -> bool:
-    """
-    Prompt the user with a message for approval (Y/Yes/N/No).
+def ask_user_for_approval(question: str) -> bool:
+    """Ask a yes/no question that Enter answers yes.
 
-    Args:
-        message (str): The message to display to the user.
+    ``question`` is the question alone. The ``[Y/n]`` and the indent are added
+    here so that this and the CLI's ``install_view.confirm_default_yes`` put the
+    same shape on screen — `opik configure` runs both, and each call site used
+    to spell its own suffix, which is how ``(Y/n)`` with the cursor jammed
+    against the bracket ended up next to ``[Y/n]: ``.
 
-    Returns:
-        bool: True if the user approves (Y/Yes/empty input), False if the user disapproves (N/No).
-
-    Logs:
-        Error when the user input is not recognized.
-    """
-    while True:
-        users_choice = input(message).strip().upper()
-        if users_choice in ("Y", "YES", ""):
-            return True
-        if users_choice in ("N", "NO"):
-            return False
-        LOGGER.error("Wrong choice. Please try again.")
-
-
-def ask_user_for_approval_default_no(message: str) -> bool:
-    """Prompt the user for approval, defaulting to "no" on empty input.
-
-    Mirrors :func:`ask_user_for_approval` but treats an empty answer as a "no",
-    for opt-in steps that should not happen unless explicitly requested.
+    Plain ``input`` rather than ``click`` or ``rich``: this half is reachable
+    from ``opik.configure()``, which is a library call and must not take over
+    someone's stdout.
     """
     while True:
-        users_choice = input(message).strip().upper()
-        if users_choice in ("N", "NO", ""):
-            return False
-        if users_choice in ("Y", "YES"):
+        answer = input(f"  {question} [Y/n]: ").strip().upper()
+        if answer in ("Y", "YES", ""):
             return True
+        if answer in ("N", "NO"):
+            return False
         LOGGER.error("Wrong choice. Please try again.")
 
 
