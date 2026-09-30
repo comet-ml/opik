@@ -1,5 +1,5 @@
 import React from "react";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import AddExperimentDialog from "./AddExperimentDialog";
 
@@ -13,8 +13,10 @@ vi.mock("@/contexts/PermissionsContext", () => ({
   usePermissions: () => ({ permissions: { canCreateExperiments: true } }),
 }));
 
+let mockIsPhone = false;
+
 vi.mock("@/hooks/useIsPhone", () => ({
-  useIsPhone: () => ({ isPhonePortrait: false }),
+  useIsPhone: () => ({ isPhonePortrait: mockIsPhone }),
 }));
 
 vi.mock("@/api/projects/useProjectById", () => ({
@@ -37,8 +39,28 @@ vi.mock("@/shared/CodeHighlighter/CodeHighlighter", () => ({
   ),
 }));
 
+vi.mock("@/shared/CodeBlockWithHeader/CodeBlockWithHeader", () => ({
+  default: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+// Only the mobile evaluator picker is multiselect; it reports values in the
+// order the user picked them, here out of display order.
 vi.mock("@/v2/components/LoadableSelectBox/LoadableSelectBox", () => ({
-  default: () => null,
+  default: ({
+    multiselect,
+    onChange,
+  }: {
+    multiselect?: boolean;
+    onChange: (values: string[]) => void;
+  }) =>
+    multiselect ? (
+      <button
+        data-testid="mobile-evaluators"
+        onClick={() => onChange(["context_recall", "levenshtein", "equals"])}
+      />
+    ) : null,
 }));
 
 vi.mock("@/shared/InstallOpikSection/InstallOpikSection", () => ({
@@ -71,6 +93,10 @@ const renderDialog = () =>
   render(<AddExperimentDialog open setOpen={vi.fn()} projectId="project-1" />);
 
 describe("AddExperimentDialog", () => {
+  beforeEach(() => {
+    mockIsPhone = false;
+  });
+
   it("orders evaluators in the snippet by the explanation list, not by click order", () => {
     renderDialog();
 
@@ -99,5 +125,21 @@ describe("AddExperimentDialog", () => {
     expect(getCode()).toContain(
       "metrics = [Equals(), Hallucination(), ContextRecall()]",
     );
+  });
+
+  it("orders evaluators picked on mobile by the explanation list", () => {
+    mockIsPhone = true;
+    renderDialog();
+
+    fireEvent.click(screen.getByTestId("mobile-evaluators"));
+
+    const code = getCode();
+    expect(code).toContain(
+      "from opik.evaluation.metrics import (Equals, LevenshteinRatio, ContextRecall)",
+    );
+    expect(code).toContain(
+      "metrics = [Equals(), LevenshteinRatio(), ContextRecall()]",
+    );
+    expect(code.indexOf('"reference"')).toBeLessThan(code.indexOf('"input"'));
   });
 });
