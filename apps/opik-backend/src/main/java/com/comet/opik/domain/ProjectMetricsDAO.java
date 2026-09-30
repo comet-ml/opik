@@ -1246,17 +1246,18 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    -- Bounded by trace_id, as in the thread list (ThreadDAO spans_deduped): a thread's cost is its traces' whole span set,
+                    -- including spans minted outside the range, and the trace_id range still prunes through the spans sort key.
+                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                     <if(spans_partitioned)>
+                    -- The weeks of the spans this read returns, found by their trace's id range like the read itself, so a span
+                    -- minted before its trace stays in, as the trace_id range above keeps it.
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                         SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
                         WHERE workspace_id = :workspace_id AND project_id = :project_id
-                        <if(uuid_from_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>)
                     <endif>
                 ) s ON s.trace_id = tr.id
             )
