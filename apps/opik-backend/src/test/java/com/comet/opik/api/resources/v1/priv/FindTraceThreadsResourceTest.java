@@ -1186,6 +1186,46 @@ class FindTraceThreadsResourceTest {
             assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
         }
 
+        @Test
+        @DisplayName("When a thread has a trace with the epoch sentinel start time, then start, end and duration skip that trace")
+        void whenThreadHasSentinelStartTrace__thenStartEndAndDurationSkipIt() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+            var realTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(250, ChronoUnit.MILLIS))
+                    .build();
+            var sentinelStartTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .environment(realTrace.environment())
+                    .startTime(Instant.EPOCH)
+                    .endTime(ranAt.plus(1000, ChronoUnit.MILLIS))
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(realTrace, sentinelStartTrace), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedThread = getExpectedThreads(List.of(realTrace, sentinelStartTrace), projectId, threadId,
+                    List.of(), TraceThreadStatus.ACTIVE).getFirst().toBuilder()
+                    .startTime(realTrace.startTime())
+                    .endTime(realTrace.endTime())
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(realTrace.startTime(),
+                            realTrace.endTime()))
+                    .build();
+
+            assertThreadPage(projectName, null, List.of(expectedThread), List.of(), Map.of(), API_KEY,
+                    TEST_WORKSPACE);
+            TraceAssertions.assertThreads(List.of(expectedThread),
+                    List.of(traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE)));
+        }
+
         @ParameterizedTest
         @EnumSource(Direction.class)
         @DisplayName("When sorting threads by feedback score, then threads are returned in correct order")
