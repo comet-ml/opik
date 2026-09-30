@@ -37,7 +37,16 @@ _RUN_CONTEXT: Dict[str, Any] = {}
 
 
 def set_run_context(**values: Any) -> None:
-    """Record how this run was entered, for every event reported after this."""
+    """Record how this run was entered, for every event enqueued after this.
+
+    Process-global and never cleared, which is safe only because the one caller
+    is a CLI entry point that owns the process and ends by exiting or by
+    `execvp`. A long-lived or library caller would leak its value onto every
+    later event in that process, including ordinary SDK use that has nothing to
+    do with how a command was started — and `_reset_after_fork` would not undo
+    it, since a forked child inherits the dict. Set this from a command, not
+    from a code path something else can call.
+    """
     _RUN_CONTEXT.update(values)
 
 
