@@ -6,6 +6,7 @@ from typing import List, NamedTuple, Optional, Tuple, TypedDict
 import click
 
 import opik.config as opik_config
+import opik.environment_details as environment_details
 import opik.url_helpers as url_helpers
 from opik import analytics
 from opik.cli import account_identity
@@ -152,6 +153,7 @@ def run_configure(
     local_server: bool = False,
     hosts: Tuple[str, ...] = (),
     skills_flag: Optional[bool] = None,
+    invoked_via: str = "direct",
 ) -> None:
     """The `opik mcp configure` flow, callable without going through click.
 
@@ -164,6 +166,15 @@ def run_configure(
     events below would be suppressed and the flow would be measured only when
     typed directly - which is not the path most people take to it.
     """
+    # Before the first event, so every event this flow reports carries it - the
+    # result, and a failure once there is one to report. A run reached through
+    # `opik configure` has already said yes to MCP and already has a working
+    # config, so it converts differently from a cold `uvx opik mcp configure`;
+    # pooling the two without being able to separate them moves the headline and
+    # hides why. Recorded here rather than passed to each event because the two
+    # populations have to stay separable further down the flow as well.
+    environment_details.set_run_context(invoked_via=invoked_via)
+
     # Same reason as `opik configure`: the click frame is what makes this visible.
     analytics.track_event(
         "configuration",
@@ -287,6 +298,21 @@ def run_configure(
         interactive=interactive_helpers.is_interactive(),
         # How the run ends, resolved just above so that it can be reported at all:
         # the handoff replaces this process, so nothing after it would be said.
+        # Which server was registered, so a run can be matched to what the MCP
+        # server went on to report: the hosted one authenticates over OAuth and is
+        # counted per Comet login, the local one by the API key digest both sides
+        # already report. Without it neither join can be chosen.
+        transport=outcome.transport or "",
+        # The hosted server answers nothing at all until the client has signed in,
+        # so this is the difference between a registration and a usable server —
+        # and `verification_succeeded` cannot see it, being a reachability probe
+        # against an endpoint that challenges everyone.
+        sign_in=outcome.sign_in,
+        # A stale uv tool install pins `uvx opik-mcp` at whatever was current when
+        # it was left behind, and the versions still out there predate identity
+        # resolution — so one we could not clear produces a server whose events
+        # nothing can attribute.
+        stale_tool=outcome.stale_tool,
         handoff=handoff.outcome,
         # Empty rather than absent when there was no handoff, so one property key
         # never carries a string on one event and nothing on another.
@@ -309,7 +335,8 @@ class _Handoff(NamedTuple):
     result event.
     """
 
-    #: `launch`, `prompt_shown`, `no_terminal` or `not_single_client`.
+    #: `launch`, `prompt_shown`, `no_terminal`, `not_single_client` or
+    #: `sign_in_failed`.
     outcome: str
     #: `diagnose` or `instrument` — which says whether the workspace already had
     #: traces of the user's own, the one thing the closing prompt turns on.
@@ -335,6 +362,12 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
         return _Handoff(outcome="no_terminal")
     if len(outcome.registered_clients) != 1:
         return _Handoff(outcome="not_single_client")
+    if outcome.sign_in == "failed":
+        # An unauthorized hosted server advertises no tools at all, so dropping
+        # the user into their agent on a question it cannot answer would teach
+        # them the integration is broken. The installer has already told them how
+        # to finish the sign-in by hand.
+        return _Handoff(outcome="sign_in_failed")
 
     host_key = outcome.registered_clients[0]
     target = mcp_targets.find_target(host_key)

@@ -11,6 +11,7 @@ from opik.cli import assistants
 from opik.cli import cli
 from opik.cli import mcp as mcp_cli
 from opik.configurator import consent
+from opik.configurator.mcp import install as mcp_install
 from opik.config import OpikConfig
 
 
@@ -621,3 +622,103 @@ class TestResultEventCarriesTheHandoff:
         event = self._result_event(("claude-code", "cursor"))
 
         assert event["handoff"] == "not_single_client"
+
+
+class TestResultEventCarriesTheConnectionSignals:
+    """What the adoption board (dashboard 2057363) needs to be joinable.
+
+    That board counts people who CONNECTED an MCP server, keyed on the Comet
+    login for the hosted transport and on the API key digest for the local one.
+    A configure run that does not say which transport it registered cannot pick
+    the right key, and one that does not say whether the sign-in worked cannot
+    explain the drop between registering and connecting.
+    """
+
+    @staticmethod
+    def _result_event(install_report):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+            patch.object(
+                mcp_cli.assistants.mcp_installer,
+                "setup_mcp_server",
+                return_value=install_report,
+            ),
+            patch.object(mcp_cli.assistants.consent, "granted", return_value=False),
+            patch.object(
+                mcp_cli.mcp_targets,
+                "find_target",
+                return_value=SimpleNamespace(display_name="Claude Code"),
+            ),
+            patch.object(mcp_cli.mcp_handoff, "traced_project", return_value=None),
+            patch.object(mcp_cli.mcp_handoff, "can_launch", return_value=True),
+            patch.object(mcp_cli.mcp_handoff, "launch"),
+            patch.object(mcp_cli.install_view, "render_handoff"),
+            patch.object(mcp_cli.install_view, "render_prompt_to_paste"),
+            patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
+            patch.object(mcp_cli.analytics, "track_event") as track,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure"])
+            assert result.exit_code == 0, result.output
+        return track.call_args_list[-1].kwargs
+
+    def test_hosted_server__transport_and_a_successful_sign_in_are_reported(self):
+        event = self._result_event(
+            mcp_install.InstallReport(
+                registered=("claude-code",),
+                verified=True,
+                transport="remote",
+                sign_in="succeeded",
+            )
+        )
+
+        assert event["transport"] == "remote"
+        assert event["sign_in"] == "succeeded"
+
+    def test_sign_in_failed__is_not_hidden_by_a_passing_verification(self):
+        """The one case `verification_succeeded` cannot see.
+
+        On the hosted transport it is a 401/403 reachability probe, which passes
+        just as well for a user who never signed in.
+        """
+        event = self._result_event(
+            mcp_install.InstallReport(
+                registered=("claude-code",),
+                verified=True,
+                transport="remote",
+                sign_in="failed",
+            )
+        )
+
+        assert event["verification_succeeded"] is True
+        assert event["sign_in"] == "failed"
+
+    def test_sign_in_failed__the_agent_is_not_launched_into_a_toolless_server(self):
+        event = self._result_event(
+            mcp_install.InstallReport(
+                registered=("claude-code",),
+                verified=True,
+                transport="remote",
+                sign_in="failed",
+            )
+        )
+
+        assert event["handoff"] == "sign_in_failed"
+
+    def test_local_server__says_so__and_has_no_sign_in_to_attempt(self):
+        event = self._result_event(
+            mcp_install.InstallReport(
+                registered=("cursor",),
+                verified=True,
+                transport="local_stdio",
+            )
+        )
+
+        assert event["transport"] == "local_stdio"
+        assert event["sign_in"] == "not_attempted"

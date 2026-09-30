@@ -38,6 +38,10 @@ def session_properties() -> Dict[str, PropertyValue]:
         "sdk_language": "python",
         **environment_details.collect_tags_once(),
         **environment_details.collect_context_once(),
+        # Last, and the one collector here that is NOT cached: it carries what a
+        # run learned about itself after its first event, such as `opik configure`
+        # handing over to the MCP flow.
+        **environment_details.run_context(),
     }
 
     return properties

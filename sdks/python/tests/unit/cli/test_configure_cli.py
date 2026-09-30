@@ -1094,3 +1094,134 @@ class TestPickerSkippedSeparatesTheTwoRefusals:
         )
 
         assert event["picker_skipped"] is False
+
+
+class TestTheRedirectReportsTheWholeFlow:
+    """The redirect must emit `opik mcp configure`'s events, not just run its code.
+
+    Analytics drops an event reported from a function another `opik` module
+    called, so without `@analytics.entry_point` on `run_configure` both MCP
+    events vanish on this path — and it is the path most people reach MCP setup
+    by. Nothing here mocks `run_configure`: the suppression is decided by the
+    real frame chain, so a test that stubs it cannot see this.
+    """
+
+    @staticmethod
+    def _reported(direct=False):
+        from opik import environment_details
+        from opik.analytics import api as analytics_api, worker as analytics_worker
+        from opik.cli import mcp as mcp_cli
+        from opik.config import OpikConfig
+        from opik.configurator.mcp import install as mcp_install
+
+        recorded = []
+
+        class Recorder:
+            def enqueue(self, event):
+                # The run context is merged by the worker at send time, so a
+                # recorder that skipped it would not see what is actually posted.
+                recorded.append(
+                    (
+                        event.name,
+                        {**analytics_worker.session_properties(), **event.properties},
+                    )
+                )
+                return True
+
+        def flow(**kwargs):
+            kwargs["progress"].redirect_to_mcp = True
+            return assistants.Outcome(clients=0, skills=False)
+
+        runner = CliRunner()
+        with (
+            # Module-level and deliberately not reset per run, so a test that
+            # left it set would colour every test after it.
+            mock.patch.object(environment_details, "_RUN_CONTEXT", {}),
+            mock.patch.object(analytics_api, "_WORKER", Recorder()),
+            mock.patch.object(analytics_api, "_DISABLED", False),
+            mock.patch.object(analytics_api, "_ALREADY_REPORTED", set()),
+            mock.patch.object(analytics_api, "_REPORTING_CODE", set()),
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli, "run_interactive_configure", side_effect=flow
+            ),
+            mock.patch.object(
+                configure_cli.account_identity, "event_properties", return_value={}
+            ),
+            mock.patch.object(
+                mcp_cli.account_identity, "event_properties", return_value={}
+            ),
+            mock.patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            # Already configured by the time the redirect runs — which is the
+            # point of the redirect: `opik configure` has just written this.
+            mock.patch.object(
+                mcp_cli.opik_config,
+                "OpikConfig",
+                return_value=OpikConfig(
+                    url_override="https://www.comet.com/opik/api/",
+                    workspace="acme-ai",
+                    api_key="key",
+                ),
+            ),
+            mock.patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+            mock.patch.object(
+                mcp_cli.assistants.mcp_installer,
+                "setup_mcp_server",
+                return_value=mcp_install.InstallReport(registered=()),
+            ),
+            mock.patch.object(
+                mcp_cli.assistants.consent, "granted", return_value=False
+            ),
+        ):
+            if direct:
+                result = runner.invoke(cli, ["mcp", "configure"])
+            else:
+                result = runner.invoke(cli, ["configure", "--use-local"])
+
+        assert result.exit_code == 0, result.output
+        return recorded
+
+    def test_both_commands_report_their_own_pair(self):
+        assert [name for name, _ in self._reported()] == [
+            "opik_python_sdk__configuration__configure",
+            "opik_python_sdk__configuration__configure__result",
+            "opik_python_sdk__configuration__mcp_configure",
+            "opik_python_sdk__configuration__mcp_configure__result",
+        ]
+
+    def test_every_mcp_event_says_it_was_reached_through_configure(self):
+        """Carried by the run context, so a later event gets it without asking."""
+        reported = self._reported()
+
+        assert [
+            properties.get("invoked_via")
+            for name, properties in reported
+            if "mcp_configure" in name
+        ] == ["opik_configure", "opik_configure"]
+
+    def test_the_configure_events_predate_the_handover__so_they_do_not_claim_it(self):
+        reported = self._reported()
+
+        assert [
+            properties.get("invoked_via")
+            for name, properties in reported
+            if "mcp_configure" not in name
+        ] == [None, None]
+
+    def test_a_direct_run_says_so(self):
+        """The control, and the reason the funnel can separate the two."""
+        reported = self._reported(direct=True)
+
+        assert {properties.get("invoked_via") for _, properties in reported} == {
+            "direct"
+        }
+
+    def test_one_session_covers_the_whole_handover(self):
+        """Same process, so the four events are joinable without a correlation id."""
+        reported = self._reported()
+
+        assert len({properties["session_id"] for _, properties in reported}) == 1

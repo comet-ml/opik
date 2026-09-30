@@ -1039,58 +1039,67 @@ def _stale_install(monkeypatch, version="0.2.12"):
     return install_spy
 
 
-def test_setup_mcp_server__stale_tool_install__removed_only_on_approval(monkeypatch):
+def test_setup_mcp_server__stale_tool_install__is_removed_without_asking(monkeypatch):
+    """It used to ask, defaulting to no. The question weighed the wrong risk.
+
+    The tool install is one an older Opik SDK left behind, and leaving it pins
+    `uvx opik-mcp` at a version old enough to predate identity resolution — so a
+    user who said no was not merely behind, they became unidentifiable.
+    """
     _stale_install(monkeypatch)
     uninstall = mock.Mock(return_value=(True, "removed"))
     monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    approval = mock.Mock()
     monkeypatch.setattr(
-        install.interactive_helpers,
-        "ask_user_for_approval_default_no",
-        lambda message: True,
+        install.interactive_helpers, "ask_user_for_approval_default_no", approval
     )
     monkeypatch.setattr("builtins.input", lambda message: "y")
 
     args = _make_args()
-    install.setup_mcp_server(**args)
+    report = install.setup_mcp_server(**args)
 
     uninstall.assert_called_once()
-    assert any("Removed opik-mcp 0.2.12" in note for note in args["view"].notes)
+    approval.assert_not_called()
+    assert report.stale_tool == "removed"
 
 
-def test_setup_mcp_server__stale_tool_install__declined__is_left_alone(monkeypatch):
+def test_setup_mcp_server__stale_tool_removed__says_nothing_about_it(monkeypatch):
+    """Silent on success: this restores what running the command already asked for."""
     _stale_install(monkeypatch)
-    uninstall = mock.Mock()
-    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
-    monkeypatch.setattr(
-        install.interactive_helpers,
-        "ask_user_for_approval_default_no",
-        lambda message: False,
-    )
+    monkeypatch.setattr(install.uv_tool, "uninstall", lambda: (True, "removed"))
     monkeypatch.setattr("builtins.input", lambda message: "y")
 
     args = _make_args()
     install.setup_mcp_server(**args)
 
-    # Saying no is a decision, not a failure: nothing is deleted and the setup
-    # still completes.
-    uninstall.assert_not_called()
-    assert any("Left in place" in note for note in args["view"].notes)
+    assert not any("opik-mcp 0.2.12" in note for note in args["view"].notes)
 
 
-def test_setup_mcp_server__stale_tool_install__headless__reports_without_asking(
-    monkeypatch,
-):
+def test_setup_mcp_server__stale_tool_cannot_be_removed__says_so(monkeypatch):
+    """Loud on failure: the server really will keep starting the old version."""
     _stale_install(monkeypatch)
-    uninstall = mock.Mock()
+    monkeypatch.setattr(install.uv_tool, "uninstall", lambda: (False, "uv exploded"))
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    report = install.setup_mcp_server(**args)
+
+    assert report.stale_tool == "removal_failed"
+    assert any(
+        "uv tool uninstall opik-mcp" in problem for problem in args["view"].problems
+    )
+
+
+def test_setup_mcp_server__stale_tool_install__headless__is_still_removed(monkeypatch):
+    """There is no question left to need a terminal for."""
+    _stale_install(monkeypatch)
+    uninstall = mock.Mock(return_value=(True, "removed"))
     monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
     monkeypatch.setattr(install.interactive_helpers, "is_interactive", lambda: False)
 
-    args = _make_args(host_keys=["cursor"])
-    install.setup_mcp_server(**args)
+    install.setup_mcp_server(**_make_args(host_keys=["cursor"]))
 
-    # No terminal means nobody to ask, so it must not delete on its own.
-    uninstall.assert_not_called()
-    assert any("uv tool uninstall opik-mcp" in note for note in args["view"].notes)
+    uninstall.assert_called_once()
 
 
 def test_setup_mcp_server__stale_install_removed_before_the_prefetch(
@@ -1105,11 +1114,6 @@ def test_setup_mcp_server__stale_install_removed_before_the_prefetch(
         "uninstall",
         lambda: (order.append("uninstall"), (True, "removed"))[1],
     )
-    monkeypatch.setattr(
-        install.interactive_helpers,
-        "ask_user_for_approval_default_no",
-        lambda message: True,
-    )
     prefetch_run.side_effect = lambda *a, **k: (
         order.append("prefetch"),
         subprocess.CompletedProcess([], 0, "", ""),
@@ -1121,19 +1125,16 @@ def test_setup_mcp_server__stale_install_removed_before_the_prefetch(
     assert order == ["uninstall", "prefetch"]
 
 
-def test_setup_mcp_server__no_tool_install__asks_nothing(monkeypatch):
+def test_setup_mcp_server__no_tool_install__nothing_to_remove(monkeypatch):
     _stale_install(monkeypatch, version=None)
-    approval = mock.Mock()
-    monkeypatch.setattr(
-        install.interactive_helpers, "ask_user_for_approval_default_no", approval
-    )
+    uninstall = mock.Mock()
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
     monkeypatch.setattr("builtins.input", lambda message: "y")
 
-    args = _make_args()
-    install.setup_mcp_server(**args)
+    report = install.setup_mcp_server(**_make_args())
 
-    approval.assert_not_called()
-    assert args["view"].notes == []
+    uninstall.assert_not_called()
+    assert report.stale_tool == "absent"
 
 
 class TestClientNotListed:

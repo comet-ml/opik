@@ -26,6 +26,10 @@ class InstallResult:
     # The registration worked but the client's own sign-in did not, so this host
     # has a server it cannot use until the user signs in by hand.
     sign_in_failed: bool = False
+    # Whether a sign-in was started at all. Without it `sign_in_failed is False`
+    # means both "it worked" and "there was nothing to do", and only the first of
+    # those says the user can expect the server to answer.
+    sign_in_attempted: bool = False
 
 
 @dataclasses.dataclass
@@ -249,7 +253,8 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         return InstallResult(
             target_display_name="Claude Code",
             succeeded=True,
-            sign_in_failed=not signed_in,
+            sign_in_attempted=signed_in is not None,
+            sign_in_failed=signed_in is False,
             detail=(
                 f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "
                 f"`claude mcp add` (user scope)"
@@ -320,7 +325,7 @@ def _claude_supports_mcp_login(claude_executable: str) -> bool:
 
 def _sign_in_claude_code(
     claude_executable: str, server_spec: mcp_spec.McpServerSpec
-) -> bool:
+) -> Optional[bool]:
     """Start the browser sign-in for a freshly registered hosted server.
 
     The hosted server carries no credentials; the client signs in over OAuth. For
@@ -337,26 +342,26 @@ def _sign_in_claude_code(
     an old client, a failed login or a user who walks away all leave a working
     registration plus the sign-in hint the closing block already prints.
 
-    Returns False only when a login was attempted and did not succeed, which is
-    the one case worth saying something specific about. Every "there was nothing
-    to do here" answers True.
+    Returns True or False for a login that was attempted, and None when there was
+    nothing to attempt. A caller that treats those last two the same cannot tell
+    a server the user can use from one nobody tried to sign into.
     """
     if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
         # A local uvx server authenticates with the API key already written into
         # the config. There is nothing to sign in to.
-        return True
+        return None
 
     if not interactive_helpers.is_interactive():
         # A run with no terminal is a coding agent or CI, and a browser there is
         # at best ignored. Unlike the Codex path — where the login is inside
         # `codex mcp add` and cannot be separated from it — this one is ours to
         # not start. The closing block's sign-in hint still covers these runs.
-        return True
+        return None
 
     if not _claude_supports_mcp_login(claude_executable):
         # Nothing to attempt on this build, so nothing failed: the closing
         # block's general sign-in hint is the right level of noise here.
-        return True
+        return None
 
     returncode = _run_interactive_client_cli(
         [claude_executable, "mcp", "login", SERVER_NAME]

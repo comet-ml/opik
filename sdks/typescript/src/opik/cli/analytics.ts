@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,6 +33,32 @@ export const LAUNCHER = "npx";
  * separable from a `uvx` one on the other side of the handoff.
  */
 export const LAUNCHER_ENV_VAR = "OPIK_CLI_LAUNCHER";
+
+/**
+ * Carries this run's `session_id` to the Python CLI, so both halves of the
+ * handoff report the same one.
+ *
+ * Without it the two sides invent their own and nothing joins them: the events
+ * describing why a run started live here, and the events describing what it did
+ * live there. The Python SDK reads this in `environment_details`.
+ */
+export const SESSION_ID_ENV_VAR = "OPIK_CLI_SESSION_ID";
+
+/**
+ * Nine ASCII letters, which is exactly what the Python SDK generates. Same shape
+ * on both sides means one column reads the whole run rather than needing a
+ * mapping table to tell the two formats apart.
+ */
+const SESSION_ID_LENGTH = 9;
+const SESSION_ID_ALPHABET =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+export function newSessionId(): string {
+  return Array.from(
+    randomBytes(SESSION_ID_LENGTH),
+    (byte) => SESSION_ID_ALPHABET[byte % SESSION_ID_ALPHABET.length],
+  ).join("");
+}
 
 declare const __OPIK_SDK_VERSION__: string;
 
@@ -152,11 +178,15 @@ export function createReporter(
   const url = env.OPIK_ANALYTICS_URL ?? ANALYTICS_URL_DEFAULT;
   const id = enabled ? userIdentifier(env) : "";
   const { command, flags } = summarizeArgs(args);
-  // Ties the three events of one run together, since they are separate requests.
-  const runId = randomUUID();
+  // Ties this run's events together, and — because it is passed to the Python
+  // CLI and reported there too — ties them to what the run went on to do.
+  const sessionId = newSessionId();
   const inFlight: Promise<void>[] = [];
 
   return {
+    /** Handed to the Python CLI so its events report the same run. */
+    sessionId,
+
     track(
       name: EventName,
       properties: Record<string, PropertyValue> = {},
@@ -168,7 +198,7 @@ export function createReporter(
         anonymous_id: id,
         event_type: eventName(name),
         event_properties: {
-          run_id: runId,
+          session_id: sessionId,
           launcher: LAUNCHER,
           sdk_version: SDK_VERSION,
           command,

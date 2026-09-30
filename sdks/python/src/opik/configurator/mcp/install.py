@@ -48,6 +48,21 @@ class InstallReport(NamedTuple):
     failed: Tuple[str, ...] = ()
     verified: Optional[bool] = None
     declined: bool = False
+    #: Which server was registered: `remote` for the Comet-hosted one, reached
+    #: over HTTP with a browser sign-in, or `local_stdio` for `uvx opik-mcp` with
+    #: the API key in the host config. The two authenticate differently and are
+    #: counted by different funnels, so a run that does not say which it was
+    #: cannot be matched to what the server went on to report.
+    transport: Optional[str] = None
+    #: `succeeded`, `failed` or `not_attempted`. Only the hosted server has a
+    #: sign-in, and only Claude Code's own CLI can be driven through it, so
+    #: `not_attempted` is the ordinary answer rather than a gap.
+    sign_in: str = "not_attempted"
+    #: `absent`, `removed` or `removal_failed`. A stale uv tool install pins
+    #: `uvx opik-mcp` at an old version, and the ones still in the wild predate
+    #: identity resolution - so a run that could not clear one produces a server
+    #: nothing can attribute.
+    stale_tool: str = "absent"
     #: The user picked "my AI client is not listed" rather than "not now". Both
     #: decline the server, but only this one says the detected clients are the
     #: wrong ones — which is a claim about more than the server.
@@ -209,11 +224,12 @@ def setup_mcp_server(
             registered=(), declined=True, manual=confirmation.manual_requested
         )
 
+    stale_tool = "absent"
     if isinstance(server_spec, mcp_spec.StdioServerSpec):
         # Before the prefetch, not after: an old tool install captures `uvx
         # opik-mcp`, so warming the cache while one is present warms something
         # the client would never reach.
-        _offer_to_remove_tool_install(display)
+        stale_tool = _remove_stale_tool_install(display)
         with display.step("Preparing the Opik MCP server"):
             _prefetch_opik_mcp()
 
@@ -222,6 +238,12 @@ def setup_mcp_server(
     # Said here rather than left to the closing block's general hint: that hint
     # describes sign-in as something the assistant may have done for you, which
     # is exactly what did not happen when a login we started came back failing.
+    sign_in = "not_attempted"
+    if any(result.sign_in_failed for result in results):
+        sign_in = "failed"
+    elif any(result.sign_in_attempted for result in results):
+        sign_in = "succeeded"
+
     for result in results:
         if result.sign_in_failed:
             display.note(
@@ -274,52 +296,50 @@ def setup_mcp_server(
             if not result.succeeded
         ),
         verified=verified,
+        transport=connection_mode.value,
+        sign_in=sign_in,
+        stale_tool=stale_tool,
     )
 
 
-def _offer_to_remove_tool_install(display: mcp_view.InstallView) -> None:
-    """Offer to remove an ``opik-mcp`` that an old SDK installed as a uv tool.
+def _remove_stale_tool_install(display: mcp_view.InstallView) -> str:
+    """Remove an ``opik-mcp`` that an older Opik SDK left installed as a uv tool.
 
     Such an install decides what `uvx opik-mcp` runs, so a client registered here
     would keep starting it instead of the published release (see ``uv_tool``).
     Removing it is what makes the plain registration mean what it says.
 
-    Asked, never assumed, and defaulting to no: this deletes from the user's
-    environment, and doing that unannounced is the bug being cleaned up. Without a
-    terminal there is nobody to ask, so it is reported and left alone.
+    Done rather than offered. It used to ask, defaulting to no, on the reasoning
+    that deleting from someone's environment unannounced is the bug being cleaned
+    up. That weighed the wrong risk: the thing being deleted is one *we* installed
+    by mistake, and leaving it is not neutral. A stale tool pins the server at the
+    version that was current when it was installed - and the versions in the wild
+    are old enough to predate identity resolution entirely, so a user left on one
+    is not merely behind, they are unidentifiable. Measured 2026-09-30: 0.2.12 and
+    0.2.13 report a resolved login on zero of their 18,592 events, while every
+    version from 0.2.23 reports one.
+
+    Silent when it works: this restores the behaviour the user already asked for
+    by running the command. Loud when it does not, because then the server really
+    will keep starting the old version and only they can fix it.
+
+    Returns ``absent``, ``removed`` or ``removal_failed``.
     """
     installed = uv_tool.installed_version()
     if installed is None:
-        return
-
-    problem = (
-        f"opik-mcp {installed} is installed as a uv tool, left by an older Opik "
-        f"SDK. While it is there, `uvx opik-mcp` runs it instead of the published "
-        f"version, so this server would start {installed} however often you "
-        f"restart."
-    )
-
-    if not interactive_helpers.is_interactive():
-        display.note(f"{problem} Remove it with `uv tool uninstall opik-mcp`.")
-        return
-
-    display.note(problem)
-    if not interactive_helpers.ask_user_for_approval_default_no(
-        "Remove it so the MCP server tracks the published version? [y/N]: "
-    ):
-        display.note(
-            "Left in place. `uv tool uninstall opik-mcp` removes it whenever you want."
-        )
-        return
+        return "absent"
 
     succeeded, detail = uv_tool.uninstall()
     if succeeded:
-        display.note(f"Removed opik-mcp {installed} from your uv tools.")
-    else:
-        display.problem(
-            f"Could not remove it: {detail}. Run `uv tool uninstall opik-mcp` "
-            f"yourself — until then this server keeps starting {installed}."
-        )
+        return "removed"
+
+    display.problem(
+        f"opik-mcp {installed} is installed as a uv tool, left by an older Opik "
+        f"SDK, and could not be removed: {detail}. Run `uv tool uninstall "
+        f"opik-mcp` yourself — until then this server keeps starting {installed} "
+        f"however often you restart."
+    )
+    return "removal_failed"
 
 
 def _deployment_label(

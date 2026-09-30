@@ -62,6 +62,16 @@ class Outcome(NamedTuple):
     #: run that never got as far as asking. The caller turns this into
     #: ``mcp_decision``; only the installer can tell the two apart.
     mcp_declined: bool = False
+    #: Carried straight up from the installer: which server was registered, and
+    #: whether its sign-in went through. The funnel cannot be joined to what the
+    #: MCP server reported without the first, and cannot explain the drop to
+    #: "connected" without the second.
+    transport: Optional[str] = None
+    sign_in: str = "not_attempted"
+    #: Whether a stale `opik-mcp` uv tool install was in the way, and whether it
+    #: could be cleared. One left behind pins the server at a version that may
+    #: predate identity resolution.
+    stale_tool: str = "absent"
 
 
 NOTHING_DONE = Outcome(clients=0, skills=False)
@@ -158,6 +168,9 @@ def setup(
             verified=install.verified,
             skills_decision=skills_reason,
             mcp_declined=install.declined,
+            transport=install.transport,
+            sign_in=install.sign_in,
+            stale_tool=install.stale_tool,
         )
 
     view.done(
@@ -172,6 +185,9 @@ def setup(
         verified=install.verified,
         skills_decision=skills_reason,
         mcp_declined=install.declined,
+        transport=install.transport,
+        sign_in=install.sign_in,
+        stale_tool=install.stale_tool,
     )
 
 

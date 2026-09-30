@@ -562,7 +562,7 @@ def configure(
         # none.
         from opik.cli import mcp as mcp_cli
 
-        mcp_cli.run_configure()
+        mcp_cli.run_configure(invoked_via="opik_configure")
 
 
 @configure.command(name="status")
