@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.util.Duration;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -36,6 +37,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode;
@@ -329,6 +332,72 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void reportsUnresolvedArgumentsOnTheRuleLogInsteadOfCallingTheEvaluator() {
+            // A metric declaring fields the trace does not carry resolves to an empty replacement map.
+            // That used to reach PythonEvaluatorService.evaluate, whose Preconditions guard threw a raw
+            // IllegalArgumentException; the job was dropped as non-retryable and the user saw nothing
+            // (OPIK-8556). The scorer must now detect it first and name the offending arguments.
+            var message = sampleMessageWithUnresolvableArguments();
+
+            scorer.score(message).block();
+
+            verify(pythonEvaluatorService, never()).evaluate(any(), any());
+            verify(userFacingLogger).warn(
+                    contains("none of the metric's declared arguments resolved"),
+                    eq("traceId"),
+                    eq(traceId),
+                    eq(ruleName),
+                    eq("'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'"));
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+        }
+
+        @Test
+        void sanitisesAndCapsTheArgumentsItReports() {
+            // Argument names and paths are rule configuration the user controls, and this line persists in
+            // automation_rule_evaluator_logs.message. A newline must not forge an entry there, and one long
+            // value must not flood it — same treatment the judge-supplied names in this file already get.
+            var longPath = "input." + RandomStringUtils.secure().nextAlphanumeric(200);
+            var message = sampleMessageWithArguments(Map.of(
+                    "a_newline", "input.first\nWARN forged entry",
+                    "b_long", longPath));
+
+            scorer.score(message).block();
+
+            var reported = ArgumentCaptor.forClass(String.class);
+            verify(userFacingLogger).warn(
+                    contains("none of the metric's declared arguments resolved"),
+                    eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
+
+            // Whole rendered string, not fragments: separator, ordering, truncation point and the absence
+            // of anything extra all have to hold, not just the presence of the two entries.
+            assertThat(reported.getValue()).isEqualTo(
+                    "'a_newline' -> 'input.first WARN forged entry', 'b_long' -> '%s…'"
+                            .formatted(longPath.substring(0, 100)));
+        }
+
+        @Test
+        void capsHowManyArgumentsItReports() {
+            // The count comes from the rule, so one rule would otherwise decide how much this path carries.
+            var arguments = IntStream.range(0, 13).boxed()
+                    .collect(Collectors.toMap("arg_%02d"::formatted, index -> "input.absent_%02d".formatted(index)));
+            var message = sampleMessageWithArguments(arguments);
+
+            scorer.score(message).block();
+
+            var reported = ArgumentCaptor.forClass(String.class);
+            verify(userFacingLogger).warn(
+                    contains("none of the metric's declared arguments resolved"),
+                    eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
+
+            // Built independently from the same inputs so ordering, separator, which ten survive the cap
+            // and the omitted-count text are all pinned, rather than spot-checked.
+            var expected = IntStream.range(0, 10)
+                    .mapToObj(index -> "'arg_%02d' -> 'input.absent_%02d'".formatted(index, index))
+                    .collect(Collectors.joining(", ")) + " and 3 more";
+            assertThat(reported.getValue()).isEqualTo(expected);
+        }
+
+        @Test
         void propagatesEvaluatorErrorAndLogsMessage() {
             var message = sampleMessage();
             var error = new RuntimeException("Python BE timeout");
@@ -356,10 +425,27 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                 Map.of("input", "input.question", "output", "output.answer", "spans", "spans"));
     }
 
+    /**
+     * Mirrors the production shape: the metric declares `expects_sql` and `execution_plan`, the trace
+     * carries neither, so every declared argument resolves to null and the replacement map comes back
+     * empty.
+     */
+    private TraceToScoreUserDefinedMetricPython sampleMessageWithUnresolvableArguments() {
+        return sampleMessageWithArguments(
+                Map.of("expects_sql", "input.expects_sql", "plan", "output.execution_plan"));
+    }
+
     private TraceToScoreUserDefinedMetricPython sampleMessageWithArguments(Map<String, String> arguments) {
+        // Pin input/output instead of letting Podam fill them: the declared paths have to actually
+        // resolve, or every test here silently hands the evaluator an empty map — which is the very
+        // state OPIK-8556 is about, and is what let that defect through this suite unnoticed.
         var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                 .id(traceId)
                 .projectId(projectId)
+                .input(JsonUtils.getJsonNodeFromString(
+                        "{\"question\":\"%s\"}".formatted(RandomStringUtils.secure().nextAlphanumeric(16))))
+                .output(JsonUtils.getJsonNodeFromString(
+                        "{\"answer\":\"%s\"}".formatted(RandomStringUtils.secure().nextAlphanumeric(16))))
                 .build();
         return podamFactory.manufacturePojo(TraceToScoreUserDefinedMetricPython.class).toBuilder()
                 .trace(trace)

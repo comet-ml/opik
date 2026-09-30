@@ -1519,6 +1519,67 @@ public class OnlineScoringEngine {
     }
 
     /**
+     * Reports a Python metric that cannot run because none of its declared arguments resolved on the
+     * entity being scored, i.e. {@link #toReplacements} came back empty.
+     *
+     * <p>This is a user-configuration mismatch — the metric declares fields the entity does not carry —
+     * not a backend fault, and it is deterministic, so retrying cannot help. It used to reach
+     * {@code PythonEvaluatorService.evaluate}, whose {@code Preconditions} guard raised a raw
+     * {@link IllegalArgumentException}; the scorer then logged a Guava stack at WARN and dropped the
+     * message, and the user saw nothing at all. Callers now detect the empty map first and report it
+     * here, so the rule's own log names the arguments that need fixing.
+     *
+     * <p>Only argument names and the paths the user configured are logged — never resolved values —
+     * so this adds no trace content to either sink. Reaching this method at all means every declared
+     * argument was a path into {@code input}/{@code output}/{@code metadata}: {@link #toVariableMapping}
+     * treats any other value as a literal, and a literal always resolves, so one would have left the
+     * map non-empty and this branch unreachable. Paths are still rule configuration the user controls,
+     * so they get the same {@link #sanitize} treatment as judge-supplied text — a newline must not
+     * forge an entry in the persisted log, nor one rule decide how much this path carries.
+     */
+    public static void logUnresolvedEvaluatorArguments(
+            @NonNull Logger userFacingLogger,
+            @NonNull Logger internalLogger,
+            @NonNull Map<String, String> mdc,
+            @NonNull String entityLabel,
+            @NonNull Object entityId,
+            String ruleName,
+            @NonNull Map<String, String> declaredArguments) {
+        // Each half is sanitized separately rather than the rendered pair: capping the pair as one
+        // unit would let a long name crowd out the path, which is the actionable half.
+        var reported = declaredArguments.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(MAX_REPORTED_FIELD_NAMES)
+                .map(argument -> "'%s' -> '%s'".formatted(sanitize(argument.getKey()), sanitize(argument.getValue())))
+                .toList();
+        var omitted = declaredArguments.size() - reported.size();
+        var renderedArguments = reported.isEmpty()
+                ? "(none declared)"
+                : renderPairs(reported, omitted);
+        var safeRuleName = sanitize(String.valueOf(ruleName));
+        // Both inside the MDC scope: the backend line needs the same workspace / rule / entity markers
+        // as the user-facing one to be correlatable, which is how logAndPrepareEvaluatorInput does it.
+        // Routing is by logger identity, not by MDC — the ClickHouse appender is attached only to the
+        // "<Class>.UserFacingLog" logger, so this does not duplicate the internal line into that sink.
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            userFacingLogger.warn(
+                    "Not scoring {} '{}' with rule '{}': none of the metric's declared arguments resolved, so there"
+                            + " is no data to evaluate. Unresolved arguments: {}. Check these against the input,"
+                            + " output and metadata actually present.",
+                    entityLabel, entityId, safeRuleName, renderedArguments);
+            internalLogger.warn(
+                    "Not scoring {} '{}' with rule '{}': none of the declared arguments resolved, unresolved: {}",
+                    entityLabel, entityId, safeRuleName, renderedArguments);
+        }
+    }
+
+    /** Mirrors {@link #renderNames}' "and N more" shape for entries that carry their own quoting. */
+    private static String renderPairs(List<String> pairs, int omitted) {
+        var shown = String.join(", ", pairs);
+        return omitted == 0 ? shown : "%s and %,d more".formatted(shown, omitted);
+    }
+
+    /**
      * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
      * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
      * by rule 'name'" entry log, the "Sending X 'id' to Python evaluator: '<summary>'" exit

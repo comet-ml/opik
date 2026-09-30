@@ -36,6 +36,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
@@ -79,6 +80,8 @@ import org.junit.jupiter.params.provider.NullSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.Logger;
+import org.slf4j.MDC;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -90,6 +93,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -2382,6 +2386,38 @@ class OnlineScoringEngineTest {
         assertThat(allText).contains(spanRef);
         // Sentinel literal must not leak into the rendered prompt.
         assertThat(allText).doesNotContain("{{span}}");
+    }
+
+    @Test
+    void logUnresolvedEvaluatorArgumentsLogsBothSinksInsideTheMdcScope() {
+        // The backend line is only correlatable with the user-facing one if it carries the same
+        // workspace / rule / entity markers, so it has to sit inside the MDC scope too (OPIK-8556).
+        // MDC is a thread-local read at append time, so it is asserted during the call, not after.
+        var mdc = Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                UserLog.WORKSPACE_ID, UUID.randomUUID().toString(),
+                UserLog.TRACE_ID, UUID.randomUUID().toString(),
+                UserLog.RULE_ID, UUID.randomUUID().toString());
+        var userFacingLogger = Mockito.mock(Logger.class);
+        var internalLogger = Mockito.mock(Logger.class);
+        Map<String, String> seenByUserFacing = new HashMap<>();
+        Map<String, String> seenByInternal = new HashMap<>();
+        Mockito.doAnswer(invocation -> {
+            seenByUserFacing.putAll(MDC.getCopyOfContextMap());
+            return null;
+        }).when(userFacingLogger).warn(Mockito.anyString(), Mockito.any(Object[].class));
+        Mockito.doAnswer(invocation -> {
+            seenByInternal.putAll(MDC.getCopyOfContextMap());
+            return null;
+        }).when(internalLogger).warn(Mockito.anyString(), Mockito.any(Object[].class));
+
+        OnlineScoringEngine.logUnresolvedEvaluatorArguments(userFacingLogger, internalLogger, mdc,
+                "traceId", UUID.randomUUID(), "a-rule", Map.of("plan", "output.execution_plan"));
+
+        assertThat(seenByUserFacing).containsAllEntriesOf(mdc);
+        assertThat(seenByInternal).containsAllEntriesOf(mdc);
+        // And the scope is closed again, so neither leaks onto the next message on this thread.
+        assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
     }
 
     private Span createSpan(UUID spanId, UUID projectId) {

@@ -1737,6 +1737,70 @@ class AutomationRuleEvaluatorsResourceTest {
         }
 
         @Test
+        void getLogsUserDefinedMetricPythonScorerWhenNoDeclaredArgumentResolves() throws JsonProcessingException {
+            // OPIK-8556. Deliberately no WireMock stub for the Python evaluator: the scorer must not call
+            // it at all when nothing resolved. If it did, the unstubbed endpoint would 404 and surface as
+            // an ERROR log, which the second assertion below rejects — that is also the shape this used to
+            // produce, when the empty map reached evaluate() and its Preconditions guard threw.
+            var ruleName = "rule-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
+                    .name(ruleName)
+                    .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
+                            .metric(USER_DEFINED_METRIC)
+                            .arguments(Map.of(
+                                    "expects_sql", "input.expects_sql",
+                                    "plan", "output.execution_plan"))
+                            .build())
+                    .samplingRate(1f)
+                    .filters(List.of())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // Carries neither declared path, so every argument resolves to null and the map comes back empty.
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
+                    .threadId(null) // Must be null for trace-level evaluation
+                    .input(OBJECT_MAPPER.readTree("""
+                            {
+                                "question": "how many rows?"
+                            }
+                            """))
+                    .output(OBJECT_MAPPER.readTree("""
+                            {
+                                "response": "abc"
+                            }
+                            """))
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            var expectedMessage = ("Not scoring traceId '%s' with rule '%s': none of the metric's declared arguments"
+                    + " resolved, so there is no data to evaluate. Unresolved arguments:"
+                    + " 'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'. Check these"
+                    + " against the input, output and metadata actually present.").formatted(trace.id(), ruleName);
+
+            Awaitility.await().untilAsserted(() -> {
+                var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+
+                // The whole point of the ticket: the line the user needs has to survive the round-trip into
+                // automation_rule_evaluator_logs and come back off the API, naming both arguments.
+                assertThat(logPage.content()).anySatisfy(log -> {
+                    assertThat(log.level()).isEqualTo(LogLevel.WARN);
+                    assertThat(log.ruleId()).isEqualTo(id);
+                    assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
+                    assertThat(log.message()).isEqualTo(expectedMessage);
+                });
+
+                // A user-configuration mismatch is not a backend fault, so nothing on this rule may be ERROR.
+                assertThat(logPage.content()).noneMatch(log -> log.level() == LogLevel.ERROR);
+            });
+        }
+
+        @Test
         void getLogsTraceThreadUserDefinedMetricPythonScorer() throws JsonProcessingException {
             //Given
             var pythonEvaluatorRequest = TraceThreadPythonEvaluatorRequest.builder()
