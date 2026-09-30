@@ -1,4 +1,7 @@
 const PLACEHOLDER_ORIGIN = "http://localhost";
+// Mirrors the compareExperimentsRoute path — the only page that links here.
+const EXPERIMENT_ROUTE_PATTERN =
+  /^\/[^/]+\/projects\/[^/]+\/experiments\/[^/]+\/compare$/;
 
 // `from` arrives via the URL, so only accept same-origin paths under the app
 // basepath that point at an experiments page — anything else would make the
@@ -21,7 +24,7 @@ export const parseExperimentReturnHref = (
   if (base && !url.pathname.startsWith(`${base}/`)) return null;
 
   const to = url.pathname.slice(base.length);
-  if (!to.includes("/experiments/")) return null;
+  if (!EXPERIMENT_ROUTE_PATTERN.test(to)) return null;
 
   return { to, searchStr: url.search };
 };

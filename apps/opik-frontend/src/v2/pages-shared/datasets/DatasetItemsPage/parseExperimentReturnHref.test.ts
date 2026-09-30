@@ -29,6 +29,9 @@ describe("parseExperimentReturnHref", () => {
     ["backslash host", "/\\evil.com/experiments/x"],
     ["absolute url", "https://evil.com/ws/projects/p1/experiments/d1/compare"],
     ["non-experiment path", "/ws/projects/p1/test-suites/s1/items"],
+    ["misplaced experiments segment", "/ws/projects/p1/foo/experiments/bar"],
+    ["unknown experiments route", "/ws/projects/p1/experiments/d1/not-a-route"],
+    ["experiments list", "/ws/projects/p1/experiments/"],
   ])("rejects %s input", (_, href) => {
     expect(parseExperimentReturnHref(href, "/")).toBeNull();
   });
