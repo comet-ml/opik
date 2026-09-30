@@ -19,6 +19,7 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -87,6 +88,8 @@ class ThreadDAOImpl implements ThreadDAO {
      ***/
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
+    // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
+    // The truncated copies are aliased *_preview so the thread filters read the full messages, as the count does.
     @VisibleForTesting
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
@@ -110,6 +113,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                         <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
                     <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
@@ -124,20 +129,24 @@ class ThreadDAOImpl implements ThreadDAO {
                         max(last_updated_at) AS trace_last_updated_at
                     FROM (
                         SELECT id, thread_id, start_time, end_time, last_updated_at
-                        FROM traces
-                        WHERE workspace_id = :workspace_id
-                          AND project_id = :project_id
-                          AND thread_id \\<> ''
-                          <if(filters)> AND <filters> <endif>
-                          <if(search_text)> AND <search_text> <endif>
-                          <if(traces_partitioned && search_text)>
-                          AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                              SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                              FROM traces
-                              WHERE workspace_id = :workspace_id AND project_id = :project_id)
-                          <endif>
-                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                        FROM (
+                            SELECT *
+                            FROM traces
+                            WHERE workspace_id = :workspace_id
+                              AND project_id = :project_id
+                              AND thread_id \\<> ''
+                              <if(traces_partitioned && search_text)>
+                              AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                                  SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                  FROM traces
+                                  WHERE workspace_id = :workspace_id AND project_id = :project_id)
+                              <endif>
+                            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        )
+                        WHERE 1 = 1
+                        <if(filters)> AND <filters> <endif>
+                        <if(search_text)> AND <search_text> <endif>
                     ) AS t
                     GROUP BY thread_id
                 ) AS pt
@@ -187,8 +196,6 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND thread_id \\<> ''
                       <if(page_pushdown)>
                           AND thread_id IN (SELECT thread_id FROM page_thread_ids)
-                          <if(filters)> AND <filters> <endif>
-                          <if(search_text)> AND <search_text> <endif>
                       <else>
                           <if(traces_final_ids)>
                               AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
@@ -207,6 +214,11 @@ class ThreadDAOImpl implements ThreadDAO {
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
+                <if(page_pushdown)>
+                WHERE 1 = 1
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+                <endif>
             ), spans_deduped AS (
                 SELECT
                     workspace_id,
@@ -437,8 +449,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 t.start_time as start_time,
                 t.end_time as end_time,
                 t.duration as duration,
-                <if(truncate)> replaceRegexpAll(t.truncated_first_message, '<truncate>', '"[image]"') as first_message <else> t.first_message as first_message<endif>,
-                <if(truncate)> replaceRegexpAll(t.truncated_last_message, '<truncate>', '"[image]"') as last_message <else> t.last_message as last_message<endif>,
+                <if(truncate)> replaceRegexpAll(t.truncated_first_message, '<truncate>', '"[image]"') as first_message_preview <else> t.first_message as first_message<endif>,
+                <if(truncate)> replaceRegexpAll(t.truncated_last_message, '<truncate>', '"[image]"') as last_message_preview <else> t.last_message as last_message<endif>,
                 <if(truncate)> t.first_message_length >= t.first_message_truncation_threshold as first_message_truncated <else> false as first_message_truncated <endif>,
                 <if(truncate)> t.last_message_length >= t.last_message_truncation_threshold as last_message_truncated <else> false as last_message_truncated <endif>,
                 t.number_of_messages as number_of_messages,
@@ -537,6 +549,7 @@ class ThreadDAOImpl implements ThreadDAO {
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
+    // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
     @VisibleForTesting
     static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
@@ -560,6 +573,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                         <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
                     <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
@@ -1159,6 +1174,7 @@ class ThreadDAOImpl implements ThreadDAO {
      ***/
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
+    // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
     @VisibleForTesting
     static final String SELECT_TRACE_THREADS_STATS = """
             SELECT
@@ -1212,6 +1228,8 @@ class ThreadDAOImpl implements ThreadDAO {
                             <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                             <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
                         <endif>
+                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
                     )
                     WHERE 1 = 1
                     <if(filters)> AND <filters> <endif>
@@ -1812,12 +1830,12 @@ class ThreadDAOImpl implements ThreadDAO {
                 .startTime(row.get("start_time", Instant.class))
                 .endTime(readEpochSentinel(row, "end_time"))
                 .duration(row.get("duration", Double.class))
-                .firstMessage(Optional.ofNullable(row.get("first_message", String.class))
+                .firstMessage(Optional.ofNullable(row.get(messageColumn(rowMetadata, "first_message"), String.class))
                         .filter(it -> !it.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
                                 "first_message_truncated", row, value))
                         .orElse(null))
-                .lastMessage(Optional.ofNullable(row.get("last_message", String.class))
+                .lastMessage(Optional.ofNullable(row.get(messageColumn(rowMetadata, "last_message"), String.class))
                         .filter(it -> !it.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
                                 "last_message_truncated", row, value))
@@ -1857,6 +1875,11 @@ class ThreadDAOImpl implements ThreadDAO {
                                 .orElse(null)
                         : null)
                 .build());
+    }
+
+    private static String messageColumn(RowMetadata rowMetadata, String column) {
+        var previewColumn = column + "_preview";
+        return rowMetadata.contains(previewColumn) ? previewColumn : column;
     }
 
     /**
