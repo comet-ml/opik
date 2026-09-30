@@ -79,6 +79,11 @@ class ThreadDAOImpl implements ThreadDAO {
      * When treating a list of traces as threads, many aggregations are performed to get the thread details.
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
+     * <p>
+     * {@code annotation_queue_items} is keyed {@code (workspace_id, project_id, queue_id, item_id)}, so the
+     * annotation-queue CTE binds {@code queue_id} to the project's thread-scope queues before looking up
+     * {@code item_id}. That is what lets the lookup use the full primary key instead of a generic scan of the
+     * project's items (OPIK-5592).
      ***/
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
@@ -386,9 +391,6 @@ class ThreadDAOImpl implements ThreadDAO {
                  FROM (
                     SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as thread_id
                     FROM (
-                        -- annotation_queue_items is keyed (workspace_id, project_id, queue_id, item_id): binding
-                        -- queue_id to the project's thread-scope queues is what lets the item_id lookup use the
-                        -- full primary key instead of a generic scan of the project's items (OPIK-5592).
                         SELECT queue_id, item_id
                         FROM annotation_queue_items
                         WHERE workspace_id = :workspace_id

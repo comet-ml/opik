@@ -1046,6 +1046,11 @@ class TraceDAOImpl implements TraceDAO {
      * forward CTE resolution, scalar-subquery caching (one evaluation reused across all reference sites — if the
      * cache stops applying, results stay correct but every aggregate silently regresses to a whole-project scan),
      * and primary-key pruning of the materialized IN-set.
+     * <p>
+     * {@code annotation_queue_items} is keyed {@code (workspace_id, project_id, queue_id, item_id)}, so the
+     * annotation-queue CTE binds {@code queue_id} to the project's trace-scope queues before looking up
+     * {@code item_id}. That is what lets the lookup use the full primary key instead of a generic scan of the
+     * project's items (OPIK-5592).
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
@@ -1429,9 +1434,6 @@ class TraceDAOImpl implements TraceDAO {
                  FROM (
                     SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as trace_id
                     FROM (
-                        -- annotation_queue_items is keyed (workspace_id, project_id, queue_id, item_id): binding
-                        -- queue_id to the project's trace-scope queues is what lets the item_id lookup use the
-                        -- full primary key instead of a generic scan of the project's items (OPIK-5592).
                         SELECT queue_id, item_id
                         FROM annotation_queue_items
                         WHERE workspace_id = :workspace_id
