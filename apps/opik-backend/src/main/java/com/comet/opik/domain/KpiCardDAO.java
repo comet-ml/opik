@@ -549,11 +549,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     SELECT trace_id, total_estimated_cost
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
-                      AND id >= :uuid_from_time AND id \\<= :uuid_to_time
-                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                          >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
-                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                          \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
+                      -- Bounded by trace_id, as in the thread list (ThreadDAO spans_deduped): a thread's cost is its traces' whole span set,
+                      -- including spans minted outside the range, and the trace_id range still prunes through the spans sort key.
+                      AND trace_id >= :uuid_from_time AND trace_id \\<= :uuid_to_time
                 ) s
                 JOIN traces_final tr ON s.trace_id = tr.id
                 GROUP BY tr.thread_id, tr.is_current_period
