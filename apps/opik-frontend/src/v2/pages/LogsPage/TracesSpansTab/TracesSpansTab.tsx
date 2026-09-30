@@ -23,6 +23,7 @@ import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
+  useIntervalBounds,
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
@@ -546,17 +547,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
 
-  const {
-    dateRange,
-    handleDateRangeChange,
-    intervalStart,
-    intervalEnd,
-    minDate,
-    maxDate,
-  } = useMetricDateRangeWithQueryAndStorage({
-    excludePresets: [DATE_RANGE_PRESET_ALLTIME],
-    ...dateRangeConfig,
-  });
+  const { dateRange, handleDateRangeChange, minDate, maxDate } =
+    useMetricDateRangeWithQueryAndStorage({
+      excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+      ...dateRangeConfig,
+    });
+  const { intervalStart, intervalEnd, reanchorToNow } =
+    useIntervalBounds(dateRange);
   const [search = "", setSearch] = useQueryParam(
     `${type}_search`,
     StringParam,
@@ -1489,8 +1486,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             size="icon-xs"
             isFetching={isFetching}
             onRefresh={() => {
-              refetch();
-              refetchStatistic();
+              if (!reanchorToNow()) {
+                refetch();
+                refetchStatistic();
+              }
             }}
           />
         </div>

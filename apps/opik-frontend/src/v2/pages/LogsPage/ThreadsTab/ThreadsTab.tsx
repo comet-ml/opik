@@ -20,6 +20,7 @@ import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
+  useIntervalBounds,
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
@@ -397,17 +398,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
 
-  const {
-    dateRange,
-    handleDateRangeChange,
-    intervalStart,
-    intervalEnd,
-    minDate,
-    maxDate,
-  } = useMetricDateRangeWithQueryAndStorage({
-    excludePresets: [DATE_RANGE_PRESET_ALLTIME],
-    ...dateRangeConfig,
-  });
+  const { dateRange, handleDateRangeChange, minDate, maxDate } =
+    useMetricDateRangeWithQueryAndStorage({
+      excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+      ...dateRangeConfig,
+    });
+  const { intervalStart, intervalEnd, reanchorToNow } =
+    useIntervalBounds(dateRange);
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
     StringParam,
@@ -617,6 +614,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       logsSource: LOGS_SOURCE.sdk,
     },
     {
+      placeholderData: keepPreviousData,
       refetchInterval: REFETCH_INTERVAL,
     },
   );
@@ -885,7 +883,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             tooltip="Refresh threads list"
             size="icon-xs"
             isFetching={isFetching}
-            onRefresh={() => refetch()}
+            onRefresh={() => {
+              if (!reanchorToNow()) refetch();
+            }}
           />
         </div>
       </PageBodyStickyContainer>
