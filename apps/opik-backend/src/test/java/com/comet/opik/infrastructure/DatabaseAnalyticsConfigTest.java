@@ -8,6 +8,7 @@ import io.dropwizard.configuration.YamlConfigurationFactory;
 import io.dropwizard.jackson.Jackson;
 import io.dropwizard.jersey.validation.Validators;
 import jakarta.validation.Validator;
+import jakarta.validation.constraints.NotNull;
 import org.apache.commons.text.StringSubstitutor;
 import org.apache.commons.text.lookup.StringLookupFactory;
 import org.junit.jupiter.api.DisplayName;
@@ -92,7 +93,16 @@ class DatabaseAnalyticsConfigTest {
         // drift that changes behaviour is drift to empty, and that cannot start.
         assertThatThrownBy(() -> build(Map.of("ANALYTICS_DB_HTTP_HEADERS_PROGRESS_INTERVAL_MS", ""),
                 Validators.newValidator()))
-                .isInstanceOf(ConfigurationValidationException.class)
-                .hasMessageContaining("httpHeadersProgressIntervalMs");
+                .isInstanceOfSatisfying(ConfigurationValidationException.class, exception -> assertThat(
+                        exception.getConstraintViolations())
+                        // The violation itself rather than the rendered message: which field and which constraint are
+                        // what this pins, and they do not change with the JVM's locale the way the message does.
+                        .singleElement()
+                        .satisfies(violation -> {
+                            assertThat(violation.getPropertyPath())
+                                    .hasToString("databaseAnalytics.httpHeadersProgressIntervalMs");
+                            assertThat(violation.getConstraintDescriptor().getAnnotation())
+                                    .isInstanceOf(NotNull.class);
+                        }));
     }
 }
