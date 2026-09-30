@@ -3086,6 +3086,30 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * A trace's server-computed `duration`, in milliseconds.
+     *
+     * Read-only and derived from `start_time`/`end_time`, which is exactly why
+     * a spec about a duration FILTER has to read it rather than assume it: the
+     * filter matches on this number, so "the seed really is a 10-second trace"
+     * is a precondition, not a restatement of what was written. A trace still
+     * open, or one whose times did not survive ingest, has no duration at all
+     * — `null` here, kept distinct from `0` so an unclosed trace cannot pass for
+     * an instantaneous one.
+     *
+     * The pinned SDK's trace type has no `duration`, so this goes through
+     * `rawFetch` like the other contract-level reads.
+     */
+    async getTraceDuration(traceId: string): Promise<number | null> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/traces/${traceId}`);
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/traces/${traceId} -> ${status}: ${message}`);
+      }
+      const duration = (json as { duration?: unknown } | null)?.duration;
+      return typeof duration === 'number' ? duration : null;
+    },
+
+    /**
      * Every span on a trace, reduced to the fields a price resolution decides.
      *
      * Scoped by `projectId` as well as `traceId` because the spans listing is

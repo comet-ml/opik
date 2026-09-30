@@ -214,6 +214,117 @@ export class OnlineEvaluationPage {
     });
   }
 
+  // --- Rule filters (the Filtering & Sampling accordion's filter table) ---
+
+  /**
+   * One row of the rule's filter table, by position.
+   *
+   * Identified by the presence of a column selector rather than by `nth` over
+   * every `tr` in the dialog: `FilterRow` renders a SECOND `tr` beneath a row
+   * that has a validation error, so a positional index over raw rows silently
+   * shifts the moment a filter is invalid — which is exactly when a spec is
+   * most likely to be looking at one.
+   */
+  filterRow(index: number): Locator {
+    return this.dialog
+      .locator('tr')
+      .filter({ has: this.page.locator('[data-testid="filter-column"]') })
+      .nth(index);
+  }
+
+  /** How many filter rows the dialog is currently showing. */
+  get filterRows(): Locator {
+    return this.dialog
+      .locator('tr')
+      .filter({ has: this.page.locator('[data-testid="filter-column"]') });
+  }
+
+  /** Append an empty filter row. */
+  async addFilterRow(): Promise<void> {
+    return test.step('add a filter row', async () => {
+      await this.expandFilteringAndSampling();
+      const before = await this.filterRows.count();
+      await this.dialog.getByRole('button', { name: 'Add filter' }).click();
+      await expect(this.filterRows, 'filter rows after Add filter').toHaveCount(before + 1);
+    });
+  }
+
+  /**
+   * Choose a filter row's column by the label the dialog shows — "Duration (s)",
+   * "Name", … — which is the user-facing name and the one that carries the
+   * UNIT. That matters here: the column is labelled in seconds while the
+   * backend stores milliseconds, and the label is the only place the dialog
+   * promises which of the two a typed number means.
+   *
+   * Selecting a column resets the row's operator and value (`createFilter()`),
+   * so always set the column first.
+   */
+  async setFilterColumn(index: number, label: string): Promise<void> {
+    return test.step(`set filter ${index + 1}'s column to "${label}"`, async () => {
+      await this.filterRow(index)
+        .locator('button[role="combobox"]:has([data-testid="filter-column"])')
+        .click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+    });
+  }
+
+  /** Choose a filter row's operator by its label (">", "contains", …). */
+  async setFilterOperator(index: number, label: string): Promise<void> {
+    return test.step(`set filter ${index + 1}'s operator to "${label}"`, async () => {
+      await this.filterRow(index)
+        .locator('button[role="combobox"]:has([data-testid="filter-operator"])')
+        .click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+    });
+  }
+
+  /**
+   * Type a filter row's value.
+   *
+   * `DebounceInput` commits on a timer, so the blur is explicit rather than
+   * left to whatever the next interaction happens to be — the same reasoning as
+   * `setSamplingRatePercent`. A real user's click on Create blurs the field
+   * first, so this is the genuine gesture, not a workaround.
+   */
+  async setFilterValue(index: number, value: string): Promise<void> {
+    return test.step(`set filter ${index + 1}'s value to "${value}"`, async () => {
+      const input = this.filterValueInput(index);
+      await input.fill(value);
+      await input.blur();
+      await expect(input, `filter ${index + 1}'s value box`).toHaveValue(value);
+    });
+  }
+
+  /**
+   * The value the dialog is SHOWING for a filter row.
+   *
+   * The assertion target for hydration: a rule stored at 5000ms must come back
+   * on screen as 5, because the column is labelled "Duration (s)". Reading the
+   * input's value rather than any internal state is the point — what the user
+   * sees is the whole claim.
+   */
+  async readFilterValue(index: number): Promise<string> {
+    return test.step(`read filter ${index + 1}'s displayed value`, async () => {
+      const input = this.filterValueInput(index);
+      await expect(input, `filter ${index + 1}'s value box`).toBeVisible();
+      return (await input.inputValue()).trim();
+    });
+  }
+
+  /**
+   * A filter row's value box, whichever type the row is.
+   *
+   * `NumberRow` and `StringRow` stamp different test ids on the same slot;
+   * matching either keeps the caller from having to know the column's type to
+   * read what is in it, and the `toHaveCount(1)` guards against a row that
+   * somehow rendered both.
+   */
+  private filterValueInput(index: number): Locator {
+    return this.filterRow(index).locator(
+      '[data-testid="filter-number-input"], [data-testid="filter-string-input"]',
+    );
+  }
+
   /** The "Enable rule" switch inside the add/edit dialog. */
   get enableRuleSwitch(): Locator {
     return this.dialog.getByRole('switch', { name: 'Enable rule' });
