@@ -130,7 +130,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
 
     const rawToggle = (
       <TooltipWrapper
-        content={showRawOutput ? "Show as messages" : "Show raw JSON"}
+        content={showRawOutput ? "Show as messages" : "Show raw output"}
       >
         <Button
           variant="outline"
@@ -145,7 +145,15 @@ const CompareExperimentsViewer: React.FunctionComponent<
     );
 
     if (!rendersAsMessages || showRawOutput) {
-      const highlighter = (
+      // The raw view skips prettifying, which would show only the message text
+      // and hide every other key, and keeps its own mode so it does not share a
+      // stored "pretty" choice with the fallback viewer.
+      const highlighter = showRawOutput ? (
+        <SyntaxHighlighter
+          data={transformedOutput as object}
+          preserveKey={`syntax-highlighter-compare-experiment-output-raw-${sectionIdx}`}
+        />
+      ) : (
         <SyntaxHighlighter
           data={transformedOutput as object}
           prettifyConfig={{ fieldType: "output" }}
