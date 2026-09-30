@@ -64,7 +64,9 @@ def _latest_assistant_text(conversation: conversation_types.Conversation) -> str
     are all non-text, whose text parts are joined here.
 
     A content value that is neither text nor a readable content list is reported by
-    raising, because skipping it would fall back to grading an older turn.
+    raising, because skipping it would fall back to grading an older turn. ``None`` is
+    the one non-text value treated as empty rather than malformed: it is what an output
+    transform returns for a turn it has nothing to say for.
     """
     for turn in reversed(conversation):
         if turn.get("role") != "assistant":
@@ -72,7 +74,9 @@ def _latest_assistant_text(conversation: conversation_types.Conversation) -> str
         content = turn.get("content")
         if isinstance(content, (list, tuple)):
             content = _text_from_parts(content)
-        elif content is None or isinstance(content, str):
+        elif content is None:
+            content = ""
+        elif isinstance(content, str):
             pass
         else:
             raise _bad_content(content)

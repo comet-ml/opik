@@ -258,3 +258,44 @@ def test_geval_conversation_metric_image_only_final_turn_grades_the_earlier_answ
 
     assert judge.received == ["Summary: timelines and budgets."]
     assert result.scoring_failed is False
+
+
+def test_geval_conversation_metric_none_content_marks_failed_without_raising():
+    """``None`` content is an empty turn, not a shape this adapter cannot read.
+
+    ``create_conversation_from_traces`` keeps a turn whose output transform returned
+    ``None``, so a conversation can carry an assistant message with no content at all.
+    Reaching ``.strip()`` on it raises ``AttributeError`` before ``score()`` reaches its
+    own ``MetricComputationError`` handling, so the caller sees a traceback instead of
+    the documented failed ``ScoreResult``. Treating it as the empty turn it is lets the
+    metric skip it the same way it skips whitespace-only content.
+    """
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = [
+        {"role": "assistant", "content": "gradeable answer"},
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "content": None},
+    ]
+
+    result = metric.score(conversation)
+
+    assert judge.received == ["gradeable answer"]
+    assert result.scoring_failed is False
+
+
+def test_geval_conversation_metric_only_none_content_marks_failed():
+    """When every assistant turn is empty, the documented failure is still returned."""
+    judge = RecordingJudge()
+    metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
+    conversation = [
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "content": None},
+    ]
+
+    result = metric.score(conversation)
+
+    assert judge.received == []
+    assert result.scoring_failed is True
+    assert result.value == 0.0
+    assert result.reason == "Conversation contains no assistant messages to evaluate."
