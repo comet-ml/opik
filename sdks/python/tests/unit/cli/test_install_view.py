@@ -609,7 +609,15 @@ class TestTheConfigureEnding:
         out = capture.get()
         assert "s3cret" not in out
         assert "alice" not in out
-        assert "https://opik.acme.io/" in out
+
+    def test_credentials__are_stripped_and_host_port_and_path_kept(self):
+        from opik.cli import install_view as rich_view
+
+        stripped = rich_view._without_credentials(
+            "https://alice:s3cret@opik.acme.io:8443/default/projects"
+        )
+
+        assert stripped == "https://opik.acme.io:8443/default/projects"
 
 
 class TestTheSuggestedPrompt:
