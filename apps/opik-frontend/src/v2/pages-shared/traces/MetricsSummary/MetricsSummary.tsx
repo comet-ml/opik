@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useCallback } from "react";
 import dayjs from "dayjs";
+import { keepPreviousData } from "@tanstack/react-query";
 import { Braces, AlertTriangle, Clock, Coins, LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -19,7 +20,7 @@ import MetricContainerChart from "@/v2/pages-shared/dashboards/widgets/ProjectMe
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
 import {
   calculateIntervalType,
-  calculateIntervalStartAndEnd,
+  calculateIntervalBounds,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DateRangeValue } from "@/shared/DateRangeSelect";
 import { TOTAL_COST_LABEL, getChartConfig } from "./helpers";
@@ -145,26 +146,25 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
   const [selectedMetric, setSelectedMetric] = useState<KpiMetricType>("count");
 
   const chartIntervalConfig = useMemo(() => {
-    const interval = calculateIntervalType(dateRange);
-    const { intervalStart: chartStart, intervalEnd: chartEnd } =
-      calculateIntervalStartAndEnd(dateRange);
+    const fallbackBounds = calculateIntervalBounds(dateRange);
     return {
-      interval,
-      intervalStart: chartStart,
-      intervalEnd: chartEnd,
+      interval: calculateIntervalType(dateRange),
+      intervalStart: intervalStart ?? fallbackBounds.intervalStart,
+      intervalEnd: intervalEnd ?? fallbackBounds.intervalEnd,
     };
-  }, [dateRange]);
+  }, [dateRange, intervalStart, intervalEnd]);
 
   const { data, isPending } = useProjectKpiCards(
     {
       projectId,
       entityType,
       filters,
-      intervalStart: intervalStart ?? chartIntervalConfig.intervalStart,
-      intervalEnd: intervalEnd ?? chartIntervalConfig.intervalEnd,
+      intervalStart: chartIntervalConfig.intervalStart,
+      intervalEnd: chartIntervalConfig.intervalEnd,
       logsSource,
     },
     {
+      placeholderData: keepPreviousData,
       refetchInterval: REFETCH_INTERVAL,
     },
   );
