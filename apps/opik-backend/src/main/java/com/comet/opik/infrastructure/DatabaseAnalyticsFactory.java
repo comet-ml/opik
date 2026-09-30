@@ -27,6 +27,7 @@ public class DatabaseAnalyticsFactory {
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS = "async_insert_busy_timeout_max_ms";
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS = "async_insert_busy_timeout_min_ms";
     private static final String ASYNC_INSERT_MAX_DATA_SIZE = "async_insert_max_data_size";
+    private static final String HTTP_HEADERS_PROGRESS_INTERVAL_MS = "http_headers_progress_interval_ms";
     private static final String KEY_VALUE_FORMAT = "%s=%s";
 
     // Split each `&`/`,`-chunk on the FIRST `=` only — values may themselves contain `=`,
@@ -65,6 +66,28 @@ public class DatabaseAnalyticsFactory {
      * ingestion at the cost of more buffer memory.
      */
     private @Min(1) Long asyncInsertMaxDataSize;
+
+    /**
+     * Cadence (ms) for {@code http_headers_progress_interval_ms}, the server-side throttle on
+     * {@code X-ClickHouse-Progress} response headers. Unlike the fields above this defaults to a value rather than to
+     * null, because it guards against a client defect rather than tuning anything.
+     *
+     * <p>{@link #build()} returns the R2DBC connection factory, and clickhouse-r2dbc sets
+     * {@code send_progress_in_http_headers=1} on every HTTP statement unconditionally
+     * ({@code ClickHouseConnection#createStatement}). It appends that setting <em>after</em>
+     * {@code custom_http_params}, and ClickHouse applies duplicate query-string settings in order, so the chain below
+     * cannot switch the progress headers off — only change how often they are emitted. Meanwhile the v1 Apache
+     * transport builds its connection manager with {@code Http1Config.DEFAULT.getMaxHeaderCount() == 100} and offers no
+     * option to raise it, so at ClickHouse's 100ms default cadence any query running past ~10s overflows the cap and
+     * the response fails to parse — reported as an {@code IOException} that the driver rethrows as a bare
+     * {@code ConnectException}, which is how it reaches dashboards as a connectivity failure (OPIK-8628).
+     *
+     * <p>The value is bounded on both sides: it must stay well under the driver's 30s {@code socket_timeout}, since the
+     * progress headers are what keep the socket producing bytes during a long query, and well above
+     * {@code maxQueryDurationMs / 90} so the cap stays out of reach. 3s leaves ~4.5 minutes of query time within the
+     * 100-header budget against a production maximum of ~66s.
+     */
+    private @Min(1) Integer httpHeadersProgressIntervalMs = 3000;
 
     private Duration healthCheckTimeout = Duration.seconds(1);
 
@@ -167,6 +190,9 @@ public class DatabaseAnalyticsFactory {
         }
         if (asyncInsertMaxDataSize != null) {
             overrides.put(ASYNC_INSERT_MAX_DATA_SIZE, String.valueOf(asyncInsertMaxDataSize));
+        }
+        if (httpHeadersProgressIntervalMs != null) {
+            overrides.put(HTTP_HEADERS_PROGRESS_INTERVAL_MS, String.valueOf(httpHeadersProgressIntervalMs));
         }
         return overrides;
     }

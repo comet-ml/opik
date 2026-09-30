@@ -56,11 +56,14 @@ class DatabaseAnalyticsFactoryIntegrationTest {
 
     private Stream<Arguments> queryParametersScenarios() {
         return Stream.of(
-                // custom_http_params entries are applied as ClickHouse server settings
+                // custom_http_params entries are applied as ClickHouse server settings, alongside the
+                // http_headers_progress_interval_ms default that keeps progress headers under Apache HC's 100-header
+                // cap (see DatabaseAnalyticsFactory#httpHeadersProgressIntervalMs)
                 Arguments.of("server settings applied",
                         "custom_http_params=max_query_size=123456789,async_insert=1,wait_for_async_insert=1",
                         null, null, null,
-                        Map.of("max_query_size", "123456789", "async_insert", "1", "wait_for_async_insert", "1")),
+                        Map.of("max_query_size", "123456789", "async_insert", "1", "wait_for_async_insert", "1",
+                                "http_headers_progress_interval_ms", "3000")),
                 // top-level driver option coexists with custom_http_params; server settings still apply
                 Arguments.of("mixed driver and server params",
                         "compress=1&custom_http_params=max_query_size=7777777,async_insert=1",
@@ -202,6 +205,31 @@ class DatabaseAnalyticsFactoryIntegrationTest {
 
             assertThat(observed).isEmpty();
         }
+    }
+
+    @Test
+    @DisplayName("R2DBC: a query outlasting the 100-header budget at ClickHouse's default progress cadence completes")
+    void longRunningQuerySurvivesTheApacheHeaderCap() {
+        // clickhouse-r2dbc sets send_progress_in_http_headers=1 on every HTTP statement, and the v1 Apache transport
+        // caps a response at Http1Config.DEFAULT.getMaxHeaderCount() == 100 with no option to raise it. One block per
+        // row keeps the query busy for ~12s, which at ClickHouse's 100ms default cadence emits ~120
+        // X-ClickHouse-Progress headers and the response fails to parse ("Maximum header count exceeded", surfaced as a
+        // bare ConnectException). httpHeadersProgressIntervalMs throttles the cadence to 3s, so ~4 headers reach the
+        // client instead. Drop that default to reproduce. Summing `number` alongside the sleep is what forces the
+        // sleep to be evaluated — a bare count() over it is optimised away and returns in milliseconds.
+        var factory = factoryWith(null);
+
+        var sum = Mono.usingWhen(
+                factory.build().create(),
+                connection -> Flux.from(connection.createStatement(
+                        "SELECT sum(number + sleepEachRow(0.1)) AS c FROM numbers(120) SETTINGS max_block_size = 1")
+                        .execute())
+                        .flatMap(result -> result.map((row, _) -> row.get("c", Double.class)))
+                        .single(),
+                Connection::close)
+                .block();
+
+        assertThat(sum).isEqualTo(7140.0d);
     }
 
     @Test

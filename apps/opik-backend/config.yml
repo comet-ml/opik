@@ -100,6 +100,14 @@ databaseAnalytics:
   #   async-insert flush; same override semantics as asyncInsertBusyTimeoutMaxMs above. Larger values yield fewer,
   #   larger parts at the cost of more buffer memory.
   asyncInsertMaxDataSize: ${ANALYTICS_DB_ASYNC_INSERT_MAX_DATA_SIZE:-}
+  #  Default: 3000
+  #  Description: Cadence (ms) for http_headers_progress_interval_ms, applied to custom_http_params the same way as the
+  #   overrides above except that it defaults to a value rather than to null. clickhouse-r2dbc turns
+  #   send_progress_in_http_headers on for every HTTP statement and the v1 Apache transport caps a response at 100
+  #   headers with no way to raise it, so at ClickHouse's 100ms default cadence a query running past ~10s overflows the
+  #   cap and its response fails to parse. Keep it well under the driver's 30s socket_timeout (the progress headers are
+  #   what keep the socket alive during a long query) and well above maxQueryDuration/90.
+  httpHeadersProgressIntervalMs: ${ANALYTICS_DB_HTTP_HEADERS_PROGRESS_INTERVAL_MS:-3000}
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
