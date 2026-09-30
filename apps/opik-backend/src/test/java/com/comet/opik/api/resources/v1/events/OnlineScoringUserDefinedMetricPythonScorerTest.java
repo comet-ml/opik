@@ -368,10 +368,11 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     contains("none of the metric's declared arguments resolved"),
                     eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
 
-            assertThat(reported.getValue())
-                    .doesNotContain("\n")
-                    .contains("'a_newline' -> 'input.first WARN forged entry'")
-                    .contains("'b_long' -> '%s…'".formatted(longPath.substring(0, 100)));
+            // Whole rendered string, not fragments: separator, ordering, truncation point and the absence
+            // of anything extra all have to hold, not just the presence of the two entries.
+            assertThat(reported.getValue()).isEqualTo(
+                    "'a_newline' -> 'input.first WARN forged entry', 'b_long' -> '%s…'"
+                            .formatted(longPath.substring(0, 100)));
         }
 
         @Test
@@ -388,11 +389,12 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     contains("none of the metric's declared arguments resolved"),
                     eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
 
-            assertThat(reported.getValue())
-                    .startsWith("'arg_00' -> 'input.absent_00', ")
-                    .contains("'arg_09' -> 'input.absent_09'")
-                    .doesNotContain("arg_10")
-                    .endsWith(" and 3 more");
+            // Built independently from the same inputs so ordering, separator, which ten survive the cap
+            // and the omitted-count text are all pinned, rather than spot-checked.
+            var expected = IntStream.range(0, 10)
+                    .mapToObj(index -> "'arg_%02d' -> 'input.absent_%02d'".formatted(index, index))
+                    .collect(Collectors.joining(", ")) + " and 3 more";
+            assertThat(reported.getValue()).isEqualTo(expected);
         }
 
         @Test
