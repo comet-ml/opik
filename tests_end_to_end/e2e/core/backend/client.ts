@@ -380,6 +380,16 @@ export interface TraceBatchSeed {
   startTime?: Date;
   endTime?: Date;
   /**
+   * The trace's `metadata` payload.
+   *
+   * Sent only when supplied, and deliberately not defaulted to `{}`: a trace
+   * with NO metadata key and one with an empty object are different inputs to
+   * a rule's field mapping — the first fails to resolve and the second
+   * resolves to an empty value — which is exactly the distinction a spec about
+   * an absent mapped field is drawing.
+   */
+  metadata?: Record<string, unknown>;
+  /**
    * Groups this trace into a conversation, as `createTraceWithSource` does.
    *
    * Here because a seed that needs MANY threads needs them in few requests:
@@ -4730,6 +4740,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             ...(trace.threadId ? { thread_id: trace.threadId } : {}),
             ...(trace.input === undefined ? {} : { input: trace.input }),
             ...(trace.output === undefined ? {} : { output: trace.output }),
+            ...(trace.metadata === undefined ? {} : { metadata: trace.metadata }),
           })),
         },
         204,
