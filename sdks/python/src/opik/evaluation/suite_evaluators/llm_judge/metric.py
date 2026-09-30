@@ -348,7 +348,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 - value: True if passed, False if failed
                 - reason: Explanation from the judge
                 Unsupported numeric schema items are retained as explicit failed
-                results with ``value=0.0`` and an unsupported-type reason.
+                results with ``value=0.0``, ``scoring_failed=True``, and an
+                unsupported-type reason.
         """
         assertions = self._get_supported_assertions()
         if not assertions and self._get_unsupported_schema_items():
@@ -429,7 +430,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
         Returns:
             List[ScoreResult]: A list of ScoreResult objects, one per assertion.
                 Unsupported numeric schema items are retained as explicit failed
-                results with ``value=0.0`` and an unsupported-type reason.
+                results with ``value=0.0``, ``scoring_failed=True``, and an
+                unsupported-type reason.
         """
         assertions = self._get_supported_assertions()
         if not assertions and self._get_unsupported_schema_items():

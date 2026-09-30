@@ -7,6 +7,21 @@ from opik.evaluation.metrics import score_result
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 
 
+def _assert_unsupported_score_result(result, *, schema_name, description, type_):
+    expected_reason = (
+        f"LLMJudge cannot score assertion(s) {schema_name} ({type_}); "
+        "only BOOLEAN assertion scores are currently supported."
+    )
+    assert result.name == description
+    assert result.value == 0.0
+    assert result.reason == expected_reason
+    assert result.category_name == "suite_assertion"
+    assert result.scoring_failed is True
+    assert result.metadata["unsupported_type"] == type_
+    assert result.metadata["error_info"]["exception_type"] == "EvaluationError"
+    assert result.metadata["error_info"]["message"] == expected_reason
+
+
 class TestLLMJudgeInit:
     def test_init__with_string_assertions__stores_texts(self):
         """Test that string assertions are stored directly."""
@@ -259,14 +274,12 @@ class TestLLMJudgeFromConfig:
         results = evaluator.score(input="input", output="output")
 
         assert len(results) == 1
-        assert results[0].name == "Rate usefulness from 0.0 to 1.0"
-        assert results[0].value == 0.0
-        assert results[0].scoring_failed is True
-        assert results[0].category_name == "suite_assertion"
-        assert results[0].metadata["unsupported_type"] == assertion_type
-        assert results[0].metadata["error_info"]["exception_type"] == "EvaluationError"
-        assert results[0].metadata["error_info"]["message"] == results[0].reason
-        assert assertion_type in results[0].reason
+        _assert_unsupported_score_result(
+            results[0],
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_=assertion_type,
+        )
         assert evaluator.to_config().schema_[0].type == assertion_type
         assert evaluator.to_config().schema_[0].name == "usefulness"
 
@@ -311,14 +324,18 @@ class TestLLMJudgeFromConfig:
             "Response is accurate"
         ]
         assert len(results) == 2
+        assert [result.name for result in results] == [
+            "Response is accurate",
+            "Rate usefulness from 0.0 to 1.0",
+        ]
         assert results[0].value is True
         assert results[0].scoring_failed is False
-        assert results[1].name == "Rate usefulness from 0.0 to 1.0"
-        assert results[1].value == 0.0
-        assert results[1].scoring_failed is True
-        assert results[1].category_name == "suite_assertion"
-        assert results[1].metadata["unsupported_type"] == "DOUBLE"
-        assert results[1].metadata["error_info"]["exception_type"] == "EvaluationError"
+        _assert_unsupported_score_result(
+            results[1],
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
+        )
 
     def test_from_config__missing_boolean_result__returns_failed_score(
         self, monkeypatch
@@ -366,8 +383,12 @@ class TestLLMJudgeFromConfig:
         assert "did not return a score" in missing_boolean.reason
 
         unsupported_numeric = results[1]
-        assert unsupported_numeric.scoring_failed is True
-        assert unsupported_numeric.metadata["unsupported_type"] == "DOUBLE"
+        _assert_unsupported_score_result(
+            unsupported_numeric,
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
+        )
 
     @pytest.mark.asyncio
     async def test_ascore__missing_boolean_result__returns_failed_score(
@@ -420,8 +441,12 @@ class TestLLMJudgeFromConfig:
         assert "did not return a score" in missing_boolean.reason
 
         unsupported_numeric = results[1]
-        assert unsupported_numeric.scoring_failed is True
-        assert unsupported_numeric.metadata["unsupported_type"] == "DOUBLE"
+        _assert_unsupported_score_result(
+            unsupported_numeric,
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
+        )
 
     @pytest.mark.asyncio
     async def test_ascore__numeric_only__returns_failed_without_calling_model(
@@ -450,10 +475,12 @@ class TestLLMJudgeFromConfig:
         results = await evaluator.ascore(input="input", output="output")
 
         assert len(results) == 1
-        assert results[0].value == 0.0
-        assert results[0].scoring_failed is True
-        assert results[0].metadata["unsupported_type"] == "DOUBLE"
-        assert results[0].metadata["error_info"]["exception_type"] == "EvaluationError"
+        _assert_unsupported_score_result(
+            results[0],
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
+        )
 
     @pytest.mark.asyncio
     async def test_ascore__mixed_types__preserves_order_and_scores_boolean(
@@ -505,14 +532,12 @@ class TestLLMJudgeFromConfig:
             "Rate usefulness from 0.0 to 1.0",
         ]
         assert results[0].value is True
-        assert results[1].value == 0.0
-        assert results[1].scoring_failed is True
-        assert results[1].category_name == "suite_assertion"
-        assert results[1].metadata["unsupported_type"] == "DOUBLE"
-        assert results[1].metadata["error_info"]["exception_type"] == (
-            "EvaluationError"
+        _assert_unsupported_score_result(
+            results[1],
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
         )
-        assert results[1].metadata["error_info"]["message"] == results[1].reason
 
     def test_from_config__no_model_name__uses_default(self):
         """When config has no model name, from_config uses the default model."""
