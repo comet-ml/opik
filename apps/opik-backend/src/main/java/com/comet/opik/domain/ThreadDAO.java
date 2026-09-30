@@ -19,6 +19,7 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -81,6 +82,8 @@ class ThreadDAOImpl implements ThreadDAO {
      ***/
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
+    // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
+    // The truncated copies are aliased *_preview so the thread filters read the full messages, as the count does.
     @VisibleForTesting
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
@@ -96,6 +99,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
@@ -105,20 +110,24 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM (
                     SELECT
                         thread_id,
-                        min(start_time) AS start_time,
-                        max(end_time) AS end_time,
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) AS start_time,
+                        maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) AS end_time,
                         max(last_updated_at) AS trace_last_updated_at
                     FROM (
                         SELECT id, thread_id, start_time, end_time, last_updated_at
-                        FROM traces
-                        WHERE workspace_id = :workspace_id
-                          AND project_id = :project_id
-                          AND thread_id \\<> ''
-                          <if(filters)> AND <filters> <endif>
-                          <if(search_text)> AND <search_text> <endif>
-                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    )
+                        FROM (
+                            SELECT *
+                            FROM traces
+                            WHERE workspace_id = :workspace_id
+                              AND project_id = :project_id
+                              AND thread_id \\<> ''
+                            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        )
+                        WHERE 1 = 1
+                        <if(filters)> AND <filters> <endif>
+                        <if(search_text)> AND <search_text> <endif>
+                    ) AS t
                     GROUP BY thread_id
                 ) AS pt
                 LEFT JOIN (
@@ -167,8 +176,6 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND thread_id \\<> ''
                       <if(page_pushdown)>
                           AND thread_id IN (SELECT thread_id FROM page_thread_ids)
-                          <if(filters)> AND <filters> <endif>
-                          <if(search_text)> AND <search_text> <endif>
                       <else>
                           <if(traces_final_ids)>
                               AND id IN (SELECT id FROM traces_final_ids)
@@ -187,6 +194,11 @@ class ThreadDAOImpl implements ThreadDAO {
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
+                <if(page_pushdown)>
+                WHERE 1 = 1
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+                <endif>
             ), spans_deduped AS (
                 SELECT
                     workspace_id,
@@ -404,8 +416,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 t.start_time as start_time,
                 t.end_time as end_time,
                 t.duration as duration,
-                <if(truncate)> replaceRegexpAll(t.truncated_first_message, '<truncate>', '"[image]"') as first_message <else> t.first_message as first_message<endif>,
-                <if(truncate)> replaceRegexpAll(t.truncated_last_message, '<truncate>', '"[image]"') as last_message <else> t.last_message as last_message<endif>,
+                <if(truncate)> replaceRegexpAll(t.truncated_first_message, '<truncate>', '"[image]"') as first_message_preview <else> t.first_message as first_message<endif>,
+                <if(truncate)> replaceRegexpAll(t.truncated_last_message, '<truncate>', '"[image]"') as last_message_preview <else> t.last_message as last_message<endif>,
                 <if(truncate)> t.first_message_length >= t.first_message_truncation_threshold as first_message_truncated <else> false as first_message_truncated <endif>,
                 <if(truncate)> t.last_message_length >= t.last_message_truncation_threshold as last_message_truncated <else> false as last_message_truncated <endif>,
                 t.number_of_messages as number_of_messages,
@@ -427,11 +439,11 @@ class ThreadDAOImpl implements ThreadDAO {
                     t.thread_id as id,
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
-                    min(t.start_time) as start_time,
-                    max(t.end_time) as end_time,
-                    if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
-                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                    minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
+                    maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as end_time,
+                    if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                           AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                        NULL) AS duration,
                     argMin(t.input, t.start_time) as first_message,
                     argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
@@ -503,6 +515,7 @@ class ThreadDAOImpl implements ThreadDAO {
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
+    // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
     @VisibleForTesting
     static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
@@ -518,6 +531,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
@@ -719,11 +734,11 @@ class ThreadDAOImpl implements ThreadDAO {
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
-                        min(t.start_time) as start_time,
-                        max(t.end_time) as end_time,
-                        if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
-                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
+                        maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as end_time,
+                        if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                               AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                            NULL) AS duration,
                         argMin(t.input, t.start_time) as first_message,
                         argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
@@ -1004,11 +1019,11 @@ class ThreadDAOImpl implements ThreadDAO {
                     t.thread_id as thread_id,
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
-                    min(t.start_time) as start_time,
-                    max(t.end_time) as end_time,
-                    if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
-                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                    minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
+                    maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as end_time,
+                    if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                           AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                        NULL) AS duration,
                     argMin(t.input, t.start_time) as first_message,
                     argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
@@ -1043,6 +1058,7 @@ class ThreadDAOImpl implements ThreadDAO {
      ***/
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
+    // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
     @VisibleForTesting
     static final String SELECT_TRACE_THREADS_STATS = """
             SELECT
@@ -1088,6 +1104,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                             \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                         <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
                     )
                     WHERE 1 = 1
                     <if(filters)> AND <filters> <endif>
@@ -1321,11 +1339,11 @@ class ThreadDAOImpl implements ThreadDAO {
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
-                        min(t.start_time) as start_time,
-                        max(t.end_time) as end_time,
-                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
-                               AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
+                        maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as end_time,
+                        if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                               AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                            NULL) AS duration,
                         argMin(t.input, t.start_time) as first_message,
                         argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
@@ -1670,12 +1688,12 @@ class ThreadDAOImpl implements ThreadDAO {
                 .startTime(row.get("start_time", Instant.class))
                 .endTime(readEpochSentinel(row, "end_time"))
                 .duration(row.get("duration", Double.class))
-                .firstMessage(Optional.ofNullable(row.get("first_message", String.class))
+                .firstMessage(Optional.ofNullable(row.get(messageColumn(rowMetadata, "first_message"), String.class))
                         .filter(it -> !it.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
                                 "first_message_truncated", row, value))
                         .orElse(null))
-                .lastMessage(Optional.ofNullable(row.get("last_message", String.class))
+                .lastMessage(Optional.ofNullable(row.get(messageColumn(rowMetadata, "last_message"), String.class))
                         .filter(it -> !it.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
                                 "last_message_truncated", row, value))
@@ -1709,6 +1727,11 @@ class ThreadDAOImpl implements ThreadDAO {
                         .orElse(null))
                 .environment(row.get("environment", String.class))
                 .build());
+    }
+
+    private static String messageColumn(RowMetadata rowMetadata, String column) {
+        var previewColumn = column + "_preview";
+        return rowMetadata.contains(previewColumn) ? previewColumn : column;
     }
 
     /**
