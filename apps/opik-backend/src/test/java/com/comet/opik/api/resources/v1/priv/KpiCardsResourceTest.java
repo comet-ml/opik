@@ -43,6 +43,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.data.Offset;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -1105,6 +1106,85 @@ class KpiCardsResourceTest {
         KpiCardResponse unfiltered = projectResourceClient.getKpiCards(projectId, request, API_KEY, WORKSPACE_NAME);
 
         assertFilteredMetrics(unfiltered, EntityType.THREADS, 2, 0, 0, 0);
+    }
+
+    @ParameterizedTest
+    @MethodSource("threadRowTimestampFilterArguments")
+    @DisplayName("a created_at / last_updated_at chip reads the thread row's value over its traces', like the thread list")
+    void threadRowTimestampFilterPrefersThreadRowOverTraces(TraceThreadField field,
+            Function<TraceThread, Instant> rowValue, Function<Trace, Instant> tracesValue, Operator operator,
+            boolean rowValueMatches) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        String threadId = mintThreadRowIdsNow(projectId, 1).getFirst();
+        Mono.delay(Duration.ofSeconds(1)).block();
+
+        Trace trace = buildThreadTrace(projectName, threadId, Instant.now(), FILTER_DURATION_MS);
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(List.of(buildCostedSpan(projectName, trace, FILTER_COST)), API_KEY,
+                WORKSPACE_NAME);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+        var timeRange = Map.of("from_time", intervalStart.toString(), "to_time", intervalEnd.toString());
+
+        // The TracesCreated listener writes the row from the pre-opened thread id, so it keeps the open time as
+        // created_at. A close that lands first writes the row from the traces instead, and the two sides agree.
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
+                .getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME, null, null, timeRange).content())
+                .extracting(TraceThread::id)
+                .containsExactly(threadId));
+        Mono.delay(Duration.ofSeconds(1)).block();
+        traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
+
+        TraceThread thread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME);
+        Trace storedTrace = traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY);
+
+        assertThat(thread.createdAt()).isBefore(storedTrace.createdAt());
+        assertThat(thread.lastUpdatedAt()).isAfter(storedTrace.lastUpdatedAt());
+
+        Instant threadRowValue = rowValue.apply(thread);
+        Instant betweenRowAndTraces = threadRowValue
+                .plus(Duration.between(threadRowValue, tracesValue.apply(storedTrace)).dividedBy(2));
+        var filter = TraceThreadFilter.builder()
+                .field(field)
+                .operator(operator)
+                .value(betweenRowAndTraces.toString())
+                .build();
+        List<String> expectedThreadIds = rowValueMatches ? List.of(threadId) : List.of();
+
+        var threadList = traceResourceClient.getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME,
+                List.of(filter), null, timeRange);
+
+        assertThat(threadList.content()).extracting(TraceThread::id).containsExactlyElementsOf(expectedThreadIds);
+        assertThat(threadList.total()).isEqualTo(expectedThreadIds.size());
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.THREADS, expectedThreadIds.size(), 0, 0, 0);
+    }
+
+    static Stream<Arguments> threadRowTimestampFilterArguments() {
+        Function<TraceThread, Instant> rowCreatedAt = TraceThread::createdAt;
+        Function<Trace, Instant> tracesCreatedAt = Trace::createdAt;
+        Function<TraceThread, Instant> rowLastUpdatedAt = TraceThread::lastUpdatedAt;
+        Function<Trace, Instant> tracesLastUpdatedAt = Trace::lastUpdatedAt;
+
+        return Stream.of(
+                Arguments.of(TraceThreadField.CREATED_AT, rowCreatedAt, tracesCreatedAt, Operator.LESS_THAN, true),
+                Arguments.of(TraceThreadField.CREATED_AT, rowCreatedAt, tracesCreatedAt, Operator.GREATER_THAN,
+                        false),
+                Arguments.of(TraceThreadField.LAST_UPDATED_AT, rowLastUpdatedAt, tracesLastUpdatedAt,
+                        Operator.GREATER_THAN, true),
+                Arguments.of(TraceThreadField.LAST_UPDATED_AT, rowLastUpdatedAt, tracesLastUpdatedAt,
+                        Operator.LESS_THAN, false));
     }
 
     @Test
