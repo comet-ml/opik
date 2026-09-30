@@ -66,6 +66,7 @@ public enum AnthropicModelName implements StructuredOutputSupported {
             CLAUDE_OPUS_4.value,
             CLAUDE_OPUS_4_5.value,
             CLAUDE_OPUS_4_6.value,
+            CLAUDE_OPUS_4_6_20260205.value,
             CLAUDE_SONNET_4.value,
             CLAUDE_SONNET_4_5.value,
             CLAUDE_SONNET_4_5_20250929.value,
