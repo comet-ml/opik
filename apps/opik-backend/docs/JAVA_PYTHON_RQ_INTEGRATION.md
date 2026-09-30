@@ -598,7 +598,10 @@ The metrics can be exported to various backends:
 
 ```yaml
 queues:
-  # Enable/disable queue functionality
+  # Config schema accepts this switch, but note: no Java code path reads
+  # `enabled` today — setting it to false does NOT stop producers or the
+  # Redis module from enqueueing. Gate Python workers with RQ_WORKER_ENABLED
+  # (see the environment reference below) until the Java-side check ships.
   enabled: ${OPIK_QUEUES_ENABLED:-true}
   
   # Default TTL for all jobs (if not specified per-queue)
@@ -619,7 +622,7 @@ queues:
 
 ```bash
 # Queue Configuration
-OPIK_QUEUES_ENABLED=true                    # Enable queue functionality
+OPIK_QUEUES_ENABLED=true                    # Config-validated only; see note above — not enforced in the Java path yet
 OPIK_QUEUES_DEFAULT_JOB_TTL="14 days"       # Default job TTL (config.yml default)
 OPIK_OPTIMIZER_QUEUE_JOB_TTL="1 day"        # Optimizer queue TTL
 
@@ -1286,9 +1289,11 @@ rq empty opik:optimizer-cloud --url redis://localhost:6379
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPIK_QUEUES_ENABLED` | `true` | Enable queue functionality |
+| `OPIK_QUEUES_ENABLED` | `true` | Config-validated only; not enforced in the Java enqueue path yet (see note in Queue Configuration) |
 | `OPIK_QUEUES_DEFAULT_JOB_TTL` | `14 days` | Default job TTL |
 | `OPIK_OPTIMIZER_QUEUE_JOB_TTL` | `1 day` | Optimizer queue job TTL |
+| `RQ_WORKER_ENABLED` | `true` | Python worker: enable/disable RQ workers (`rq_worker_manager.py`) |
+| `RQ_QUEUE_NAMES` | `opik:optimizer-cloud` | Python worker: comma-separated queue names to listen to |
 | `REDIS_HOST` | `localhost` | Redis host |
 | `REDIS_PORT` | `6379` | Redis port |
 | `REDIS_DB` | `0` | Redis database number |
