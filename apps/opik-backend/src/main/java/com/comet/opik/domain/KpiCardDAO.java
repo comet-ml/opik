@@ -501,7 +501,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     t.is_current_period as is_current_period,
                     -- minIf returns the epoch default when every trace carries the sentinel start time.
                     -- Without this fallback the thread lands in neither KPI period and disappears.
-                    if(equals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), UUIDv7ToDateTime(toUUID(tt.thread_model_id), 'UTC'), t.start_time) as start_time,
+                    -- Not aliased start_time: a start_time filter must read the raw minIf value, as the chart and the thread list do.
+                    if(equals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), UUIDv7ToDateTime(toUUID(tt.thread_model_id), 'UTC'), t.start_time) as thread_start_time,
                     t.duration as duration,
                     if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id
                 FROM (
@@ -580,11 +581,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 SELECT
                     tf.*,
                     tf.is_current_period
-                        AND tf.start_time >= UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC')
-                        AND tf.start_time \\<= UUIDv7ToDateTime(toUUID(:id_end), 'UTC') AS is_current,
+                        AND tf.thread_start_time >= UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC')
+                        AND tf.thread_start_time \\<= UUIDv7ToDateTime(toUUID(:id_end), 'UTC') AS is_current,
                     NOT tf.is_current_period
-                        AND tf.start_time >= UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')
-                        AND tf.start_time \\< UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC') AS is_previous
+                        AND tf.thread_start_time >= UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')
+                        AND tf.thread_start_time \\< UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC') AS is_previous
                 FROM threads_filtered tf
             )
             SELECT
