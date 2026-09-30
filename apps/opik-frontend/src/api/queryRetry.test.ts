@@ -1,12 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { AxiosError, AxiosResponse } from "axios";
-import { QueryClient } from "@tanstack/react-query";
 import {
   isTransientQueryError,
   shouldRetryQuery,
-  QUERY_CLIENT_DEFAULT_OPTIONS,
   MAX_QUERY_RETRIES,
 } from "@/api/queryRetry";
+import { queryClient as appQueryClient } from "@/api/queryClient";
 
 const axiosErrorWithStatus = (status: number) =>
   new AxiosError(
@@ -82,15 +81,12 @@ describe("shouldRetryQuery", () => {
   });
 });
 
-describe("QUERY_CLIENT_DEFAULT_OPTIONS", () => {
+describe("app query client", () => {
   it("retries a network failure before giving up", async () => {
     vi.useFakeTimers();
     try {
-      const queryClient = new QueryClient({
-        defaultOptions: QUERY_CLIENT_DEFAULT_OPTIONS,
-      });
       let calls = 0;
-      const promise = queryClient.fetchQuery({
+      const promise = appQueryClient.fetchQuery({
         queryKey: ["query-retry", "network"],
         queryFn: () => {
           calls += 1;
@@ -111,11 +107,8 @@ describe("QUERY_CLIENT_DEFAULT_OPTIONS", () => {
   it("fails a client error immediately without retrying", async () => {
     vi.useFakeTimers();
     try {
-      const queryClient = new QueryClient({
-        defaultOptions: QUERY_CLIENT_DEFAULT_OPTIONS,
-      });
       let calls = 0;
-      const promise = queryClient.fetchQuery({
+      const promise = appQueryClient.fetchQuery({
         queryKey: ["query-retry", "not-found"],
         queryFn: () => {
           calls += 1;
