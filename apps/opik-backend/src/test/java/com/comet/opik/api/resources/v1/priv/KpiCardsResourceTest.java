@@ -1043,6 +1043,71 @@ class KpiCardsResourceTest {
     }
 
     @Test
+    @DisplayName("a start_time filter reads a sentinel-only thread's raw start time, like the chart and the thread list")
+    void threadStartTimeFilterExcludesEpochSentinelOnlyThread() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now().minus(1, ChronoUnit.SECONDS);
+        Instant ranAt = Instant.now();
+        String sentinelOnlyThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        String realThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+
+        createThreadWithCostOnFirstTrace(projectName, sentinelOnlyThreadId, List.of(
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(idGenerator.generateId(ranAt))
+                        .projectName(projectName)
+                        .threadId(sentinelOnlyThreadId)
+                        .startTime(Instant.EPOCH)
+                        .endTime(ranAt.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
+                        .build(),
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(idGenerator.generateId(ranAt.plus(1, ChronoUnit.MILLIS)))
+                        .projectName(projectName)
+                        .threadId(sentinelOnlyThreadId)
+                        .startTime(Instant.EPOCH)
+                        .endTime(ranAt.plus(FILTER_DURATION_MS * 3, ChronoUnit.MILLIS))
+                        .build()));
+        createThreadWithCostOnFirstTrace(projectName, realThreadId, List.of(
+                buildThreadTrace(projectName, realThreadId, ranAt.plus(2, ChronoUnit.MILLIS), FILTER_DURATION_MS)));
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        assertThat(List.of(sentinelOnlyThreadId, realThreadId))
+                .extracting(threadId -> getThreadRowMintedAt(threadId, projectId))
+                .allSatisfy(rowMintedAt -> assertThat(rowMintedAt).isBetween(intervalStart, intervalEnd));
+
+        var startTimeFilter = TraceThreadFilter.builder()
+                .field(TraceThreadField.START_TIME)
+                .operator(Operator.GREATER_THAN)
+                .value(intervalStart.toString())
+                .build();
+        var request = KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build();
+
+        KpiCardResponse filtered = projectResourceClient.getKpiCards(projectId, request.toBuilder()
+                .filters(JsonUtils.writeValueAsString(List.of(startTimeFilter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(filtered, EntityType.THREADS, 1, 0, 0, 0);
+
+        var threadList = traceResourceClient.getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME,
+                List.of(startTimeFilter), null,
+                Map.of("from_time", intervalStart.toString(), "to_time", intervalEnd.toString()));
+
+        assertThat(threadList.content()).extracting(TraceThread::id).containsExactly(realThreadId);
+        assertThat(threadList.total()).isEqualTo(1);
+
+        KpiCardResponse unfiltered = projectResourceClient.getKpiCards(projectId, request, API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(unfiltered, EntityType.THREADS, 2, 0, 0, 0);
+    }
+
+    @Test
     @DisplayName("a thread straddling the start with its row in the current period counts in current, from its current traces only")
     void threadStraddlingStartWithRowInCurrentPeriodUsesOnlyCurrentTraces() {
         mockTargetWorkspace();
