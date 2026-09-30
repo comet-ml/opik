@@ -503,6 +503,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     -- Without this fallback the thread lands in neither KPI period and disappears.
                     -- Not aliased start_time: a start_time filter must read the raw minIf value, as the chart and the thread list do.
                     if(equals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), UUIDv7ToDateTime(toUUID(tt.thread_model_id), 'UTC'), t.start_time) as thread_start_time,
+                    if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
+                    if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
+                    if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
+                    if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                     t.duration as duration,
                     if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id
                 FROM (
