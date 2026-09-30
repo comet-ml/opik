@@ -50,7 +50,7 @@ _DISMISS_PATTERN = (
     rf"|(?:disregard|forget|omit|remove|bypass|disable|neglect)\s+{_GAP}"
     rf"(?:{_INSTRUCTION_TARGET}|content\b|inputs?\b))"
 )
-_OVERRIDE_PATTERN = rf"override\s+{_GAP}(?:{_INSTRUCTION_TARGET}|system\b)"
+_OVERRIDE_PATTERN = rf"override\s+{_GAP}{_INSTRUCTION_TARGET}"
 _PRETEND_PATTERN = (
     r"pretend (?:to )?be (?:(?:an?|the)?\s*"
     r"(?:assistant|user|hacker|developer|admin|administrator|moderator|human|system"
@@ -95,15 +95,14 @@ _INJECTION_PATTERNS = [
     r"\bDan\b.*?mode",  # "Dan mode" or similar
     r"\bJailbreak\b",
     r"DAN\:|DAN mode",  # DAN pattern
-    r"Unleash",  # "Unleash DAN", "Unleash yourself", etc.
+    r"\bunleash (?:the )?dan\b",  # "Unleash DAN"
     r"no restrictions apply",
     r"no rules apply",
     r"\bno longer (?:bound|restricted|limited) by",  # flexible "no longer bound by..."
-    r"###",  # common delimiter used in leaked prompts
-    r"```",  # triple backtick for code/metadata leakage
     r"\[system message\]",  # Often appears as system message marker
     r"\[prompt\]",  # prompt marker
-    r"system\s*:",  # "system: " as preface
+    # Not line-anchored: score() normalizes newlines away before matching.
+    r"\bsystem\s*(?:prompt|message)?\s*:\s*you (?:are|must|will)",  # leaked "System: You are ..."
     r"please disregard (?:the )?(?:previous|prior|above) (?:instructions|prompts|messages)",
     r"please ignore (?:the )?(?:previous|prior|above) (?:instructions|prompts|messages)",
 ]

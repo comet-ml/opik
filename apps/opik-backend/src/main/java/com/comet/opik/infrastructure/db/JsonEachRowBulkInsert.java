@@ -5,6 +5,7 @@ import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
+import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -144,14 +145,12 @@ public class JsonEachRowBulkInsert {
                 .flatMap(payload -> {
                     Segment segment = startSegment(table, "Clickhouse", "batch_insert");
 
-                    return Mono.fromFuture(() -> clickHouseClient.insert(
-                            table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)))
+                    return AsyncUtils.usingClickHouseFuture(
+                            () -> clickHouseClient.insert(
+                                    table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)),
+                            response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN)
+                                    .getLong())
                             .doFinally(signalType -> endSegment(segment));
-                })
-                .map(response -> {
-                    try (response) {
-                        return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
-                    }
                 })
                 // The throwable is passed as the cause, not formatted into the message: a failed bulk
                 // insert is diagnosable only from the stack and the cause chain, which say whether it

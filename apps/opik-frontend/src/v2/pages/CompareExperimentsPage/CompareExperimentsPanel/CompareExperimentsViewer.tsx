@@ -14,10 +14,12 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import CopyButton from "@/shared/CopyButton/CopyButton";
 import NoData from "@/shared/NoData/NoData";
 import useExperimentById from "@/api/datasets/useExperimentById";
+import useTraceById from "@/api/traces/useTraceById";
 import { TraceFeedbackScore } from "@/types/traces";
 import { ExperimentItem } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
+import { useToast } from "@/ui/use-toast";
 import { traceExist, traceVisible } from "@/lib/traces";
 import ExperimentCommentsViewer from "./DataTab/ExperimentCommentsViewer";
 import { splitOutputForMessages } from "./splitOutputForMessages";
@@ -77,14 +79,36 @@ const CompareExperimentsViewer: React.FunctionComponent<
     [inputAndOutputMedia, media],
   );
 
+  const { toast } = useToast();
+
+  const onChangeApplied = () =>
+    toast({
+      title: "Changes saved",
+      description: "The results table will reflect them within a minute.",
+    });
+
+  const { data: trace } = useTraceById(
+    {
+      traceId: experimentItem.trace_id as string,
+      stripAttachments: true,
+    },
+    {
+      enabled: Boolean(isTraceExist && experimentItem.trace_id),
+    },
+  );
+
   const feedbackScores: TraceFeedbackScore[] = useMemo(
-    () => sortBy(experimentItem.feedback_scores || [], "name"),
-    [experimentItem.feedback_scores],
+    () =>
+      sortBy(
+        (trace ? trace.feedback_scores : experimentItem.feedback_scores) || [],
+        "name",
+      ),
+    [trace, experimentItem.feedback_scores],
   );
 
   const comments: CommentItems = useMemo(
-    () => experimentItem.comments || [],
-    [experimentItem.comments],
+    () => (trace ? trace.comments : experimentItem.comments) || [],
+    [trace, experimentItem.comments],
   );
 
   // Gated on the output alone: mapAndCombineMessages silently drops a side it
@@ -254,6 +278,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
               feedbackScores={feedbackScores}
               traceId={experimentItem.trace_id as string}
               sectionIdx={sectionIdx}
+              onChangeApplied={onChangeApplied}
             />
           </div>
 
@@ -262,6 +287,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
               comments={comments}
               traceId={experimentItem.trace_id as string}
               sectionIdx={sectionIdx}
+              onChangeApplied={onChangeApplied}
             />
           </div>
         </div>
