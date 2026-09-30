@@ -85,10 +85,11 @@ databaseAnalytics:
   #   larger parts at the cost of more buffer memory.
   asyncInsertMaxDataSize: # Empty - ClickHouse/server-side value applies
   #  Default: 3000
-  #  Description: Cadence (ms) for http_headers_progress_interval_ms. clickhouse-r2dbc turns
-  #   send_progress_in_http_headers on for every HTTP statement and the v1 Apache transport caps a response at 100
-  #   headers, so at ClickHouse's 100ms default cadence a query running past ~10s overflows the cap and its response
-  #   fails to parse. Keep it well under the driver's 30s socket_timeout and well above maxQueryDuration/90.
+  #  Description: Cadence (ms) for http_headers_progress_interval_ms, applied to the R2DBC connection only.
+  #   clickhouse-r2dbc turns send_progress_in_http_headers on for every HTTP statement and the v1 Apache transport caps
+  #   a response at 100 headers, so at ClickHouse's 100ms default cadence a query running past ~10s overflows the cap
+  #   and its response fails to parse. Keep it well under the driver's 30s socket_timeout and well above
+  #   maxQueryDuration/90.
   httpHeadersProgressIntervalMs: 3000
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)

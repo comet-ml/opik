@@ -69,8 +69,11 @@ public class DatabaseAnalyticsFactory {
 
     /**
      * Cadence (ms) for {@code http_headers_progress_interval_ms}, the server-side throttle on
-     * {@code X-ClickHouse-Progress} response headers. Unlike the fields above this defaults to a value rather than to
-     * null, because it guards against a client defect rather than tuning anything.
+     * {@code X-ClickHouse-Progress} response headers. Applied to {@link #build()} only, via
+     * {@link #r2dbcOnlyServerSettings()}. Unlike the fields above it defaults to a value rather than to null, and is
+     * {@link NotNull} so that a YAML overlay binding it to null is a startup failure rather than a silently
+     * reinstated defect: it guards against a client defect rather than tuning anything, so there is no deployment for
+     * which "leave it at the ClickHouse default" is the right answer. The cadence stays freely tunable.
      *
      * <p>{@link #build()} returns the R2DBC connection factory, and clickhouse-r2dbc sets
      * {@code send_progress_in_http_headers=1} on every HTTP statement unconditionally
@@ -87,7 +90,7 @@ public class DatabaseAnalyticsFactory {
      * {@code maxQueryDurationMs / 90} so the cap stays out of reach. 3s leaves ~4.5 minutes of query time within the
      * 100-header budget against a production maximum of ~66s.
      */
-    private @Min(1) Integer httpHeadersProgressIntervalMs = 3000;
+    private @NotNull @Min(1) Integer httpHeadersProgressIntervalMs = 3000;
 
     private Duration healthCheckTimeout = Duration.seconds(1);
 
@@ -108,7 +111,7 @@ public class DatabaseAnalyticsFactory {
     private boolean coldStorageDiskHealthCheckEnabled;
 
     public ConnectionFactory build() {
-        var queryParametersOverrides = getQueryParametersOverrides(queryParameters);
+        var queryParametersOverrides = getQueryParametersOverrides(queryParameters, r2dbcOnlyServerSettings());
         var options = queryParametersOverrides == null ? "" : "?%s".formatted(queryParametersOverrides);
         var url = URL_TEMPLATE.formatted(protocol.getValue(), username, password, host, port, databaseName, options);
         return ConnectionFactories.get(url);
@@ -149,7 +152,10 @@ public class DatabaseAnalyticsFactory {
         // are R2DBC-specific and do not translate to the v2 driver surface; connection pool,
         // timeouts and compression are owned by the v2 Client.Builder methods above. Values
         // are still returned by parseQueryParameters() for tests/observability.
-        var parsed = parseQueryParameters(getQueryParametersOverrides(queryParameters));
+        // No r2dbcOnlyServerSettings() here: the progress-header guard is specific to the v1/R2DBC driver, and
+        // DatabaseAnalyticsModule#buildReadOnlyClient builds a bare factory whose user runs under readonly=1 with a
+        // two-setting allowlist — any other per-query setting change is rejected outright.
+        var parsed = parseQueryParameters(getQueryParametersOverrides(queryParameters, Map.of()));
         parsed.serverSettings().forEach(builder::serverSetting);
 
         if (clientSocketTimeout != null) {
@@ -160,12 +166,16 @@ public class DatabaseAnalyticsFactory {
     }
 
     /**
-     * Returns {@code queryParameters} with every set {@link #configurableServerSettings() override} applied to
-     * {@code custom_http_params} — overriding a present value, or added when absent (including when
-     * {@code queryParameters} is blank). Returned unchanged when no override field is set.
+     * Returns {@code queryParameters} with every set {@link #configurableServerSettings() override}, plus
+     * {@code pathServerSettings}, applied to {@code custom_http_params} — overriding a present value, or added when
+     * absent (including when {@code queryParameters} is blank). Returned unchanged when neither contributes anything.
+     *
+     * @param pathServerSettings settings that apply to only one of {@link #build()} / {@link #buildClient()}, rather
+     *                           than to both as the config fields do.
      */
-    private String getQueryParametersOverrides(String queryParameters) {
+    private String getQueryParametersOverrides(String queryParameters, Map<String, String> pathServerSettings) {
         var overrides = configurableServerSettings();
+        overrides.putAll(pathServerSettings);
         if (overrides.isEmpty()) {
             return queryParameters;
         }
@@ -177,8 +187,9 @@ public class DatabaseAnalyticsFactory {
 
     /**
      * Server settings from dedicated config fields, included when the field is set. Each is applied to
-     * {@code custom_http_params} by {@link #getQueryParametersOverrides(String)} — overriding a present value, or
+     * {@code custom_http_params} by {@link #getQueryParametersOverrides(String, Map)} — overriding a present value, or
      * added when absent — so an unset field leaves the {@code queryParameters} / ClickHouse-server value untouched.
+     * These apply to both {@link #build()} and {@link #buildClient()}.
      */
     private Map<String, String> configurableServerSettings() {
         var overrides = new LinkedHashMap<String, String>();
@@ -191,10 +202,25 @@ public class DatabaseAnalyticsFactory {
         if (asyncInsertMaxDataSize != null) {
             overrides.put(ASYNC_INSERT_MAX_DATA_SIZE, String.valueOf(asyncInsertMaxDataSize));
         }
-        if (httpHeadersProgressIntervalMs != null) {
-            overrides.put(HTTP_HEADERS_PROGRESS_INTERVAL_MS, String.valueOf(httpHeadersProgressIntervalMs));
-        }
         return overrides;
+    }
+
+    /**
+     * Settings applied to {@link #build()} only. The progress-header guard belongs here rather than in
+     * {@link #configurableServerSettings()} for two independent reasons: the defect it guards is clickhouse-r2dbc's
+     * alone — the v2 client never sets {@code send_progress_in_http_headers} — and
+     * {@code DatabaseAnalyticsModule#buildReadOnlyClient} builds a bare factory for a user running under
+     * {@code readonly=1} whose profile allows exactly two settings to change per query, so sending it there fails
+     * every read that user makes.
+     *
+     * <p>Null-tolerant although the field is {@link NotNull}: the annotation governs the configuration path, while a
+     * factory built in code can still have it cleared, and emitting {@code "null"} as a setting value would be worse
+     * than emitting nothing.
+     */
+    private Map<String, String> r2dbcOnlyServerSettings() {
+        return httpHeadersProgressIntervalMs == null
+                ? Map.of()
+                : Map.of(HTTP_HEADERS_PROGRESS_INTERVAL_MS, String.valueOf(httpHeadersProgressIntervalMs));
     }
 
     private String serialize(Map<String, String> driverOptions, Map<String, String> serverSettings) {

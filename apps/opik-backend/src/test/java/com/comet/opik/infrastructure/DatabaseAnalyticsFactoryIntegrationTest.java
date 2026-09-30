@@ -56,14 +56,11 @@ class DatabaseAnalyticsFactoryIntegrationTest {
 
     private Stream<Arguments> queryParametersScenarios() {
         return Stream.of(
-                // custom_http_params entries are applied as ClickHouse server settings, alongside the
-                // http_headers_progress_interval_ms default that keeps progress headers under Apache HC's 100-header
-                // cap (see DatabaseAnalyticsFactory#httpHeadersProgressIntervalMs)
+                // custom_http_params entries are applied as ClickHouse server settings
                 Arguments.of("server settings applied",
                         "custom_http_params=max_query_size=123456789,async_insert=1,wait_for_async_insert=1",
                         null, null, null,
-                        Map.of("max_query_size", "123456789", "async_insert", "1", "wait_for_async_insert", "1",
-                                "http_headers_progress_interval_ms", "3000")),
+                        Map.of("max_query_size", "123456789", "async_insert", "1", "wait_for_async_insert", "1")),
                 // top-level driver option coexists with custom_http_params; server settings still apply
                 Arguments.of("mixed driver and server params",
                         "compress=1&custom_http_params=max_query_size=7777777,async_insert=1",
@@ -204,6 +201,31 @@ class DatabaseAnalyticsFactoryIntegrationTest {
             Map<String, String> observed = readSettings(client, "auto_discovery", "failover");
 
             assertThat(observed).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("R2DBC connection carries the progress-header cadence that keeps responses under Apache HC's cap")
+    void r2dbcConnectionCarriesTheProgressHeaderCadence() {
+        var factory = factoryWith(null);
+
+        var actualSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
+
+        assertThat(actualSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "3000"));
+    }
+
+    @Test
+    @DisplayName("v2 client does not carry the progress-header cadence, which a readonly=1 user would reject")
+    void v2ClientDoesNotCarryTheProgressHeaderCadence() {
+        // The guard is clickhouse-r2dbc's alone, and DatabaseAnalyticsModule#buildReadOnlyClient builds a bare factory
+        // for a user whose profile is readonly=1 with a two-setting allowlist — sending anything else fails every read
+        // that user makes. So the v2 client must leave ClickHouse's own default in place.
+        var factory = factoryWith(null);
+
+        try (var client = factory.buildClient()) {
+            var actualSettings = readSettings(client, "http_headers_progress_interval_ms");
+
+            assertThat(actualSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "100"));
         }
     }
 
