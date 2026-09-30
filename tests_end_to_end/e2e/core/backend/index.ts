@@ -34,6 +34,7 @@ export {
   type SpanReadRef,
   type SpanReadPage,
   type SpanBatchSeed,
+  type OtelSpanSeed,
   type TraceBatchSeed,
   type SpanIdPage,
   type KpiCardStat,

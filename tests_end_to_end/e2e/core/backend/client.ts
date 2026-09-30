@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { Opik } from 'opik';
 import { loadEnvConfig } from '../../config/env.config';
@@ -181,7 +182,25 @@ export interface DatasetSummaryRef {
    * version where there is one, a `count(DISTINCT id)` scan where there is not.
    */
   latestVersionName: string | null;
+  /**
+   * `max(experiment_items.last_updated_at)` over every experiment recorded
+   * against the dataset — computed LIVE on each read, and with no experiment-type
+   * filter, so a trial's items move it exactly as a regular run's do.
+   */
   mostRecentExperimentAt: string | null;
+  /**
+   * The `datasets.last_created_experiment_at` column, which is a different fact
+   * from `mostRecentExperimentAt` above and is allowed to disagree with it.
+   *
+   * Stored rather than computed, and REGULAR-only: `DatasetEventListener`
+   * writes it when a regular experiment is created and recomputes it when
+   * regular experiments are deleted, skipping trials and mini-batches entirely.
+   * That makes it the one field a broken post-delete listener can leave
+   * permanently wrong — the live figures above would re-derive themselves on the
+   * next read no matter what the listener did, so a spec about the bookkeeping
+   * (opik#8607) has to be able to read this one.
+   */
+  lastCreatedExperimentAt: string | null;
   mostRecentOptimizationAt: string | null;
 }
 
@@ -295,6 +314,30 @@ export interface SpanRef {
   name: string;
   traceId: string;
   parentSpanId: string | null;
+}
+
+/**
+ * One span of an OTLP export, in the vocabulary the caller thinks in: a name and
+ * a flat attribute map.
+ *
+ * `attributes` is deliberately typed as a flat map of scalars rather than the
+ * OTLP `KeyValue[]`/`AnyValue` shape. The protobuf envelope is protocol detail
+ * that `postOtelSpans` owns; a fixture that had to spell `{ key, value: {
+ * stringValue } }` per attribute would be describing the wire format instead of
+ * the span under test, and the int-vs-string distinction that actually matters
+ * here (usage counts must arrive as `intValue`, or `extractUsageField` skips
+ * them) would be one more thing every call site could get wrong.
+ */
+export interface OtelSpanSeed {
+  name: string;
+  /**
+   * Numbers are sent as OTLP `intValue`, strings as `stringValue`.
+   *
+   * There is no float case, and that is not an omission: every numeric
+   * attribute Opik reads off an OTel span is a token count, and
+   * `extractUsageField` only reads `hasIntValue()`.
+   */
+  attributes: Record<string, string | number>;
 }
 
 /** One span of a `POST /v1/private/spans/batch` write. */
@@ -1010,6 +1053,7 @@ function toDatasetSummary(row: unknown): DatasetSummaryRef {
     experiment_count?: number;
     optimization_count?: number;
     most_recent_experiment_at?: string | null;
+    last_created_experiment_at?: string | null;
     most_recent_optimization_at?: string | null;
     latest_version?: { version_hash?: string; version_name?: string } | null;
   };
@@ -1033,6 +1077,7 @@ function toDatasetSummary(row: unknown): DatasetSummaryRef {
     latestVersionHash: d.latest_version?.version_hash ?? null,
     latestVersionName: d.latest_version?.version_name ?? null,
     mostRecentExperimentAt: d.most_recent_experiment_at ?? null,
+    lastCreatedExperimentAt: d.last_created_experiment_at ?? null,
     mostRecentOptimizationAt: d.most_recent_optimization_at ?? null,
   };
 }
@@ -1150,6 +1195,23 @@ function toMetricSeries(json: unknown): MetricSeries[] {
   }));
 }
 
+/**
+ * A random OTLP id as lowercase hex — 16 bytes for a trace id, 8 for a span id.
+ *
+ * Hex rather than raw bytes because that is the form the OTLP/JSON spec and
+ * every collector log speaks, so a failure message names an id a reader can
+ * search for. `postOtelSpans` converts to base64 on the wire; see its comment
+ * for why the two differ.
+ */
+function randomOtelId(bytes: 8 | 16): string {
+  return randomBytes(bytes).toString('hex');
+}
+
+/** The protobuf `bytes` encoding of a hex OTLP id. See `postOtelSpans`. */
+function hexToBase64(hex: string): string {
+  return Buffer.from(hex, 'hex').toString('base64');
+}
+
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
   const env = loadEnvConfig();
   const opik = new Opik({
@@ -1243,6 +1305,60 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (typeof m === 'string') message = m;
     } catch {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
+    }
+    return { status: res.status, message, json, location: res.headers.get('location') };
+  };
+
+  /**
+   * `rawFetch` plus request headers the endpoint reads as arguments.
+   *
+   * Only the OTLP endpoint needs this so far: it takes the project from a
+   * `projectName` HEADER rather than from the body, so a body-only helper cannot
+   * express the call at all — and a seed that silently landed in the workspace's
+   * default project would be outside the run prefix the teardown sweeps.
+   *
+   * A separate function rather than an optional argument on `rawFetch` so the
+   * ~60 existing call sites keep one obvious signature, and so the reserved
+   * headers below are enforced in one place.
+   */
+  const rawFetchWithHeaders = async (
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+    path: string,
+    extraHeaders: Record<string, string>,
+    body?: unknown,
+  ): Promise<RawApiResult & { json: unknown }> => {
+    const reserved = ['authorization', 'comet-workspace', 'content-type', 'accept'];
+    for (const name of Object.keys(extraHeaders)) {
+      if (reserved.includes(name.toLowerCase())) {
+        throw new Error(
+          `rawFetchWithHeaders: '${name}' is owned by the client — overriding it would ` +
+            'silently retarget the workspace or the auth identity',
+        );
+      }
+    }
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Comet-Workspace': env.workspace,
+      ...extraHeaders,
+    };
+    const key = apiKey ?? env.apiKey;
+    if (key) headers['Authorization'] = key;
+
+    const res = await fetch(`${env.apiBaseUrl}${path}`, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const text = await res.text();
+    let json: unknown = null;
+    let message = text;
+    try {
+      json = JSON.parse(text);
+      const m = (json as { message?: unknown } | null)?.message;
+      if (typeof m === 'string') message = m;
+    } catch {
+      // Not JSON (the OTLP endpoint's empty 200 body, or an HTML error page).
     }
     return { status: res.status, message, json, location: res.headers.get('location') };
   };
@@ -4659,6 +4775,141 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
       return (page.content ?? []).map((t) => String(t.id));
+    },
+
+    /**
+     * `POST /v1/private/otel/v1/traces` — the OTLP ingestion endpoint, as an
+     * OTLP/JSON export.
+     *
+     * The estate reaches this endpoint nowhere else. Every other span seed
+     * writes `POST /v1/private/spans` with `provider` as a literal field, which
+     * bypasses `ProviderResolvers` entirely — so the whole OTel attribute
+     * mapping (provider aliasing, `gen_ai.usage.*` key translation, model
+     * resolution) has never run in e2e. It is the class of gap that reads as
+     * coverage forever, because the failure is a $0.00 cost rather than an error.
+     *
+     * Three protocol details the caller must not have to know:
+     *
+     *  - **`traceId`/`spanId` are protobuf `bytes`, so they go on the wire as
+     *    BASE64, not hex.** OTLP/JSON's own spec says hex, but the endpoint
+     *    parses with `JsonFormat.parser()` (see `OtelJsonMessageBodyReader`),
+     *    which implements plain proto3 JSON — and proto3 JSON encodes `bytes`
+     *    as base64. A hex id is accepted as a *different*, wrong id or rejected
+     *    outright, so this converts.
+     *  - **The project comes from the `projectName` header** (`RequestContext.
+     *    PROJECT_NAME`), not from the body, and defaults to the workspace's
+     *    default project when absent — which would scatter a seed outside the
+     *    run prefix. Always sent.
+     *  - **`opik.trace_id` attaches the spans to a trace that already exists**
+     *    rather than letting the service mint one from the OTLP trace id
+     *    (`OpenTelemetryMapper.extractOpikTraceId`). That is what lets a caller
+     *    read its spans back with `listSpanCosts({ traceId })` and open them in
+     *    the panel by id, exactly as an SDK-seeded trace's spans are read —
+     *    without having to re-derive the UUID the service would have minted.
+     *
+     * The endpoint answers 200 with an empty body, not 201: it is an OTLP
+     * collector endpoint, and `ExportTraceServiceResponse` is the shape a real
+     * exporter expects. Asserted rather than defaulted, because an export the
+     * backend refused stores nothing and would otherwise surface as an empty
+     * read further down the fixture.
+     */
+    async postOtelSpans(args: {
+      projectName: string;
+      /**
+       * The Opik trace these spans attach to, sent as `opik.trace_id` on each.
+       * Must be a UUIDv7 — `extractOpikTraceId` runs it through `parseUUIDv7`
+       * and silently ignores anything else, which would put the spans on a
+       * freshly minted trace instead and leave every read below looking at an
+       * empty one.
+       */
+      opikTraceId: string;
+      spans: OtelSpanSeed[];
+      /**
+       * The instrumentation scope name. Left unset by default: the service maps
+       * it to `metadata.integration` only for names it recognises, and a seed
+       * claiming an integration it is not changes which attribute rules apply.
+       */
+      scopeName?: string;
+    }): Promise<void> {
+      if (args.spans.length === 0) {
+        throw new Error('postOtelSpans: an export with no spans is a no-op the backend answers 200 for');
+      }
+      // One OTLP trace id for the batch and one span id each. These are the
+      // ids the PROTOCOL needs; what the spans are actually stored under is
+      // decided by `opik.trace_id` above and by `convertOtelIdToUUIDv7`.
+      const otelTraceId = randomOtelId(16);
+      const startNanos = BigInt(Date.now()) * 1_000_000n;
+
+      const toAnyValue = (value: string | number) =>
+        typeof value === 'number'
+          ? // `String`, not the number itself: proto3 JSON represents int64 as a
+            // string, and a bare JSON number overflows silently for large counts.
+            { intValue: String(Math.trunc(value)) }
+          : { stringValue: value };
+
+      const { status, message } = await rawFetchWithHeaders(
+        'POST',
+        '/v1/private/otel/v1/traces',
+        { projectName: args.projectName },
+        {
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  ...(args.scopeName === undefined
+                    ? {}
+                    : { scope: { name: args.scopeName } }),
+                  spans: args.spans.map((span, index) => ({
+                    traceId: hexToBase64(otelTraceId),
+                    spanId: hexToBase64(randomOtelId(8)),
+                    name: span.name,
+                    // SPAN_KIND_CLIENT — what an instrumented LLM call is.
+                    kind: 3,
+                    startTimeUnixNano: String(startNanos + BigInt(index)),
+                    endTimeUnixNano: String(startNanos + BigInt(index) + 1_000_000n),
+                    attributes: [
+                      {
+                        key: 'opik.trace_id',
+                        value: { stringValue: args.opikTraceId },
+                      },
+                      ...Object.entries(span.attributes).map(([key, value]) => ({
+                        key,
+                        value: toAnyValue(value),
+                      })),
+                    ],
+                  })),
+                },
+              ],
+            },
+          ],
+        },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `postOtelSpans: expected 200 for ${args.spans.length} span(s) into ` +
+            `'${args.projectName}', got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * `POST /v1/private/experiments/delete` for SEVERAL ids at once, reporting
+     * the status instead of throwing on it.
+     *
+     * `deleteExperiment` above takes one id and swallows a 404, which is what a
+     * teardown wants. This is the caller's-contract version: the batch delete's
+     * own answer (204) is part of what opik#8607 is about — the event listener
+     * threw AFTER the delete had committed, so "the delete reported success"
+     * and "the bookkeeping is right" are two separate claims and a spec has to
+     * be able to make them separately.
+     */
+    async deleteExperimentsBatch(ids: string[]): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/experiments/delete',
+        { body: { ids } },
+      );
+      return { status, message, location };
     },
 
     /**

@@ -1,4 +1,4 @@
-export { test, expect } from './compare-button-experiments.fixture';
+export { test, expect } from './paged-stream-population.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -276,4 +276,19 @@ export type {
   CompareButtonExperimentsRef,
   CompareButtonExperimentsFixtures,
 } from './compare-button-experiments.fixture';
+export type {
+  OtelAliasSpanSeed,
+  OtelProviderAliasSpansRef,
+  OtelProviderAliasSpansFixtures,
+} from './otel-provider-alias-spans.fixture';
+export type {
+  TypedExperimentRef,
+  ExperimentTypeDatasetRef,
+  ExperimentTypeDatasetsRef,
+  ExperimentTypeDatasetsFixtures,
+} from './experiment-type-datasets.fixture';
+export type {
+  PagedStreamPopulationRef,
+  PagedStreamPopulationFixtures,
+} from './paged-stream-population.fixture';
 export type { ProjectRef } from '../core/backend';

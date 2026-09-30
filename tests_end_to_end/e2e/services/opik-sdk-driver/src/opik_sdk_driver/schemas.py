@@ -726,3 +726,64 @@ class ThreadsEvaluateResponse(BaseModel):
     # `context` field would serialize an absent key as `"context": null` and
     # destroy the distinction the caller is asserting on.
     conversation: list[dict[str, Any]]
+
+
+class StreamReadShape(BaseModel):
+    """One `search_*` call's paging arguments, exposed verbatim.
+
+    `max_batch_size` is the whole point of the route this belongs to: it is what
+    makes a MULTI-PAGE read cheap to provoke. Every other estate call through
+    `read_and_parse_full_stream` asks for fewer rows than one page holds, so the
+    rewritten cursor arithmetic (opik#8411) has never actually paged.
+
+    Plain ints, not constrained ones: the SDK's own handling of a `max_results`
+    that is not a multiple of the batch size — and of one larger than the
+    population — is part of what a caller reads this route to assert, so pydantic
+    must not reject or round them first.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Caller-chosen handle, echoed back so a response can be matched to the shape
+    # that produced it without depending on list order.
+    key: str
+    max_results: int
+    # Omitted means "the SDK's own default" (MAX_ENDPOINT_BATCH_SIZE, 2000),
+    # which is itself one of the shapes worth asserting — a single-page read that
+    # must agree with the many-page ones.
+    max_batch_size: int | None = None
+
+
+class StreamReadResult(BaseModel):
+    """The ids one shape's read returned, in the order the SDK assembled them.
+
+    Order is carried, not just membership: `read_and_parse_full_stream` appends
+    page by page, so a cursor that re-served a page shows up as a duplicate and a
+    cursor that skipped one shows up as a gap — and a set comparison would hide
+    the first while a count alone would hide both.
+    """
+
+    key: str
+    ids: list[str]
+
+
+class StreamReadsRequest(BaseModel):
+    """Several `search_traces` / `search_spans` reads of one project, in one call.
+
+    Batched deliberately. Each shape is a whole multi-page read of the same
+    seeded population, so issuing them as separate HTTP requests would multiply
+    the bridge's client construction and the rate-limit exposure for no
+    assertion, and the shapes are only meaningful when compared to each other.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    trace_shapes: list[StreamReadShape] = []
+    span_shapes: list[StreamReadShape] = []
+    workspace: str | None = None
+
+
+class StreamReadsResponse(BaseModel):
+    traces: list[StreamReadResult] = []
+    spans: list[StreamReadResult] = []
