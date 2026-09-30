@@ -134,6 +134,7 @@ class OpikADKOtelTracer:
 
         trace_to_close_in_finally_block = None
         span_to_close_in_finally_block = None
+        exited_normally = False
 
         current_trace_data = opik.context_storage.get_trace_data()
         current_span_data = opik.context_storage.top_span_data()
@@ -177,6 +178,7 @@ class OpikADKOtelTracer:
                 end_on_exit=end_on_exit,
             ) as inner_span:
                 yield inner_span
+            exited_normally = True
         except Exception as exception:
             # The expected exception here is the exception that happened during the agent
             # execution and was re-raised from the `opentelemetry.util._decorator._agnosticcontextmanagergenerator`s
@@ -195,7 +197,20 @@ class OpikADKOtelTracer:
                 self._ensure_trace_is_finalized(trace_to_close_in_finally_block.id)
 
             if span_to_close_in_finally_block is not None:
-                self._ensure_span_is_finalized(span_to_close_in_finally_block.id)
+                # ADK (2.x) ends the inference span as soon as it records the final
+                # response, before running after_model_callback. Finalizing the LLM
+                # span here would send it without output and usage, and that copy
+                # races after_model_callback's complete one downstream, so leave it
+                # on the stack for after_model_callback. On an error there may be
+                # no after_model_callback, so the span is still finalized here.
+                left_for_after_model_callback = (
+                    exited_normally
+                    and llm_span_helpers.is_externally_created_llm_span_that_just_started(
+                        span_to_close_in_finally_block
+                    )
+                )
+                if not left_for_after_model_callback:
+                    self._ensure_span_is_finalized(span_to_close_in_finally_block.id)
 
             if (
                 trace_to_close_in_finally_block is None
