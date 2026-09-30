@@ -25,5 +25,6 @@ export interface ServiceTogglesConfig {
     ollieEnabled: boolean;
     projectHomepageEnabled: boolean;
     onlineScoringTracingEnabled: boolean;
+    annotationQueueAutomationEnabled: boolean;
     defaultPageSize?: number;
 }

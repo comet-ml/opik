@@ -78,6 +78,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.SentinelTranslation.emptyUuidToNullableUuid;
 import static com.comet.opik.utils.SentinelTranslation.epochToNull;
 import static com.comet.opik.utils.SentinelTranslation.nanToNull;
 import static com.comet.opik.utils.SentinelTranslation.nullToEpoch;
@@ -2112,11 +2113,11 @@ public class SpanDAO {
 
                 bindNanSentinel(statement, "ttft" + i, span.ttft());
 
-                if (span.source() != null) {
-                    statement.bind("source" + i, span.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
+                // The column is non-nullable with DEFAULT 'unknown'; binding NULL makes the
+                // driver wrap it in a nullable guard, costing two swallowed exceptions per row.
+                statement.bind("source" + i, span.source() == null
+                        ? Source.UNKNOWN_VALUE
+                        : span.source().getValue());
 
                 statement.bind("environment" + i, StringUtils.defaultString(span.environment()));
 
@@ -2197,11 +2198,9 @@ public class SpanDAO {
 
             bindNanSentinel(statement, "ttft", span.ttft());
 
-            if (span.source() != null) {
-                statement.bind("source", span.source().getValue());
-            } else {
-                statement.bindNull("source", String.class);
-            }
+            statement.bind("source", span.source() == null
+                    ? Source.UNKNOWN_VALUE
+                    : span.source().getValue());
 
             statement.bind("environment", StringUtils.defaultString(span.environment()));
 
@@ -2341,11 +2340,10 @@ public class SpanDAO {
                     bindEpochSentinel(statement, "end_time", spanUpdate.endTime());
                     bindNanSentinel(statement, "ttft", spanUpdate.ttft());
 
-                    if (spanUpdate.source() != null) {
-                        statement.bind("source", spanUpdate.source().getValue());
-                    } else {
-                        statement.bindNull("source", String.class);
-                    }
+                    // 'unknown' is also what the merge above treats as "no source supplied".
+                    statement.bind("source", spanUpdate.source() == null
+                            ? Source.UNKNOWN_VALUE
+                            : spanUpdate.source().getValue());
 
                     bindUserNameAndWorkspace(statement, userName, workspaceId);
 
@@ -2807,10 +2805,10 @@ public class SpanDAO {
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
                 .traceId(row.get("trace_id", UUID.class))
-                .parentSpanId(Optional.ofNullable(row.get("parent_span_id", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(UUID::fromString)
-                        .orElse(null))
+                // Not an isBlank guard: on the partitioned successor the column is FixedString(36), whose empty
+                // (root-span) value reaches Java NUL-padded, and NUL is not whitespace. See
+                // SentinelTranslation#emptyUuidToNullableUuid.
+                .parentSpanId(emptyUuidToNullableUuid(row.get("parent_span_id", String.class)))
                 .name(StringUtils.defaultIfBlank(getValue(exclude, SpanField.NAME, row, "name", String.class),
                         null))
                 .type(SpanType.fromString(getValue(exclude, SpanField.TYPE, row, "type", String.class)))
@@ -2851,7 +2849,7 @@ public class SpanDAO {
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
-                .usage(getValue(exclude, SpanField.USAGE, row, "usage", Map.class))
+                .usage(UsageUtils.toIntegerUsage(getValue(exclude, SpanField.USAGE, row, "usage", Map.class)))
                 .comments(Optional
                         .ofNullable(getValue(exclude, SpanField.COMMENTS, row, "comments", List[].class))
                         .map(CommentResultMapper::getComments)

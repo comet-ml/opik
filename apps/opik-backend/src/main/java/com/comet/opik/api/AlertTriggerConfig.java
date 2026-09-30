@@ -71,4 +71,55 @@ public record AlertTriggerConfig(
         // belongs in the 400 the validation already produces, not a 500 raised from inside this helper.
         return Collections.unmodifiableMap(normalized);
     }
+
+    /**
+     * The canonical spelling of {@code operator} — the comparison symbol — or {@code null} when the value is
+     * not an operator at all.
+     *
+     * <p>Both the enum name ({@code less_than}) and the symbol ({@code <}) reach persistence today, because
+     * nothing ever canonicalised the value on the way in. They are not interchangeable downstream: the alerts
+     * editor treats anything that is not exactly {@code <} as {@code >}, so a stored {@code less_than} both
+     * displays as the opposite comparison and is written back as {@code >} the next time the alert is saved,
+     * silently reversing what it fires on.
+     *
+     * <p>This is the one place that knows the accepted spellings; {@code MetricsAlertJob.Operator.fromString}
+     * reads them from here rather than keeping a second list that could drift.
+     */
+    public static String normalizedOperator(String operator) {
+        if (StringUtils.isBlank(operator)) {
+            return null;
+        }
+        var value = operator.strip();
+        if ("<".equals(value) || "less_than".equalsIgnoreCase(value)) {
+            return "<";
+        }
+        if (">".equals(value) || "greater_than".equalsIgnoreCase(value)) {
+            return ">";
+        }
+        return null;
+    }
+
+    /**
+     * The config value with {@code operator} in its canonical spelling, left untouched when there is no
+     * operator or it is not one this understands — an unknown value is the validation's business, not this
+     * helper's. Applied alongside {@link #withNormalizedWindow}, on the way in and on the way out, so no
+     * consumer has to know that more than one spelling was ever stored.
+     */
+    public static Map<String, String> withNormalizedOperator(Map<String, String> configValue) {
+        if (configValue == null) {
+            return null;
+        }
+        var canonical = normalizedOperator(configValue.get(OPERATOR_CONFIG_KEY));
+        if (canonical == null || canonical.equals(configValue.get(OPERATOR_CONFIG_KEY))) {
+            return configValue;
+        }
+        var normalized = new HashMap<>(configValue);
+        normalized.put(OPERATOR_CONFIG_KEY, canonical);
+        return Collections.unmodifiableMap(normalized);
+    }
+
+    /** Both normalisations, so a caller cannot remember one and forget the other. */
+    public static Map<String, String> withNormalizedConfigValue(Map<String, String> configValue) {
+        return withNormalizedOperator(withNormalizedWindow(configValue));
+    }
 }

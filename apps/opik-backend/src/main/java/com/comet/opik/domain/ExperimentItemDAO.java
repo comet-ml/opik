@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
@@ -129,6 +130,15 @@ class ExperimentItemDAO {
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+            <if(traces_partitioned)>
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                FROM (
+                    SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                    FROM experiment_items_trace_scope
+                )
+            )
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -465,6 +475,15 @@ class ExperimentItemDAO {
                           WHERE workspace_id = :workspace_id
                           <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                           AND id IN (SELECT trace_id FROM experiment_items_ids)
+                          <if(traces_partitioned)>
+                          AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                              SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                              FROM (
+                                  SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                                  FROM experiment_items_ids
+                              )
+                          )
+                          <endif>
                           ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                           LIMIT 1 BY id
                       ) AS t
@@ -749,11 +768,22 @@ class ExperimentItemDAO {
         return experimentAggregatesDAO.getAggregationBranchCounts(criteria);
     }
 
+    /**
+     * Enables the week bound on this DAO's {@code traces} reads - see
+     * {@code ExperimentDAO#addTracesPartitionedFlag} for what it is and why it is gated.
+     */
+    private void addTracesPartitionedFlag(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
+    }
+
     private Mono<List<UUID>> getTargetProjectIds(Set<UUID> experimentIds) {
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
                     var template = TemplateUtils.newST(SELECT_TARGET_PROJECTS);
                     template.add("log_comment", "get_target_project_ids_experiment_items");
+                    addTracesPartitionedFlag(template);
 
                     var statement = connection.createStatement(template.render())
                             .bind("experiment_ids", experimentIds.toArray(UUID[]::new));
@@ -777,6 +807,7 @@ class ExperimentItemDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(STREAM, "get_experiment_items_stream", workspaceId, userName,
                     experimentIds.size());
+            addTracesPartitionedFlag(template);
             if (lastRetrievedId != null) {
                 template.add("lastRetrievedId", lastRetrievedId);
             }
