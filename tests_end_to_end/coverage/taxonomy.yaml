@@ -291,6 +291,19 @@ areas:
       filter-traces:          { covered: true,  tier: t2-cuj }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
+      # New for 2.2.86, from the release pass's own exploration of opik#8411.
+      #
+      # The Python SDK's MULTI-PAGE read of search_traces / search_spans —
+      # `read_and_parse_full_stream`'s cursor arithmetic, which opik#8411
+      # rewrote so the cursor is the last id the BACKEND sent rather than the
+      # last one that parsed. Its own key rather than part of list-traces: that
+      # key names the Logs TABLE (see the note above), and every estate call
+      # through this function is single-page, so the paging itself has never
+      # run. The failure mode is a short read — ids silently missing from a
+      # result set that still looks like an ordinary list — which is why it is
+      # asserted as set equality against a direct REST enumeration rather than
+      # as a count.
+      sdk-multipage-stream-reads: { covered: false }
       add-trace-to-dataset:   { covered: true,  tier: t2-cuj, note: "AddToDatasetDialog, and the create-dataset-items-from-{traces,spans} endpoints behind it: field_mappings resolving a path, taking precedence over enrichment_options on a collision, being dropped when the path resolves to nothing, and being ignored for a TEST_SUITE dataset; plus the four validation rejections (blank name, blank path, uncompilable path, over the 100-entry cap) and that none of them writes. Driven through the dialog's Advanced mapping section for one trace — defaults, Preview, re-pointing a row through the JSON tree — and read back through the API" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details. Not covered from the traces side; the playground-written shape is covered under playground.trace-messages-tab, which does not generalise to SDK-logged traces." }
@@ -613,6 +626,17 @@ areas:
       version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache; also API-level, the single version a multi-batch insert cuts whatever its num_threads or its compression arm, and the v1/v2 pair either side of a rejected insert; plus the counters a single non-JSON-native item cuts (one version, itemsAdded 1, itemsModified 0) and the absence of any second version once the repeat insert deduplicates" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
+      # New for 2.2.86, from the release pass's own exploration of opik#8607.
+      #
+      # A dataset's last-experiment bookkeeping (most_recent_experiment_at,
+      # experiment_count) as RECOMPUTED after experiments are deleted. Its own
+      # key rather than part of list-datasets: that key asserts the summary a
+      # freshly-seeded set of datasets reports, and deletes nothing, while
+      # experiment-delete.spec.ts deletes and never reads the summary back. The
+      # gap between them is the whole of opik#8607 — onExperimentsDeleted threw
+      # after the delete had already committed, so the column was left stale
+      # forever with no error anywhere a user could see.
+      experiment-recency-after-delete: { covered: false }
 
     visual:
       datasets-page:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 04" }
@@ -714,6 +738,22 @@ areas:
       compare-sort-search:     { covered: true,  tier: t2-cuj }
       compare-feedback-tab:    { covered: true,  tier: t2-cuj }
       compare-row-detail:      { covered: true,  tier: t2-cuj, note: "the row-detail panel off the compare grid; also inline images in an item's output, where what is asserted is the MAPPING rather than the render — each [image_N] placeholder in the rendered text resolved to the exact data URL it names, on a mixed png/gif seed whose document order and placeholder order deliberately disagree, plus the panel showing those thumbnails and no others, and a repeated image numbered twice but deduplicated to one tile" }
+      # From opik#8469, applied by the release job for 2.2.86.
+      #
+      # The evaluation-suite item sidebar on the compare route's Items tab
+      # (TestSuiteExperimentPanel), as opposed to compare-row-detail, which is
+      # the CompareExperimentsPanel shown for a dataset-method experiment. Its
+      # own key because the Items tab mounts one or the other on
+      # evaluation_method and they are wired differently: this one takes the
+      # project it looks attachments up under from the experiments LIST
+      # (experimentProjectIdMap), while the compare panel takes it from
+      # useExperimentById — so one can break while the other works. Covers the
+      # multi-run axis MultiRunTabs adds, which the compare panel has no
+      # equivalent of: one dataset item run twice, each run's own output text
+      # paired with its own picture, asserted per run so that a tab rendering
+      # the other run's media is caught rather than read as a normal-looking
+      # panel.
+      suite-item-sidebar:      { covered: false }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
       # Whether a scoring metric in an evaluate() run computes with the LOCALE
