@@ -167,8 +167,8 @@ class TestPackTargets:
     ):
         """ "None of these is mine" is not an invitation to write to all of them.
 
-        The fallback above is right for "not now" — the clients are still the
-        user's, the server step was just declined. It is wrong for the user who
+        The fallback above is right for a server step that reached nothing on
+        its own — the clients are still the user's. It is wrong for the user who
         has just said the detected list is not about them: it put the pack in
         every one of the clients they disowned. Naming none installs the shared
         copy and links nowhere.
@@ -180,6 +180,37 @@ class TestPackTargets:
         assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
         assert skills_spy.call_args.args[0] == []
+
+    def test_server_skipped_at_the_picker__a_default_pack_does_not_follow(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """ "Skip" refused the one thing this run was writing into AI clients.
+
+        The pack is no longer a question, so falling back to every detected
+        client here wrote into all of them without anyone having said yes to
+        anything — the case `opik configure` already refuses for a "no" to its
+        MCP question.
+        """
+        mcp_spy.return_value = mcp_install.InstallReport(registered=(), declined=True)
+
+        outcome = assistants.setup(
+            _params(),
+            install_mcp=True,
+            skills=consent.resolve_installed_by_default(None),
+        )
+
+        skills_spy.assert_not_called()
+        assert outcome.skills_decision == "declined"
+
+    def test_server_skipped_at_the_picker__an_explicit_pack_request_still_installs(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """`--skills` is a request of its own, so it survives refusing the server."""
+        mcp_spy.return_value = mcp_install.InstallReport(registered=(), declined=True)
+
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+
+        assert skills_spy.call_args.args[0] == ["vscode"]
 
 
 class TestThePackIsNotOffered:

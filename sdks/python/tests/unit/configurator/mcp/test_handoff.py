@@ -1,3 +1,5 @@
+import subprocess
+
 import httpx
 import pytest
 
@@ -172,6 +174,34 @@ class TestLaunching:
 
         assert recorded["executable"] == "/usr/bin/claude"
         assert recorded["argv"] == ["claude", "look at my traces"]
+
+    def test_launching_on_windows__runs_the_agent_and_exits_with_its_status(
+        self, monkeypatch
+    ):
+        """Windows has no exec: `os.execvp` there returns the console to the shell
+        while the agent still reads from it, and passes the prompt unquoted, so it
+        arrives split into words. The agent runs as a child instead."""
+        recorded = {}
+        monkeypatch.setattr(handoff.sys, "platform", "win32")
+        monkeypatch.setattr(handoff.shutil, "which", lambda name: "C:\\bin\\claude.CMD")
+        monkeypatch.setattr(
+            handoff.os,
+            "execvp",
+            lambda *args: pytest.fail("Windows must not exec"),
+        )
+        monkeypatch.setattr(handoff.signal, "signal", lambda *args: None)
+
+        def fake_run(argv):
+            recorded["argv"] = argv
+            return subprocess.CompletedProcess(argv, 3)
+
+        monkeypatch.setattr(handoff.subprocess, "run", fake_run)
+
+        with pytest.raises(SystemExit) as exited:
+            handoff.launch("claude-code", "look at my traces")
+
+        assert recorded["argv"] == ["C:\\bin\\claude.CMD", "look at my traces"]
+        assert exited.value.code == 3
 
     def test_launching_something_that_cannot_be__does_nothing(self, monkeypatch):
         monkeypatch.setattr(

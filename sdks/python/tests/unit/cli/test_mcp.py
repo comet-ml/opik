@@ -565,6 +565,7 @@ class TestResultEventCarriesTheHandoff:
         abort=False,
         interactive=True,
         args=(),
+        lookup_interrupted=False,
     ):
         runner = CliRunner()
         outcome = assistants.Outcome(
@@ -586,7 +587,10 @@ class TestResultEventCarriesTheHandoff:
             patch.object(mcp_cli.assistants, "setup", return_value=outcome),
             patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
             patch.object(
-                mcp_cli.mcp_handoff, "traced_project", return_value=traced_project
+                mcp_cli.mcp_handoff,
+                "traced_project",
+                return_value=traced_project,
+                side_effect=KeyboardInterrupt if lookup_interrupted else None,
             ),
             patch.object(mcp_cli.mcp_handoff, "can_launch", return_value=can_launch),
             patch.object(mcp_cli.mcp_handoff, "launch"),
@@ -604,6 +608,17 @@ class TestResultEventCarriesTheHandoff:
             result = runner.invoke(cli, ["mcp", "configure", *args])
             assert result.exit_code == 0, result.output
         return track.call_args_list[-1].kwargs
+
+    def test_ctrl_c_during_the_project_lookup__still_reports_the_run(self):
+        """The lookup runs after "Done" and before the result event, with nothing
+        on screen, so it is where a user who thinks the run is over presses
+        Ctrl-C. Aborting there lost the result event, and the funnel filed a run
+        that wrote a config as one abandoned before the AI-client step.
+        """
+        event = self._result_event(("claude-code",), lookup_interrupted=True)
+
+        assert event["handoff"] == "interrupted"
+        assert event["clients_written"] == 1
 
     def test_single_client_with_traces__launches_on_the_diagnose_prompt(self):
         event = self._result_event(("claude-code",), traced_project="my-app")
@@ -688,6 +703,37 @@ class TestResultEventCarriesTheHandoff:
 
         assert track.call_args_list[-1].kwargs["handoff"] == "cancelled"
         # Nothing was written, so there is nothing to restart for.
+        restart.assert_not_called()
+
+    def test_sign_in_failed__ends_on_the_sign_in_note_alone(self):
+        """The installer has just said the server has no tools until the user
+        signs in, and named the command. Following that with "restart it, then
+        ask it to list your projects" sends them to a question it cannot answer.
+        """
+        runner = CliRunner()
+        outcome = assistants.Outcome(
+            clients=1,
+            skills=True,
+            registered_clients=("claude-code",),
+            sign_in="failed",
+        )
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+            patch.object(mcp_cli.assistants, "setup", return_value=outcome),
+            patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
+            patch.object(mcp_cli.install_view, "render_restart_note") as restart,
+            patch.object(mcp_cli.analytics, "track_event") as track,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure"])
+            assert result.exit_code == 0, result.output
+
+        assert track.call_args_list[-1].kwargs["handoff"] == "sign_in_failed"
         restart.assert_not_called()
 
 

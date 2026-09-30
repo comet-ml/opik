@@ -591,7 +591,12 @@ def configure(
         # `install_skills` goes with it: the MCP flow installs the pack unless
         # refused, and without the flag a `--no-install-skills` run reached it as
         # "never said" and got the pack anyway.
-        mcp_cli.run_configure(skills_flag=install_skills, invoked_via="opik_configure")
+        mcp_cli.run_configure(
+            local_server=False,
+            hosts=(),
+            skills_flag=install_skills,
+            invoked_via="opik_configure",
+        )
 
 
 @configure.command(name="status")

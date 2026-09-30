@@ -27,6 +27,22 @@ SESSION_ID_ENV_VAR = "OPIK_CLI_SESSION_ID"
 #: why the run began and then hands over to `uvx opik`.
 LAUNCHER_ENV_VAR = "OPIK_CLI_LAUNCHER"
 
+
+def _take_from_launcher(name: str) -> str:
+    """A value the launcher handed this process, removed so that it goes no further.
+
+    Removed, not only read, because what this process starts is not the command
+    the launcher reported: the agent `opik mcp configure` execs into, and the app
+    `opik run` starts, would otherwise report this run's `session_id` and
+    launcher on every event of their own. Read at import so that it is gone
+    before any of them can be started.
+    """
+    return os.environ.pop(name, "").strip()
+
+
+_INHERITED_SESSION_ID = _take_from_launcher(SESSION_ID_ENV_VAR)
+_LAUNCHER = _take_from_launcher(LAUNCHER_ENV_VAR)
+
 #: How this run was entered, reported on every event from the moment it is known.
 #: Deliberately NOT part of `collect_context_once`: that is cached on the first
 #: event, and the things recorded here are learned later - `opik configure` only
@@ -51,14 +67,13 @@ def set_run_context(**values: Any) -> None:
 
 
 def run_context() -> Dict[str, Any]:
-    """The run context, including anything a launcher announced through the env.
+    """The run context, including the launcher that started this process.
 
     Read rather than cached: the point of it is to carry facts learned partway
     through a run, so a cache would freeze it at the first event.
     """
-    launcher = os.environ.get(LAUNCHER_ENV_VAR, "").strip()
-    if launcher:
-        return {"cli_launcher": launcher, **_RUN_CONTEXT}
+    if _LAUNCHER:
+        return {"cli_launcher": _LAUNCHER, **_RUN_CONTEXT}
     return dict(_RUN_CONTEXT)
 
 
@@ -68,14 +83,11 @@ SESSION_ID_LENGTH = 9
 def _session_id() -> str:
     """This process's session, inherited from a launcher when there was one.
 
-    A launcher only ever passes this to a CLI it is about to exec, so the id it
-    pins describes one command. `_reset_after_fork` cannot undo an inherited
-    value - a forked child re-reads the same variable - which is why nothing sets
-    it around long-lived or forking processes.
+    A launcher only ever passes this to a CLI it is about to exec, and the CLI
+    takes it out of the environment, so the id it pins describes one command.
     """
-    inherited = os.environ.get(SESSION_ID_ENV_VAR, "").strip()
-    if inherited:
-        return inherited
+    if _INHERITED_SESSION_ID:
+        return _INHERITED_SESSION_ID
 
     return "".join(
         random.choice(string.ascii_letters) for _ in range(SESSION_ID_LENGTH)
@@ -102,7 +114,11 @@ def _reset_after_fork() -> None:
     `pid` and `session_id` describe one process, and the cache holding them survives
     `fork()`. Without this a child keeps reporting its parent's values, so its error
     reports and its usage events are indistinguishable from the parent's.
+
+    That includes an id inherited from a launcher, which named the parent.
     """
+    global _INHERITED_SESSION_ID
+    _INHERITED_SESSION_ID = ""
     collect_context_once.cache_clear()
 
 

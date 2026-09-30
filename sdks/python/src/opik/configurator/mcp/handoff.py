@@ -19,6 +19,9 @@ agent at data the user did not produce teaches them nothing about their own app.
 import logging
 import os
 import shutil
+import signal
+import subprocess
+import sys
 from typing import Dict, Final, List, Optional
 
 import httpx
@@ -171,5 +174,16 @@ def launch(host_key: str, prompt: str) -> None:
     executable = shutil.which(command[0])
     if executable is None:
         return
+
+    if sys.platform == "win32":
+        # Windows has no exec. `os.execvp` there starts the agent and exits this
+        # process, handing the console back to the shell while the agent is still
+        # reading from it, and passes the arguments unquoted, so the prompt
+        # arrives split into words. The nearest equivalent is to run the agent as
+        # a child and leave with its status — ignoring Ctrl-C meanwhile, which
+        # the agent uses for itself and would otherwise take this process down,
+        # and the agent with it.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        sys.exit(subprocess.run([executable, *command[1:], prompt]).returncode)
 
     os.execvp(executable, [*command, prompt])

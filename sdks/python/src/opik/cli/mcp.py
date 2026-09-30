@@ -145,15 +145,20 @@ def configure(
     one, falling back to a local server otherwise. Pass `--local-server` to force
     the local server.
     """
-    run_configure(local_server=local_server, hosts=hosts, skills_flag=skills_flag)
+    run_configure(
+        local_server=local_server,
+        hosts=hosts,
+        skills_flag=skills_flag,
+        invoked_via="direct",
+    )
 
 
 @analytics.entry_point
 def run_configure(
-    local_server: bool = False,
-    hosts: Tuple[str, ...] = (),
-    skills_flag: Optional[bool] = None,
-    invoked_via: str = "direct",
+    local_server: bool,
+    hosts: Tuple[str, ...],
+    skills_flag: Optional[bool],
+    invoked_via: str,
 ) -> None:
     """The `opik mcp configure` flow, callable without going through click.
 
@@ -332,7 +337,8 @@ class _Handoff(NamedTuple):
     """
 
     #: `launch`, `declined`, `prompt_shown`, `no_terminal`, `not_single_client`,
-    #: `sign_in_failed` or `cancelled`. `launch` and `declined` are the two
+    #: `sign_in_failed`, `cancelled` (at the picker, nothing written) or
+    #: `interrupted` (after the config was written, before the offer). `launch` and `declined` are the two
     #: answers to a question that is actually asked, so together they are the
     #: number of runs that got as far as being offered their first question —
     #: the last stage of the funnel, and the only one the user drives.
@@ -385,12 +391,19 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
     target = mcp_targets.find_target(host_key)
     display_name = target.display_name if target is not None else host_key
 
-    project = mcp_handoff.traced_project(
-        api_key=params["api_key"],
-        workspace=params["workspace"],
-        api_url=params["api_url"],
-        check_tls_certificate=params["check_tls_certificate"],
-    )
+    try:
+        project = mcp_handoff.traced_project(
+            api_key=params["api_key"],
+            workspace=params["workspace"],
+            api_url=params["api_url"],
+            check_tls_certificate=params["check_tls_certificate"],
+        )
+    except KeyboardInterrupt:
+        # This runs after "Done" with nothing on screen, so it is where someone
+        # who reads the run as over presses Ctrl-C. Letting it through lost the
+        # result event, and the funnel filed a run that wrote a config as one
+        # abandoned before the AI-client step.
+        return _Handoff(outcome="interrupted", wrote_config=True)
     prompt_kind = "diagnose" if project is not None else "instrument"
     prompt = mcp_handoff.closing_prompt(project)
 
@@ -432,8 +445,10 @@ def _perform_handoff(handoff: _Handoff) -> None:
         # Nothing to hand over to and no one client to name. A run that still
         # wrote a configuration gets the generic instruction, because that
         # configuration is not read until the client restarts; a cancelled one
-        # gets nothing, having changed nothing.
-        if handoff.wrote_config:
+        # gets nothing, having changed nothing. A failed sign-in has already been
+        # told the one thing left to do, and "ask it about your projects" is the
+        # question an unsigned-in server cannot answer.
+        if handoff.wrote_config and handoff.outcome != "sign_in_failed":
             install_view.render_restart_note(mcp_installed=True)
         return
 

@@ -257,10 +257,19 @@ def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str
     One client, like the picker this stands in for. It used to offer "All of the
     above" and accept ``1,2`` — which registered servers this flow then could not
     finish for, since it ends by starting the one client that was chosen.
-    """
-    if len(candidates) == 1:
-        return _single_candidate_menu(candidates[0])
 
+    Ctrl-C answers ``None``, as it does at the picker: a cancel rather than an
+    abort, so the flow can still report the run and stop cleanly.
+    """
+    try:
+        if len(candidates) == 1:
+            return _single_candidate_menu(candidates[0])
+        return _several_candidates_menu(title, candidates)
+    except KeyboardInterrupt:
+        return None
+
+
+def _several_candidates_menu(title: str, candidates: List[HostChoice]) -> List[str]:
     host_count = len(candidates)
     manual_choice = host_count + 1
     skip_choice = host_count + 2

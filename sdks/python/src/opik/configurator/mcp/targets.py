@@ -283,7 +283,8 @@ def _run_interactive_client_cli(command: List[str]) -> Optional[int]:
     browser. All three are right for the non-interactive commands the other
     runner exists for, and all three are wrong here.
 
-    Returns the exit status, or ``None`` when the command could not be run at all.
+    Returns the exit status, or ``None`` when the command could not be run at all
+    or was interrupted.
     """
     try:
         return subprocess.run(command).returncode
@@ -291,6 +292,11 @@ def _run_interactive_client_cli(command: List[str]) -> Optional[int]:
         # Same shape as `_run_client_cli`'s FileNotFoundError case: a client shim
         # whose node has moved out from under it. Nothing to report but "it did
         # not run" — this module speaks through its result, not a logger.
+        return None
+    except KeyboardInterrupt:
+        # The terminal is shared with the command, so Ctrl-C in a browser wait
+        # reaches this process too. It gives up on the sign-in, not on the run:
+        # the server is already registered, and the caller says how to finish.
         return None
 
 

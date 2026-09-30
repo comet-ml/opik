@@ -98,9 +98,7 @@ def setup(
 
     ``install_mcp`` is already resolved: the question names the clients it would
     write to, so the caller asks it before this runs. ``skills`` arrives as a
-    verdict instead, because that question is deliberately asked *after* the
-    server's results table, so the user answers it with the outcome in front of
-    them.
+    verdict, and a default one yields to a server refused at the picker.
     """
     # One view for the whole step, not one per half: it carries what the server
     # install learned — notably whether the connection needs a sign-in — through
@@ -137,6 +135,17 @@ def setup(
             skills_decision=consent.Reason.CANCELLED.value,
             cancelled=True,
         )
+
+    # "Skip" at the picker refused the server, and with it the only thing this
+    # run had been asked to write into an AI client. A pack that is installed by
+    # default follows that refusal, the rule `opik configure` applies to a "no" to
+    # its MCP question; an explicit `--skills` is a request of its own and stands.
+    if (
+        install.declined
+        and not install.manual
+        and skills.reason is consent.Reason.INSTALLED_BY_DEFAULT
+    ):
+        skills = consent.Verdict(consent.Decision.SKIP, consent.Reason.DECLINED)
 
     configured_hosts = list(install.registered)
 

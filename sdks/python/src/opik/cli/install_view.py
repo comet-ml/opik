@@ -498,9 +498,10 @@ class RichInstallView(mcp_view.InstallView):
                 )
             ],
         )
-        # Escape still declines silently. The manual row is the other kind of no
-        # — the detection missed their client — and it is worth its place because
-        # the answer to it is a link rather than nothing.
+        # Escape cancels the run rather than declining the server: there is no
+        # "skip" row, so the only way out of the list is to stop. The manual row
+        # is the other kind of no — the detection missed their client — and it is
+        # worth its place because the answer to it is a link rather than nothing.
         if chosen is None:
             return None
         return [chosen]

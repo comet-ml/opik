@@ -745,6 +745,36 @@ def test_install_claude_code__sign_in_cli_breaks__registration_still_succeeds(
     assert result.succeeded is True
 
 
+def test_install_claude_code__sign_in_interrupted__is_a_failed_sign_in(
+    monkeypatch, interactive
+):
+    """Ctrl-C in the browser wait gives up on the login, not on the whole run.
+
+    The terminal is shared with the login, so the interrupt reaches this process
+    too. Letting it through aborted `opik mcp configure` after the server was
+    registered, skipping the skill pack, the result event, and the note that says
+    how to finish signing in.
+    """
+
+    def fake_run(command, **kwargs):
+        if command[1:] == ["mcp", "--help"]:
+            return subprocess.CompletedProcess(
+                command, 0, stdout=CLAUDE_MCP_HELP_WITH_LOGIN, stderr=""
+            )
+        if command[1:3] == ["mcp", "login"]:
+            raise KeyboardInterrupt
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/claude")
+    monkeypatch.setattr(targets.subprocess, "run", fake_run)
+
+    result = targets._install_claude_code(REMOTE_SERVER_SPEC)
+
+    assert result.succeeded is True
+    assert result.sign_in_attempted is True
+    assert result.sign_in_failed is True
+
+
 def test_claude_supports_mcp_login__name_only_in_a_description__false(monkeypatch):
     """`login` inside another command's help text is not a listed command."""
     listing = "Commands:\n  add   Add a server, then sign in with login\n"

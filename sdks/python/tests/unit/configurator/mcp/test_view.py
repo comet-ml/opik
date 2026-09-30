@@ -127,6 +127,39 @@ class TestSingleCandidateMenu:
         assert chosen == ["cursor"]
 
 
+class TestNumberedMenuCancel:
+    """Ctrl-C at the fallback means what it means at the picker it stands in for.
+
+    The picker answers it with ``None``, which the flow reports as a cancelled
+    run. `input()` raised instead, so the same key on a terminal without the
+    picker aborted the command before it could report anything.
+    """
+
+    @staticmethod
+    def _interrupt(prompt):
+        raise KeyboardInterrupt
+
+    def test_one_client__ctrl_c__is_a_cancel(self):
+        with mock.patch("builtins.input", self._interrupt):
+            chosen = mcp_view.numbered_menu(
+                "pick", [mcp_view.HostChoice("cursor", "Cursor")]
+            )
+
+        assert chosen is None
+
+    def test_several_clients__ctrl_c__is_a_cancel(self):
+        with mock.patch("builtins.input", self._interrupt):
+            chosen = mcp_view.numbered_menu(
+                "pick",
+                [
+                    mcp_view.HostChoice("cursor", "Cursor"),
+                    mcp_view.HostChoice("codex", "Codex"),
+                ],
+            )
+
+        assert chosen is None
+
+
 class TestTargetResult:
     def test_short__prefers_the_summary(self):
         result = mcp_view.TargetResult(
