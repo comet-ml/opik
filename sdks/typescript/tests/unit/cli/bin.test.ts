@@ -52,9 +52,9 @@ describe.skipIf(process.platform === "win32")("the built opik bin", () => {
     // Built inside the package rather than in a temp directory: the bundle keeps
     // its dependencies external, exactly as the published one does, so it has to
     // sit somewhere `node_modules` resolves from.
-    const outDir = fs.mkdtempSync(
-      path.join("node_modules", ".cache", "opik-cli-bin-"),
-    );
+    const cacheDir = path.resolve("node_modules", ".cache");
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const outDir = fs.mkdtempSync(path.join(cacheDir, "opik-cli-bin-"));
     await build({
       config: false,
       entry: { cli: "src/opik/cli/bin.ts" },
