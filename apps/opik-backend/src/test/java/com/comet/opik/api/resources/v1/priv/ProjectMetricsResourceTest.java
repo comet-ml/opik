@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
@@ -7,6 +8,7 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
@@ -34,6 +36,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
@@ -99,6 +102,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -200,6 +204,7 @@ class ProjectMetricsResourceTest {
     private SpanResourceClient spanResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
+    private AnnotationQueuesResourceClient annotationQueuesResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, IdGenerator idGenerator) {
@@ -211,6 +216,7 @@ class ProjectMetricsResourceTest {
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
+        this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
 
         ClientSupportUtils.config(client);
 
@@ -2000,6 +2006,75 @@ class ProjectMetricsResourceTest {
                     null, null, current);
         }
 
+        @ParameterizedTest
+        @EnumSource(value = Source.class, names = "SDK", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("the UI's source = sdk filter drops a thread whose only trace has another source, like the thread list")
+        void whenSourceFilterIsSdk_thenThreadOfOtherSourceNotCounted(Source otherSource) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            createSdkOtherSourceAndMixedThreads(projectName, subtract(marker, TIME_BUCKET_1, interval), otherSource);
+
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build();
+
+            // SUT
+            getMetricsAndAssert(projectId, request.toBuilder().threadFilters(List.of(sdkSourceThreadFilter())).build(),
+                    marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    null, Map.of(ProjectMetricsDAO.NAME_THREADS, 2L), null);
+            getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    null, Map.of(ProjectMetricsDAO.NAME_THREADS, 3L), null);
+        }
+
+        @Test
+        @DisplayName("an annotation_queue_ids filter counts only the threads in that queue, like the thread list")
+        void whenAnnotationQueueFilter_thenOnlyThreadsInQueueCounted() {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var tracesPerThreadMinus3 = createTracesWithThreads(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 2, null);
+            var tracesPerThreadMinus1 = createTracesWithThreads(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval), 4, null);
+
+            Set<UUID> queuedThreadModelIds = Stream.of(tracesPerThreadMinus3, tracesPerThreadMinus1)
+                    .map(tracesPerThread -> traceResourceClient.getTraceThread(
+                            tracesPerThread.getFirst().getFirst().threadId(), projectId, API_KEY, WORKSPACE_NAME)
+                            .threadModelId())
+                    .collect(Collectors.toSet());
+            UUID queueId = createThreadAnnotationQueue(projectId, queuedThreadModelIds);
+
+            var queueFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ANNOTATION_QUEUE_IDS)
+                    .operator(CONTAINS)
+                    .value(queueId.toString())
+                    .build();
+
+            // SUT
+            Map<String, Long> oneThread = Map.of(ProjectMetricsDAO.NAME_THREADS, 1L);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .threadFilters(List.of(queueFilter))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    oneThread, oneThread, null);
+        }
+
         private List<List<Trace>> createTracesWithThreads(String projectName, Instant marker, int threadCount,
                 Integer tracesPerThread) {
             // Create traces with different thread_ids to simulate multiple threads
@@ -2795,6 +2870,78 @@ class ProjectMetricsResourceTest {
                                 .value("")
                                 .build(),
                         Arrays.asList(1, 2, 3)));
+    }
+
+    private static final BigDecimal SDK_THREAD_COST = BigDecimal.valueOf(1);
+    private static final BigDecimal OTHER_SOURCE_THREAD_COST = BigDecimal.valueOf(3);
+    private static final BigDecimal MIXED_THREAD_SDK_TRACE_COST = BigDecimal.valueOf(5);
+    private static final BigDecimal MIXED_THREAD_OTHER_SOURCE_TRACE_COST = BigDecimal.valueOf(7);
+
+    private static TraceThreadFilter sdkSourceThreadFilter() {
+        return TraceThreadFilter.builder()
+                .field(TraceThreadField.SOURCE)
+                .operator(EQUAL)
+                .value(Source.SDK.getValue())
+                .build();
+    }
+
+    private void createSdkOtherSourceAndMixedThreads(String projectName, Instant ranAt, Source otherSource) {
+        String sdkThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        String otherSourceThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        String mixedThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+
+        List<Pair<Trace, BigDecimal>> tracesWithCost = List.of(
+                Pair.of(buildThreadTrace(projectName, sdkThreadId, Source.SDK, ranAt.plusMillis(1)),
+                        SDK_THREAD_COST),
+                Pair.of(buildThreadTrace(projectName, otherSourceThreadId, otherSource, ranAt.plusMillis(2)),
+                        OTHER_SOURCE_THREAD_COST),
+                Pair.of(buildThreadTrace(projectName, mixedThreadId, Source.SDK, ranAt.plusMillis(3)),
+                        MIXED_THREAD_SDK_TRACE_COST),
+                Pair.of(buildThreadTrace(projectName, mixedThreadId, otherSource, ranAt.plusMillis(4)),
+                        MIXED_THREAD_OTHER_SOURCE_TRACE_COST));
+
+        List<Span> spans = tracesWithCost.stream()
+                .map(traceWithCost -> factory.manufacturePojo(Span.class).toBuilder()
+                        .id(idGenerator.generateId(traceWithCost.getLeft().startTime()))
+                        .projectName(projectName)
+                        .traceId(traceWithCost.getLeft().id())
+                        .startTime(traceWithCost.getLeft().startTime())
+                        .totalEstimatedCost(traceWithCost.getRight())
+                        .build())
+                .toList();
+
+        traceResourceClient.batchCreateTraces(tracesWithCost.stream().map(Pair::getLeft).toList(), API_KEY,
+                WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+        Mono.delay(Duration.ofMillis(100)).block();
+
+        traceResourceClient.closeTraceThreads(Set.of(sdkThreadId, otherSourceThreadId, mixedThreadId), null,
+                projectName, API_KEY, WORKSPACE_NAME);
+    }
+
+    private Trace buildThreadTrace(String projectName, String threadId, Source source, Instant startTime) {
+        return factory.manufacturePojo(Trace.class).toBuilder()
+                .id(idGenerator.generateId(startTime))
+                .projectName(projectName)
+                .threadId(threadId)
+                .source(source)
+                .startTime(startTime)
+                .build();
+    }
+
+    private UUID createThreadAnnotationQueue(UUID projectId, Set<UUID> threadModelIds) {
+        var annotationQueue = factory.manufacturePojo(AnnotationQueue.class).toBuilder()
+                .projectId(projectId)
+                .scope(AnnotationQueue.AnnotationScope.THREAD)
+                .build();
+
+        annotationQueuesResourceClient.createAnnotationQueueBatch(new LinkedHashSet<>(List.of(annotationQueue)),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+        annotationQueuesResourceClient.addItemsToAnnotationQueue(annotationQueue.id(), threadModelIds, API_KEY,
+                WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+
+        return annotationQueue.id();
     }
 
     static Stream<Arguments> spanHappyPathWithFilterArguments() {
@@ -4747,6 +4894,39 @@ class ProjectMetricsResourceTest {
 
         Stream<Arguments> happyPathWithFilter() {
             return ProjectMetricsResourceTest.threadHappyPathWithFilterArguments();
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = Source.class, names = "SDK", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("the UI's source = sdk filter sums only the cost of sdk traces, like the thread list")
+        void whenSourceFilterIsSdk_thenOnlySdkTracesCostSummed(Source otherSource) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            createSdkOtherSourceAndMixedThreads(projectName, subtract(marker, TIME_BUCKET_1, interval), otherSource);
+
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build();
+
+            var sdkTracesCost = Map.of(ProjectMetricsDAO.NAME_THREAD_COST,
+                    SDK_THREAD_COST.add(MIXED_THREAD_SDK_TRACE_COST));
+            var allTracesCost = Map.of(ProjectMetricsDAO.NAME_THREAD_COST,
+                    SDK_THREAD_COST.add(OTHER_SOURCE_THREAD_COST)
+                            .add(MIXED_THREAD_SDK_TRACE_COST)
+                            .add(MIXED_THREAD_OTHER_SOURCE_TRACE_COST));
+
+            getMetricsAndAssert(projectId, request.toBuilder().threadFilters(List.of(sdkSourceThreadFilter())).build(),
+                    marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST), BigDecimal.class,
+                    null, sdkTracesCost, null);
+            getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST),
+                    BigDecimal.class, null, allTracesCost, null);
         }
 
         private Pair<List<String>, List<BigDecimal>> createTraceThreadsWithCost(String projectName, Instant marker,
