@@ -30,6 +30,7 @@ import {
   AIProviderFormType,
   DEFAULT_OPENAI_PIPELINE_MODE,
   normalizeOpenAiPipelineMode,
+  supportsProviderHeaders,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
@@ -334,7 +335,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
     const isEditingCustomProvider =
       isCustomLike && !!(providerKey || calculatedProviderKey);
-    const headers = convertHeadersForAPI(headersArray, isEditingCustomProvider);
+    const sendsHeaders = isCustomLike || supportsProviderHeaders(provider);
+    const headers = sendsHeaders
+      ? convertHeadersForAPI(
+          headersArray,
+          !!(providerKey || calculatedProviderKey),
+        )
+      : undefined;
 
     const storedProvider = providerKey ?? calculatedProviderKey;
     const authConfig = isCustomLike
@@ -359,7 +366,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           apiKey: effectiveApiKey,
           base_url: isCustomLike ? url : undefined,
           ...(configuration && { configuration }),
-          ...(isCustomLike && headers !== undefined && { headers }),
+          ...(headers !== undefined && { headers }),
           ...(authConfig !== undefined && { auth_config: authConfig }),
         },
       });
@@ -375,7 +382,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           base_url: isCustomLike ? url : undefined,
           provider_name: isCustomLike ? providerName : undefined,
           ...(configuration && { configuration }),
-          ...(isCustomLike && headers !== undefined && { headers }),
+          ...(headers !== undefined && { headers }),
           ...(authConfig !== undefined && { auth_config: authConfig }),
         },
       });

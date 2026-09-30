@@ -36,29 +36,118 @@ export const normalizeOpenAiPipelineMode = (
     : DEFAULT_OPENAI_PIPELINE_MODE;
 };
 
-export const CloudAIProviderDetailsFormSchema = z.object({
-  provider: z.enum(
-    Object.values(PROVIDER_TYPE).filter(
-      (v) =>
-        v !== PROVIDER_TYPE.VERTEX_AI &&
-        v !== PROVIDER_TYPE.CUSTOM &&
-        v !== PROVIDER_TYPE.BEDROCK &&
-        v !== PROVIDER_TYPE.OLLAMA,
-    ) as [string, ...string[]],
-    {
-      message: "Provider is required",
-    },
-  ),
-  composedProviderType: z.string(),
-  apiKey: z
-    .string({
-      required_error: "API key is required",
-    })
-    .min(1, { message: "API key is required" }),
-  // OpenAI-only: which pipeline the backend routes the request through. Schema-level optional
-  // because non-OpenAI cloud providers ignore it. The dialog defaults to chat_completions_api.
-  openaiPipelineMode: z.enum(OPENAI_PIPELINE_MODE_VALUES).optional(),
-});
+// Built-in providers whose backend client applies the stored static `headers` map to every
+// upstream call (OpenAIClientGenerator serves both). Other built-in providers ignore `headers`,
+// so the field is only offered for these.
+export const PROVIDERS_WITH_HEADERS: readonly PROVIDER_TYPE[] = [
+  PROVIDER_TYPE.OPEN_AI,
+  PROVIDER_TYPE.OPEN_ROUTER,
+];
+
+export const supportsProviderHeaders = (
+  provider: PROVIDER_TYPE | string | undefined | null,
+): boolean =>
+  Boolean(provider) &&
+  (PROVIDERS_WITH_HEADERS as readonly string[]).includes(provider as string);
+
+// Built-in providers take the key from the API key field; a custom header with one of these
+// names would override it and surface as a confusing auth error.
+const BUILT_IN_PROVIDER_RESERVED_HEADERS = ["authorization", "api-key"];
+
+const headersArraySchema = z
+  .array(
+    z.object({
+      key: z.string(),
+      value: z.string(),
+      id: z.string(),
+    }),
+  )
+  .optional();
+
+// If a header has any content, both key and value must be non-empty, and keys must be unique.
+const validateHeaders = (
+  headers: Array<{ key: string; value: string }> | undefined,
+  ctx: z.RefinementCtx,
+  reservedKeys: string[] = [],
+) => {
+  if (!headers) return;
+
+  const headerKeys: string[] = [];
+
+  headers.forEach((header, index) => {
+    const hasKey = header.key.trim().length > 0;
+    const hasValue = header.value.trim().length > 0;
+
+    // If either field has content, both must have content
+    if ((hasKey || hasValue) && !hasKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Header key is required",
+        path: ["headers", index, "key"],
+      });
+    }
+
+    if ((hasKey || hasValue) && !hasValue) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Header value is required",
+        path: ["headers", index, "value"],
+      });
+    }
+
+    if (hasKey) {
+      const trimmedKey = header.key.trim();
+      if (reservedKeys.includes(trimmedKey.toLowerCase())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Use the API key field instead of this header",
+          path: ["headers", index, "key"],
+        });
+      } else if (headerKeys.includes(trimmedKey)) {
+        // Check for duplicate header keys
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Header key must be unique",
+          path: ["headers", index, "key"],
+        });
+      } else {
+        headerKeys.push(trimmedKey);
+      }
+    }
+  });
+};
+
+export const CloudAIProviderDetailsFormSchema = z
+  .object({
+    provider: z.enum(
+      Object.values(PROVIDER_TYPE).filter(
+        (v) =>
+          v !== PROVIDER_TYPE.VERTEX_AI &&
+          v !== PROVIDER_TYPE.CUSTOM &&
+          v !== PROVIDER_TYPE.BEDROCK &&
+          v !== PROVIDER_TYPE.OLLAMA,
+      ) as [string, ...string[]],
+      {
+        message: "Provider is required",
+      },
+    ),
+    composedProviderType: z.string(),
+    apiKey: z
+      .string({
+        required_error: "API key is required",
+      })
+      .min(1, { message: "API key is required" }),
+    // OpenAI-only: which pipeline the backend routes the request through. Schema-level optional
+    // because non-OpenAI cloud providers ignore it. The dialog defaults to chat_completions_api.
+    openaiPipelineMode: z.enum(OPENAI_PIPELINE_MODE_VALUES).optional(),
+    // Only offered (and sent) for PROVIDERS_WITH_HEADERS; ignored for other cloud providers.
+    headers: headersArraySchema,
+  })
+  .superRefine((data, ctx) => {
+    if (supportsProviderHeaders(data.provider)) {
+      validateHeaders(data.headers, ctx, BUILT_IN_PROVIDER_RESERVED_HEADERS);
+    }
+  });
 
 export const VertexAIProviderDetailsFormSchema = z.object({
   provider: z.enum([PROVIDER_TYPE.VERTEX_AI], {
@@ -100,15 +189,7 @@ export const createCustomProviderDetailsFormSchema = (
           },
           { message: "All model names should be unique" },
         ),
-      headers: z
-        .array(
-          z.object({
-            key: z.string(),
-            value: z.string(),
-            id: z.string(),
-          }),
-        )
-        .optional(),
+      headers: headersArraySchema,
       queryParams: z
         .array(
           z.object({
@@ -205,46 +286,7 @@ export const createCustomProviderDetailsFormSchema = (
           });
         }
       }
-      // Validate headers: if a header has any content, both key and value must be non-empty
-      if (data.headers) {
-        const headerKeys: string[] = [];
-
-        data.headers.forEach((header, index) => {
-          const hasKey = header.key.trim().length > 0;
-          const hasValue = header.value.trim().length > 0;
-
-          // If either field has content, both must have content
-          if ((hasKey || hasValue) && !hasKey) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: "Header key is required",
-              path: ["headers", index, "key"],
-            });
-          }
-
-          if ((hasKey || hasValue) && !hasValue) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: "Header value is required",
-              path: ["headers", index, "value"],
-            });
-          }
-
-          // Check for duplicate header keys
-          if (hasKey) {
-            const trimmedKey = header.key.trim();
-            if (headerKeys.includes(trimmedKey)) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Header key must be unique",
-                path: ["headers", index, "key"],
-              });
-            } else {
-              headerKeys.push(trimmedKey);
-            }
-          }
-        });
-      }
+      validateHeaders(data.headers, ctx);
 
       // Validate query params: same rules as headers (both key/value required, unique keys)
       if (data.queryParams) {
