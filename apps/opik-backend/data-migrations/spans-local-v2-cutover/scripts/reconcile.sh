@@ -1201,9 +1201,15 @@ run_reverse_deletion_replay() {
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
     sql="$(expand_scope "$sql" reverse-replay)" || exit 2
     if [[ -z "$(sed 's/--.*$//' <<<"$sql" | tr -d '[:space:]')" ]]; then
+        verify_delete_scope
         return 0
     fi
     send_scoped_sql "$sql"
+    # A no-op while `spans` is unpartitioned, since verify_delete_scope returns immediately for the unbounded form.
+    # Present for the same reason the derivation above asks system.tables rather than assuming: the day that table
+    # becomes weekly-partitioned this path starts scoping, and it would otherwise be the ONE replay in the runbook that
+    # scopes without checking afterwards what its scope could not see.
+    verify_delete_scope
 }
 
 # 000004_rollback_verify_replay.sql, unchanged: asserts no id bridged since cutover_start is live again.

@@ -1450,8 +1450,9 @@ not be small.
 
 ## Partition-scoped deletion replays (OPIK-8607)
 
-**Every deletion replay in this runbook is emitted once per partition, not once.** That is not a tuning choice; without
-it the replay cannot run at all once the successor has accumulated enough weekly partitions.
+**Every deletion replay in this runbook is emitted as one statement per partition its bridged ids resolve to, never as
+a single unbounded one.** That is not a tuning choice; without it the replay cannot run at all once the successor has
+accumulated enough weekly partitions.
 
 **What breaks unscoped.** To run a mutation on a `ReplicatedMergeTree`, ClickHouse allocates a block number in every
 **affected** partition, as ephemeral znodes written in a **single atomic** ZooKeeper `tryMulti`. A `DELETE` carrying no
