@@ -14,11 +14,7 @@ const PromptVersionTag: React.FunctionComponent<PromptVersionTagProps> = ({
 }) => (
   <NavigationTag
     id={promptVersion.prompt_id}
-    name={
-      promptVersion.prompt_name
-        ? formatPromptVersionLabel(promptVersion)
-        : undefined
-    }
+    name={formatPromptVersionLabel(promptVersion)}
     resource={RESOURCE_TYPE.prompt}
     search={{ activeVersionId: promptVersion.id }}
   />

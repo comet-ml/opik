@@ -47,15 +47,13 @@ export const suggestNextExperimentName = (
   return trimmed.replace(RUN_SUFFIX_RE, `_${next}`);
 };
 
-const DELETED_PROMPT_LABEL = "Deleted prompt";
-
 /**
  * Human-readable label for a prompt version linked to an experiment: the
  * prompt name plus its version (e.g. "My Prompt (v3)"). Prefers the sequential
  * version number, falls back to the commit hash when it's unavailable, and
- * omits the parenthetical entirely when neither is present (OPIK-6838). A
- * deleted prompt has no name, so it reads "Deleted prompt", matching
- * ResourceLink's deleted state.
+ * omits the parenthetical entirely when neither is present (OPIK-6838).
+ * Undefined for a deleted prompt (the backend omits its name), which every
+ * ResourceLink consumer renders as its disabled "Deleted prompt" state.
  *
  * Single source of truth so the experiments table, the single-experiment
  * Configuration tab, and the dashboard leaderboard widget stay consistent.
@@ -65,14 +63,19 @@ export const formatPromptVersionLabel = (
     ExperimentPromptVersion,
     "prompt_name" | "version_number" | "commit"
   >,
-): string => {
-  if (!promptVersion.prompt_name) return DELETED_PROMPT_LABEL;
+): string | undefined => {
+  if (!promptVersion.prompt_name) return undefined;
 
   const version = promptVersion.version_number ?? promptVersion.commit;
   return version
     ? `${promptVersion.prompt_name} (${version})`
     : promptVersion.prompt_name;
 };
+
+// The compare row's text needs a word for a deleted prompt where links use
+// ResourceLink's deleted state.
+const toComparableLabel = (promptVersion: ExperimentPromptVersion) =>
+  formatPromptVersionLabel(promptVersion) ?? "Deleted prompt";
 
 /**
  * Prompt versions in label order: case-insensitive, with version numbers
@@ -87,11 +90,10 @@ export const sortPromptVersions = (
 ): ExperimentPromptVersion[] =>
   [...promptVersions].sort(
     (a, b) =>
-      formatPromptVersionLabel(a).localeCompare(
-        formatPromptVersionLabel(b),
-        undefined,
-        { sensitivity: "base", numeric: true },
-      ) ||
+      toComparableLabel(a).localeCompare(toComparableLabel(b), undefined, {
+        sensitivity: "base",
+        numeric: true,
+      }) ||
       a.prompt_id.localeCompare(b.prompt_id) ||
       a.id.localeCompare(b.id),
   );
@@ -112,9 +114,7 @@ export const formatExperimentPromptVersions = (
   const promptVersions = experiment?.prompt_versions;
   if (!promptVersions?.length) return undefined;
 
-  return sortPromptVersions(promptVersions)
-    .map(formatPromptVersionLabel)
-    .join(", ");
+  return sortPromptVersions(promptVersions).map(toComparableLabel).join(", ");
 };
 
 export const isExperimentTerminal = (

@@ -118,16 +118,12 @@ describe("experiments utilities", () => {
       ).toBe("My Prompt");
     });
 
-    // The backend keeps the link to a deleted prompt but nulls its name,
-    // commit and version number.
-    it("labels a deleted prompt", () => {
-      expect(
-        formatPromptVersionLabel({
-          prompt_name: null,
-          version_number: undefined,
-          commit: null,
-        }),
-      ).toBe("Deleted prompt");
+    // The backend keeps the link to a deleted prompt but omits its name,
+    // commit and version number. Every table and widget passes this label to
+    // ResourceLink, which only renders its disabled deleted state for an
+    // undefined name.
+    it("leaves a deleted prompt unlabelled", () => {
+      expect(formatPromptVersionLabel({})).toBeUndefined();
     });
   });
 
@@ -221,11 +217,7 @@ describe("experiments utilities", () => {
     // Whether a null label reaches the comparator depends on its position, so
     // both orders are checked.
     it("labels a deleted prompt alongside live ones, in any order", () => {
-      const deleted = promptVersion({
-        prompt_name: null,
-        commit: null,
-        version_number: undefined,
-      });
+      const deleted: ExperimentPromptVersion = { id: "pv1", prompt_id: "p1" };
       const live = promptVersion({ id: "pv2" });
 
       for (const prompt_versions of [
@@ -256,8 +248,8 @@ describe("experiments utilities", () => {
         sortPromptVersions(versions).map((pv) => pv.id);
       const inP2 = promptVersion({ id: "pv1", prompt_id: "p2" });
       const inP1 = promptVersion({ id: "pv2", prompt_id: "p1" });
-      const deletedB = promptVersion({ id: "pvB", prompt_name: null });
-      const deletedA = promptVersion({ id: "pvA", prompt_name: null });
+      const deletedB: ExperimentPromptVersion = { id: "pvB", prompt_id: "p1" };
+      const deletedA: ExperimentPromptVersion = { id: "pvA", prompt_id: "p1" };
 
       expect(sorted([inP2, inP1])).toEqual(["pv2", "pv1"]);
       expect(sorted([inP1, inP2])).toEqual(["pv2", "pv1"]);

@@ -314,13 +314,7 @@ describe("ConfigurationTab prompt tags", () => {
   it("renders a deleted prompt in the tag's deleted state", () => {
     renderTab([
       experiment("e1", {
-        prompt_versions: [
-          promptVersion({
-            prompt_name: null,
-            commit: null,
-            version_number: undefined,
-          }),
-        ],
+        prompt_versions: [{ id: "pv1", prompt_id: "p1" }],
       }),
     ]);
 

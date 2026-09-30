@@ -118,13 +118,7 @@ describe("CompareExperimentsConfigCell prompt version row", () => {
     renderCell(
       promptRow(
         {
-          e1: [
-            promptVersion({
-              prompt_name: null,
-              commit: null,
-              version_number: undefined,
-            }),
-          ],
+          e1: [{ id: "pv1", prompt_id: "p1" }],
         },
         { e1: "Deleted prompt" },
       ),
