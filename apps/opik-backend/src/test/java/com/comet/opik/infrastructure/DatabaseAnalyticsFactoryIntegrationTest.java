@@ -48,9 +48,17 @@ class DatabaseAnalyticsFactoryIntegrationTest {
         }
     }
 
+    /**
+     * The shipped cadence, set explicitly because the field carries no initializer — the default lives in
+     * {@code config.yml} and is asserted there by {@code DatabaseAnalyticsConfigTest}. A factory built in code gets
+     * nothing, so a suite exercising the guard has to state the value it is exercising.
+     */
+    private static final int SHIPPED_PROGRESS_HEADER_CADENCE_MS = 3000;
+
     private DatabaseAnalyticsFactory factoryWith(String queryParameters) {
         var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, "default");
         factory.setQueryParameters(queryParameters);
+        factory.setHttpHeadersProgressIntervalMs(SHIPPED_PROGRESS_HEADER_CADENCE_MS);
         return factory;
     }
 
@@ -233,8 +241,8 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     @DisplayName("a cadence in custom_http_params: the field wins on R2DBC, the operator's value stands on v2")
     void operatorSuppliedCadenceIsOverriddenOnlyOnTheR2dbcPath() {
         // Two different rules meeting, both pre-existing. On R2DBC the dedicated field overrides a value present in
-        // the chain, exactly as asyncInsertBusyTimeoutMaxMs does — and because the field is @NotNull with a default it
-        // always does, so the guard cannot be undercut from custom_http_params. On v2 the field is not applied at all,
+        // the chain, exactly as asyncInsertBusyTimeoutMaxMs does — and because @NotNull forces the configuration to
+        // supply one, it always does, so the guard cannot be undercut from custom_http_params. On v2 the field is not applied at all,
         // so the operator's own entry stands, forwarded verbatim like async_insert or max_query_size; singling this
         // one key out for filtering would be the surprising behaviour. Neither reaches the readonly free-form user,
         // whose factory is built without queryParameters (DatabaseAnalyticsModule#buildReadOnlyClient).

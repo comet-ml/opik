@@ -92,8 +92,14 @@ public class DatabaseAnalyticsFactory {
      * progress headers are what keep the socket producing bytes during a long query, and well above
      * {@code maxQueryDurationMs / 90} so the cap stays out of reach. 3s leaves ~4.5 minutes of query time within the
      * 100-header budget against a production maximum of ~66s.
+     *
+     * <p>No initializer on purpose: the default lives once, in {@code config.yml}, so there is a single place to read
+     * and change it. {@link NotNull} then makes a configuration that supplies nothing fail at startup rather than
+     * silently reinstating the ClickHouse default. A factory built in code — tests, and
+     * {@code DatabaseAnalyticsModule#buildReadOnlyClient} — leaves it null and emits no setting, which is what
+     * {@link #r2dbcOnlyServerSettings()} already handles.
      */
-    private @NotNull @Min(1) Integer httpHeadersProgressIntervalMs = 3000;
+    private @NotNull @Min(1) Integer httpHeadersProgressIntervalMs;
 
     private Duration healthCheckTimeout = Duration.seconds(1);
 
