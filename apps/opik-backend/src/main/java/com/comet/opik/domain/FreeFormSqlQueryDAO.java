@@ -15,13 +15,12 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.StreamSupport;
 
 /**
- * Read-only ClickHouse access for caller-supplied free-form SQL. All queries run on the dedicated
- * {@code comet_readonly_freeform_sql_user} client; the workspace/project bounds are passed as server settings
+ * Read-only ClickHouse access for caller-supplied free-form SQL. Queries run on one of two dedicated accounts,
+ * chosen per call by {@link FreeFormSqlAccount}; the workspace/project bounds are passed as server settings
  * (URL params) so the SQL text is never modified. Higher-level validation, metrics and error mapping live in
  * {@link FreeFormSqlQueryService}.
  *
@@ -34,12 +33,21 @@ public interface FreeFormSqlQueryDAO {
     /**
      * Parses {@code query} via {@code EXPLAIN AST} (without executing it) and returns the AST node labels, one per row.
      */
-    CompletableFuture<List<String>> explainAst(String query);
+    CompletableFuture<List<String>> explainAst(@NonNull FreeFormSqlAccount account, @NonNull String query);
 
     /**
-     * Executes {@code query} bounded to the given workspace/project and reads the single {@code result} column.
+     * The reserved {@code SQL_project_id} value meaning "every project in that workspace". The row policies match it
+     * explicitly, so an unset or empty setting matches no branch and returns nothing — a dropped setting fails
+     * closed rather than silently widening the query to the workspace.
      */
-    CompletableFuture<FreeFormSqlResult> execute(String workspaceId, UUID projectId, String query);
+    String PROJECT_ID_ALL = "*";
+
+    /**
+     * Executes {@code query} bounded to the given workspace and project, reading the single {@code result}
+     * column. {@code projectId} is a single project's id, or {@link #PROJECT_ID_ALL}.
+     */
+    CompletableFuture<FreeFormSqlResult> execute(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
+            @NonNull String projectId, @NonNull String query);
 }
 
 @Singleton
@@ -55,31 +63,38 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     private static final String SETTING_PROJECT_ID = "SQL_project_id";
 
     private final Client readOnlyClient;
+    private final Client extendedReadOnlyClient;
 
     @Inject
     FreeFormSqlQueryDAOImpl(
-            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client readOnlyClient) {
+            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client readOnlyClient,
+            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT) @NonNull Client extendedReadOnlyClient) {
         this.readOnlyClient = readOnlyClient;
+        this.extendedReadOnlyClient = extendedReadOnlyClient;
+    }
+
+    private Client clientFor(FreeFormSqlAccount account) {
+        return account == FreeFormSqlAccount.EXTENDED ? extendedReadOnlyClient : readOnlyClient;
     }
 
     @Override
     @WithSpan
-    public CompletableFuture<List<String>> explainAst(@NonNull String query) {
-        return readOnlyClient.queryRecords(EXPLAIN_AST_PREFIX + query)
+    public CompletableFuture<List<String>> explainAst(@NonNull FreeFormSqlAccount account, @NonNull String query) {
+        return clientFor(account).queryRecords(EXPLAIN_AST_PREFIX + query)
                 .thenApply(FreeFormSqlQueryDAOImpl::readNodeLabels);
     }
 
     @Override
     @WithSpan
-    public CompletableFuture<FreeFormSqlResult> execute(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull String query) {
+    public CompletableFuture<FreeFormSqlResult> execute(@NonNull FreeFormSqlAccount account,
+            @NonNull String workspaceId, @NonNull String projectId, @NonNull String query) {
         // Only the SQL_ custom settings are sent: readonly=1 rejects any other per-query setting.
         // Execution/memory/row caps are pinned on the read-only user's server-side profile.
         var settings = new QuerySettings()
                 .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
-                .serverSetting(SETTING_PROJECT_ID, projectId.toString());
+                .serverSetting(SETTING_PROJECT_ID, projectId);
 
-        return readOnlyClient.queryRecords(query, settings)
+        return clientFor(account).queryRecords(query, settings)
                 .thenApply(FreeFormSqlQueryDAOImpl::readResult);
     }
 

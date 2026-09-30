@@ -2,8 +2,10 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
@@ -15,14 +17,12 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -82,7 +82,7 @@ public class AnnotationQueueRoutingBufferService {
             return pending.addAllIfGreater(members)
                     .then(pending.expireIfNotSet(config.getBufferTtl().toJavaDuration()))
                     .doOnError(error -> log.error(
-                            "Failed to buffer '{}' entities for annotation queue routing, scope '{}', workspace '{}'",
+                            "Failed to buffer entities for annotation queue routing, size '{}', scope '{}', workspace '{}'",
                             members.size(), scope, workspaceId, error))
                     .then();
         });
@@ -120,23 +120,31 @@ public class AnnotationQueueRoutingBufferService {
                 });
     }
 
+    /**
+     * Groups one page and publishes a message per group. Everything here is derived from the page with
+     * streams into immutable values: the page is parsed once, malformed members are separated from the rest
+     * and each group carries its own members and entity ids. Nothing is shared or mutated, so the grouping
+     * holds whether the page is handled on the job's thread or a Reactor worker.
+     */
     private Mono<Long> publishPage(RScoredSortedSetReactive<String> pending, Collection<String> page) {
-        Map<GroupKey, Group> groups = new HashMap<>();
-        List<String> malformed = new ArrayList<>();
-        for (String member : page) {
-            PendingEntity entity = decode(member);
-            if (entity == null) {
-                malformed.add(member);
-                continue;
-            }
-            groups.computeIfAbsent(GroupKey.of(entity), __ -> new Group()).add(member, entity.entityId());
-        }
+        var parsed = page.stream().map(ParsedMember::of).toList();
+
+        List<String> malformed = parsed.stream()
+                .filter(ParsedMember::isMalformed)
+                .map(ParsedMember::member)
+                .toList();
+
+        Map<GroupKey, PendingGroup> groups = parsed.stream()
+                .filter(Predicate.not(ParsedMember::isMalformed))
+                .collect(Collectors.groupingBy(member -> GroupKey.of(member.entity()),
+                        Collectors.collectingAndThen(Collectors.toList(), PendingGroup::of)));
 
         // Removed rather than left to be re-read every run forever; nothing can be routed from them anyway.
         Mono<Void> dropMalformed = malformed.isEmpty()
                 ? Mono.empty()
                 : Mono.fromRunnable(() -> log.warn(
-                        "Dropping '{}' malformed annotation queue routing buffer members", malformed.size()))
+                        "Dropping malformed members from the annotation queue routing buffer, size '{}'",
+                        malformed.size()))
                         .then(pending.removeAll(malformed))
                         .then();
 
@@ -162,48 +170,69 @@ public class AnnotationQueueRoutingBufferService {
         return MEMBER_FORMAT.formatted(workspaceId, scope.getValue(), entityId);
     }
 
-    private static PendingEntity decode(String member) {
-        int entityAt = member.lastIndexOf(MEMBER_SEPARATOR);
-        int scopeAt = entityAt > 0 ? member.lastIndexOf(MEMBER_SEPARATOR, entityAt - 1) : -1;
-        if (scopeAt <= 0) {
-            log.warn("Malformed annotation queue routing buffer member: '{}'", member);
-            return null;
+    /**
+     * One buffer member as read back: the raw member, and what it decodes to. A {@code null} entity is a
+     * member this deployment cannot parse — a leftover from an older member format, or a corrupted write.
+     */
+    @Builder(toBuilder = true)
+    private record ParsedMember(@NonNull String member, @Nullable PendingEntity entity) {
+
+        static ParsedMember of(@NonNull String member) {
+            return ParsedMember.builder().member(member).entity(decode(member)).build();
         }
-        try {
-            return new PendingEntity(
-                    member.substring(0, scopeAt),
-                    AnnotationQueue.AnnotationScope.fromString(member.substring(scopeAt + 1, entityAt)),
-                    UUID.fromString(member.substring(entityAt + 1)));
-        } catch (IllegalArgumentException e) {
-            log.warn("Malformed annotation queue routing buffer member: '{}'", member, e);
-            return null;
+
+        boolean isMalformed() {
+            return entity == null;
+        }
+
+        private static @Nullable PendingEntity decode(String member) {
+            int entityAt = member.lastIndexOf(MEMBER_SEPARATOR);
+            int scopeAt = entityAt > 0 ? member.lastIndexOf(MEMBER_SEPARATOR, entityAt - 1) : -1;
+            if (scopeAt <= 0) {
+                log.warn("Malformed annotation queue routing buffer member, member '{}'", member);
+                return null;
+            }
+            try {
+                return PendingEntity.builder()
+                        .workspaceId(member.substring(0, scopeAt))
+                        .scope(AnnotationQueue.AnnotationScope.fromString(member.substring(scopeAt + 1, entityAt)))
+                        .entityId(UUID.fromString(member.substring(entityAt + 1)))
+                        .build();
+            } catch (IllegalArgumentException exception) {
+                log.warn("Malformed annotation queue routing buffer member, member '{}'", member, exception);
+                return null;
+            }
         }
     }
 
-    private record PendingEntity(String workspaceId, AnnotationQueue.AnnotationScope scope, UUID entityId) {
+    @Builder(toBuilder = true)
+    private record PendingEntity(@NonNull String workspaceId, @NonNull AnnotationQueue.AnnotationScope scope,
+            @NonNull UUID entityId) {
     }
 
-    private record GroupKey(String workspaceId, AnnotationQueue.AnnotationScope scope) {
-        static GroupKey of(PendingEntity entity) {
-            return new GroupKey(entity.workspaceId(), entity.scope());
+    /** What one stream message is addressed to: everything in a group travels together. */
+    @Builder(toBuilder = true)
+    private record GroupKey(@NonNull String workspaceId, @NonNull AnnotationQueue.AnnotationScope scope) {
+
+        static GroupKey of(@NonNull PendingEntity entity) {
+            return GroupKey.builder().workspaceId(entity.workspaceId()).scope(entity.scope()).build();
         }
     }
 
-    private static final class Group {
-        private final List<String> members = new ArrayList<>();
-        private final Set<UUID> entityIds = new HashSet<>();
+    /**
+     * The members of one group and the entities they name. Both are kept: the entity ids are what the
+     * message carries, the members are what is removed from the buffer once it is on the stream.
+     */
+    @Builder(toBuilder = true)
+    private record PendingGroup(@NonNull List<String> members, @NonNull Set<UUID> entityIds) {
 
-        void add(String member, UUID entityId) {
-            members.add(member);
-            entityIds.add(entityId);
-        }
-
-        List<String> members() {
-            return members;
-        }
-
-        Set<UUID> entityIds() {
-            return Set.copyOf(entityIds);
+        static PendingGroup of(@NonNull List<ParsedMember> parsed) {
+            return PendingGroup.builder()
+                    .members(parsed.stream().map(ParsedMember::member).toList())
+                    .entityIds(parsed.stream()
+                            .map(member -> member.entity().entityId())
+                            .collect(Collectors.toUnmodifiableSet()))
+                    .build();
         }
     }
 }
