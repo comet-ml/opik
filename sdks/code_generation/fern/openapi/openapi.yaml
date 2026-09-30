@@ -21658,6 +21658,7 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agentInsightsEnabled
       - alertsEnabled
       - annotationQueueAutomationEnabled
       - anthropicProviderEnabled
@@ -21728,6 +21729,8 @@ components:
         ollamaProviderEnabled:
           type: boolean
         ollieEnabled:
+          type: boolean
+        agentInsightsEnabled:
           type: boolean
         projectHomepageEnabled:
           type: boolean

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -56,6 +57,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean ollieEnabled;
     @JsonProperty
+    @NotNull boolean agentInsightsEnabled;
+    @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
     @NotNull boolean onlineScoringTracingEnabled;
@@ -64,4 +67,9 @@ public class ServiceTogglesConfig {
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;
+
+    @JsonIgnore
+    public boolean isAgentInsightsActive() {
+        return ollieEnabled && agentInsightsEnabled;
+    }
 }

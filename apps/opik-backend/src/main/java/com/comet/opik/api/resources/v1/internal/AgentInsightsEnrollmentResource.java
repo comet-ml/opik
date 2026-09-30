@@ -44,8 +44,7 @@ public class AgentInsightsEnrollmentResource {
     @Operation(operationId = "enrolProjectsInAutoFirstRun", summary = "Enrol projects in the auto-first-run rollout", description = "Enrols the given projects, creating their job row if needed, or clears their enrolment. Idempotent.", responses = {
             @ApiResponse(responseCode = "200", description = "Enrollment result", content = @Content(schema = @Schema(implementation = AgentInsightsEnrollment.Response.class)))})
     public Response enrolInAutoFirstRun(@Valid @NotNull AgentInsightsEnrollment.Request request) {
-        // Without Ollie the sweep is never scheduled, so an enrolment could never be honoured.
-        if (!serviceToggles.isOllieEnabled()) {
+        if (!serviceToggles.isAgentInsightsActive()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
         return Response.ok(service.enrolInAutoFirstRun(request.enrolled(), request.projectIds())).build();
