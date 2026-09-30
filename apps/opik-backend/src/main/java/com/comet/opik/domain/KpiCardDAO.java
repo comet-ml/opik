@@ -378,7 +378,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                   AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                       \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
                   AND thread_id \\<> ''
-                  -- Thread source/environment filters act on traces, as in the thread list (ThreadDAO traces_final_ids).
+                  -- Source/environment chips filter each trace, not the thread row, so a thread with mixed traces aggregates only its matching ones,
+                  -- as the thread list does (ThreadDAO traces_final_ids). A thread-row filter would count such threads whole and drift from the list.
                   <if(trace_filters)> AND <trace_filters> <endif>
             ), trace_threads_final AS (
                 SELECT
@@ -495,8 +496,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
                     if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
                     if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
+                    if(tt.status = 'unknown', 'active', tt.status) as status,
                     t.duration as duration,
-                    if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id
+                    if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                    tt.tags as tags
                 FROM (
                     SELECT
                         t.thread_id as id,
@@ -510,8 +513,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                            (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                            NULL) AS duration,
                         count(DISTINCT t.id) * 2 as number_of_messages,
-                        <if(trace_thread_first_message_filter)>argMin(t.input, t.start_time) as first_message,<endif>
-                        <if(trace_thread_last_message_filter)>argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,<endif>
+                        <if(trace_thread_first_message_filter)>argMinIf(t.input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as first_message,<endif>
+                        <if(trace_thread_last_message_filter)>argMaxIf(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,<endif>
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
                         argMin(t.created_by, t.created_at) as created_by,

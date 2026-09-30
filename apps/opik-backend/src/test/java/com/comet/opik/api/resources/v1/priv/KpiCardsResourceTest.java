@@ -6,6 +6,8 @@ import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
@@ -36,6 +38,7 @@ import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -68,6 +71,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -106,6 +111,7 @@ class KpiCardsResourceTest {
 
     private static final long FILTER_DURATION_MS = 100;
     private static final double FILTER_COST = 1.0;
+    private static final String THREAD_ROW_CHIP_TAG = "thread-row-chip";
 
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
@@ -139,11 +145,13 @@ class KpiCardsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, IdGenerator idGenerator) {
+    void setUpAll(ClientSupport client, IdGenerator idGenerator, TransactionTemplateAsync clickHouseTemplate) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.idGenerator = idGenerator;
+        this.clickHouseTemplate = clickHouseTemplate;
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
@@ -1185,6 +1193,125 @@ class KpiCardsResourceTest {
                         Operator.GREATER_THAN, true),
                 Arguments.of(TraceThreadField.LAST_UPDATED_AT, rowLastUpdatedAt, tracesLastUpdatedAt,
                         Operator.LESS_THAN, false));
+    }
+
+    private enum ThreadRowKind {
+        LEGACY_UNKNOWN,
+        ACTIVE,
+        INACTIVE
+    }
+
+    @ParameterizedTest
+    @MethodSource("threadRowChipArguments")
+    @DisplayName("a status or tags chip counts the same threads as the thread list, a legacy 'unknown' status row included")
+    void threadRowChipCountsSameThreadsAsThreadList(TraceThreadField field, Operator operator, String value,
+            Set<ThreadRowKind> expectedMatches) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        Map<ThreadRowKind, String> threadIds = new EnumMap<>(ThreadRowKind.class);
+        List<Trace> traces = new ArrayList<>();
+        List<Span> spans = new ArrayList<>();
+        for (ThreadRowKind kind : ThreadRowKind.values()) {
+            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+            Trace trace = buildThreadTrace(projectName, threadId, Instant.now(), FILTER_DURATION_MS);
+            threadIds.put(kind, threadId);
+            traces.add(trace);
+            spans.add(buildCostedSpan(projectName, trace, FILTER_COST));
+        }
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+        var timeRange = Map.of("from_time", intervalStart.toString(), "to_time", intervalEnd.toString());
+
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
+                .getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME, null, null, timeRange).content())
+                .extracting(TraceThread::id)
+                .containsExactlyInAnyOrderElementsOf(threadIds.values()));
+
+        Stream.of(ThreadRowKind.LEGACY_UNKNOWN, ThreadRowKind.INACTIVE)
+                .map(kind -> traceResourceClient.getTraceThread(threadIds.get(kind), projectId, API_KEY,
+                        WORKSPACE_NAME))
+                .forEach(thread -> traceResourceClient.updateThread(
+                        TraceThreadUpdate.builder().tags(Set.of(THREAD_ROW_CHIP_TAG)).build(),
+                        thread.threadModelId(), API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT));
+        traceResourceClient.closeTraceThreads(Set.of(threadIds.get(ThreadRowKind.INACTIVE)), null, projectName,
+                API_KEY, WORKSPACE_NAME);
+        writeLegacyUnknownStatusRow(projectId, threadIds.get(ThreadRowKind.LEGACY_UNKNOWN));
+
+        assertThat(readStoredThreadStatus(projectId, threadIds.get(ThreadRowKind.LEGACY_UNKNOWN)))
+                .isEqualTo("unknown");
+
+        var filter = TraceThreadFilter.builder()
+                .field(field)
+                .operator(operator)
+                .value(value)
+                .build();
+        List<String> expectedThreadIds = expectedMatches.stream().map(threadIds::get).toList();
+
+        var threadList = traceResourceClient.getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME,
+                List.of(filter), null, timeRange);
+
+        assertThat(threadList.content()).extracting(TraceThread::id)
+                .containsExactlyInAnyOrderElementsOf(expectedThreadIds);
+        assertThat(threadList.total()).isEqualTo(expectedThreadIds.size());
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.THREADS, expectedThreadIds.size(), 0, 0, 0);
+    }
+
+    static Stream<Arguments> threadRowChipArguments() {
+        return Stream.of(
+                Arguments.of(TraceThreadField.STATUS, Operator.EQUAL, TraceThreadStatus.ACTIVE.getValue(),
+                        EnumSet.of(ThreadRowKind.LEGACY_UNKNOWN, ThreadRowKind.ACTIVE)),
+                Arguments.of(TraceThreadField.TAGS, Operator.CONTAINS, THREAD_ROW_CHIP_TAG,
+                        EnumSet.of(ThreadRowKind.LEGACY_UNKNOWN, ThreadRowKind.INACTIVE)));
+    }
+
+    // The API only ever writes 'active' or 'inactive'. Older rows still carry the column's enum default, 'unknown',
+    // which the thread list reads as active, so the test has to write that row version itself.
+    private void writeLegacyUnknownStatusRow(UUID projectId, String threadId) {
+        String sql = """
+                INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by,
+                    created_at, last_updated_at, tags, sampling_per_rule, source, environment)
+                SELECT workspace_id, project_id, thread_id, id, 'unknown', created_by, last_updated_by,
+                    created_at, now64(6), tags, sampling_per_rule, source, environment
+                FROM trace_threads FINAL
+                WHERE workspace_id = :workspace_id AND project_id = :project_id AND thread_id = :thread_id
+                """;
+
+        clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement(sql)
+                .bind("workspace_id", WORKSPACE_ID)
+                .bind("project_id", projectId.toString())
+                .bind("thread_id", threadId)
+                .execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
+    }
+
+    private String readStoredThreadStatus(UUID projectId, String threadId) {
+        String sql = """
+                SELECT toString(status) AS status
+                FROM trace_threads FINAL
+                WHERE workspace_id = :workspace_id AND project_id = :project_id AND thread_id = :thread_id
+                """;
+
+        return clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement(sql)
+                .bind("workspace_id", WORKSPACE_ID)
+                .bind("project_id", projectId.toString())
+                .bind("thread_id", threadId)
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("status", String.class)))))
+                .block();
     }
 
     @Test
