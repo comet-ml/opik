@@ -196,10 +196,42 @@ describe("ConfigurationTab prompt version row", () => {
 
     renderTab([
       experiment("e1", { prompt_versions: [promptVersion()] }),
-      experiment("e2", { prompt_versions: [promptVersion({ id: "pv2" })] }),
+      experiment("e2", { prompt_versions: [promptVersion()] }),
     ]);
 
     expect(rowNames()).not.toContain(PROMPT_VERSION_ROW);
+  });
+
+  // Prompt names are only unique per project, so two different prompts can
+  // share a label; the row has to diff on the versions themselves.
+  it("keeps the row under 'show differences only' when same-labelled prompts differ", () => {
+    queryParams.diff = true;
+
+    renderTab([
+      experiment("e1", { prompt_versions: [promptVersion()] }),
+      experiment("e2", {
+        prompt_versions: [promptVersion({ id: "pv2", prompt_id: "p2" })],
+      }),
+    ]);
+
+    expect(rowNames()).toContain(PROMPT_VERSION_ROW);
+  });
+
+  it("treats an empty prompt list like no prompt under 'show differences only'", () => {
+    queryParams.diff = true;
+
+    renderTab([
+      experiment("e1", { prompt_versions: [promptVersion()] }),
+      experiment("e2", { prompt_versions: [] }),
+      experiment("e3"),
+    ]);
+
+    const row = screen
+      .getAllByTestId("row")
+      .find((r) => r.textContent === PROMPT_VERSION_ROW);
+    expect(
+      JSON.parse(row?.getAttribute("data-prompt-version-ids") ?? "{}"),
+    ).toEqual({ e1: ["pv1"] });
   });
 
   it("keeps the row under 'show differences only' when the prompts differ", () => {

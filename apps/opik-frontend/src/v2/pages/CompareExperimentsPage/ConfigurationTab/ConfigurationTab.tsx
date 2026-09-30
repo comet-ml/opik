@@ -129,21 +129,25 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     experimentsIds.forEach((id: string) => {
       const experiment = find(experiments, (e) => e.id === id);
       data[id] = formatExperimentPromptVersions(experiment);
-      promptVersionsByExperimentId[id] =
-        experiment?.prompt_versions &&
-        sortPromptVersions(experiment.prompt_versions);
+      promptVersionsByExperimentId[id] = experiment?.prompt_versions?.length
+        ? sortPromptVersions(experiment.prompt_versions)
+        : undefined;
     });
 
     if (Object.values(data).every(isUndefined)) return null;
 
-    const values = Object.values(data);
+    // Labels can collide (prompt names are only unique per project, and every
+    // deleted prompt reads the same), so diff on the versions themselves.
+    const versionKeys = experimentsIds.map(
+      (id) => promptVersionsByExperimentId[id]?.map((pv) => pv.id).join(),
+    );
 
     return {
       name: PROMPT_VERSION_ROW_NAME,
       base: experimentsIds[0],
       data,
       promptVersionsByExperimentId,
-      different: !values.every((v) => values[0] === v),
+      different: !versionKeys.every((key) => key === versionKeys[0]),
     } as CompareConfig;
   }, [isCompare, experimentsIds, experiments]);
 
