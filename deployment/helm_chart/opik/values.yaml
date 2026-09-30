@@ -914,6 +914,13 @@ clickhouse:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 30
+  # Graceful restarts: ClickHouse closes its listeners the moment it gets SIGTERM, so clients
+  # still holding the pod's address get "connection refused". A preStop sleep keeps it serving
+  # while the pod leaves the service; the grace period must cover that plus
+  # shutdown_wait_unfinished. E.g. lifecycle: {preStop: {sleep: {seconds: 15}}} with 60.
+  lifecycle: {}
+  # -- (int) Pod termination grace period in seconds. Unset keeps the Kubernetes default (30).
+  terminationGracePeriodSeconds: null
   configuration:
     files:
       conf.d/memory.xml: |
