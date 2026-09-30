@@ -58,8 +58,8 @@ class DatabaseAnalyticsConfigTest {
         var databaseAnalytics = load(Map.of());
 
         assertThat(databaseAnalytics.getHttpHeadersProgressIntervalMs())
-                .as("the shipped default must match the field default in DatabaseAnalyticsFactory, since a deployment "
-                        + "inherits whichever of the two reaches it first")
+                .as("config.yml is the only place this default lives — the field carries no initializer to fall back "
+                        + "on — so this is the cadence every deployment that sets no override actually gets")
                 .isEqualTo(3000);
     }
 

@@ -213,6 +213,20 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     }
 
     @Test
+    @DisplayName("a factory built in code with no cadence set emits no setting, leaving ClickHouse's own default")
+    void factoryWithoutCadenceEmitsNoSetting() {
+        // The field carries no initializer, so a factory built in code rather than bound from config leaves it null —
+        // DatabaseAnalyticsModule#buildReadOnlyClient and the suites that call build() directly. What must not happen
+        // is emitting the literal "null" as a setting value, which ClickHouse rejects outright; r2dbcOnlyServerSettings()
+        // emits nothing instead, so the server keeps its own default. Deliberately not factoryWith(), which sets one.
+        var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, "default");
+
+        var actualSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
+
+        assertThat(actualSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "100"));
+    }
+
+    @Test
     @DisplayName("R2DBC connection carries the progress-header cadence that keeps responses under Apache HC's cap")
     void r2dbcConnectionCarriesTheProgressHeaderCadence() {
         var factory = factoryWith(null);
