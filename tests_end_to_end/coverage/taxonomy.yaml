@@ -302,6 +302,16 @@ areas:
       delete-traces:          { covered: true,  tier: t2-cuj, note: "Logs bulk delete; also the span cascade behind it — a 5-deep span chain, asserted gone project-wide rather than only through a filter on the deleted trace_id, against a bystander trace that keeps its own spans, scores and comments" }
       delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table; also the span cascade behind DELETE /v1/private/traces/{id}, same shape as delete-traces" }
       update-trace-api:       { covered: true,  tier: t2-cuj, note: "PATCH /traces/{id} merges into the existing row rather than replacing it with a partial; asserted at the epoch-week, present and ~2201 id ages" }
+      # The SPAN counterpart of update-trace-api, and its own key rather than
+      # part of that one: what a span update has to get right is not what a
+      # trace update has to. `SpanService.update` carries a conflict guard no
+      # trace update has — an update whose `parent_span_id` disagrees with the
+      # stored one is refused with a 409 — and post-cutover (opik#8595) a root
+      # span's absent parent is a sentinel rather than a NULL, so "an update
+      # that says nothing about the parent leaves the root parentless" is a
+      # distinct statement from anything update-trace-api asserts. Not part of
+      # span-tree-expand either: that key is the panel's tree widget.
+      update-span-api:        { covered: false }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----
@@ -706,6 +716,22 @@ areas:
       compare-row-detail:      { covered: true,  tier: t2-cuj, note: "the row-detail panel off the compare grid; also inline images in an item's output, where what is asserted is the MAPPING rather than the render — each [image_N] placeholder in the rendered text resolved to the exact data URL it names, on a mixed png/gif seed whose document order and placeholder order deliberately disagree, plus the panel showing those thumbnails and no others, and a repeated image numbered twice but deduplicated to one tile" }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
+      # Whether a scoring metric in an evaluate() run computes with the LOCALE
+      # it was configured with, and rejects one it cannot honour. Its own
+      # capability rather than part of per-item-scores, which is about scores
+      # reaching an experiment's items and rendering against them — that key is
+      # satisfied by any number at all, whereas this one is about the number
+      # being RIGHT, and its failure mode is silent: before opik#8318 every
+      # Readability locale quietly scored as en_US, so a regression changes
+      # stored score values without any error. Scoped to the metric's own
+      # contract, asserted through the Python SDK: several locales scored in
+      # ONE evaluate() run (which is what reaches textstat's module-wide locale
+      # state from the scoring thread pool) stay distinct from each other AND
+      # equal to their own uncontended sequential score, and an unknown locale
+      # raises a MetricComputationError naming the language instead of pyphen's
+      # bare KeyError. Deliberately NOT asserted on absolute Flesch numbers,
+      # which drift with textstat/pyphen releases.
+      metric-locale-scoring:   { covered: false }
       # Reading an experiment's items back through the Python SDK
       # (`Experiment.get_items()`), as opposed to writing them or reading them
       # through the compare grid. Its own capability rather than part of
@@ -713,6 +739,40 @@ areas:
       # into concurrent paged waves, which is a correctness surface — dropped,
       # duplicated or reordered rows — that no score assertion would reach.
       experiment-item-read:    { covered: true,  tier: t2-cuj }
+      # Walking the compare Results tab's paged read
+      # (GET /v1/private/datasets/{id}/items/experiments/items) across every page
+      # of a large experiment. Its own capability rather than part of
+      # experiment-item-read, whose note scopes that key to the Python SDK's
+      # Experiment.get_items(), and rather than part of compare-side-by-side,
+      # which is about two experiments in one row: what is asserted here is that
+      # consecutive pages are an exact, correctly-paired, correctly-ordered
+      # partition at the SHIPPED DEFAULT page size (2,000) and at a non-zero
+      # OFFSET — the un-aggregated (push_top_limit_raw) branch opik#8575/#8578
+      # rewrote, where a row silently dropped at a page boundary renders as
+      # plausible data on the view people read to pick an experiment.
+      compare-deep-paging:     { covered: false }
+      # The compare grid's LAYOUT, as opposed to the data in it — added for
+      # opik#8510, which pins the experiment-name column beside the select
+      # column. Not part of compare-side-by-side, which is about two experiments
+      # agreeing or disagreeing in one row, and NOT the same thing as the visual
+      # `compare-view` key below: that one is a screenshot baseline owned by the
+      # visual suite, while this is asserted as computed style and geometry — the
+      # Name cells' x unchanged through a horizontal scroll that is itself proven
+      # to have moved the columns, and the inset border drawn by the pinned cell
+      # AND by each sub-row band inside it (main.scss extends the rule to
+      # `.comet-pinned-last-left [data-virtual-row-id]` because an inset shadow
+      # paints beneath its element's children).
+      compare-name-pinning:    { covered: false }
+      # Hovering one experiment's sub-row in the compare grid highlights that
+      # sub-row and not its sibling — the other half of opik#8510, and a
+      # different code path from the pinning above
+      # (`VerticallySplitCellWrapper`'s onMouseEnter/onMouseLeave, driven through
+      # the table's `subRowHighlightColor` meta). Its own key because a reader
+      # can lose track of which experiment a band belongs to either way, but only
+      # one of the two is about scrolling. Asserted as "the hovered band is
+      # painted and the sibling is not", in both directions, rather than against
+      # a literal design token.
+      compare-sub-row-hover:   { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: true,  tier: t2-cuj, note: "browser export off the compare Results tab, asserted on the downloaded file: an unscoped export covers the whole result set untruncated and carries both compared experiments' outputs, filter/search/sort scope and order it, a row selection narrows it and clearing restores it. NOT covered: the over-the-cap disabled state (EXPORT_ROW_LIMIT is 2,000, and seeding past it costs far more than the assertion is worth), and the CSV format — only JSON is read back" }
       delete-experiment:       { covered: true,  tier: t2-cuj }

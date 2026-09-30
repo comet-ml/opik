@@ -14,6 +14,28 @@ const EXPORT_TIMEOUT_MS = 60_000;
 const FILTER_SETTLE_TIMEOUT_MS = 30_000;
 
 /**
+ * How long the grid's own data read may take. Generous because a deep offset
+ * over a large un-aggregated experiment is the slowest shape this endpoint
+ * serves, and because a page load has to get through auth and the bundle first.
+ */
+const GRID_READ_TIMEOUT_MS = 60_000;
+
+/**
+ * How many times a cold load of the compare view may be re-attempted when the
+ * app renders its own failure panel instead of the page.
+ *
+ * Not flake-hiding: the panel means a request the ROUTE depends on (the project
+ * read) was refused, so the grid never mounts and never issues the read this POM
+ * is waiting for — the symptom is a 60s timeout on a request that was never
+ * going to be made. Observed on staging after a spec had just spent its own
+ * budget on a few thousand rows of API reads, i.e. it is the workspace rate
+ * limiter, which is a budget over time and so clears on its own. A reload is the
+ * only remedy from here, and exhausting the attempts still fails the test with
+ * the panel named.
+ */
+const PAGE_LOAD_ATTEMPTS = 3;
+
+/**
  * The compare view lives at /experiments/{datasetId}/compare?experiments=[...]
  * and renders the SAME page in single- and multi-experiment mode. This POM
  * targets multi-experiment (comparison) mode: two experiments over one dataset.
@@ -53,6 +75,210 @@ export class CompareExperimentsPage {
     await test.step('open the compare Feedback scores tab', async () => {
       await this.page.goto(this.compareUrl('scores'));
     });
+  }
+
+  /**
+   * Open the Results tab at an explicit page and page size, and return the read
+   * the grid itself made for it.
+   *
+   * Both params are explicit because neither default is the suite's to assume:
+   * `size` falls back to `ServiceTogglesConfig.defaultPageSize`, a per-deployment
+   * value, so a spec that omitted it would be asserting different pagination
+   * arithmetic on different environments. Both are URL state (`?page=`, `?size=`),
+   * which is why this can be driven by navigation — the same reason
+   * `sortByColumn` does.
+   *
+   * The grid's own response rather than the DOM, because the table is
+   * virtualised: only the rows in the viewport carry a `data-row-id`, so reading
+   * the rendered rows would compare a screenful against a page. The response is
+   * what the page actually received, and comparing it to a direct API read at the
+   * same offset is what catches the front end and the backend disagreeing about
+   * which slice a page is.
+   *
+   * ONLY SAFE FOR PAGE 1 on a cold load. `DataTablePagination` sends the view
+   * back to page 1 whenever `(page - 1) * size > total`, and `total` is still 0
+   * until the row read answers — so a deep offset asked for here is requested
+   * and then abandoned, leaving the footer reading 1-100. Use
+   * `clickLastResultsPage` to reach the end.
+   */
+  async gotoResultsPage(pageNumber: number, size: number): Promise<{ total: number; ids: string[] }> {
+    return test.step(`open the compare Results tab at page ${pageNumber} (size ${size})`, async () => {
+      const url = new URL(this.compareUrl('items'));
+      url.searchParams.set('page', String(pageNumber));
+      url.searchParams.set('size', String(size));
+
+      for (let attempt = 1; ; attempt++) {
+        // The response wait has to be armed BEFORE the navigation, or the answer
+        // can arrive first and the wait then hangs for a request that has already
+        // been served.
+        const settled = this.gridReadFor(pageNumber, size);
+        // The loser of the race below is abandoned; without this its rejection
+        // lands as an unhandled promise and Playwright reports it against
+        // whichever step happens to be open at the time.
+        settled.catch(() => {});
+
+        await this.page.goto(url.toString());
+
+        // Armed only AFTER the navigation, and that ordering is load-bearing on
+        // a retry: the previous attempt's failure panel is still in the DOM until
+        // the new document replaces it, so a wait armed before `goto` would see
+        // the OLD panel, resolve immediately, and spend every remaining attempt
+        // in a few milliseconds without ever giving the reload a chance.
+        // Registering here is safe for the fast case too — a panel already
+        // rendered by the time `goto` resolves satisfies `visible` at once.
+        const failed = this.appFailurePanel.waitFor({
+          state: 'visible',
+          timeout: GRID_READ_TIMEOUT_MS,
+        });
+        failed.catch(() => {});
+
+        const outcome = await Promise.race([
+          settled.then((response) => ({ kind: 'read' as const, response })),
+          failed.then(() => ({ kind: 'failed' as const })),
+        ]);
+
+        if (outcome.kind === 'read') return this.readGridAnswer(outcome.response, pageNumber);
+
+        if (attempt >= PAGE_LOAD_ATTEMPTS) {
+          throw new Error(
+            `CompareExperimentsPage.gotoResultsPage: the app rendered "Something went wrong" ` +
+              `instead of the compare view on all ${attempt} attempts, so the grid never issued ` +
+              `its read of page ${pageNumber}. A request the route depends on is being refused — ` +
+              'check the workspace rate limiter before reading this as a paging defect.',
+          );
+        }
+      }
+    });
+  }
+
+  /** The grid's own data read for one exact offset. */
+  private gridReadFor(pageNumber: number, size: number) {
+    // Matched on parsed params, never a substring: `page=1` occurs inside
+    // `page=10`, and the whole point of this helper is which offset was read.
+    return this.page.waitForResponse((response) => {
+      const requested = new URL(response.url());
+      return (
+        requested.pathname.endsWith('/items/experiments/items') &&
+        requested.searchParams.get('page') === String(pageNumber) &&
+        requested.searchParams.get('size') === String(size) &&
+        response.ok()
+      );
+    }, { timeout: GRID_READ_TIMEOUT_MS });
+  }
+
+  /**
+   * The app's route-level failure card — what renders in place of the page when
+   * a read the route depends on is refused.
+   *
+   * Matched on the heading text because the card carries no `data-testid`; it is
+   * only ever used to decide "the page is not coming", never asserted on, so a
+   * text match is proportionate here.
+   */
+  private get appFailurePanel(): Locator {
+    return this.page.getByRole('heading', { level: 3, name: 'Something went wrong' });
+  }
+
+  /**
+   * The grid's own data response, narrowed to the two fields a paging assertion
+   * reads.
+   *
+   * `total` and `content` are both checked rather than defaulted: a page that
+   * answered without them is indistinguishable from an empty comparison once a
+   * `?? 0` or a `?? []` has been applied, and "the grid received no rows" is
+   * exactly the failure these callers exist to catch.
+   */
+  private async readGridAnswer(
+    response: import('@playwright/test').Response,
+    pageNumber: number,
+  ): Promise<{ total: number; ids: string[] }> {
+    const body: unknown = await response.json();
+    const { total, content } = body as { total?: unknown; content?: unknown };
+    if (typeof total !== 'number') {
+      throw new Error(
+        `CompareExperimentsPage: the grid's read of page ${pageNumber} answered without a total — ` +
+          'cannot tell a complete comparison from a partial one.',
+      );
+    }
+    if (!Array.isArray(content)) {
+      throw new Error(
+        `CompareExperimentsPage: the grid's read of page ${pageNumber} answered with no content ` +
+          `array (got ${typeof content}).`,
+      );
+    }
+    return { total, ids: content.map((row) => String((row as { id: unknown }).id)) };
+  }
+
+  /**
+   * Click through to the last page, and return the read the grid made for it.
+   *
+   * By the control rather than by `?page=`, and NOT as a matter of taste.
+   * `DataTablePagination` runs `if (page !== 1 && (page - 1) * size > total)
+   * pageChange(1)` in an effect that sits above its own `total === 0` early
+   * return, so on a cold document load at a deep offset the row read has not
+   * answered yet, `total` is still 0, and the component sends the view back to
+   * page 1 before the data arrives. The request for the deep page IS issued, so a
+   * spec that waited on the response and then read the footer would be told 1-100
+   * while believing it had jumped to the end. Clicking gets there with `total`
+   * already known, which is also the only way a user reaches it.
+   *
+   * `expectedPage` is passed in rather than read off the control so the wait
+   * pins the offset the caller means; a mismatch fails on the response wait
+   * instead of silently asserting against whatever page was served.
+   */
+  async clickLastResultsPage(
+    expectedPage: number,
+    size: number,
+  ): Promise<{ total: number; ids: string[] }> {
+    return test.step(`jump to the last page (${expectedPage})`, async () => {
+      const button = this.lastPageButton;
+      await expect(button, 'exactly one last-page control').toHaveCount(1);
+      await expect(button, 'last-page control').toBeEnabled();
+
+      const settled = this.gridReadFor(expectedPage, size);
+      await button.click();
+      return this.readGridAnswer(await settled, expectedPage);
+    });
+  }
+
+  /**
+   * Assert the pagination footer reads exactly this.
+   *
+   * The footer is the only place the grid states its own paging arithmetic — the
+   * offset it believes it is at and the total it believes exists — so at a deep
+   * offset it is the user-visible half of "the pages partition the experiment".
+   * Note the asymmetric formatting the component produces: the from-to pair is
+   * raw (`4901-5000`) while the total is localised (`5,000`).
+   *
+   * Addressed by its text. `DataTablePagination` is shared across every table in
+   * the app and carries no `data-testid`, and the footer is a bare `<span>` with
+   * no role or label, so there is nothing more stable to select on. A
+   * `data-testid` belongs on that component — it is not added here for the reason
+   * `exportButton` below gives: these specs run against a pre-built deployment,
+   * where a front-end attribute added alongside them would not exist. The count
+   * assertion keeps the match honest — the sibling "Rows per page:" span has the
+   * same class, and a second paginator on the page would be a real ambiguity
+   * rather than something to silently take the first of.
+   */
+  async expectPaginationFooter(expected: string): Promise<void> {
+    await test.step(`the pagination footer reads "${expected}"`, async () => {
+      const footer = this.paginationFooter;
+      await expect(footer, 'exactly one pagination footer').toHaveCount(1);
+      await expect(footer, 'pagination footer').toHaveText(expected);
+    });
+  }
+
+  private get paginationFooter(): Locator {
+    return this.page.locator('span.comet-body-s').filter({ hasText: /^Showing / });
+  }
+
+  /**
+   * The "jump to last page" control — icon-only, no accessible name and no
+   * `data-testid`, so it is addressed by its Lucide icon class, the same idiom
+   * `exportButton` and `filtersButton` below already use for this shared
+   * component. Callers assert `toHaveCount(1)` before clicking.
+   */
+  private get lastPageButton(): Locator {
+    return this.page.locator('button:has(svg.lucide-chevron-last)');
   }
 
   async waitForResultsReady(): Promise<void> {
@@ -474,6 +700,277 @@ export class CompareExperimentsPage {
         );
       }
       return parsed as Record<string, unknown>[];
+    });
+  }
+
+  /**
+   * A row's Name cell — the experiment-name column, pinned left since opik#8510.
+   *
+   * `experiment_name` is the column id `ExperimentItemsTab` pins alongside
+   * `select`, so this is also the cell that carries `comet-pinned-last-left`.
+   */
+  experimentNameCell(datasetItemId: string): Locator {
+    return this.page.locator(`td[data-cell-id="${datasetItemId}_experiment_name"]`);
+  }
+
+  /**
+   * Every cell the table marks as the LAST left-pinned one — the column that has
+   * to draw the border separating the frozen columns from the scrolling ones.
+   *
+   * By the class rather than a geometric guess, because the class IS the
+   * contract: `getCommonPinningClasses` stamps `comet-pinned-last-left` on
+   * whichever pinned column is last, and `main.scss` hangs the inset box-shadow
+   * off it. Header row included, which is why callers assert a count of rows + 1.
+   */
+  get pinnedLastLeftCells(): Locator {
+    return this.page.locator('.comet-pinned-last-left');
+  }
+
+  /**
+   * The left edge of each named row's Name cell, in viewport coordinates.
+   *
+   * The left edge and not the whole box: width and height move with the row
+   * height and the column resizer, and neither is what pinning is about — a
+   * sticky column is one whose x does not change when the grid scrolls under it.
+   */
+  async readNameCellLeftEdges(datasetItemIds: string[]): Promise<number[]> {
+    return test.step('read the Name cells\' left edges', async () => {
+      const edges: number[] = [];
+      for (const id of datasetItemIds) {
+        const cell = this.experimentNameCell(id);
+        await expect(cell, `exactly one Name cell for row ${id}`).toHaveCount(1);
+        const box = await cell.boundingBox();
+        if (box === null) {
+          throw new Error(
+            `CompareExperimentsPage.readNameCellLeftEdges: the Name cell for row ${id} has no ` +
+              'layout box, so it is not rendered — there is no pinning to assert.',
+          );
+        }
+        edges.push(box.x);
+      }
+      return edges;
+    });
+  }
+
+  /**
+   * The column ids whose header is currently inside the grid's horizontal
+   * viewport, in document order.
+   *
+   * This is how a scroll is PROVEN rather than assumed. Asserting the Name cells
+   * held their x is vacuous on a grid that never moved — and a grid narrower
+   * than its container, or one whose columns all fit, never moves. Comparing the
+   * set of headers on screen before and after says the columns really slid past.
+   *
+   * A header counts as on screen when it overlaps the scroll container's own box,
+   * not the window's: the container is what scrolls, and the pinned columns sit
+   * inside it.
+   */
+  async readHeaderIdsInView(): Promise<string[]> {
+    return test.step('read the column headers currently in view', async () => {
+      const wrapper = this.gridWrapper;
+      await expect(wrapper, 'exactly one grid table wrapper').toHaveCount(1);
+      return wrapper.evaluate((el) => {
+        const scroller = findHorizontalScroller(el);
+        const bounds = scroller.getBoundingClientRect();
+        return Array.from(el.querySelectorAll<HTMLElement>('th[data-header-id]'))
+          .filter((header) => {
+            const box = header.getBoundingClientRect();
+            return box.width > 0 && box.right > bounds.left && box.left < bounds.right;
+          })
+          .map((header) => header.getAttribute('data-header-id') ?? '');
+
+        function findHorizontalScroller(from: Element): Element {
+          for (let node: Element | null = from.parentElement; node; node = node.parentElement) {
+            if (node.scrollWidth > node.clientWidth) return node;
+          }
+          throw new Error(
+            'CompareExperimentsPage: no horizontally scrollable ancestor above ' +
+              '[data-table-wrapper] — the grid has no overflow, so there is no scroll to drive.',
+          );
+        }
+      });
+    });
+  }
+
+  /**
+   * Scroll the grid all the way right, and report how far it actually went.
+   *
+   * Anchored on `[data-table-wrapper]` — the attribute
+   * `PageBodyStickyTableWrapper` sets, already the estate's handle for this grid
+   * (see `PlaygroundPage.hasBlankBandAboveRows`) — and then resolved to whichever
+   * ancestor actually overflows. The compare grid does NOT scroll inside a
+   * wrapper of its own: it is laid out `min-w-fit` and the whole PAGE BODY
+   * scrolls around it, and that container is an unlabelled `div`. Walking up to
+   * the first ancestor whose `scrollWidth` exceeds its `clientWidth` names it by
+   * the property under test instead of by a structural path that would break the
+   * next time the layout gains a wrapper.
+   *
+   * Driven by assigning `scrollLeft` rather than a wheel gesture: a wheel event
+   * has to land on the right element and its delta is a guess at how far the
+   * columns extend, whereas `scrollWidth` is the answer. The returned distance
+   * lets the caller fail loudly when the grid had nothing to scroll — which is
+   * the one way the pinning assertion could pass while testing nothing.
+   */
+  async scrollGridToEnd(): Promise<number> {
+    return test.step('scroll the grid to its right-hand end', async () => {
+      const wrapper = this.gridWrapper;
+      await expect(wrapper, 'exactly one grid table wrapper').toHaveCount(1);
+      const scrolled = await wrapper.evaluate((el) => {
+        for (let node = el.parentElement; node !== null; node = node.parentElement) {
+          if (node.scrollWidth > node.clientWidth) {
+            node.scrollLeft = node.scrollWidth;
+            return node.scrollLeft;
+          }
+        }
+        return 0;
+      });
+      if (scrolled > 0) {
+        // The assignment lands synchronously, but the page body's own
+        // `data-scrolled-right` flag — and with it the sticky columns' settled
+        // paint — is toggled in a requestAnimationFrame callback. Waiting on the
+        // flag is what keeps the geometry read below out of the same frame as the
+        // scroll.
+        await expect(
+          this.page.locator('[data-scrolled-right]'),
+          'the page body reports itself scrolled right',
+        ).toHaveCount(1);
+      }
+      return scrolled;
+    });
+  }
+
+  /** The grid's own wrapper element, inside whichever container scrolls it. */
+  private get gridWrapper(): Locator {
+    return this.page.locator('[data-table-wrapper]');
+  }
+
+  /**
+   * One experiment's band inside a row, as a public handle — the element
+   * `VerticallySplitCellWrapper` paints on hover.
+   *
+   * `columnId` defaults to the pinned Name column because that is where a
+   * reader's eye is when they hover a sub-row, and it is the cell whose border
+   * the hover background could paint over.
+   */
+  subRow(datasetItemId: string, experimentIndex: number, columnId = 'experiment_name'): Locator {
+    return this.splitBand(datasetItemId, experimentIndex, columnId);
+  }
+
+  /**
+   * Hover one experiment's sub-row and report the background colour of every
+   * band in the same cell, indexed by experiment position.
+   *
+   * Both at once because isolation is a comparison: the hovered band lighting up
+   * is only interesting next to a sibling that did not. Read as the COMPUTED
+   * style rather than the inline one the handler writes, so a value the browser
+   * refused (a bad custom property, say) fails here instead of being read back
+   * out of the attribute that set it.
+   */
+  async hoverSubRowAndReadBandColours(
+    datasetItemId: string,
+    experimentIndex: number,
+    experimentCount: number,
+  ): Promise<string[]> {
+    return test.step(
+      `hover sub-row #${experimentIndex} of row ${datasetItemId} and read every band's background`,
+      async () => {
+        const hovered = this.subRow(datasetItemId, experimentIndex);
+        await expect(hovered, `sub-row #${experimentIndex} of row ${datasetItemId}`).toHaveCount(1);
+        await hovered.hover();
+
+        const colours: string[] = [];
+        for (let index = 0; index < experimentCount; index++) {
+          const band = this.subRow(datasetItemId, index);
+          await expect(band, `sub-row #${index} of row ${datasetItemId}`).toHaveCount(1);
+          colours.push(
+            await band.evaluate((el) => getComputedStyle(el).backgroundColor),
+          );
+        }
+        return colours;
+      },
+    );
+  }
+
+  /**
+   * The computed `box-shadow` of a row's pinned Name cell AND of each
+   * experiment band inside it.
+   *
+   * Both, because the border they draw is the same border and only one of them
+   * is new. The `td` has carried the inset shadow since pinning existed; opik#8510
+   * extends the rule to `.comet-pinned-last-left [data-virtual-row-id]` as well,
+   * because an inset shadow paints BENEATH its element's children — so a hovered
+   * band with a background of its own would cover the cell's border unless the
+   * band draws one too. Reading only the `td` would assert the half that never
+   * changed.
+   */
+  async readNameCellBorders(
+    datasetItemId: string,
+    experimentCount: number,
+  ): Promise<{ cell: string; bands: string[] }> {
+    return test.step(`read the pinned Name column's borders for row ${datasetItemId}`, async () => {
+      const cell = this.experimentNameCell(datasetItemId);
+      await expect(cell, `exactly one Name cell for row ${datasetItemId}`).toHaveCount(1);
+      const bands: string[] = [];
+      for (let index = 0; index < experimentCount; index++) {
+        const band = this.subRow(datasetItemId, index);
+        await expect(band, `sub-row #${index} of row ${datasetItemId}`).toHaveCount(1);
+        bands.push(await band.evaluate((el) => getComputedStyle(el).boxShadow));
+      }
+      return {
+        cell: await cell.evaluate((el) => getComputedStyle(el).boxShadow),
+        bands,
+      };
+    });
+  }
+
+  /**
+   * Every metric that has a feedback-score COLUMN on the Results grid, in
+   * document order.
+   *
+   * Read off the headers rather than the cells because "the column exists" is
+   * the claim — a run whose metrics all wrote under one name, or under a name
+   * nobody expected, differs from a correct one by which columns are here, not
+   * by what any single cell holds.
+   */
+  async scoreColumnMetricNames(): Promise<string[]> {
+    return test.step('read the feedback-score column headers', async () => {
+      const prefix = 'feedback_scores_';
+      const ids = await this.page
+        .locator(`th[data-header-id^="${prefix}"]`)
+        .evaluateAll((headers) =>
+          headers.map((h) => h.getAttribute('data-header-id') ?? ''),
+        );
+      return ids.map((id) => id.slice(prefix.length));
+    });
+  }
+
+  /**
+   * One metric's score for one dataset item, in SINGLE-experiment mode.
+   *
+   * Separate from `readItemScore`, which addresses a vertically-split band and
+   * so only exists when two or more experiments share a row. With one
+   * experiment the grid renders an ordinary cell and there is no band to index.
+   *
+   * Counted rather than waited for visible, the way `readDatasetCellText` is:
+   * the grid scrolls horizontally, so a column further right than the viewport
+   * is in the DOM and correct while never being `toBeVisible()`. Requiring
+   * visibility here would fail on column position rather than on the score.
+   */
+  async readSingleExperimentItemScore(datasetItemId: string, metricName: string): Promise<number> {
+    return test.step(`read ${metricName} for item ${datasetItemId}`, async () => {
+      const cell = this.page.locator(
+        `td[data-cell-id="${datasetItemId}_feedback_scores_${metricName}"]`,
+      );
+      await expect(cell, `"${metricName}" score cell for item ${datasetItemId}`).toHaveCount(1);
+      const text = ((await cell.textContent()) ?? '').trim();
+      const value = parseFloat(text);
+      if (Number.isNaN(value)) {
+        throw new Error(
+          `CompareExperimentsPage.readSingleExperimentItemScore: could not parse "${text}" ` +
+            `as ${metricName} for item ${datasetItemId}`,
+        );
+      }
+      return value;
     });
   }
 
