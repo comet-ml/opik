@@ -260,15 +260,16 @@ def test_geval_conversation_metric_image_only_final_turn_grades_the_earlier_answ
     assert result.scoring_failed is False
 
 
-def test_geval_conversation_metric_none_content_marks_failed_without_raising():
+def test_geval_conversation_metric_trailing_none_turn_is_skipped_and_earlier_answer_graded():
     """``None`` content is an empty turn, not a shape this adapter cannot read.
 
     ``create_conversation_from_traces`` keeps a turn whose output transform returned
     ``None``, so a conversation can carry an assistant message with no content at all.
     Reaching ``.strip()`` on it raises ``AttributeError`` before ``score()`` reaches its
     own ``MetricComputationError`` handling, so the caller sees a traceback instead of
-    the documented failed ``ScoreResult``. Treating it as the empty turn it is lets the
-    metric skip it the same way it skips whitespace-only content.
+    a score at all. Treating it as the empty turn it is lets the metric skip it the
+    same way it skips whitespace-only content, so the answer before it is graded and
+    the result is an ordinary successful one.
     """
     judge = RecordingJudge()
     metric = GEvalConversationMetric(judge=judge, name="conversation_stub")
@@ -281,6 +282,9 @@ def test_geval_conversation_metric_none_content_marks_failed_without_raising():
     result = metric.score(conversation)
 
     assert judge.received == ["gradeable answer"]
+    assert result.name == "conversation_stub"
+    assert result.value == 0.8
+    assert result.reason == "ok"
     assert result.scoring_failed is False
 
 
