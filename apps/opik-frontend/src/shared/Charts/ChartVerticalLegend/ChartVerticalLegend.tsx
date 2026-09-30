@@ -2,6 +2,7 @@ import React from "react";
 import * as RechartsPrimitive from "recharts";
 import { OnChangeFn } from "@/types/shared";
 import { useChart } from "@/ui/chart";
+import { cn } from "@/lib/utils";
 import LegendItem from "@/shared/Charts/LegendItem/LegendItem";
 import type { LegendLabelAction } from "@/shared/Charts/LegendItem/LegendItem";
 
@@ -35,7 +36,18 @@ const ChartVerticalLegend = React.forwardRef<
   return (
     <div
       ref={ref}
-      className="comet-hover-scrollbar group -mt-2.5 flex max-h-full w-full flex-col items-start gap-1 overflow-x-hidden"
+      className={cn(
+        "group -mt-2.5 flex max-h-full w-full flex-col items-start gap-1 overflow-y-auto overflow-x-hidden",
+        // The scrollbar is shown only while the legend or an ancestor `group/chart` is hovered.
+        // It always exists so nothing reflows; hiding goes through the container's visibility
+        // because Safari doesn't repaint scrollbar pseudo-elements on :hover (it stays hidden there).
+        "[&>*]:visible [@media(hover:hover)]:invisible group-hover/chart:visible hover:visible",
+        // `!` beats the theme-wide .dark / .comet-custom-scrollbar 16px scrollbar rules.
+        "[&::-webkit-scrollbar-thumb]:!rounded-full [&::-webkit-scrollbar-thumb]:!border-0 [&::-webkit-scrollbar-thumb]:!bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:!bg-transparent [&::-webkit-scrollbar]:!w-2 [&::-webkit-scrollbar]:!bg-transparent",
+        // Firefox only: in Chrome these standard properties disable the ::-webkit-scrollbar
+        // styling above and fall back to macOS overlay scrollbars.
+        "[@supports(-moz-appearance:none)]:[scrollbar-color:var(--scrollbar-thumb)_transparent] [@supports(-moz-appearance:none)]:[scrollbar-width:thin]",
+      )}
       onMouseLeave={handleMouseLeave}
     >
       {payload.map((item) => {
