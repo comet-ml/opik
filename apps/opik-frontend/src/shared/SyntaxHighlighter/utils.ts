@@ -1,4 +1,4 @@
-import { Document, Scalar, visit } from "yaml";
+import { Document, isScalar, Scalar, visit } from "yaml";
 import { prettifyMessage } from "@/lib/traces";
 import {
   MODE_TYPE,
@@ -42,15 +42,41 @@ const toYaml = (data: object): string => {
   if (data === undefined) return "";
 
   const doc = new Document(data, normalizeLineEndings, YAML_OPTIONS);
+  let lastScalar: Scalar | undefined;
   visit(doc, {
     Scalar(_key, node) {
       if (needsQuotes(node.value)) {
         node.type = Scalar.QUOTE_SINGLE;
       }
+      lastScalar = node;
     },
   });
 
-  return escapeDelAndC1(doc.toString(YAML_OPTIONS)).trim();
+  // Only the document's own final newline is dropped: trimming more would strip
+  // a trailing NBSP or spaces, and when the last value ends in a newline PyYAML
+  // needs the document newline to keep it.
+  const lastValue = lastScalar?.value;
+  const keepFinalNewline =
+    typeof lastValue === "string" && lastValue.endsWith("\n");
+  const render = () => {
+    const yaml = escapeDelAndC1(doc.toString(YAML_OPTIONS));
+    return keepFinalNewline ? yaml : yaml.replace(/\n$/, "");
+  };
+
+  const yaml = render();
+  if (!isScalar(doc.contents) || !/^[|>]/.test(yaml)) return yaml;
+
+  // yaml writes a top-level block scalar unindented, which PyYAML and js-yaml
+  // cannot load. Indent it, unless it carries an indentation indicator, which
+  // parsers read inconsistently at the top level; quote those instead.
+  if (/^[|>][+-]?\n/.test(yaml)) {
+    return yaml
+      .split("\n")
+      .map((line, i) => (i === 0 || line === "" ? line : `  ${line}`))
+      .join("\n");
+  }
+  doc.contents.type = Scalar.QUOTE_DOUBLE;
+  return render();
 };
 
 export const generateSyntaxHighlighterCode = (

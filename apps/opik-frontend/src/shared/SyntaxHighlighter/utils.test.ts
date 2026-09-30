@@ -131,6 +131,52 @@ describe("generateSyntaxHighlighterCode - YAML mode", () => {
       expect(toYaml({ arg: value })).toBe(`arg: "${value}"`);
     },
   );
+
+  it.each([
+    ["an NBSP-only value", { k: NBSP }],
+    ["a trailing NBSP", { k: `text${NBSP}` }],
+    ["trailing spaces on the last line", { k: "line1\ntrailing  \n" }],
+  ])("keeps %s", (_label, data) => {
+    expect(parse(toYaml(data))).toEqual(data);
+  });
+
+  it.each([
+    ["ends in one newline", { k: "a\nb\n" }, "k: |\n  a\n  b\n"],
+    ["ends in several newlines", { k: "a\n\n" }, "k: |+\n  a\n\n"],
+    [
+      "is followed by another key",
+      { k: "a\nb\n", z: 1 },
+      "k: |\n  a\n  b\nz: 1",
+    ],
+  ])(
+    "keeps the newline a last value needs when it %s",
+    (_label, data, expected) => {
+      const result = toYaml(data);
+
+      expect(result).toBe(expected);
+      expect(parse(result)).toEqual(data);
+    },
+  );
+
+  it("indents a top-level multiline string", () => {
+    const value = "You are a helpful assistant.\nAnswer briefly.";
+
+    const result = toYaml(value as unknown as object);
+
+    expect(result).toBe(
+      "|-\n  You are a helpful assistant.\n  Answer briefly.",
+    );
+    expect(parse(result)).toBe(value);
+  });
+
+  it("quotes a top-level string whose first line is indented", () => {
+    const value = "  indented first\nsecond";
+
+    const result = toYaml(value as unknown as object);
+
+    expect(result).toBe('"  indented first\\nsecond"');
+    expect(parse(result)).toBe(value);
+  });
 });
 
 describe("generateSyntaxHighlighterCode - pretty mode YAML fallback", () => {
