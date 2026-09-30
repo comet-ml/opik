@@ -354,9 +354,17 @@ if [[ "$SKIP_AUDITS" != "1" ]]; then
     #
     # `spans_local` is surveyed too, for the one state where `spans` is not the table a driver mutates. This runbook's
     # own wrap is what creates it, so pre-cutover there is no such row; afterwards `spans` is a Distributed routing
-    # definition -- no parts, no key of its own -- and reconcile.sh resolves the shard behind it. Reported as N/A on
-    # the engine rather than as an unpartitioned table, which is the answer its empty `partition_key` would otherwise
-    # produce and the wrong one to act on.
+    # definition -- no parts, no key of its own -- and reconcile.sh resolves the shard behind it. BOTH exemptions below
+    # name `spans` explicitly, because neither is a property of the engine or of the empty key alone:
+    #
+    #   - Distributed is N/A only for `spans`, the one name this runbook ever wraps. A Distributed `spans_local` or
+    #     `spans_local_v2` is a topology nothing here produces, so it is flagged rather than waved through.
+    #   - An empty key is legitimate only for `spans`, the rollback's restored original. On `spans_local` it is the
+    #     silent case worth the most: reconcile.sh resolves the wrapped live table to it, and derive_delete_scope reads
+    #     an empty key as `unbounded` and RETURNS -- no refusal -- so the forward replay would run the very statement
+    #     this scope exists to remove. Post-wrap that shard IS the successor and carries the weekly key; after a stage-C
+    #     rollback it is parked under another name and absent here. There is no state where it is legitimately
+    #     unpartitioned, so the survey says so rather than reporting a healthy estate.
     #
     # Asked here because a MISMATCH is a refusal issued mid-window, and this is a one-line read that moves it to the
     # survey. The likeliest cause is not a schema change but a ClickHouse version serialising the expression
@@ -372,24 +380,29 @@ if [[ "$SKIP_AUDITS" != "1" ]]; then
             engine,
             if(partition_key = '', '<none>', partition_key) AS declared_key,
             multiIf(
+                engine = 'Distributed' AND name = 'spans',
+                    'N/A: the wrapper holds no parts; the drivers derive against the shard it fronts',
                 engine = 'Distributed',
-                    'N/A: a wrapper holds no parts; the drivers derive against the shard it fronts',
+                    'MISMATCH: only the spans name is ever wrapped here, and a Distributed table REJECTS mutations',
                 replaceAll(partition_key, ' ', '')
                     = replaceAll('toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))', ' ', ''),
                     'OK: the replays scope to values this key produces',
-                partition_key = '' AND name != 'spans_local_v2',
+                partition_key = '' AND name = 'spans',
                     'OK: unpartitioned, so its replay renders unbounded (one block number)',
+                partition_key = '' AND name = 'spans_local',
+                    'MISMATCH: the wrapped live shard is unpartitioned, so the forward replay runs UNBOUNDED UNREFUSED',
                 'MISMATCH: the drivers REFUSE rather than scope to a key they cannot reproduce') AS verdict
         FROM system.tables
         WHERE database = currentDatabase() AND name IN ('spans', 'spans_local', 'spans_local_v2')
         ORDER BY name
         FORMAT Vertical"
-    echo "  Expected before the cutover: spans_local_v2 OK on the weekly key, spans OK as <none>. Either row reading"
-    echo "  MISMATCH means a driver will refuse mid-window -- reconcile the derivation in"
+    echo "  Expected before the cutover: spans_local_v2 OK on the weekly key, spans OK as <none>. A MISMATCH on a"
+    echo "  WRONG key means a driver will refuse mid-window -- reconcile the derivation in"
     echo "  000002_delete_partition_scope.sql with the table's actual key BEFORE opening it. A missing spans_local_v2"
     echo "  row means the EXCHANGE has already run, so this audit belongs to a pre-cutover survey only."
     echo "  Re-run on an estate this runbook has already wrapped, spans reads N/A and spans_local carries the key"
-    echo "  that matters -- it is the shard reconcile.sh resolves and mutates."
+    echo "  that matters -- it is the shard reconcile.sh resolves and mutates. A MISMATCH there is the worse kind:"
+    echo "  an unpartitioned shard is not refused, it is replayed UNBOUNDED -- fix the shard before opening a window."
 fi
 
 # Effective COPY throughput. If the caller measured a real one, use it as-is. Otherwise probe READ throughput with an
