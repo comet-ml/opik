@@ -4183,6 +4183,46 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * but a present value that is not an object throws rather than being cast,
      * because the backend types it as a bare `JsonNode`.
      */
+    /**
+     * The `type` of every score an `llm_as_judge` rule declares, in order.
+     *
+     * A sibling of `getLlmJudgeModel` and `getLlmJudgeMessages` rather than a
+     * field on `AutomationRuleDetail`, for the same reason those exist: the
+     * judge shape is specific to one rule type, and widening the shared detail
+     * type with fields only one type carries would make every other caller
+     * handle a `null` it can never see.
+     *
+     * The types are returned rather than the whole schema because what a caller
+     * asks of them is a set membership — a decisions model answers yes/no, so
+     * every entry must be BOOLEAN, and a widened schema is the regression.
+     * Throws rather than returning `[]` when the schema is missing: a rule with
+     * no scores at all is a different failure and must not read as "no
+     * non-BOOLEAN types found".
+     */
+    async getLlmJudgeScoreTypes(ruleId: string): Promise<string[]> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeScoreTypes: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as { type?: string; code?: { schema?: unknown } };
+      if (rule.type !== 'llm_as_judge') {
+        throw new Error(
+          `getLlmJudgeScoreTypes: ${ruleId} is type '${rule.type}', not 'llm_as_judge'`,
+        );
+      }
+      const schema = rule.code?.schema;
+      if (!Array.isArray(schema) || schema.length === 0) {
+        throw new Error(
+          `getLlmJudgeScoreTypes: ${ruleId} returned no code.schema entries: ` +
+            JSON.stringify(rule.code).slice(0, 300),
+        );
+      }
+      return schema.map((entry) => String((entry as { type?: unknown }).type ?? ''));
+    },
+
     async getLlmJudgeModel(ruleId: string): Promise<LlmJudgeModelRef> {
       const { status, message, json } = await rawFetch(
         'GET',
