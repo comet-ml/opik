@@ -297,6 +297,8 @@ def _run_interactive_client_cli(command: List[str]) -> Optional[int]:
         # The terminal is shared with the command, so Ctrl-C in a browser wait
         # reaches this process too. It gives up on the sign-in, not on the run:
         # the server is already registered, and the caller says how to finish.
+        # The newline ends the line the terminal echoed `^C` onto.
+        print()
         return None
 
 

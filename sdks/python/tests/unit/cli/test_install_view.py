@@ -478,7 +478,136 @@ class TestLinks:
 
     def test_trailing_punctuation__stays_out_of_the_link(self, view, monkeypatch):
         """`See <url>.` must not make the full stop part of the address."""
-        linked = view._linkify(f"See {self.URL}.")
+        linked = view._emphasize(f"See {self.URL}.")
 
         spans = [s for s in linked.spans if "link" in str(s.style)]
         assert spans and linked.plain[spans[0].start : spans[0].end] == self.URL
+
+
+@pytest.fixture
+def terminal(monkeypatch):
+    """A recorder that keeps the escapes, so styling can be asserted."""
+    import rich.console
+
+    from opik.cli import install_view as rich_view
+
+    recorder = rich.console.Console(force_terminal=True, width=100)
+    monkeypatch.setattr(rich_view, "console", recorder)
+    return rich_view, recorder
+
+
+class TestWhatToActOnStandsOut:
+    """Links and commands are what the user acts on, so they leave the grey behind."""
+
+    @staticmethod
+    def _styles_at(rendered, fragment):
+        start = rendered.plain.index(fragment)
+        return [
+            str(span.style) for span in rendered.spans if span.start <= start < span.end
+        ]
+
+    def test_a_command_in_backticks__is_set_in_full_weight(self):
+        from opik.cli import install_view as rich_view
+
+        rendered = rich_view._emphasize(
+            "Run `claude mcp login opik-mcp` to finish it.", base="dim"
+        )
+
+        assert rich_view._CODE_STYLE in self._styles_at(rendered, "claude mcp login")
+
+    def test_an_indented_command_line__is_set_in_full_weight(self):
+        from opik.cli import install_view as rich_view
+
+        rendered = rich_view._emphasize(
+            "Name one directly:\n    opik mcp configure --ai-client cursor",
+            base="yellow",
+        )
+
+        assert rich_view._CODE_STYLE in self._styles_at(rendered, "opik mcp configure")
+        assert self._styles_at(rendered, "Name one") == []
+
+    def test_notes__carry_the_emphasis_too(self, terminal):
+        """They were plain grey text, so a command in one looked like prose."""
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.RichInstallView().note("Run `uv tool install opik-mcp==0.2.13`.")
+
+        # Bold in the terminal's own colour, and out of the dim around it.
+        assert "\x1b[1;39m`uv tool install" in capture.get()
+
+
+class TestTheConfigureEnding:
+    @staticmethod
+    def _configured(**overrides):
+        from opik.configurator import configure as opik_configure
+
+        fields = dict(
+            saved=True,
+            config_file=str(pathlib.Path.home() / ".opik.config"),
+            url=None,
+            workspace="acme-ai",
+            project_name="checkout-bot",
+        )
+        fields.update(overrides)
+        return opik_configure.Configured(**fields)
+
+    def test_says_what_was_set_up_row_by_row(self, terminal):
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_configured(self._configured())
+
+        out = capture.get()
+        assert "Opik is configured" in out
+        assert "~/.opik.config" in out
+        assert "acme-ai" in out
+        assert "checkout-bot" in out
+        assert rich_view.PROJECT_NAME_DOCS_URL in out
+
+    def test_nothing_rewritten__says_it_was_already_configured(self, terminal):
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_configured(self._configured(saved=False))
+
+        assert "Opik is already configured" in capture.get()
+
+    def test_no_workspace_to_name__leaves_the_row_out(self, terminal):
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_configured(
+                self._configured(workspace=None, url="http://localhost:5173/")
+            )
+
+        out = capture.get()
+        assert "Workspace" not in out
+        assert "localhost:5173" in out
+
+
+class TestTheSuggestedPrompt:
+    """The prompt is what the user sends or pastes, so it is not grey."""
+
+    PROMPT = "Using the Opik /opik-diagnose skill, give me an overview."
+
+    def test_offer__heads_it_and_sets_it_in_full_weight(self, terminal):
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_handoff_offer(self.PROMPT)
+
+        out = capture.get()
+        assert "Suggested first prompt" in out
+        assert "\x1b[1m" + self.PROMPT in out
+        assert "\x1b[2m" + self.PROMPT not in out
+
+    def test_paste_ending__uses_the_same_block_then_says_what_to_do(self, terminal):
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_prompt_to_paste("Cursor", self.PROMPT)
+
+        out = capture.get()
+        assert out.index("Suggested first prompt") < out.index("Restart")
+        assert "paste the prompt above" in out

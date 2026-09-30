@@ -16,6 +16,7 @@ import rich.console
 from rich import padding, table, text
 
 from opik.cli import selector
+from opik.configurator import configure as opik_configure
 from opik.configurator.mcp import view as mcp_view
 from opik.configurator.skills import install as skills_install
 from opik.configurator.skills import roots as skills_roots
@@ -41,18 +42,39 @@ _URL = re.compile(r"https?://[^\s)\]}>,;\"']+")
 _SENTENCE_END = ".,;:!?"
 
 
-def _linkify(message: str, base: str = "") -> text.Text:
-    """Colour the URLs in a message and make them clickable.
+#: A command or name in backticks, the way messages here quote what to type.
+_CODE_SPAN = re.compile(r"`[^`\n]+`")
 
-    One call covers every terminal. ``rich`` emits the OSC 8 hyperlink only where
-    the terminal advertises support, keeps the colour where it does not, and
-    drops every escape when stdout is not a terminal at all — so a pipe or a CI
-    log still gets the bare URL, unchanged and still copy-pasteable.
+#: A line indented by four spaces, which messages here use for a command or a
+#: config snippet to copy.
+_CODE_LINE = re.compile(r"^ {4}\S.*$", re.MULTILINE)
 
-    The style is applied over a range rather than by splitting the string, so the
+#: What a command looks like against the text around it: full weight, in the
+#: terminal's own colour, so it stands out from both the dim and the yellow.
+_CODE_STYLE = "bold not dim default"
+
+
+def _emphasize(message: str, base: str = "") -> text.Text:
+    """Style a message so the parts to act on stand out from the prose.
+
+    URLs are coloured and made clickable; commands — in backticks, or on a line
+    of their own indented by four spaces — are set in full weight. Everything
+    else keeps ``base``, which is usually dim or yellow, so a line that is mostly
+    context still leads the eye to the link to open or the thing to type.
+
+    ``rich`` emits the OSC 8 hyperlink only where the terminal advertises
+    support, keeps the colour where it does not, and drops every escape when
+    stdout is not a terminal at all — so a pipe or a CI log still gets the text
+    unchanged, backticks and URLs included, and still copy-pasteable.
+
+    Styles are applied over ranges rather than by splitting the string, so the
     surrounding text keeps ``base`` and the message stays one paragraph.
     """
     rendered = text.Text(message, style=base)
+    for pattern in (_CODE_LINE, _CODE_SPAN):
+        for match in pattern.finditer(message):
+            start = match.start() + len(match.group()) - len(match.group().lstrip())
+            rendered.stylize(_CODE_STYLE, start, match.end())
     for match in _URL.finditer(message):
         # Trailing sentence punctuation is not part of the address. It cannot be
         # excluded by the pattern, because a URL is full of dots — so the match
@@ -61,7 +83,9 @@ def _linkify(message: str, base: str = "") -> text.Text:
         while end > match.start() and message[end - 1] in _SENTENCE_END:
             end -= 1
         rendered.stylize(
-            f"bold cyan underline link {message[match.start() : end]}",
+            # `not dim`: a link inside a grey hint is the part to click, and
+            # without it the link inherits the grey along with the rest.
+            f"bold not dim cyan underline link {message[match.start() : end]}",
             match.start(),
             end,
         )
@@ -70,7 +94,56 @@ def _linkify(message: str, base: str = "") -> text.Text:
 
 def render_hint(message: str) -> None:
     """A line pointing somewhere — typically where to get something."""
-    console.print(_linkify(message, base="dim"))
+    console.print(_emphasize(message, base="dim"))
+
+
+def render_configure_hint(message: str) -> None:
+    """A line the configurator says between its questions.
+
+    Indented like the questions it sits among, so a hint reads as belonging to
+    the prompt under it rather than as a stray log line in the margin.
+    """
+    console.print(padding.Padding(_emphasize(message, base="dim"), (0, 0, 0, 2)))
+
+
+def render_configured(configured: opik_configure.Configured) -> None:
+    """How `opik configure` closes: what was set up, and where, at a glance.
+
+    A block rather than the sentence `opik.configure()` logs, which ran the
+    file, the project and a docs link together into one long grey line — the
+    part of the run people most need to find again later, and the easiest to
+    skim past.
+    """
+    console.print()
+    headline = (
+        "Opik is configured" if configured.saved else "Opik is already configured"
+    )
+    console.print(text.Text.assemble(("✓ ", "green bold"), (headline, "bold")))
+
+    grid = table.Table.grid(padding=(0, 2))
+    grid.add_column(style=_KEY_STYLE, no_wrap=True)
+    grid.add_column(overflow="fold")
+    grid.add_row("Config file", _collapse_home(configured.config_file))
+    if configured.url is not None:
+        grid.add_row("Opik", _emphasize(configured.url))
+    if configured.workspace is not None:
+        grid.add_row("Workspace", configured.workspace)
+    grid.add_row("Project", text.Text(configured.project_name, style="bold"))
+    console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
+    console.print(
+        padding.Padding(
+            _emphasize(
+                f"To log to another project: {PROJECT_NAME_DOCS_URL}", base="dim"
+            ),
+            _FIELDS_INDENT,
+        )
+    )
+
+
+#: Where the closing block points for changing the destination project.
+PROJECT_NAME_DOCS_URL = (
+    "https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name"
+)
 
 
 def confirm_default_yes(question: str) -> bool:
@@ -240,12 +313,17 @@ def render_mcp_intro() -> None:
             ("(Recommended)", "green bold"),
         )
     )
+    # Indented with the question under it, so the pitch and the prompt read as
+    # one block under the heading rather than as two unrelated lines.
     console.print(
-        text.Text(
-            "Lets your AI client inspect traces, scan your projects for\n"
-            "issues, debug experiments, and run Opik commands directly from\n"
-            "chat.",
-            style="dim",
+        padding.Padding(
+            text.Text(
+                "Lets your AI client inspect traces, scan your projects for\n"
+                "issues, debug experiments, and run Opik commands directly from\n"
+                "chat.",
+                style="dim",
+            ),
+            (0, 0, 0, 2),
         )
     )
 
@@ -259,9 +337,20 @@ def render_handoff_offer(prompt: str) -> None:
     Printed at all because saying yes sends it — so this is the user's one
     chance to read what they are agreeing to ask.
     """
+    _render_suggested_prompt(prompt)
+
+
+def _render_suggested_prompt(prompt: str) -> None:
+    """The prompt the run ends on, set so that it is actually read.
+
+    Full weight under an orange heading rather than grey: it is the one thing on
+    screen the user either agrees to send or has to paste themselves, and dim
+    text is what people skip. No box around it, because the paste path copies it
+    straight out of the terminal and a border would come along.
+    """
     console.print()
-    console.print(text.Text("Your AI client will be asked:", style="bold"))
-    console.print(padding.Padding(text.Text(prompt, style="dim"), (0, 0, 1, 2)))
+    console.print(text.Text("Suggested first prompt", style=f"bold {OPIK_ORANGE}"))
+    console.print(padding.Padding(text.Text(prompt, style="bold"), (0, 0, 1, 2)))
 
 
 def render_handoff(client_display_name: str) -> None:
@@ -285,9 +374,9 @@ def render_handoff_declined(client_display_name: str) -> None:
     console.print()
     console.print(
         text.Text.assemble(
-            ("Restart ", "dim"),
-            (client_display_name, "dim cyan"),
-            (", then ask it the question above.", "dim"),
+            ("Restart ", "bold"),
+            (client_display_name, "bold cyan"),
+            (", then paste the prompt above.", ""),
         )
     )
 
@@ -299,15 +388,14 @@ def render_prompt_to_paste(client_display_name: str, prompt: str) -> None:
     is printed instead. Worth printing rather than dropping: the prompt is the
     part that turns a configured server into something the user has seen work.
     """
-    console.print()
+    _render_suggested_prompt(prompt)
     console.print(
         text.Text.assemble(
             ("Restart ", "bold"),
             (client_display_name, "bold cyan"),
-            (", then ask it:", "bold"),
+            (", then paste the prompt above into a new chat.", ""),
         )
     )
-    console.print(padding.Padding(text.Text(prompt, style="dim"), (0, 0, 1, 2)))
 
 
 def render_restart_note(mcp_installed: bool) -> None:
@@ -324,27 +412,28 @@ def render_restart_note(mcp_installed: bool) -> None:
     console.print()
     if not mcp_installed:
         console.print(
-            text.Text(
-                "Restart your AI client to pick up the Opik skill pack.",
-                style="dim",
+            text.Text.assemble(
+                ("Restart your AI client", "bold"),
+                (" to pick up the Opik skill pack.", ""),
             )
         )
         return
 
     console.print(
         text.Text.assemble(
-            ("Restart your AI client, then ask it to ", "dim"),
+            ("Restart your AI client", "bold"),
+            (", then ask it to ", ""),
             ('"list my Opik projects via Opik MCP"', "green"),
-            (".", "dim"),
+            (".", ""),
         )
     )
 
 
 def render_note(message: str, hint: Optional[str] = None) -> None:
     """A line the user should notice but does not have to act on, plus its fix."""
-    console.print(text.Text(message, style="yellow"))
+    console.print(_emphasize(message, base="yellow"))
     if hint is not None:
-        console.print(text.Text(hint, style="dim"))
+        console.print(_emphasize(hint, base="dim"))
 
 
 class RichInstallView(mcp_view.InstallView):
@@ -401,7 +490,7 @@ class RichInstallView(mcp_view.InstallView):
                 grid.add_row(
                     text.Text("✗", style="red"),
                     result.display_name,
-                    text.Text(_collapse_home(result.detail), style="yellow"),
+                    _emphasize(_collapse_home(result.detail), base="yellow"),
                 )
         console.print(padding.Padding(grid, (0, 0, 0, 2), expand=False))
 
@@ -419,7 +508,7 @@ class RichInstallView(mcp_view.InstallView):
             row.add_row(
                 text.Text("✗", style="red"),
                 "Not working",
-                text.Text(detail, style="yellow"),
+                _emphasize(detail, base="yellow"),
             )
         console.print(padding.Padding(row, (0, 0, 0, 2), expand=False))
 
@@ -456,12 +545,12 @@ class RichInstallView(mcp_view.InstallView):
 
     def skipped(self, message: str) -> None:
         console.print()
-        console.print(text.Text(message, style="dim"))
+        console.print(_emphasize(message, base="dim"))
         console.print()
 
     def problem(self, message: str) -> None:
         console.print()
-        console.print(_linkify(_collapse_home(message), base="yellow"))
+        console.print(_emphasize(_collapse_home(message), base="yellow"))
         console.print()
 
     def choose_hosts(
@@ -507,7 +596,7 @@ class RichInstallView(mcp_view.InstallView):
         return [chosen]
 
     def note(self, message: str) -> None:
-        console.print(padding.Padding(text.Text(message, style="dim"), (0, 0, 0, 2)))
+        console.print(padding.Padding(_emphasize(message, base="dim"), (0, 0, 0, 2)))
 
 
 def render_skill_pack(

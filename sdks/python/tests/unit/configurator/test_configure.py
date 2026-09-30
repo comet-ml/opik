@@ -17,6 +17,7 @@ from opik.configurator.configure import (
     OPIK_BASE_URL_LOCAL,
     OpikConfigurator,
 )
+from opik.configurator import configure as configure_module
 from opik.exceptions import ConfigurationError
 
 
@@ -2517,3 +2518,79 @@ class TestTheLibraryPathDoesNotTouchAiClients:
             "_skills_host_keys",
         ):
             assert not hasattr(OpikConfigurator, name), name
+
+
+class TestTheEndingIsReported:
+    """`opik configure` draws its own closing block; `opik.configure()` logs.
+
+    The CLI passes `report_configured` and gets the facts to render. Without one,
+    the library keeps the log lines it has always written.
+    """
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch("opik.configurator.configure.opik.config.update_session_config")
+    def test_with_a_reporter__it_gets_what_was_saved_and_nothing_is_logged(
+        self, mock_update_session_config, mock_opik_config
+    ):
+        report = Mock()
+        announce = Mock()
+        configurator = OpikConfigurator(
+            api_key="key",
+            workspace="acme-ai",
+            url="http://example.com",
+            project_name="checkout-bot",
+            announce=announce,
+            report_configured=report,
+        )
+
+        with patch("opik.configurator.configure.LOGGER.info") as log_info:
+            configurator._update_config(save_to_file=True)
+            configurator._log_project_configuration_message()
+
+        report.assert_called_once_with(
+            configure_module.Configured(
+                saved=True,
+                config_file=str(configurator.current_config.config_file_fullpath),
+                url="http://example.com/",
+                workspace="acme-ai",
+                project_name="checkout-bot",
+            )
+        )
+        log_info.assert_not_called()
+        announce.assert_not_called()
+
+    def test_with_a_reporter__cloud_and_the_placeholder_workspace_are_left_out(self):
+        """Neither tells the user anything: Cloud is the default, `default` a placeholder."""
+        report = Mock()
+        configurator = OpikConfigurator(
+            workspace=OPIK_WORKSPACE_DEFAULT_NAME,
+            project_name="checkout-bot",
+            report_configured=report,
+        )
+
+        configurator._log_project_configuration_message()
+
+        configured = report.call_args.args[0]
+        assert configured.saved is False
+        assert configured.url is None
+        assert configured.workspace is None
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch("opik.configurator.configure.opik.config.update_session_config")
+    def test_without_a_reporter__the_library_logs_as_it_always_has(
+        self, mock_update_session_config, mock_opik_config
+    ):
+        announce = Mock()
+        configurator = OpikConfigurator(
+            api_key="key", project_name="checkout-bot", announce=announce
+        )
+
+        with patch("opik.configurator.configure.LOGGER.info") as log_info:
+            configurator._update_config(save_to_file=True)
+            configurator._log_project_configuration_message()
+
+        assert log_info.call_args.args[0] == "Configuration saved to file: %s"
+        assert (
+            "Traces will be logged to 'checkout-bot' project"
+            in (announce.call_args.args[0])
+        )

@@ -1,9 +1,6 @@
 import enum
-import logging
 import sys
 from typing import Optional
-
-LOGGER = logging.getLogger(__name__)
 
 
 def is_interactive() -> bool:
@@ -96,7 +93,9 @@ def ask_user_for_approval(question: str) -> bool:
             return True
         if answer in ("N", "NO"):
             return False
-        LOGGER.error("Wrong choice. Please try again.")
+        # Printed, indented like the question, rather than logged: an `OPIK:`
+        # log line between two copies of a prompt reads as unrelated output.
+        print("  Please answer y or n.")
 
 
 class DeploymentType(enum.Enum):
@@ -161,7 +160,7 @@ def ask_user_for_deployment_type(prompt: Optional[str] = None) -> DeploymentType
         choice_str = input(message_string).strip()
 
         if choice_str not in ("1", "2", "3", ""):
-            LOGGER.error("Wrong choice. Please try again.\n")
+            print("  Please enter 1, 2 or 3.")
             continue
 
         if choice_str == "":

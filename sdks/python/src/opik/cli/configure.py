@@ -230,6 +230,9 @@ def _ask_for_deployment_type() -> interactive_helpers.DeploymentType:
             # prompt this replaces; falling through would re-ask the question
             # the user just backed out of.
             raise click.Abort()
+        # The picker ends on its key legend; the credential questions start a
+        # new block, and without a gap they read as part of the list.
+        click.echo()
         return interactive_helpers.DeploymentType.find_by_value(int(chosen))
 
     # No picker here — a pipe, a CI log, a terminal without raw-mode key reading.
@@ -357,7 +360,8 @@ def run_interactive_configure(
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=record,
-            announce=install_view.render_hint,
+            announce=install_view.render_configure_hint,
+            report_configured=install_view.render_configured,
         ).configure()
         progress.stage = Progress.DONE
         return recorded
@@ -376,7 +380,8 @@ def run_interactive_configure(
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=record,
-            announce=install_view.render_hint,
+            announce=install_view.render_configure_hint,
+            report_configured=install_view.render_configured,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.SELF_HOSTED:
         configurator = opik_configure.OpikConfigurator(
@@ -387,7 +392,8 @@ def run_interactive_configure(
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=record,
-            announce=install_view.render_hint,
+            announce=install_view.render_configure_hint,
+            report_configured=install_view.render_configured,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.LOCAL:
         configurator = opik_configure.OpikConfigurator(
@@ -398,7 +404,8 @@ def run_interactive_configure(
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=record,
-            announce=install_view.render_hint,
+            announce=install_view.render_configure_hint,
+            report_configured=install_view.render_configured,
         )
     else:
         raise click.ClickException("Unknown deployment type was selected. Exiting.")

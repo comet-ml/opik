@@ -95,28 +95,22 @@ class TestAskUserForApproval:
         assert result is False
 
     @patch("builtins.input", side_effect=["INVALID", "Y"])
-    @patch("opik.configurator.interactive_helpers.LOGGER.error")
-    def test_user_enters_invalid_choice_then_approves(
-        self, mock_logger_error, mock_input
-    ):
+    def test_user_enters_invalid_choice_then_approves(self, mock_input, capsys):
         """
-        Test that invalid input triggers error logging and prompts again until valid input is entered.
+        Invalid input is answered in the terminal, like the prompt, and asked again.
         """
         result = ask_user_for_approval("Do you approve?")
         assert result is True
-        mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")
+        assert capsys.readouterr().out == "  Please answer y or n.\n"
 
     @patch("builtins.input", side_effect=["INVALID", "NO"])
-    @patch("opik.configurator.interactive_helpers.LOGGER.error")
-    def test_user_enters_invalid_choice_then_disapproves(
-        self, mock_logger_error, mock_input
-    ):
+    def test_user_enters_invalid_choice_then_disapproves(self, mock_input, capsys):
         """
-        Test that invalid input triggers error logging and prompts again until valid input is entered.
+        Invalid input is answered in the terminal, like the prompt, and asked again.
         """
         result = ask_user_for_approval("Do you disapprove?")
         assert result is False
-        mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")
+        assert capsys.readouterr().out == "  Please answer y or n.\n"
 
 
 class TestTheQuestionIsWordedHere:
