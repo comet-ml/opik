@@ -11,17 +11,14 @@ import { TooltipProvider } from "@/ui/tooltip";
 import { PostHogProvider } from "posthog-js/react";
 import posthog from "posthog-js";
 import DatasetExportPanel from "@/v2/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel";
+import { QUERY_CLIENT_DEFAULT_OPTIONS } from "@/api/queryRetry";
 import {
   TOOLTIP_DELAY_DURATION,
   TOOLTIP_SKIP_DELAY_DURATION,
 } from "@/constants/shared";
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: false,
-    },
-  },
+  defaultOptions: QUERY_CLIENT_DEFAULT_OPTIONS,
 });
 
 function App() {
