@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { chalkStderr as chalk } from "chalk";
 
 import { createReporter, LAUNCHER, LAUNCHER_ENV_VAR } from "./analytics";
 import { findUv } from "./uv";
@@ -28,10 +29,20 @@ async function main(): Promise<number> {
   });
 
   if (uv === undefined) {
+    // `chalkStderr` rather than `chalk`: this message goes to stderr, and that
+    // is the stream whose colour support decides. Piped or NO_COLOR, it comes
+    // out as plain text on its own.
+    // Blank lines above and below, a marker, and an indented body: this lands in
+    // the middle of npm's own install chatter, which it has to be legible
+    // against even where nothing is coloured. The `✗` matches what the Python
+    // CLI marks a failure with.
     process.stderr.write(
-      "The Opik MCP runs through uv, which is not installed on this machine.\n\n" +
-        `How to install uv: ${UV_DOCS_URL}\n\n` +
-        "Once it is installed, re-run this command.\n",
+      "\n" +
+        `${chalk.red("✗")} ${chalk.bold(
+          "The Opik MCP configuration requires uv, which is not installed on this machine.",
+        )}\n\n` +
+        `  How to install uv: ${chalk.cyan.underline(UV_DOCS_URL)}\n\n` +
+        "  Once it is installed, re-run this command.\n\n",
     );
     // Separate from the detection above, which says what this machine has:
     // this says the user was sent to the docs instead of getting a setup.
@@ -54,7 +65,9 @@ async function main(): Promise<number> {
   });
 
   if (result.error !== undefined) {
-    process.stderr.write(`Could not run uv: ${result.error.message}\n`);
+    process.stderr.write(
+      chalk.red(`Could not run uv: ${result.error.message}`) + "\n",
+    );
     return 1;
   }
 
