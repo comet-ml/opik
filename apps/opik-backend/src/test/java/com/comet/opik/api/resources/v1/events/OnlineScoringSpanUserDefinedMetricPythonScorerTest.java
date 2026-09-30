@@ -352,8 +352,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                     eq("spanId"),
                     eq(spanId),
                     eq(ruleName),
-                    eq("'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'"),
-                    eq("spanId"));
+                    eq("'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'"));
             verify(feedbackScoreService, never()).scoreBatchOfSpans(anyList());
         }
 

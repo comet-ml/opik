@@ -1530,7 +1530,12 @@ public class OnlineScoringEngine {
      * here, so the rule's own log names the arguments that need fixing.
      *
      * <p>Only argument names and the paths the user configured are logged — never resolved values —
-     * so this adds no trace content to either sink.
+     * so this adds no trace content to either sink. Reaching this method at all means every declared
+     * argument was a path into {@code input}/{@code output}/{@code metadata}: {@link #toVariableMapping}
+     * treats any other value as a literal, and a literal always resolves, so one would have left the
+     * map non-empty and this branch unreachable. Paths are still rule configuration the user controls,
+     * so they get the same {@link #sanitize} treatment as judge-supplied text — a newline must not
+     * forge an entry in the persisted log, nor one rule decide how much this path carries.
      */
     public static void logUnresolvedEvaluatorArguments(
             @NonNull Logger userFacingLogger,
@@ -1540,22 +1545,33 @@ public class OnlineScoringEngine {
             @NonNull Object entityId,
             String ruleName,
             @NonNull Map<String, String> declaredArguments) {
-        var arguments = declaredArguments.isEmpty()
-                ? "none declared"
-                : declaredArguments.entrySet().stream()
-                        .sorted(Map.Entry.comparingByKey())
-                        .map(argument -> "'%s' -> '%s'".formatted(argument.getKey(), argument.getValue()))
-                        .collect(Collectors.joining(", "));
+        // Each half is sanitized separately rather than the rendered pair: capping the pair as one
+        // unit would let a long name crowd out the path, which is the actionable half.
+        var reported = declaredArguments.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(MAX_REPORTED_FIELD_NAMES)
+                .map(argument -> "'%s' -> '%s'".formatted(sanitize(argument.getKey()), sanitize(argument.getValue())))
+                .toList();
+        var omitted = declaredArguments.size() - reported.size();
+        var arguments = reported.isEmpty()
+                ? "(none declared)"
+                : renderPairs(reported, omitted);
         try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
             userFacingLogger.warn(
                     "Not scoring {} '{}' with rule '{}': none of the metric's declared arguments resolved, so there"
                             + " is no data to evaluate. Unresolved arguments: {}. Check these against the input,"
-                            + " output and metadata actually present on the {}.",
-                    entityLabel, entityId, ruleName, arguments, entityLabel);
+                            + " output and metadata actually present.",
+                    entityLabel, entityId, sanitize(String.valueOf(ruleName)), arguments);
         }
         internalLogger.warn(
                 "Not scoring {} '{}' with rule '{}': none of the declared arguments resolved, unresolved: {}",
-                entityLabel, entityId, ruleName, arguments);
+                entityLabel, entityId, sanitize(String.valueOf(ruleName)), arguments);
+    }
+
+    /** Mirrors {@link #renderNames}' "and N more" shape for entries that carry their own quoting. */
+    private static String renderPairs(List<String> pairs, int omitted) {
+        var shown = String.join(", ", pairs);
+        return omitted == 0 ? shown : "%s and %,d more".formatted(shown, omitted);
     }
 
     /**

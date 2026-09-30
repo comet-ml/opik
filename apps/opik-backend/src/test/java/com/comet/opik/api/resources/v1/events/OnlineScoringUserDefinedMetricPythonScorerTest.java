@@ -37,6 +37,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode;
@@ -345,9 +347,52 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     eq("traceId"),
                     eq(traceId),
                     eq(ruleName),
-                    eq("'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'"),
-                    eq("traceId"));
+                    eq("'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'"));
             verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+        }
+
+        @Test
+        void sanitisesAndCapsTheArgumentsItReports() {
+            // Argument names and paths are rule configuration the user controls, and this line persists in
+            // automation_rule_evaluator_logs.message. A newline must not forge an entry there, and one long
+            // value must not flood it — same treatment the judge-supplied names in this file already get.
+            var longPath = "input." + RandomStringUtils.secure().nextAlphanumeric(200);
+            var message = sampleMessageWithArguments(Map.of(
+                    "a_newline", "input.first\nWARN forged entry",
+                    "b_long", longPath));
+
+            scorer.score(message).block();
+
+            var reported = ArgumentCaptor.forClass(String.class);
+            verify(userFacingLogger).warn(
+                    contains("none of the metric's declared arguments resolved"),
+                    eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
+
+            assertThat(reported.getValue())
+                    .doesNotContain("\n")
+                    .contains("'a_newline' -> 'input.first WARN forged entry'")
+                    .contains("'b_long' -> '%s…'".formatted(longPath.substring(0, 100)));
+        }
+
+        @Test
+        void capsHowManyArgumentsItReports() {
+            // The count comes from the rule, so one rule would otherwise decide how much this path carries.
+            var arguments = IntStream.range(0, 13).boxed()
+                    .collect(Collectors.toMap("arg_%02d"::formatted, index -> "input.absent_%02d".formatted(index)));
+            var message = sampleMessageWithArguments(arguments);
+
+            scorer.score(message).block();
+
+            var reported = ArgumentCaptor.forClass(String.class);
+            verify(userFacingLogger).warn(
+                    contains("none of the metric's declared arguments resolved"),
+                    eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
+
+            assertThat(reported.getValue())
+                    .startsWith("'arg_00' -> 'input.absent_00', ")
+                    .contains("'arg_09' -> 'input.absent_09'")
+                    .doesNotContain("arg_10")
+                    .endsWith(" and 3 more");
         }
 
         @Test
