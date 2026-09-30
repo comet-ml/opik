@@ -16,6 +16,7 @@ import { TraceFeedbackScore } from "@/types/traces";
 import { ExperimentItem } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
+import { useToast } from "@/ui/use-toast";
 import { traceExist, traceVisible } from "@/lib/traces";
 import ExperimentCommentsViewer from "./DataTab/ExperimentCommentsViewer";
 import { CommentItems } from "@/types/comment";
@@ -49,6 +50,14 @@ const CompareExperimentsViewer: React.FunctionComponent<
     traceId: experimentItem.trace_id,
     projectId: data?.project_id,
   });
+
+  const { toast } = useToast();
+
+  const onChangeApplied = () =>
+    toast({
+      title: "Changes saved",
+      description: "The results table will reflect them within a minute.",
+    });
 
   const { data: trace } = useTraceById(
     {
@@ -153,6 +162,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
               feedbackScores={feedbackScores}
               traceId={experimentItem.trace_id as string}
               sectionIdx={sectionIdx}
+              onChangeApplied={onChangeApplied}
             />
           </div>
 
@@ -161,6 +171,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
               comments={comments}
               traceId={experimentItem.trace_id as string}
               sectionIdx={sectionIdx}
+              onChangeApplied={onChangeApplied}
             />
           </div>
         </div>
