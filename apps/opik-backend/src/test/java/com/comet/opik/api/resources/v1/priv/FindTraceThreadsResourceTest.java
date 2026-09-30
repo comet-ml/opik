@@ -102,6 +102,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 @DisplayName("Find Trace Threads  Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1223,8 +1224,8 @@ class FindTraceThreadsResourceTest {
         }
 
         @Test
-        @DisplayName("When a thread has a trace with the epoch sentinel start time, then start, end and duration skip that trace")
-        void whenThreadHasSentinelStartTrace__thenStartEndAndDurationSkipIt() {
+        @DisplayName("When a thread has a trace with the epoch sentinel start time, then start, end, duration and messages skip that trace")
+        void whenThreadHasSentinelStartTrace__thenStartEndDurationAndMessagesSkipIt() {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var threadId = UUID.randomUUID().toString();
             var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
@@ -1254,12 +1255,56 @@ class FindTraceThreadsResourceTest {
                     .endTime(realTrace.endTime())
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(realTrace.startTime(),
                             realTrace.endTime()))
+                    .firstMessage(realTrace.input())
+                    .lastMessage(realTrace.output())
                     .build();
 
             assertThreadPage(projectName, null, List.of(expectedThread), List.of(), Map.of(), API_KEY,
                     TEST_WORKSPACE);
             TraceAssertions.assertThreads(List.of(expectedThread),
                     List.of(traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE)));
+        }
+
+        @ParameterizedTest(name = "truncate={0}")
+        @ValueSource(booleans = {false, true})
+        @DisplayName("When an update-before-create placeholder trace joins a thread after a real trace, then the first message is the real trace's input")
+        void whenPlaceholderTraceJoinsThreadAfterRealTrace__thenFirstMessageIsRealTraceInput(boolean truncate) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+            var realTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(250, ChronoUnit.MILLIS))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(realTrace), API_KEY, TEST_WORKSPACE);
+
+            var placeholderTraceId = idGenerator.generateId(ranAt.plusMillis(1));
+            traceResourceClient.updateTrace(placeholderTraceId, TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var placeholderTrace = traceResourceClient.getById(placeholderTraceId, TEST_WORKSPACE, API_KEY);
+
+            assertThat(placeholderTrace).extracting(Trace::startTime, Trace::input).containsExactly(Instant.EPOCH,
+                    null);
+
+            var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, List.of(),
+                    List.of(), Map.of("truncate", String.valueOf(truncate)));
+            var thread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY, TEST_WORKSPACE);
+
+            assertThat(Stream.concat(page.content().stream(), Stream.of(thread)))
+                    .extracting(TraceThread::id, TraceThread::startTime, TraceThread::numberOfMessages,
+                            TraceThread::firstMessage, TraceThread::lastMessage)
+                    .containsExactly(
+                            tuple(threadId, realTrace.startTime(), 4L, realTrace.input(), realTrace.output()),
+                            tuple(threadId, realTrace.startTime(), 4L, realTrace.input(), realTrace.output()));
         }
 
         @ParameterizedTest
