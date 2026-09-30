@@ -1230,19 +1230,37 @@ class SpansLocalV2CutoverTest {
      * An id at or past the {@code DateTime64} ceiling has no partition this can derive exactly — the column saturates
      * rather than wrapping — so the WHOLE batch falls back to a single unbounded statement. All-or-nothing, never per
      * id: a scope covering only the derivable ids is a scope the rest of the batch's rows are not in.
+     * <p>
+     * The past-ceiling span is really seeded and really replayed, so the final assertion covers the fallback WORKING
+     * and not merely being chosen. It has to be, because saturation makes the two sides disagree: the stored week
+     * comes from the instant the id itself clamps to, the derivation's from the instant its raw SECOND count clamps
+     * to, and those are different points inside the last representable day. They land in the same week here only by
+     * where this server happens to clamp — which is what "the value stops being a function of the id" means, and why
+     * an underivable id is refused rather than approximated.
      */
     @Test
     void anIdPastTheDateTime64CeilingSendsTheWholeBatchToOneUnboundedStatement() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
 
-        var spans = mintIdsInWeek(0, 2);
+        var spans = new ArrayList<>(mintIdsInWeek(0, 2));
+        spans.add(SeededSpan.builder()
+                .id(UUID.fromString(PAST_CEILING_ID))
+                .traceId(ID_GENERATOR.generateId(weekInstant(0, 1)))
+                .createdAt(weekInstant(0, 1))
+                .build());
         seedSpans(spans, workspaceId, projectId);
         var backfillStart = nowMicros();
         backfillWeek(0);
-        var deleted = union(idStrings(spans), Set.of(PAST_CEILING_ID));
+        var deleted = idStrings(spans);
+
+        assertThat(liveCount("spans_local_v2", deleted, workspaceId))
+                .as("the backfill really carried the past-ceiling row across; without it the post-replay assertion "
+                        + "below would hold for a row that was never there")
+                .isEqualTo(spans.size());
+
         recordDeletionEvents(deleted, workspaceId, projectId.toString(), "cascade");
-        lightweightDeleteScoped(idStrings(spans), workspaceId, projectId);
+        lightweightDeleteScoped(deleted, workspaceId, projectId);
 
         var scope = deletePartitionScope(backfillStart);
         assertThat(scope.underivable()).isEqualTo(1L);
@@ -1252,8 +1270,9 @@ class SpansLocalV2CutoverTest {
 
         replayDeletions(backfillStart);
 
-        assertThat(liveCount("spans_local_v2", idStrings(spans), workspaceId))
-                .as("the fallback is the correct form, not merely the single one")
+        assertThat(liveCount("spans_local_v2", deleted, workspaceId))
+                .as("every id the batch carried is masked, the past-ceiling one included — the fallback is the "
+                        + "correct form, not merely the single one")
                 .isZero();
     }
 
