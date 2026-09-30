@@ -7,6 +7,7 @@ import {
   DateRangeSerializedValue,
 } from "@/shared/DateRangeSelect";
 import dayjs from "dayjs";
+import isEqual from "lodash/isEqual";
 import {
   DATE_RANGE_PRESET_ALLTIME,
   DEFAULT_DATE_PRESET,
@@ -118,6 +119,32 @@ export const calculateIntervalStartAndEnd = (
     intervalStart: startTime.format(),
     intervalEnd: endTime?.format(),
   };
+};
+
+export type IntervalBounds = {
+  intervalStart: string;
+  intervalEnd: string;
+};
+
+export const calculateIntervalBounds = (
+  dateRange: DateRangeValue,
+): IntervalBounds => {
+  const { intervalStart, intervalEnd } =
+    calculateIntervalStartAndEnd(dateRange);
+
+  return {
+    intervalStart,
+    intervalEnd: intervalEnd ?? dayjs().utc().format(),
+  };
+};
+
+export const reanchorIntervalBounds = (
+  dateRange: DateRangeValue,
+  bounds: IntervalBounds,
+): IntervalBounds => {
+  const reanchored = calculateIntervalBounds(dateRange);
+
+  return isEqual(reanchored, bounds) ? bounds : reanchored;
 };
 
 export const calculateIntervalConfig = (
