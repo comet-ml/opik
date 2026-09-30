@@ -93,5 +93,8 @@ def maybe_auto_configure(
     install_view.render_hint(
         "No Opik config file found. Running `opik configure` first."
     )
+    # The configure flow opens straight on its first question with no leading
+    # blank of its own — it normally follows a banner that supplies one.
+    click.echo()
     run_interactive_configure()
     click.echo()
