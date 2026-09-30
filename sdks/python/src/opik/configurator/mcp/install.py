@@ -46,6 +46,10 @@ class InstallReport(NamedTuple):
 
     registered: Tuple[str, ...]
     failed: Tuple[str, ...] = ()
+    #: The user pressed Ctrl-C or Escape at the picker. A cancel is not a
+    #: decision about the server, it is "stop" — so the caller must not carry on
+    #: to the skill pack, which is the same step continuing under another name.
+    cancelled: bool = False
     verified: Optional[bool] = None
     declined: bool = False
     #: Which server was registered: `remote` for the Comet-hosted one, reached
@@ -209,6 +213,8 @@ def setup_mcp_server(
     confirmation = _confirm_targets(candidates, host_keys, assume_confirmed, display)
     selected_targets = confirmation.targets
     if len(selected_targets) == 0:
+        if confirmation.cancelled:
+            return InstallReport(registered=(), declined=True, cancelled=True)
         if confirmation.manual_requested:
             _report_manual_setup(server_spec, display)
         else:
@@ -243,6 +249,11 @@ def setup_mcp_server(
         sign_in = "failed"
     elif any(result.sign_in_attempted for result in results):
         sign_in = "succeeded"
+
+    # The plan set the hint from the transport alone, which is all it could know
+    # then. By here the run knows whether a sign-in actually happened.
+    if sign_in != "not_attempted":
+        display.sign_in_handled()
 
     for result in results:
         if result.sign_in_failed:
@@ -445,6 +456,7 @@ class _Confirmation(NamedTuple):
 
     targets: List[mcp_targets.HostTarget]
     manual_requested: bool = False
+    cancelled: bool = False
 
 
 def _confirm_targets(
@@ -474,7 +486,11 @@ def _confirm_targets(
         preselected=[],
     )
     if chosen is None:
-        return _Confirmation([])
+        # Distinct from an empty list, which is "I deliberately chose nothing".
+        # `select_many` keeps the two apart and this used to collapse them, so a
+        # Ctrl-C read as declining the server and the flow carried on into the
+        # skill pack.
+        return _Confirmation([], cancelled=True)
     if mcp_view.MANUAL_SETUP in chosen:
         return _Confirmation([], manual_requested=True)
     by_key = {target.key: target for target in candidates}

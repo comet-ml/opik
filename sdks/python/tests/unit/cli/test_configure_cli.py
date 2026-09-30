@@ -129,11 +129,16 @@ class TestAssistantConfirmation:
         assert setup_calls == [], "the inline installer must not also run"
 
     def test_no_flags__permission_refused__does_not_register_or_redirect(self):
+        """Nothing runs at all now: the pack used to keep the installer alive.
+
+        It was a separate question then, so a no to the server still reached
+        `setup` to ask it. With no question left there is nothing to go in for.
+        """
         confirm, setup_calls, outcome, redirected = self._run(answer=False)
 
         assert confirm.called
         assert redirected is False
-        assert setup_calls[0]["install_mcp"] is False
+        assert setup_calls == []
         assert outcome.mcp_decision == "declined"
 
     def test_skipping_the_picker__is_not_reported_as_declining_permission(self):
@@ -149,15 +154,19 @@ class TestAssistantConfirmation:
         assert outcome.clients == 0, "and still registered nothing"
         assert outcome.mcp_declined is True, "deliberately, not a failure"
 
-    def test_declining_the_server__still_offers_the_skill_pack(self):
-        """The pack is a separate question: it needs no MCP server.
+    def test_declining_the_server__skips_the_pack_too(self):
+        """The pack is no longer a separate question, so it has no separate answer.
 
-        On the redirect path the MCP flow asks about the pack itself, so this is
-        the case where this command still owns the question.
+        It used to be asked about on its own, on the reasoning that it needs no
+        MCP server. True, but it still writes into Cursor and Claude Code — and
+        somebody who just said no to Opik touching their AI client has not asked
+        for that. `--install-skills` still overrides, which is where a user who
+        genuinely wants one without the other says so.
         """
-        _, setup_calls, _, _ = self._run(answer=False, install_skills=None)
+        _, setup_calls, outcome, _ = self._run(answer=False, install_skills=None)
 
-        assert setup_calls[0]["skills"].decision is configure_cli.consent.Decision.ASK
+        assert setup_calls == []
+        assert outcome.skills_decision == "declined"
 
     def test_install_mcp_flag__is_the_consent__skips_the_picker(self):
         """A flag in a script registers here rather than starting a flow.
@@ -712,15 +721,15 @@ class TestBothDecisionsReachTheEvent:
         assert event["mcp_decision"] == "declined"
         assert event["skills_decision"] == "requested"
 
-    def test_declining_the_server__does_not_imply_declining_the_pack(self):
-        """They used to be coupled, so one Enter answered both.
+    def test_declining_the_server__reports_the_pack_as_declined_too(self):
+        """One decision now, so one reason — and it is the honest one.
 
-        Declining is the path this command still owns: a yes redirects into
-        `opik mcp configure`, which asks about the pack itself.
+        The event still separates it from a pack that was asked for and failed
+        to download, which is what `skills_decision` exists for.
         """
-        _, setup_calls, _, _ = TestAssistantConfirmation._run(answer=False)
+        _, _, outcome, _ = TestAssistantConfirmation._run(answer=False)
 
-        assert setup_calls[0]["skills"].decision is configure_cli.consent.Decision.ASK
+        assert outcome.skills_decision == "declined"
 
 
 class TestTheRedirectIntoTheMcpFlow:
@@ -807,7 +816,10 @@ class TestTheMcpQuestionIsRecommended:
             configure_cli._ask_about_mcp()
 
         out = capsys.readouterr().out
-        assert "Set up Opik MCP for your AI client?" in out
+        # A statement, not a question: `click.confirm` below asks the question,
+        # and this block used to ask it too.
+        assert "Opik MCP" in out
+        assert "?" not in out
         assert "(Recommended)" in out
 
     def test_permission_is_asked_with_a_real_label_and_defaults_to_yes(self):

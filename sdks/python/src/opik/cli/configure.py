@@ -42,11 +42,25 @@ def _setup_assistants(
     )
 
     mcp_verdict = consent.resolve(install_mcp, **situation)
-    skills_verdict = consent.resolve(install_skills, **situation)
-
     wants_mcp = consent.granted(mcp_verdict, _ask_about_mcp)
-
     mcp_decision = consent.decision_reason(mcp_verdict, wants_mcp)
+
+    # The pack is no longer offered - it is part of setting an AI client up, so
+    # it comes with that step rather than being asked about after it. Which is
+    # also why it is scoped to that step HERE and unconditional in `opik mcp
+    # configure`: running that command is itself the request, whereas this one
+    # configures Opik and may never touch an AI client at all. A run that refused
+    # the server, or never had a terminal to be asked in, has not asked for
+    # anything to be written into Cursor or Claude Code, and the pack writes
+    # there too. An explicit `--install-skills` still wins, as it always did.
+    skills_verdict = (
+        consent.resolve_installed_by_default(install_skills)
+        if wants_mcp or install_skills is True
+        # `mcp_decision` rather than `mcp_verdict.reason`: the verdict says a
+        # question was put, not what came back, so a refusal would report itself
+        # as `asking`.
+        else consent.Verdict(consent.Decision.SKIP, consent.Reason(mcp_decision))
+    )
 
     # A yes from someone sitting at a terminal buys the whole flow — the client
     # picker, the sign-in, and the ending inside the agent — rather than the
@@ -97,12 +111,19 @@ def _setup_assistants(
         # longer silently takes whichever client happened to be listed first.
         assume_confirmed=mcp_verdict.reason is consent.Reason.REQUESTED,
     )
+    # Said here because this path does not redirect into `opik mcp configure`,
+    # which is what otherwise ends the run by saying what to do next. Only when
+    # something was written: a run that installed nothing has nothing to restart
+    # for.
+    if outcome.clients or outcome.skills:
+        install_view.render_restart_note(mcp_installed=bool(outcome.clients))
+
     # `mcp_decision` answers the permission question and nothing else. Folding a
     # skipped picker into it relabelled those runs as never having accepted,
     # which hid the one drop the funnel exists to show: said yes, then chose no
     # client. That drop is `clients_written == 0` after `requested`, and
     # `mcp_declined` says whether it was deliberate.
-    # `skills_decision` is left as `setup` recorded it: it did the asking.
+    # `skills_decision` is left as `setup` recorded it.
     return (
         outcome._replace(
             detected=len(detected),
@@ -131,7 +152,7 @@ def _ask_about_mcp() -> bool:
     refusal of a question that never looked like one.
     """
     install_view.render_mcp_intro()
-    return click.confirm("  Set up Opik MCP?", default=True)
+    return install_view.confirm_default_yes("Set up Opik MCP?")
 
 
 #: Skips worth mentioning, and how to say them. A skip the user asked for
@@ -419,8 +440,8 @@ def run_interactive_configure(
     "--install-skills/--no-install-skills",
     default=None,
     help="Install the Opik skill pack into detected AI clients, teaching your "
-    "AI client how to instrument code with Opik. When omitted, you are prompted "
-    "interactively.",
+    "AI client how to instrument code with Opik. When omitted it comes with the "
+    "MCP server; pass --no-install-skills to leave it out.",
 )
 @click.pass_context
 def configure(
@@ -460,6 +481,13 @@ def configure(
     # `-y` and "no terminal" both mean "do not ask me", and both suppress the AI
     # client step outright — so the funnel needs to see it. It was invisible.
     automatic_approvals = yes or not interactive
+
+    # Only with a terminal: without one this is a log stream, and six lines of
+    # ASCII art at the top of it is noise. Rendered here rather than inside
+    # `run_interactive_configure`, which `opik mcp configure` calls to fix an
+    # unconfigured machine — that run has its own banner already on screen.
+    if interactive:
+        install_view.render_configure_banner()
 
     analytics.track_event(
         "configuration",

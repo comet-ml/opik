@@ -9,14 +9,13 @@ logger-based default.
 import contextlib
 import pathlib
 import re
-import textwrap
 from typing import Iterator, List, Optional, Tuple
 
+import click
 import rich.console
 from rich import padding, table, text
 
 from opik.cli import selector
-from opik.configurator import consent
 from opik.configurator.mcp import view as mcp_view
 from opik.configurator.skills import install as skills_install
 from opik.configurator.skills import roots as skills_roots
@@ -77,11 +76,14 @@ def render_hint(message: str) -> None:
     console.print(_linkify(message, base="dim"))
 
 
-def _join(names: List[str]) -> str:
-    """ "a", "a and b", "a, b and c" — a list a person would read aloud."""
-    if len(names) <= 1:
-        return "".join(names)
-    return f"{', '.join(names[:-1])} and {names[-1]}"
+def confirm_default_yes(question: str) -> bool:
+    """A yes/no question that Enter answers yes.
+
+    Every question in the onboarding flow defaults to yes, so they all come
+    through here and are indented and worded the same way. ``click``'s
+    capitalised ``[Y/n]`` is left to say which answer Enter gives.
+    """
+    return click.confirm(f"  {question}", default=True)
 
 
 _KEY_STYLE = "cyan"
@@ -154,17 +156,59 @@ def choose_one_numbered(
     )
 
 
-#: Drawn rather than written: this is the first thing `opik mcp configure` puts
-#: on screen, and a command that is about to edit another tool's configuration
+#: The orange the mark itself is drawn in - the first stop of the gradient in
+#: `opik-logo.svg`, which fades from it to crimson.
+#:
+#: Deliberately NOT `--primary` from the frontend's main.scss. That is indigo,
+#: and it is what the product UI accents *with* - buttons, links, focus rings -
+#: rather than what Opik looks *like*. This banner is a drawing of the logo, so
+#: it takes the logo's colour.
+#:
+#: Spelled as hex rather than a named ANSI colour, because `yellow` or `red` is
+#: whatever the user's terminal theme decided it is, and this is the one piece of
+#: branding the CLI shows. Rich degrades it to the nearest available colour where
+#: truecolor is missing. The status colours elsewhere in this module stay as they
+#: are: green, yellow and red mean something, and are not ours to restyle.
+OPIK_ORANGE = "#FB9341"
+
+
+#: Drawn rather than written: this is the first thing either configure command
+#: puts on screen, and a command that is about to edit a tool's configuration
 #: should look like it knows what it is.
 _BANNER = r"""
-   ___       _ _
+   ___        _ _
   / _ \ _ __ (_) | __
  | | | | '_ \| | |/ /
  | |_| | |_) | |   <
   \___/| .__/|_|_|\_\
        |_|
 """
+
+
+def _render_banner(headline: str, detail: str) -> None:
+    """The mark, then what the command about to run is for.
+
+    Shared so the two entry points into onboarding open in the same hand. They
+    are one flow seen from different ends — `opik configure` can run
+    `opik mcp configure` — and looking like two programs is what made that
+    surprising rather than continuous.
+    """
+    console.print(text.Text(_BANNER, style=f"bold {OPIK_ORANGE}"))
+    console.print(
+        padding.Padding(
+            text.Text.assemble((f"{headline}\n", "bold"), (detail, "dim")),
+            (0, 0, 1, 2),
+        )
+    )
+
+
+def render_configure_banner() -> None:
+    """How `opik configure` opens."""
+    _render_banner(
+        "Set up Opik on this machine.",
+        "A few questions, then your code and your AI client can both\n"
+        "reach your workspace.",
+    )
 
 
 def render_mcp_banner() -> None:
@@ -175,29 +219,19 @@ def render_mcp_banner() -> None:
     say is what the command is for, so the first screen states it rather than
     putting a question mark after a decision already made.
     """
-    console.print(text.Text(_BANNER, style="bold cyan"))
-    console.print(
-        padding.Padding(
-            text.Text.assemble(
-                ("Connect your coding agent to Opik.\n", "bold"),
-                (
-                    "It can then read your traces, find the failing ones, score "
-                    "them,\nand instrument your code — from chat.",
-                    "dim",
-                ),
-            ),
-            (0, 0, 1, 2),
-        )
+    _render_banner(
+        "Connect your coding agent to Opik.",
+        "It can then read your traces, find the failing ones, score them,\n"
+        "and instrument your code — from chat.",
     )
 
 
 def render_mcp_intro() -> None:
-    """What the MCP step is, before either command asks about it.
+    """What the MCP step is, before ``opik configure`` asks about it.
 
-    Shared by ``opik configure`` and ``opik mcp configure`` so the two explain
-    themselves identically: they write into the same files, and only one of them
-    used to say so. Rendering here rather than in either command is what keeps
-    them from drifting apart again.
+    States what the thing is; the ``click`` prompt underneath asks about it. Both
+    used to be questions, so the same one arrived twice in a row in slightly
+    different words, and the second read as the first not having registered.
 
     Does not list the detected clients: the picker directly below is that list,
     and naming them twice pushed the question off the screen.
@@ -205,71 +239,108 @@ def render_mcp_intro() -> None:
     console.print()
     console.print(
         text.Text.assemble(
-            ("Set up Opik MCP for your AI client? ", "bold"),
+            ("Opik MCP ", "bold"),
             ("(Recommended)", "green bold"),
         )
     )
     console.print(
         text.Text(
-            "Enables your AI assistant to inspect traces, scan your projects\n"
-            "for issues, debug experiments, and run Opik commands directly\n"
-            "from chat.",
+            "Lets your AI assistant inspect traces, scan your projects for\n"
+            "issues, debug experiments, and run Opik commands directly from\n"
+            "chat.",
             style="dim",
         )
     )
 
 
-def render_skill_pack_intro() -> None:
-    """The skill pack's case, laid out exactly like :func:`render_mcp_intro`.
+def render_handoff_offer(prompt: str) -> None:
+    """The question the run would open the agent on, above the offer to do it.
 
-    The two are halves of one step. They were written separately and looked it —
-    one was three ``rich`` lines and the other was the whole thing crammed into a
-    ``click`` label — so the second half read as a different program.
+    Only the prompt: the ``click`` prompt underneath is where "Try it in X?" is
+    asked, and saying it here as well put the same question on screen twice.
+
+    Printed at all because saying yes sends it — so this is the user's one
+    chance to read what they are agreeing to ask.
     """
     console.print()
-    console.print(
-        text.Text.assemble(
-            ("Download the Opik skill pack for your AI client? ", "bold"),
-            ("(Recommended)", "green bold"),
-        )
-    )
-    console.print(
-        text.Text(
-            textwrap.fill(consent.SKILL_PACK_PITCH, width=66),
-            style="dim",
-        )
-    )
+    console.print(text.Text("Your AI client will be asked:", style="bold"))
+    console.print(padding.Padding(text.Text(prompt, style="dim"), (0, 0, 1, 2)))
 
 
-def render_handoff(client_display_name: str, prompt: str) -> None:
+def render_handoff(client_display_name: str) -> None:
     """The last thing shown before the agent takes the terminal."""
     console.print()
     console.print(
         text.Text.assemble(
             ("Starting ", "bold"),
             (client_display_name, "bold cyan"),
-            (" with:", "bold"),
+            ("…", "bold"),
         )
     )
-    console.print(padding.Padding(text.Text(prompt, style="dim"), (0, 0, 1, 2)))
 
 
-def render_prompt_to_paste(client_display_name: str, prompt: str) -> None:
-    """The same ending for a client that cannot be handed a prompt.
+def render_handoff_declined(client_display_name: str) -> None:
+    """What to do later, for a run that turned the offer down.
 
-    A GUI app takes no argument from here, so the question it should open with is
-    printed instead. Worth printing rather than dropping: the prompt is the part
-    that turns a configured server into something the user has seen work.
+    The restart matters and nothing else says so any more: a client that was
+    running while its configuration was rewritten has not read it yet.
     """
     console.print()
     console.print(
         text.Text.assemble(
-            ("Open ", "bold"),
+            ("Restart ", "dim"),
+            (client_display_name, "dim cyan"),
+            (", then ask it the question above.", "dim"),
+        )
+    )
+
+
+def render_prompt_to_paste(client_display_name: str, prompt: str) -> None:
+    """The same ending for a client this command cannot start.
+
+    A GUI app cannot be launched from here, so the question it should open with
+    is printed instead. Worth printing rather than dropping: the prompt is the
+    part that turns a configured server into something the user has seen work.
+    """
+    console.print()
+    console.print(
+        text.Text.assemble(
+            ("Restart ", "bold"),
             (client_display_name, "bold cyan"),
-            (" and ask it:", "bold"),
+            (", then ask it:", "bold"),
         )
     )
     console.print(padding.Padding(text.Text(prompt, style="dim"), (0, 0, 1, 2)))
+
+
+def render_restart_note(mcp_installed: bool) -> None:
+    """The closing instruction for a run with no one client to name.
+
+    Every ending says what to do next exactly once. This is the one for the
+    endings with nothing more specific to say — several clients written at once,
+    or a scripted run with no terminal to hand over from.
+
+    ``mcp_installed`` because ``opik configure --install-skills --no-install-mcp``
+    reaches this too, and telling that run to ask its client about a server it
+    never registered would send the user looking for tools that are not there.
+    """
+    console.print()
+    if not mcp_installed:
+        console.print(
+            text.Text(
+                "Restart your AI client to pick up the Opik skill pack.",
+                style="dim",
+            )
+        )
+        return
+
+    console.print(
+        text.Text.assemble(
+            ("Restart your AI client, then ask it to ", "dim"),
+            ('"list my Opik projects via Opik MCP"', "green"),
+            (".", "dim"),
+        )
+    )
 
 
 def render_note(message: str, hint: Optional[str] = None) -> None:
@@ -356,27 +427,23 @@ class RichInstallView(mcp_view.InstallView):
         console.print(padding.Padding(row, (0, 0, 0, 2), expand=False))
 
     def done(self, components: List[str], assistants: List[str]) -> None:
+        """Close the run. Deliberately almost empty.
+
+        `components` and `assistants` are not rendered: the results rows above
+        are those two lists, per item, with a mark saying whether each landed —
+        so the summary grid that used to sit here said the same thing a second
+        time in prose. Nor is there a "next step" row: the ending below this
+        says what to do next, in words that fit the ending actually reached.
+
+        The arguments stay in the signature because `LoggingInstallView` has no
+        results table and so has nothing else to report from.
+        """
         console.print()
         console.print(
             text.Text.assemble(("✓ ", "green bold"), ("Done", "bold")),
         )
-        grid = table.Table.grid(padding=(0, 2))
-        grid.add_column(style=_KEY_STYLE, no_wrap=True)
-        grid.add_column(overflow="fold")
-        grid.add_row("Set up", _join(components) or "nothing")
-        grid.add_row("For", _join(assistants) or "your AI client")
-        grid.add_row(
-            "Next",
-            text.Text.assemble(
-                ("Restart ", ""),
-                ("them" if len(assistants) > 1 else "it", "bold"),
-                (", then ask ", ""),
-                ('"list my Opik projects via Opik MCP"', "green"),
-            ),
-        )
-        console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
-        # Last, because it is the one thing here the user may still have to act
-        # on, and it should not sit between them and the prompt to try.
+        # The one thing here the user may still have to act on, so it should not
+        # sit between them and the prompt to try.
         if self._needs_sign_in:
             console.print()
             console.print(

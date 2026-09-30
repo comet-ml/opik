@@ -67,26 +67,39 @@ MANUAL_SETUP_LABEL = "My AI client is not listed"
 
 #: How the sign-in step is phrased, once, so both views agree.
 #:
-#: Written to hold whether or not the sign-in already happened: Codex signs in
-#: inside `codex mcp add`, and Claude Code is signed in right after it, so for
-#: those two the browser has usually opened by the time this prints. Promising a
-#: prompt that already came and went is what this wording avoids.
+#: Only reaches a user whose run attempted no sign-in at all — a client that
+#: takes the config and prompts on first use, rather than one like Codex or
+#: Claude Code that opens the browser during setup. That is what lets it say
+#: plainly what will happen; it used to hedge with "may have opened it during
+#: setup" because it also printed after a login that had already succeeded.
 SIGN_IN_HINT = (
-    "Signing in to Opik happens in your browser. Your assistant may have opened "
-    "it during setup; otherwise it will prompt you the first time it uses Opik, "
-    "or wait for you to authorize the opik-mcp server from its MCP settings."
+    "Signing in to Opik happens in your browser. Your assistant will prompt you "
+    "the first time it uses Opik, or you can authorize the opik-mcp server from "
+    "its MCP settings."
 )
 
 
 class InstallView(abc.ABC):
     """Narration hooks for the MCP install flow."""
 
-    #: Whether the connection needs a sign-in, as decided by ``install`` and
-    #: handed over in :meth:`plan`. Kept here rather than passed to :meth:`done`
-    #: because the CLI closes the run from ``cli.assistants``, which never sees
-    #: the server spec — the view carries the fact across that gap. A class
-    #: attribute, so a view that is never planned still renders.
+    #: Whether :meth:`done` should still explain the sign-in. Set from the
+    #: transport in :meth:`plan` and cleared by :meth:`sign_in_handled` once the
+    #: run knows better. Kept here rather than passed to :meth:`done` because the
+    #: CLI closes the run from ``cli.assistants``, which never sees the server
+    #: spec — the view carries the fact across that gap. A class attribute, so a
+    #: view that is never planned still renders.
     _needs_sign_in: bool = False
+
+    def sign_in_handled(self) -> None:
+        """Drop the closing hint: this run has already said what applies.
+
+        Two ways to get here, and the hint is wrong in both. A sign-in that
+        succeeded is done — the browser came and went during setup, so a closing
+        note about a prompt to expect describes the past. One that failed has
+        already been answered by a note naming the exact command to run, which
+        the general version would only repeat more vaguely.
+        """
+        self._needs_sign_in = False
 
     @abc.abstractmethod
     def plan(

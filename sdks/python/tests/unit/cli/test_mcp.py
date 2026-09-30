@@ -4,7 +4,7 @@ import pathlib
 from types import SimpleNamespace
 from unittest.mock import patch
 
-
+import click
 from click.testing import CliRunner
 
 from opik.cli import assistants
@@ -558,7 +558,13 @@ class TestResultEventCarriesTheHandoff:
 
     @staticmethod
     def _result_event(
-        registered, traced_project=None, can_launch=True, interactive=True, args=()
+        registered,
+        traced_project=None,
+        can_launch=True,
+        accepted=True,
+        abort=False,
+        interactive=True,
+        args=(),
     ):
         runner = CliRunner()
         outcome = assistants.Outcome(
@@ -584,7 +590,14 @@ class TestResultEventCarriesTheHandoff:
             ),
             patch.object(mcp_cli.mcp_handoff, "can_launch", return_value=can_launch),
             patch.object(mcp_cli.mcp_handoff, "launch"),
+            patch(
+                "click.confirm",
+                side_effect=click.Abort if abort else None,
+                return_value=accepted,
+            ),
             patch.object(mcp_cli.install_view, "render_handoff"),
+            patch.object(mcp_cli.install_view, "render_handoff_offer"),
+            patch.object(mcp_cli.install_view, "render_handoff_declined"),
             patch.object(mcp_cli.install_view, "render_prompt_to_paste"),
             patch.object(mcp_cli.analytics, "track_event") as track,
         ):
@@ -609,6 +622,29 @@ class TestResultEventCarriesTheHandoff:
 
         assert event["handoff"] == "prompt_shown"
 
+    def test_saying_no_to_the_offer__is_its_own_ending(self):
+        """The last stage of the funnel, and the only one the user drives.
+
+        A registered server nobody wanted to try is a different outcome from one
+        that ended inside the agent, and neither is a failure.
+        """
+        event = self._result_event(("claude-code",), accepted=False)
+
+        assert event["handoff"] == "declined"
+        # Still resolved, because the question the user turned down is the same
+        # one a launch would have opened on.
+        assert event["closing_prompt"] == "instrument"
+
+    def test_ctrl_c_at_the_offer__ends_the_same_way_as_saying_no(self):
+        """Nothing is left half-done by then: the server and the pack are in.
+
+        Letting the abort propagate would lose the result event, which would make
+        the run that got furthest the one the funnel cannot see.
+        """
+        event = self._result_event(("claude-code",), abort=True)
+
+        assert event["handoff"] == "declined"
+
     def test_no_terminal__nothing_to_hand_over_to(self):
         """A named client is what lets the command run unattended at all."""
         event = self._result_event(
@@ -622,6 +658,37 @@ class TestResultEventCarriesTheHandoff:
         event = self._result_event(("claude-code", "cursor"))
 
         assert event["handoff"] == "not_single_client"
+
+    def test_ctrl_c_at_the_picker__is_not_filed_as_a_client_count(self):
+        """A cancelled run registers nothing, which the count check also matches.
+
+        Whichever is tested first wins, and `not_single_client` describes a
+        scripted run that wrote several configurations — the opposite of a run
+        that wrote none.
+        """
+        runner = CliRunner()
+        outcome = assistants.Outcome(
+            clients=0, skills=False, registered_clients=(), cancelled=True
+        )
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+            patch.object(mcp_cli.assistants, "setup", return_value=outcome),
+            patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
+            patch.object(mcp_cli.install_view, "render_restart_note") as restart,
+            patch.object(mcp_cli.analytics, "track_event") as track,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure"])
+            assert result.exit_code == 0, result.output
+
+        assert track.call_args_list[-1].kwargs["handoff"] == "cancelled"
+        # Nothing was written, so there is nothing to restart for.
+        restart.assert_not_called()
 
 
 class TestResultEventCarriesTheConnectionSignals:

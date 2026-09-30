@@ -86,7 +86,10 @@ def rich_view(monkeypatch):
 @pytest.fixture
 def confirm(monkeypatch):
     spy = mock.Mock(return_value=True)
-    monkeypatch.setattr(assistants.click, "confirm", spy)
+    # `click.confirm` itself rather than an attribute of `assistants`: the module
+    # no longer imports click at all, having nothing left to ask, and the thing
+    # worth asserting is that nothing anywhere put a question to the user.
+    monkeypatch.setattr("click.confirm", spy)
     return spy
 
 
@@ -179,21 +182,34 @@ class TestPackTargets:
         assert skills_spy.call_args.args[0] == []
 
 
-class TestAsking:
-    def test_verdict_ask__prompts(self, mcp_spy, skills_spy, rich_view, confirm):
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
+class TestThePackIsNotOffered:
+    """It is part of the setup now, not a question asked after it.
 
-        confirm.assert_called_once()
-        skills_spy.assert_called_once()
+    The question used to arrive under the server's results table, when the user
+    had already got what they came for, and it asked about something that makes
+    the thing they just installed usable. Only an explicit flag skips it.
+    """
 
-    def test_verdict_ask__declining_installs_only_the_server(
+    def test_no_flag__installs_without_asking(
         self, mcp_spy, skills_spy, rich_view, confirm
     ):
-        confirm.return_value = False
+        verdict = consent.resolve_installed_by_default(None)
 
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
+        assistants.setup(_params(), install_mcp=True, skills=verdict)
+
+        skills_spy.assert_called_once()
+        confirm.assert_not_called()
+
+    def test_refused_by_flag__is_still_honoured(
+        self, mcp_spy, skills_spy, rich_view, confirm
+    ):
+        """A script saying no is a decision, unlike a question nobody put."""
+        verdict = consent.resolve_installed_by_default(False)
+
+        assistants.setup(_params(), install_mcp=True, skills=verdict)
 
         skills_spy.assert_not_called()
+        confirm.assert_not_called()
 
     def test_decided_verdicts__never_prompt(
         self, mcp_spy, skills_spy, rich_view, confirm
@@ -203,28 +219,13 @@ class TestAsking:
 
         confirm.assert_not_called()
 
-    def test_the_pack_defaults_to_yes(self, mcp_spy, skills_spy, rich_view, confirm):
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
-
-        assert confirm.call_args.kwargs["default"] is True
-
-    def test_the_pack_is_recommended_on_its_headline(
-        self, mcp_spy, skills_spy, rich_view, confirm, capsys
-    ):
-        """Same shape as the MCP question: the recommendation rides the headline."""
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
-
-        out = capsys.readouterr().out
-        assert "Download the Opik skill pack for your AI client?" in out
-        assert "(Recommended)" in out
-
-    def test_the_prompt_does_not_relist_the_clients(
+    def test_an_ask_verdict__is_refused_rather_than_answered(
         self, mcp_spy, skills_spy, rich_view, confirm
     ):
-        """The results table directly above it just named them."""
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
-
-        assert "cursor" not in confirm.call_args.args[0].lower()
+        """Guards the removal: a resolver that starts asking again should fail
+        loudly rather than install behind a question nobody saw."""
+        with pytest.raises(AssertionError):
+            assistants.setup(_params(), install_mcp=True, skills=ASK)
 
 
 class TestClosingBlock:
@@ -287,24 +288,29 @@ class TestSkillsDecisionIsRecorded:
 
     `skills_installed=False` covered three different things — declined, never
     asked, and asked-for-but-failed-to-download — which made the pack's own
-    accept rate unmeasurable.
+    accept rate unmeasurable. The question is gone, but the distinction is not:
+    a flag that refused it and a download that failed still look identical
+    without this.
     """
 
-    def test_asked_and_accepted__requested(
-        self, mcp_spy, skills_spy, rich_view, confirm
+    def test_installed_by_default__says_so_rather_than_claiming_a_request(
+        self, mcp_spy, skills_spy, rich_view
     ):
-        confirm.return_value = True
+        """Its own value, so the day the question went away is visible.
 
-        outcome = assistants.setup(_params(), install_mcp=True, skills=ASK)
+        Reusing `requested` would blend a behaviour change into the accept rate
+        the funnel already has history for.
+        """
+        verdict = consent.resolve_installed_by_default(None)
 
-        assert outcome.skills_decision == "requested"
+        outcome = assistants.setup(_params(), install_mcp=True, skills=verdict)
 
-    def test_asked_and_declined__declined(
-        self, mcp_spy, skills_spy, rich_view, confirm
-    ):
-        confirm.return_value = False
+        assert outcome.skills_decision == "installed_by_default"
 
-        outcome = assistants.setup(_params(), install_mcp=True, skills=ASK)
+    def test_refused_by_flag__declined(self, mcp_spy, skills_spy, rich_view):
+        verdict = consent.resolve_installed_by_default(False)
+
+        outcome = assistants.setup(_params(), install_mcp=True, skills=verdict)
 
         assert outcome.skills_decision == "declined"
 

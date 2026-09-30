@@ -95,20 +95,15 @@ class TestGranted:
 
 
 class TestPrompts:
-    """Only the skill pack's one-liner is left here.
+    """No prompt copy lives here any more.
 
     The plain-text MCP and skills prompts went with the library path:
     `opik.configure()` no longer offers either, so the CLI is the only thing
-    left that words these questions and it renders its own.
+    left that words these questions and it renders its own. The skill pack's
+    one-liner went with the question it was the body of — the pack is installed
+    rather than offered.
     """
 
-    def test_skill_pack_pitch__says_what_the_pack_is_for(self):
-        assert "instrument" in consent.SKILL_PACK_PITCH
-
-    def test_skill_pack_pitch__does_not_name_the_assistants(self):
-        """The picker lists them; the pitch is about the pack."""
-        assert "Claude Code" not in consent.SKILL_PACK_PITCH
-
-    def test_the_library_prompts_are_gone(self):
-        for name in ("MCP_PROMPT", "SKILLS_PROMPT", "mcp_prompt"):
+    def test_the_prompts_are_gone(self):
+        for name in ("MCP_PROMPT", "SKILLS_PROMPT", "mcp_prompt", "SKILL_PACK_PITCH"):
             assert not hasattr(consent, name), name

@@ -84,7 +84,12 @@ class TestRichInstallView:
         assert "Not working" in out
         assert "HTTP 401" in out
 
-    def test_done__joins_names_readably_and_marks_completion(self, view):
+    def test_done__marks_completion_without_restating_the_results(self, view):
+        """The rows above already list each component and each client, with marks.
+
+        Summarising them again here put "MCP server and skill pack for Cursor"
+        directly under the two rows that had just said exactly that.
+        """
         with view.console.capture() as capture:
             view.RichInstallView().done(
                 ["MCP server", "skill pack"], ["Cursor", "Claude Code", "Codex"]
@@ -92,31 +97,23 @@ class TestRichInstallView:
 
         out = capture.get()
         assert "Done" in out
-        assert "MCP server and skill pack" in out
-        assert "Cursor, Claude Code and Codex" in out
-        assert "list my Opik projects" in out
+        assert "MCP server" not in out
+        assert "Cursor" not in out
 
-    def test_done__single_assistant__says_restart_it(self, view):
+    def test_done__says_nothing_about_what_to_do_next(self, view):
+        """The ending below it does that, in words that fit the ending reached.
+
+        This block said "restart it, then ask to list my Opik projects" directly
+        above an offer to start the client on a different question.
+        """
         with view.console.capture() as capture:
             view.RichInstallView().done(["MCP server"], ["Cursor"])
 
-        assert "Restart it" in capture.get()
+        out = capture.get()
+        assert "Restart" not in out
+        assert "list my Opik projects" not in out
 
-    def test_done__suggested_prompt_is_green(self, view, monkeypatch):
-        """It is the one thing here the user is meant to copy, so it stands out."""
-        import rich.console
-
-        recorder = rich.console.Console(force_terminal=True, width=100)
-        monkeypatch.setattr(view, "console", recorder)
-
-        with recorder.capture() as capture:
-            view.RichInstallView().done(["MCP server"], ["Cursor"])
-
-        # Anchored to the prompt itself: the ✓ above is also green (`1;32`), so a
-        # bare search for the colour would pass even if the prompt lost it.
-        assert '\x1b[32m"list my Opik projects via Opik MCP"' in capture.get()
-
-    def test_done__sign_in_needed__hint_comes_after_the_next_step(self, view):
+    def test_done__sign_in_needed__is_the_one_thing_it_still_says(self, view):
         installer = view.RichInstallView()
         installer.plan("Opik Cloud", "Hosted server", [], needs_sign_in=True)
         with view.console.capture() as capture:
@@ -124,7 +121,30 @@ class TestRichInstallView:
 
         out = capture.get()
         assert "Signing in" in out
-        assert out.index("list my Opik projects") < out.index("Signing in")
+        assert out.index("Done") < out.index("Signing in")
+
+    def test_restart_note__names_the_prompt_in_green(self, view, monkeypatch):
+        """The one thing the user is meant to copy, so it stands out."""
+        import rich.console
+
+        recorder = rich.console.Console(force_terminal=True, width=100)
+        monkeypatch.setattr(view, "console", recorder)
+
+        with recorder.capture() as capture:
+            view.render_restart_note(mcp_installed=True)
+
+        assert '\x1b[32m"list my Opik projects via Opik MCP"' in capture.get()
+
+    def test_restart_note__without_mcp__does_not_name_a_server_that_is_not_there(
+        self, view
+    ):
+        """`--install-skills --no-install-mcp` reaches this ending too."""
+        with view.console.capture() as capture:
+            view.render_restart_note(mcp_installed=False)
+
+        out = capture.get()
+        assert "skill pack" in out
+        assert "Opik MCP" not in out
 
     def test_done__no_sign_in__stays_quiet(self, view):
         """The local server takes its credentials at startup — nothing to sign in to."""
@@ -139,18 +159,6 @@ class TestRichInstallView:
         with pytest.raises(ValueError):
             with view.RichInstallView().step("probing"):
                 raise ValueError("boom")
-
-    @pytest.mark.parametrize(
-        ("names", "expected"),
-        [
-            ([], ""),
-            (["Cursor"], "Cursor"),
-            (["Cursor", "Codex"], "Cursor and Codex"),
-            (["a", "b", "c"], "a, b and c"),
-        ],
-    )
-    def test_join(self, view, names, expected):
-        assert view._join(names) == expected
 
     def test_failure_detail__collapses_home_paths(self, view, monkeypatch, tmp_path):
         """One absolute path wraps over three lines and buries the instruction."""

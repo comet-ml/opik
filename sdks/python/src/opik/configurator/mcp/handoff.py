@@ -1,9 +1,13 @@
 """How ``opik mcp configure`` ends: inside the agent, on a question worth asking.
 
 Registering a server is not the point — using it is. So the command finishes by
-starting the client it just configured with a prompt that exercises the thing
-that was set up, rather than printing "done" and leaving the user to think of
+starting the client it just configured on a prompt that exercises the thing that
+was set up, rather than printing "done" and leaving the user to think of
 something.
+
+The prompt is asked, not merely offered. It is shown with the question that
+precedes it — "Try it in Claude Code?" — so by the time the agent starts, the
+user has read what it will be asked and agreed to it.
 
 Which prompt depends on what the user already has. Traces of their own mean
 there is something to look at, and the diagnose skill is what looks at it. No
@@ -51,8 +55,8 @@ INSTRUMENT_PROMPT: Final[str] = (
     "is already instrumented, tell me what is covered and what is not."
 )
 
-#: The clients that take a prompt as an argument and run in this terminal.
-#: A GUI client cannot be handed one, so it is left to the caller to show.
+#: The clients that take a prompt as an argument and run in this terminal. A GUI
+#: client cannot be handed one, so it is left to the caller to show.
 LAUNCH_COMMANDS: Final[Dict[str, List[str]]] = {
     "claude-code": ["claude"],
     "codex": ["codex"],
@@ -135,6 +139,10 @@ def can_launch(host_key: str) -> bool:
 
 def launch(host_key: str, prompt: str) -> None:
     """Replace this process with the agent, mid-question.
+
+    The prompt goes in as the positional argument, which both CLIs treat as a
+    message to send — so the agent opens already working on it. That is the
+    point: the user was shown this exact prompt and said yes to it a line ago.
 
     ``execvp`` rather than a subprocess: the agent owns the terminal from here,
     and a parent sitting behind it would only be something to exit twice. It

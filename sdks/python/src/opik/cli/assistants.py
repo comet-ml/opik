@@ -17,7 +17,6 @@ caller passes the answers in. Kept in the CLI layer because it renders —
 and keeps its plain-text prompts.
 """
 
-import click
 from typing import Any, List, Mapping, NamedTuple, Optional, Tuple
 
 from opik.cli import install_view
@@ -68,6 +67,9 @@ class Outcome(NamedTuple):
     #: "connected" without the second.
     transport: Optional[str] = None
     sign_in: str = "not_attempted"
+    #: The user cancelled at the picker. Carried so the caller can stop rather
+    #: than treat it as a decision about the server alone.
+    cancelled: bool = False
     #: Whether a stale `opik-mcp` uv tool install was in the way, and whether it
     #: could be cleared. One left behind pins the server at a version that may
     #: predate identity resolution.
@@ -91,8 +93,8 @@ def setup(
     ``setup_params`` is the connection block ``configurator.mcp`` needs — api key,
     workspace, base and api urls, deployment flags.
 
-    The skill-pack question is asked here rather than by the caller, because it
-    must land after the server's results table — see :func:`_ask_about_skill_pack`.
+    The skill pack is no longer a question: it is part of the setup, installed
+    unless a flag refused it. See :func:`consent.resolve_installed_by_default`.
 
     ``install_mcp`` is already resolved: the question names the clients it would
     write to, so the caller asks it before this runs. ``skills`` arrives as a
@@ -119,6 +121,23 @@ def setup(
         if install_mcp
         else mcp_install.NOTHING_INSTALLED
     )
+    # Ctrl-C is not an answer to the MCP question, it is "stop" — so nothing else
+    # in this step runs. The pack used to be a separate question and survived a
+    # cancel by being asked separately; now it is installed by default, and
+    # carrying on would have meant a cancelled run still writing into the user's
+    # AI client.
+    if install.cancelled:
+        return NOTHING_DONE._replace(
+            transport=install.transport,
+            sign_in=install.sign_in,
+            stale_tool=install.stale_tool,
+            mcp_declined=install.declined,
+            # Not `declined`: nobody refused the pack, the run stopped before it
+            # came up. The funnel has to be able to tell those apart.
+            skills_decision=consent.Reason.CANCELLED.value,
+            cancelled=True,
+        )
+
     configured_hosts = list(install.registered)
 
     # Where the pack goes: the clients we just registered, or — when the server
@@ -140,10 +159,10 @@ def setup(
 
     installed_skills = False
 
-    # Asked here rather than by the caller, so this is the only place that knows
-    # what the user answered — and `skills_installed` alone could not say why it
-    # was false: a decline and a failed download looked identical.
-    wants_skills = consent.granted(skills, _ask_about_skill_pack)
+    # `skills_installed` alone cannot say why it was false: a flag that refused
+    # the pack and a download that failed look identical, and only one of them is
+    # a problem.
+    wants_skills = consent.granted(skills, _no_longer_asked)
     skills_reason = consent.decision_reason(skills, wants_skills)
 
     if wants_skills:
@@ -191,17 +210,14 @@ def setup(
     )
 
 
-def _ask_about_skill_pack() -> bool:
-    """Offer the skill pack, once the server step's results are on screen.
+def _no_longer_asked() -> bool:
+    """The skill pack is not offered any more, so nothing should reach this.
 
-    The clients are not named again: the results table directly above this already
-    lists them, and repeating three of them buries the question.
-
-    Laid out exactly like the MCP question in ``cli.configure``: a bold headline
-    carrying the recommendation, the pitch under it in dim, then the confirm. The
-    two were built separately and looked it — one was three rich lines and the
-    other was the whole thing crammed into a click label, so the second half of
-    one step read as a different program.
+    Kept because :func:`consent.granted` takes an asker, and a resolver that
+    never returns ``ASK`` is a claim worth failing on rather than quietly
+    installing behind a question nobody put.
     """
-    install_view.render_skill_pack_intro()
-    return click.confirm("  Install it?", default=True)
+    raise AssertionError(
+        "the skill pack is installed by default; consent.resolve_installed_by_default "
+        "never asks"
+    )

@@ -37,6 +37,8 @@ class Reason(enum.Enum):
     ASSUME_YES = "assume_yes"
     NOTHING_DETECTED = "nothing_detected"
     ASKING = "asking"
+    INSTALLED_BY_DEFAULT = "installed_by_default"
+    CANCELLED = "cancelled"
 
 
 class Verdict(NamedTuple):
@@ -87,6 +89,32 @@ def resolve(
     return Verdict(Decision.ASK, Reason.ASKING)
 
 
+def resolve_installed_by_default(flag: Optional[bool]) -> Verdict:
+    """Decide a step that is done unless refused, rather than offered.
+
+    The skill pack. It used to go through :func:`resolve` like the server, which
+    meant a question — and the question was the wrong shape: it arrived after the
+    server's results table, when the user had already got what they came for, and
+    it asked about something that is part of the setup rather than an extra.
+
+    Only an explicit refusal skips it now, which is why this is a separate
+    resolver rather than a flag on the other one: none of that table's rules
+    apply. A terminal is irrelevant with nothing to ask, `-y` has nothing to
+    assume, and "nothing detected" is the installer's business — it places the
+    pack for the clients it finds, or leaves a shared copy.
+
+    `INSTALLED_BY_DEFAULT` is deliberately its own reason rather than reusing
+    `REQUESTED` or `ASSUME_YES`: the funnel has a history of accept rates for
+    this step, and reusing a value would blend a behaviour change into it
+    silently instead of showing the day the question went away.
+    """
+    if flag is False:
+        return Verdict(Decision.SKIP, Reason.DECLINED)
+    if flag is True:
+        return Verdict(Decision.PROCEED, Reason.REQUESTED)
+    return Verdict(Decision.PROCEED, Reason.INSTALLED_BY_DEFAULT)
+
+
 def decision_reason(verdict: Verdict, granted_: bool) -> str:
     """What this step decided and why, as one value for analytics.
 
@@ -115,15 +143,3 @@ def granted(verdict: Verdict, ask: Callable[[], bool]) -> bool:
     if verdict.decision is Decision.ASK:
         return ask()
     return verdict.decision is Decision.PROCEED
-
-
-SKILL_PACK_PITCH: str = (
-    "It teaches your AI client how to instrument code with Opik, wire up "
-    "integrations, run test suites and agent logs diagnostics."
-)
-"""The case for the pack, as one line — used by the CLI, which wraps it itself.
-
-The only prompt text left here. Its plain-text siblings went with the library
-path: `opik.configure()` no longer offers the MCP server or the skill pack, so
-there is nothing outside the CLI left to word. "AI client" is the term the rest
-of the CLI uses for these tools."""

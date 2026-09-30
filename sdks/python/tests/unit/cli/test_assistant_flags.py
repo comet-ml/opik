@@ -136,7 +136,9 @@ class TestExplicitRequestsRunWithoutATerminal:
     """A named flag is the request, so it works where there is nobody to ask."""
 
     def test_install_mcp__registers(self, ran):
-        assert ran("--install-mcp") == [MCP]
+        # The pack comes with the AI-client step now rather than being asked
+        # about after it, so requesting the server requests both.
+        assert ran("--install-mcp") == [MCP, SKILLS]
 
     def test_both_flags__do_both(self, ran):
         assert ran("--install-mcp", "--install-skills") == [MCP, SKILLS]
@@ -245,7 +247,9 @@ class TestThePickerIsReallyExercised:
                 "detected_host_keys",
                 return_value=list(detected),
             ),
-            mock.patch.object(assistants.click, "confirm", return_value=False),
+            # `click.confirm` itself: `assistants` no longer imports click, having
+            # nothing left to ask.
+            mock.patch("click.confirm", return_value=False),
         ):
             outcome = assistants.setup(
                 PARAMS,
@@ -299,6 +303,22 @@ class TestThePickerIsReallyExercised:
         assert installed == []
         assert outcome.clients == 0
         assert outcome.mcp_declined is True, "InstallReport.declined must survive"
+        assert outcome.cancelled is True, "Ctrl-C is not an answer, it is stop"
+
+    def test_cancelling__does_not_install_the_skill_pack(self):
+        """Ctrl-C ends the step, rather than declining only the half in front of it.
+
+        The pack is installed by default now, so a cancel that only stopped the
+        server half would leave a cancelled run still writing into the user's AI
+        client.
+        """
+        from opik.cli import selector
+
+        outcome, installed = self._pick([selector.CANCEL])
+
+        assert installed == []
+        assert outcome.skills is False
+        assert outcome.skills_decision == "cancelled"
 
     def test_choosing_one__registers_only_that_one(self):
         from opik.cli import selector

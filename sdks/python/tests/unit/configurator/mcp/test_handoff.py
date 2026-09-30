@@ -159,6 +159,7 @@ class TestLaunching:
         assert handoff.can_launch("claude-code") is False
 
     def test_launching__execs_the_agent_with_the_prompt(self, monkeypatch):
+        """The user agreed to this exact question a line ago, so it is sent."""
         recorded = {}
         monkeypatch.setattr(handoff.shutil, "which", lambda name: "/usr/bin/claude")
         monkeypatch.setattr(

@@ -124,8 +124,8 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     "--skills/--no-skills",
     "skills_flag",
     default=None,
-    help="Also install the Opik skill pack for the same clients. Default: yes. "
-    "When omitted you are asked, with both pre-selected.",
+    help="Also install the Opik skill pack for the same clients. On by default; "
+    "pass --no-skills to register the server without it.",
 )
 def configure(
     local_server: bool, hosts: Tuple[str, ...], skills_flag: Optional[bool]
@@ -139,7 +139,7 @@ def configure(
     Without a terminal — a coding agent, a script — name the client, which is what
     makes the request explicit:
 
-        opik mcp configure --ai-client cursor --skills
+        opik mcp configure --ai-client cursor
 
     By default this uses the Comet-hosted MCP server when your deployment offers
     one, falling back to a local server otherwise. Pass `--local-server` to force
@@ -214,8 +214,8 @@ def run_configure(
                 "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
                 "`opik configure`, then re-run this command."
             )
-        if not click.confirm(
-            "Opik is not configured yet. Configure it now?", default=True
+        if not install_view.confirm_default_yes(
+            "Opik is not configured yet. Configure it now?"
         ):
             raise click.ClickException(
                 "Run `opik configure` first, then `opik mcp configure`."
@@ -234,25 +234,18 @@ def run_configure(
     detected = mcp_targets.detected_targets()
     detected_clients = len(detected)
 
-    # The banner, not `opik configure`'s "set MCP up? (Recommended)" block: that
-    # one asks a question this command has already been answered by being run,
-    # and a question mark after a decision reads as a second chance to decline.
-    # A client named with `--ai-client` gets neither — it is a scripted run.
-    if not host_keys:
+    # The banner, not `opik configure`'s "Opik MCP (Recommended)" block: that one
+    # introduces a question this command has already been answered by being run,
+    # and asking it again reads as a second chance to decline. A client named
+    # with `--ai-client` gets neither — it is a scripted run — and neither does a
+    # redirect from `opik configure`, which opened on the same logo a moment ago.
+    if not host_keys and invoked_via == "direct":
         install_view.render_mcp_banner()
-    skills_verdict = consent.resolve(
-        skills_flag,
-        # No `-y` on this command, and nothing to detect-or-not: a named client
-        # counts as something to install into even when it was not auto-detected.
-        assume_yes=False,
-        interactive=interactive_helpers.is_interactive(),
-        anything_detected=bool(host_keys) or detected_clients > 0,
-    )
-    if skills_verdict.reason is consent.Reason.NO_TERMINAL:
-        install_view.render_note(
-            "Skipping the Opik skill pack: no terminal to ask in. Pass --skills "
-            "to install it without being asked."
-        )
+    # Installed rather than offered: the pack is what teaches the client to use
+    # the server this command just registered, so a run that set one up without
+    # the other did half the job. `--no-skills` is still honoured, because a
+    # script saying no is a decision rather than an unanswered question.
+    skills_verdict = consent.resolve_installed_by_default(skills_flag)
 
     outcome = assistants.setup(
         params,
@@ -308,6 +301,9 @@ def run_configure(
         # and `verification_succeeded` cannot see it, being a reachability probe
         # against an endpoint that challenges everyone.
         sign_in=outcome.sign_in,
+        # Ctrl-C at the picker, which is not the same answer as choosing no
+        # client: one is "stop", the other is a decision about the server.
+        cancelled=outcome.cancelled,
         # A stale uv tool install pins `uvx opik-mcp` at whatever was current when
         # it was left behind, and the versions still out there predate identity
         # resolution — so one we could not clear produces a server whose events
@@ -335,9 +331,17 @@ class _Handoff(NamedTuple):
     result event.
     """
 
-    #: `launch`, `prompt_shown`, `no_terminal`, `not_single_client` or
-    #: `sign_in_failed`.
+    #: `launch`, `declined`, `prompt_shown`, `no_terminal`, `not_single_client`,
+    #: `sign_in_failed` or `cancelled`. `launch` and `declined` are the two
+    #: answers to a question that is actually asked, so together they are the
+    #: number of runs that got as far as being offered their first question —
+    #: the last stage of the funnel, and the only one the user drives.
     outcome: str
+    #: Whether this run wrote into an AI client's configuration. The closing
+    #: "restart it" note is only true for a run that changed something, and the
+    #: endings that reach it cover both — a cancel writes nothing, a scripted
+    #: multi-client run writes several.
+    wrote_config: bool = False
     #: `diagnose` or `instrument` — which says whether the workspace already had
     #: traces of the user's own, the one thing the closing prompt turns on.
     prompt_kind: Optional[str] = None
@@ -347,7 +351,7 @@ class _Handoff(NamedTuple):
 
 
 def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Handoff:
-    """Decide how to end, without doing it yet.
+    """Settle how to end, including asking, without doing it yet.
 
     Registering a server is not the point — using it is. Which question depends
     on what the user has: traces of their own mean there is something to
@@ -358,19 +362,28 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
     and only with a terminal: `--ai-client` in a script is a request to
     configure, not to be replaced by an agent.
     """
+    # First, because a cancelled run registers nothing and so would otherwise be
+    # claimed by the client-count check below — which would file every Ctrl-C
+    # under `not_single_client` and print a restart note for a run that wrote
+    # nothing to restart for.
+    if outcome.cancelled:
+        return _Handoff(outcome="cancelled")
+
+    wrote_config = bool(outcome.registered_clients)
     if not interactive_helpers.is_interactive():
-        return _Handoff(outcome="no_terminal")
+        return _Handoff(outcome="no_terminal", wrote_config=wrote_config)
     if len(outcome.registered_clients) != 1:
-        return _Handoff(outcome="not_single_client")
+        return _Handoff(outcome="not_single_client", wrote_config=wrote_config)
     if outcome.sign_in == "failed":
         # An unauthorized hosted server advertises no tools at all, so dropping
         # the user into their agent on a question it cannot answer would teach
         # them the integration is broken. The installer has already told them how
         # to finish the sign-in by hand.
-        return _Handoff(outcome="sign_in_failed")
+        return _Handoff(outcome="sign_in_failed", wrote_config=True)
 
     host_key = outcome.registered_clients[0]
     target = mcp_targets.find_target(host_key)
+    display_name = target.display_name if target is not None else host_key
 
     project = mcp_handoff.traced_project(
         api_key=params["api_key"],
@@ -378,19 +391,50 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
         api_url=params["api_url"],
         check_tls_certificate=params["check_tls_certificate"],
     )
+    prompt_kind = "diagnose" if project is not None else "instrument"
+    prompt = mcp_handoff.closing_prompt(project)
+
+    if not mcp_handoff.can_launch(host_key):
+        return _Handoff(
+            outcome="prompt_shown",
+            wrote_config=True,
+            prompt_kind=prompt_kind,
+            host_key=host_key,
+            display_name=display_name,
+            prompt=prompt,
+        )
+
+    # Asked rather than done. Starting the agent replaces this process, which is
+    # a large enough thing to happen unannounced that it was worth a question —
+    # and the answer is the one piece of this funnel that measures wanting to
+    # use the server rather than having one installed.
+    install_view.render_handoff_offer(prompt)
+    try:
+        accepted = install_view.confirm_default_yes(f"Try it in {display_name}?")
+    except click.Abort:
+        # Ctrl-C here is not a failed run: the server is registered and the pack
+        # is installed. It means "not now", which is the same answer as `n`.
+        accepted = False
 
     return _Handoff(
-        outcome="launch" if mcp_handoff.can_launch(host_key) else "prompt_shown",
-        prompt_kind="diagnose" if project is not None else "instrument",
+        outcome="launch" if accepted else "declined",
+        wrote_config=True,
+        prompt_kind=prompt_kind,
         host_key=host_key,
-        display_name=target.display_name if target is not None else host_key,
-        prompt=mcp_handoff.closing_prompt(project),
+        display_name=display_name,
+        prompt=prompt,
     )
 
 
 def _perform_handoff(handoff: _Handoff) -> None:
-    """End inside the agent, or hand over the prompt for a client we cannot start."""
+    """End inside the agent, or leave the prompt where the user can reach it."""
     if handoff.host_key is None or handoff.prompt is None:
+        # Nothing to hand over to and no one client to name. A run that still
+        # wrote a configuration gets the generic instruction, because that
+        # configuration is not read until the client restarts; a cancelled one
+        # gets nothing, having changed nothing.
+        if handoff.wrote_config:
+            install_view.render_restart_note(mcp_installed=True)
         return
 
     # Set together with `host_key`, so this only ever falls back for a client the
@@ -401,7 +445,11 @@ def _perform_handoff(handoff: _Handoff) -> None:
         install_view.render_prompt_to_paste(display_name, handoff.prompt)
         return
 
-    install_view.render_handoff(display_name, handoff.prompt)
+    if handoff.outcome == "declined":
+        install_view.render_handoff_declined(display_name)
+        return
+
+    install_view.render_handoff(display_name)
     # `launch` replaces this process, so `atexit` never runs and anything still
     # queued would be lost. The events describing this run are the reason the
     # run happened.
