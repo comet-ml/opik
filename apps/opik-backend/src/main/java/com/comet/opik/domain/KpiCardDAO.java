@@ -377,7 +377,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
     private static final String GET_THREAD_KPI_CARDS = """
             WITH traces_final AS (
                 SELECT
-                    *
+                    *,
+                    -- Each period is built from its own traces and rows, like the chart for that range.
+                    -- Aggregating both periods as one set moved threads that straddle the start into "previous".
+                    id >= :id_current_start AS is_current_period
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -398,7 +401,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     created_by,
                     last_updated_by,
                     created_at,
-                    last_updated_at
+                    last_updated_at,
+                    id >= :id_current_start AS is_current_period
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -475,6 +479,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
+                    t.is_current_period as is_current_period,
                     -- minIf returns the epoch default when every trace carries the sentinel start time.
                     -- Without this fallback the thread lands in neither KPI period and disappears.
                     if(equals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), UUIDv7ToDateTime(toUUID(tt.thread_model_id), 'UTC'), t.start_time) as start_time,
@@ -485,6 +490,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
+                        t.is_current_period as is_current_period,
                         minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
                         maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as end_time,
                         if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
@@ -500,9 +506,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         min(t.created_at) as created_at
                     FROM traces_final AS t
                     GROUP BY
-                        t.workspace_id, t.project_id, t.thread_id
+                        t.workspace_id, t.project_id, t.thread_id, t.is_current_period
                 ) AS t
-                JOIN trace_threads_final AS tt ON t.id = tt.thread_id
+                JOIN trace_threads_final AS tt ON t.id = tt.thread_id AND t.is_current_period = tt.is_current_period
                 WHERE workspace_id = :workspace_id
                 <if(thread_feedback_scores_filters)>
                 AND thread_model_id IN (
@@ -527,7 +533,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
             ), thread_costs AS (
-                SELECT tr.thread_id AS thread_id, sum(s.total_estimated_cost) AS cost
+                SELECT tr.thread_id AS thread_id, tr.is_current_period AS is_current_period, sum(s.total_estimated_cost) AS cost
                 FROM (
                     SELECT trace_id, total_estimated_cost
                     FROM spans FINAL
@@ -545,14 +551,16 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       <endif>
                 ) s
                 JOIN traces_final tr ON s.trace_id = tr.id
-                GROUP BY tr.thread_id
+                GROUP BY tr.thread_id, tr.is_current_period
             )
             , thread_periods AS (
                 SELECT
                     tf.*,
-                    tf.start_time >= UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC')
+                    tf.is_current_period
+                        AND tf.start_time >= UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC')
                         AND tf.start_time \\<= UUIDv7ToDateTime(toUUID(:id_end), 'UTC') AS is_current,
-                    tf.start_time >= UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')
+                    NOT tf.is_current_period
+                        AND tf.start_time >= UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')
                         AND tf.start_time \\< UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC') AS is_previous
                 FROM threads_filtered tf
             )
@@ -564,7 +572,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 SUMIf(tc.cost, tf.is_current) AS current_total_cost,
                 SUMIf(tc.cost, tf.is_previous) AS previous_total_cost
             FROM thread_periods tf
-            LEFT JOIN thread_costs tc ON tf.id = tc.thread_id
+            LEFT JOIN thread_costs tc ON tf.id = tc.thread_id AND tf.is_current_period = tc.is_current_period
             SETTINGS log_comment = '<log_comment>';
             """;
 
