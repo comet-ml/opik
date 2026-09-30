@@ -522,7 +522,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > wall time — `clickhouse-client --time` — to **stderr**. Several of the numbers this runbook later asks you to record
 > are the stderr ones: the deletion replay's times (step 2 — one per scoped statement now, see
 > [Partition-scoped deletion replays](#partition-scoped-deletion-replays-opik-8607)), the rollback's per-statement
-> times, the reconciliation's.
+> times, and the reconciliation's per-statement times.
 > A plain `> run.log` keeps the narrative and silently drops all of them. Run each step as
 > `./scripts/<driver>.sh ... 2>&1 | tee -a cutover.log` — and detached (`nohup` / `screen`) for the backfill, which
 > runs for days.

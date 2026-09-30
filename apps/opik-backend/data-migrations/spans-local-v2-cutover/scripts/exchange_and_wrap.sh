@@ -402,7 +402,7 @@ scope_extract() {
 # the estate this exists for, the unbounded form is precisely what does not work. Refusing sends the operator to fix a
 # grant or a connection; falling back would send them into the ZooKeeper failure this block prevents.
 derive_delete_scope() {
-    local target="$1" anchor="$2" row found partition_key expected sql counts bridged underivable partitions p
+    local target="$1" anchor="$2" row found partition_key expected sql scope_row bridged underivable partitions p
     SCOPE_MODE="" SCOPE_PARTITIONS=() SCOPE_WINDOW_END="" SCOPE_REASON=""
 
     [[ -f "$SCOPE_SQL" ]] || { echo "ERROR: cannot find $SCOPE_SQL" >&2; exit 2; }
@@ -475,16 +475,16 @@ derive_delete_scope() {
         exit 2
     fi
 
-    counts="$(clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$sql")" || {
+    scope_row="$(clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$sql")" || {
         echo "ERROR: the partition-scope derivation failed against '$DATABASE'. Refusing to fall back to the unbounded" >&2
         echo "       mutation: that is the statement that cannot run once the target has enough weekly partitions." >&2
         exit 2
     }
     # Tab-separated, and the third field is legitimately empty when nothing is derivable, so IFS is pinned to a tab --
     # the default IFS would split the partition list across the variables.
-    IFS=$'\t' read -r bridged underivable partitions SCOPE_WINDOW_END <<<"$counts"
+    IFS=$'\t' read -r bridged underivable partitions SCOPE_WINDOW_END <<<"$scope_row"
     if ! [[ "$bridged" =~ ^[0-9]+$ && "$underivable" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: the partition-scope derivation returned no usable counts (got: '$counts')." >&2
+        echo "ERROR: the partition-scope derivation returned no usable counts (got: '$scope_row')." >&2
         exit 2
     fi
 
@@ -551,10 +551,13 @@ derive_delete_scope() {
 render_scope() {
     local block="$1" p bound placeholder
     case "$SCOPE_MODE" in
-        skip) return 0 ;;
-        unbounded|scoped) ;;
+        skip|unbounded|scoped) ;;
         *) echo "ERROR: render_scope called before derive_delete_scope." >&2; exit 2 ;;
     esac
+    # Checked for EVERY mode, including `skip`, and so before the empty-bridge return below. A pass with nothing to
+    # replay emits no statement either way, but it is also the cheapest moment to notice that the template it WOULD
+    # have used has lost a placeholder -- the alternative is discovering it on the first pass that has work, which on
+    # this procedure is a refusal mid-window.
     for placeholder in '${PARTITION_SCOPE}' '${BRIDGE_WINDOW_END}'; do
         grep -qF "$placeholder" <<<"$block" || {
             echo "ERROR: the deletion-replay statement carries no $placeholder placeholder, so it cannot be scoped." >&2
@@ -563,6 +566,7 @@ render_scope() {
             exit 2
         }
     done
+    [[ "$SCOPE_MODE" != "skip" ]] || return 0
     if [[ "$SCOPE_MODE" == "unbounded" ]]; then
         block="${block//'${BRIDGE_WINDOW_END}'/}"
         printf '%s\n' "${block//'${PARTITION_SCOPE}'/}"

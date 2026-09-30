@@ -397,7 +397,7 @@ scope_extract() {
 # the estate this exists for, the unbounded form is precisely what does not work. Refusing sends the operator to fix a
 # grant or a connection; falling back would send them into the ZooKeeper failure this block prevents.
 derive_delete_scope() {
-    local target="$1" anchor="$2" row found partition_key expected sql counts bridged underivable partitions p
+    local target="$1" anchor="$2" row found partition_key expected sql scope_row bridged underivable partitions p
     SCOPE_MODE="" SCOPE_PARTITIONS=() SCOPE_WINDOW_END="" SCOPE_REASON=""
 
     [[ -f "$SCOPE_SQL" ]] || { echo "ERROR: cannot find $SCOPE_SQL" >&2; exit 2; }
@@ -470,16 +470,16 @@ derive_delete_scope() {
         exit 2
     fi
 
-    counts="$(clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$sql")" || {
+    scope_row="$(clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$sql")" || {
         echo "ERROR: the partition-scope derivation failed against '$DATABASE'. Refusing to fall back to the unbounded" >&2
         echo "       mutation: that is the statement that cannot run once the target has enough weekly partitions." >&2
         exit 2
     }
     # Tab-separated, and the third field is legitimately empty when nothing is derivable, so IFS is pinned to a tab --
     # the default IFS would split the partition list across the variables.
-    IFS=$'\t' read -r bridged underivable partitions SCOPE_WINDOW_END <<<"$counts"
+    IFS=$'\t' read -r bridged underivable partitions SCOPE_WINDOW_END <<<"$scope_row"
     if ! [[ "$bridged" =~ ^[0-9]+$ && "$underivable" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: the partition-scope derivation returned no usable counts (got: '$counts')." >&2
+        echo "ERROR: the partition-scope derivation returned no usable counts (got: '$scope_row')." >&2
         exit 2
     fi
 
@@ -546,10 +546,13 @@ derive_delete_scope() {
 render_scope() {
     local block="$1" p bound placeholder
     case "$SCOPE_MODE" in
-        skip) return 0 ;;
-        unbounded|scoped) ;;
+        skip|unbounded|scoped) ;;
         *) echo "ERROR: render_scope called before derive_delete_scope." >&2; exit 2 ;;
     esac
+    # Checked for EVERY mode, including `skip`, and so before the empty-bridge return below. A pass with nothing to
+    # replay emits no statement either way, but it is also the cheapest moment to notice that the template it WOULD
+    # have used has lost a placeholder -- the alternative is discovering it on the first pass that has work, which on
+    # this procedure is a refusal mid-window.
     for placeholder in '${PARTITION_SCOPE}' '${BRIDGE_WINDOW_END}'; do
         grep -qF "$placeholder" <<<"$block" || {
             echo "ERROR: the deletion-replay statement carries no $placeholder placeholder, so it cannot be scoped." >&2
@@ -558,6 +561,7 @@ render_scope() {
             exit 2
         }
     done
+    [[ "$SCOPE_MODE" != "skip" ]] || return 0
     if [[ "$SCOPE_MODE" == "unbounded" ]]; then
         block="${block//'${BRIDGE_WINDOW_END}'/}"
         printf '%s\n' "${block//'${PARTITION_SCOPE}'/}"
@@ -1072,6 +1076,25 @@ run_block() {
     # size the reconciliation step in the runbook's timings, so they are recorded rather than guessed. The scoped replay
     # prints one figure per partition; their sum is its wall time.
     send_scoped_sql "$sql"
+    [[ "$block" != "forward-deletion-replay" ]] || report_late_bridged_deletes
+}
+
+# Deletes bridged PAST the window this pass replayed, reported because nothing else can see them. The replay covers
+# exactly the window its scope was derived from (000006, `forward-deletion-replay`); an event arriving after that is
+# the next pass's, and the four counts are structurally blind to it -- every one starts from a row in the PARKED table
+# and looks up its live version, while an unreplayed delete is live on the successor and absent from the parked side.
+# So RECONCILED would otherwise print with no hint that a delete is still outstanding. Advisory, like
+# leak-check-forward: it is a reason to re-run the driver or to quiesce trace deletes, not a gate.
+report_late_bridged_deletes() {
+    local late
+    late="$(ch "SELECT count() FROM $DATABASE.deletion_events_local
+                WHERE source_table = 'spans'
+                  AND event_time >= toDateTime64('$SCOPE_WINDOW_END', 6, 'UTC')" 2>/dev/null || true)"
+    [[ "$late" =~ ^[0-9]+$ ]] || return 0
+    (( late > 0 )) || return 0
+    echo "  NOTE: $late span-delete event(s) were bridged after this pass's window closed ($SCOPE_WINDOW_END UTC)."
+    echo "        They are NOT covered by the replay above and the four counts cannot see them. Re-run this driver to"
+    echo "        pick them up on a wider window; quiescing user TRACE deletes is what empties this."
 }
 
 # The reverse replay, unchanged from the rollback path: 000004_rollback_reverse_replay.sql re-applies every delete

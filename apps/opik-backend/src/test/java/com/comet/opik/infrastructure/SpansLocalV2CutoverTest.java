@@ -24,6 +24,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -33,6 +34,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -149,6 +151,15 @@ class SpansLocalV2CutoverTest {
      * {@code now}-derived so it never lands on Feb 29 and cannot drift.
      */
     private static final Instant FAR_FUTURE = LocalDate.of(2201, 6, 1).atStartOfDay().toInstant(ZoneOffset.UTC);
+
+    /**
+     * The two weekly partitions {@link #FAR_FUTURE} resolves to: the honest one the {@code DateTime64} successor
+     * stores it in, and the one the legacy 32-bit {@code id_at} wraps it into ({@code epochSecond % 2^32}). Asserted
+     * as literals rather than against whatever the derivation returned — comparing a derivation with itself passes
+     * for any pair of the right size. {@code SpansLocalV2PartitioningTest} pins the same pair.
+     */
+    private static final long FAR_FUTURE_HONEST_WEEK = 22010601L;
+    private static final long FAR_FUTURE_LEGACY_WRAP_WEEK = 20650420L;
 
     /**
      * A UUIDv7 whose embedded millisecond count is the 48-bit maximum — far past {@code DateTime64}'s 2300-01-01
@@ -1165,11 +1176,19 @@ class SpansLocalV2CutoverTest {
 
         assertThat(scope.bridged()).isEqualTo(spans.size());
         assertThat(scope.underivable()).isZero();
+        // Against a Java oracle over the suite's fixed anchor, not against the derivation's own output: comparing the
+        // rendered scopes with the partitions they were rendered from passes for any set of the right size, so it
+        // would miss a derivation that named the wrong weeks entirely.
+        var expectedWeeks = IntStream.range(0, SEED_WEEKS)
+                .mapToObj(
+                        week -> Long.parseLong(ANCHOR_MONDAY.plusWeeks(week).format(DateTimeFormatter.BASIC_ISO_DATE)))
+                .toList();
+        assertThat(scope.derivedPartitions())
+                .as("the Monday of each seeded week, and nothing else")
+                .containsExactlyElementsOf(expectedWeeks);
         assertThat(scope.statementScopes())
-                .as("one statement per week, each naming its own partition")
-                .hasSize(SEED_WEEKS)
-                .containsExactlyElementsOf(scope.derivedPartitions().stream().map("IN PARTITION %d"::formatted)
-                        .toList());
+                .as("one statement per derived partition, each naming its own")
+                .containsExactlyElementsOf(expectedWeeks.stream().map("IN PARTITION %d"::formatted).toList());
     }
 
     /**
@@ -1193,10 +1212,11 @@ class SpansLocalV2CutoverTest {
         lightweightDeleteScoped(deleted, workspaceId, projectId);
 
         assertThat(deletePartitionScope(backfillStart).derivedPartitions())
-                .as("the honest ~2201 week and the week the 32-bit column wraps it into")
-                .hasSize(2)
-                .as("and the honest one is the partition ClickHouse actually stored the row in, not merely some week "
-                        + "in the right year — an off-by-one-week derivation would scope to a partition holding nothing")
+                .as("both weeks exactly: the honest one and the one the 32-bit column wraps it into. A size check "
+                        + "alone leaves the wrap unconstrained, and it is the half no table here can falsify")
+                .containsExactly(FAR_FUTURE_LEGACY_WRAP_WEEK, FAR_FUTURE_HONEST_WEEK)
+                .as("and the honest one is the partition ClickHouse actually stored the row in, which is what ties "
+                        + "the literal above to this server rather than to a comment")
                 .contains(Long.parseLong(destinationPartitionId(farFuture.getFirst().id(), workspaceId)));
 
         replayDeletions(backfillStart);

@@ -287,6 +287,16 @@ SETTINGS max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
 -- three arms below are identical in every copy, so the union removes exactly the rows one unbounded statement removed.
 -- The arms decide which rows match; `IN PARTITION` only decides which parts the mutation is registered against.
 --
+-- WHAT THE BOUND DOES NOT CLOSE, stated because the four counts cannot see it. ${BRIDGE_WINDOW_END} makes this pass
+-- cover exactly the bridge window its scope was derived from, so nothing inside that window is silently skipped. A
+-- delete bridged AFTER it is simply not this pass's to replay — the same residual every replay here has always had,
+-- since a statement cannot mask a key the bridge did not yet name when it ran; the bound only makes the edge explicit
+-- instead of timing-dependent. The postcondition cannot report it either: all four counts start from a row in the
+-- PARKED table and look up its live version, and a delete that was never replayed is live on the successor and absent
+-- from the parked side, which is the one shape they are structurally blind to. So ../reconcile.sh prints how many
+-- events were bridged past this pass's bound, and the mitigation is the runbook's existing one: QUIESCE USER TRACE
+-- DELETES across the window. Re-running the driver picks them up on the next pass's wider window.
+--
 -- The scope comes from ARM 1's bridge window alone — the same ${GAP_START} floor, deliberately ignoring arms 2 and 3.
 -- Those two only ever REMOVE rows from what arm 1 admits, so the partitions arm 1's ids resolve to are a superset of
 -- the partitions this statement can delete from. A superset is the safe direction: a statement scoped to a partition

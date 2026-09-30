@@ -315,10 +315,15 @@ if [[ "$SKIP_AUDITS" != "1" ]]; then
     #
     # Which is why it is asked HERE, before the window, and read from two places. `source_spans_past_ceiling` is the
     # latent population: spans that would trigger the fallback IF one of them were cascade-deleted while the cutover
-    # runs. `bridged_ids_past_ceiling` is the live one: such an id already in the bridge, which makes the next replay
-    # fall back for certain. The ids are read from `id` via UUIDv7ToDateTime and compared in RAW milliseconds, the
-    # same rule 000002_delete_partition_scope.sql applies -- `toUnixTimestamp64Milli` returns the embedded count
-    # rather than the saturated rendering, which is the only way such an id is recognisable at all.
+    # runs. `bridged_ids_past_ceiling` counts such an id ANYWHERE IN THE BRIDGE'S RETAINED HISTORY -- deliberately
+    # unbounded, because this runs before backfill.sh mints the anchor a replay would be bounded by, so there is no
+    # run-specific window to apply yet. Read it as reachability, NOT as a verdict on the next replay: an event older
+    # than that anchor proves the cascade has reached this population on this estate, while the next replay would not
+    # see it. The run-specific answer is the `underivable` count each driver derives and prints before it runs.
+    #
+    # The ids are read from `id` via UUIDv7ToDateTime and compared in RAW milliseconds, the same rule
+    # 000002_delete_partition_scope.sql applies -- `toUnixTimestamp64Milli` returns the embedded count rather than the
+    # saturated rendering, which is the only way such an id is recognisable at all.
     echo
     echo "=== Audit 3: ids the deletion replay cannot derive a partition for ==="
     ch "SELECT
@@ -330,11 +335,14 @@ if [[ "$SKIP_AUDITS" != "1" ]]; then
                   AND toUnixTimestamp64Milli(UUIDv7ToDateTime(toUUIDOrZero(deleted_id))) >= 10413792000000)
                                                                              AS bridged_ids_past_ceiling
         FORMAT Vertical"
-    echo "  Both at 0 means every replay in the window will be partition-scoped. bridged_ids_past_ceiling > 0 means the"
-    echo "  NEXT replay already falls back to the unbounded statement -- resolve those bridge rows before opening the"
-    echo "  window. source_spans_past_ceiling > 0 is the latent risk: it cannot be resolved, only known, and it is the"
-    echo "  reason the runbook asks to QUIESCE USER TRACE DELETES across the window rather than merely across the swap."
-    echo "  Every driver prints which form it chose before it runs; 'runs UNBOUNDED' on a large estate is the warning."
+    echo "  Both at 0 means nothing on this estate can send a replay to its unbounded fallback today."
+    echo "  bridged_ids_past_ceiling counts the bridge's WHOLE retained history, not the next replay's window -- this"
+    echo "  runs before backfill.sh mints that anchor -- so read it as 'the cascade has reached this population here',"
+    echo "  not as 'the next replay falls back'. source_spans_past_ceiling is the same signal from the source side; it"
+    echo "  cannot be resolved, only known, and it is why the runbook asks to QUIESCE USER TRACE DELETES across the"
+    echo "  whole window rather than merely across the swap."
+    echo "  The run-specific verdict is the driver's own: each prints which form it chose before it runs, and"
+    echo "  'runs UNBOUNDED' on a large estate is the warning."
 
     # --- Audit 4: the partition keys the replays' scope is derived against -----------------------------------------
     #
