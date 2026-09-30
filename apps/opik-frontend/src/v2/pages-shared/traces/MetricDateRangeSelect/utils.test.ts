@@ -1,8 +1,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
-import { calculateIntervalStartAndEnd } from "./utils";
-import { DateRangeValue } from "@/shared/DateRangeSelect";
+import {
+  calculateIntervalBounds,
+  calculateIntervalStartAndEnd,
+  reanchorIntervalBounds,
+} from "./utils";
+import {
+  DateRangePreset,
+  DateRangeValue,
+  PRESET_DATE_RANGES,
+} from "@/shared/DateRangeSelect";
 
 dayjs.extend(utc);
 
@@ -312,5 +320,146 @@ describe("calculateIntervalStartAndEnd", () => {
         expect(intervalEnd).toMatch(/Z$/);
       }
     });
+  });
+});
+
+describe("calculateIntervalBounds", () => {
+  const now = dayjs(PRESET_DATE_RANGES.past24hours.to)
+    .startOf("day")
+    .add(12, "hours")
+    .add(30, "minutes");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now.toDate());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each<DateRangePreset>([
+    "past24hours",
+    "past3days",
+    "past7days",
+    "past30days",
+    "past60days",
+  ])(
+    "should close the %s preset at the current time and keep its start",
+    (preset) => {
+      const dateRange = PRESET_DATE_RANGES[preset];
+      const openInterval = calculateIntervalStartAndEnd(dateRange);
+
+      const result = calculateIntervalBounds(dateRange);
+
+      expect(openInterval.intervalEnd).toBeUndefined();
+      expect(result).toEqual({
+        intervalStart: openInterval.intervalStart,
+        intervalEnd: now.utc().format(),
+      });
+    },
+  );
+
+  it("should give All time an explicit window from five years ago until now", () => {
+    const fiveYearsAgo = now.subtract(5, "years").format("YYYY-MM-DD");
+
+    const result = calculateIntervalBounds(PRESET_DATE_RANGES.alltime);
+
+    expect(result).toEqual({
+      intervalStart: `${fiveYearsAgo}T00:00:00Z`,
+      intervalEnd: now.utc().format(),
+    });
+  });
+
+  it("should leave a past custom range unchanged", () => {
+    const dateRange: DateRangeValue = {
+      from: new Date("2024-01-03"),
+      to: new Date("2024-01-10"),
+    };
+
+    const result = calculateIntervalBounds(dateRange);
+
+    expect(result).toEqual(calculateIntervalStartAndEnd(dateRange));
+    expect(result.intervalEnd).toBe(
+      dayjs(dateRange.to).utc().endOf("day").format(),
+    );
+  });
+
+  it("should leave a custom range ending today unchanged", () => {
+    const dateRange: DateRangeValue = {
+      from: now.subtract(10, "days").startOf("day").toDate(),
+      to: now.endOf("day").toDate(),
+    };
+
+    const result = calculateIntervalBounds(dateRange);
+
+    expect(result).toEqual(calculateIntervalStartAndEnd(dateRange));
+    expect(result.intervalEnd).toBe(now.utc().format());
+  });
+});
+
+describe("reanchorIntervalBounds", () => {
+  const now = dayjs(PRESET_DATE_RANGES.past24hours.to)
+    .startOf("day")
+    .add(12, "hours")
+    .add(30, "minutes");
+  const later = now.add(90, "minutes");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now.toDate());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each<DateRangePreset>([
+    "past24hours",
+    "past3days",
+    "past7days",
+    "past30days",
+    "past60days",
+  ])("should move the %s preset to the current time", (preset) => {
+    const dateRange = PRESET_DATE_RANGES[preset];
+    const bounds = calculateIntervalBounds(dateRange);
+    vi.setSystemTime(later.toDate());
+
+    const result = reanchorIntervalBounds(dateRange, bounds);
+
+    expect(result).not.toBe(bounds);
+    expect(result).toEqual(calculateIntervalBounds(dateRange));
+    expect(result.intervalEnd).toBe(later.utc().format());
+  });
+
+  it("should move a custom range ending today to the current time", () => {
+    const dateRange: DateRangeValue = {
+      from: now.subtract(10, "days").startOf("day").toDate(),
+      to: now.endOf("day").toDate(),
+    };
+    const bounds = calculateIntervalBounds(dateRange);
+    vi.setSystemTime(later.toDate());
+
+    const result = reanchorIntervalBounds(dateRange, bounds);
+
+    expect(result.intervalEnd).toBe(later.utc().format());
+  });
+
+  it("should keep the bounds of a past custom range", () => {
+    const dateRange: DateRangeValue = {
+      from: new Date("2024-01-03"),
+      to: new Date("2024-01-10"),
+    };
+    const bounds = calculateIntervalBounds(dateRange);
+    vi.setSystemTime(later.toDate());
+
+    expect(reanchorIntervalBounds(dateRange, bounds)).toBe(bounds);
+  });
+
+  it("should keep the bounds when refreshed within the same second", () => {
+    const dateRange = PRESET_DATE_RANGES.past7days;
+    const bounds = calculateIntervalBounds(dateRange);
+
+    expect(reanchorIntervalBounds(dateRange, bounds)).toBe(bounds);
   });
 });
