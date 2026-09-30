@@ -22,9 +22,6 @@ from opik.configurator.skills import roots as skills_roots
 
 console = rich.console.Console()
 
-#: Key of the synthetic "All" row in the host picker. Not a host key, and cannot
-#: collide with one: `mcp_targets.HOST_KEYS` are plain names like `claude-code`.
-
 
 def _collapse_home(message: str) -> str:
     """Shorten any absolute home paths inside a message.
@@ -471,7 +468,6 @@ class RichInstallView(mcp_view.InstallView):
         self,
         title: str,
         candidates: List[mcp_view.HostChoice],
-        preselected: List[str],
     ) -> Optional[List[str]]:
         # A terminal that cannot host a picker still gets the inherited numbered
         # menu rather than an error.
@@ -499,7 +495,6 @@ class RichInstallView(mcp_view.InstallView):
                     key=mcp_view.MANUAL_SETUP,
                     label=mcp_view.MANUAL_SETUP_LABEL,
                     hint="show manual setup",
-                    synthetic=True,
                 )
             ],
         )

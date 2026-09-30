@@ -479,15 +479,10 @@ def _confirm_targets(
             mcp_view.HostChoice(key=target.key, label=target.display_name)
             for target in candidates
         ],
-        # Nothing pre-ticked. Registering a server edits another tool's config
-        # file, so Enter must not do it to every assistant found on the machine
-        # by default — the same reason `opik configure -y` refuses to. Enter
-        # takes the highlighted row; `a` is there when the answer really is all.
-        preselected=[],
     )
     if chosen is None:
         # Distinct from an empty list, which is "I deliberately chose nothing".
-        # `select_many` keeps the two apart and this used to collapse them, so a
+        # The picker keeps the two apart and this used to collapse them, so a
         # Ctrl-C read as declining the server and the flow carried on into the
         # skill pack.
         return _Confirmation([], cancelled=True)

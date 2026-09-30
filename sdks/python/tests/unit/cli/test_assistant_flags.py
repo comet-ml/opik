@@ -261,23 +261,24 @@ class TestThePickerIsReallyExercised:
     def test_one_answer_only__no_key_registers_a_second_client(self):
         """The question takes one client, so nothing typed into it can take two.
 
-        `a` used to mean select-all. It is not a key this picker has, and the
-        guard here is that it stays that way: the flow ends by starting the
-        chosen client, which only means anything for one of them.
+        `a` used to mean select-all, and `_normalise` now maps it to nothing at
+        all. The guard here is that a key the picker has no meaning for stays
+        inert rather than growing one: the flow ends by starting the chosen
+        client, which only means anything for one of them.
         """
         from opik.cli import selector
 
-        outcome, installed = self._pick([selector.TOGGLE_ALL, selector.ACCEPT])
+        outcome, installed = self._pick(["", selector.ACCEPT])
 
         assert installed == ["claude-code"]
         assert outcome.clients == 1
 
     def test_enter_on_the_first_row__registers_that_client_alone(self):
-        """`All` sits under the clients, so a bare Enter is not select-all.
+        """Enter takes the row under the cursor, which starts on the first client.
 
-        With nothing ticked the picker takes the highlighted row, and that is
-        now the first client. Registering every client is a row the user has to
-        move to, which is the conservative reading of an ambiguous Enter.
+        It used to confirm a pre-ticked set and write into three tools' configs
+        at once, which is not what "move to Claude Code, press Enter" looks like
+        it does.
         """
         from opik.cli import selector
 

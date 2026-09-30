@@ -200,7 +200,7 @@ class TestChooseHosts:
         monkeypatch.setattr("builtins.input", lambda prompt: "y")
 
         chosen = mcp_view.LoggingInstallView().choose_hosts(
-            "pick", [mcp_view.HostChoice("cursor", "Cursor")], ["cursor"]
+            "pick", [mcp_view.HostChoice("cursor", "Cursor")]
         )
 
         assert chosen == ["cursor"]
@@ -209,7 +209,7 @@ class TestChooseHosts:
         monkeypatch.setattr("builtins.input", lambda prompt: "n")
 
         chosen = mcp_view.LoggingInstallView().choose_hosts(
-            "pick", [mcp_view.HostChoice("cursor", "Cursor")], []
+            "pick", [mcp_view.HostChoice("cursor", "Cursor")]
         )
 
         assert chosen == []
@@ -223,7 +223,7 @@ class TestChooseHosts:
 
         monkeypatch.setattr("builtins.input", fake_input)
 
-        mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates(), [])
+        mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
 
         assert "Claude Code" in prompts[0]
         assert "All of the above" in prompts[0]
@@ -231,18 +231,14 @@ class TestChooseHosts:
     def test_logging_view__all_of_the_above(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda prompt: "4")
 
-        chosen = mcp_view.LoggingInstallView().choose_hosts(
-            "pick", self._candidates(), []
-        )
+        chosen = mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
 
         assert chosen == ["claude-code", "cursor", "codex"]
 
     def test_logging_view__comma_separated_subset(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda prompt: "1,3")
 
-        chosen = mcp_view.LoggingInstallView().choose_hosts(
-            "pick", self._candidates(), []
-        )
+        chosen = mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
 
         assert chosen == ["claude-code", "codex"]
 
@@ -251,23 +247,20 @@ class TestChooseHosts:
         monkeypatch.setattr("builtins.input", lambda prompt: "6")
 
         assert (
-            mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates(), [])
-            == []
+            mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates()) == []
         )
 
     def test_logging_view__client_not_listed(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda prompt: "5")
 
         assert mcp_view.LoggingInstallView().choose_hosts(
-            "pick", self._candidates(), []
+            "pick", self._candidates()
         ) == [mcp_view.MANUAL_SETUP]
 
     def test_logging_view__invalid_then_valid__retries(self, monkeypatch):
         monkeypatch.setattr("builtins.input", mock.Mock(side_effect=["x", "99", "2"]))
 
-        chosen = mcp_view.LoggingInstallView().choose_hosts(
-            "pick", self._candidates(), []
-        )
+        chosen = mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
 
         assert chosen == ["cursor"]
 
@@ -278,9 +271,7 @@ class TestChooseHosts:
         monkeypatch.setattr(selector, "is_supported", lambda: True)
         monkeypatch.setattr(selector, "choose_one", lambda **kwargs: "codex")
 
-        chosen = rich_view.RichInstallView().choose_hosts(
-            "pick", self._candidates(), ["claude-code"]
-        )
+        chosen = rich_view.RichInstallView().choose_hosts("pick", self._candidates())
 
         assert chosen == ["codex"]
 
@@ -291,9 +282,7 @@ class TestChooseHosts:
         monkeypatch.setattr(selector, "is_supported", lambda: False)
         monkeypatch.setattr("builtins.input", lambda prompt: "4")
 
-        chosen = rich_view.RichInstallView().choose_hosts(
-            "pick", self._candidates(), []
-        )
+        chosen = rich_view.RichInstallView().choose_hosts("pick", self._candidates())
 
         assert chosen == ["claude-code", "cursor", "codex"]
 
@@ -318,7 +307,7 @@ class TestChooseHosts:
         )
 
         chosen = rich_view.RichInstallView().choose_hosts(
-            "pick", [mcp_view.HostChoice("cursor", "Cursor")], ["cursor"]
+            "pick", [mcp_view.HostChoice("cursor", "Cursor")]
         )
 
         assert chosen == [mcp_view.MANUAL_SETUP]
@@ -338,7 +327,7 @@ class TestChooseHosts:
             lambda **kwargs: offered.update(kwargs) or "cursor",
         )
 
-        rich_view.RichInstallView().choose_hosts("pick", self._candidates(), [])
+        rich_view.RichInstallView().choose_hosts("pick", self._candidates())
 
         assert "All" not in [choice.label for choice in offered["choices"]]
 
@@ -350,8 +339,7 @@ class TestChooseHosts:
         monkeypatch.setattr(selector, "choose_one", lambda **kwargs: None)
 
         assert (
-            rich_view.RichInstallView().choose_hosts("pick", self._candidates(), [])
-            is None
+            rich_view.RichInstallView().choose_hosts("pick", self._candidates()) is None
         )
 
 
@@ -383,9 +371,7 @@ class TestThePickerRows:
 
         monkeypatch.setattr(selector, "is_supported", lambda: True)
         monkeypatch.setattr(selector, "choose_one", fake)
-        chosen = rich_view.RichInstallView().choose_hosts(
-            "pick", self._candidates(), []
-        )
+        chosen = rich_view.RichInstallView().choose_hosts("pick", self._candidates())
         return chosen, seen["choices"]
 
     def test_clients_first_then_not_listed(self, monkeypatch):

@@ -55,11 +55,11 @@ class RecordingView(mcp_view.LoggingInstallView):
     def note(self, message):
         self.notes.append(message)
 
-    def choose_hosts(self, title, candidates, preselected):
-        self.choose_calls.append((title, list(candidates), list(preselected)))
+    def choose_hosts(self, title, candidates):
+        self.choose_calls.append((title, list(candidates)))
         if self.host_choice is not None:
             return list(self.host_choice)
-        return super().choose_hosts(title, candidates, preselected)
+        return super().choose_hosts(title, candidates)
 
     @property
     def said(self) -> str:

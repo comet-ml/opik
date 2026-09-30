@@ -141,12 +141,13 @@ class InstallView(abc.ABC):
 
     @abc.abstractmethod
     def choose_hosts(
-        self, title: str, candidates: List[HostChoice], preselected: List[str]
+        self, title: str, candidates: List[HostChoice]
     ) -> Optional[List[str]]:
-        """Ask which hosts to install for.
+        """Ask which host to install for.
 
         Returns the chosen keys, or ``None`` if the user cancelled — distinct
-        from an empty list, which means "none of them, deliberately".
+        from an empty list, which means "none of them, deliberately". Still a
+        list because the manual row answers with its own key rather than a host.
         """
 
 
@@ -210,7 +211,7 @@ class LoggingInstallView(InstallView):
         LOGGER.info(message)
 
     def choose_hosts(
-        self, title: str, candidates: List[HostChoice], preselected: List[str]
+        self, title: str, candidates: List[HostChoice]
     ) -> Optional[List[str]]:
         return numbered_menu(title, candidates)
 
