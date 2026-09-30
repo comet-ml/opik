@@ -20,6 +20,7 @@ from typing import Optional, Tuple
 import click
 
 from opik.api_objects.rest_helpers import resolve_project_id_by_name
+from opik.cli import install_view
 from opik.config import OpikConfig
 from opik.rest_api.core.api_error import ApiError
 
@@ -54,9 +55,10 @@ def should_create_project(
     if not sys.stdin.isatty():
         return False, False
     workspace_label = f" in workspace '{workspace}'" if workspace else ""
-    confirmed = click.confirm(
-        f"Project '{project_name}'{workspace_label} does not exist. Create it?",
-        default=True,
+    # The same asker the configure flow uses, so the CLI's yes/no questions all
+    # look alike wherever the user meets one.
+    confirmed = install_view.confirm_default_yes(
+        f"Project '{project_name}'{workspace_label} does not exist. Create it?"
     )
     return confirmed, confirmed
 
@@ -85,6 +87,11 @@ def maybe_auto_configure(
     # cold-start path unless we actually need it here.
     from ..configure import run_interactive_configure
 
-    click.echo("No Opik config file found. Running `opik configure` first.\n")
+    # `run_interactive_configure` rather than the click command, so the banner
+    # stays with the command the user actually typed — the same reason
+    # `opik mcp configure` calls it this way when it has to configure first.
+    install_view.render_hint(
+        "No Opik config file found. Running `opik configure` first."
+    )
     run_interactive_configure()
     click.echo()

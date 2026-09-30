@@ -69,7 +69,7 @@ def setup_skills(
         return InstallResult(
             succeeded=False,
             error=(
-                f"none of the requested assistants ({', '.join(host_keys) or 'none'}) "
+                f"none of the requested AI clients ({', '.join(host_keys) or 'none'}) "
                 "have a known skills location"
             ),
         )

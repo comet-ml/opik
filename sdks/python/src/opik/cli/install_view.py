@@ -217,7 +217,7 @@ def render_mcp_banner() -> None:
     putting a question mark after a decision already made.
     """
     _render_banner(
-        "Connect your coding agent to Opik.",
+        "Connect your AI client to Opik.",
         "It can then read your traces, find the failing ones, score them,\n"
         "and instrument your code — from chat.",
     )
@@ -242,7 +242,7 @@ def render_mcp_intro() -> None:
     )
     console.print(
         text.Text(
-            "Lets your AI assistant inspect traces, scan your projects for\n"
+            "Lets your AI client inspect traces, scan your projects for\n"
             "issues, debug experiments, and run Opik commands directly from\n"
             "chat.",
             style="dim",

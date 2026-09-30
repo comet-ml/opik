@@ -73,7 +73,7 @@ MANUAL_SETUP_LABEL = "My AI client is not listed"
 #: plainly what will happen; it used to hedge with "may have opened it during
 #: setup" because it also printed after a login that had already succeeded.
 SIGN_IN_HINT = (
-    "Signing in to Opik happens in your browser. Your assistant will prompt you "
+    "Signing in to Opik happens in your browser. Your AI client will prompt you "
     "the first time it uses Opik, or you can authorize the opik-mcp server from "
     "its MCP settings."
 )
