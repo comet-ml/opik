@@ -268,7 +268,7 @@ class TestChooseHosts:
         from opik.cli import selector
 
         monkeypatch.setattr(selector, "is_supported", lambda: True)
-        monkeypatch.setattr(selector, "multiselect", lambda **kwargs: ["codex"])
+        monkeypatch.setattr(selector, "choose_one", lambda **kwargs: "codex")
 
         chosen = rich_view.RichInstallView().choose_hosts(
             "pick", self._candidates(), ["claude-code"]
@@ -305,8 +305,8 @@ class TestChooseHosts:
         offered = {}
         monkeypatch.setattr(
             selector,
-            "multiselect",
-            lambda **kwargs: offered.update(kwargs) or [mcp_view.MANUAL_SETUP],
+            "choose_one",
+            lambda **kwargs: offered.update(kwargs) or mcp_view.MANUAL_SETUP,
         )
 
         chosen = rich_view.RichInstallView().choose_hosts(
@@ -317,8 +317,8 @@ class TestChooseHosts:
         labels = [choice.label for choice in offered["choices"]]
         assert labels == ["Cursor", mcp_view.MANUAL_SETUP_LABEL]
 
-    def test_rich_view__single_candidate__offers_no_all_row(self, monkeypatch):
-        """Nothing for it to stand in for, and it would outnumber the clients."""
+    def test_rich_view__offers_no_all_row(self, monkeypatch):
+        """One client, so there is nothing for an "All" row to stand in for."""
         from opik.cli import install_view as rich_view
         from opik.cli import selector
 
@@ -326,13 +326,11 @@ class TestChooseHosts:
         offered = {}
         monkeypatch.setattr(
             selector,
-            "multiselect",
-            lambda **kwargs: offered.update(kwargs) or ["cursor"],
+            "choose_one",
+            lambda **kwargs: offered.update(kwargs) or "cursor",
         )
 
-        rich_view.RichInstallView().choose_hosts(
-            "pick", [mcp_view.HostChoice("cursor", "Cursor")], []
-        )
+        rich_view.RichInstallView().choose_hosts("pick", self._candidates(), [])
 
         assert "All" not in [choice.label for choice in offered["choices"]]
 
@@ -341,7 +339,7 @@ class TestChooseHosts:
         from opik.cli import selector
 
         monkeypatch.setattr(selector, "is_supported", lambda: True)
-        monkeypatch.setattr(selector, "multiselect", lambda **kwargs: None)
+        monkeypatch.setattr(selector, "choose_one", lambda **kwargs: None)
 
         assert (
             rich_view.RichInstallView().choose_hosts("pick", self._candidates(), [])
@@ -349,15 +347,12 @@ class TestChooseHosts:
         )
 
 
-class TestTheAllRow:
-    """The picker offers "All" after the clients, before the manual row.
+class TestThePickerRows:
+    """One client, and a way out for the user whose client is not listed.
 
-    The same order the numbered-menu fallback has always used: the rows the
-    user is choosing between come first, and the two catch-alls sit under them.
-    Nothing is pre-ticked — this writes into other tools' config files — and
-    `multiselect` takes the highlighted row when the selection is empty, so a
-    bare Enter registers the first (highest-priority) client, and choosing
-    every client stays deliberate.
+    The flow ends by starting the chosen client with a prompt, which only means
+    anything for one of them, so the picker takes one answer. `--ai-client` is
+    still repeatable for scripted runs, and those skip this picker entirely.
     """
 
     @staticmethod
@@ -379,54 +374,38 @@ class TestTheAllRow:
             return returns
 
         monkeypatch.setattr(selector, "is_supported", lambda: True)
-        monkeypatch.setattr(selector, "multiselect", fake)
+        monkeypatch.setattr(selector, "choose_one", fake)
         chosen = rich_view.RichInstallView().choose_hosts(
             "pick", self._candidates(), []
         )
         return chosen, seen["choices"]
 
-    def test_clients_first_then_all_then_not_listed(self, monkeypatch):
-        _, choices = self._choose(monkeypatch, [])
+    def test_clients_first_then_not_listed(self, monkeypatch):
+        _, choices = self._choose(monkeypatch, "codex")
 
         assert [c.label for c in choices] == [
             "Claude Code",
             "Codex",
             "Cursor",
-            "All",
             mcp_view.MANUAL_SETUP_LABEL,
         ]
 
     def test_no_skip_row(self, monkeypatch):
         """Escape is the silent decline; the extra row is the one with an answer."""
-        _, choices = self._choose(monkeypatch, [])
+        _, choices = self._choose(monkeypatch, "codex")
 
         assert "Skip" not in [c.label for c in choices]
 
-    def test_not_listed__returns_the_sentinel_alone(self, monkeypatch):
+    def test_not_listed__returns_the_sentinel(self, monkeypatch):
         """It must not reach the installer as a host key, or nothing installs."""
-        chosen, _ = self._choose(monkeypatch, [mcp_view.MANUAL_SETUP, "codex"])
+        chosen, _ = self._choose(monkeypatch, mcp_view.MANUAL_SETUP)
 
         assert chosen == [mcp_view.MANUAL_SETUP]
 
-    def test_choosing_all__expands_to_every_candidate(self, monkeypatch):
-        from opik.cli import install_view as rich_view
+    def test_a_chosen_client__comes_back_alone(self, monkeypatch):
+        chosen, _ = self._choose(monkeypatch, "codex")
 
-        chosen, _ = self._choose(monkeypatch, [rich_view._ALL])
-
-        assert chosen == ["claude-code", "codex", "cursor"]
-
-    def test_choosing_some__returns_only_those(self, monkeypatch):
-        chosen, _ = self._choose(monkeypatch, ["codex", "cursor"])
-
-        assert chosen == ["codex", "cursor"]
-
-    def test_the_sentinel_never_leaks_out(self, monkeypatch):
-        """It is not a host key; passing it downstream would install nothing."""
-        from opik.cli import install_view as rich_view
-
-        chosen, _ = self._choose(monkeypatch, ["codex", rich_view._ALL])
-
-        assert rich_view._ALL not in chosen
+        assert chosen == ["codex"]
 
     def test_cancelled__still_propagates_none(self, monkeypatch):
         chosen, _ = self._choose(monkeypatch, None)

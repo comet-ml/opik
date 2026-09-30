@@ -69,9 +69,12 @@ class TestAssistantConfirmation:
     """`opik configure` must ask before editing another tool's config.
 
     Registering an MCP server writes into files owned by Claude Code, Cursor and
-    friends. Configuring Opik is not consent for that. The client picker is that
-    question — one question, the same one `opik mcp configure` asks — preceded by
-    a block saying what the step is and what it writes.
+    friends. Configuring Opik is not consent for that, so it is asked for.
+
+    A yes in a terminal is then answered by redirecting into `opik mcp
+    configure`, which owns that flow; this command runs the installer inline
+    only where there is no interactive flow to redirect into — a `--install-mcp`
+    flag, or an unattended run.
     """
 
     @staticmethod
@@ -112,31 +115,26 @@ class TestAssistantConfirmation:
                 )[1],
             ),
         ):
-            outcome = configure_cli._setup_assistants(
+            outcome, redirected = configure_cli._setup_assistants(
                 {}, install_mcp, install_skills, auto
             )
-        return confirm, setup_calls, outcome
+        return confirm, setup_calls, outcome, redirected
 
-    def test_no_flags__asks_permission_then_reaches_the_installer(self):
-        """Registering into another tool's config is asked for, not inferred."""
-        confirm, setup_calls, _ = self._run(answer=True)
-
-        assert confirm.called
-        assert len(setup_calls) == 1
-        assert setup_calls[0]["install_mcp"] is True
-
-    def test_no_flags__permission_refused__does_not_register(self):
-        confirm, setup_calls, outcome = self._run(answer=False)
+    def test_no_flags__asks_permission_then_redirects_to_the_mcp_flow(self):
+        """One MCP setup flow, not two: the yes buys `opik mcp configure`."""
+        confirm, setup_calls, _, redirected = self._run(answer=True)
 
         assert confirm.called
+        assert redirected is True
+        assert setup_calls == [], "the inline installer must not also run"
+
+    def test_no_flags__permission_refused__does_not_register_or_redirect(self):
+        confirm, setup_calls, outcome, redirected = self._run(answer=False)
+
+        assert confirm.called
+        assert redirected is False
         assert setup_calls[0]["install_mcp"] is False
         assert outcome.mcp_decision == "declined"
-
-    def test_no_flags__picker_is_not_pre_confirmed(self):
-        """`assume_confirmed` would skip the picker, leaving nothing to answer."""
-        _, setup_calls, _ = self._run()
-
-        assert setup_calls[0]["assume_confirmed"] is False
 
     def test_skipping_the_picker__is_not_reported_as_declining_permission(self):
         """The two are different answers and the funnel needs both.
@@ -145,34 +143,46 @@ class TestAssistantConfirmation:
         never having accepted, which hid the one drop the funnel exists to
         show: said yes, then chose no client.
         """
-        _, _, outcome = self._run(answer=True, declined=True)
+        _, _, outcome, _ = self._run(answer=True, declined=True, install_mcp=True)
 
         assert outcome.mcp_decision == "requested", "they did give permission"
         assert outcome.clients == 0, "and still registered nothing"
         assert outcome.mcp_declined is True, "deliberately, not a failure"
 
-    def test_no_flags__still_offers_the_skill_pack(self):
-        """The pack is a separate question: it needs no MCP server."""
-        _, setup_calls, _ = self._run(declined=True)
+    def test_declining_the_server__still_offers_the_skill_pack(self):
+        """The pack is a separate question: it needs no MCP server.
+
+        On the redirect path the MCP flow asks about the pack itself, so this is
+        the case where this command still owns the question.
+        """
+        _, setup_calls, _, _ = self._run(answer=False, install_skills=None)
 
         assert setup_calls[0]["skills"].decision is configure_cli.consent.Decision.ASK
 
     def test_install_mcp_flag__is_the_consent__skips_the_picker(self):
-        _, setup_calls, _ = self._run(install_mcp=True)
+        """A flag in a script registers here rather than starting a flow.
 
+        The redirect ends by replacing the process with an agent, which is not
+        what a script asking for a server registration wants.
+        """
+        _, setup_calls, _, redirected = self._run(install_mcp=True)
+
+        assert redirected is False
         assert setup_calls[0]["assume_confirmed"] is True
 
     def test_no_terminal__does_not_prompt(self):
-        confirm, setup_calls, _ = self._run(interactive=False)
+        confirm, setup_calls, _, redirected = self._run(interactive=False)
 
         assert not confirm.called
         assert setup_calls == []
+        assert redirected is False
 
     def test_no_host_detected__nothing_worth_asking(self):
-        confirm, setup_calls, _ = self._run(detected=())
+        confirm, setup_calls, _, redirected = self._run(detected=())
 
         assert not confirm.called
         assert setup_calls == []
+        assert redirected is False
 
     def test_intro_does_not_list_the_clients(self, capsys):
         """The picker directly below is that list; twice pushed the question off."""
@@ -464,7 +474,7 @@ class TestAssistantOutcomeReachesTheCaller:
 
         with (
             mock.patch.object(
-                configure_cli, "_setup_assistants", return_value=installed
+                configure_cli, "_setup_assistants", return_value=(installed, False)
             ),
             mock.patch.object(configure_cli.opik_configure, "OpikConfigurator") as ctor,
         ):
@@ -529,7 +539,8 @@ class TestTheDecisionIsReported:
                 ),
             ),
         ):
-            return configure_cli._setup_assistants({}, install_mcp, None, auto)
+            outcome, _ = configure_cli._setup_assistants({}, install_mcp, None, auto)
+            return outcome
 
     def test_nothing_detected__is_not_a_refusal(self):
         outcome = self._reason(detected=0)
@@ -702,10 +713,85 @@ class TestBothDecisionsReachTheEvent:
         assert event["skills_decision"] == "requested"
 
     def test_declining_the_server__does_not_imply_declining_the_pack(self):
-        """They used to be coupled, so one Enter answered both."""
-        _, setup_calls, _ = TestAssistantConfirmation._run(declined=True)
+        """They used to be coupled, so one Enter answered both.
+
+        Declining is the path this command still owns: a yes redirects into
+        `opik mcp configure`, which asks about the pack itself.
+        """
+        _, setup_calls, _, _ = TestAssistantConfirmation._run(answer=False)
 
         assert setup_calls[0]["skills"].decision is configure_cli.consent.Decision.ASK
+
+
+class TestTheRedirectIntoTheMcpFlow:
+    """A yes to MCP hands over to `opik mcp configure` rather than half-doing it.
+
+    Two implementations of the same setup is how they drift, and only one of
+    them has the picker, the sign-in and the ending inside the agent.
+    """
+
+    @staticmethod
+    def _run(redirect):
+        runner = CliRunner()
+
+        def flow(**kwargs):
+            kwargs["progress"].redirect_to_mcp = redirect
+            return assistants.Outcome(clients=1, skills=True)
+
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli, "run_interactive_configure", side_effect=flow
+            ),
+            mock.patch.object(
+                configure_cli.account_identity, "event_properties", return_value={}
+            ),
+            mock.patch.object(configure_cli.analytics, "track_event") as track,
+            mock.patch("opik.cli.mcp.run_configure") as run_configure,
+        ):
+            result = runner.invoke(cli, ["configure", "--use-local"])
+
+        assert result.exit_code == 0, result.output
+        return run_configure, track
+
+    def test_asked_for__runs_the_mcp_flow(self):
+        run_configure, _ = self._run(redirect=True)
+
+        assert run_configure.called
+
+    def test_not_asked_for__does_not(self):
+        run_configure, _ = self._run(redirect=False)
+
+        assert not run_configure.called
+
+    def test_the_result_event_is_reported_first(self):
+        """The MCP flow ends by replacing this process with the user's agent.
+
+        Anything this command had left to say would never be said, so it says it
+        before handing over.
+        """
+        run_configure, track = self._run(redirect=True)
+
+        reported_before_redirect = track.call_args_list[-1].args[:3]
+        assert reported_before_redirect == ("configuration", "configure", "result")
+        assert run_configure.called
+
+    def test_redirect__result_event_says_the_mcp_step_was_handed_over(self):
+        """Otherwise the funnel reads a handover as a failure.
+
+        A redirect reports `mcp_decision='requested'` with nothing written, which
+        is the exact shape of someone accepting and then registering no client.
+        """
+        _, track = self._run(redirect=True)
+
+        assert track.call_args_list[-1].kwargs["mcp_redirected"] is True
+
+    def test_no_redirect__result_event_says_so(self):
+        _, track = self._run(redirect=False)
+
+        assert track.call_args_list[-1].kwargs["mcp_redirected"] is False
 
 
 class TestTheMcpQuestionIsRecommended:

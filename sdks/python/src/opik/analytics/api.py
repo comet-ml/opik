@@ -72,6 +72,10 @@ _REPORTING_CODE: Set[types.CodeType] = set()
 # Opik acting on its own behalf, see `internal`.
 _INTERNAL_CODE: Set[types.CodeType] = set()
 
+# Functions marked with `@entry_point`. Reporting from one of these is the user's
+# own use of the SDK however it was reached, see `entry_point`.
+_ENTRY_POINT_CODE: Set[types.CodeType] = set()
+
 
 def _build_event_name(component: Component, path: Tuple[str, ...]) -> str:
     """
@@ -114,6 +118,26 @@ def internal(func: _F) -> _F:
     return func
 
 
+def entry_point(func: _F) -> _F:
+    """
+    Marks a flow that is the user's own however it was reached - the exemption to
+    `_reported_from_inside_the_sdk`, and the mirror of `internal`.
+
+    That test drops anything reported from a function another `opik` module called,
+    which is right for a method reused internally and wrong for a whole flow that
+    one command hands to another. `opik configure` calls `opik mcp configure`'s
+    `run_configure` when the user says yes to MCP: the same setup either way, and
+    without this the redirect reports nothing at all, so the flow would be measured
+    only when typed directly.
+
+    Only for a function that IS the thing being reported. It exempts the decorated
+    frame alone; anything nested below it is still judged normally, because the
+    reporter is still recorded in `_REPORTING_CODE` before this is consulted.
+    """
+    _ENTRY_POINT_CODE.add(func.__code__)
+    return func
+
+
 def _is_sdk_module(module: str) -> bool:
     return module == "opik" or module.startswith(_SDK_MODULE_PREFIXES)
 
@@ -149,6 +173,12 @@ def _reported_from_inside_the_sdk() -> bool:
     # Registered whether or not this particular event is reported, so that a call
     # nested inside this one recognises it either way.
     _REPORTING_CODE.add(reporter.f_code)
+
+    # Before both tests below, because a flow handed over by another command fails
+    # both: its caller is a different `opik` module, and that caller has usually
+    # reported already. See `entry_point`.
+    if reporter.f_code in _ENTRY_POINT_CODE:
+        return False
 
     caller = reporter.f_back
     if caller is None:

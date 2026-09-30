@@ -545,3 +545,79 @@ class TestResultEventCarriesTheFunnelProperties:
         )
 
         assert event["picker_skipped"] is False
+
+
+class TestResultEventCarriesTheHandoff:
+    """How the run ends is the point of the command, so the funnel must see it.
+
+    The handoff replaces this process with the user's agent, so it is resolved
+    before the result event rather than after: anything reported later would
+    never be reported at all.
+    """
+
+    @staticmethod
+    def _result_event(
+        registered, traced_project=None, can_launch=True, interactive=True, args=()
+    ):
+        runner = CliRunner()
+        outcome = assistants.Outcome(
+            clients=len(registered), skills=False, registered_clients=registered
+        )
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=interactive
+            ),
+            patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+            patch.object(
+                mcp_cli.mcp_targets,
+                "find_target",
+                return_value=SimpleNamespace(display_name="Claude Code"),
+            ),
+            patch.object(mcp_cli.assistants, "setup", return_value=outcome),
+            patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
+            patch.object(
+                mcp_cli.mcp_handoff, "traced_project", return_value=traced_project
+            ),
+            patch.object(mcp_cli.mcp_handoff, "can_launch", return_value=can_launch),
+            patch.object(mcp_cli.mcp_handoff, "launch"),
+            patch.object(mcp_cli.install_view, "render_handoff"),
+            patch.object(mcp_cli.install_view, "render_prompt_to_paste"),
+            patch.object(mcp_cli.analytics, "track_event") as track,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure", *args])
+            assert result.exit_code == 0, result.output
+        return track.call_args_list[-1].kwargs
+
+    def test_single_client_with_traces__launches_on_the_diagnose_prompt(self):
+        event = self._result_event(("claude-code",), traced_project="my-app")
+
+        assert event["handoff"] == "launch"
+        assert event["closing_prompt"] == "diagnose"
+
+    def test_single_client_without_traces__opens_on_the_instrument_prompt(self):
+        """Which is also the answer when the workspace lookup fails."""
+        event = self._result_event(("claude-code",), traced_project=None)
+
+        assert event["closing_prompt"] == "instrument"
+
+    def test_client_we_cannot_start__the_prompt_is_shown_instead(self):
+        event = self._result_event(("cursor",), can_launch=False)
+
+        assert event["handoff"] == "prompt_shown"
+
+    def test_no_terminal__nothing_to_hand_over_to(self):
+        """A named client is what lets the command run unattended at all."""
+        event = self._result_event(
+            ("claude-code",), interactive=False, args=("--ai-client", "claude-code")
+        )
+
+        assert event["handoff"] == "no_terminal"
+        assert event["closing_prompt"] == ""
+
+    def test_several_clients__no_single_agent_to_end_in(self):
+        event = self._result_event(("claude-code", "cursor"))
+
+        assert event["handoff"] == "not_single_client"

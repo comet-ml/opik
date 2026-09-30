@@ -182,7 +182,7 @@ class TestThePickerIsReallyExercised:
     Every other test here stubs `assistants.setup` or `setup_mcp_server`, so a
     broken picker or a lost `InstallReport.declined` would pass unnoticed —
     which is exactly how select-all came to resolve to "my client is not
-    listed" and install nothing.
+    listed" and install nothing, back when this question took several answers.
     """
 
     @staticmethod
@@ -254,15 +254,19 @@ class TestThePickerIsReallyExercised:
             )
         return outcome, installed
 
-    def test_select_all__registers_every_client(self):
-        """`a` must not resolve to a synthetic row and install nothing."""
+    def test_one_answer_only__no_key_registers_a_second_client(self):
+        """The question takes one client, so nothing typed into it can take two.
+
+        `a` used to mean select-all. It is not a key this picker has, and the
+        guard here is that it stays that way: the flow ends by starting the
+        chosen client, which only means anything for one of them.
+        """
         from opik.cli import selector
 
         outcome, installed = self._pick([selector.TOGGLE_ALL, selector.ACCEPT])
 
-        assert sorted(installed) == ["claude-code", "cursor"]
-        assert outcome.clients == 2
-        assert outcome.mcp_declined is False
+        assert installed == ["claude-code"]
+        assert outcome.clients == 1
 
     def test_enter_on_the_first_row__registers_that_client_alone(self):
         """`All` sits under the clients, so a bare Enter is not select-all.
@@ -278,14 +282,14 @@ class TestThePickerIsReallyExercised:
         assert installed == ["claude-code"]
         assert outcome.clients == 1
 
-    def test_enter_on_the_all_row__registers_every_client(self):
+    def test_moving_past_the_clients__lands_on_the_manual_row(self):
+        """The row under the clients is the way out, not a summary of them."""
         from opik.cli import selector
 
-        # Past both clients, onto the `All` row.
         outcome, installed = self._pick([selector.DOWN, selector.DOWN, selector.ACCEPT])
 
-        assert sorted(installed) == ["claude-code", "cursor"]
-        assert outcome.clients == 2
+        assert installed == []
+        assert outcome.clients == 0
 
     def test_cancelling__registers_nothing_and_propagates_declined(self):
         from opik.cli import selector
@@ -299,10 +303,8 @@ class TestThePickerIsReallyExercised:
     def test_choosing_one__registers_only_that_one(self):
         from opik.cli import selector
 
-        # Down one row from the first client, tick it: the second client.
-        outcome, installed = self._pick(
-            [selector.DOWN, selector.TOGGLE, selector.ACCEPT]
-        )
+        # Down one row from the first client, then take it: the second client.
+        outcome, installed = self._pick([selector.DOWN, selector.ACCEPT])
 
         assert installed == ["cursor"]
         assert outcome.registered_clients == ("cursor",)

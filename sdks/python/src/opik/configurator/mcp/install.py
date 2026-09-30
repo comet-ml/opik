@@ -218,6 +218,18 @@ def setup_mcp_server(
             _prefetch_opik_mcp()
 
     results = [target.install(server_spec) for target in selected_targets]
+
+    # Said here rather than left to the closing block's general hint: that hint
+    # describes sign-in as something the assistant may have done for you, which
+    # is exactly what did not happen when a login we started came back failing.
+    for result in results:
+        if result.sign_in_failed:
+            display.note(
+                f"{result.target_display_name} is registered but not signed in. "
+                f"Run `claude mcp login {mcp_spec.SERVER_NAME}` to finish it — until "
+                "then the server contributes no tools."
+            )
+
     display.results(
         [
             mcp_view.TargetResult(

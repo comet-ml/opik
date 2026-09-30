@@ -1,7 +1,7 @@
 """`opik mcp` commands for managing the Opik MCP server integration."""
 
 import logging
-from typing import List, Optional, Tuple, TypedDict
+from typing import List, NamedTuple, Optional, Tuple, TypedDict
 
 import click
 
@@ -15,6 +15,7 @@ from opik.cli import install_view
 from opik.cli import status_view
 from opik.configurator import consent
 from opik.configurator import interactive_helpers
+from opik.configurator.mcp import handoff as mcp_handoff
 from opik.configurator.mcp import status as mcp_status
 from opik.configurator.mcp import targets as mcp_targets
 
@@ -143,6 +144,26 @@ def configure(
     one, falling back to a local server otherwise. Pass `--local-server` to force
     the local server.
     """
+    run_configure(local_server=local_server, hosts=hosts, skills_flag=skills_flag)
+
+
+@analytics.entry_point
+def run_configure(
+    local_server: bool = False,
+    hosts: Tuple[str, ...] = (),
+    skills_flag: Optional[bool] = None,
+) -> None:
+    """The `opik mcp configure` flow, callable without going through click.
+
+    `opik configure` redirects into this when the user says yes to MCP, so that
+    there is one MCP setup flow rather than two that drift: one picker, one
+    sign-in, one ending inside the agent, and one funnel describing all of it.
+
+    `@entry_point` is what keeps that last part true. Analytics drops an event
+    reported from a function another `opik` module called, so on the redirect both
+    events below would be suppressed and the flow would be measured only when
+    typed directly - which is not the path most people take to it.
+    """
     # Same reason as `opik configure`: the click frame is what makes this visible.
     analytics.track_event(
         "configuration",
@@ -202,12 +223,12 @@ def configure(
     detected = mcp_targets.detected_targets()
     detected_clients = len(detected)
 
-    # The same block `opik configure` shows, from the same renderer. Both commands
-    # write into the same files and only one of them used to say what it was about
-    # to do; a client named with `--ai-client` is the one case that needs no
-    # introduction, because the user already named it.
+    # The banner, not `opik configure`'s "set MCP up? (Recommended)" block: that
+    # one asks a question this command has already been answered by being run,
+    # and a question mark after a decision reads as a second chance to decline.
+    # A client named with `--ai-client` gets neither — it is a scripted run.
     if not host_keys:
-        install_view.render_mcp_intro()
+        install_view.render_mcp_banner()
     skills_verdict = consent.resolve(
         skills_flag,
         # No `-y` on this command, and nothing to detect-or-not: a named client
@@ -229,6 +250,11 @@ def configure(
         force_local_server=local_server,
         host_keys=host_keys,
     )
+
+    # Resolved before the result event, not after the handoff is performed: the
+    # launch branch replaces this process, so anything left unreported here would
+    # never be reported at all.
+    handoff = _resolve_handoff(params, outcome)
 
     # A sibling of the entry event, not a nested one: reporting is suppressed
     # inside an already-reporting stack, but two calls from this same frame both
@@ -259,11 +285,95 @@ def configure(
         # nothing because the user chose no client in the picker.
         picker_skipped=outcome.mcp_declined,
         interactive=interactive_helpers.is_interactive(),
+        # How the run ends, resolved just above so that it can be reported at all:
+        # the handoff replaces this process, so nothing after it would be said.
+        handoff=handoff.outcome,
+        # Empty rather than absent when there was no handoff, so one property key
+        # never carries a string on one event and nothing on another.
+        closing_prompt=handoff.prompt_kind or "",
         # Resolved again, not reused: this command can run `opik configure` on the
         # way through, which is what turns an unconfigured run into an attributed
         # one.
         **account_identity.event_properties(),
     )
+
+    _perform_handoff(handoff)
+
+
+class _Handoff(NamedTuple):
+    """How the run ends, decided before it is reported so it can be.
+
+    The handoff is what the command is for, so a run that registered a server and
+    then could not hand over is a different outcome from one that dropped the user
+    into their agent — and neither was visible while this was decided after the
+    result event.
+    """
+
+    #: `launch`, `prompt_shown`, `no_terminal` or `not_single_client`.
+    outcome: str
+    #: `diagnose` or `instrument` — which says whether the workspace already had
+    #: traces of the user's own, the one thing the closing prompt turns on.
+    prompt_kind: Optional[str] = None
+    host_key: Optional[str] = None
+    display_name: Optional[str] = None
+    prompt: Optional[str] = None
+
+
+def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Handoff:
+    """Decide how to end, without doing it yet.
+
+    Registering a server is not the point — using it is. Which question depends
+    on what the user has: traces of their own mean there is something to
+    diagnose, and nothing logged yet means the next step is instrumenting an app
+    rather than staring at an empty project.
+
+    Only for a single registered client, which is what the picker now returns,
+    and only with a terminal: `--ai-client` in a script is a request to
+    configure, not to be replaced by an agent.
+    """
+    if not interactive_helpers.is_interactive():
+        return _Handoff(outcome="no_terminal")
+    if len(outcome.registered_clients) != 1:
+        return _Handoff(outcome="not_single_client")
+
+    host_key = outcome.registered_clients[0]
+    target = mcp_targets.find_target(host_key)
+
+    project = mcp_handoff.traced_project(
+        api_key=params["api_key"],
+        workspace=params["workspace"],
+        api_url=params["api_url"],
+        check_tls_certificate=params["check_tls_certificate"],
+    )
+
+    return _Handoff(
+        outcome="launch" if mcp_handoff.can_launch(host_key) else "prompt_shown",
+        prompt_kind="diagnose" if project is not None else "instrument",
+        host_key=host_key,
+        display_name=target.display_name if target is not None else host_key,
+        prompt=mcp_handoff.closing_prompt(project),
+    )
+
+
+def _perform_handoff(handoff: _Handoff) -> None:
+    """End inside the agent, or hand over the prompt for a client we cannot start."""
+    if handoff.host_key is None or handoff.prompt is None:
+        return
+
+    # Set together with `host_key`, so this only ever falls back for a client the
+    # target list does not know by name.
+    display_name = handoff.display_name or handoff.host_key
+
+    if handoff.outcome == "prompt_shown":
+        install_view.render_prompt_to_paste(display_name, handoff.prompt)
+        return
+
+    install_view.render_handoff(display_name, handoff.prompt)
+    # `launch` replaces this process, so `atexit` never runs and anything still
+    # queued would be lost. The events describing this run are the reason the
+    # run happened.
+    analytics.flush()
+    mcp_handoff.launch(handoff.host_key, handoff.prompt)
 
 
 @mcp.command(name="status")

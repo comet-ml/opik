@@ -25,7 +25,6 @@ console = rich.console.Console()
 
 #: Key of the synthetic "All" row in the host picker. Not a host key, and cannot
 #: collide with one: `mcp_targets.HOST_KEYS` are plain names like `claude-code`.
-_ALL = "__all__"
 
 
 def _collapse_home(message: str) -> str:
@@ -155,6 +154,43 @@ def choose_one_numbered(
     )
 
 
+#: Drawn rather than written: this is the first thing `opik mcp configure` puts
+#: on screen, and a command that is about to edit another tool's configuration
+#: should look like it knows what it is.
+_BANNER = r"""
+   ___       _ _
+  / _ \ _ __ (_) | __
+ | | | | '_ \| | |/ /
+ | |_| | |_) | |   <
+  \___/| .__/|_|_|\_\
+       |_|
+"""
+
+
+def render_mcp_banner() -> None:
+    """How `opik mcp configure` opens.
+
+    Not :func:`render_mcp_intro`, which asks whether to set MCP up: by the time
+    this renders, the user has typed the command that does it. What is left to
+    say is what the command is for, so the first screen states it rather than
+    putting a question mark after a decision already made.
+    """
+    console.print(text.Text(_BANNER, style="bold cyan"))
+    console.print(
+        padding.Padding(
+            text.Text.assemble(
+                ("Connect your coding agent to Opik.\n", "bold"),
+                (
+                    "It can then read your traces, find the failing ones, score "
+                    "them,\nand instrument your code — from chat.",
+                    "dim",
+                ),
+            ),
+            (0, 0, 1, 2),
+        )
+    )
+
+
 def render_mcp_intro() -> None:
     """What the MCP step is, before either command asks about it.
 
@@ -203,6 +239,37 @@ def render_skill_pack_intro() -> None:
             style="dim",
         )
     )
+
+
+def render_handoff(client_display_name: str, prompt: str) -> None:
+    """The last thing shown before the agent takes the terminal."""
+    console.print()
+    console.print(
+        text.Text.assemble(
+            ("Starting ", "bold"),
+            (client_display_name, "bold cyan"),
+            (" with:", "bold"),
+        )
+    )
+    console.print(padding.Padding(text.Text(prompt, style="dim"), (0, 0, 1, 2)))
+
+
+def render_prompt_to_paste(client_display_name: str, prompt: str) -> None:
+    """The same ending for a client that cannot be handed a prompt.
+
+    A GUI app takes no argument from here, so the question it should open with is
+    printed instead. Worth printing rather than dropping: the prompt is the part
+    that turns a configured server into something the user has seen work.
+    """
+    console.print()
+    console.print(
+        text.Text.assemble(
+            ("Open ", "bold"),
+            (client_display_name, "bold cyan"),
+            (" and ask it:", "bold"),
+        )
+    )
+    console.print(padding.Padding(text.Text(prompt, style="dim"), (0, 0, 1, 2)))
 
 
 def render_note(message: str, hint: Optional[str] = None) -> None:
@@ -344,35 +411,22 @@ class RichInstallView(mcp_view.InstallView):
         if not selector.is_supported():
             return mcp_view.numbered_menu(title, candidates)
 
-        # The clients first, then the two catch-all rows: `All`, then the manual
-        # one. That is the order the numbered-menu fallback below has always
-        # used, and it keeps the rows the user is actually choosing between at
-        # the top rather than behind a summary row.
+        # One client, not a set of them. The flow this belongs to ends by handing
+        # the chosen client a prompt and starting it, which only means anything
+        # for a single client — and registering into several config files at once
+        # was never what most runs wanted. `--ai-client` is still repeatable for
+        # scripted runs, which skip this picker entirely.
         #
-        # Nothing is pre-ticked — this writes into other tools' config files, so
-        # the list stays opt-in — and with an empty selection `multiselect` takes
-        # the highlighted row, so a bare Enter registers the first client rather
-        # than all of them. That is the conservative half of the trade: the
-        # clients are listed in priority order, so the row Enter lands on is the
-        # most likely one, and picking every client stays a deliberate act.
-        #
-        # One candidate skips the `All` row, having nothing to stand in for, but
-        # still gets the picker. A one-item list was not thought worth arrow keys
-        # until the manual row moved in here: skipping the picker skipped that
-        # too, so the user whose one detected client is not theirs could say no
-        # and get "Skipped" where the manual config belonged.
-        all_row = (
-            [selector.Choice(key=_ALL, label="All", synthetic=True)]
-            if len(candidates) > 1
-            else []
-        )
-        chosen = selector.multiselect(
+        # The clients come first and the manual row last: it is the way out for
+        # someone whose client detection missed, not one of the things being
+        # chosen between. A one-item list still gets the picker, because skipping
+        # it would skip that row too.
+        chosen = selector.choose_one(
             title=title,
             choices=[
                 selector.Choice(key=c.key, label=c.label, hint=c.hint)
                 for c in candidates
             ]
-            + all_row
             + [
                 selector.Choice(
                     key=mcp_view.MANUAL_SETUP,
@@ -381,20 +435,13 @@ class RichInstallView(mcp_view.InstallView):
                     synthetic=True,
                 )
             ],
-            preselected=preselected,
         )
-        # Escape still declines silently. This row is the other kind of no — the
-        # detection missed their client — and it is worth its place because the
-        # answer to it is a link rather than nothing.
+        # Escape still declines silently. The manual row is the other kind of no
+        # — the detection missed their client — and it is worth its place because
+        # the answer to it is a link rather than nothing.
         if chosen is None:
             return None
-        # `All` wins: the two are mutually exclusive by construction — select-all
-        # skips synthetic rows — but a list holding both can only have meant all.
-        if _ALL in chosen:
-            return [c.key for c in candidates]
-        if mcp_view.MANUAL_SETUP in chosen:
-            return [mcp_view.MANUAL_SETUP]
-        return [key for key in chosen if key != _ALL]
+        return [chosen]
 
     def note(self, message: str) -> None:
         console.print(padding.Padding(text.Text(message, style="dim"), (0, 0, 0, 2)))

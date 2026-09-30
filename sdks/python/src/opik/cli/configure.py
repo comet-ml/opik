@@ -2,7 +2,7 @@
 
 import os
 import urllib.parse
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Tuple
 
 import click
 
@@ -22,11 +22,16 @@ def _setup_assistants(
     install_mcp: Optional[bool],
     install_skills: Optional[bool],
     automatic_approvals: bool,
-) -> assistants.Outcome:
+) -> Tuple[assistants.Outcome, bool]:
     """The CLI's assistant step: resolve consent, then hand off to the installers.
 
     Both questions go through :func:`consent.resolve`, so this function no longer
     holds a policy of its own — it wires the flags to it and does the asking.
+
+    Returns the outcome, and whether the MCP flow should take over once this
+    command has finished reporting. A yes in a terminal is answered by
+    `opik mcp configure` itself rather than by a second implementation here: it
+    is the same work, and one of the two would drift.
     """
     interactive = interactive_helpers.is_interactive()
     detected = mcp_installer.detected_host_keys()
@@ -43,6 +48,25 @@ def _setup_assistants(
 
     mcp_decision = consent.decision_reason(mcp_verdict, wants_mcp)
 
+    # A yes from someone sitting at a terminal buys the whole flow — the client
+    # picker, the sign-in, and the ending inside the agent — rather than the
+    # subset this command used to run inline. It happens after this command has
+    # reported, so the redirect is asked for here and performed there.
+    #
+    # Flag-driven and unattended runs keep the inline path: `--install-mcp` in a
+    # script is a request to register a server, not to be dropped into an
+    # interactive flow that ends by replacing the process with an agent.
+    if wants_mcp and interactive and mcp_verdict.reason is not consent.Reason.REQUESTED:
+        return (
+            assistants.NOTHING_DONE._replace(
+                detected=len(detected),
+                detected_keys=tuple(detected),
+                mcp_decision=mcp_decision,
+                skills_decision=skills_verdict.reason.value,
+            ),
+            True,
+        )
+
     # Only when the pack was skipped for a reason of its own. Declining the
     # server no longer declines the pack: they were coupled because the MCP
     # question read as the umbrella for the whole step, but the pack needs no
@@ -52,11 +76,14 @@ def _setup_assistants(
         _announce_skip(mcp_verdict, skills_verdict)
         # The pack was never asked about on this path, so its decision comes
         # straight off the verdict — nobody said no, the question never arose.
-        return assistants.NOTHING_DONE._replace(
-            detected=len(detected),
-            detected_keys=tuple(detected),
-            mcp_decision=mcp_decision,
-            skills_decision=skills_verdict.reason.value,
+        return (
+            assistants.NOTHING_DONE._replace(
+                detected=len(detected),
+                detected_keys=tuple(detected),
+                mcp_decision=mcp_decision,
+                skills_decision=skills_verdict.reason.value,
+            ),
+            False,
         )
 
     outcome = assistants.setup(
@@ -76,10 +103,13 @@ def _setup_assistants(
     # client. That drop is `clients_written == 0` after `requested`, and
     # `mcp_declined` says whether it was deliberate.
     # `skills_decision` is left as `setup` recorded it: it did the asking.
-    return outcome._replace(
-        detected=len(detected),
-        detected_keys=tuple(detected),
-        mcp_decision=mcp_decision,
+    return (
+        outcome._replace(
+            detected=len(detected),
+            detected_keys=tuple(detected),
+            mcp_decision=mcp_decision,
+        ),
+        False,
     )
 
 
@@ -261,6 +291,9 @@ class Progress:
     def __init__(self) -> None:
         self.stage = self.DEPLOYMENT
         self.deployment: Optional[str] = None
+        #: The user said yes to MCP in a terminal, so `opik mcp configure` runs
+        #: once this command has finished reporting.
+        self.redirect_to_mcp = False
 
 
 def run_interactive_configure(
@@ -289,7 +322,7 @@ def run_interactive_configure(
         # Reached only once the credentials are written, so this is also what
         # says the run got past them.
         progress.stage = Progress.ASSISTANTS
-        recorded = _setup_assistants(*args)
+        recorded, progress.redirect_to_mcp = _setup_assistants(*args)
 
     if use_local:
         # `--use_local` answers the deployment question, so it is never asked.
@@ -494,6 +527,11 @@ def configure(
         mcp_decision=outcome.mcp_decision,
         skills_decision=outcome.skills_decision,
         verification_succeeded=outcome.verified,
+        # The MCP step did not run here: the user said yes in a terminal and
+        # `opik mcp configure` takes it from the line below. Without this a
+        # redirect reads as `requested` followed by nothing written, which is the
+        # shape of a failure rather than a handover.
+        mcp_redirected=progress.redirect_to_mcp,
         # Which clients, not only how many. Sorted and joined so one string is a
         # stable breakdown value, and `splitByChar` gets back to per-client
         # counts — the two together say what was on offer and what was taken.
@@ -515,6 +553,16 @@ def configure(
         # first-ever configure has an account to name at all.
         **account_identity.event_properties(),
     )
+
+    if progress.redirect_to_mcp:
+        # Last, and deliberately after the event above: the MCP flow ends by
+        # replacing this process with the user's agent, so anything left unsaid
+        # here would never be said. Imported at the call site because `opik mcp
+        # configure` imports this module to offer configuration when there is
+        # none.
+        from opik.cli import mcp as mcp_cli
+
+        mcp_cli.run_configure()
 
 
 @configure.command(name="status")

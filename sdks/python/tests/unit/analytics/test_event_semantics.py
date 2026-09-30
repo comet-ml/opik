@@ -10,7 +10,11 @@ mechanisms keep it honest, and these cover both:
   a user calling it.
 - `BaseMetric` reports through a private helper in its own module, the case that must
   keep working: a helper reporting on its caller's behalf is not an internal call.
+- `@analytics.entry_point` is the exemption: a whole flow one command hands to
+  another is still the user's own, and without it the handover reports nothing.
 """
+
+import types
 
 import pytest
 
@@ -185,3 +189,70 @@ def test_metric_created__opik_own_metric__reported_by_name(recording_worker):
     ]
     assert metric_events
     assert metric_events[0].properties["metric"] == "Equals"
+
+
+def _in_module(function, module_name):
+    """The same function, reported as living in `module_name`.
+
+    The module test in `_reported_from_inside_the_sdk` reads `__name__` off the
+    frame's globals, and a test module is not an `opik` one - so a caller that
+    looks like the SDK has to be built rather than imported.
+    """
+    globals_ = dict(function.__globals__)
+    globals_["__name__"] = module_name
+    return types.FunctionType(
+        function.__code__,
+        globals_,
+        function.__name__,
+        function.__defaults__,
+        function.__closure__,
+    )
+
+
+def test_entry_point__handed_over_by_another_opik_module__still_reports(
+    recording_worker,
+):
+    """`opik configure` calling `opik mcp configure` is the user's own flow.
+
+    Without the marker this is indistinguishable from an internal call, and the
+    whole redirect - the path most people take to MCP setup - reports nothing.
+    """
+
+    @api.entry_point
+    def run_configure():
+        api.track_event("configuration", "mcp_configure")
+
+    handing_over = _in_module(lambda: run_configure(), "opik.cli.configure")
+
+    handing_over()
+
+    assert recording_worker.names == ["opik_python_sdk__configuration__mcp_configure"]
+
+
+def test_entry_point__unmarked__handover_is_dropped(recording_worker):
+    """The control, and the bug it exists to fix."""
+
+    def run_configure():
+        api.track_event("configuration", "mcp_configure")
+
+    handing_over = _in_module(lambda: run_configure(), "opik.cli.configure")
+
+    handing_over()
+
+    assert recording_worker.names == []
+
+
+def test_entry_point__nested_call_below_it__still_dropped(recording_worker):
+    """The exemption covers the marked frame only, not everything beneath it."""
+
+    def reports_from_deeper():
+        api.track_event("client", "create_dataset")
+
+    @api.entry_point
+    def run_configure():
+        api.track_event("configuration", "mcp_configure")
+        reports_from_deeper()
+
+    run_configure()
+
+    assert recording_worker.names == ["opik_python_sdk__configuration__mcp_configure"]
