@@ -226,7 +226,15 @@ export const buildAutomationPayload = ({
 }): AnnotationQueueAutomation | undefined => {
   if (!isFeatureEnabled) return undefined;
 
-  if (!enabled) return hasStoredAutomation ? { enabled: false } : undefined;
+  // The cap control is hidden while automation is off, but its state is not, so a save that unticks the
+  // cap and turns automation off at once has to carry the removal too.
+  if (!enabled) {
+    if (!hasStoredAutomation) return undefined;
+
+    return capEnabled
+      ? { enabled: false }
+      : { enabled: false, clear_max_items_in_queue: true };
+  }
 
   return {
     enabled: true,

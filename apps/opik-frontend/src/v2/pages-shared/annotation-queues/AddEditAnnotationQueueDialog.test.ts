@@ -118,8 +118,19 @@ describe("the automation payload", () => {
     expect(build()).toBeUndefined();
   });
 
-  it("turns a stored automation off without touching its conditions", () => {
-    expect(build({ hasStoredAutomation: true })).toEqual({ enabled: false });
+  it("turns a stored automation off without touching its conditions or ceiling", () => {
+    expect(build({ hasStoredAutomation: true, capEnabled: true })).toEqual({
+      enabled: false,
+    });
+  });
+
+  it("removes the ceiling when the cap is unticked and automation turned off at once", () => {
+    // The cap control is hidden once automation is off, so the removal would otherwise be dropped and
+    // the tick would be back on reopening.
+    expect(build({ hasStoredAutomation: true })).toEqual({
+      enabled: false,
+      clear_max_items_in_queue: true,
+    });
   });
 
   it("asks for the ceiling to be cleared when the cap is unticked", () => {

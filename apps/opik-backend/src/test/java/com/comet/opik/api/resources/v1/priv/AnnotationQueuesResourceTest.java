@@ -747,7 +747,7 @@ class AnnotationQueuesResourceTest {
                     AnnotationQueueUpdate.builder()
                             .automation(automation.toBuilder().clearMaxItemsInQueue(true).build())
                             .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST);
+                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
 
             assertThat(readBack(queue.id()).automation()).isEqualTo(automation);
         }

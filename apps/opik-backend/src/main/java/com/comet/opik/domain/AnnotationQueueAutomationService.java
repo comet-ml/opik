@@ -178,11 +178,6 @@ public class AnnotationQueueAutomationService {
             throw new BadRequestException("An enabled annotation queue automation requires at least one condition");
         }
 
-        if (Boolean.TRUE.equals(automation.clearMaxItemsInQueue()) && automation.maxItemsInQueue() != null) {
-            throw new BadRequestException(
-                    "An annotation queue automation cannot both set and clear its item ceiling");
-        }
-
         // Null keeps the stored ceiling, as null does for every field on this resource, so removing one has
         // to be said outright rather than implied by leaving the field out.
         Integer maxItemsInQueue = Boolean.TRUE.equals(automation.clearMaxItemsInQueue())
