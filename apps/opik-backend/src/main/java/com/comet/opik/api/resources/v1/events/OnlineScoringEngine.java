@@ -1519,6 +1519,46 @@ public class OnlineScoringEngine {
     }
 
     /**
+     * Reports a Python metric that cannot run because none of its declared arguments resolved on the
+     * entity being scored, i.e. {@link #toReplacements} came back empty.
+     *
+     * <p>This is a user-configuration mismatch — the metric declares fields the entity does not carry —
+     * not a backend fault, and it is deterministic, so retrying cannot help. It used to reach
+     * {@code PythonEvaluatorService.evaluate}, whose {@code Preconditions} guard raised a raw
+     * {@link IllegalArgumentException}; the scorer then logged a Guava stack at WARN and dropped the
+     * message, and the user saw nothing at all. Callers now detect the empty map first and report it
+     * here, so the rule's own log names the arguments that need fixing.
+     *
+     * <p>Only argument names and the paths the user configured are logged — never resolved values —
+     * so this adds no trace content to either sink.
+     */
+    public static void logUnresolvedEvaluatorArguments(
+            @NonNull Logger userFacingLogger,
+            @NonNull Logger internalLogger,
+            @NonNull Map<String, String> mdc,
+            @NonNull String entityLabel,
+            @NonNull Object entityId,
+            String ruleName,
+            @NonNull Map<String, String> declaredArguments) {
+        var arguments = declaredArguments.isEmpty()
+                ? "none declared"
+                : declaredArguments.entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey())
+                        .map(argument -> "'%s' -> '%s'".formatted(argument.getKey(), argument.getValue()))
+                        .collect(Collectors.joining(", "));
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            userFacingLogger.warn(
+                    "Not scoring {} '{}' with rule '{}': none of the metric's declared arguments resolved, so there"
+                            + " is no data to evaluate. Unresolved arguments: {}. Check these against the input,"
+                            + " output and metadata actually present on the {}.",
+                    entityLabel, entityId, ruleName, arguments, entityLabel);
+        }
+        internalLogger.warn(
+                "Not scoring {} '{}' with rule '{}': none of the declared arguments resolved, unresolved: {}",
+                entityLabel, entityId, ruleName, arguments);
+    }
+
+    /**
      * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
      * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
      * by rule 'name'" entry log, the "Sending X 'id' to Python evaluator: '<summary>'" exit
