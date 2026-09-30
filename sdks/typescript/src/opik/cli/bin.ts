@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-import { createReporter } from "./analytics";
+import { createReporter, LAUNCHER, LAUNCHER_ENV_VAR } from "./analytics";
 import { findUv } from "./uv";
 
 /**
@@ -50,6 +50,7 @@ async function main(): Promise<number> {
   // `uvx`, because that is what detection can tell us about.
   const result = spawnSync(uv.path, ["tool", "run", "opik", ...args], {
     stdio: "inherit",
+    env: { ...process.env, [LAUNCHER_ENV_VAR]: LAUNCHER },
   });
 
   if (result.error !== undefined) {

@@ -34,6 +34,31 @@ describe("uvCandidatePaths", () => {
     ]);
   });
 
+  it("ignores a blank root rather than joining it into a relative path", () => {
+    // `CARGO_HOME=""` would otherwise name `bin/uv`, and probing that runs
+    // whatever the working directory happens to hold.
+    const candidates = uvCandidatePaths(
+      { CARGO_HOME: "", XDG_BIN_HOME: "   " },
+      "linux",
+      HOME,
+    );
+
+    expect(candidates).toEqual([
+      path.join(HOME, ".local", "bin", "uv"),
+      path.join(HOME, ".cargo", "bin", "uv"),
+    ]);
+  });
+
+  it("ignores a relative root", () => {
+    const candidates = uvCandidatePaths(
+      { XDG_BIN_HOME: "relative/bin" },
+      "linux",
+      HOME,
+    );
+
+    expect(candidates).not.toContain(path.join("relative", "bin", "uv"));
+  });
+
   it("does not repeat a directory the environment points at twice", () => {
     const candidates = uvCandidatePaths(
       { XDG_BIN_HOME: path.join(HOME, ".local", "bin") },

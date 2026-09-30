@@ -30,16 +30,34 @@ export function uvCandidatePaths(
   home: string = os.homedir(),
 ): string[] {
   const directories = [
-    env.XDG_BIN_HOME,
-    env.CARGO_HOME === undefined ? undefined : path.join(env.CARGO_HOME, "bin"),
+    installDirectory(env.XDG_BIN_HOME),
+    installDirectory(env.CARGO_HOME, "bin"),
     path.join(home, ".local", "bin"),
     path.join(home, ".cargo", "bin"),
-  ].filter((directory): directory is string => Boolean(directory));
+  ].filter((directory): directory is string => directory !== undefined);
 
   const binary = uvBinaryName(platform);
   return [...new Set(directories)].map((directory) =>
     path.join(directory, binary),
   );
+}
+
+/**
+ * One install directory named by the environment, or ``undefined``.
+ *
+ * A variable that is set but blank has to drop out rather than join into a
+ * relative path: `CARGO_HOME=""` would otherwise name `bin/uv`, and probing that
+ * runs whatever `bin/uv` the working directory happens to hold.
+ */
+function installDirectory(
+  root: string | undefined,
+  ...segments: string[]
+): string | undefined {
+  const trimmed = (root ?? "").trim();
+  if (trimmed === "" || !path.isAbsolute(trimmed)) {
+    return undefined;
+  }
+  return path.join(trimmed, ...segments);
 }
 
 export function findUv(): UvLocation | undefined {

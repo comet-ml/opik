@@ -24,6 +24,16 @@ const EVENT_NAME_PREFIX = "opik_typescript_sdk__configuration__cli";
 const SEND_TIMEOUT_MS = 3_000;
 const WORKSPACE_DEFAULT_NAME = "default";
 
+/** How the Opik CLI was reached. Reported here, and passed to the CLI itself. */
+export const LAUNCHER = "npx";
+
+/**
+ * Tells the Python CLI how it was started, so its own events can say so too.
+ * A run started by hand leaves this unset, which is what makes an npx run
+ * separable from a `uvx` one on the other side of the handoff.
+ */
+export const LAUNCHER_ENV_VAR = "OPIK_CLI_LAUNCHER";
+
 declare const __OPIK_SDK_VERSION__: string;
 
 const SDK_VERSION =
@@ -59,42 +69,69 @@ export function analyticsEnabled(
 /**
  * The arguments, minus anything a user could have typed a secret into.
  *
- * Flag *names* say which paths people take (`--ai-client`, `--skills`); flag
- * values can be an API key, so only the names are reported.
+ * Flag *names* say which paths people take (`--ai-client`, `--skills`); a flag
+ * value can be an API key. Nothing here can tell which flags take a value - the
+ * flags belong to the Python CLI, not to this one - so rather than track option
+ * structure, this reports only tokens *shaped* like a flag name and drops every
+ * other token: a value keeps its secret even when it leads with a dash, and
+ * everything after a bare `--` is a value by definition.
+ *
+ * The subcommand is read the same way: bare words before the first flag, which
+ * is where `mcp configure` lives, and never a later token that could be a path
+ * or an argument.
  */
+const LONG_FLAG = /^--[a-z][a-z0-9-]*$/;
+const SHORT_FLAG = /^-[A-Za-z]$/;
+const SUBCOMMAND = /^[a-z][a-z0-9-]*$/;
+const MAX_SUBCOMMAND_WORDS = 3;
+
 export function summarizeArgs(args: string[]): {
   command: string;
   flags: string;
 } {
   const command: string[] = [];
   const flags: string[] = [];
-  let afterFlag = false;
+  let sawFlag = false;
 
   for (const arg of args) {
+    if (arg === "--") {
+      break;
+    }
+
     if (arg.startsWith("-")) {
-      flags.push(arg.split("=")[0]);
-      afterFlag = !arg.includes("=");
+      sawFlag = true;
+      const name = arg.split("=")[0];
+      if (LONG_FLAG.test(name) || SHORT_FLAG.test(name)) {
+        flags.push(name);
+      }
       continue;
     }
-    if (!afterFlag) {
+
+    if (!sawFlag && command.length < MAX_SUBCOMMAND_WORDS && SUBCOMMAND.test(arg)) {
       command.push(arg);
     }
-    afterFlag = false;
   }
 
-  return { command: command.join(" "), flags: flags.join(",") };
+  return {
+    command: command.join(" "),
+    flags: [...new Set(flags)].join(","),
+  };
 }
 
 /**
  * Who is running this, derived the way the Python SDK derives it, so the same
  * machine reports one identity across both.
+ *
+ * Not an anonymous value despite the wire field it fills: a configured
+ * workspace is reported as itself, exactly as `get_user_identifier` does, and
+ * only the unconfigured case falls back to a hash.
  */
-export function anonymousId(
+export function userIdentifier(
   env: NodeJS.ProcessEnv = process.env,
   home: string = os.homedir(),
 ): string {
   const workspace = (
-    env.OPIK_WORKSPACE ?? workspaceFromConfigFile(env, home)
+    blankToUndefined(env.OPIK_WORKSPACE) ?? workspaceFromConfigFile(env, home)
   ).trim();
 
   if (workspace !== "" && workspace !== WORKSPACE_DEFAULT_NAME) {
@@ -113,7 +150,7 @@ export function createReporter(
 ) {
   const enabled = analyticsEnabled(env);
   const url = env.OPIK_ANALYTICS_URL ?? ANALYTICS_URL_DEFAULT;
-  const id = enabled ? anonymousId(env) : "";
+  const id = enabled ? userIdentifier(env) : "";
   const { command, flags } = summarizeArgs(args);
   // Ties the three events of one run together, since they are separate requests.
   const runId = randomUUID();
@@ -132,7 +169,7 @@ export function createReporter(
         event_type: eventName(name),
         event_properties: {
           run_id: runId,
-          launcher: "npx",
+          launcher: LAUNCHER,
           sdk_version: SDK_VERSION,
           command,
           flags,
@@ -176,7 +213,13 @@ async function send(url: string, event: Event): Promise<void> {
 }
 
 function workspaceFromConfigFile(env: NodeJS.ProcessEnv, home: string): string {
-  const configPath = env.OPIK_CONFIG_PATH ?? path.join(home, ".opik.config");
+  const configured = blankToUndefined(env.OPIK_CONFIG_PATH);
+  // `~` is expanded the way the SDK's own loader expands it: a config path is
+  // something people write by hand, and no shell expanded it for us here.
+  const configPath =
+    configured === undefined
+      ? path.join(home, ".opik.config")
+      : configured.trim().replace(/^~(?=$|\/|\\)/, home);
 
   try {
     const parsed = ini.parse(fs.readFileSync(configPath, "utf8"));
@@ -185,6 +228,10 @@ function workspaceFromConfigFile(env: NodeJS.ProcessEnv, home: string): string {
   } catch {
     return "";
   }
+}
+
+function blankToUndefined(value: string | undefined): string | undefined {
+  return value === undefined || value.trim() === "" ? undefined : value;
 }
 
 function userName(): string {
