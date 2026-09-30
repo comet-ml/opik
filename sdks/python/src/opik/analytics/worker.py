@@ -88,8 +88,9 @@ class Worker(threading.Thread):
         """False when the queue was full and the event was dropped.
 
         Merges the run context into the event's properties, with the event's
-        own winning on a collision: the context is a default describing how the
-        run was entered, not an override of what a call site stated outright.
+        own value winning on a collision: the context is a default describing
+        how the run was entered, not an override of what a call site stated
+        outright.
 
         Read here rather than in :meth:`_enrich`, which runs on the worker
         thread when a batch is sent. It is the one property source that changes

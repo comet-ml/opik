@@ -18,8 +18,7 @@ Removal is done rather than offered, and said out loud. It used to ask,
 defaulting to no, on the reasoning that deleting from someone's environment
 unannounced is the bug being cleaned up — but leaving one is not neutral either:
 the versions still out there predate identity resolution, so a user left on one
-is not merely behind, they are unidentifiable. See
-``install._remove_stale_tool_install`` for the measurement behind that.
+is not merely behind, they are unidentifiable.
 
 Saying so is what keeps the original reasoning honoured. The person that
 argument was really about — the rare one who installed a version on purpose —

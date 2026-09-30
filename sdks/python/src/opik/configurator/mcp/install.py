@@ -321,24 +321,13 @@ def _remove_stale_tool_install(display: mcp_view.InstallView) -> str:
     """Remove an ``opik-mcp`` that an older Opik SDK left installed as a uv tool.
 
     Such an install decides what `uvx opik-mcp` runs, so a client registered here
-    would keep starting it instead of the published release (see ``uv_tool``).
-    Removing it is what makes the plain registration mean what it says.
+    would keep starting that pinned version instead of the published release (see
+    ``uv_tool``). Removed without asking, because leaving it defeats the
+    registration this command is making.
 
-    Done rather than offered. It used to ask, defaulting to no, on the reasoning
-    that deleting from someone's environment unannounced is the bug being cleaned
-    up. That weighed the wrong risk: the thing being deleted is one *we* installed
-    by mistake, and leaving it is not neutral. A stale tool pins the server at the
-    version that was current when it was installed - and the versions in the wild
-    are old enough to predate identity resolution entirely, so a user left on one
-    is not merely behind, they are unidentifiable. Measured 2026-09-30: 0.2.12 and
-    0.2.13 report a resolved login on zero of their 18,592 events, while every
-    version from 0.2.23 reports one.
-
-    Reported either way. On success because a deletion nobody is told about is
-    one nobody can undo, and the person the old prompt was really protecting —
-    the rare one who installed a version deliberately — is exactly who needs to
-    know. On failure because the server really will keep starting the old
-    version and only they can fix it.
+    On success, notes which version was removed and the command that puts it
+    back. On failure, reports uv's reason and the command to remove it by hand,
+    since the server keeps starting the old version until someone does.
 
     Returns ``absent``, ``removed`` or ``removal_failed``.
     """
