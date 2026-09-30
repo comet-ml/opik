@@ -69,6 +69,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -1089,6 +1090,44 @@ class KpiCardsResourceTest {
         assertMetric(response, KpiMetricType.COUNT, 0.0, 1.0);
         assertMetric(response, KpiMetricType.AVG_DURATION, null, (double) DURATION_1);
         assertMetric(response, KpiMetricType.TOTAL_COST, 0.0, COST_1);
+    }
+
+    @Test
+    @DisplayName("a thread's cost includes a span of its trace minted after the window end, like the thread list")
+    void threadCostIncludesSpanMintedAfterWindowEnd() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
+        String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+
+        Trace trace = buildThreadTrace(projectName, threadId, intervalStart.plus(1, ChronoUnit.SECONDS),
+                DURATION_1);
+        Span spanMintedInside = buildCostedSpan(projectName, trace, COST_1);
+        Span spanMintedAfterEnd = buildCostedSpan(projectName, trace, COST_2).toBuilder()
+                .id(idGenerator.generateId(intervalEnd.plus(2, ChronoUnit.HOURS)))
+                .build();
+        createThread(projectName, threadId, List.of(trace), List.of(spanMintedInside, spanMintedAfterEnd));
+
+        assertThat(getThreadRowMintedAt(threadId, projectId)).isBetween(intervalStart, intervalEnd);
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertMetric(response, KpiMetricType.COUNT, 1.0, 0.0);
+        assertMetric(response, KpiMetricType.TOTAL_COST, COST_1 + COST_2, 0.0);
+
+        var threadList = traceResourceClient.getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME, null, null,
+                Map.of("from_time", intervalStart.toString(), "to_time", intervalEnd.toString()));
+
+        assertThat(threadList.content()).extracting(TraceThread::id).containsExactly(threadId);
+        assertThat(threadList.content().getFirst().totalEstimatedCost())
+                .isEqualByComparingTo(BigDecimal.valueOf(COST_1 + COST_2));
     }
 
     @ParameterizedTest
