@@ -128,7 +128,7 @@ def setup_mcp_server(
         and not assume_confirmed
     ):
         display.skipped(
-            "Skipping MCP server setup: no interactive terminal and no client "
+            "Skipped MCP server setup: no interactive terminal and no client "
             "named. Pass `--ai-client <client>` to set it up unattended, or run "
             "`opik mcp configure` from a shell."
         )
