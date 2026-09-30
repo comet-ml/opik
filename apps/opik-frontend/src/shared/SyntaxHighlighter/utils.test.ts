@@ -149,7 +149,7 @@ describe("generateSyntaxHighlighterCode - YAML mode", () => {
       "k: |\n  a\n  b\nz: 1",
     ],
   ])(
-    "keeps the newline a last value needs when it %s",
+    "preserves required trailing newlines when the string %s",
     (_label, data, expected) => {
       const result = toYaml(data);
 
