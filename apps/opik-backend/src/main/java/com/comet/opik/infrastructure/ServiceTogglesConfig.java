@@ -56,8 +56,9 @@ public class ServiceTogglesConfig {
     @NotNull boolean ollamaProviderEnabled;
     @JsonProperty
     @NotNull boolean ollieEnabled;
+    // Defaults on so a config that omits the key keeps Agent Insights as it was before this toggle existed.
     @JsonProperty
-    @NotNull boolean agentInsightsEnabled;
+    @NotNull boolean agentInsightsEnabled = true;
     @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
