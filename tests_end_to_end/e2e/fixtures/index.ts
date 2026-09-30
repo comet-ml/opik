@@ -1,4 +1,4 @@
-export { test, expect } from './raw-branch-experiment.fixture';
+export { test, expect } from './compare-button-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -271,4 +271,9 @@ export type {
   RawBranchExperimentFixtures,
 } from './raw-branch-experiment.fixture';
 export { RAW_ITEM_COUNT } from './raw-branch-experiment.fixture';
+export type {
+  CompareButtonExperimentRef,
+  CompareButtonExperimentsRef,
+  CompareButtonExperimentsFixtures,
+} from './compare-button-experiments.fixture';
 export type { ProjectRef } from '../core/backend';
