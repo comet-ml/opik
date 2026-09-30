@@ -22,15 +22,29 @@
 --                skipped is not.
 --   partitions   the derivable ids' distinct partition values, ascending, space-separated. The driver emits one
 --                `DELETE ... IN PARTITION <p>` per value.
---   window_end   the instant this read bounded itself at, which the driver renders into the replay's own bridge match
---                as `${BRIDGE_WINDOW_END}`. THIS IS WHAT MAKES THE SCOPE SOUND. The derivation is a snapshot; the
---                replay's predicate is re-evaluated when the statement runs, and it carries only a LOWER bound — so
---                without a shared upper bound an id bridged between the two would be matched by the predicate while
---                its partition was absent from the scope, and a scoped statement cannot mask a row outside the
---                partitions it names. That is a silently skipped delete. Sharing this bound makes
---                "scope ⊇ everything the statement can match" true by construction rather than by timing. What falls
---                after it is not lost: it is simply this pass's tail, which the next pass or stage picks up on its own
---                wider window, exactly as the runbook already assumes for every replay.
+--
+-- THE WINDOW IS AN INPUT, NOT AN OUTPUT. `${PARTITION_SCOPE_WINDOW_END}` is read from the server clock by the driver
+-- and passed in here, and the SAME value is rendered into the replay's own bridge match as `${BRIDGE_WINDOW_END}`.
+-- THIS IS WHAT MAKES THE SCOPE SOUND. The derivation is a snapshot; the replay's predicate is re-evaluated when the
+-- statement runs and carries only a LOWER bound — so without a shared upper bound an id bridged between the two would
+-- be matched by the predicate while its partition was absent from the scope, and a scoped statement cannot mask a row
+-- outside the partitions it names. That is a silently skipped delete. What falls after the bound is not lost: it is
+-- this pass's tail, which the next pass picks up on its own wider window, as the runbook already assumes.
+--
+-- The driver owns the bound rather than reading it back out of this result, because as an output it did not exist
+-- when it was most needed: over an EMPTY bridge window the column had no row to carry it and came back blank, which
+-- is precisely the pass whose tail still has to be reported. As an input it is always known, it can be replayed
+-- against this same statement to re-derive over an IDENTICAL window, and `partitions` — the one field that is
+-- legitimately empty — is last, where a shell read cannot lose a field behind it.
+--
+-- WHAT THE SHARED BOUND STILL DOES NOT COVER, because it is a clock and not a visibility watermark. This reads the
+-- bridge on ONE replica. `deletion_events_local` is a ReplicatedMergeTree whose `event_time` is stamped by whichever
+-- replica accepted the insert, and the replay's `IN (SELECT ...)` is evaluated by each replica when IT runs the
+-- mutation (that is what `allow_nondeterministic_mutations = 1` permits). So a row inserted on another replica just
+-- before the bound can become visible here only afterwards: its `event_time` is INSIDE the replayed window, but its
+-- partition was never in the scope. The unbounded form had no such gap — the scoping introduces it — so the drivers
+-- re-run this derivation over the SAME fixed window after the replay and report any partition it did not name
+-- (`verify_delete_scope`). The remedy is to run the driver again; quiescing user TRACE deletes is what empties it.
 --
 -- WHY AN ID CAN CONTRIBUTE TWO WEEKS. `id_at` is MATERIALIZED as `UUIDv7ToDateTime(toUUID(id))`, and the two shapes a
 -- replay may run against declare it with different widths: the legacy `spans` as a 32-bit `DateTime('UTC')`, which
@@ -72,7 +86,7 @@
 -- This is a SELECT, so it allocates no block numbers and takes no ZooKeeper lock; `deletion_events_local` is a small
 -- event-time-ordered bridge table, so the read is bounded by the window rather than by the table.
 -- >>> BEGIN delete-partition-scope
-WITH now64(6, 'UTC') AS bridge_window_end,  -- evaluated once per query, and returned so the replay shares it
+WITH toDateTime64('${PARTITION_SCOPE_WINDOW_END}', 6, 'UTC') AS bridge_window_end,  -- the driver's bound, shared with the replay
      10413792000000 AS id_at_ceiling_ms,   -- 2300-01-01T00:00:00Z: the first instant id_at cannot represent
      4294967296 AS id_at_legacy_modulus    -- 2^32 seconds: the wrap of the legacy 32-bit DateTime id_at
 SELECT
@@ -83,8 +97,7 @@ SELECT
     -- shape read as many in query_log. Underivable rows contribute an empty array, so they cannot contaminate this
     -- list; the driver ignores it entirely when `underivable` is non-zero.
     arrayStringConcat(arrayMap(p -> toString(p),
-        arraySort(arrayDistinct(arrayFlatten(groupArray(weeks))))), ' ') AS partitions,
-    toString(bridge_window_end) AS window_end
+        arraySort(arrayDistinct(arrayFlatten(groupArray(weeks))))), ' ') AS partitions
 FROM (
     SELECT
         derivable,

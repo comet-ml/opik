@@ -1303,6 +1303,48 @@ class SpansLocalV2CutoverTest {
      * A migration that partitioned {@code spans} would fail here, which is the prompt to re-read that file: the
      * drivers would start scoping its replay, correctly, but the reasoning in its header would no longer hold.
      */
+    /**
+     * The window is an INPUT, and re-running over the same one answers about the same set of ids. Both halves matter,
+     * and they are what the drivers' post-replay check rests on.
+     * <p>
+     * A delete bridged AFTER the bound must not appear, or the replay — whose own match carries that same bound —
+     * would be asked to cover a partition it has no reason to touch. A delete bridged INSIDE the bound must appear on
+     * a re-run, because that is how a driver detects one it could not see the first time: the scope is derived from
+     * what one replica can see at one instant, while the replay's subquery is re-evaluated by each replica when it
+     * runs the mutation, so a row written on another replica just before the bound can surface here only afterwards —
+     * inside the replayed window, outside the scope, silently unmasked. Re-deriving over the fixed window is what
+     * turns that into a reported partition instead of a lost delete.
+     */
+    @Test
+    void reDerivingOverTheSameWindowSeesInsideItAndIgnoresWhatFollowsIt() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var early = mintIdsInWeek(0, 2);
+        var lateVisible = mintIdsInWeek(1, 1);
+        seedSpans(early, workspaceId, projectId);
+        seedSpans(lateVisible, workspaceId, projectId);
+        var backfillStart = nowMicros();
+        backfillWeek(0);
+        backfillWeek(1);
+
+        recordDeletionEvents(idStrings(early), workspaceId, projectId.toString(), "cascade");
+        var windowEnd = nowMicros();
+        var scoped = deletePartitionScope(backfillStart, windowEnd);
+
+        assertThat(scoped.derivedPartitions()).hasSize(1);
+
+        // Bridged after the bound: the next pass's tail, not this one's.
+        recordDeletionEvents(idStrings(lateVisible), workspaceId, projectId.toString(), "cascade");
+
+        assertThat(deletePartitionScope(backfillStart, windowEnd))
+                .as("the bound is honoured on a re-run, so a delete bridged after it cannot widen this pass's scope")
+                .isEqualTo(scoped);
+        assertThat(deletePartitionScope(backfillStart, nowMicros()).derivedPartitions())
+                .as("and a later bound does pick it up, which is what makes re-running the driver the remedy")
+                .hasSize(2);
+    }
+
     @Test
     void onlyTheSuccessorIsPartitionedByIdAt() {
         assertThat(partitionKeyOf("spans_local_v2")).contains("id_at");
@@ -3528,16 +3570,24 @@ class SpansLocalV2CutoverTest {
      * partition ClickHouse stored it in.
      */
     private DeleteScope deletePartitionScope(String anchor) {
+        return deletePartitionScope(anchor, nowMicros());
+    }
+
+    /**
+     * The same derivation over an explicit window, which is how the drivers always run it: the bound is read from the
+     * server once and passed IN, so the replay's own match can be rendered with the identical value and so the
+     * statement can be re-run over an IDENTICAL window afterwards to check what the scope missed.
+     */
+    private DeleteScope deletePartitionScope(String anchor, String windowEnd) {
         return template.nonTransaction(connection -> Mono.from(connection.createStatement("""
-                WITH now64(6, 'UTC') AS bridge_window_end,
+                WITH toDateTime64(:window_end, 6, 'UTC') AS bridge_window_end,
                      10413792000000 AS id_at_ceiling_ms,
                      4294967296 AS id_at_legacy_modulus
                 SELECT
                     count() AS bridged,
                     countIf(NOT derivable) AS underivable,
                     arrayStringConcat(arrayMap(p -> toString(p),
-                        arraySort(arrayDistinct(arrayFlatten(groupArray(weeks))))), ' ') AS partitions,
-                    toString(bridge_window_end) AS window_end
+                        arraySort(arrayDistinct(arrayFlatten(groupArray(weeks))))), ' ') AS partitions
                 FROM (
                     SELECT
                         derivable,
@@ -3568,12 +3618,13 @@ class SpansLocalV2CutoverTest {
                 )
                 """)
                 .bind("anchor", anchor)
+                .bind("window_end", windowEnd)
                 .execute())
                 .flatMap(result -> Mono.from(result.map((row, ignored) -> DeleteScope.builder()
                         .bridged(row.get("bridged", Long.class))
                         .underivable(row.get("underivable", Long.class))
                         .partitions(row.get("partitions", String.class))
-                        .windowEnd(row.get("window_end", String.class))
+                        .windowEnd(windowEnd)
                         .build()))))
                 .block();
     }

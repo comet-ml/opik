@@ -1484,6 +1484,27 @@ how many of them it cannot derive a partition for, and the derivable ones' weeks
 id resolves to — the honest one on the `DateTime64` successor and the wrapped one on the legacy 32-bit `id_at` — for
 the same reason `WeeklyPartitions` does on the application's own delete path (OPIK-8364).
 
+**The window is passed in, and the same pass checks itself afterwards.** The driver reads one instant from the server
+clock, derives the scope over `[anchor, that instant)`, and renders the *same* value into the replay's own bridge
+match. Without a shared upper bound an id bridged between the two reads would be matched by the predicate while its
+partition was absent from the scope — and a scoped statement cannot mask a row outside the partitions it names.
+
+That bound is a clock, not a visibility watermark, and the difference is the one gap scoping introduces:
+
+- The scope is derived from what **one replica** can see at that instant.
+- `deletion_events_local` is a `ReplicatedMergeTree` whose `event_time` is stamped by whichever replica accepted the
+  insert, and the replay's `IN (SELECT …)` is re-evaluated by **each** replica when it runs the mutation.
+- So a delete written on another replica just before the bound can become visible here only afterwards: its
+  `event_time` is *inside* the replayed window, its partition was never in the scope, and it is silently skipped. The
+  unbounded form had no such gap.
+
+So every driver re-runs the derivation over the **same fixed window** after its replay and reports any partition the
+scope did not name (`verify_delete_scope`). It is a plain `SELECT` needing no privilege beyond the one already in use.
+It runs for the scoped form **and for the empty one** — a pass that emitted no statement covers a late-visible delete
+no better than one that named the wrong partitions — but not for the unbounded form, which carries no upper bound and
+therefore masks whatever was visible when it ran. **Treat a warning here as a reason to run the driver again**; the
+window is fixed, so it converges, and quiescing user trace deletes across the window is what stops it recurring.
+
 **What each driver then emits**, from that one answer:
 
 | the answer | what is sent | why |

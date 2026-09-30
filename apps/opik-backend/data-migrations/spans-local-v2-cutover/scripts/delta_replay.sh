@@ -185,12 +185,43 @@ SCOPE_MODE=""          # skip | unbounded | scoped. Set by derive_delete_scope, 
 SCOPE_PARTITIONS=()    # the partition values, ascending, when SCOPE_MODE is `scoped`.
 SCOPE_WINDOW_END=""    # the instant the derivation bounded its bridge read at; rendered into the replay's own match.
 SCOPE_REASON=""        # one line for the operator saying which mode was chosen and why.
+SCOPE_TARGET=""        # the table the replay mutates, kept so verify_delete_scope re-derives against the same one.
+SCOPE_ANCHOR=""        # the event_time floor, kept for the same reason.
 
 # One `-- >>> BEGIN <name>` .. `-- >>> END <name>` block (exact-line markers) out of a text held in a variable. The
 # same marker grammar extract() parses out of a file; this reads a string because the callers below splice a block
 # back into the surrounding statement text.
 scope_extract() {
     awk -v begin="-- >>> BEGIN $2" -v end="-- >>> END $2" '$0 == begin {f = 1; next} $0 == end {f = 0} f' <<<"$1"
+}
+
+# The derivation itself, over [SCOPE_ANCHOR, SCOPE_WINDOW_END). Echoes the server's three TSV fields. A separate
+# function because it is run TWICE against the same window: once to build the scope, once afterwards to check it.
+run_scope_derivation() {
+    local sql
+    [[ -f "$SCOPE_SQL" ]] || { echo "ERROR: cannot find $SCOPE_SQL" >&2; exit 2; }
+
+    sql="$(scope_extract "$(cat "$SCOPE_SQL")" delete-partition-scope)"
+    sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    sql="${sql//'${PARTITION_SCOPE_ANCHOR}'/$SCOPE_ANCHOR}"
+    sql="${sql//'${PARTITION_SCOPE_WINDOW_END}'/$SCOPE_WINDOW_END}"
+    # Checked on the extracted text, so a renamed or moved marker is caught here rather than reaching the server as an
+    # empty query that exits 0 and leaves the caller reading "0 bridged ids" as a verdict.
+    if [[ -z "${sql//[[:space:]]/}" ]] || ! grep -qF 'delete_partition_scope' <<<"$sql"; then
+        echo "ERROR: the 'delete-partition-scope' block of $SCOPE_SQL rendered no statement. Expected the exact marker" >&2
+        echo "       lines '-- >>> BEGIN delete-partition-scope' and '-- >>> END delete-partition-scope'." >&2
+        exit 2
+    fi
+    if grep -qF '${' <<<"$sql"; then
+        echo "ERROR: the 'delete-partition-scope' block of $SCOPE_SQL still holds an unsubstituted \${...} placeholder." >&2
+        exit 2
+    fi
+
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$sql" || {
+        echo "ERROR: the partition-scope derivation failed against '$DATABASE'. Refusing to fall back to the unbounded" >&2
+        echo "       mutation: that is the statement that cannot run once the target has enough weekly partitions." >&2
+        exit 2
+    }
 }
 
 # Decide this run's scope. $1 = the table the replay MUTATES; $2 = the event_time floor of its bridge match.
@@ -201,8 +232,9 @@ scope_extract() {
 # the estate this exists for, the unbounded form is precisely what does not work. Refusing sends the operator to fix a
 # grant or a connection; falling back would send them into the ZooKeeper failure this block prevents.
 derive_delete_scope() {
-    local target="$1" anchor="$2" row found partition_key expected sql scope_row bridged underivable partitions p
+    local target="$1" anchor="$2" row found partition_key expected scope_row bridged underivable partitions p
     SCOPE_MODE="" SCOPE_PARTITIONS=() SCOPE_WINDOW_END="" SCOPE_REASON=""
+    SCOPE_TARGET="$target" SCOPE_ANCHOR="$anchor"
 
     [[ -f "$SCOPE_SQL" ]] || { echo "ERROR: cannot find $SCOPE_SQL" >&2; exit 2; }
 
@@ -259,29 +291,27 @@ derive_delete_scope() {
         exit 2
     fi
 
-    sql="$(scope_extract "$(cat "$SCOPE_SQL")" delete-partition-scope)"
-    sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
-    sql="${sql//'${PARTITION_SCOPE_ANCHOR}'/$anchor}"
-    # Checked on the extracted text, so a renamed or moved marker is caught here rather than reaching the server as an
-    # empty query that exits 0 and leaves the caller reading "0 bridged ids" as a verdict.
-    if [[ -z "${sql//[[:space:]]/}" ]] || ! grep -qF 'delete_partition_scope' <<<"$sql"; then
-        echo "ERROR: the 'delete-partition-scope' block of $SCOPE_SQL rendered no statement. Expected the exact marker" >&2
-        echo "       lines '-- >>> BEGIN delete-partition-scope' and '-- >>> END delete-partition-scope'." >&2
+    # The bound is read from the SERVER and passed INTO the derivation, not computed inside it and read back out.
+    # event_time is server-stamped, so a client clock would compare against the wrong scale; and as an output the bound
+    # did not exist over an empty bridge window -- the column had no row to carry it -- which is exactly the pass whose
+    # tail still has to be reported.
+    SCOPE_WINDOW_END="$(clickhouse-client "${CH_ARGS[@]}" --format TabSeparated \
+        --log_comment 'spans_local_v2_cutover:delete_partition_scope:window' \
+        --query "SELECT toString(now64(6, 'UTC'))")" || {
+        echo "ERROR: could not read the server clock to bound the partition scope's bridge window." >&2
         exit 2
-    fi
-    if grep -qF '${' <<<"$sql"; then
-        echo "ERROR: the 'delete-partition-scope' block of $SCOPE_SQL still holds an unsubstituted \${...} placeholder." >&2
+    }
+    # Shape-checked because it is INTERPOLATED into two statements -- this derivation and the replay's own match.
+    if ! [[ "$SCOPE_WINDOW_END" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?$ ]]; then
+        echo "ERROR: the server returned no usable window bound (got: '$SCOPE_WINDOW_END')." >&2
         exit 2
     fi
 
-    scope_row="$(clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$sql")" || {
-        echo "ERROR: the partition-scope derivation failed against '$DATABASE'. Refusing to fall back to the unbounded" >&2
-        echo "       mutation: that is the statement that cannot run once the target has enough weekly partitions." >&2
-        exit 2
-    }
-    # Tab-separated, and the third field is legitimately empty when nothing is derivable, so IFS is pinned to a tab --
-    # the default IFS would split the partition list across the variables.
-    IFS=$'\t' read -r bridged underivable partitions SCOPE_WINDOW_END <<<"$scope_row"
+    scope_row="$(run_scope_derivation)"
+    # `partitions` is LAST because it is the one field that is legitimately empty, and a tab is an IFS *whitespace*
+    # character: consecutive tabs collapse even with IFS pinned to one, so an empty field in any other position would
+    # shift every field after it.
+    IFS=$'\t' read -r bridged underivable partitions <<<"$scope_row"
     if ! [[ "$bridged" =~ ^[0-9]+$ && "$underivable" =~ ^[0-9]+$ ]]; then
         echo "ERROR: the partition-scope derivation returned no usable counts (got: '$scope_row')." >&2
         exit 2
@@ -302,15 +332,6 @@ derive_delete_scope() {
         SCOPE_MODE="unbounded"
         SCOPE_REASON="$underivable of $bridged bridged id(s) have no exactly derivable partition (at or past the 2300-01-01 DateTime64 ceiling), so the replay runs as ONE unbounded statement -- correct, and slower."
         return 0
-    fi
-
-    # Only the scoped form renders the bound, so it is validated only here -- over an EMPTY bridge window the
-    # derivation's bare `bridge_window_end` column has no row to carry it and comes back empty, which is correct and
-    # unused: that run emits no statement at all. Shape-checked because it is interpolated into SQL, and because an
-    # empty value would render a timestamp that parses and silently matches the wrong window.
-    if ! [[ "$SCOPE_WINDOW_END" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?$ ]]; then
-        echo "ERROR: the partition-scope derivation returned no usable window bound (got: '$SCOPE_WINDOW_END')." >&2
-        exit 2
     fi
 
     read -r -a SCOPE_PARTITIONS <<<"$partitions"
@@ -347,6 +368,52 @@ derive_delete_scope() {
 # A missing placeholder is refused rather than tolerated. Without ${PARTITION_SCOPE} a `scoped` run would emit N
 # byte-identical UNBOUNDED statements -- N times the failure this block prevents, reported as a successful scoped
 # replay; without ${BRIDGE_WINDOW_END} it would emit the silently-skipped-delete shape that bound exists to remove.
+# AFTER the replay: re-derive over the SAME fixed window and report any partition the scope did not name.
+#
+# WHY, when the shared bound already makes "scope covers every match" hold. The bound is a clock, not a visibility
+# watermark. This reads the bridge on ONE replica, while the replay's `IN (SELECT ... deletion_events_local ...)` is
+# evaluated by each replica when IT runs the mutation -- that is what `allow_nondeterministic_mutations = 1` permits.
+# `deletion_events_local` is a ReplicatedMergeTree whose `event_time` is stamped by whichever replica accepted the
+# insert, so a row written elsewhere just before the bound can become visible here only afterwards: its `event_time`
+# is INSIDE the replayed window, but its partition was never in the scope, and a scoped statement cannot mask a row
+# outside the partitions it names. The unbounded form had no such gap, so the scoping owns the check.
+#
+# Runs for `scoped` AND for `skip`: emitting no statement covers a late-visible row no better than a statement that
+# named the wrong partitions. NOT for `unbounded` -- that form carries no upper bound, so anything visible when it ran
+# was masked whatever its event_time.
+#
+# A plain SELECT over the window the derivation already reads, so it needs no privilege beyond the one in use, and no
+# SYSTEM grant. Advisory rather than a refusal: the window is fixed, so re-running the driver converges, and that is
+# the delta replay's normal mode anyway.
+verify_delete_scope() {
+    local scope_row bridged underivable partitions p covered missed=()
+    [[ "$SCOPE_MODE" == "scoped" || "$SCOPE_MODE" == "skip" ]] || return 0
+
+    # run_scope_derivation's refusals are an `exit` inside a command substitution, so they end that subshell and print
+    # their reason without ending this one. Say so rather than returning quietly: a check that silently did not run is
+    # indistinguishable here from one that found nothing.
+    scope_row="$(run_scope_derivation)"
+    IFS=$'\t' read -r bridged underivable partitions <<<"$scope_row"
+    if ! [[ "$bridged" =~ ^[0-9]+$ ]]; then
+        echo "  WARNING: could not re-derive the partition scope after the replay, so nothing here confirms it covered" >&2
+        echo "           every bridged id in its window. The replay itself ran; treat this pass as unverified." >&2
+        return 0
+    fi
+
+    covered=" ${SCOPE_PARTITIONS[*]:-} "
+    for p in $partitions; do
+        [[ "$covered" == *" $p "* ]] || missed+=("$p")
+    done
+    (( ${#missed[@]} > 0 )) || return 0
+
+    echo "  WARNING: re-deriving over the SAME window now names partition(s) this pass did not scope: ${missed[*]}" >&2
+    echo "           Window unchanged ($SCOPE_ANCHOR .. $SCOPE_WINDOW_END UTC), so these carry deletes that were" >&2
+    echo "           INSIDE the replayed window but not yet visible on this replica when the scope was derived --" >&2
+    echo "           replication lag, or an insert still committing. The replay above did NOT mask them, and the" >&2
+    echo "           postcondition counts cannot see them. RUN THIS DRIVER AGAIN; quiescing user TRACE deletes" >&2
+    echo "           across the window is what stops it recurring." >&2
+}
+
 render_scope() {
     local block="$1" p bound placeholder
     case "$SCOPE_MODE" in
@@ -578,6 +645,7 @@ sql="$(expand_scope "$sql" deletion-replay)" || exit 2
 # announce_delete_scope printed the count just above, so the two can be matched up without counting lines.
 echo "Statement wall times (seconds, in order: delta-insert, then one per deletion-replay statement):"
 send_scoped_sql "$sql"
+verify_delete_scope
 
 # The PENDING DELTA: rows the source took while this pass was running, i.e. exactly what a swap issued now would strand
 # in the parked backup for reconcile.sh to sweep. Printing it makes convergence something the operator WATCHES rather
