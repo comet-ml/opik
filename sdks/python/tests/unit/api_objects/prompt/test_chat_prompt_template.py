@@ -642,3 +642,13 @@ def test_chat_prompt_template__format__placeholder_without_variable__left_unchan
     result = tested.format({"name": "Harry"})
 
     assert result == [{"role": "user", "content": "Hi Harry, welcome to {{ city }}."}]
+
+
+def test_chat_prompt_template__format__brace_right_before_placeholder__substituted():
+    messages = [{"role": "user", "content": "Reply as JSON: {{{key}}: true}"}]
+
+    tested = ChatPromptTemplate(messages)
+
+    result = tested.format({"key": "ok"})
+
+    assert result == [{"role": "user", "content": "Reply as JSON: {ok: true}"}]

@@ -70,7 +70,9 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
         return self._template
 
 
-_MUSTACHE_PLACEHOLDER = re.compile(r"\{\{(.*?)\}\}")
+# Braces are excluded from the key, so a "{" right before "{{key}}" (as in
+# "{{{key}}}" or a JSON example) stays literal and the inner placeholder matches.
+_MUSTACHE_PLACEHOLDER = re.compile(r"\{\{([^{}]*?)\}\}")
 
 
 def extract_mustache_placeholder_keys(prompt_template: str) -> Set[str]:

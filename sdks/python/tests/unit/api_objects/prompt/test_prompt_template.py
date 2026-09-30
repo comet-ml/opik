@@ -172,3 +172,11 @@ def test_prompt__format__placeholder_without_argument__left_unchanged():
     result = tested.format(name="Harry")
 
     assert result == "Hi Harry, welcome to {{ city }}."
+
+
+def test_prompt__format__brace_right_before_placeholder__substituted():
+    tested = PromptTemplate("x{{{n}}}y JSON: {{{n}}: 1}")
+
+    result = tested.format(n="H")
+
+    assert result == "x{H}y JSON: {H: 1}"
