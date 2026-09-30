@@ -67,24 +67,49 @@ export class SuiteExperimentPanelPage {
     await test.step(`show Run ${index + 1}`, async () => {
       const tab = this.runTabs.nth(index);
       await expect(tab, `the Run ${index + 1} tab`).toBeVisible();
-      await tab.click();
-      await expect(this.outputLine, `Run ${index + 1}'s output line`).toHaveCount(1);
-      if (previousText !== undefined) {
-        // Settle on the body having actually CHANGED, rather than on any
-        // particular run's content. Waiting for the expected marker would
-        // presuppose the tab order, which is the backend's to choose; waiting
-        // for nothing at all would race the swap and report the previous run's
-        // content as a cross-run bleed. "Switching tabs changes the body" is a
-        // property the panel owes regardless of ordering, so it is the right
-        // thing to wait on — and if it never changes, the message below says
-        // precisely that rather than timing out on a mystery locator.
+
+      // Retried as a unit, and NOT because clicking is unreliable.
+      // `ExperimentItemContent` holds the selected run in its own state and
+      // resets it with `useEffect(() => setActiveRunIndex(0), [experimentItems])`,
+      // so a refetch settling after the click bounces the panel back to Run 1 —
+      // the body reverts to the first run's and stays there. Against a local
+      // build that window is too small to hit; against a cloud deployment it is
+      // not, and it showed up as this spec failing on staging with Run 2 still
+      // rendering Run 1's output. Re-clicking is the honest response: the panel
+      // really is on the wrong run, and absorbing it here keeps the assertion
+      // below about CROSS-RUN BLEED rather than about query timing.
+      await expect(async () => {
+        await tab.click();
+        // The panel's own state marker. A class is the house's last resort and
+        // it is used here because `MultiRunTabs` gives its buttons no
+        // aria-selected, no data-state and no test id — and the frontend is not
+        // this branch's to change. React commits the highlight and the body in
+        // one render, so the clicked tab carrying it is a sound settle for the
+        // body being that run's.
         await expect(
-          this.outputLine,
-          `Run ${index + 1}'s body must differ from the previously shown run's ` +
-            `(${JSON.stringify(previousText)}); an unchanged body means the tab switch ` +
-            'did not re-render, or this run is showing the other run\'s output',
-        ).not.toHaveText(previousText);
-      }
+          tab,
+          `the Run ${index + 1} tab must be the active one after being clicked`,
+        ).toHaveClass(/separator-light/, { timeout: 5_000 });
+        await expect(this.outputLine, `Run ${index + 1}'s output line`).toHaveCount(1, {
+          timeout: 5_000,
+        });
+        if (previousText !== undefined) {
+          // Settle on the body having actually CHANGED, rather than on any
+          // particular run's content. Waiting for the expected marker would
+          // presuppose the tab order, which is the backend's to choose; waiting
+          // for nothing at all would race the swap and report the previous run's
+          // content as a cross-run bleed. "Switching tabs changes the body" is a
+          // property the panel owes regardless of ordering, so it is the right
+          // thing to wait on — and if it never changes, the message below says
+          // precisely that rather than timing out on a mystery locator.
+          await expect(
+            this.outputLine,
+            `Run ${index + 1}'s body must differ from the previously shown run's ` +
+              `(${JSON.stringify(previousText)}); an unchanged body means the tab switch ` +
+              'did not re-render, or this run is showing the other run\'s output',
+          ).not.toHaveText(previousText, { timeout: 5_000 });
+        }
+      }).toPass({ timeout: 45_000 });
     });
   }
 

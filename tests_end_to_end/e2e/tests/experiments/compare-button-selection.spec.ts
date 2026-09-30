@@ -1,5 +1,24 @@
 import { test, expect } from '@e2e/fixtures';
 import { ExperimentsPage } from '@e2e/pom/experiments.page';
+import { loadEnvConfig } from '../../config/env.config';
+
+/**
+ * The compare route's pathname for one dataset, built the way the POMs build
+ * every other URL in the estate (`${baseUrl}/${workspace}/projects/...`).
+ *
+ * Not assembled from the pathname the browser happens to be on: the number of
+ * segments before `projects` differs by deployment — `/default/projects/...` on
+ * local OSS, `/opik/opik-testing/projects/...` on cloud, where the app is served
+ * under a mount AND a workspace — so a spec that took "the first segment" was
+ * asserting the OSS shape and failed on staging for the path rather than for the
+ * navigation it is about.
+ */
+const compareRoutePath = (projectId: string, datasetId: string): string => {
+  const env = loadEnvConfig();
+  return new URL(
+    `${env.baseUrl}/${env.workspace}/projects/${projectId}/experiments/${datasetId}/compare`,
+  ).pathname;
+};
 
 /**
  * The Compare button's three branches on the experiments list (opik#8612,
@@ -97,9 +116,7 @@ test.describe(
           expect(
             url.pathname,
             'submitting must land on this dataset\'s compare view',
-          ).toBe(
-            `/${url.pathname.split('/')[1]}/projects/${seed.projectId}/experiments/${seed.datasetAId}/compare`,
-          );
+          ).toBe(compareRoutePath(seed.projectId, seed.datasetAId));
           // Both ids, as a set: the param is a JSON array whose order is the
           // picker's, which is not part of the contract.
           expect(
