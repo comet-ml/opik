@@ -29,7 +29,6 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -38,6 +37,7 @@ import java.util.stream.Collectors;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
+import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
@@ -58,7 +58,7 @@ public interface FeedbackScoreDAO {
 
     Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores, @Nullable String author);
 
-    Mono<Map<UUID, EntityFeedbackScores>> getEffectiveScores(EntityType entityType, Set<UUID> entityIds);
+    Flux<EffectiveFeedbackScore> getEffectiveScores(EntityType entityType, Set<UUID> entityIds);
 
     Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
 
@@ -593,13 +593,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<Map<UUID, EntityFeedbackScores>> getEffectiveScores(@NonNull EntityType entityType,
-            @NonNull Set<UUID> entityIds) {
-        if (entityIds.isEmpty()) {
-            return Mono.just(Map.of());
+    public Flux<EffectiveFeedbackScore> getEffectiveScores(@NonNull EntityType entityType, Set<UUID> entityIds) {
+        if (CollectionUtils.isEmpty(entityIds)) {
+            return Flux.empty();
         }
 
-        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_EFFECTIVE_SCORES_BY_ENTITY_IDS, "get_effective_scores",
                     workspaceId, userName, "");
 
@@ -608,24 +607,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("entity_type", entityType.getType())
                     .bind("entity_ids", entityIds.toArray(UUID[]::new));
 
-            record ScoreRow(UUID entityId, UUID projectId, String name, BigDecimal value) {
-            }
-
             return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, rowMetadata) -> new ScoreRow(
-                            UUID.fromString(row.get("entity_id", String.class)),
-                            UUID.fromString(row.get("project_id", String.class)),
-                            row.get("name", String.class),
-                            row.get("value", BigDecimal.class))))
-                    .collect(Collectors.groupingBy(ScoreRow::entityId))
-                    .map(byEntity -> byEntity.entrySet().stream()
-                            .collect(Collectors.toMap(Map.Entry::getKey, entry -> EntityFeedbackScores.builder()
-                                    .entityId(entry.getKey())
-                                    .projectId(entry.getValue().getFirst().projectId())
-                                    .scores(entry.getValue().stream()
-                                            .collect(Collectors.toMap(ScoreRow::name, ScoreRow::value,
-                                                    (a, b) -> a)))
-                                    .build())));
+                    .flatMap(result -> result.map((row, rowMetadata) -> EffectiveFeedbackScore.builder()
+                            .entityId(UUID.fromString(row.get("entity_id", String.class)))
+                            .projectId(UUID.fromString(row.get("project_id", String.class)))
+                            .name(row.get("name", String.class))
+                            .value(row.get("value", BigDecimal.class))
+                            .build()));
         }));
     }
 

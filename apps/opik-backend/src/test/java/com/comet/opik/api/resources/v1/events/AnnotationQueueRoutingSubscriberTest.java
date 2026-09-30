@@ -8,12 +8,14 @@ import com.comet.opik.domain.AnnotationQueueAutomationService.QueueAutomation;
 import com.comet.opik.domain.AnnotationQueueConditionEvaluator;
 import com.comet.opik.domain.AnnotationQueueRoutingMessage;
 import com.comet.opik.domain.AnnotationQueueService;
-import com.comet.opik.domain.EntityFeedbackScores;
+import com.comet.opik.domain.EffectiveFeedbackScore;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -22,15 +24,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,11 +49,13 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class AnnotationQueueRoutingSubscriberTest {
 
-    private static final String WORKSPACE_ID = "workspace-1";
-    private static final String SCORE_NAME = "relevance";
+    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    private static final String SCORE_NAME = RandomStringUtils.secure().nextAlphanumeric(10);
 
     @Mock
     private RedissonReactiveClient redisson;
+    @Mock
+    private FeatureFlags featureFlags;
     @Mock
     private AnnotationQueueAutomationService automationService;
     @Mock
@@ -75,10 +78,9 @@ class AnnotationQueueRoutingSubscriberTest {
         projectId = UUID.randomUUID();
         queueId = UUID.randomUUID();
         var config = AnnotationQueueRoutingConfig.builder()
-                .enabled(true)
                 .consumerBatchSize(10)
                 .build();
-        subscriber = new AnnotationQueueRoutingSubscriber(config, redisson,
+        subscriber = new AnnotationQueueRoutingSubscriber(config, redisson, featureFlags,
                 automationService, evaluator, annotationQueueService, feedbackScoreDAO, traceDAO, traceThreadDAO);
     }
 
@@ -254,14 +256,16 @@ class AnnotationQueueRoutingSubscriberTest {
     }
 
     private void givenScored(EntityType entityType, UUID... entityIds) {
-        Map<UUID, EntityFeedbackScores> scores = Arrays.stream(entityIds)
-                .collect(Collectors.toMap(id -> id, id -> EntityFeedbackScores.builder()
+        var scores = Arrays.stream(entityIds)
+                .map(id -> EffectiveFeedbackScore.builder()
                         .entityId(id)
                         .projectId(projectId)
-                        .scores(Map.of(SCORE_NAME, BigDecimal.valueOf(0.2)))
-                        .build()));
+                        .name(SCORE_NAME)
+                        .value(BigDecimal.valueOf(0.2))
+                        .build())
+                .toList();
 
-        when(feedbackScoreDAO.getEffectiveScores(eq(entityType), any())).thenReturn(Mono.just(scores));
+        when(feedbackScoreDAO.getEffectiveScores(eq(entityType), any())).thenReturn(Flux.fromIterable(scores));
     }
 
     private void givenEnabledAutomation(AnnotationQueue.AnnotationScope scope) {

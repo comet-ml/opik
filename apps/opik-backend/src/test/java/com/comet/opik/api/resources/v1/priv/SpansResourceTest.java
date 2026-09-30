@@ -4691,8 +4691,50 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("Create span without source defaults to null (unknown in storage)")
-        void createSpanWithoutSourceDefaultsToNull() {
+        @DisplayName("Create span without source stores no source")
+        void createSpanWithoutSourceStoresNoSource() {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .source(null)
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            var actualSpan = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+            assertThat(actualSpan.source()).isNull();
+        }
+
+        @Test
+        @DisplayName("Batch create span without source stores no source")
+        void batchCreateSpanWithoutSourceStoresNoSource() {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .source(null)
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(expectedSpan), API_KEY, TEST_WORKSPACE);
+
+            var actualSpan = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+            assertThat(actualSpan.source()).isNull();
+        }
+
+        @Test
+        @DisplayName("Update without source keeps the source the span was created with")
+        void updateWithoutSourceKeepsExistingSource() {
             var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .build();
@@ -4701,13 +4743,25 @@ class SpansResourceTest {
             var span = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .traceId(traceId)
-                    .source(null)
+                    .source(Source.EXPERIMENT)
+                    .feedbackScores(null)
                     .build();
-
             var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
 
-            var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
-            assertThat(actual.source()).isNull();
+            // The partial-insert merge keeps the old value only while it is not 'unknown', which is
+            // what an absent source binds as — so a no-source update must not downgrade it.
+            var spanUpdate = SpanUpdate.builder()
+                    .projectName(span.projectName())
+                    .traceId(span.traceId())
+                    .parentSpanId(span.parentSpanId())
+                    .build();
+            spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpanBuilder = span.toBuilder();
+            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
+
+            var actualSpan = getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
+            assertThat(actualSpan.source()).isEqualTo(Source.EXPERIMENT);
         }
 
         @Test
