@@ -1,14 +1,17 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import sortBy from "lodash/sortBy";
 import isFunction from "lodash/isFunction";
-import { FlaskConical, ListTree } from "lucide-react";
+import isEmpty from "lodash/isEmpty";
+import { Braces, FlaskConical, ListTree, MessagesSquare } from "lucide-react";
 
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
 import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
 import { useExperimentItemMedia } from "@/hooks/useExperimentItemMedia";
+import ExperimentMessagesViewer from "@/v2/pages-shared/experiments/ExperimentMessagesViewer/ExperimentMessagesViewer";
 import ExperimentFeedbackScoresViewer from "@/v2/pages-shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import CopyButton from "@/shared/CopyButton/CopyButton";
 import NoData from "@/shared/NoData/NoData";
 import useExperimentById from "@/api/datasets/useExperimentById";
 import { TraceFeedbackScore } from "@/types/traces";
@@ -17,6 +20,7 @@ import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
 import { traceExist, traceVisible } from "@/lib/traces";
 import ExperimentCommentsViewer from "./DataTab/ExperimentCommentsViewer";
+import { splitOutputForMessages } from "./splitOutputForMessages";
 import { CommentItems } from "@/types/comment";
 
 type CompareExperimentsViewerProps = {
@@ -49,6 +53,30 @@ const CompareExperimentsViewer: React.FunctionComponent<
     projectId: data?.project_id,
   });
 
+  const inputAndOutput = useMemo(
+    () => ({ input: experimentItem.input, output: experimentItem.output }),
+    [experimentItem.input, experimentItem.output],
+  );
+
+  // Extracted in one pass so input and output media share one placeholder
+  // numbering: separate passes both start at [image_0], and the provider would
+  // then resolve the output's [image_0] to the input's picture.
+  const {
+    media: inputAndOutputMedia,
+    transformedOutput: transformedInputAndOutput,
+  } = useExperimentItemMedia({ output: inputAndOutput });
+
+  const { input: messagesInput, output: messagesOutput } =
+    transformedInputAndOutput as typeof inputAndOutput;
+
+  const messagesMedia = useMemo(
+    () => [
+      ...inputAndOutputMedia,
+      ...media.filter((item) => item.source === "attachment"),
+    ],
+    [inputAndOutputMedia, media],
+  );
+
   const feedbackScores: TraceFeedbackScore[] = useMemo(
     () => sortBy(experimentItem.feedback_scores || [], "name"),
     [experimentItem.feedback_scores],
@@ -57,6 +85,23 @@ const CompareExperimentsViewer: React.FunctionComponent<
   const comments: CommentItems = useMemo(
     () => experimentItem.comments || [],
     [experimentItem.comments],
+  );
+
+  // Gated on the output alone: mapAndCombineMessages silently drops a side it
+  // does not recognise, and this panel is the only place the output is shown.
+  const { rendersAsMessages, remainingOutput } = useMemo(
+    () => splitOutputForMessages(messagesOutput),
+    [messagesOutput],
+  );
+
+  // Scoped to the item because columns are reused across rows: a plain boolean
+  // would open every following row in raw mode too.
+  const [rawOutputItemId, setRawOutputItemId] = useState<string | null>(null);
+  const showRawOutput = rawOutputItemId === experimentItem.id;
+
+  const outputText = useMemo(
+    () => JSON.stringify(experimentItem.output, null, 2),
+    [experimentItem.output],
   );
 
   const onExpandClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -83,23 +128,82 @@ const CompareExperimentsViewer: React.FunctionComponent<
       return null;
     }
 
-    const highlighter = (
-      <SyntaxHighlighter
-        data={transformedOutput as object}
-        prettifyConfig={{ fieldType: "output" }}
-        preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
-      />
+    const rawToggle = (
+      <TooltipWrapper
+        content={showRawOutput ? "Show as messages" : "Show raw JSON"}
+      >
+        <Button
+          variant="outline"
+          size="icon-2xs"
+          onClick={() =>
+            setRawOutputItemId(showRawOutput ? null : experimentItem.id)
+          }
+        >
+          {showRawOutput ? <MessagesSquare /> : <Braces />}
+        </Button>
+      </TooltipWrapper>
     );
 
-    if (!media.length) {
-      return highlighter;
+    if (!rendersAsMessages || showRawOutput) {
+      const highlighter = (
+        <SyntaxHighlighter
+          data={transformedOutput as object}
+          prettifyConfig={{ fieldType: "output" }}
+          preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
+        />
+      );
+
+      const content = media.length ? (
+        <MediaProvider media={media}>
+          <div className="flex flex-col gap-2">
+            <AttachmentsList media={media} />
+            {highlighter}
+          </div>
+        </MediaProvider>
+      ) : (
+        highlighter
+      );
+
+      if (!rendersAsMessages) {
+        return content;
+      }
+
+      return (
+        <div className="flex flex-col">
+          <div className="flex justify-end pb-1">{rawToggle}</div>
+          {content}
+        </div>
+      );
     }
 
     return (
-      <MediaProvider media={media}>
+      <MediaProvider media={messagesMedia}>
         <div className="flex flex-col gap-2">
-          <AttachmentsList media={media} />
-          {highlighter}
+          {media.length > 0 && <AttachmentsList media={media} />}
+          <ExperimentMessagesViewer
+            key={experimentItem.id}
+            input={messagesInput}
+            output={messagesOutput}
+            actions={
+              <>
+                {rawToggle}
+                <CopyButton
+                  text={outputText}
+                  message="Successfully copied output"
+                  tooltipText="Copy output"
+                  variant="outline"
+                  size="icon-2xs"
+                />
+              </>
+            }
+          />
+          {!isEmpty(remainingOutput) && (
+            <SyntaxHighlighter
+              data={remainingOutput}
+              prettifyConfig={{ fieldType: "output" }}
+              preserveKey={`syntax-highlighter-compare-experiment-output-remaining-${sectionIdx}`}
+            />
+          )}
         </div>
       </MediaProvider>
     );
@@ -129,7 +233,11 @@ const CompareExperimentsViewer: React.FunctionComponent<
         )}
       </div>
 
-      {renderOutput()}
+      {/* Scrolls within the column so a long conversation does not push the
+          scores and comments sections out of reach, and so each experiment
+          scrolls independently instead of the whole row moving as one block.
+          min-h-0 lets this flex child shrink below its content height. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">{renderOutput()}</div>
 
       {isTraceExist && (
         <div className="sticky bottom-0 right-0 mt-auto flex max-h-[50vh] shrink-0 flex-col bg-background contain-content">
