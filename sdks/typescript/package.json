@@ -39,6 +39,9 @@
       "require": "./dist/index.cjs"
     }
   },
+  "bin": {
+    "opik": "dist/cli.js"
+  },
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
