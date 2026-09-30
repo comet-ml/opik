@@ -390,6 +390,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                   <if(uuid_to_time)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                       \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                   AND thread_id \\<> ''
+                  -- Thread source/environment filters act on traces, as in the thread list (ThreadDAO traces_final_ids).
+                  <if(trace_filters)> AND <trace_filters> <endif>
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -462,6 +464,23 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
+            <if(annotation_queue_filters)>
+            thread_annotation_queue_ids AS (
+                 SELECT thread_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'thread'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND aqi.item_id >= :uuid_from_time
+                      AND aqi.item_id \\<= :uuid_to_time
+                 ) AS annotation_queue_ids_with_thread_id
+                 GROUP BY thread_id
+            ),
+            <endif>
             <if(thread_feedback_scores_empty_filters)>
                fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -509,6 +528,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         t.workspace_id, t.project_id, t.thread_id, t.is_current_period
                 ) AS t
                 JOIN trace_threads_final AS tt ON t.id = tt.thread_id AND t.is_current_period = tt.is_current_period
+                <if(annotation_queue_filters)>
+                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(thread_feedback_scores_filters)>
                 AND thread_model_id IN (
@@ -532,6 +554,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 )
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             ), thread_costs AS (
                 SELECT tr.thread_id AS thread_id, tr.is_current_period AS is_current_period, sum(s.total_estimated_cost) AS cost
                 FROM (
@@ -715,8 +738,13 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private void addThreadFilters(ST template, List<? extends Filter> filters) {
         Optional.ofNullable(filters).ifPresent(f -> {
+            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.TRACE, traceColumnsNonNullable())
+                    .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
             FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.TRACE_THREAD, traceColumnsNonNullable())
                     .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.ANNOTATION_AGGREGATION)
+                    .ifPresent(annotationQueueFilters -> template.add("annotation_queue_filters",
+                            annotationQueueFilters));
             // first_message/last_message aggregate the full input/output payloads, so only project
             // them in threads_filtered when a filter actually references them (otherwise the thread
             // KPI query would needlessly materialize large columns). number_of_messages is cheap and
@@ -734,7 +762,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private void bindThreadFilters(Statement statement, List<? extends Filter> filters) {
         Optional.ofNullable(filters).ifPresent(f -> {
+            FilterQueryBuilder.bind(statement, f, FilterStrategy.TRACE);
             FilterQueryBuilder.bind(statement, f, FilterStrategy.TRACE_THREAD);
+            FilterQueryBuilder.bind(statement, f, FilterStrategy.ANNOTATION_AGGREGATION);
             FilterQueryBuilder.bind(statement, f, FilterStrategy.FEEDBACK_SCORES);
             FilterQueryBuilder.bind(statement, f, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
         });

@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
@@ -25,6 +27,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -38,6 +41,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -63,10 +67,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -130,6 +136,7 @@ class KpiCardsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private AnnotationQueuesResourceClient annotationQueuesResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, IdGenerator idGenerator) {
@@ -138,6 +145,7 @@ class KpiCardsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
+        this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
 
         ClientSupportUtils.config(client);
         mockTargetWorkspace();
@@ -1083,6 +1091,106 @@ class KpiCardsResourceTest {
         assertMetric(response, KpiMetricType.TOTAL_COST, 0.0, COST_1);
     }
 
+    @ParameterizedTest
+    @EnumSource(value = Source.class, names = "SDK", mode = EnumSource.Mode.EXCLUDE)
+    @DisplayName("the UI's source = sdk filter keeps only sdk traces, like the thread list")
+    void threadSourceFilterKeepsOnlySdkTraces(Source otherSource) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        String sdkThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        String otherSourceThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        String mixedThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+
+        Trace sdkTrace = buildThreadTrace(projectName, sdkThreadId, Source.SDK,
+                intervalStart.plus(1, ChronoUnit.SECONDS), DURATION_1);
+        Trace otherSourceTrace = buildThreadTrace(projectName, otherSourceThreadId, otherSource,
+                intervalStart.plus(2, ChronoUnit.SECONDS), DURATION_2);
+        Trace mixedSdkTrace = buildThreadTrace(projectName, mixedThreadId, Source.SDK,
+                intervalStart.plus(3, ChronoUnit.SECONDS), DURATION_3);
+        Trace mixedOtherSourceTrace = buildThreadTrace(projectName, mixedThreadId, otherSource,
+                intervalStart.plus(4, ChronoUnit.SECONDS), DURATION_4);
+
+        createThread(projectName, sdkThreadId, List.of(sdkTrace),
+                List.of(buildCostedSpan(projectName, sdkTrace, COST_1)));
+        createThread(projectName, otherSourceThreadId, List.of(otherSourceTrace),
+                List.of(buildCostedSpan(projectName, otherSourceTrace, COST_2)));
+        createThread(projectName, mixedThreadId, List.of(mixedSdkTrace, mixedOtherSourceTrace), List.of(
+                buildCostedSpan(projectName, mixedSdkTrace, COST_3),
+                buildCostedSpan(projectName, mixedOtherSourceTrace, COST_4)));
+
+        Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
+        var request = KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build();
+        var sdkSourceFilter = TraceThreadFilter.builder()
+                .field(TraceThreadField.SOURCE)
+                .operator(Operator.EQUAL)
+                .value(Source.SDK.getValue())
+                .build();
+
+        KpiCardResponse filtered = projectResourceClient.getKpiCards(projectId, request.toBuilder()
+                .filters(JsonUtils.writeValueAsString(List.of(sdkSourceFilter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertMetric(filtered, KpiMetricType.COUNT, 2.0, 0.0);
+        assertMetric(filtered, KpiMetricType.AVG_DURATION, (DURATION_1 + DURATION_3) / 2.0, null);
+        assertMetric(filtered, KpiMetricType.TOTAL_COST, COST_1 + COST_3, 0.0);
+
+        KpiCardResponse unfiltered = projectResourceClient.getKpiCards(projectId, request, API_KEY, WORKSPACE_NAME);
+
+        assertMetric(unfiltered, KpiMetricType.COUNT, 3.0, 0.0);
+        assertMetric(unfiltered, KpiMetricType.TOTAL_COST, COST_1 + COST_2 + COST_3 + COST_4, 0.0);
+    }
+
+    @Test
+    @DisplayName("an annotation_queue_ids filter counts only the threads in that queue, like the thread list")
+    void threadAnnotationQueueFilterCountsOnlyQueuedThreads() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var previousEntities = createFilterEntities(EntityType.THREADS, projectName, 3);
+
+        Instant intervalStart = Instant.now();
+
+        var currentEntities = createFilterEntities(EntityType.THREADS, projectName, 3);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        Set<UUID> queuedThreadModelIds = Stream.of(previousEntities, currentEntities)
+                .map(entities -> traceResourceClient.getTraceThread(
+                        entities.threadIds().getFirst(), projectId, API_KEY, WORKSPACE_NAME).threadModelId())
+                .collect(Collectors.toSet());
+        var annotationQueue = factory.manufacturePojo(AnnotationQueue.class).toBuilder()
+                .projectId(projectId)
+                .scope(AnnotationQueue.AnnotationScope.THREAD)
+                .build();
+        annotationQueuesResourceClient.createAnnotationQueueBatch(new LinkedHashSet<>(List.of(annotationQueue)),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+        annotationQueuesResourceClient.addItemsToAnnotationQueue(annotationQueue.id(), queuedThreadModelIds,
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+
+        var queueFilter = TraceThreadFilter.builder()
+                .field(TraceThreadField.ANNOTATION_QUEUE_IDS)
+                .operator(Operator.CONTAINS)
+                .value(annotationQueue.id().toString())
+                .build();
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .filters(JsonUtils.writeValueAsString(List.of(queueFilter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.THREADS, 1, 1, 0, 0);
+    }
+
     private void createThreadStraddlingStart(String projectName, String threadId, Instant intervalStart) {
         Trace previousTrace = buildThreadTrace(projectName, threadId, intervalStart.minus(30, ChronoUnit.SECONDS),
                 DURATION_1);
@@ -1092,6 +1200,13 @@ class KpiCardsResourceTest {
         createThread(projectName, threadId, List.of(previousTrace, currentTrace), List.of(
                 buildCostedSpan(projectName, previousTrace, COST_1),
                 buildCostedSpan(projectName, currentTrace, COST_2)));
+    }
+
+    private Trace buildThreadTrace(String projectName, String threadId, Source source, Instant ranAt,
+            long durationMs) {
+        return buildThreadTrace(projectName, threadId, ranAt, durationMs).toBuilder()
+                .source(source)
+                .build();
     }
 
     private Trace buildThreadTrace(String projectName, String threadId, Instant ranAt, long durationMs) {
