@@ -104,11 +104,9 @@ def _setup_assistants(
         setup_params,
         install_mcp=wants_mcp,
         skills=skills_verdict,
-        # A named flag covers whatever is detected, so it needs no picker. A yes to
-        # the prompt above does not: the picker is where a subset can be chosen,
-        # and its first row is "All", which is where the cursor starts — so the
-        # second step costs a keystroke rather than a decision, and Enter no
-        # longer silently takes whichever client happened to be listed first.
+        # A named flag covers whatever is detected, so it needs no picker. A yes
+        # to the prompt above does not: "whether" and "which" are two questions,
+        # and the picker is the second one.
         assume_confirmed=mcp_verdict.reason is consent.Reason.REQUESTED,
     )
     # Said here because this path does not redirect into `opik mcp configure`,

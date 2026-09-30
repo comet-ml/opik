@@ -253,41 +253,37 @@ def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str
     fall back to it without inheriting a logging view it otherwise overrides
     entirely. A single candidate keeps its own shape; see
     :func:`_single_candidate_menu`.
+
+    One client, like the picker this stands in for. It used to offer "All of the
+    above" and accept ``1,2`` — which registered servers this flow then could not
+    finish for, since it ends by starting the one client that was chosen.
     """
     if len(candidates) == 1:
         return _single_candidate_menu(candidates[0])
 
     host_count = len(candidates)
-    all_choice = host_count + 1
-    manual_choice = host_count + 2
-    skip_choice = host_count + 3
+    manual_choice = host_count + 1
+    skip_choice = host_count + 2
 
     lines = [title]
     for index, candidate in enumerate(candidates, start=1):
         lines.append(f"  {index} - {candidate.label}")
-    lines.append(f"  {all_choice} - All of the above")
     lines.append(f"  {manual_choice} - {MANUAL_SETUP_LABEL}")
     lines.append(f"  {skip_choice} - Skip")
-    lines.append("\nEnter a number, or several separated by commas (e.g. 1,2)\n> ")
+    lines.append("\nEnter a number\n> ")
     prompt = "\n".join(lines)
 
     while True:
-        raw = [token.strip() for token in input(prompt).split(",") if token.strip()]
+        answer = input(prompt).strip()
 
-        if not raw or not all(token.isdigit() for token in raw):
-            LOGGER.error("Wrong choice. Please try again.\n")
-            continue
-
-        numbers = [int(token) for token in raw]
-
-        if skip_choice in numbers:
-            return []
-        if manual_choice in numbers:
-            return [MANUAL_SETUP]
-        if all_choice in numbers:
-            return [candidate.key for candidate in candidates]
-        if all(1 <= number <= host_count for number in numbers):
-            return [candidates[number - 1].key for number in dict.fromkeys(numbers)]
+        if answer.isdigit():
+            number = int(answer)
+            if number == skip_choice:
+                return []
+            if number == manual_choice:
+                return [MANUAL_SETUP]
+            if 1 <= number <= host_count:
+                return [candidates[number - 1].key]
 
         LOGGER.error("Wrong choice. Please try again.\n")
 

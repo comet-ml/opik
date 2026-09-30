@@ -219,39 +219,48 @@ class TestChooseHosts:
 
         def fake_input(prompt):
             prompts.append(prompt)
-            return "5"  # Skip (3 hosts -> 4 all, 5 skip)
+            return "5"  # Skip (3 hosts -> 4 not listed, 5 skip)
 
         monkeypatch.setattr("builtins.input", fake_input)
 
         mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
 
         assert "Claude Code" in prompts[0]
-        assert "All of the above" in prompts[0]
 
-    def test_logging_view__all_of_the_above(self, monkeypatch):
-        monkeypatch.setattr("builtins.input", lambda prompt: "4")
+    def test_logging_view__one_client_like_the_picker_it_stands_in_for(
+        self, monkeypatch
+    ):
+        """No "All of the above", and `1,3` is not an answer.
+
+        Both registered servers this flow could not then finish for: it ends by
+        starting the one client that was chosen.
+        """
+        prompts = []
+
+        def fake_input(prompt):
+            prompts.append(prompt)
+            return "1,3" if len(prompts) == 1 else "2"
+
+        monkeypatch.setattr("builtins.input", fake_input)
 
         chosen = mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
 
-        assert chosen == ["claude-code", "cursor", "codex"]
-
-    def test_logging_view__comma_separated_subset(self, monkeypatch):
-        monkeypatch.setattr("builtins.input", lambda prompt: "1,3")
-
-        chosen = mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
-
-        assert chosen == ["claude-code", "codex"]
+        assert "All of the above" not in prompts[0]
+        assert "commas" not in prompts[0]
+        # The comma answer was refused rather than taken, so the menu came back.
+        assert len(prompts) == 2
+        assert chosen == ["cursor"]
 
     def test_logging_view__skip(self, monkeypatch):
-        """3 candidates, so 4 is All, 5 is "not listed" and 6 is Skip."""
-        monkeypatch.setattr("builtins.input", lambda prompt: "6")
+        """3 candidates, so 4 is "not listed" and 5 is Skip."""
+        monkeypatch.setattr("builtins.input", lambda prompt: "5")
 
         assert (
             mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates()) == []
         )
 
     def test_logging_view__client_not_listed(self, monkeypatch):
-        monkeypatch.setattr("builtins.input", lambda prompt: "5")
+        monkeypatch.setattr("builtins.input", lambda prompt: "4")
 
         assert mcp_view.LoggingInstallView().choose_hosts(
             "pick", self._candidates()
@@ -280,11 +289,11 @@ class TestChooseHosts:
         from opik.cli import selector
 
         monkeypatch.setattr(selector, "is_supported", lambda: False)
-        monkeypatch.setattr("builtins.input", lambda prompt: "4")
+        monkeypatch.setattr("builtins.input", lambda prompt: "2")
 
         chosen = rich_view.RichInstallView().choose_hosts("pick", self._candidates())
 
-        assert chosen == ["claude-code", "cursor", "codex"]
+        assert chosen == ["cursor"]
 
     def test_rich_view__single_candidate__still_offers_the_manual_row(
         self, monkeypatch

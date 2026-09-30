@@ -223,7 +223,7 @@ def test_setup_mcp_server__menu_lists_detected_hosts(monkeypatch):
 
     def fake_input(message):
         prompts.append(message)
-        return "4"  # Skip (2 hosts -> 1,2 hosts, 3 all, 4 skip)
+        return "4"  # Skip (2 hosts -> 1,2 hosts, 3 not listed, 4 skip)
 
     monkeypatch.setattr("builtins.input", fake_input)
 
@@ -231,28 +231,16 @@ def test_setup_mcp_server__menu_lists_detected_hosts(monkeypatch):
 
     assert "Claude Code" in prompts[0]
     assert "Cursor" in prompts[0]
-    assert "All of the above" in prompts[0]
     assert "VS Code Copilot" not in prompts[0]
 
 
-def test_setup_mcp_server__select_all__installs_every_detected_host(monkeypatch):
-    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
-    claude_spy = mock.Mock(return_value=targets.InstallResult("Claude", True, "Added"))
-    cursor_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
-    monkeypatch.setattr(
-        targets,
-        "HOST_TARGETS",
-        [_target("Claude Code", True, claude_spy), _target("Cursor", True, cursor_spy)],
-    )
-    monkeypatch.setattr("builtins.input", lambda message: "3")  # All of the above
+def test_setup_mcp_server__the_menu_installs_the_one_client_chosen(monkeypatch):
+    """No "all", no `1,3`: the fallback menu matches the picker it stands in for.
 
-    install.setup_mcp_server(**_make_args())
-
-    claude_spy.assert_called_once()
-    cursor_spy.assert_called_once()
-
-
-def test_setup_mcp_server__comma_separated_selection__installs_each(monkeypatch):
+    The flow ends by starting the chosen client, which only means anything for
+    one of them — so a menu that could register three left those runs with a
+    registration and no way to finish.
+    """
     monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
     claude_spy = mock.Mock(return_value=targets.InstallResult("Claude", True, "Added"))
     cursor_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
@@ -266,12 +254,13 @@ def test_setup_mcp_server__comma_separated_selection__installs_each(monkeypatch)
             _target("VS Code Copilot", True, vscode_spy),
         ],
     )
-    monkeypatch.setattr("builtins.input", lambda message: "1,3")  # Claude + VS Code
+    answers = iter(["1,3", "3"])  # The comma answer is refused, then VS Code.
+    monkeypatch.setattr("builtins.input", lambda message: next(answers))
 
     install.setup_mcp_server(**_make_args())
 
-    claude_spy.assert_called_once()
     vscode_spy.assert_called_once()
+    claude_spy.assert_not_called()
     cursor_spy.assert_not_called()
 
 
