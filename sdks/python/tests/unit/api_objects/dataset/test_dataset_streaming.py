@@ -502,7 +502,10 @@ def _payloads_with_an_oversized_item():
 
 def test_insert__oversized_item__gets_its_own_request_in_input_order(monkeypatch):
     """An item past the cap is sent alone, and the input's order survives batching."""
-    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0005)
+    # Room for the envelope plus two of the small items but not three: the cap now
+    # covers the whole request body, and at these sizes the envelope is a visible
+    # share of it. The grouping under test is unchanged.
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0006)
 
     capture = UploadCapture()
     streaming = make_dataset(Dataset, Mock(), capture)

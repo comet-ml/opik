@@ -4,6 +4,17 @@
          Inert unless a test provisions that profile. -->
     <custom_settings_prefixes>SQL_</custom_settings_prefixes>
 
+    <!-- Mirrors conf.d/merge_tree.xml in the Helm chart's values.yaml, which explains the
+         values; keep the two in step. Without these, LWD-masked rows are never reclaimed.
+         No practical effect on a transient test container, but settings stay aligned across
+         Helm, Compose and test containers. -->
+    <merge_tree>
+        <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>
+        <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>
+        <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>
+        <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+    </merge_tree>
+
     <macros>
         <shard>01</shard>
         <replica>clickhouse</replica>

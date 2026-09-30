@@ -27,6 +27,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
+import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
@@ -55,6 +57,8 @@ public interface FeedbackScoreDAO {
     Mono<Long> scoreBatchOf(EntityType entityType, List<? extends FeedbackScoreItem> scores, @Nullable String author);
 
     Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores, @Nullable String author);
+
+    Flux<EffectiveFeedbackScore> getEffectiveScores(EntityType entityType, Set<UUID> entityIds);
 
     Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
 
@@ -137,6 +141,56 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(project_id)>AND project_id = :project_id<endif>
             <if(sources)>AND source IN :sources<endif>
             <if(source_queue_id)>AND source_queue_id = :source_queue_id<endif>
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    /**
+     * Effective score values for a set of entities, keyed by entity and name.
+     *
+     * <p>Mirrors the {@code feedback_scores_deduped → grouped → final} chain used by the trace and span
+     * searches, because the value a threshold is compared against must be the same value the UI shows.
+     * Two details carry that: rows are deduplicated to the latest per
+     * {@code (entity_id, name, author, source_queue_id)}, and where several authors scored the same name
+     * the effective value is their <em>average</em> — a single author's score is used as-is.
+     */
+    private static final String SELECT_EFFECTIVE_SCORES_BY_ENTITY_IDS = """
+            WITH deduped AS (
+                SELECT entity_id, project_id, name, value, author, source_queue_id, last_updated_at
+                FROM (
+                    SELECT entity_id,
+                           project_id,
+                           name,
+                           value,
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id,
+                           last_updated_at
+                    FROM feedback_scores
+                    WHERE workspace_id = :workspace_id
+                      AND entity_type = :entity_type
+                      AND entity_id IN :entity_ids
+                    UNION ALL
+                    SELECT entity_id,
+                           project_id,
+                           name,
+                           value,
+                           author,
+                           source_queue_id,
+                           last_updated_at
+                    FROM authored_feedback_scores
+                    WHERE workspace_id = :workspace_id
+                      AND entity_type = :entity_type
+                      AND entity_id IN :entity_ids
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY entity_id, name, author, source_queue_id
+            )
+            SELECT entity_id,
+                   project_id,
+                   name,
+                   IF(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
+            FROM deduped
+            GROUP BY entity_id, project_id, name
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -539,6 +593,31 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
+    public Flux<EffectiveFeedbackScore> getEffectiveScores(@NonNull EntityType entityType, Set<UUID> entityIds) {
+        if (CollectionUtils.isEmpty(entityIds)) {
+            return Flux.empty();
+        }
+
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_EFFECTIVE_SCORES_BY_ENTITY_IDS, "get_effective_scores",
+                    workspaceId, userName, "");
+
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("entity_type", entityType.getType())
+                    .bind("entity_ids", entityIds.toArray(UUID[]::new));
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> EffectiveFeedbackScore.builder()
+                            .entityId(UUID.fromString(row.get("entity_id", String.class)))
+                            .projectId(UUID.fromString(row.get("project_id", String.class)))
+                            .name(row.get("name", String.class))
+                            .value(row.get("value", BigDecimal.class))
+                            .build()));
+        }));
+    }
+
+    @Override
     public Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 

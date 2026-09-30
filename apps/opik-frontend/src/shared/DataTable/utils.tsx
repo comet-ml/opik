@@ -15,6 +15,7 @@ import get from "lodash/get";
 import { Checkbox } from "@/ui/checkbox";
 import { Button } from "@/ui/button";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import PinCell from "@/shared/DataTableCells/PinCell";
 import HeaderWrapper from "@/shared/DataTableHeaders/HeaderWrapper";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -28,6 +29,7 @@ import {
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_ACTIONS_ID,
+  COLUMN_PIN_ID,
   COLUMN_SELECT_ID,
   ColumnData,
   OnChangeFn,
@@ -182,7 +184,11 @@ export const shiftCheckboxClickHandler = <TData,>(
   previousClickedRowID: string,
 ) => {
   if (event.shiftKey) {
-    const { rows, rowsById: rowsMap } = context.table.getRowModel();
+    const rows = [
+      ...context.table.getTopRows(),
+      ...context.table.getCenterRows(),
+    ];
+    const { rowsById: rowsMap } = context.table.getRowModel();
     const rowsToToggle = getRowRange(
       rows,
       context.row.id,
@@ -254,6 +260,18 @@ export const generateSelectColumDef = <TData,>(meta?: {
     },
     meta,
     size: 50,
+    enableResizing: false,
+    enableSorting: false,
+    enableHiding: false,
+  } as ColumnDef<TData>;
+};
+
+export const generatePinColumDef = <TData,>() => {
+  return {
+    accessorKey: COLUMN_PIN_ID,
+    header: "",
+    cell: PinCell,
+    size: 40,
     enableResizing: false,
     enableSorting: false,
     enableHiding: false,

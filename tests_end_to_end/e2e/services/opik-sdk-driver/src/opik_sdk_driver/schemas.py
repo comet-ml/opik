@@ -185,6 +185,65 @@ class DatasetInsertItemsResponse(BaseModel):
     value_error: str | None = None
 
 
+class TypedValue(BaseModel):
+    """One dataset-item field, named by the Python type it must be built as.
+
+    Everything on `/datasets/insert-items` arrives as JSON, so by the time the
+    bridge sees it a `uuid.UUID` is already a string and a `set` is already a
+    list — which is exactly the normalisation the content-hash path exists to
+    perform, and therefore the thing a caller cannot test through that route.
+    This carries the *instruction* over the wire instead of the value, and the
+    bridge materialises the real Python object before `Dataset.insert` ever
+    sees it.
+
+    `value` is the JSON form the object is built FROM, not what it must store
+    as; the caller asserts the stored form against the backend afterwards.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["float", "uuid", "enum", "datetime", "set", "tuple"]
+    value: Any
+
+
+class DatasetInsertTypedItemRequest(BaseModel):
+    """Insert ONE item whose content carries non-JSON-native Python types.
+
+    `Dataset.insert` hashes an item's content to decide whether it has already
+    been stored, and a value the encoder cannot represent natively reaches that
+    digest through `streaming_writer.encode_flexible` — a UUID becomes a string,
+    an Enum its value, a set a canonically-ordered list. None of those survive
+    the round trip as themselves, so the digest of the live object has to equal
+    the digest of the JSON it becomes, or an item could never deduplicate
+    against its own stored form.
+
+    One insert per request, deliberately: the bridge builds a fresh client (and
+    therefore a `Dataset` whose hash cache starts unsynced) per request, so a
+    caller posting this twice gets the second insert's digest compared against
+    what the backend actually stored rather than against an in-process cache.
+    That is the comparison worth making, and a repeat loop inside one request
+    would quietly avoid it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    typed_content: dict[str, TypedValue]
+    deduplication: bool = True
+    workspace: str | None = None
+
+
+class DatasetInsertTypedItemResponse(BaseModel):
+    dataset_id: str
+    inserted: int
+    # Which JSON encoder answered in the process that computed the digest.
+    # Diagnostic only — the round trip must hold either way — but a caller
+    # reading a failure needs to know which one it was looking at, because the
+    # two do not produce identical bytes for every value.
+    accelerated: bool
+
+
 class DatasetInsertCall(BaseModel):
     """One `Dataset.insert(...)` inside an insert-items-session request."""
 
@@ -325,6 +384,51 @@ class ExperimentEvaluateRequest(BaseModel):
     items: list[ExperimentItemSeed]
     dataset_description: str | None = None
     workspace: str | None = None
+
+
+class ExperimentReadItemsRequest(BaseModel):
+    """One `Experiment.get_items()` call, with its paging knobs exposed.
+
+    `page_size` and `num_threads` are `None` by default so the route can tell
+    "the caller wants the SDK's default" from "the caller chose the value that
+    happens to equal it" — the whole point of the read is comparing the
+    defaults against explicit settings, and passing a hardcoded copy of the
+    default would compare a value against itself.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    experiment_id: str
+    max_results: int | None = None
+    page_size: int | None = None
+    num_threads: int | None = None
+    workspace: str | None = None
+
+
+class ExperimentItemFingerprint(BaseModel):
+    """The identity of one experiment item, in the order the read returned it.
+
+    Deliberately not the whole item: the assertion is that the SAME rows come
+    back in the SAME order under every paging knob, so what matters is the
+    identity triple and the caller-supplied index that says where the row
+    belongs. Returning the full `dataset_item_data` for thousands of rows would
+    make the response enormous for no extra discriminating power.
+    """
+
+    id: str
+    dataset_item_id: str
+    trace_id: str
+    # The monotonic `idx` the seed wrote onto the dataset item, or None when the
+    # row came back without one. Never defaulted to a number: an absent index is
+    # how a dropped or corrupted `dataset_item_data` would show, and coercing it
+    # to 0 would hide exactly that.
+    idx: int | None
+
+
+class ExperimentReadItemsResponse(BaseModel):
+    experiment_id: str
+    count: int
+    items: list[ExperimentItemFingerprint]
 
 
 class ExperimentItemScore(BaseModel):

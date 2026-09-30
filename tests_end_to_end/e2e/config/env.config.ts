@@ -151,6 +151,11 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   }
 
   const skipLlmJudges = boolFromEnv(env.SKIP_LLM_JUDGES, false);
+  // Presence, not usability — and deliberately so: loadEnvConfig() runs once at
+  // config-load time (before the preflight) and again inside each worker
+  // (after it), so this flag would disagree across the two phases if it tried
+  // to read the preflight's verdict. Anything gating an actual judge call must
+  // ask anthropicKeyUsable() at call time instead; see core/llm-key-preflight.
   const hasAnthropicKey = !!env.ANTHROPIC_API_KEY;
 
   const runId = resolveRunId(env.OPIK_RUN_ID);

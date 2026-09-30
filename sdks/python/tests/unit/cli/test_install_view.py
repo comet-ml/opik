@@ -350,13 +350,14 @@ class TestChooseHosts:
 
 
 class TestTheAllRow:
-    """The picker offers "All" as its first row.
+    """The picker offers "All" after the clients, before the manual row.
 
+    The same order the numbered-menu fallback has always used: the rows the
+    user is choosing between come first, and the two catch-alls sit under them.
     Nothing is pre-ticked — this writes into other tools' config files — and
-    `multiselect` takes the highlighted row when the selection is empty, so
-    Enter used to register whichever client happened to be listed first. The
-    row Enter lands on now says All. The numbered-menu fallback has carried its
-    own "All of the above" all along; this is the picker's parity.
+    `multiselect` takes the highlighted row when the selection is empty, so a
+    bare Enter registers the first (highest-priority) client, and choosing
+    every client stays deliberate.
     """
 
     @staticmethod
@@ -384,12 +385,16 @@ class TestTheAllRow:
         )
         return chosen, seen["choices"]
 
-    def test_all_is_the_first_row_and_not_listed_the_last(self, monkeypatch):
+    def test_clients_first_then_all_then_not_listed(self, monkeypatch):
         _, choices = self._choose(monkeypatch, [])
 
-        assert choices[0].label == "All"
-        assert choices[-1].label == mcp_view.MANUAL_SETUP_LABEL
-        assert [c.label for c in choices[1:-1]] == ["Claude Code", "Codex", "Cursor"]
+        assert [c.label for c in choices] == [
+            "Claude Code",
+            "Codex",
+            "Cursor",
+            "All",
+            mcp_view.MANUAL_SETUP_LABEL,
+        ]
 
     def test_no_skip_row(self, monkeypatch):
         """Escape is the silent decline; the extra row is the one with an answer."""

@@ -933,7 +933,10 @@
     border-right: none;
   }
 
-  .comet-pinned-last-left {
+  // An inset shadow paints beneath the cell's children, so a compare sub-row
+  // with a hover background would hide the border unless it draws its own.
+  .comet-pinned-last-left,
+  .comet-pinned-last-left [data-virtual-row-id] {
     box-shadow: inset -1px 0px 0px 0px hsl(var(--border));
   }
 

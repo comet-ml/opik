@@ -13,6 +13,7 @@ import uniqBy from "lodash/uniqBy";
 
 import { Groups } from "@/types/groups";
 import {
+  COLUMN_PIN_ID,
   COLUMN_SELECT_ID,
   ColumnData,
   DynamicColumn,
@@ -44,6 +45,7 @@ import {
   generateActionsColumDef,
   generateDataRowCellDef,
   generateGroupedRowCellDef,
+  generatePinColumDef,
   generateSelectColumDef,
   getSharedShiftCheckboxClickHandler,
 } from "@/shared/DataTable/utils";
@@ -306,25 +308,27 @@ export const useExperimentsTableConfig = <
       (col) => col.id !== COLUMN_NAME_ID,
     );
 
-    const firstColumn =
+    const firstColumns =
       hasGrouping && nameColumn
-        ? generateDataRowCellDef<T>(
-            {
-              ...nameColumn,
-              cell: ResourceCell as never,
-              customMeta: {
-                nameKey: "name",
-                idKey: "dataset_id",
-                resource: RESOURCE_TYPE.experiment,
-                getSearch: (data: Experiment) => ({
-                  experiments: [data.id],
-                }),
+        ? [
+            generateDataRowCellDef<T>(
+              {
+                ...nameColumn,
+                cell: ResourceCell as never,
+                customMeta: {
+                  nameKey: "name",
+                  idKey: "dataset_id",
+                  resource: RESOURCE_TYPE.experiment,
+                  getSearch: (data: Experiment) => ({
+                    experiments: [data.id],
+                  }),
+                },
+                headerCheckbox: true,
               },
-              headerCheckbox: true,
-            },
-            checkboxClickHandler,
-          )
-        : generateSelectColumDef<T>();
+              checkboxClickHandler,
+            ),
+          ]
+        : [generateSelectColumDef<T>(), generatePinColumDef<T>()];
 
     const regularColumns = convertColumnDataToColumn<T, T>(
       hasGrouping && nameColumn ? columnsWithoutName : defaultColumns,
@@ -342,7 +346,7 @@ export const useExperimentsTableConfig = <
     });
 
     const baseColumns = [
-      firstColumn,
+      ...firstColumns,
       ...groupColumns,
       ...regularColumns,
       ...scoresColumns,
@@ -393,7 +397,7 @@ export const useExperimentsTableConfig = <
       left:
         groupFieldNames.length > 0
           ? [COLUMN_NAME_ID, ...groupFieldNames]
-          : [COLUMN_SELECT_ID],
+          : [COLUMN_SELECT_ID, COLUMN_PIN_ID],
       right: [],
     } as ColumnPinningState;
   }, [groupFieldNames]);

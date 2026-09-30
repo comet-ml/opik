@@ -381,6 +381,13 @@ def test_trace_oql__valid_filters(filter_string, expected):
         # Whitespace-only query takes the full parser path (unlike None/""),
         # and must still fail cleanly rather than raising IndexError.
         ("   ", r"Incomplete filter string.*"),
+        # A dictionary separator with nothing after it leaves the cursor past the
+        # end of the string, which the key parsing then indexed directly.
+        ("metadata.", r"Incomplete filter string.*expected a key.*"),
+        ("feedback_scores.", r"Incomplete filter string.*expected a key.*"),
+        ("usage.", r"Incomplete filter string.*expected a key.*"),
+        ("name.", r"Incomplete filter string.*expected a key.*"),
+        (".", r"Incomplete filter string.*expected a key.*"),
         # Unterminated quoted values (keys already covered above).
         # Raised from _is_valid_escaped_key_char while scanning the value.
         (
@@ -1291,3 +1298,29 @@ def test_oql_factories__incomplete_and_unterminated_inputs(
 ):
     with pytest.raises(ValueError, match=error_pattern):
         factory(filter_string)
+
+
+def test_malformed_queries_never_raise_anything_but_value_error():
+    """Every parse failure is a ValueError, whatever the input looks like.
+
+    The invalid-input table above pins the messages for the shapes a person is
+    likely to type. This pins the weaker property across a wide sweep of inputs,
+    which is how the trailing-separator case ("metadata.") turned up: it raised
+    IndexError from inside the parser rather than reporting a bad filter.
+    """
+    import itertools
+
+    alphabet = 'nam= ".0<>_ax'
+    for length in range(1, 4):
+        for combination in itertools.product(alphabet, repeat=length):
+            query = "".join(combination)
+            try:
+                OpikQueryLanguage.for_traces(query)
+            except ValueError:
+                pass
+            except (
+                Exception
+            ) as exception:  # pragma: no cover - the assertion reports it
+                raise AssertionError(
+                    f"{query!r} raised {type(exception).__name__}: {exception}"
+                ) from exception

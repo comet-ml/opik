@@ -52,6 +52,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
@@ -574,7 +575,7 @@ class AlertServiceImpl implements AlertService {
                 }
                 // Normalized so the legacy spelling counts, exactly as it does everywhere a config is read.
                 Map<String, String> configValue = Optional
-                        .ofNullable(AlertTriggerConfig.withNormalizedWindow(config.configValue()))
+                        .ofNullable(AlertTriggerConfig.withNormalizedConfigValue(config.configValue()))
                         .orElseGet(Map::of);
                 for (String key : List.of(THRESHOLD_CONFIG_KEY, WINDOW_CONFIG_KEY)) {
                     if (StringUtils.isBlank(configValue.get(key))) {
@@ -587,7 +588,34 @@ class AlertServiceImpl implements AlertService {
                 // every run, which is the same silent never-fires this validation exists to prevent.
                 validateThreshold(configValue.get(THRESHOLD_CONFIG_KEY), config.type());
                 validateWindow(configValue.get(WINDOW_CONFIG_KEY), config.type());
+                // Only where the job actually reads the operator. On cost, latency and errors it ignores
+                // config_value's operator entirely and always compares GREATER_THAN, so validating it there
+                // would 400 released clients over a value that has never had any effect. Same scoping rule
+                // as the block comment above: never reject a config that is inert anyway.
+                if (OPERATOR_BEARING_EVENT_TYPES.contains(trigger.eventType())) {
+                    validateOperator(configValue.get(OPERATOR_CONFIG_KEY), config.type());
+                }
             }
+        }
+    }
+
+    // The event types whose operator MetricsAlertJob reads.
+    // Everywhere else it hardcodes GREATER_THAN and never looks at the stored value.
+    private static final Set<AlertEventType> OPERATOR_BEARING_EVENT_TYPES = Set.of(
+            AlertEventType.TRACE_FEEDBACK_SCORE, AlertEventType.TRACE_THREAD_FEEDBACK_SCORE);
+
+    // Absent is allowed - the job defaults it - but a value that is present and unrecognised is not, for the
+    // same reason as the two above: it throws inside the job on every run and the alert never fires. Until
+    // this check existed the endpoint took any spelling at all and stored it verbatim.
+    //
+    // Blank counts as unrecognised, not as absent: normalizedOperator returns null for it, so a stored "  "
+    // would reach Operator.fromString on a feedback-score alert and throw there on every run. Rejecting it
+    // here is the only point at which its author finds out.
+    private static void validateOperator(String operator, AlertTriggerConfigType type) {
+        if (operator != null && AlertTriggerConfig.normalizedOperator(operator) == null) {
+            throw new BadRequestException(
+                    "Config value for key '%s' in trigger config of type '%s' is not a known operator: '%s'"
+                            .formatted(OPERATOR_CONFIG_KEY, type.getValue(), operator));
         }
     }
 
@@ -703,7 +731,7 @@ class AlertServiceImpl implements AlertService {
                 // Normalized on the way in as well as on the way out: validation already reads the legacy
                 // key, so without this a legacy-only payload passes and is written back unchanged, and the
                 // old spelling outlives every row that touches it.
-                .configValue(AlertTriggerConfig.withNormalizedWindow(config.configValue()))
+                .configValue(AlertTriggerConfig.withNormalizedConfigValue(config.configValue()))
                 .alertTriggerId(triggerId)
                 .createdBy(Optional.ofNullable(config.createdBy()).orElse(userName))
                 .createdAt(alert.createdAt()) // will be null for new alert, and not null for update

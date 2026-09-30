@@ -100,9 +100,11 @@ The table below shows the default permissions for each role. Custom roles can co
 | Opik production          | Manage alerts                   | Yes    | Yes   | No       | No   |
 
 <Note>
-  **View unanonymized data** only affects workspaces where anonymization is
-  enabled. [Contact us](https://www.comet.com/site/about-us/contact-us/) to
-  enable anonymization for your organization.
+  **View unanonymized data** (shown as **Original data view** under **Opik Traces**
+  in the custom role editor) only has an effect when [data anonymization](/administration/data_anonymization)
+  is enabled. Users without it see sensitive values replaced by tokens such as
+  `[EMAIL]`. Data anonymization is in preview; contact your Comet account team
+  to enable it.
 </Note>
 
 ### Custom roles
@@ -113,9 +115,11 @@ Custom roles are available on Enterprise plans. [Reach out](https://www.comet.co
 
 To create a custom role:
 
-1. Go to **Admin Dashboard** > **Roles & Permissions**.
-2. Click **Create Role** and configure permissions.
-3. Inherit from an existing role as a starting point.
+1. Go to **Admin Dashboard** > **Roles & permissions**.
+2. Click **Create custom role**.
+3. Select a **Base role** (Write, Annotate, or Read) as a starting point, then add or exclude permissions.
+
+For a worked example, see [Set up data anonymization](/administration/data_anonymization#set-up-data-anonymization).
 
 ## Assigning roles
 

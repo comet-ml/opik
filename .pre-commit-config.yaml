@@ -269,6 +269,20 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
+  # Self-check: opik.sh's startup wait. Stubs docker, so it runs in ~1s with no
+  # daemon — the retry budget and the per-container timing table are both easy to
+  # regress silently, and CI only asserts that the stack came up, not how.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: opik-startup-timing-tests
+        name: 🧪 opik.sh startup wait tests
+        entry: scripts/test_opik_startup_timings.sh
+        language: system
+        files: ^opik\.sh$|^scripts/test_opik_startup_timings\.sh$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
   # Self-check: the changelog re-baseline script's guards decide whether an
   # operator recovery is refused or silently bricks a database, so exercise them
   # (stubbed java/curl — no JVM, no ClickHouse) whenever the script changes.
@@ -342,7 +356,7 @@ repos:
   # comments inline in the Dockerfiles, so no repo-level config file is needed.
   # ---------------------------------------------------------------------------
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.14.0
+    rev: v2.15.1
     hooks:
       - id: hadolint-docker
         name: 🐳 hadolint — dockerfiles

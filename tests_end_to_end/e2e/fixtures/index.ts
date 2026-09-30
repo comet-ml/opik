@@ -1,7 +1,8 @@
-export { test, expect } from './export-comparison.fixture';
+export { test, expect } from './feedback-score-reasons.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
+  FailingProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';
@@ -132,6 +133,15 @@ export type {
   TimedThreadsFixtures,
 } from './timed-threads.fixture';
 export type {
+  BoundaryThreadRef,
+  BoundaryThreadsRef,
+  BoundaryThreadsFixtures,
+} from './boundary-threads.fixture';
+export type {
+  ExperimentItemReadRef,
+  ExperimentItemReadFixtures,
+} from './experiment-item-read.fixture';
+export type {
   PagedSpansRef,
   FarFuturePagedSpanRef,
   PagedSpansFixtures,
@@ -166,4 +176,58 @@ export type {
   ExportComparisonRef,
   ExportComparisonFixtures,
 } from './export-comparison.fixture';
+export type {
+  OptimizationCostRef,
+  OptimizationCostFixtures,
+} from './optimization-cost.fixture';
+export { SPAN_COST, EXPECTED_TOTAL_COST } from './optimization-cost.fixture';
+export type {
+  PromptExperimentsRef,
+  PromptExperimentsFixtures,
+} from './prompt-experiments.fixture';
+export { EXPERIMENT_COUNT, PAGE_SIZE } from './prompt-experiments.fixture';
+export type {
+  FieldMappingSeedRef,
+  FieldMappingSeedFixtures,
+} from './field-mapping-seed.fixture';
+export {
+  FM_TRACE_INPUT,
+  FM_TRACE_OUTPUT,
+  FM_TRACE_METADATA,
+  FM_TRACE_TAGS,
+  FM_SPAN_INPUT,
+  FM_SPAN_OUTPUT,
+  FM_SPAN_MODEL,
+} from './field-mapping-seed.fixture';
+export type { BulkTagTraceRef, BulkTagTracesFixtures } from './bulk-tag-traces.fixture';
+export type {
+  ImageOutputItemRef,
+  ExperimentImageOutputRef,
+  ExperimentImageOutputFixtures,
+} from './experiment-image-output.fixture';
+export {
+  RED_PNG_BASE64,
+  BLUE_PNG_BASE64,
+  GREEN_GIF_BASE64,
+  RED_PNG_URL,
+  BLUE_PNG_URL,
+  GREEN_GIF_URL,
+  mediaAlt,
+} from './experiment-image-output.fixture';
+export type {
+  MimeTypedFileSeed,
+  AttachmentMimeTypesRef,
+  AttachmentMimeTypesFixtures,
+} from './attachment-mime-types.fixture';
+export type {
+  ScoredReasonSeed,
+  FeedbackScoreReasonsRef,
+  FeedbackScoreReasonsFixtures,
+} from './feedback-score-reasons.fixture';
+export {
+  JUDGE_REASON_ITEMS,
+  MULTILINE_JUDGE_REASON,
+  COLLAPSED_JUDGE_REASON,
+  EMPTY_LIST_JUDGE_REASON,
+} from './feedback-score-reasons.fixture';
 export type { ProjectRef } from '../core/backend';
