@@ -219,13 +219,34 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     void v2ClientDoesNotCarryTheProgressHeaderCadence() {
         // The guard is clickhouse-r2dbc's alone, and DatabaseAnalyticsModule#buildReadOnlyClient builds a bare factory
         // for a user whose profile is readonly=1 with a two-setting allowlist — sending anything else fails every read
-        // that user makes. So the v2 client must leave ClickHouse's own default in place.
+        // that user makes. This is that factory's shape: no queryParameters, so no server settings at all.
         var factory = factoryWith(null);
 
         try (var client = factory.buildClient()) {
             var actualSettings = readSettings(client, "http_headers_progress_interval_ms");
 
             assertThat(actualSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "100"));
+        }
+    }
+
+    @Test
+    @DisplayName("a cadence in custom_http_params: the field wins on R2DBC, the operator's value stands on v2")
+    void operatorSuppliedCadenceIsOverriddenOnlyOnTheR2dbcPath() {
+        // Two different rules meeting, both pre-existing. On R2DBC the dedicated field overrides a value present in
+        // the chain, exactly as asyncInsertBusyTimeoutMaxMs does — and because the field is @NotNull with a default it
+        // always does, so the guard cannot be undercut from custom_http_params. On v2 the field is not applied at all,
+        // so the operator's own entry stands, forwarded verbatim like async_insert or max_query_size; singling this
+        // one key out for filtering would be the surprising behaviour. Neither reaches the readonly free-form user,
+        // whose factory is built without queryParameters (DatabaseAnalyticsModule#buildReadOnlyClient).
+        var factory = factoryWith("custom_http_params=http_headers_progress_interval_ms=500");
+
+        var r2dbcSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
+        assertThat(r2dbcSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "3000"));
+
+        try (var client = factory.buildClient()) {
+            var v2Settings = readSettings(client, "http_headers_progress_interval_ms");
+
+            assertThat(v2Settings).isEqualTo(Map.of("http_headers_progress_interval_ms", "500"));
         }
     }
 

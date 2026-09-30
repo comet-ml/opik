@@ -69,8 +69,11 @@ public class DatabaseAnalyticsFactory {
 
     /**
      * Cadence (ms) for {@code http_headers_progress_interval_ms}, the server-side throttle on
-     * {@code X-ClickHouse-Progress} response headers. Applied to {@link #build()} only, via
-     * {@link #r2dbcOnlyServerSettings()}. Unlike the fields above it defaults to a value rather than to null, and is
+     * {@code X-ClickHouse-Progress} response headers. <em>This field</em> is applied to {@link #build()} only, via
+     * {@link #r2dbcOnlyServerSettings()} — which is not the same as the setting never reaching {@link #buildClient()},
+     * since a cadence an operator puts in {@code custom_http_params} is forwarded there wholesale like every other
+     * entry. Because the field overrides the chain on the R2DBC path and is non-null, the guard itself cannot be
+     * undercut from {@code custom_http_params}. Unlike the fields above it defaults to a value rather than to null, and is
      * {@link NotNull} so that a YAML overlay binding it to null is a startup failure rather than a silently
      * reinstated defect: it guards against a client defect rather than tuning anything, so there is no deployment for
      * which "leave it at the ClickHouse default" is the right answer. The cadence stays freely tunable.
@@ -154,7 +157,10 @@ public class DatabaseAnalyticsFactory {
         // are still returned by parseQueryParameters() for tests/observability.
         // No r2dbcOnlyServerSettings() here: the progress-header guard is specific to the v1/R2DBC driver, and
         // DatabaseAnalyticsModule#buildReadOnlyClient builds a bare factory whose user runs under readonly=1 with a
-        // two-setting allowlist — any other per-query setting change is rejected outright.
+        // two-setting allowlist — any other per-query setting change is rejected outright. That is about the *field*;
+        // custom_http_params is still forwarded wholesale, so a cadence an operator writes there reaches this client
+        // like any other entry. Deliberate: it is their explicit instruction, filtering one key would be inconsistent
+        // with every other setting, and the readonly factory is built without queryParameters so it cannot be hit.
         var parsed = parseQueryParameters(getQueryParametersOverrides(queryParameters, Map.of()));
         parsed.serverSettings().forEach(builder::serverSetting);
 
