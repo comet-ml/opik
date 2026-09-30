@@ -156,6 +156,11 @@ public class ModelCapabilities {
         if (canonical.endsWith(LATEST_ALIAS_SUFFIX)) {
             return newestInFamily(StringUtils.removeEnd(canonical, LATEST_ALIAS_SUFFIX));
         }
+        // A listed id is itself, even once a dated build of it is listed too — otherwise the longer
+        // dated id would win and a sync adding it would silently reclassify the undated model.
+        if (AnthropicModelName.allModelIds().contains(canonical)) {
+            return Optional.of(canonical);
+        }
         return AnthropicModelName.allModelIds().stream()
                 .filter(id -> namesModel(canonical, id))
                 .max(Comparator.comparingInt(String::length));
