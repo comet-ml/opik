@@ -6,7 +6,7 @@ was set up, rather than printing "done" and leaving the user to think of
 something.
 
 The prompt is asked, not merely offered. It is shown with the question that
-precedes it — "Try it in Claude Code?" — so by the time the agent starts, the
+precedes it — "Continue in Claude Code" — so by the time the agent starts, the
 user has read what it will be asked and agreed to it.
 
 Which prompt depends on what the user already has. Traces of their own mean

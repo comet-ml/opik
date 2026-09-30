@@ -5,8 +5,11 @@ import urllib.parse
 from typing import Any, Mapping, Optional, Tuple
 
 import click
+import httpx
 
 import opik.config as opik_config
+import opik.httpx_client as httpx_client
+import opik.url_helpers as url_helpers
 from opik import analytics
 from opik.cli import account_identity
 from opik.cli import assistants
@@ -15,6 +18,73 @@ from opik.cli import status_view
 from opik.configurator import consent
 from opik.configurator import configure as opik_configure, interactive_helpers
 from opik.configurator import mcp as mcp_installer
+
+
+#: The lookup only decides which link to print, so it must not hold up the end
+#: of the run on a slow deployment.
+PROJECT_LOOKUP_TIMEOUT_SECONDS = 5.0
+
+
+def _report_configured(configured: opik_configure.Configured) -> None:
+    """Render the closing block, with a link to the project it configured."""
+    project_url, project_exists = _project_url(configured.project_name)
+    install_view.render_configured(
+        configured, project_url=project_url, project_exists=project_exists
+    )
+
+
+def _project_url(project_name: str) -> Tuple[str, bool]:
+    """Where to open the configured project, and whether it exists yet.
+
+    Read from the config the configurator has just saved and put into the
+    session. A project is created by its first trace, so on a fresh setup it is
+    usually not there yet: that answers the workspace's project list instead,
+    where it will appear, rather than a link that would 404.
+    """
+    config = opik_config.OpikConfig()
+    # The UI sits where the REST API does, minus the `api/` suffix — under
+    # `/opik/` on the Comet platform, at the root of a local Opik.
+    ui_root = url_helpers.ensure_ending_slash(config.url_override).removesuffix("api/")
+    projects_url = f"{ui_root}{config.workspace}/projects"
+
+    project_id = _find_project_id(config, project_name)
+    if project_id is None:
+        return projects_url, False
+    return f"{projects_url}/{project_id}/", True
+
+
+def _find_project_id(
+    config: opik_config.OpikConfig, project_name: str
+) -> Optional[str]:
+    """The id of the project called ``project_name``, or None.
+
+    Best-effort: any failure answers None, which only means the closing block
+    links to the project list instead of the project.
+    """
+    try:
+        with httpx_client.get(
+            workspace=config.workspace,
+            api_key=config.api_key,
+            check_tls_certificate=config.check_tls_certificate,
+            compress_json_requests=False,
+        ) as client:
+            response = client.get(
+                url=f"{url_helpers.ensure_ending_slash(config.url_override)}v1/private/projects",
+                # The filter is a partial match, so the exact one is picked below.
+                params={"name": project_name, "size": 100},
+                timeout=PROJECT_LOOKUP_TIMEOUT_SECONDS,
+            )
+        body = response.json() if response.status_code == 200 else None
+    except (httpx.HTTPError, OSError, ValueError):
+        return None
+
+    if not isinstance(body, dict) or not isinstance(body.get("content"), list):
+        return None
+    for project in body["content"]:
+        if isinstance(project, dict) and project.get("name") == project_name:
+            project_id = project.get("id")
+            return project_id if isinstance(project_id, str) else None
+    return None
 
 
 def _setup_assistants(
@@ -361,7 +431,7 @@ def run_interactive_configure(
             install_skills=install_skills,
             assistant_setup=record,
             announce=install_view.render_configure_hint,
-            report_configured=install_view.render_configured,
+            report_configured=_report_configured,
         ).configure()
         progress.stage = Progress.DONE
         return recorded
@@ -381,7 +451,7 @@ def run_interactive_configure(
             install_skills=install_skills,
             assistant_setup=record,
             announce=install_view.render_configure_hint,
-            report_configured=install_view.render_configured,
+            report_configured=_report_configured,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.SELF_HOSTED:
         configurator = opik_configure.OpikConfigurator(
@@ -393,7 +463,7 @@ def run_interactive_configure(
             install_skills=install_skills,
             assistant_setup=record,
             announce=install_view.render_configure_hint,
-            report_configured=install_view.render_configured,
+            report_configured=_report_configured,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.LOCAL:
         configurator = opik_configure.OpikConfigurator(
@@ -405,7 +475,7 @@ def run_interactive_configure(
             install_skills=install_skills,
             assistant_setup=record,
             announce=install_view.render_configure_hint,
-            report_configured=install_view.render_configured,
+            report_configured=_report_configured,
         )
     else:
         raise click.ClickException("Unknown deployment type was selected. Exiting.")

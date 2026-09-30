@@ -1184,3 +1184,54 @@ class TestClientNotListed:
 
         assert view.problems == []
         assert view.skips, "still says the step was skipped"
+
+
+class TestAFailedSignInIsWhereTheRunEnds:
+    """Verification only proves the hosted server is reachable, which it is
+    without a sign-in — so a run with a failed sign-in must not end on "done"."""
+
+    @staticmethod
+    def _run(monkeypatch, verify):
+        monkeypatch.setattr(
+            install.mcp_detection,
+            "detect_hosted_mcp_server",
+            lambda **kwargs: "https://dev.comet.com/opik/api/v1/mcp",
+        )
+        install_spy = mock.Mock(
+            return_value=targets.InstallResult(
+                "Claude Code",
+                True,
+                "Added",
+                sign_in_attempted=True,
+                sign_in_failed=True,
+            )
+        )
+        monkeypatch.setattr(
+            targets, "HOST_TARGETS", [_target("claude-code", True, install_spy)]
+        )
+        monkeypatch.setattr("builtins.input", lambda message: "y")
+        args = _make_args()
+        order = []
+        view = args["view"]
+        original = view.sign_in_failed
+        view.sign_in_failed = lambda names: (order.append("sign-in"), original(names))
+        verify.side_effect = lambda **kwargs: (
+            order.append("verify"),
+            verification.VerificationResult(True, "reachable"),
+        )[1]
+
+        report = install.setup_mcp_server(**args)
+        return report, view, order
+
+    def test_the_view_is_told_before_verification(self, monkeypatch, verify):
+        """So nothing that goes wrong while verifying can swallow the command."""
+        report, view, order = self._run(monkeypatch, verify)
+
+        assert order == ["sign-in", "verify"]
+        assert view._sign_in_failed == ("Claude Code",)
+        assert report.sign_in == "failed"
+
+    def test_a_log_is_not_told_the_setup_is_done(self, monkeypatch, verify):
+        report, view, order = self._run(monkeypatch, verify)
+
+        assert view.done_calls == []

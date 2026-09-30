@@ -423,7 +423,7 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
     # use the server rather than having one installed.
     install_view.render_handoff_offer(prompt)
     try:
-        accepted = install_view.confirm_default_yes(f"Try it in {display_name}?")
+        accepted = install_view.confirm_default_yes(f"Continue in {display_name}")
     except click.Abort:
         # Ctrl-C here is not a failed run: the server is registered and the pack
         # is installed. It means "not now", which is the same answer as `n`.

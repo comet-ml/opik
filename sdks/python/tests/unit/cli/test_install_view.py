@@ -556,7 +556,11 @@ class TestTheConfigureEnding:
         rich_view, recorder = terminal
 
         with recorder.capture() as capture:
-            rich_view.render_configured(self._configured())
+            rich_view.render_configured(
+                self._configured(),
+                project_url="https://www.comet.com/opik/acme-ai/projects/0190-abc/",
+                project_exists=True,
+            )
 
         out = capture.get()
         assert "Opik is configured" in out
@@ -569,21 +573,43 @@ class TestTheConfigureEnding:
         rich_view, recorder = terminal
 
         with recorder.capture() as capture:
-            rich_view.render_configured(self._configured(saved=False))
+            rich_view.render_configured(
+                self._configured(saved=False),
+                project_url="https://www.comet.com/opik/acme-ai/projects/0190-abc/",
+                project_exists=True,
+            )
 
         assert "Opik is already configured" in capture.get()
 
-    def test_no_workspace_to_name__leaves_the_row_out(self, terminal):
+    def test_a_non_cloud_deployment__names_its_url(self, terminal):
         rich_view, recorder = terminal
 
         with recorder.capture() as capture:
             rich_view.render_configured(
-                self._configured(workspace=None, url="http://localhost:5173/")
+                self._configured(workspace="default", url="http://localhost:5173/"),
+                project_url="http://localhost:5173/default/projects",
+                project_exists=False,
             )
 
         out = capture.get()
-        assert "Workspace" not in out
+        assert "default" in out
         assert "localhost:5173" in out
+
+    def test_credentials_in_the_url__are_not_shown_or_linked(self, terminal):
+        """The summary prints the URL and makes it a link; a password must be in neither."""
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_configured(
+                self._configured(url="https://alice:s3cret@opik.acme.io/"),
+                project_url="https://alice:s3cret@opik.acme.io/default/projects",
+                project_exists=False,
+            )
+
+        out = capture.get()
+        assert "s3cret" not in out
+        assert "alice" not in out
+        assert "https://opik.acme.io/" in out
 
 
 class TestTheSuggestedPrompt:
@@ -611,3 +637,49 @@ class TestTheSuggestedPrompt:
         out = capture.get()
         assert out.index("Suggested first prompt") < out.index("Restart")
         assert "paste the prompt above" in out
+
+
+class TestTheConfigureEndingLinksTheProject:
+    def test_an_existing_project__is_linked_directly(self, terminal):
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_configured(
+                TestTheConfigureEnding._configured(),
+                project_url="https://www.comet.com/opik/acme-ai/projects/0190-abc/",
+                project_exists=True,
+            )
+
+        out = capture.get()
+        assert "https://www.comet.com/opik/acme-ai/projects/0190-abc/" in out
+        assert "after its first trace" not in out
+
+    def test_a_project_not_created_yet__links_the_list_and_says_why(self, terminal):
+        """A project is created by its first trace, so a fresh setup has none."""
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_configured(
+                TestTheConfigureEnding._configured(),
+                project_url="https://www.comet.com/opik/acme-ai/projects",
+                project_exists=False,
+            )
+
+        out = capture.get()
+        assert "https://www.comet.com/opik/acme-ai/projects" in out
+        assert "after its first trace" in out
+
+
+class TestTheEndingAfterAFailedSignIn:
+    def test_ends_on_the_step_left__not_on_done(self, terminal):
+        rich_view, recorder = terminal
+        view = rich_view.RichInstallView()
+        view.sign_in_failed(["Claude Code"])
+
+        with recorder.capture() as capture:
+            view.done(["MCP server"], ["Claude Code"])
+
+        out = capture.get()
+        assert "not signed in yet" in out
+        assert "claude mcp login opik-mcp" in out
+        assert "Done" not in out

@@ -1288,3 +1288,74 @@ class TestTheRedirectReportsTheWholeFlow:
         reported = self._reported()
 
         assert len({properties["session_id"] for _, properties in reported}) == 1
+
+
+class TestTheProjectLink:
+    """The closing block links the project; a lookup only picks which link."""
+
+    @staticmethod
+    def _config(url_override="https://www.comet.com/opik/api/"):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            url_override=url_override,
+            workspace="acme-ai",
+            api_key="key",
+            check_tls_certificate=True,
+        )
+
+    @staticmethod
+    def _listing(monkeypatch, content=None, error=None):
+        response = mock.Mock(status_code=200)
+        response.json.return_value = {"content": content or []}
+        client = mock.MagicMock()
+        client.__enter__.return_value.get.side_effect = (
+            error if error is not None else lambda **kwargs: response
+        )
+        monkeypatch.setattr(configure_cli.httpx_client, "get", lambda **kwargs: client)
+
+    def test_an_existing_project__links_its_page(self, monkeypatch):
+        monkeypatch.setattr(configure_cli.opik_config, "OpikConfig", self._config)
+        self._listing(
+            monkeypatch,
+            content=[
+                {"name": "checkout-bot-v2", "id": "other"},
+                {"name": "checkout-bot", "id": "0190-abc"},
+            ],
+        )
+
+        assert configure_cli._project_url("checkout-bot") == (
+            "https://www.comet.com/opik/acme-ai/projects/0190-abc/",
+            True,
+        )
+
+    def test_no_such_project_yet__links_the_project_list(self, monkeypatch):
+        """The name filter is a partial match, so a near miss is not the project."""
+        monkeypatch.setattr(configure_cli.opik_config, "OpikConfig", self._config)
+        self._listing(monkeypatch, content=[{"name": "checkout-bot-v2", "id": "x"}])
+
+        assert configure_cli._project_url("checkout-bot") == (
+            "https://www.comet.com/opik/acme-ai/projects",
+            False,
+        )
+
+    def test_an_unreachable_backend__still_gives_a_link(self, monkeypatch):
+        import httpx
+
+        monkeypatch.setattr(configure_cli.opik_config, "OpikConfig", self._config)
+        self._listing(monkeypatch, error=httpx.ConnectError("down"))
+
+        assert configure_cli._project_url("checkout-bot")[1] is False
+
+    def test_a_local_opik__serves_the_ui_at_its_root(self, monkeypatch):
+        """Only the Comet platform puts the UI under `/opik/`."""
+        monkeypatch.setattr(
+            configure_cli.opik_config,
+            "OpikConfig",
+            lambda: self._config(url_override="http://localhost:5173/api/"),
+        )
+        self._listing(monkeypatch, content=[])
+
+        assert configure_cli._project_url("checkout-bot")[0] == (
+            "http://localhost:5173/acme-ai/projects"
+        )

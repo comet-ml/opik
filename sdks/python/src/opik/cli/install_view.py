@@ -9,6 +9,7 @@ logger-based default.
 import contextlib
 import pathlib
 import re
+import urllib.parse
 from typing import Iterator, List, Optional, Tuple
 
 import click
@@ -106,7 +107,9 @@ def render_configure_hint(message: str) -> None:
     console.print(padding.Padding(_emphasize(message, base="dim"), (0, 0, 0, 2)))
 
 
-def render_configured(configured: opik_configure.Configured) -> None:
+def render_configured(
+    configured: opik_configure.Configured, project_url: str, project_exists: bool
+) -> None:
     """How `opik configure` closes: what was set up, and where, at a glance.
 
     A block rather than the sentence `opik.configure()` logs, which ran the
@@ -125,10 +128,17 @@ def render_configured(configured: opik_configure.Configured) -> None:
     grid.add_column(overflow="fold")
     grid.add_row("Config file", _collapse_home(configured.config_file))
     if configured.url is not None:
-        grid.add_row("Opik", _emphasize(configured.url))
-    if configured.workspace is not None:
-        grid.add_row("Workspace", configured.workspace)
+        grid.add_row("Opik", _emphasize(_without_credentials(configured.url)))
+    grid.add_row("Workspace", configured.workspace)
     grid.add_row("Project", text.Text(configured.project_name, style="bold"))
+    # Shown in full rather than behind the project name: not every terminal
+    # makes a hyperlink clickable, and a visible URL can still be copied.
+    open_row = _emphasize(_without_credentials(project_url))
+    if not project_exists:
+        open_row.append(
+            "\nThe project appears here after its first trace.", style="dim"
+        )
+    grid.add_row("Open", open_row)
     console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
     console.print(
         padding.Padding(
@@ -138,6 +148,22 @@ def render_configured(configured: opik_configure.Configured) -> None:
             _FIELDS_INDENT,
         )
     )
+
+
+def _without_credentials(url: str) -> str:
+    """``url`` with any ``user:password@`` removed, for putting on screen.
+
+    An Opik URL can carry basic-auth credentials, and the summary both prints
+    it and makes it a link — so the password would be on screen and in the
+    link target.
+    """
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.username is None and parsed.password is None:
+        return url
+    host = parsed.hostname or ""
+    if parsed.port is not None:
+        host = f"{host}:{parsed.port}"
+    return urllib.parse.urlunsplit(parsed._replace(netloc=host))
 
 
 #: Where the closing block points for changing the destination project.
@@ -331,7 +357,7 @@ def render_mcp_intro() -> None:
 def render_handoff_offer(prompt: str) -> None:
     """The question the run would open the agent on, above the offer to do it.
 
-    Only the prompt: the ``click`` prompt underneath is where "Try it in X?" is
+    Only the prompt: the ``click`` prompt underneath is where "Continue in X" is
     asked, and saying it here as well put the same question on screen twice.
 
     Printed at all because saying yes sends it — so this is the user's one
@@ -525,6 +551,25 @@ class RichInstallView(mcp_view.InstallView):
         results table and so has nothing else to report from.
         """
         console.print()
+        if self._sign_in_failed:
+            # The run's last word, after the skill pack: the one step left for
+            # the user, and why "done" would not be true yet.
+            console.print(
+                text.Text.assemble(
+                    ("! ", "yellow bold"), ("Set up, but not signed in yet", "bold")
+                )
+            )
+            for name in self._sign_in_failed:
+                console.print(
+                    padding.Padding(
+                        _emphasize(
+                            mcp_view.sign_in_failed_message(name), base="yellow"
+                        ),
+                        (0, 0, 0, 2),
+                    )
+                )
+            console.print()
+            return
         console.print(
             text.Text.assemble(("✓ ", "green bold"), ("Done", "bold")),
         )

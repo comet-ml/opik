@@ -32,15 +32,14 @@ Announce = Callable[[str], None]
 class Configured(NamedTuple):
     """What a run of the configurator settled on, for a caller that shows it."""
 
-    #: False when the file already said all of this and was left alone.
+    #: Whether this run wrote the config file. False when nothing needed
+    #: writing, and the settings were only applied to the running session.
     saved: bool
     config_file: str
     #: Only when it is not Opik Cloud, which is the one the user does not need
     #: reminding of.
     url: Optional[str]
-    #: None for a deployment with no workspace to choose, where it is always
-    #: the placeholder `default`.
-    workspace: Optional[str]
+    workspace: str
     project_name: str
 
 
@@ -107,6 +106,10 @@ class OpikConfigurator:
             ConfigurationError
             ConnectionError
         """
+
+        # Per run, so a configurator used twice does not report the first run's
+        # write as the second's.
+        self._saved = False
 
         # if there is already cached Opik client instance
         if get_current_client_raw() is not None:
@@ -613,9 +616,7 @@ class OpikConfigurator:
                     saved=self._saved,
                     config_file=str(self.current_config.config_file_fullpath),
                     url=None if self.base_url == OPIK_BASE_URL_CLOUD else self.base_url,
-                    workspace=None
-                    if self.workspace in (None, config.OPIK_WORKSPACE_DEFAULT_NAME)
-                    else self.workspace,
+                    workspace=self.workspace or config.OPIK_WORKSPACE_DEFAULT_NAME,
                     project_name=self.project_name or config.OPIK_PROJECT_DEFAULT_NAME,
                 )
             )

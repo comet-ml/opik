@@ -20,7 +20,9 @@ import contextlib
 import dataclasses
 import logging
 import pathlib
-from typing import Iterator, List, Optional
+from typing import Iterator, List, Optional, Tuple
+
+from opik.configurator.mcp import spec as mcp_spec
 
 LOGGER = logging.getLogger(__name__)
 
@@ -79,6 +81,15 @@ SIGN_IN_HINT = (
 )
 
 
+def sign_in_failed_message(client_display_name: str) -> str:
+    """What to do about a client that was registered but not signed in."""
+    return (
+        f"{client_display_name} is registered but not signed in. Run "
+        f"`claude mcp login {mcp_spec.SERVER_NAME}` to finish it — until then the server "
+        "contributes no tools."
+    )
+
+
 class InstallView(abc.ABC):
     """Narration hooks for the MCP install flow."""
 
@@ -89,6 +100,19 @@ class InstallView(abc.ABC):
     #: spec — the view carries the fact across that gap. A class attribute, so a
     #: view that is never planned still renders.
     _needs_sign_in: bool = False
+
+    #: Clients registered without a working sign-in. Carried to :meth:`done`,
+    #: which must not call the run done while one of them has no tools yet.
+    _sign_in_failed: Tuple[str, ...] = ()
+
+    def sign_in_failed(self, client_display_names: List[str]) -> None:
+        """Record clients that were registered but could not be signed in.
+
+        Recorded rather than printed where it happens: the run goes on to verify
+        the server and install the skill pack, and the one thing left for the
+        user to do has to be what the run ends on.
+        """
+        self._sign_in_failed = tuple(client_display_names)
 
     def sign_in_handled(self) -> None:
         """Drop the closing hint: this run has already said what applies.
@@ -180,6 +204,13 @@ class LoggingInstallView(InstallView):
                 LOGGER.info("%s: %s", result.display_name, result.detail)
             else:
                 LOGGER.warning("%s: %s", result.display_name, result.detail)
+
+    def sign_in_failed(self, client_display_names: List[str]) -> None:
+        # A log has no ending to hold this back for, so it is said where it is
+        # learned — before verification, which could otherwise go first.
+        super().sign_in_failed(client_display_names)
+        for name in client_display_names:
+            LOGGER.warning(sign_in_failed_message(name))
 
     def verification(self, succeeded: bool, detail: str) -> None:
         if succeeded:

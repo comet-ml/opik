@@ -2559,8 +2559,8 @@ class TestTheEndingIsReported:
         log_info.assert_not_called()
         announce.assert_not_called()
 
-    def test_with_a_reporter__cloud_and_the_placeholder_workspace_are_left_out(self):
-        """Neither tells the user anything: Cloud is the default, `default` a placeholder."""
+    def test_with_a_reporter__cloud_is_left_out_and_the_workspace_kept(self):
+        """Cloud is the default and needs no reminding; the workspace is always true."""
         report = Mock()
         configurator = OpikConfigurator(
             workspace=OPIK_WORKSPACE_DEFAULT_NAME,
@@ -2573,7 +2573,24 @@ class TestTheEndingIsReported:
         configured = report.call_args.args[0]
         assert configured.saved is False
         assert configured.url is None
-        assert configured.workspace is None
+        assert configured.workspace == OPIK_WORKSPACE_DEFAULT_NAME
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch("opik.configurator.configure.opik.config.update_session_config")
+    def test_reused__a_run_that_writes_nothing_does_not_report_a_write(
+        self, mock_update_session_config, mock_opik_config
+    ):
+        report = Mock()
+        configurator = OpikConfigurator(
+            api_key="key", project_name="checkout-bot", report_configured=report
+        )
+        configurator._update_config(save_to_file=True)
+
+        with patch.object(configurator, "_configure_cloud"):
+            configurator.configure()
+        configurator._log_project_configuration_message()
+
+        assert report.call_args.args[0].saved is False
 
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     @patch("opik.configurator.configure.opik.config.update_session_config")

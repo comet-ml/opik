@@ -271,6 +271,12 @@ def setup_mcp_server(
         ]
     )
 
+    sign_in_failed = [
+        result.target_display_name for result in results if result.sign_in_failed
+    ]
+    if sign_in_failed:
+        display.sign_in_failed(sign_in_failed)
+
     # One verification per run: it exercises the credentials, which are identical
     # for every host, so running it once and reporting once is enough.
     verified: Optional[bool] = None
@@ -285,17 +291,9 @@ def setup_mcp_server(
             )
         verified = verification.succeeded
         display.verification(verification.succeeded, verification.detail)
-        for result in results:
-            if result.sign_in_failed:
-                # A problem rather than a note, and after the verification row: that
-                # row says the server is reachable, which is true without a sign-in,
-                # so the one thing left to do has to be the last thing read.
-                display.problem(
-                    f"{result.target_display_name} is registered but not signed in. "
-                    f"Run `claude mcp login {mcp_spec.SERVER_NAME}` to finish it — until "
-                    "then the server contributes no tools."
-                )
-        if verification.succeeded and announce_next_steps:
+        # Not "done" while a client has no tools yet: verification only proves
+        # the server is reachable, which it is without a sign-in.
+        if verification.succeeded and announce_next_steps and not sign_in_failed:
             display.done(
                 ["MCP server"],
                 [result.target_display_name for result in results if result.succeeded],
