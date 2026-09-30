@@ -841,6 +841,53 @@
     scrollbar-width: none;
   }
 
+  /* Vertical scrollbar shown only while the container or a
+   * .comet-hover-scrollbar-trigger ancestor is hovered. The scrollbar always
+   * exists (so it keeps its space and nothing reflows) and is hidden through
+   * the container's visibility. Safari doesn't repaint the scrollbar on hover,
+   * so it stays hidden there while wheel/trackpad scrolling keeps working.
+   * Touch devices keep a regular scrollable container. The body prefix outranks
+   * the theme-wide .dark / .comet-custom-scrollbar rules. */
+  body .comet-hover-scrollbar {
+    overflow-y: auto;
+  }
+
+  /* Firefox only: in Chrome these standard properties disable the
+   * ::-webkit-scrollbar styling below and fall back to macOS overlay scrollbars. */
+  @supports (-moz-appearance: none) {
+    body .comet-hover-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
+  }
+
+  @media (hover: hover) {
+    body .comet-hover-scrollbar {
+      visibility: hidden;
+    }
+
+    body .comet-hover-scrollbar > *,
+    body .comet-hover-scrollbar:hover,
+    body .comet-hover-scrollbar-trigger:hover .comet-hover-scrollbar {
+      visibility: visible;
+    }
+  }
+
+  body .comet-hover-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    background: transparent;
+  }
+
+  body .comet-hover-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  body .comet-hover-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border: none;
+    border-radius: 8px;
+  }
+
   .action-card-shadow {
     box-shadow: var(--action-card-shadow);
   }

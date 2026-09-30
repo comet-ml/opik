@@ -1,5 +1,6 @@
 import React from "react";
 
+import { cn } from "@/lib/utils";
 import FeedbackScoresChartContainer from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContainer";
 import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 
@@ -14,13 +15,21 @@ const FeedbackScoresChartsWrapper = ({
   areAggregatedScores = false,
   noDataComponent,
 }: FeedbackScoresChartsWrapperProps) => {
+  const chartClassName =
+    chartsData.length === 1
+      ? "w-full"
+      : chartsData.length === 2
+        ? "basis-1/2"
+        : "basis-[520px]";
+
   return (
-    <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(400px,1fr))] gap-4">
+    <div className={cn("flex items-center gap-4 overflow-y-auto mb-4")}>
       {chartsData.length === 0 && noDataComponent
         ? noDataComponent
         : chartsData.map((data, index) => (
             <FeedbackScoresChartContainer
               key={data.id}
+              className={chartClassName}
               chartData={chartsData[index]}
               chartId={data.id}
               chartName={data.name}
