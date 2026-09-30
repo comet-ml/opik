@@ -43,6 +43,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.Response;
@@ -63,6 +64,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -452,6 +454,40 @@ class FindTraceThreadsResourceTest {
 
             assertThreadPage(projectName, null, expectedThreads, List.of(), queryParams, API_KEY,
                     TEST_WORKSPACE);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = TraceThreadField.class, names = {"FIRST_MESSAGE", "LAST_MESSAGE"})
+        @DisplayName("when truncating, a message filter matching past the truncation limit lists the thread it counts")
+        void whenTruncateAndMessageMatchesPastTruncationLimit__thenThreadIsListed(TraceThreadField messageField) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var marker = RandomStringUtils.secure().nextAlphanumeric(20);
+            JsonNode payloadWithMarkerPastLimit = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("text", "x".repeat(10_001) + marker)));
+
+            traceResourceClient.batchCreateTraces(List.of(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .input(payloadWithMarkerPastLimit)
+                    .output(payloadWithMarkerPastLimit)
+                    .build()), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var messageFilter = TraceThreadFilter.builder()
+                    .field(messageField)
+                    .operator(Operator.CONTAINS)
+                    .value(marker)
+                    .build();
+
+            var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                    List.of(messageFilter), List.of(), Map.of("truncate", "true"));
+
+            assertThat(page.content()).extracting(TraceThread::id).containsExactly(threadId);
+            assertThat(page.total()).isEqualTo(1);
+            var listedThread = page.content().getFirst();
+            assertThat(List.of(listedThread.firstMessage(), listedThread.lastMessage()))
+                    .allSatisfy(message -> assertThat(message.asText()).doesNotContain(marker));
         }
 
         @Test
@@ -2751,6 +2787,85 @@ class FindTraceThreadsResourceTest {
                     .untilAsserted(() -> assertThat(traceResourceClient
                             .getTraceThread(closedThreadId, projectId, apiKey, workspaceName).status())
                             .isEqualTo(TraceThreadStatus.ACTIVE));
+        }
+
+        @ParameterizedTest(name = "withTimeWindow={0}")
+        @ValueSource(booleans = {false, true})
+        @DisplayName("when a playground trace is updated before it is created, then the source = sdk filter skips its thread before any merge")
+        void whenPlaygroundTraceIsUpdatedBeforeCreate__thenSdkSourceFilterSkipsItsThread(boolean withTimeWindow) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var baseTime = Instant.now();
+            var playgroundThreadId = UUID.randomUUID().toString();
+            var playgroundTraceId = idGenerator.generateId(baseTime);
+
+            traceResourceClient.updateTrace(playgroundTraceId, TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(playgroundThreadId)
+                    .build(), apiKey, workspaceName);
+
+            var sdkThreadId = UUID.randomUUID().toString();
+            var sdkTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(baseTime.plusMillis(1)))
+                    .projectName(projectName)
+                    .threadId(sdkThreadId)
+                    .source(Source.SDK)
+                    .lastUpdatedAt(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(sdkTrace), apiKey, workspaceName);
+            traceResourceClient.updateTrace(sdkTrace.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .tags(Set.of("updated"))
+                    .build(), apiKey, workspaceName);
+
+            var projectId = projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+            Map<String, String> queryParams = withTimeWindow
+                    ? Map.of(
+                            "from_time", baseTime.minus(Duration.ofMinutes(10)).toString(),
+                            "to_time", baseTime.plus(Duration.ofMinutes(10)).toString())
+                    : Map.of();
+
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(traceResourceClient
+                            .getTraceThreads(projectId, null, apiKey, workspaceName, List.of(), List.of(), queryParams)
+                            .content())
+                            .extracting(TraceThread::id)
+                            .containsExactlyInAnyOrder(playgroundThreadId, sdkThreadId));
+
+            traceResourceClient.batchCreateTraces(List.of(createTrace().toBuilder()
+                    .id(playgroundTraceId)
+                    .projectName(projectName)
+                    .threadId(playgroundThreadId)
+                    .source(Source.PLAYGROUND)
+                    .lastUpdatedAt(null)
+                    .build()), apiKey, workspaceName);
+
+            var sdkSourceFilter = List.of(TraceThreadFilter.builder()
+                    .field(TraceThreadField.SOURCE)
+                    .operator(Operator.EQUAL)
+                    .value(Source.SDK.getValue())
+                    .build());
+
+            var filteredPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
+                    sdkSourceFilter, List.of(), queryParams);
+
+            assertThat(filteredPage.content()).extracting(TraceThread::id).containsExactly(sdkThreadId);
+            assertThat(filteredPage.total()).isEqualTo(1);
+
+            var filteredStats = traceResourceClient.getTraceThreadStats(null, projectId, apiKey, workspaceName,
+                    sdkSourceFilter, queryParams);
+
+            assertThat(filteredStats.stats())
+                    .filteredOn(stat -> stat.getName().equals("thread_count"))
+                    .extracting(stat -> ((ProjectStats.CountValueStat) stat).getValue())
+                    .containsExactly(1L);
         }
     }
 
