@@ -41,6 +41,7 @@ export {
   type TracePayload,
   type TraceLifecycle,
   type SpanDetail,
+  type SpanPayload,
   type AutomationRuleRef,
   type AutomationRuleDetail,
   type CreatePythonRuleArgs,

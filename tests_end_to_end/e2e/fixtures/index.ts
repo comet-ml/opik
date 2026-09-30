@@ -1,4 +1,4 @@
-export { test, expect } from './suite-experiment-run-media.fixture';
+export { test, expect } from './id-aged-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -256,4 +256,9 @@ export type {
   SuiteExperimentRunMediaRef,
   SuiteExperimentRunMediaFixtures,
 } from './suite-experiment-run-media.fixture';
+export type {
+  IdAgedSpanRef,
+  IdAgedSpansRef,
+  IdAgedSpansFixtures,
+} from './id-aged-spans.fixture';
 export type { ProjectRef } from '../core/backend';

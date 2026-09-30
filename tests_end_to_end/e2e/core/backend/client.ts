@@ -498,6 +498,28 @@ export interface SpanDetail {
   output: unknown;
 }
 
+/**
+ * A span's whole stored payload — the fields a partial update can silently
+ * drop.
+ *
+ * Deliberately not `SpanDetail`: that shape exists for feedback-score reads and
+ * flattens away `input`, `metadata`, `tags`, `type` and `project_id`, which are
+ * exactly what an update whose row lookup missed leaves behind. `null`
+ * throughout means the server sent nothing, kept distinct from an empty value
+ * so a caller can tell "never set" from "wiped".
+ */
+export interface SpanPayload {
+  id: string;
+  name: string;
+  type: string | null;
+  traceId: string | null;
+  projectId: string | null;
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  tags: string[] | null;
+}
+
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
 export interface ThreadDetail {
   id: string;
@@ -3254,6 +3276,18 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       traceId: string;
       parentSpanId?: string;
       output?: TraceJsonSection;
+      /**
+       * Tags, and nothing else — the smallest possible update, which is what
+       * makes it the sharpest probe of the read path underneath.
+       *
+       * `SpanService.update` resolves the existing row before merging, and when
+       * that lookup misses, the update falls through to a partial INSERT that
+       * answers 204 and quietly drops every field the request did not carry. A
+       * tags-only PATCH therefore has the largest blast radius of any update
+       * available: everything else the span holds is absent from the body, so
+       * everything else is what a missed lookup destroys.
+       */
+      tags?: string[];
     }): Promise<RawApiResult> {
       const { status, message } = await rawFetch('PATCH', `/v1/private/spans/${args.spanId}`, {
         body: {
@@ -3261,9 +3295,68 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           trace_id: args.traceId,
           ...(args.parentSpanId === undefined ? {} : { parent_span_id: args.parentSpanId }),
           ...(args.output === undefined ? {} : { output: args.output }),
+          ...(args.tags === undefined ? {} : { tags: args.tags }),
         },
       });
       return { status, message };
+    },
+
+    /**
+     * The comment texts on one span, newest-first as the API returns them.
+     *
+     * A span comment is written against the span's PROJECT, which the backend
+     * has to resolve from the span id (`getProjectIdFromSpan`) — a read that
+     * opik#8537 put a week bound on. A bound that misses makes the project
+     * unresolvable, so the write either fails or attaches nowhere; reading the
+     * comments back off the span is what tells those apart from "it worked".
+     *
+     * Throws on a missing span rather than returning `[]`: an absent span and a
+     * span with no comments are exactly what a caller here is distinguishing.
+     */
+    async listSpanComments(spanId: string): Promise<string[]> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/spans/${spanId}`);
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/spans/${spanId} -> ${status}: ${message}`);
+      }
+      const comments = (json as { comments?: unknown } | null)?.comments;
+      if (!Array.isArray(comments)) return [];
+      return comments.map((c) => String((c as { text?: unknown }).text ?? ''));
+    },
+
+    /**
+     * A span's whole stored payload, as `GET /v1/private/spans/{id}` answers it.
+     *
+     * The span counterpart of `getTracePayload`, and it exists for the same
+     * reason: `SpanDetail` is shaped for feedback-score reads and flattens away
+     * `input`, `metadata`, `tags`, `type` and `project_id` — which are exactly
+     * the fields an update that failed to resolve its target row silently
+     * drops. A spec asserting that a tags-only PATCH preserved the span cannot
+     * use a shape that never carried the fields at risk.
+     *
+     * Every field is kept as the server sent it, `null` for absent, so the spec
+     * compares answers rather than defaults.
+     */
+    async getSpanPayload(spanId: string): Promise<SpanPayload | null> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/spans/${spanId}`);
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/spans/${spanId} -> ${status}: ${message}`);
+      }
+      const s = (json ?? {}) as Record<string, unknown>;
+      return {
+        id: String(s.id ?? ''),
+        name: typeof s.name === 'string' ? s.name : '',
+        type: typeof s.type === 'string' ? s.type : null,
+        traceId: typeof s.trace_id === 'string' ? s.trace_id : null,
+        projectId: typeof s.project_id === 'string' ? s.project_id : null,
+        input: (s.input ?? null) as Record<string, unknown> | null,
+        output: (s.output ?? null) as Record<string, unknown> | null,
+        metadata: (s.metadata ?? null) as Record<string, unknown> | null,
+        // Absent and empty are different answers: a span that never had tags
+        // and one whose tags an update wiped are precisely what a caller here
+        // is telling apart.
+        tags: Array.isArray(s.tags) ? s.tags.map(String) : null,
+      };
     },
 
     /**
