@@ -52,6 +52,8 @@
             <max_rows_to_read>100000000</max_rows_to_read>
             <read_overflow_mode>throw</read_overflow_mode>
             <max_concurrent_queries_for_user>5</max_concurrent_queries_for_user>
+            <!-- Live on the production profile; kept here so FINAL queries run under the same settings. -->
+            <use_skip_indexes_if_final>1</use_skip_indexes_if_final>
             <!--
                 Production sets SQL_workspace_id = '' / SQL_project_id = '' as defaults, but
                 ClickHouse's XML profile loader rejects an empty Field for custom settings. The
@@ -111,5 +113,58 @@
                 </opik>
             </databases>
         </comet_readonly_freeform_sql_user>
+
+        <!--
+            Extended free-form SQL account. Same profile with comet_readonly_freeform_sql_user shape,
+            wider reach: tables carrying project_id in their primary key stay bound to workspace and, when
+            SQL_project_id is not '*', to that project too; experiments, experiment_items and dataset_items
+            are workspace-only.
+        -->
+        <comet_readonly_freeform_extended_sql_user>
+            <password>opik</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>comet_llm_readonly_freeform_sql_profile</profile>
+            <quota>default</quota>
+            <grants>
+                <query>GRANT SELECT ON opik.spans</query>
+                <query>GRANT SELECT ON opik.traces</query>
+                <query>GRANT SELECT ON opik.authored_feedback_scores</query>
+                <query>GRANT SELECT ON opik.feedback_scores</query>
+                <query>GRANT SELECT ON opik.experiments</query>
+                <query>GRANT SELECT ON opik.experiment_items</query>
+                <query>GRANT SELECT ON opik.dataset_items</query>
+                <query>GRANT SELECT ON opik.trace_threads</query>
+            </grants>
+            <databases>
+                <opik>
+                    <spans>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
+                    </spans>
+                    <traces>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
+                    </traces>
+                    <authored_feedback_scores>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
+                    </authored_feedback_scores>
+                    <feedback_scores>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
+                    </feedback_scores>
+                    <experiments>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </experiments>
+                    <experiment_items>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </experiment_items>
+                    <dataset_items>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </dataset_items>
+                    <trace_threads>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
+                    </trace_threads>
+                </opik>
+            </databases>
+        </comet_readonly_freeform_extended_sql_user>
     </users>
 </clickhouse>

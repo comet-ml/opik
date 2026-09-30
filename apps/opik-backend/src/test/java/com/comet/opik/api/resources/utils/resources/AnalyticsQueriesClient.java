@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AnalyticsQueryRequest;
 import com.comet.opik.api.AnalyticsQueryResponse;
+import com.comet.opik.api.ScopedAnalyticsQueryRequest;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -19,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class AnalyticsQueriesClient {
 
     private static final String RESOURCE_PATH = "%s/v1/internal/analytics-queries/projects/%s";
+    private static final String SCOPED_RESOURCE_PATH = "%s/v1/internal/analytics-queries";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -36,6 +38,22 @@ public class AnalyticsQueriesClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.entity(AnalyticsQueryRequest.builder().query(query).build(),
+                        MediaType.APPLICATION_JSON_TYPE));
+    }
+
+    public AnalyticsQueryResponse executeScoped(UUID projectId, String query, String apiKey, String workspaceName) {
+        try (var response = callExecuteScoped(projectId, query, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(AnalyticsQueryResponse.class);
+        }
+    }
+
+    public Response callExecuteScoped(UUID projectId, String query, String apiKey, String workspaceName) {
+        return client.target(SCOPED_RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.entity(ScopedAnalyticsQueryRequest.builder().query(query).projectId(projectId).build(),
                         MediaType.APPLICATION_JSON_TYPE));
     }
 }

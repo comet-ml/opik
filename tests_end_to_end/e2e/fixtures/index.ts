@@ -1,4 +1,4 @@
-export { test, expect } from './experiment-item-read.fixture';
+export { test, expect } from './readability-locale-experiment.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -200,4 +200,50 @@ export {
   FM_SPAN_MODEL,
 } from './field-mapping-seed.fixture';
 export type { BulkTagTraceRef, BulkTagTracesFixtures } from './bulk-tag-traces.fixture';
+export type {
+  ImageOutputItemRef,
+  ExperimentImageOutputRef,
+  ExperimentImageOutputFixtures,
+} from './experiment-image-output.fixture';
+export {
+  RED_PNG_BASE64,
+  BLUE_PNG_BASE64,
+  GREEN_GIF_BASE64,
+  RED_PNG_URL,
+  BLUE_PNG_URL,
+  GREEN_GIF_URL,
+  mediaAlt,
+} from './experiment-image-output.fixture';
+export type {
+  MimeTypedFileSeed,
+  AttachmentMimeTypesRef,
+  AttachmentMimeTypesFixtures,
+} from './attachment-mime-types.fixture';
+export type {
+  ScoredReasonSeed,
+  FeedbackScoreReasonsRef,
+  FeedbackScoreReasonsFixtures,
+} from './feedback-score-reasons.fixture';
+export {
+  JUDGE_REASON_ITEMS,
+  MULTILINE_JUDGE_REASON,
+  COLLAPSED_JUDGE_REASON,
+  EMPTY_LIST_JUDGE_REASON,
+} from './feedback-score-reasons.fixture';
+export type {
+  DeepPagedItemSeed,
+  DeepPagedExperimentRef,
+  DeepPagedExperimentFixtures,
+} from './deep-paged-experiment.fixture';
+export type {
+  TraceSourceRef,
+  TraceSourcesRef,
+  TraceSourceFixtures,
+} from './trace-source.fixture';
+export type {
+  ReadabilityLocaleScore,
+  ReadabilityLocaleExperimentRef,
+  ReadabilityLocaleExperimentFixtures,
+} from './readability-locale-experiment.fixture';
+export { READABILITY_LANGUAGES } from './readability-locale-experiment.fixture';
 export type { ProjectRef } from '../core/backend';

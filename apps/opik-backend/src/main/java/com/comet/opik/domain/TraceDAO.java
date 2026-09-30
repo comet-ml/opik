@@ -161,6 +161,12 @@ public interface TraceDAO {
 
     Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
+    /**
+     * Of the given ids, the ones an SDK logged — {@link Source#isLoggingSource} expressed as a query,
+     * so legacy {@code unknown} rows count as SDK the same way it treats {@code null}.
+     */
+    Mono<Set<UUID>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> traceIds);
+
     /** Same as {@link #countTracesPerWorkspaceProject()}, broken down by user for the BI events. */
     Flux<WorkspaceProjectUserCount> getTraceBIInformationPerProject();
 
@@ -485,6 +491,35 @@ class TraceDAOImpl implements TraceDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
+    private static final String[] LOGGING_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
+
+    /**
+     * Reads the latest row per id rather than matching on any row. An out-of-order create leaves an earlier row
+     * holding 'unknown' until the real source arrives (see the merge in the batch insert), and matching on any
+     * row would read that 'unknown' as SDK and route a playground trace.
+     * <p>
+     * Takes the latest source with {@code argMax} rather than deduplicating whole rows: one column is all this
+     * reads, so a hash aggregate over the few rows the id list admits costs about what the sort it replaces did.
+     * <p>
+     * Carries the {@code <id_weeks>} week bound — see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} (OPIK-8332).
+     */
+    private static final String SELECT_LOGGING_SOURCE_IDS = """
+            SELECT id
+            FROM (
+                SELECT id, argMax(source, last_updated_at) AS source
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                AND id IN :ids
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                GROUP BY workspace_id, project_id, id
+            )
+            WHERE source IN :sources
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1290,16 +1325,15 @@ class TraceDAOImpl implements TraceDAO {
                     )) AS span_feedback_scores_list
                 FROM span_feedback_scores_final
                 GROUP BY workspace_id, project_id, trace_id
-            ),<endif> spans_agg AS (
+            ),<endif> spans_deduped AS (
                 SELECT
                     trace_id,
-                    sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost,
-                    COUNT(DISTINCT id) as span_count,
-                    toInt64(countIf(type = 'llm')) as llm_span_count,
-                    countIf(type = 'tool') > 0 as has_tool_spans,
-                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans FINAL
+                    id,
+                    type,
+                    usage,
+                    total_estimated_cost,
+                    provider
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
@@ -1308,7 +1342,19 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
-                GROUP BY workspace_id, project_id, trace_id
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), spans_agg AS (
+                SELECT
+                    trace_id,
+                    sumMap(usage) as usage,
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    COUNT(DISTINCT id) as span_count,
+                    toInt64(countIf(type = 'llm')) as llm_span_count,
+                    countIf(type = 'tool') > 0 as has_tool_spans,
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
+                FROM spans_deduped
+                GROUP BY trace_id
             ), comments_agg AS (
                 SELECT
                     entity_id,
@@ -2887,6 +2933,14 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     // Split-B: per-project feedback-score and span-feedback-score aggregates.
+    //
+    // scored_span_ids carries the spans partition key as an IN over the weeks of the scored span ids themselves, so
+    // it prunes without assuming anything about where a span sits relative to its trace. The ids exist only inside
+    // ClickHouse here, so the set is a subquery rather than WeeklyPartitions.weeksOf. Each scored id is cast exactly as
+    // spans_local_v2 materialises id_at (DateTime64(0), saturating past 2300), so the set holds the row's own partition
+    // value. Emitted only once spans is that partitioned successor (spans_partitioned): the legacy table has no
+    // partitions to prune, so there the subquery would be pure cost. Non-v7 ids never reach spans (ingestion rejects
+    // them).
     private static final String SELECT_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
             WITH spans_data AS (
@@ -3231,6 +3285,15 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND id IN (SELECT entity_id FROM span_scores)
+                <if(spans_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(scored_id_at) - toIntervalDay(toDayOfWeek(scored_id_at, 1)))
+                    FROM (
+                        SELECT CAST(UUIDv7ToDateTime(toUUID(entity_id)) AS DateTime64(0, 'UTC')) AS scored_id_at
+                        FROM span_scores
+                    )
+                )
+                <endif>
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 <if(filters_present)> AND trace_id IN (SELECT id FROM trace_final) <endif>
@@ -3483,11 +3546,11 @@ class TraceDAOImpl implements TraceDAO {
             statement.bindNull("visibility_mode", String.class);
         }
 
-        if (trace.source() != null) {
-            statement.bind("source", trace.source().getValue());
-        } else {
-            statement.bindNull("source", String.class);
-        }
+        // The column is non-nullable with DEFAULT 'unknown'; binding NULL makes the driver
+        // wrap it in a nullable guard, costing two swallowed exceptions per row.
+        statement.bind("source", trace.source() == null
+                ? Source.UNKNOWN_VALUE
+                : trace.source().getValue());
 
         statement.bind("environment", StringUtils.defaultString(trace.environment()));
 
@@ -3528,6 +3591,17 @@ class TraceDAOImpl implements TraceDAO {
 
     private boolean traceColumnsNonNullable() {
         return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
+    }
+
+    /**
+     * Enables the spans week bounds, a pruning hint on the weekly-partitioned {@code spans} and pure cost on the
+     * unpartitioned legacy one. {@code spanColumnsNonNullable} flips with the EXCHANGE that puts the partitioned
+     * successor behind the name, which is how {@code SpanDAO#deleteBatch} already reads it.
+     */
+    private void addSpansPartitionedFlag(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()) {
+            template.add("spans_partitioned", true);
+        }
     }
 
     /**
@@ -4213,11 +4287,10 @@ class TraceDAOImpl implements TraceDAO {
             bindEpochSentinel(statement, "end_time", traceUpdate.endTime());
             bindNanSentinel(statement, "ttft", traceUpdate.ttft());
 
-            if (traceUpdate.source() != null) {
-                statement.bind("source", traceUpdate.source().getValue());
-            } else {
-                statement.bindNull("source", String.class);
-            }
+            // 'unknown' is also what the merge treats as "no source supplied".
+            statement.bind("source", traceUpdate.source() == null
+                    ? Source.UNKNOWN_VALUE
+                    : traceUpdate.source().getValue());
 
             Segment segment = startSegment("traces", "Clickhouse", "insert_partial");
 
@@ -4598,11 +4671,9 @@ class TraceDAOImpl implements TraceDAO {
 
                 bindNanSentinel(statement, "ttft" + i, trace.ttft());
 
-                if (trace.source() != null) {
-                    statement.bind("source" + i, trace.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
+                statement.bind("source" + i, trace.source() == null
+                        ? Source.UNKNOWN_VALUE
+                        : trace.source().getValue());
 
                 statement.bind("environment" + i, StringUtils.defaultString(trace.environment()));
 
@@ -4711,6 +4782,7 @@ class TraceDAOImpl implements TraceDAO {
             template.add("filters_present", true);
         }
         template.add("has_legacy_scores", hasLegacyScores);
+        addSpansPartitionedFlag(template);
         if (canDedupByArgMax(template)) {
             template.add("dedup_by_argmax", true);
         }
@@ -4734,6 +4806,7 @@ class TraceDAOImpl implements TraceDAO {
         var logComment = getLogComment("get_trace_stats_feedback_scores", workspaceId, "", projectIds.size());
         var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORES_STATS).add("log_comment", logComment);
         template.add("has_legacy_scores", hasLegacyScores);
+        addSpansPartitionedFlag(template);
         if (uuidFromTime != null) {
             template.add("uuid_from_time", true);
         }
@@ -5123,6 +5196,34 @@ class TraceDAOImpl implements TraceDAO {
                                     row.get("id", UUID.class), row.get("start_time", Instant.class))))
                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
                 });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Set<UUID>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(projectIds) || CollectionUtils.isEmpty(traceIds)) {
+            return Mono.just(Set.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_LOGGING_SOURCE_IDS, "get_logging_source_ids",
+                    workspaceId, userName, "trace_ids_size=%s".formatted(traceIds.size()));
+
+            var idWeeks = idWeeks(traceIds);
+            idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_ids", projectIds.toArray(UUID[]::new))
+                    .bind("ids", traceIds.toArray(UUID[]::new))
+                    .bind("sources", LOGGING_SOURCES);
+
+            idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("id", UUID.class)))
+                    .collect(toSet());
+        }));
     }
 
     @Override

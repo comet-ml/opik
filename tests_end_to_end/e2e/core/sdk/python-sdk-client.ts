@@ -254,6 +254,55 @@ export interface PythonSdkClient {
     }>;
   }>;
   /**
+   * Seed one dataset and score it with several `Readability` locales in a
+   * SINGLE `evaluate()` run — the only shape that reaches textstat's
+   * module-wide locale state from the scoring thread pool (opik#8318).
+   *
+   * Every score comes back with the uncontended `serial_value` for the same
+   * text and language, so the caller can tell "the locale stopped being
+   * applied" (languages stop differing) apart from "the lock stopped holding"
+   * (a language differs from its own sequential score).
+   */
+  readabilityEvaluate(args: {
+    project_name: string;
+    dataset_name: string;
+    experiment_name: string;
+    items: Array<{ key: string; text: string }>;
+    languages: string[];
+    task_threads?: number;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    experiment_name: string;
+    dataset_id: string;
+    item_count: number;
+    scored_item_count: number;
+    scores: Array<{
+      dataset_item_id: string;
+      key: string;
+      language: string;
+      metric_name: string;
+      evaluated_value: number;
+      serial_value: number;
+      scoring_failed: boolean;
+    }>;
+  }>;
+  /**
+   * Score one text with one locale, with the failure reported rather than
+   * raised. `error_type` is the exception's own class name, so an unknown
+   * locale regressing from `MetricComputationError` back to pyphen's bare
+   * `KeyError` is an assertion diff instead of a 500.
+   */
+  readabilityScore(args: { text: string; language: string }): Promise<{
+    language: string;
+    scored: boolean;
+    value: number | null;
+    reading_ease: number | null;
+    error_type: string | null;
+    error_message: string | null;
+  }>;
+  /**
    * `Experiment.get_items()` — the SDK read the estate has never driven.
    *
    * Every knob is optional so an omitted one exercises the SDK's own default
@@ -591,6 +640,39 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           }>;
         }>;
       }>('POST', '/experiments/compare-seed', args);
+    },
+    async readabilityEvaluate(args) {
+      return request<{
+        experiment_id: string;
+        experiment_name: string;
+        dataset_id: string;
+        item_count: number;
+        scored_item_count: number;
+        scores: Array<{
+          dataset_item_id: string;
+          key: string;
+          language: string;
+          metric_name: string;
+          evaluated_value: number;
+          serial_value: number;
+          scoring_failed: boolean;
+        }>;
+      }>('POST', '/experiments/readability-evaluate', args, {
+        // One evaluate() plus one sequential reference score per (item,
+        // language). All local computation, but it runs behind a dataset
+        // create and an experiment write against a cloud backend.
+        timeoutMs: 120_000,
+      });
+    },
+    async readabilityScore(args) {
+      return request<{
+        language: string;
+        scored: boolean;
+        value: number | null;
+        reading_ease: number | null;
+        error_type: string | null;
+        error_message: string | null;
+      }>('POST', '/metrics/readability-score', args);
     },
     async readExperimentItems(args) {
       return request<{

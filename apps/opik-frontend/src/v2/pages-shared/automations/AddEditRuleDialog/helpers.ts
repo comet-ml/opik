@@ -10,7 +10,12 @@ import {
   RESERVED_TRACE_EVALUATOR_VARIABLES,
 } from "@/constants/llm";
 import { Filter } from "@/types/filters";
-import { ColumnData } from "@/types/shared";
+import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import {
+  durationToMilliseconds,
+  durationToSeconds,
+  isFilterValid,
+} from "@/lib/filters";
 
 export const getUIRuleType = (ruleType: EVALUATORS_RULE_TYPE) =>
   ({
@@ -78,16 +83,47 @@ export const normalizeFilters = (
 
   return filters.map((filter) => {
     const field = normalizeFieldName(filter.field || "");
+    const type = filter.type || getFilterTypeByField(field, columns);
+    const value = filter.value || "";
+
     return {
       id: filter.id || uniqid(),
       field,
-      type: filter.type || getFilterTypeByField(field, columns),
+      type,
       operator: filter.operator || "",
       key: filter.key || "",
-      value: filter.value || "",
+      value: type === COLUMN_TYPE.duration ? durationToSeconds(value) : value,
     };
   }) as Filter[];
 };
+
+const denormalizeFilters = (filters: Filter[]): Filter[] =>
+  filters.map((filter) =>
+    filter.type === COLUMN_TYPE.duration
+      ? { ...filter, value: durationToMilliseconds(filter.value) }
+      : filter,
+  );
+
+const isRuleFilterValid = (filter: Filter) =>
+  // input/output accept a bare value with no key, which the dictionary rules would reject
+  isFilterValid(
+    (filter.field === "input" || filter.field === "output") && !filter.key
+      ? { ...filter, type: COLUMN_TYPE.string }
+      : filter,
+  );
+
+// The rule payload's filters, built from form state: drop incomplete rows, address a keyed
+// input/output at its JSON column, and convert to the units the backend evaluates in.
+export const buildRuleFilters = (filters: Filter[]): Filter[] =>
+  denormalizeFilters(
+    filters
+      .filter(isRuleFilterValid)
+      .map((filter) =>
+        (filter.field === "input" || filter.field === "output") && filter.key
+          ? { ...filter, field: `${filter.field}_json` }
+          : filter,
+      ),
+  );
 
 /**
  * The reserved-variable set a Python-metric editor must pass for {@code scope}.
