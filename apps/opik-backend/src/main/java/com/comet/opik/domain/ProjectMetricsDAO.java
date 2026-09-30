@@ -318,7 +318,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id \\<> ''
-                -- Thread source/environment filters act on traces, as in the thread list (ThreadDAO traces_final_ids).
+                -- Source/environment chips filter each trace, not the thread row, so a thread with mixed traces aggregates only its matching ones,
+                -- as the thread list does (ThreadDAO traces_final_ids). A thread-row filter would count such threads whole and drift from the list.
                 <if(trace_filters)> AND <trace_filters> <endif>
                 <if(uuid_from_time)> AND id >= :uuid_from_time
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -457,8 +458,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                                AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                            NULL) AS duration,
-                        <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                        <if(truncate)> replaceRegexpAll(argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message<endif>,
+                        <if(truncate)> replaceRegexpAll(argMinIf(t.input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), '<truncate>', '"[image]"') as first_message <else> argMinIf(t.input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as first_message<endif>,
+                        <if(truncate)> replaceRegexpAll(argMaxIf(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), '<truncate>', '"[image]"') as last_message <else> argMaxIf(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message<endif>,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
@@ -958,7 +959,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY name, bucket
             ORDER BY name, bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
                 TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
@@ -1059,7 +1060,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
                 TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
@@ -1093,7 +1094,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
                 TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
@@ -1202,7 +1203,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
                 TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
@@ -1234,7 +1235,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
                 TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
@@ -1640,8 +1641,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                                 "toStartOfInterval(%s, %s)".formatted(getTimeField(request.metricType()),
                                         intervalToSql(request.interval()))))
                         .add("fill_from", pinBucket(
-                                "toStartOfInterval(%s, %s)".formatted(getFillAnchor(request.metricType()),
-                                        intervalToSql(request.interval()))));
+                                "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
+                                        .formatted(intervalToSql(request.interval()))));
             }
 
             // Add breakdown group expression if breakdown is enabled
@@ -1842,12 +1843,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             return "thread_start_time";
         }
         return SPAN_TIME_METRICS.contains(metricType) ? "span_time" : "trace_time";
-    }
-
-    private String getFillAnchor(MetricType metricType) {
-        return THREAD_METRICS.contains(metricType)
-                ? "UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')"
-                : "UUIDv7ToDateTime(toUUID(:uuid_from_time))";
     }
 
     private Publisher<Entry> rowToDataPoint(
