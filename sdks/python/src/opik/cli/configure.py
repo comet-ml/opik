@@ -217,7 +217,7 @@ def _ask_for_deployment_type() -> interactive_helpers.DeploymentType:
     ``rich`` drops the styling by itself when stdout is not a terminal, so a
     redirected or styling-less terminal gets the same words without escapes.
     """
-    question = "Where should Opik log your traces?"
+    question = interactive_helpers.DEPLOYMENT_QUESTION
     rows = [
         (str(deployment.value[0]), deployment.value[1], _DEPLOYMENT_BLURBS[deployment])
         for deployment in interactive_helpers.DeploymentType
@@ -237,7 +237,7 @@ def _ask_for_deployment_type() -> interactive_helpers.DeploymentType:
     # the same ones and nothing driving this from a script notices a difference.
     install_view.render_numbered_choices(question, rows)
     return interactive_helpers.ask_user_for_deployment_type(
-        prompt="  Enter 1, 2 or 3 [1]: "
+        prompt=interactive_helpers.DEPLOYMENT_ANSWER_PROMPT.lstrip("\n")
     )
 
 

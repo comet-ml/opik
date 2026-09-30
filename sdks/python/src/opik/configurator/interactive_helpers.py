@@ -118,6 +118,15 @@ class DeploymentType(enum.Enum):
         raise ValueError(f"No DeploymentType with value '{value}'")
 
 
+#: Asked by `opik configure` and by `opik.configure()`, which render it very
+#: differently — `rich` rows against plain text — but must not word it
+#: differently. The CLI passes its own rendered version through ``prompt``.
+DEPLOYMENT_QUESTION = "Where should Opik log your traces?"
+
+#: What follows the options, wherever they were drawn.
+DEPLOYMENT_ANSWER_PROMPT = "\n  Enter 1, 2 or 3 [1]: "
+
+
 def ask_user_for_deployment_type(prompt: Optional[str] = None) -> DeploymentType:
     """
     Asks the user to select a deployment type from the available Opik deployment options.
@@ -135,12 +144,16 @@ def ask_user_for_deployment_type(prompt: Optional[str] = None) -> DeploymentType
     if prompt is not None:
         message_string = prompt
     else:
-        msg = ["Which Opik deployment do you want to log your traces to?"]
+        # The same question the CLI asks, in the same words. It used to be
+        # "Which Opik deployment do you want to log your traces to?" here and
+        # "Where should Opik log your traces?" there — one question with two
+        # wordings, picked by which surface the user came in through.
+        msg = [DEPLOYMENT_QUESTION]
 
         for deployment in DeploymentType:
             msg.append(f"{deployment.value[0]} - {deployment.value[1]}")
 
-        msg.append("\n> ")
+        msg.append(DEPLOYMENT_ANSWER_PROMPT)
 
         message_string = "\n".join(msg)
 
