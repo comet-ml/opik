@@ -49,8 +49,9 @@ class OpikContextStorage:
     So the getters do not trust a stale write: trace and span data carrying an
     `end_time` has been finalized and sent, and is reported as absent rather than as
     the current observation. Otherwise later work would be parented under a closed
-    span inside a closed trace and silently mis-attributed. `pop_*` and `clear_*`
-    stay authoritative - they act on what is actually stored.
+    span inside a closed trace and silently mis-attributed. `pop_span_data` discards
+    finished spans the same way before it pops, which puts a contract on its callers
+    (see its docstring). `pop_trace_data` and `clear_*` act on what is actually stored.
     """
 
     def __init__(self) -> None:
@@ -135,6 +136,16 @@ class OpikContextStorage:
     ) -> Optional[span.SpanData]:
         """
         Pops the span from the stack.
+
+        Finished spans on top of the stack are discarded first, as in `top_span_data`:
+        their own pop landed in another task's copy of this context, and handing one
+        to the caller would finalize it twice. So a caller must pop its span before it
+        finalizes it (sets `end_time`). A span finalized first is discarded as stale,
+        and an unqualified pop then removes the live span beneath it, which is the
+        caller's parent. `@track`, `temporary_context` and the legacy ADK tracer all
+        pop first. A caller that cannot must pass `ensure_id`, which then returns None
+        and leaves the parent in place.
+
         Args:
             ensure_id: If provided, it will pop the span only if it has the given id.
                 Intended to be used in the modules that perform unsafe manipulations with the

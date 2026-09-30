@@ -853,6 +853,10 @@ async def test_langgraph__ainvoke__parallel_fan_out__tracked_calls_nest_under_th
     call under each, and an empty stack once the graph returns. If a LangGraph release
     stopped putting a task boundary between branches, the two costs would
     cross-attribute and the per-node assertions below would say so.
+
+    The expected spans list ``fan_a`` before ``fan_b`` because the emulator sorts
+    siblings by ``start_time``, so the order is the order the branches started, not
+    the order they finished.
     """
 
     class State(TypedDict):
@@ -1213,6 +1217,112 @@ async def test_langgraph__tracked_call_after_ainvoke__opens_its_own_trace(
     assert len(fake_backend.trace_trees) == 2
     assert_equal(EXPECTED_GRAPH_TRACE_TREE, fake_backend.trace_trees[0])
     assert_equal(EXPECTED_TRACKED_TRACE_TREE, fake_backend.trace_trees[1])
+
+
+@pytest.mark.asyncio
+async def test_langgraph__ainvoke_inside_tracked_function__tracked_span_ends_and_context_is_clean(
+    fake_backend,
+):
+    """A tracked coroutine that awaits the graph ends its own span, not a finished one.
+
+    The graph's end callbacks pop in a copy of this task's context, so when ``outer``
+    returns, its span sits under the finished ``LangGraph`` and ``node_one`` spans.
+    ``@track`` pops without an id, so ``pop_span_data`` has to discard those first.
+    Measured with a pop that took the raw top instead: ``outer`` finalized ``node_one``
+    a second time, writing its own output into it, and ``outer``'s span and trace
+    were never ended.
+    """
+
+    class State(TypedDict):
+        value: int
+        result: int
+
+    @opik.track
+    def tracked_inner(value: int) -> int:
+        return value * 2
+
+    async def node(state: State) -> Dict[str, Any]:
+        return {"result": tracked_inner(state["value"])}
+
+    builder = StateGraph(State)
+    builder.add_node("node_one", node)
+    builder.add_edge(START, "node_one")
+    builder.add_edge("node_one", END)
+    graph = builder.compile()
+
+    @opik.track
+    async def outer(value: int) -> int:
+        result = await graph.ainvoke(
+            {"value": value}, config={"callbacks": [OpikTracer()]}
+        )
+        return result["result"]
+
+    assert await outer(21) == 42
+
+    opik.flush_tracker()
+
+    assert context_storage.span_data_stack_size() == 0
+    assert opik_context.get_current_trace_data() is None
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="outer",
+        input={"value": 21},
+        output={"output": 42},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="outer",
+                input={"value": 21},
+                output={"output": 42},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="LangGraph",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata=ANY_DICT,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name="node_one",
+                                input=ANY_DICT,
+                                output={"result": 42},
+                                metadata=ANY_DICT,
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        name="tracked_inner",
+                                        input={"value": 21},
+                                        output={"output": 42},
+                                        start_time=ANY_BUT_NONE,
+                                        end_time=ANY_BUT_NONE,
+                                        source="sdk",
+                                    ),
+                                ],
+                                source="sdk",
+                            ),
+                        ],
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
 def test_langgraph__distributed_headers__langgraph_span_is_kept(
