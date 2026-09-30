@@ -77,11 +77,11 @@ test.describe(
             name: bindingRuleName,
             samplingRate: 1,
             metric: buildBindFailureMetric(bindingRuleName),
-            // `unmapped_extra` resolves to a real field, so it IS passed — and
+            // `unexpected_extra` resolves to a real field, so it IS passed — and
             // the metric's `score()` takes no `**kwargs`, so the call fails
             // while binding. A mapping that did not resolve would simply be
             // dropped and the metric would succeed.
-            arguments: { output: 'output.output', unmapped_extra: 'input.q' },
+            arguments: { output: 'output.output', unexpected_extra: 'input.q' },
           }),
         }));
 
@@ -146,7 +146,7 @@ test.describe(
           expect(
             joined,
             'a bind failure must name the argument that could not be bound',
-          ).toContain("unexpected keyword argument 'unmapped_extra'");
+          ).toContain("unexpected keyword argument 'unexpected_extra'");
 
           // The regression this test exists for. A bind failure has no user
           // frame, and the old fixed-slice formatter returned "" for it — so

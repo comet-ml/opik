@@ -58,7 +58,7 @@ test.describe(
   () => {
     test(
       'a threshold typed in seconds is sent in milliseconds and hydrates back as seconds',
-      { tag: ['@cap:online-evaluation.edit-rule'] },
+      { tag: ['@cap:online-evaluation.edit-rule', '@cap:online-evaluation.rule-filters'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
         const ruleName = `${testNamespace}-dur-units`;
         const rules = new OnlineEvaluationPage(page);
@@ -130,7 +130,7 @@ test.describe(
 
     test(
       'a sub-second threshold survives repeated unedited saves without drifting',
-      { tag: ['@cap:online-evaluation.edit-rule'] },
+      { tag: ['@cap:online-evaluation.edit-rule', '@cap:online-evaluation.rule-filters'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
         const ruleName = `${testNamespace}-dur-subsec`;
         const rules = new OnlineEvaluationPage(page);
@@ -190,7 +190,7 @@ test.describe(
 
     test(
       'a thread-scope rule re-sends its time and duration filters unchanged',
-      { tag: ['@cap:online-evaluation.edit-rule'] },
+      { tag: ['@cap:online-evaluation.edit-rule', '@cap:online-evaluation.rule-filters'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
         const ruleName = `${testNamespace}-dur-thread`;
         const rules = new OnlineEvaluationPage(page);
@@ -325,11 +325,31 @@ async function storedFilters(
   projectId: string,
   ruleName: string,
 ): Promise<Array<{ field: unknown; operator: unknown; value: unknown }>> {
-  const rules = await backendClient.listAutomationRulesForProject(projectId);
-  const match = rules.filter((r) => r.name === ruleName);
-  // Exactly one, so a repeated submit that created a second rule fails here
-  // rather than silently having its filters read off whichever came first.
-  expect(match, `rules named "${ruleName}" under the project`).toHaveLength(1);
+  // Polled, not read once. The caller submits the dialog and waits for it to
+  // close, but a closed dialog is a CLIENT event — the form dismisses on the
+  // mutation resolving and the list is refetched behind it, so a read taken
+  // straight after can legitimately land before the rule is listable and see
+  // zero. That is a race in the reading, not a fact about the rule, and it
+  // failed exactly that way once in three local runs.
+  //
+  // The poll settles on exactly one, so it is not weaker than the read it
+  // replaces: a repeated submit that created a SECOND rule of the same name
+  // still fails here rather than silently having its filters read off
+  // whichever came first — the count has to be 1, and 2 never becomes 1.
+  let match: Array<{ id: string; name: string }> = [];
+  await expect
+    .poll(
+      async () => {
+        const rules = await backendClient.listAutomationRulesForProject(projectId);
+        match = rules.filter((r) => r.name === ruleName);
+        return match.length;
+      },
+      {
+        message: `rules named "${ruleName}" under the project`,
+        timeout: 30_000,
+      },
+    )
+    .toBe(1);
   const rule = await backendClient.getAutomationRule(match[0].id);
   expect(rule.filters, `rule "${ruleName}" came back with a filter list`).not.toBeNull();
   return (rule.filters ?? []).map((f) => ({

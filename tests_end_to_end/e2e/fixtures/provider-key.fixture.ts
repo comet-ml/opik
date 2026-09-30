@@ -268,14 +268,28 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
         for (const model of models) registerUnbilledModel(model);
         const existing = await findProviderKeyByProvider(provider);
         if (existing) return { seeded: false };
-        await createProviderKey({
-          provider,
-          // Neither `provider_name` nor `base_url` is sent: a built-in provider
-          // is keyed by its provider type and calls the vendor's own endpoint,
-          // and the API rejects either field blank ("baseUrl must not be
-          // blank"). Omitted, not empty.
-          api_key: `qa-placeholder-${provider}-never-called`,
-        });
+        try {
+          await createProviderKey({
+            provider,
+            // Neither `provider_name` nor `base_url` is sent: a built-in provider
+            // is keyed by its provider type and calls the vendor's own endpoint,
+            // and the API rejects either field blank ("baseUrl must not be
+            // blank"). Omitted, not empty.
+            api_key: `qa-placeholder-${provider}-never-called`,
+          });
+        } catch (err) {
+          // The check above and this create are not atomic, and the config runs
+          // `fullyParallel`, so two workers can both look, both find nothing and
+          // both try to create. A built-in provider holds ONE key per workspace,
+          // so the loser of that race is refused. Losing is not a failure — the
+          // key it wanted now exists — but the loser must NOT record it as
+          // seeded, or its teardown would delete a key the winner is still
+          // using. Re-read rather than trusting the status code, so this only
+          // swallows a refusal that really did leave a usable key behind.
+          const raced = await findProviderKeyByProvider(provider);
+          if (!raced) throw err;
+          return { seeded: false };
+        }
         const created = await findProviderKeyByProvider(provider);
         if (!created) {
           throw new Error(

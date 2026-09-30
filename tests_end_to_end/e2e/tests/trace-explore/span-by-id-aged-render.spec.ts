@@ -108,7 +108,12 @@ test.describe(
 
     test(
       'a tags-only PATCH keeps every other field, at every id age',
-      { tag: ['@cap:traces.span-tree-expand'] },
+      // `update-span-api` is the load-bearing claim: this is the span counterpart
+      // of `trace-partial-update-merge.spec.ts`, and that key's own taxonomy note
+      // says a span update is explicitly NOT part of span-tree-expand. The tree
+      // tag stays because the last step really does drive the panel's tree —
+      // selecting each node and reading the preserved payload back off it.
+      { tag: ['@cap:traces.update-span-api', '@cap:traces.span-tree-expand'] },
       async ({ idAgedSpans, backendClient, project, page }) => {
         const tagFor = (label: string) => `aged-${label}-tag`;
 
