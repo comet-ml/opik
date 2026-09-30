@@ -5003,6 +5003,66 @@ class ProjectMetricsResourceTest {
                     costMinus3, null, null);
         }
 
+        @Test
+        @DisplayName("a thread's cost includes a span of its trace minted after the range end, like the thread list")
+        void whenTraceSpanMintedAfterRangeEnd_thenThreadCostIncludesIt() {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant ranAt = subtract(marker, TIME_BUCKET_1, interval);
+            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(idGenerator.generateId(ranAt))
+                    .projectName(projectName)
+                    .startTime(ranAt)
+                    .threadId(threadId)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
+
+            // Taken after the thread row is written, so the row falls inside the range.
+            Instant intervalStart = subtract(marker, TIME_BUCKET_4, interval);
+            Instant intervalEnd = Instant.now();
+
+            BigDecimal costOfSpanMintedInside = BigDecimal.valueOf(3);
+            BigDecimal costOfSpanMintedAfterEnd = BigDecimal.valueOf(5);
+            spanResourceClient.batchCreateSpans(List.of(
+                    buildCostedSpan(projectName, trace, idGenerator.generateId(ranAt.plusMillis(1)),
+                            costOfSpanMintedInside),
+                    buildCostedSpan(projectName, trace, idGenerator.generateId(intervalEnd.plus(2, ChronoUnit.HOURS)),
+                            costOfSpanMintedAfterEnd)),
+                    API_KEY, WORKSPACE_NAME);
+            BigDecimal threadCost = costOfSpanMintedInside.add(costOfSpanMintedAfterEnd);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COST)
+                    .interval(interval)
+                    .intervalStart(intervalStart)
+                    .intervalEnd(intervalEnd)
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST), BigDecimal.class,
+                    null, Map.of(ProjectMetricsDAO.NAME_THREAD_COST, threadCost), null);
+
+            var threadList = traceResourceClient.getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME, null,
+                    null, Map.of("from_time", intervalStart.toString(), "to_time", intervalEnd.toString()));
+
+            assertThat(threadList.content()).extracting(TraceThread::id).containsExactly(threadId);
+            assertThat(threadList.content().getFirst().totalEstimatedCost()).isEqualByComparingTo(threadCost);
+        }
+
+        private Span buildCostedSpan(String projectName, Trace trace, UUID spanId, BigDecimal cost) {
+            return factory.manufacturePojo(Span.class).toBuilder()
+                    .id(spanId)
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .startTime(trace.startTime())
+                    .totalEstimatedCost(cost)
+                    .build();
+        }
+
         private BigDecimal createThreadsWithTraceIdsMintedAtAndGetTotalCost(String projectName, Instant ranAt,
                 Instant traceIdsMintedAt) {
             List<String> threadIds = new ArrayList<>();
