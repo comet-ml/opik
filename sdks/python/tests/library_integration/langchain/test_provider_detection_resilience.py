@@ -10,15 +10,33 @@ were extractable.
 
 import logging
 import uuid
+from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import Any, Dict
+from typing import Any, Dict, Iterator
 
 import httpx
 import pytest
-from langchain_core.tracers import schemas
+from langchain_core.messages import HumanMessage
 
 from opik import LLMProvider
+from opik import _logging as opik_logging
+from opik.integrations.langchain.opik_tracer import OpikTracer
 from opik.integrations.langchain.provider_usage_extractors import usage_extractor
+
+
+@contextmanager
+def _isolate_log_once_message(message: str) -> Iterator[None]:
+    """Clear and restore one log-once key without replacing the shared cache."""
+    cache = opik_logging.LOG_ONCE_CACHE
+    was_cached = message in cache
+    cache.discard(message)
+    try:
+        yield
+    finally:
+        if was_cached:
+            cache.add(message)
+        else:
+            cache.discard(message)
 
 
 def _openai_run(base_url: Any) -> Dict[str, Any]:
@@ -135,26 +153,43 @@ def test_try_extract_provider_usage_data__string_and_url_object__report_the_same
 
 def test_try_extract_provider_usage_data__unparseable_base_url__reports_no_host(
     caplog: pytest.LogCaptureFixture,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An unreadable host must not be reported as OpenAI, which prices the run."""
-    monkeypatch.setattr("opik._logging.LOG_ONCE_CACHE", set())
+    warning_message = (
+        "Could not parse base_url for LangChain OpenAI provider detection "
+        "(ValueError); leaving the provider unknown."
+    )
+    cache = opik_logging.LOG_ONCE_CACHE
+    unrelated_key = f"unrelated cache state {uuid.uuid4()}"
+    warning_was_cached = warning_message in cache
+    cache.add(warning_message)
+    cache.add(unrelated_key)
     caplog.set_level(
         logging.WARNING,
         logger="opik.integrations.langchain.provider_usage_extractors.openai_usage_extractor",
     )
 
-    for base_url in ("http://[::1", "https://user:secret@[::1"):
-        assert _provider(base_url) == ""
+    try:
+        with _isolate_log_once_message(warning_message):
+            for base_url in ("http://[::1", "https://user:secret@[::1"):
+                assert _provider(base_url) == ""
 
-    warnings = [
-        record
-        for record in caplog.records
-        if "Could not parse base_url" in record.message
-    ]
-    assert len(warnings) == 1
-    assert "ValueError" in warnings[0].message
-    assert "secret" not in caplog.text
+            warnings = [
+                record
+                for record in caplog.records
+                if "Could not parse base_url" in record.message
+            ]
+            assert len(warnings) == 1
+            assert "ValueError" in warnings[0].message
+            assert "secret" not in caplog.text
+    finally:
+        cache.discard(unrelated_key)
+        if warning_was_cached:
+            cache.add(warning_message)
+        else:
+            cache.discard(warning_message)
+
+    assert (warning_message in cache) is warning_was_cached
 
 
 @pytest.mark.parametrize("host", [None, 42], ids=["none", "integer"])
@@ -171,10 +206,7 @@ def test_try_extract_provider_usage_data__non_text_host__reports_unknown_provide
 
 def test_try_extract_provider_usage_data__raising_host_accessor__reports_unknown_provider(
     caplog: pytest.LogCaptureFixture,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("opik._logging.LOG_ONCE_CACHE", set())
-
     class BaseURLWithRaisingHost:
         @property
         def host(self) -> str:
@@ -185,9 +217,14 @@ def test_try_extract_provider_usage_data__raising_host_accessor__reports_unknown
         logger="opik.integrations.langchain.provider_usage_extractors.openai_usage_extractor",
     )
 
-    info = usage_extractor.try_extract_provider_usage_data(
-        _openai_run(BaseURLWithRaisingHost())
+    warning_message = (
+        "Could not read base_url.host for LangChain OpenAI provider detection "
+        "(ValueError); leaving the provider unknown."
     )
+    with _isolate_log_once_message(warning_message):
+        info = usage_extractor.try_extract_provider_usage_data(
+            _openai_run(BaseURLWithRaisingHost())
+        )
 
     _assert_usage_survived(info)
     assert info.provider == ""
@@ -208,39 +245,40 @@ def test_try_extract_provider_usage_data__value_that_is_not_url_shaped__keeps_de
     assert _provider(base_url) == LLMProvider.OPENAI
 
 
-def test_try_extract_provider_usage_data__base_url_through_a_real_run_object__reports_the_host() -> (
-    None
-):
-    """Keeps the serialisation boundary between the tracer and the extractor covered.
-
-    `opik_tracer._process_end_span` hands the extractors `run.dict()`, so the payload
-    below is built through the same LangChain model rather than a literal dict. A
-    change in how `extra` is dumped, including a switch to a JSON mode that coerces
-    values, has to break here rather than only in a running application.
-    """
-    run = schemas.Run(
-        id=uuid.uuid4(),
-        trace_id=uuid.uuid4(),
-        name="ChatOpenAI",
-        run_type="llm",
+def test_try_extract_provider_usage_data__base_url_through_tracer_callback__reports_the_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The tracer callback preserves invocation params through Run serialization."""
+    monkeypatch.setattr(
+        "opik.integrations.langchain.opik_tracer.tracing_runtime_config.is_tracing_active",
+        lambda: True,
+    )
+    # Keep the real callback and Run construction path; replace only backend writes.
+    monkeypatch.setattr(OpikTracer, "_emit_start_trace", lambda self, trace: None)
+    monkeypatch.setattr(OpikTracer, "_emit_start_span", lambda self, span: None)
+    tracer = OpikTracer(opik_context_read_only_mode=True)
+    run = tracer.on_chat_model_start(
         serialized={"kwargs": {"openai_api_key": "fixture-value"}},
-        extra={
-            "invocation_params": {
-                "base_url": "http://litellm.local:4000",
-                "model": "mock-model",
-            }
-        },
-        outputs={
-            "llm_output": {
-                "token_usage": {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 20,
-                    "total_tokens": 30,
-                },
-                "model_name": "gpt-4o",
-            }
+        messages=[[HumanMessage(content="hello")]],
+        run_id=uuid.uuid4(),
+        name="ChatOpenAI",
+        invocation_params={
+            "base_url": "http://litellm.local:4000",
+            "model": "mock-model",
         },
     )
+    # The start callback returns the real Run; attach the response fields that are
+    # present by the time LangChain calls the end-of-run usage extractor.
+    run.outputs = {
+        "llm_output": {
+            "token_usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+            },
+            "model_name": "gpt-4o",
+        }
+    }
 
     run_dict = run.dict()
 
