@@ -75,9 +75,10 @@ OPENAI_EXCLUDE_PATTERNS = [
 # Only these prefixes are chat/completion models usable in our playground.
 OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")
 
-# LiteLLM flags these ChatGPT snapshots as supporting reasoning, but OpenAI's model pages list no reasoning for them and the API answers
-# reasoning_effort with 400 "Invalid 'reasoning_effort' for non-reasoning model". Must equal the `reasoning: false` rows of
-# OPENAI_MODEL_CAPABILITIES in apps/opik-frontend/src/constants/llm.ts (its llm.test.ts fails otherwise); one shared list is OPIK-8637.
+# LiteLLM marks these ChatGPT snapshots with `supports_reasoning`, a flag broader than what the frontend classifies as a reasoning model:
+# OpenAI's model pages list no reasoning for them and the API answers reasoning_effort with 400 "Invalid 'reasoning_effort' for non-reasoning
+# model". Must equal the `reasoning: false` rows of OPENAI_MODEL_CAPABILITIES in apps/opik-frontend/src/constants/llm.ts (its llm.test.ts
+# fails otherwise); one shared list is OPIK-8637.
 OPENAI_NON_REASONING_MODELS = {"gpt-5-chat-latest", "gpt-5.1-chat-latest", "gpt-5.2-chat-latest", "gpt-5.3-chat-latest"}
 
 ANTHROPIC_EXCLUDE_PATTERNS = [
