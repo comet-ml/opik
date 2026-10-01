@@ -1,4 +1,4 @@
-export { test, expect } from './compare-prompt-versions.fixture';
+export { test, expect } from './quick-filter-logs.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -253,4 +253,13 @@ export type {
   ComparePromptVersionsFixtures,
 } from './compare-prompt-versions.fixture';
 export { CONFIG_METADATA_KEYS } from './compare-prompt-versions.fixture';
+export type {
+  QuickFilterPairRef,
+  QuickFilterLogsRef,
+  QuickFilterLogsFixtures,
+} from './quick-filter-logs.fixture';
+export {
+  QUICK_FILTER_SEED,
+  TRACE_PROVIDER_METADATA_VALUE,
+} from './quick-filter-logs.fixture';
 export type { ProjectRef } from '../core/backend';

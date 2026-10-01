@@ -4416,6 +4416,31 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Span ids visible for a project under `filters` — `GET /v1/private/spans`,
+     * the read behind the Spans table.
+     *
+     * The counterpart to `listTraceIds`, and separate from `listSpanRefs`
+     * because that one takes no filters at all. A spec that drives a quick
+     * filter in the UI needs to know what the SAME filter returns server-side,
+     * or "the table narrowed to one row" says nothing about whether it narrowed
+     * to the right one.
+     */
+    async listSpanIds(
+      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+    ): Promise<string[]> {
+      const page = await opik.api.spans.getSpansByProject({
+        projectId: args.projectId,
+        size: args.size ?? 200,
+        page: 1,
+        truncate: true,
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.fromTime ? { fromTime: args.fromTime } : {}),
+        ...(args.toTime ? { toTime: args.toTime } : {}),
+      });
+      return (page.content ?? []).map((s) => String(s.id));
+    },
+
+    /**
      * Create a trace with an explicit id and `source`. The SDK bridge always
      * emits `source=sdk`; the optimization-trial overlay filters on
      * `source=optimization`, so a trial-log fixture cannot be built through the

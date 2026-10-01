@@ -10,6 +10,9 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
  */
 const PANEL_POINTER_PARK = { x: 4, y: 300 } as const;
 
+const escapeForRegExp = (literal: string): string =>
+  literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export class TracePanelPage {
   constructor(
     private readonly page: Page,
@@ -150,6 +153,68 @@ export class TracePanelPage {
    */
   estimatedCost(formatted: string): Locator {
     return this.dataViewer.getByText(formatted, { exact: true });
+  }
+
+  // --- Quick attribute filters (Details tab) ---
+
+  /**
+   * A collapsible `CodeBlock` in the data viewer — "Input", "Output",
+   * "Metadata", "Token usage" — addressed through its own header button.
+   *
+   * The block renders no `data-testid`, and its header button is the only
+   * labelled thing in it, so the block is reached as that button's grandparent
+   * (button → header row → block). Scoped to the data viewer rather than the
+   * page because the Logs chip bar also carries a button called "Metadata",
+   * and an unscoped lookup would filter lines inside a chip popover.
+   */
+  private codeBlock(title: string): Locator {
+    return this.dataViewer
+      .getByRole('button', { name: title, exact: true })
+      .locator('xpath=ancestor::div[2]');
+  }
+
+  /**
+   * One rendered attribute line inside a `CodeBlock`.
+   *
+   * Metadata renders as YAML (no `prettifyConfig`, so the mode defaults to
+   * yaml and is not persisted), which makes a leaf line read `key: value`. The
+   * key is anchored to the start of the line so `provider:` cannot be matched
+   * by a line for `providers:` or by one whose VALUE happens to contain the
+   * word — the distinction between those two keys is exactly what the filter
+   * resolver turns on.
+   */
+  attributeLine(blockTitle: string, key: string): Locator {
+    return this.codeBlock(blockTitle)
+      .locator('.cm-line')
+      .filter({ hasText: new RegExp(`^\\s*${escapeForRegExp(key)}:`) });
+  }
+
+  /**
+   * The quick-filter icon on an attribute line, if the attribute has one.
+   *
+   * Rendered by a CodeMirror widget as a `role="button"` span whose
+   * `aria-label` is the action's current label — which is the point: the label
+   * changes to "Filter in Spans table" when the filter would be applied to a
+   * table other than the one on screen, so it is both the handle and a thing
+   * worth asserting. Absent entirely when the attribute cannot be filtered.
+   */
+  quickFilterButton(blockTitle: string, key: string): Locator {
+    return this.attributeLine(blockTitle, key).getByRole('button');
+  }
+
+  /**
+   * Click an attribute's quick-filter icon.
+   *
+   * The widget acts on `mousedown` (it must, to beat CodeMirror's own
+   * selection handling), which Playwright's `click()` dispatches — so this is
+   * an ordinary click and not a dispatched event.
+   */
+  async applyQuickFilter(blockTitle: string, key: string): Promise<void> {
+    return test.step(`Quick-filter on the "${key}" attribute of ${blockTitle}`, async () => {
+      const button = this.quickFilterButton(blockTitle, key);
+      await expect(button, `quick-filter icon for "${key}"`).toHaveCount(1);
+      await button.click();
+    });
   }
 
   // --- Attachments ---
