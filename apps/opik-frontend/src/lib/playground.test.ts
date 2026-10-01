@@ -96,6 +96,66 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
   });
 });
 
+describe("getDefaultConfigByProvider — OpenAI", () => {
+  const defaults = (model: PROVIDER_MODEL_TYPE) =>
+    getDefaultConfigByProvider(
+      PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
+      model,
+    ) as LLMOpenAIConfigsType;
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
+    PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
+    PROVIDER_MODEL_TYPE.GPT_6_SOL,
+    PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+    PROVIDER_MODEL_TYPE.GPT_5_6_LUNA,
+    PROVIDER_MODEL_TYPE.GPT_5_4,
+    PROVIDER_MODEL_TYPE.GPT_5,
+    PROVIDER_MODEL_TYPE.GPT_O1,
+  ])("seeds %s as a reasoning model with high effort", (model) => {
+    // Not 1: the request omits temperature for reasoning models anyway, and a seeded 1 would carry
+    // over to the next chat model the user picks.
+    expect(defaults(model)).toMatchObject({
+      temperature: 0,
+      reasoningEffort: "high",
+    });
+  });
+
+  it("seeds o1-mini as a reasoning model without an effort", () => {
+    const config = defaults(PROVIDER_MODEL_TYPE.GPT_O1_MINI);
+
+    expect(config.temperature).toBe(0);
+    expect(config).not.toHaveProperty("reasoningEffort");
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_4O,
+  ])("seeds %s as a chat model without an effort", (model) => {
+    const config = defaults(model);
+
+    expect(config.temperature).toBe(0);
+    expect(config).not.toHaveProperty("reasoningEffort");
+  });
+});
+
+describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+  ])("seeds no thinkingEffort for %s while the backend drops it", (model) => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      model,
+    );
+
+    expect(config).not.toHaveProperty("thinkingEffort");
+  });
+});
+
 describe("restoreMissingConfigKeys", () => {
   const prompt = (
     provider: PROVIDER_TYPE,
