@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useCallback } from "react";
 import dayjs from "dayjs";
-import { keepPreviousData } from "@tanstack/react-query";
 import { Braces, AlertTriangle, Clock, Coins, LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -22,6 +21,7 @@ import {
   calculateIntervalType,
   calculateIntervalBounds,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect/utils";
+import { keepDataWhenOnlyWindowEndChanged } from "@/v2/pages-shared/traces/MetricDateRangeSelect/useIntervalBounds";
 import { DateRangeValue } from "@/shared/DateRangeSelect";
 import { TOTAL_COST_LABEL, getChartConfig } from "./helpers";
 
@@ -129,6 +129,7 @@ export type MetricsSummaryProps = {
   filters?: Filters;
   intervalStart?: string;
   intervalEnd?: string;
+  refetchInterval?: number | false;
   dateRange: DateRangeValue;
   logsSource?: LOGS_SOURCE;
 };
@@ -140,6 +141,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
   filters,
   intervalStart,
   intervalEnd,
+  refetchInterval = REFETCH_INTERVAL,
   dateRange,
   logsSource,
 }) => {
@@ -154,20 +156,21 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
     };
   }, [dateRange, intervalStart, intervalEnd]);
 
-  const { data, isPending } = useProjectKpiCards(
-    {
-      projectId,
-      entityType,
-      filters,
-      intervalStart: chartIntervalConfig.intervalStart,
-      intervalEnd: chartIntervalConfig.intervalEnd,
-      logsSource,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
+  const kpiCardsParams = {
+    projectId,
+    entityType,
+    filters,
+    intervalStart: chartIntervalConfig.intervalStart,
+    intervalEnd: chartIntervalConfig.intervalEnd,
+    logsSource,
+  };
+  const { data, isPending } = useProjectKpiCards(kpiCardsParams, {
+    placeholderData: keepDataWhenOnlyWindowEndChanged(
+      kpiCardsParams,
+      "intervalEnd",
+    ),
+    refetchInterval,
+  });
 
   const metricsMap = useMemo(() => {
     const map = new Map<KpiMetricType, KpiMetric>();
@@ -291,6 +294,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
             interval={chartIntervalConfig.interval}
             intervalStart={chartIntervalConfig.intervalStart}
             intervalEnd={chartIntervalConfig.intervalEnd}
+            refetchInterval={refetchInterval}
             metricName={chartConfig.metricName}
             customYTickFormatter={chartConfig.customYTickFormatter}
             renderValue={chartConfig.renderValue}
