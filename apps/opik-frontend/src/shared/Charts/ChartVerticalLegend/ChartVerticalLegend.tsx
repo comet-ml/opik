@@ -38,15 +38,16 @@ const ChartVerticalLegend = React.forwardRef<
       ref={ref}
       className={cn(
         "group -mt-2.5 flex max-h-full w-full flex-col items-start gap-1 overflow-y-auto overflow-x-hidden",
-        // The scrollbar is shown only while the legend or an ancestor `group/chart` is hovered.
-        // It always exists so nothing reflows; hiding goes through the container's visibility
-        // because Safari doesn't repaint scrollbar pseudo-elements on :hover (it stays hidden there).
-        "[&>*]:visible [@media(hover:hover)]:invisible group-hover/chart:visible hover:visible",
+        // Only the scrollbar thumb is hidden at rest (the legend stays visible, readable by
+        // assistive tech and keyboard-scrollable); it's painted while the legend or an ancestor
+        // `group/chart` is hovered, or the legend has keyboard focus. The scrollbar always
+        // exists, so nothing reflows. Safari doesn't repaint it on :hover, so it stays hidden there.
         // `!` beats the theme-wide .dark / .comet-custom-scrollbar 16px scrollbar rules.
-        "[&::-webkit-scrollbar-thumb]:!rounded-full [&::-webkit-scrollbar-thumb]:!border-0 [&::-webkit-scrollbar-thumb]:!bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:!bg-transparent [&::-webkit-scrollbar]:!w-2 [&::-webkit-scrollbar]:!bg-transparent",
+        "[&::-webkit-scrollbar-thumb]:!rounded-full [&::-webkit-scrollbar-thumb]:!border-0 [&::-webkit-scrollbar-track]:!bg-transparent [&::-webkit-scrollbar]:!w-2 [&::-webkit-scrollbar]:!bg-transparent",
+        "[&::-webkit-scrollbar-thumb]:!bg-transparent group-hover/chart:[&::-webkit-scrollbar-thumb]:!bg-[var(--scrollbar-thumb)] [&:focus-visible::-webkit-scrollbar-thumb]:!bg-[var(--scrollbar-thumb)] [&:hover::-webkit-scrollbar-thumb]:!bg-[var(--scrollbar-thumb)]",
         // Firefox only: in Chrome these standard properties disable the ::-webkit-scrollbar
         // styling above and fall back to macOS overlay scrollbars.
-        "[@supports(-moz-appearance:none)]:[scrollbar-color:var(--scrollbar-thumb)_transparent] [@supports(-moz-appearance:none)]:[scrollbar-width:thin]",
+        "[@supports(-moz-appearance:none)]:[scrollbar-color:transparent_transparent] [@supports(-moz-appearance:none)]:[scrollbar-width:thin] [@supports(-moz-appearance:none)]:group-hover/chart:[scrollbar-color:var(--scrollbar-thumb)_transparent] [@supports(-moz-appearance:none)]:hover:[scrollbar-color:var(--scrollbar-thumb)_transparent] [@supports(-moz-appearance:none)]:focus-visible:[scrollbar-color:var(--scrollbar-thumb)_transparent]",
       )}
       onMouseLeave={handleMouseLeave}
     >
