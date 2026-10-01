@@ -13,13 +13,15 @@ import litellm
 import opik
 from opik.integrations.litellm import track_completion
 
-MODEL = "gpt-4o-mini"
+from . import constants
+
+MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 MESSAGES = [{"role": "user", "content": "hi"}]
 
 
 def _tracked_stream(**kwargs):
     return track_completion()(litellm.completion)(
-        model=MODEL,
+        model=MODEL_FOR_TESTS,
         messages=MESSAGES,
         mock_response="hello world",
         stream=True,
@@ -96,7 +98,10 @@ async def test_litellm_acompletion_stream__fails_mid_stream__span_ends_with_erro
     fake_backend,
 ):
     stream = await track_completion()(litellm.acompletion)(
-        model=MODEL, messages=MESSAGES, mock_response="hello world", stream=True
+        model=MODEL_FOR_TESTS,
+        messages=MESSAGES,
+        mock_response="hello world",
+        stream=True,
     )
     await _afail_mid_stream(stream, after=1)
 
