@@ -89,29 +89,32 @@ export const calculateIntervalType = (
 export const isEndDateToday = (dateRange: DateRangeValue): boolean =>
   dayjs(dateRange.to).isSame(dayjs(), "day");
 
+const isRelativePreset = (dateRange: DateRangeValue): boolean => {
+  const preset = getRangePreset(dateRange);
+  return !!preset && preset !== DATE_RANGE_PRESET_ALLTIME;
+};
+
+export const isLiveDateRange = (dateRange: DateRangeValue): boolean =>
+  isRelativePreset(dateRange) || isEndDateToday(dateRange);
+
 export const calculateIntervalStartAndEnd = (
   dateRange: DateRangeValue,
 ): { intervalStart: string; intervalEnd: string | undefined } => {
   const daysDiff = dayjs(dateRange.to).diff(dayjs(dateRange.from), "days");
   const startOf = daysDiff <= 1 ? "hour" : "day";
 
-  const preset = getRangePreset(dateRange);
-  const isPresetRange = preset && preset !== DATE_RANGE_PRESET_ALLTIME;
-
   let endTime: dayjs.Dayjs | undefined;
   let startTime: dayjs.Dayjs;
 
-  if (isEndDateToday(dateRange)) {
-    if (isPresetRange) {
-      endTime = undefined;
-      startTime = dayjs()
-        .utc()
-        .subtract(daysDiff || 1, "days")
-        .startOf(startOf);
-    } else {
-      endTime = dayjs().utc();
-      startTime = endTime.subtract(daysDiff || 1, "days").startOf(startOf);
-    }
+  if (isRelativePreset(dateRange)) {
+    endTime = undefined;
+    startTime = dayjs()
+      .utc()
+      .subtract(daysDiff || 1, "days")
+      .startOf(startOf);
+  } else if (isEndDateToday(dateRange)) {
+    endTime = dayjs().utc();
+    startTime = endTime.subtract(daysDiff || 1, "days").startOf(startOf);
   } else {
     endTime = dayjs(dateRange.to).utc().endOf("day");
     startTime = dayjs(dateRange.from).utc().startOf(startOf);

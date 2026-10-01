@@ -23,8 +23,9 @@ import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
-  useIsOnlyWindowEndBehind,
-  keepDataWhenOnlyWindowEndChanged,
+  useIsOnlyWindowBehind,
+  keepDataWhileWindowMoves,
+  windowQueryOptions,
   DATE_RANGE_PRESET_ALLTIME,
   IntervalWindow,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
@@ -556,8 +557,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       excludePresets: [DATE_RANGE_PRESET_ALLTIME],
       ...dateRangeConfig,
     });
-  const { intervalStart, intervalEnd, refetchInterval, reanchorToNow } =
-    intervalWindow;
+  const {
+    intervalStart,
+    intervalEnd,
+    selectionKey,
+    refetchInterval,
+    reanchorToNow,
+  } = intervalWindow;
   const [search = "", setSearch] = useQueryParam(
     `${type}_search`,
     StringParam,
@@ -864,12 +870,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const { data, isPending, isPlaceholderData, isFetching, refetch } =
     useTracesOrSpansList(listParams, {
       enabled: isTableDataEnabled,
-      refetchInterval,
+      ...windowQueryOptions(refetchInterval),
       refetchOnMount: false,
     });
-  const isOnlyWindowEndBehind = useIsOnlyWindowEndBehind(
-    listParams,
-    "toTime",
+  const isOnlyWindowBehind = useIsOnlyWindowBehind(
+    { ...listParams, selectionKey },
+    ["fromTime", "toTime"],
     isPlaceholderData,
   );
 
@@ -905,11 +911,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   };
   const { data: statisticData, refetch: refetchStatistic } =
     useTracesOrSpansStatistic(statisticParams, {
-      placeholderData: keepDataWhenOnlyWindowEndChanged(
+      placeholderData: keepDataWhileWindowMoves(
+        refetchInterval,
         statisticParams,
-        "toTime",
+        ["fromTime", "toTime"],
       ),
-      refetchInterval,
+      ...windowQueryOptions(refetchInterval),
     });
 
   // Cheap "does this project have any SDK-logged traces/spans?" probe for the empty-state decision.
@@ -1634,7 +1641,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           stickyHeader
           meta={meta}
           showLoadingOverlay={
-            isPlaceholderData && isFetching && !isOnlyWindowEndBehind
+            isPlaceholderData && isFetching && !isOnlyWindowBehind
           }
         />
         <PageBodyStickyContainer

@@ -17,7 +17,10 @@ import {
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
 import useMetricData from "@/api/projects/useMetricData";
-import { keepDataWhenOnlyWindowEndChanged } from "@/v2/pages-shared/traces/MetricDateRangeSelect/useIntervalBounds";
+import {
+  keepDataWhileWindowMoves,
+  windowQueryOptions,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect/useIntervalBounds";
 import { ChartTooltipRenderValueArguments } from "@/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import NoData from "@/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
@@ -145,11 +148,11 @@ const MetricContainerChart = ({
     logsSource,
   };
   const { data: response, isPending } = useMetricData(metricParams, {
-    placeholderData: keepDataWhenOnlyWindowEndChanged(
-      metricParams,
+    placeholderData: keepDataWhileWindowMoves(refetchInterval, metricParams, [
+      "intervalStart",
       "intervalEnd",
-    ),
-    refetchInterval,
+    ]),
+    ...windowQueryOptions(refetchInterval),
   });
 
   const traces = response?.results;

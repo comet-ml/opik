@@ -4,6 +4,7 @@ import utc from "dayjs/plugin/utc";
 import {
   calculateIntervalBounds,
   calculateIntervalStartAndEnd,
+  isLiveDateRange,
   reanchorIntervalBounds,
 } from "./utils";
 import {
@@ -360,6 +361,18 @@ describe("calculateIntervalBounds", () => {
     },
   );
 
+  it("should keep a preset relative to the clock after the day it was created", () => {
+    const nextDay = now.add(1, "day");
+    vi.setSystemTime(nextDay.toDate());
+
+    const result = calculateIntervalBounds(PRESET_DATE_RANGES.past7days);
+
+    expect(result).toEqual({
+      intervalStart: nextDay.utc().subtract(6, "days").startOf("day").format(),
+      intervalEnd: nextDay.utc().format(),
+    });
+  });
+
   it("should give All time an explicit window from five years ago until now", () => {
     const fiveYearsAgo = now.subtract(5, "years").format("YYYY-MM-DD");
 
@@ -461,5 +474,32 @@ describe("reanchorIntervalBounds", () => {
     const bounds = calculateIntervalBounds(dateRange);
 
     expect(reanchorIntervalBounds(dateRange, bounds)).toBe(bounds);
+  });
+});
+
+describe("isLiveDateRange", () => {
+  const now = dayjs(PRESET_DATE_RANGES.past24hours.to)
+    .startOf("day")
+    .add(12, "hours");
+  const nextDay = now.add(1, "day");
+  const endingToday: DateRangeValue = {
+    from: now.subtract(10, "days").startOf("day").toDate(),
+    to: now.endOf("day").toDate(),
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each<[string, DateRangeValue, dayjs.Dayjs, boolean]>([
+    ["a preset on its own day", PRESET_DATE_RANGES.past7days, now, true],
+    ["a preset after its day", PRESET_DATE_RANGES.past7days, nextDay, true],
+    ["a custom range ending today", endingToday, now, true],
+    ["a custom range that ended yesterday", endingToday, nextDay, false],
+  ])("should tell whether %s is live", (_, dateRange, time, expected) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(time.toDate());
+
+    expect(isLiveDateRange(dateRange)).toBe(expected);
   });
 });
