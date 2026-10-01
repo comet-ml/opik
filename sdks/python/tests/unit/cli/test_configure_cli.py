@@ -1,6 +1,7 @@
 """Tests for the ``opik configure`` command group."""
 
 import pathlib
+from types import SimpleNamespace
 
 import click
 import pytest
@@ -1345,7 +1346,23 @@ class TestTheProjectLink:
         monkeypatch.setattr(configure_cli.opik_config, "OpikConfig", self._config)
         self._listing(monkeypatch, error=httpx.ConnectError("down"))
 
-        assert configure_cli._project_url("checkout-bot")[1] is False
+        assert configure_cli._project_url("checkout-bot") == (
+            "https://www.comet.com/opik/acme-ai/projects",
+            False,
+        )
+
+    def test_a_workspace_name_is_one_path_segment(self, monkeypatch):
+        """A `/`, `?` or `#` in it must not move the link somewhere else."""
+        monkeypatch.setattr(
+            configure_cli.opik_config,
+            "OpikConfig",
+            lambda: SimpleNamespace(**{**vars(self._config()), "workspace": "a/b?c"}),
+        )
+        self._listing(monkeypatch, content=[])
+
+        assert configure_cli._project_url("checkout-bot")[0] == (
+            "https://www.comet.com/opik/a%2Fb%3Fc/projects"
+        )
 
     def test_a_local_opik__serves_the_ui_at_its_root(self, monkeypatch):
         """Only the Comet platform puts the UI under `/opik/`."""

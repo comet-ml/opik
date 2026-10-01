@@ -45,12 +45,12 @@ def _project_url(project_name: str) -> Tuple[str, bool]:
     # The UI sits where the REST API does, minus the `api/` suffix — under
     # `/opik/` on the Comet platform, at the root of a local Opik.
     ui_root = url_helpers.ensure_ending_slash(config.url_override).removesuffix("api/")
-    projects_url = f"{ui_root}{config.workspace}/projects"
+    projects_url = f"{ui_root}{urllib.parse.quote(config.workspace, safe='')}/projects"
 
     project_id = _find_project_id(config, project_name)
     if project_id is None:
         return projects_url, False
-    return f"{projects_url}/{project_id}/", True
+    return f"{projects_url}/{urllib.parse.quote(project_id, safe='')}/", True
 
 
 def _find_project_id(
