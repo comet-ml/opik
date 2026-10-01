@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.OpenAiStreamingHelper;
@@ -10,6 +11,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 
 import java.util.Map;
 import java.util.Optional;
@@ -21,10 +23,11 @@ public class CustomLlmProvider implements LlmProviderService {
     // assume that the provider is compatible with OpenAI API, so we use the OpenAiClient to interact with it
     private final @NonNull OpenAiClient openAiClient;
     private final Map<String, String> configuration;
+    private final LlmProvider provider;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        ChatCompletionRequest cleanedRequest = cleanModelName(request);
+        ChatCompletionRequest cleanedRequest = mapMaxTokens(cleanModelName(request));
         return openAiClient.chatCompletion(cleanedRequest).execute();
     }
 
@@ -35,7 +38,7 @@ public class CustomLlmProvider implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        ChatCompletionRequest cleanedRequest = cleanModelName(request);
+        ChatCompletionRequest cleanedRequest = mapMaxTokens(cleanModelName(request));
         OpenAiStreamingHelper.executeStreamingRequest(openAiClient, cleanedRequest, handleMessage, handleClose,
                 handleError);
     }
@@ -71,6 +74,32 @@ public class CustomLlmProvider implements LlmProviderService {
                 .from(request)
                 .model(actualModelName)
                 .build();
+    }
+
+    // Ollama's /v1 endpoint reads only max_tokens and silently drops max_completion_tokens, so the limit never applied.
+    // Bedrock documents max_completion_tokens for its OpenAI-compatible body, so it keeps that field. Neither gets the
+    // 0 the playground slider allows: OpenAI-style APIs reject it, and Ollama passes it to its runner as the budget.
+    // A generic custom server gets the request exactly as sent, since some of them need max_completion_tokens.
+    private ChatCompletionRequest mapMaxTokens(ChatCompletionRequest request) {
+        if (provider == LlmProvider.OLLAMA) {
+            return ChatCompletionRequest.builder()
+                    .from(request)
+                    .maxTokens(ObjectUtils.firstNonNull(
+                            positive(request.maxCompletionTokens()), positive(request.maxTokens())))
+                    .maxCompletionTokens(null)
+                    .build();
+        }
+        if (provider == LlmProvider.BEDROCK) {
+            return ChatCompletionRequest.builder()
+                    .from(request)
+                    .maxCompletionTokens(positive(request.maxCompletionTokens()))
+                    .build();
+        }
+        return request;
+    }
+
+    private static Integer positive(Integer tokens) {
+        return tokens != null && tokens > 0 ? tokens : null;
     }
 
 }
