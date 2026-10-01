@@ -52,8 +52,8 @@ export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
 
 // Which thinking levels each Gemini model accepts, per Google's own support table
 // (https://ai.google.dev/gemini-api/docs/thinking). The sets genuinely differ per model — 3.7 Flash
-// has no "minimal", 3.1 Flash Lite has only "minimal" and "high" — and sending a level a model does
-// not accept is rejected upstream, so this cannot be collapsed into one list per family.
+// has no "minimal", 3 Pro has only "low" and "high" — and sending a level a model does not accept
+// is rejected upstream, so this cannot be collapsed into one list per family.
 //
 // Keep both provider spellings of a model on the same row: the level support is a property of the
 // underlying model, not of whether it is reached through AI Studio or Vertex. New models arrive via
@@ -92,19 +92,21 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   // no thinkingConfig and keeps their latency where it was. Asking for a level here switches thinking
   // ON, which measurably slows them (~2.5s -> ~5s at budget 2048 on 3.1 Flash Lite).
   //
-  // 3.1 Flash Lite also has no low/medium: minimal and high only.
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["none", "minimal", "high"]],
+  // 3.1 Flash Lite takes all four levels: the AI Studio table omits it, Vertex's table lists
+  // minimal/low/medium/high, and Vertex accepted each one live with rising thinking counts. The
+  // "minimal, high" row in Google's tables is the separate gemini-3.1-flash-lite-image model.
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["none", ...MINIMAL_TO_HIGH]],
   [
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
-    ["none", "minimal", "high"],
+    ["none", ...MINIMAL_TO_HIGH],
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
-    ["none", "minimal", "high"],
+    ["none", ...MINIMAL_TO_HIGH],
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-    ["none", "minimal", "high"],
+    ["none", ...MINIMAL_TO_HIGH],
   ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW, MINIMAL_TO_HIGH],
