@@ -28,6 +28,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanDBUtils;
 import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -299,6 +300,43 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         assertMetric(response, KpiMetricType.COUNT, 2.0, 0.0);
+    }
+
+    @Test
+    @DisplayName("counts a far-future span id in the current period when intervalEnd is null")
+    void nullIntervalEndCountsFarFutureSpans(TransactionTemplateAsync templateAsync) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        var span = factory.manufacturePojo(Span.class).toBuilder()
+                .id(idGenerator.generateId(now))
+                .projectName(projectName)
+                .startTime(now)
+                .endTime(now.plusMillis(DURATION_1))
+                .totalEstimatedCost(BigDecimal.valueOf(COST_1))
+                .feedbackScores(null)
+                .build();
+        spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
+        // Inserted directly: ingestion rejects an id this far outside its validation window.
+        SpanDBUtils.createSpanViaDB(span.toBuilder()
+                .id(idGenerator.generateId(Instant.parse("2201-08-30T03:18:08Z")))
+                .projectId(projectId)
+                .endTime(now.plusMillis(DURATION_2))
+                .totalEstimatedCost(BigDecimal.valueOf(COST_2))
+                .createdBy(USER)
+                .lastUpdatedBy(USER)
+                .build(), WORKSPACE_ID, templateAsync);
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.SPANS)
+                .intervalStart(now.minus(1, ChronoUnit.MINUTES))
+                .intervalEnd(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertMetric(response, KpiMetricType.COUNT, 2.0, 0.0);
+        assertMetric(response, KpiMetricType.AVG_DURATION, (DURATION_1 + DURATION_2) / 2.0, null);
+        assertMetric(response, KpiMetricType.TOTAL_COST, COST_1 + COST_2, 0.0);
     }
 
     @ParameterizedTest
