@@ -498,13 +498,16 @@ const mapOpenAIMessage = (
 /**
  * Maps OpenAI input format to LLMMapperResult
  */
-const mapOpenAIInput = (data: OpenAIInputData): LLMMapperResult => {
+const mapOpenAIInput = (
+  data: OpenAIInputData,
+  fieldType: "input" | "output" = "input",
+): LLMMapperResult => {
   if (!data.messages || !Array.isArray(data.messages)) {
     return { messages: [] };
   }
 
   const messages = data.messages.map((msg, index) =>
-    mapOpenAIMessage(msg, index, "input"),
+    mapOpenAIMessage(msg, index, fieldType),
   );
 
   return { messages };
@@ -538,13 +541,16 @@ const mapOpenAIOutput = (data: OpenAIOutputData): LLMMapperResult => {
 /**
  * Maps direct array input format to LLMMapperResult
  */
-const mapDirectArrayInput = (data: OpenAIDirectArrayInput): LLMMapperResult => {
+const mapDirectArrayInput = (
+  data: OpenAIDirectArrayInput,
+  fieldType: "input" | "output" = "input",
+): LLMMapperResult => {
   if (!Array.isArray(data) || data.length === 0) {
     return { messages: [] };
   }
 
   const messages = data.map((msg, index) =>
-    mapOpenAIMessage(msg, index, "input"),
+    mapOpenAIMessage(msg, index, fieldType),
   );
 
   return { messages };
@@ -649,6 +655,15 @@ export const mapOpenAIMessages: FormatMapper = (data, prettifyConfig) => {
     // Standard format { choices: [...] }
     if (typeof data === "object" && "choices" in data) {
       return mapOpenAIOutput(data as OpenAIOutputData);
+    }
+
+    // Conversation logged as output: [{ role, content }] or { messages: [...] }
+    if (Array.isArray(data)) {
+      return mapDirectArrayInput(data as OpenAIDirectArrayInput, "output");
+    }
+
+    if (typeof data === "object" && "messages" in data) {
+      return mapOpenAIInput(data as OpenAIInputData, "output");
     }
   }
 

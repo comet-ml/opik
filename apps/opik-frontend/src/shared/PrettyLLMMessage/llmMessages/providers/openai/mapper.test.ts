@@ -185,6 +185,35 @@ describe("mapOpenAIMessages", () => {
         );
       }
     });
+
+    it("should map a conversation logged as output", () => {
+      const data = {
+        model: "llama3.1:8b",
+        messages: [
+          { id: "m-1", role: "user", content: "Hi" },
+          { id: "m-2", role: "assistant", content: "Hello! How can I help?" },
+        ],
+      };
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("user");
+      expect(result.messages[1].role).toBe("assistant");
+      expect(result.messages[1].id).toContain("output");
+      if (result.messages[1].blocks[0].blockType === "text") {
+        expect(result.messages[1].blocks[0].props.children).toBe(
+          "Hello! How can I help?",
+        );
+      }
+    });
+
+    it("should map a direct message array logged as output", () => {
+      const data = [{ role: "assistant", content: "Hello!" }];
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("assistant");
+    });
   });
 
   describe("Edge cases", () => {
