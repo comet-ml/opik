@@ -8,8 +8,11 @@ import {
 } from "@/types/providers";
 import { DEFAULT_VERTEX_AI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import NoModelParameters from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/NoModelParameters";
-import isUndefined from "lodash/isUndefined";
+import {
+  createSupports,
+  getVertexAIVisibleControls,
+  isAnyControlVisible,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -17,7 +20,6 @@ import {
   getDefaultThinkingLevel,
   getThinkingLevelOptions,
   resolveSamplingParams,
-  supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
@@ -34,27 +36,20 @@ const VertexAIModelConfigs = ({
   onChange,
   unsupportedParams,
 }: VertexAIModelConfigsProps) => {
-  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
-  const hasThinkingLevel = supportsVertexAIThinkingLevel(model);
   const thinkingLevelOptions = getThinkingLevelOptions(model);
   const defaultThinkingLevel = getDefaultThinkingLevel(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
-  const showTemperature = !isUndefined(temperature);
-  const showMaxOutputTokens = !isUndefined(configs.maxCompletionTokens);
-  const showTopP = supports("topP") && !isUndefined(topP);
-  const hasNoControls =
-    !showTemperature &&
-    !showMaxOutputTokens &&
-    !showTopP &&
-    !hasThinkingLevel &&
-    !supports("throttling") &&
-    !supports("maxConcurrentRequests");
+  const visible = getVertexAIVisibleControls({
+    model,
+    configs,
+    supports: createSupports(unsupportedParams),
+  });
+
+  if (!isAnyControlVisible(visible)) return null;
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {hasNoControls && <NoModelParameters />}
-
-      {showTemperature && (
+      {visible.temperature && (
         <SliderInputControl
           value={temperature}
           onChange={(v) => onChange({ temperature: v })}
@@ -70,7 +65,7 @@ const VertexAIModelConfigs = ({
         />
       )}
 
-      {showMaxOutputTokens && (
+      {visible.maxCompletionTokens && (
         <SliderInputControl
           value={configs.maxCompletionTokens}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
@@ -86,7 +81,7 @@ const VertexAIModelConfigs = ({
         />
       )}
 
-      {showTopP && (
+      {visible.topP && (
         <SliderInputControl
           value={topP}
           onChange={(v) => onChange({ topP: v })}
@@ -102,7 +97,7 @@ const VertexAIModelConfigs = ({
         />
       )}
 
-      {hasThinkingLevel && (
+      {visible.thinkingLevel && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingLevel" className="text-sm font-medium">
@@ -122,7 +117,7 @@ const VertexAIModelConfigs = ({
         </div>
       )}
 
-      {supports("throttling") && (
+      {visible.throttling && (
         <SliderInputControl
           value={configs.throttling ?? DEFAULT_VERTEX_AI_CONFIGS.THROTTLING}
           onChange={(v) => onChange({ throttling: v })}
@@ -138,7 +133,7 @@ const VertexAIModelConfigs = ({
         />
       )}
 
-      {supports("maxConcurrentRequests") && (
+      {visible.maxConcurrentRequests && (
         <SliderInputControl
           value={
             configs.maxConcurrentRequests ??

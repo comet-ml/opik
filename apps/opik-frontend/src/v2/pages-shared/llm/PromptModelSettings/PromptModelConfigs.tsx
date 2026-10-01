@@ -28,6 +28,7 @@ import OpenRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/pr
 import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
+import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { parseComposedProviderType } from "@/lib/provider";
@@ -127,6 +128,14 @@ const PromptModelConfigs = ({
 
     return;
   };
+
+  // Hide, not disable (as for decisions models): an empty panel misleads, and a disabled button can't say why.
+  if (
+    composedProviderType &&
+    !hasVisibleControls(provider, model ?? "", configs, unsupportedParams)
+  ) {
+    return null;
+  }
 
   const disabled = disabledProp || !composedProviderType;
 

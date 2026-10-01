@@ -2,7 +2,11 @@ import React from "react";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import NoModelParameters from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/NoModelParameters";
+import {
+  createSupports,
+  getOpenAIVisibleControls,
+  isAnyControlVisible,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import {
   LLMOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
@@ -13,9 +17,7 @@ import {
   getOpenAIReasoningEffortOptions,
   resolveEffort,
   resolveSamplingParams,
-  supportsPenaltyParams,
 } from "@/lib/modelUtils";
-import isUndefined from "lodash/isUndefined";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import {
   Select,
@@ -40,34 +42,19 @@ const OpenAIModelConfigs = ({
   onChange,
   unsupportedParams,
 }: OpenAIModelSettingsProps) => {
-  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
-  // The resolver owns which sampling params this model accepts and what the request will carry, so
-  // both sliders follow it rather than the config's own keys. Reasoning models tune neither.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const { reasoningEffort } = resolveEffort(model ?? "", configs);
-  const showPenalties = supportsPenaltyParams(model);
-  const showTopP = supports("topP") && !isUndefined(topP);
-  const showFrequencyPenalty =
-    showPenalties && !isUndefined(configs.frequencyPenalty);
-  const showPresencePenalty =
-    showPenalties && !isUndefined(configs.presencePenalty);
-  const showReasoningEffort =
-    supports("reasoningEffort") && reasoningEffort !== undefined;
-  const hasNoControls =
-    isUndefined(temperature) &&
-    isUndefined(configs.maxCompletionTokens) &&
-    !showTopP &&
-    !showFrequencyPenalty &&
-    !showPresencePenalty &&
-    !showReasoningEffort &&
-    !supports("throttling") &&
-    !supports("maxConcurrentRequests");
+  const visible = getOpenAIVisibleControls({
+    model,
+    configs,
+    supports: createSupports(unsupportedParams),
+  });
+
+  if (!isAnyControlVisible(visible)) return null;
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {hasNoControls && <NoModelParameters />}
-
-      {!isUndefined(temperature) && (
+      {visible.temperature && (
         <SliderInputControl
           value={temperature}
           onChange={(v) => onChange({ temperature: v })}
@@ -83,7 +70,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.maxCompletionTokens) && (
+      {visible.maxCompletionTokens && (
         <SliderInputControl
           value={configs.maxCompletionTokens}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
@@ -99,7 +86,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {showTopP && (
+      {visible.topP && (
         <SliderInputControl
           value={topP}
           onChange={(v) => onChange({ topP: v })}
@@ -115,7 +102,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {showFrequencyPenalty && (
+      {visible.frequencyPenalty && (
         <SliderInputControl
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
@@ -131,7 +118,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {showPresencePenalty && (
+      {visible.presencePenalty && (
         <SliderInputControl
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
@@ -147,7 +134,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {showReasoningEffort && (
+      {visible.reasoningEffort && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="reasoningEffort" className="text-sm font-medium">
@@ -175,7 +162,7 @@ const OpenAIModelConfigs = ({
         </div>
       )}
 
-      {supports("throttling") && (
+      {visible.throttling && (
         <SliderInputControl
           value={configs.throttling ?? DEFAULT_OPEN_AI_CONFIGS.THROTTLING}
           onChange={(v) => onChange({ throttling: v })}
@@ -191,7 +178,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {supports("maxConcurrentRequests") && (
+      {visible.maxConcurrentRequests && (
         <SliderInputControl
           value={
             configs.maxConcurrentRequests ??

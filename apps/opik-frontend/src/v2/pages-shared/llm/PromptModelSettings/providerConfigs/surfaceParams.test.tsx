@@ -121,10 +121,8 @@ describe("the playground and the optimizer", () => {
 });
 
 describe("a panel left with no control", () => {
-  const NO_PARAMETERS_MESSAGE = "This model has no adjustable parameters here.";
-
-  it("shows the no-adjustable-parameters message for a Claude model without sampling params on a rule", () => {
-    renderPanel(
+  it("renders nothing for a Claude model without sampling params on a rule", () => {
+    const { container } = renderPanel(
       <AnthropicModelConfigs
         configs={ANTHROPIC_CONFIG}
         model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5}
@@ -133,13 +131,13 @@ describe("a panel left with no control", () => {
       />,
     );
 
-    expect(screen.getByText(NO_PARAMETERS_MESSAGE)).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
-  it("shows the no-adjustable-parameters message for an OpenAI reasoning model on a rule", () => {
+  it("renders nothing for an OpenAI reasoning model on a rule", () => {
     // The OpenAI panel shows max output tokens whenever the config carries the key, and a rule's
     // config never does: it holds only temperature and seed.
-    renderPanel(
+    const { container } = renderPanel(
       <OpenAIModelConfigs
         configs={{ temperature: 0.4 }}
         model={PROVIDER_MODEL_TYPE.GPT_6_ASTRA}
@@ -148,7 +146,7 @@ describe("a panel left with no control", () => {
       />,
     );
 
-    expect(screen.getByText(NO_PARAMETERS_MESSAGE)).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
   // A rule's config holds only temperature and seed, which PromptModelConfigs casts to the full
@@ -156,8 +154,8 @@ describe("a panel left with no control", () => {
   // synced) has no level control either.
   const RULE_CONFIG = { temperature: 0.4 };
 
-  it("shows the no-adjustable-parameters message for a Gemini 3 model without a thinking row on a rule", () => {
-    renderPanel(
+  it("renders nothing for a Gemini 3 model without a thinking row on a rule", () => {
+    const { container } = renderPanel(
       <GeminiModelConfigs
         configs={RULE_CONFIG as LLMGeminiConfigsType}
         model={"gemini-3.9-flash" as PROVIDER_MODEL_TYPE}
@@ -166,11 +164,11 @@ describe("a panel left with no control", () => {
       />,
     );
 
-    expect(screen.getByText(NO_PARAMETERS_MESSAGE)).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
-  it("shows the no-adjustable-parameters message for its Vertex AI counterpart on a rule", () => {
-    renderPanel(
+  it("renders nothing for its Vertex AI counterpart on a rule", () => {
+    const { container } = renderPanel(
       <VertexAIModelConfigs
         configs={RULE_CONFIG as LLMVertexAIConfigsType}
         model={"vertex_ai/gemini-3.9-flash" as PROVIDER_MODEL_TYPE}
@@ -179,10 +177,10 @@ describe("a panel left with no control", () => {
       />,
     );
 
-    expect(screen.getByText(NO_PARAMETERS_MESSAGE)).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
-  it("stays quiet for a Gemini 3 model that offers a thinking level", () => {
+  it("keeps a Gemini 3 model that offers a thinking level", () => {
     renderPanel(
       <GeminiModelConfigs
         configs={RULE_CONFIG as LLMGeminiConfigsType}
@@ -193,10 +191,9 @@ describe("a panel left with no control", () => {
     );
 
     expect(screen.getByText("Thinking level")).toBeInTheDocument();
-    expect(screen.queryByText(NO_PARAMETERS_MESSAGE)).not.toBeInTheDocument();
   });
 
-  it("stays quiet on the playground, where the same Claude model keeps its other controls", () => {
+  it("keeps the same Claude model's other controls on the playground", () => {
     renderPanel(
       <AnthropicModelConfigs
         configs={ANTHROPIC_CONFIG}
@@ -206,6 +203,5 @@ describe("a panel left with no control", () => {
     );
 
     expect(screen.getByTestId("maxCompletionTokens-input")).toBeInTheDocument();
-    expect(screen.queryByText(NO_PARAMETERS_MESSAGE)).not.toBeInTheDocument();
   });
 });
