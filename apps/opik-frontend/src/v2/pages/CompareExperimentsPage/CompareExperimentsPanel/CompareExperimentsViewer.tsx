@@ -211,7 +211,11 @@ const CompareExperimentsViewer: React.FunctionComponent<
     return (
       <MediaProvider media={messagesMedia}>
         <div className="flex flex-col gap-2">
-          {media.length > 0 && <AttachmentsList media={media} />}
+          {/* Same list as the provider: the text is numbered across input and
+              output, so the output-only list would mislabel the thumbnails. */}
+          {messagesMedia.length > 0 && (
+            <AttachmentsList media={messagesMedia} />
+          )}
           <ExperimentMessagesViewer
             key={experimentItem.id}
             input={messagesInput}
