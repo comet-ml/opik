@@ -7,6 +7,7 @@ import {
   useDatasetType,
   useIsPromptRunning,
   usePromptById,
+  useDatasetItemsTotal,
 } from "@/store/PlaygroundStore";
 import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
@@ -29,15 +30,19 @@ const PlaygroundRunButton = ({
   const isPromptRunning = useIsPromptRunning(promptId);
   const { datasetId, itemsTotal } = usePlaygroundDataset();
   const datasetType = useDatasetType();
+  const datasetItemsTotal = useDatasetItemsTotal();
 
   const hasUnrunnableMessages = !!prompt && !canRunMessages(prompt.messages);
   const hasMediaCompatibilityIssue = !!prompt && hasUnsupportedMedia(prompt);
   const isDatasetEmpty = !!datasetId && itemsTotal === 0;
+  // Zero rows is a real state, not a loading one: a filter can exclude everything
+  const hasNoDatasetItems = !!datasetId && datasetItemsTotal === 0;
   const isPromptRunDisabled =
     !prompt?.model ||
     hasUnrunnableMessages ||
     hasMediaCompatibilityIssue ||
-    isDatasetEmpty;
+    isDatasetEmpty ||
+    hasNoDatasetItems;
 
   let promptRunDisabledReason: string | null = null;
   if (!prompt?.model) {
@@ -52,6 +57,8 @@ const PlaygroundRunButton = ({
     const datasetLabel =
       datasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
     promptRunDisabledReason = `This ${datasetLabel} version has no items. Add items or select another version to run an experiment`;
+  } else if (hasNoDatasetItems) {
+    promptRunDisabledReason = "No dataset items match the current filters";
   }
 
   return (

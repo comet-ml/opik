@@ -33,6 +33,7 @@ import {
   useDatasetType,
   useDatasetFilters,
   useSetDatasetFilters,
+  useDatasetItemsTotal,
 } from "@/store/PlaygroundStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -138,6 +139,8 @@ const PlaygroundHeader = ({
     [promptMap],
   );
 
+  const datasetItemsTotal = useDatasetItemsTotal();
+
   const allMessagesRunnable = useMemo(
     () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
@@ -146,13 +149,16 @@ const PlaygroundHeader = ({
   const isDatasetEmpty = isExperimentMode && versionItemsTotal === 0;
   const experimentTarget =
     currentDatasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
+  // Zero rows is a real state, not a loading one: a filter can exclude everything
+  const hasNoDatasetItems = isExperimentMode && datasetItemsTotal === 0;
 
   const isRunDisabled =
     !allPromptsHaveModels ||
     !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
     (isExperimentMode && !datasetName) ||
-    isDatasetEmpty;
+    isDatasetEmpty ||
+    hasNoDatasetItems;
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
@@ -165,11 +171,13 @@ const PlaygroundHeader = ({
       return "Your dataset has been removed. Select another one";
     if (isDatasetEmpty)
       return `This ${experimentTarget} version has no items. Add items or select another version to run an experiment`;
+    if (hasNoDatasetItems) return "No dataset items match the current filters";
     return null;
   }, [
     allPromptsHaveModels,
     allMessagesRunnable,
     hasMediaCompatibilityIssues,
+    hasNoDatasetItems,
     isExperimentMode,
     datasetName,
     isDatasetEmpty,
