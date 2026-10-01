@@ -93,7 +93,7 @@ class ThreadDAOImpl implements ThreadDAO {
     @VisibleForTesting
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
-                SELECT DISTINCT id, thread_id
+                SELECT id, thread_id
                 FROM (
                     SELECT *
                     FROM traces
@@ -540,7 +540,7 @@ class ThreadDAOImpl implements ThreadDAO {
     @VisibleForTesting
     static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
-                SELECT DISTINCT id, thread_id
+                SELECT id, thread_id
                 FROM (
                     SELECT *
                     FROM traces
@@ -1145,7 +1145,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 toInt64(0) AS error_count
             FROM (
                 WITH <if(traces_final_ids)>traces_final_ids AS (
-                    SELECT DISTINCT id, thread_id
+                    SELECT id, thread_id
                     FROM (
                         SELECT *
                         FROM traces
