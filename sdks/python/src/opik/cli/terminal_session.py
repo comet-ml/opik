@@ -12,6 +12,7 @@ import codecs
 import os
 import re
 import select
+import signal
 import subprocess
 import sys
 import unicodedata
@@ -53,6 +54,10 @@ def cursor_after(text: str, columns: int) -> Tuple[int, int]:
             row, column = row + 1, 0
         elif char == "\r":
             column = 0
+        elif char == "\b":
+            column = max(column - 1, 0)
+        elif char == "\t":
+            column = min(column + 8 - column % 8, columns - 1)
         elif unicodedata.category(char)[0] != "C":
             width = 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
             if column + width > columns:
@@ -127,6 +132,7 @@ def _run_on_pty(
     marker, hint = hint_after
     hint_shown = False
 
+    saved = termios.tcgetattr(stdin_fd)
     pid, master_fd = pty.fork()
     if pid == 0:
         try:
@@ -134,20 +140,23 @@ def _run_on_pty(
         finally:
             os._exit(127)
 
-    fcntl.ioctl(
-        master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", lines, columns, 0, 0)
-    )
-    saved = termios.tcgetattr(stdin_fd)
+    watched = [stdin_fd, master_fd]
     try:
+        fcntl.ioctl(
+            master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", lines, columns, 0, 0)
+        )
         # Raw, so every key — Ctrl-C included — goes to the command, whose own
         # terminal then echoes it and turns ^C into its signal.
         tty.setraw(stdin_fd)
         while True:
-            readable, _, _ = select.select([stdin_fd, master_fd], [], [])
+            readable, _, _ = select.select(watched, [], [])
             if stdin_fd in readable:
                 data = os.read(stdin_fd, _CHUNK)
                 if data:
                     os.write(master_fd, data)
+                else:
+                    # Input has closed; the command can still finish without it.
+                    watched.remove(stdin_fd)
             if master_fd in readable:
                 try:
                     data = os.read(master_fd, _CHUNK)
@@ -181,11 +190,16 @@ def _run_on_pty(
                         hint_shown = True
                 os.write(stdout_fd, text.encode())
                 shown += text
+    except BaseException:
+        # Whatever failed here, the command must not outlive it: closing our end
+        # alone does not reach a command that has not taken the terminal yet.
+        os.kill(pid, signal.SIGTERM)
+        raise
     finally:
-        termios.tcsetattr(stdin_fd, termios.TCSADRAIN, saved)
         os.close(master_fd)
+        _, status = os.waitpid(pid, 0)
+        termios.tcsetattr(stdin_fd, termios.TCSADRAIN, saved)
 
-    _, status = os.waitpid(pid, 0)
     returncode = os.waitstatus_to_exitcode(status)
     # Tracked by where the cursor is, not by the last character: the client
     # ends on an escape code after its last newline.

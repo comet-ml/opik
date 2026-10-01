@@ -2,7 +2,7 @@
 
 import pathlib
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import click
 from click.testing import CliRunner
@@ -650,6 +650,7 @@ class TestResultEventCarriesTheHandoff:
         interactive=True,
         args=(),
         lookup_interrupted=False,
+        declined=None,
     ):
         runner = CliRunner()
         outcome = assistants.Outcome(
@@ -689,7 +690,9 @@ class TestResultEventCarriesTheHandoff:
             ),
             patch.object(mcp_cli.install_view, "render_handoff"),
             patch.object(mcp_cli.install_view, "render_handoff_offer"),
-            patch.object(mcp_cli.install_view, "render_handoff_declined"),
+            patch.object(
+                mcp_cli.install_view, "render_handoff_declined", declined or Mock()
+            ),
             patch.object(mcp_cli.install_view, "render_prompt_to_paste"),
             patch.object(mcp_cli.analytics, "track_event") as track,
         ):
@@ -698,7 +701,7 @@ class TestResultEventCarriesTheHandoff:
         return track.call_args_list[-1].kwargs
 
     def test_ctrl_c_during_the_project_lookup__still_reports_the_run(self):
-        """Ctrl-C during the silent lookup after "Done" still reports the run."""
+        """Ctrl-C during the silent lookup after the install still reports the run."""
         event = self._result_event(("claude-code",), lookup_interrupted=True)
 
         assert event["handoff"] == "interrupted"
@@ -735,6 +738,21 @@ class TestResultEventCarriesTheHandoff:
         event = self._result_event(("claude-code",), abort=True)
 
         assert event["handoff"] == "declined"
+
+    def test_ctrl_c_at_the_offer__the_ending_replaces_the_offer_line(self):
+        """The terminal leaves the cursor after the `^C` on the offer's line."""
+        declined = Mock()
+
+        self._result_event(("claude-code",), abort=True, declined=declined)
+
+        declined.assert_called_once_with("Claude Code", replace_offer=True)
+
+    def test_saying_no_at_the_offer__the_ending_goes_below_it(self):
+        declined = Mock()
+
+        self._result_event(("claude-code",), accepted=False, declined=declined)
+
+        declined.assert_called_once_with("Claude Code", replace_offer=False)
 
     def test_no_terminal__nothing_to_hand_over_to(self):
         """A named client is what lets the command run unattended at all."""

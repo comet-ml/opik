@@ -151,10 +151,11 @@ class TestReadKeyPosixUsesTheDescriptor:
         )
         # termios/tty are imported inside the reader (they do not exist on
         # Windows), so patch the modules themselves rather than an attribute of
-        # `selector`.
+        # `selector`. `tty` first: it copies termios' functions when first
+        # imported, and would keep these fakes for every later test.
+        monkeypatch.setattr("tty.setcbreak", lambda fd, *a: None)
         monkeypatch.setattr("termios.tcgetattr", lambda fd: [])
         monkeypatch.setattr("termios.tcsetattr", lambda *a, **k: None)
-        monkeypatch.setattr("tty.setcbreak", lambda fd, *a: None)
         pulls = iter(reads)
         monkeypatch.setattr(selector.os, "read", lambda fd, n: next(pulls))
         return selector._read_key_posix()()
@@ -209,9 +210,9 @@ class TestABurstYieldsEveryToken:
     def _reader(monkeypatch, reads):
         monkeypatch.setattr(selector.sys, "stdin", mock.Mock(fileno=lambda: 99))
         monkeypatch.setattr(selector, "_has_pending_input", lambda d, **k: False)
+        monkeypatch.setattr("tty.setcbreak", lambda fd, *a: None)
         monkeypatch.setattr("termios.tcgetattr", lambda fd: [])
         monkeypatch.setattr("termios.tcsetattr", lambda *a, **k: None)
-        monkeypatch.setattr("tty.setcbreak", lambda fd, *a: None)
         pulls = iter(reads)
         monkeypatch.setattr(selector.os, "read", lambda fd, n: next(pulls))
         return selector._read_key_posix()
@@ -270,9 +271,9 @@ class TestOneReaderPerRun:
     def test_what_one_prompt_did_not_use__answers_the_next(self, monkeypatch):
         monkeypatch.setattr(selector.sys, "stdin", mock.Mock(fileno=lambda: 99))
         monkeypatch.setattr(selector, "_has_pending_input", lambda d, **k: False)
+        monkeypatch.setattr("tty.setcbreak", lambda fd, *a: None)
         monkeypatch.setattr("termios.tcgetattr", lambda fd: [])
         monkeypatch.setattr("termios.tcsetattr", lambda *a, **k: None)
-        monkeypatch.setattr("tty.setcbreak", lambda fd, *a: None)
         # Both answers arrive in one read, and there is no second one to fall
         # back on: a reader that dropped the leftovers would block here.
         pulls = iter([b"1\r2\r"])
