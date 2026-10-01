@@ -10,6 +10,9 @@ import { loadEnvConfig } from '../config/env.config';
  */
 const EXPORT_TIMEOUT_MS = 60_000;
 
+const escapeForRegExp = (literal: string): string =>
+  literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** How long the grid may take to answer a newly-applied filter. */
 const FILTER_SETTLE_TIMEOUT_MS = 30_000;
 
@@ -65,10 +68,25 @@ export class CompareExperimentsPage {
     });
   }
 
-  async gotoConfiguration(): Promise<void> {
-    await test.step('open the compare Configuration tab', async () => {
-      await this.page.goto(this.compareUrl('config'));
-    });
+  /**
+   * Open the Configuration tab, optionally with "Show differences only" already
+   * on.
+   *
+   * `diff` is URL state (`?diff=1`, a `BooleanParam`), the same the toggle
+   * writes — so a spec that needs the view to START filtered gets there without
+   * a render of the unfiltered table first. Driving the real switch is what
+   * `setShowDifferencesOnly` is for; both paths matter, because the toggle is
+   * the user's and the param is what a shared link carries.
+   */
+  async gotoConfiguration(opts: { diff?: boolean } = {}): Promise<void> {
+    await test.step(
+      `open the compare Configuration tab${opts.diff ? ' with differences only' : ''}`,
+      async () => {
+        const url = new URL(this.compareUrl('config'));
+        if (opts.diff !== undefined) url.searchParams.set('diff', opts.diff ? '1' : '0');
+        await this.page.goto(url.toString());
+      },
+    );
   }
 
   async gotoFeedbackScores(): Promise<void> {
@@ -503,6 +521,268 @@ export class CompareExperimentsPage {
         ).toContainText(exp.name);
       }
     });
+  }
+
+  /**
+   * Every Configuration row name, in render order.
+   *
+   * Order is part of the contract: the synthetic prompt-version row is
+   * prepended to the metadata rows rather than sorted in among them, so
+   * "it is the first row" is an assertion a spec can make and a regression
+   * that reordered it would be invisible to a set comparison.
+   */
+  async configRowNames(): Promise<string[]> {
+    return test.step('read the Configuration row names in order', async () => {
+      await this.configTableSettled();
+      return (await this.configNameCells.allInnerTexts()).map((t) => t.trim());
+    });
+  }
+
+  /** The number of rows currently rendered on the Configuration tab. */
+  async countConfigRows(): Promise<number> {
+    return test.step('count the Configuration rows', async () => {
+      await this.configTableSettled();
+      return this.page.locator('tbody tr[data-row-id]').count();
+    });
+  }
+
+  async expectConfigRowAbsent(rowName: string): Promise<void> {
+    await test.step(`the "${rowName}" Configuration row is not rendered`, async () => {
+      await this.configTableSettled();
+      await expect(
+        this.configRow(rowName),
+        `Configuration row named "${rowName}"`,
+      ).toHaveCount(0);
+    });
+  }
+
+  /**
+   * The text of one experiment's cell on one Configuration row.
+   *
+   * The row is found by its own name — anchored and exact, so "Prompt version
+   * (linked)" cannot also match a longer row — and the cell is then addressed
+   * by the EXPERIMENT ID, which is the table's column id. Neither half is
+   * positional: the Configuration table's columns are resizable and the row set
+   * changes with the search box and the diff toggle, so an `nth-child` lookup
+   * here would silently read a different experiment.
+   */
+  async configCellText(rowName: string, experimentId: string): Promise<string> {
+    return test.step(`read the "${rowName}" cell for experiment ${experimentId}`, async () => {
+      const cell = await this.configCell(rowName, experimentId);
+      return ((await cell.innerText()) ?? '').trim();
+    });
+  }
+
+  /**
+   * The prompt-version tags rendered in one experiment's cell.
+   *
+   * `ResourceLink` renders each tag as an anchor whether or not it is
+   * navigable, so this is also how a DELETED prompt's tag is reached — which is
+   * the point: the deleted state is an anchor that lost its `href`, not a tag
+   * that disappeared. Zero of these means the cell fell back to plain text,
+   * which is what "No value" and the diff view both do.
+   */
+  async configCellPromptTags(rowName: string, experimentId: string): Promise<Locator> {
+    const cell = await this.configCell(rowName, experimentId);
+    return cell.locator('a');
+  }
+
+  /**
+   * Type into the Configuration tab's "Search by name" box and wait for the
+   * table to answer.
+   *
+   * The filter is client-side over rows already loaded, so the settle point is
+   * the search having been committed to the URL (`?searchConfig=`), which is
+   * what the table filters from — not a network response, of which there is
+   * none.
+   */
+  async searchConfiguration(text: string): Promise<void> {
+    await test.step(`search the Configuration rows for "${text}"`, async () => {
+      const search = this.page.getByPlaceholder('Search by name');
+      await search.fill(text);
+      await this.page.waitForURL(
+        (url) => (url.searchParams.get('searchConfig') ?? '') === text,
+      );
+    });
+  }
+
+  /**
+   * Drive the real "Show differences only" switch and wait for the table to
+   * re-render under it.
+   *
+   * Through the control rather than the `diff` query param because the switch
+   * is the interaction under test; `gotoConfiguration({ diff })` covers the
+   * link-arriving-pre-filtered path separately. The settle point is the switch's
+   * own `aria-checked`, which React flips in the same commit as the filtered
+   * rows.
+   */
+  async setShowDifferencesOnly(on: boolean): Promise<void> {
+    await test.step(`turn "Show differences only" ${on ? 'on' : 'off'}`, async () => {
+      const toggle = this.showDifferencesOnlyToggle;
+      await expect(toggle, 'the Show differences only switch').toHaveCount(1);
+      if ((await toggle.getAttribute('aria-checked')) !== String(on)) {
+        await toggle.click();
+      }
+      await expect(toggle, 'Show differences only after the click').toHaveAttribute(
+        'aria-checked',
+        String(on),
+      );
+    });
+  }
+
+  /** The "Show differences only" switch — labelled, compare mode only. */
+  get showDifferencesOnlyToggle(): Locator {
+    return this.page.getByRole('switch', { name: 'Show differences only' });
+  }
+
+  /**
+   * The two sides of the text diff rendered in a non-baseline Configuration
+   * cell while "Show differences only" is on.
+   *
+   * Read by the diff's own colour tokens rather than by position: `TextDiff`
+   * emits one span per line-level change, and which of them is the removal is
+   * carried by the class, not by the order they happen to render in. Returning
+   * both sides lets a spec assert the baseline's value was struck out AND the
+   * new value added, which is what distinguishes a real diff from a cell that
+   * merely echoed one of the two strings.
+   */
+  async configCellDiffSides(
+    rowName: string,
+    experimentId: string,
+  ): Promise<{ removed: string[]; added: string[] }> {
+    return test.step(`read the diff in the "${rowName}" cell for experiment ${experimentId}`, async () => {
+      const cell = await this.configCell(rowName, experimentId);
+      const read = async (token: string): Promise<string[]> =>
+        (await cell.locator(`[class*="${token}"]`).allInnerTexts()).map((t) => t.trim());
+      return { removed: await read('bg-diff-removed-bg'), added: await read('bg-diff-added-bg') };
+    });
+  }
+
+  /**
+   * Every prompt tag on the page rendering `ResourceLink`'s deleted state.
+   *
+   * Matched on the rendered words rather than on a disabled attribute, because
+   * the regression this guards turns the tag into an ENABLED link with an empty
+   * label: such a tag is still an anchor, still a tag, and differs only in what
+   * it says. Anchored and exact so a tooltip or a longer label cannot satisfy
+   * it.
+   *
+   * A deleted resource's anchor keeps rendering as an `<a>`; it loses its
+   * `href` and gains `aria-disabled`, so it is found exactly the way a live
+   * one is.
+   */
+  deletedPromptTags(): Locator {
+    return this.page.locator('a').filter({ hasText: /^\s*Deleted prompt\s*$/ });
+  }
+
+  /**
+   * A tag that must not navigate: marked disabled, carrying no `href`, and
+   * leaving the URL alone when clicked anyway.
+   *
+   * All three, because each covers a different way the deleted state can break.
+   * `aria-disabled` is what a screen reader and Playwright's own actionability
+   * check read; the absent `href` is what stops a middle-click; and the click
+   * is what catches a build that kept both of those and dropped only the
+   * router `<Link>`'s `disabled` prop, which would navigate while looking
+   * perfectly correct in the DOM.
+   *
+   * The click is forced deliberately. Playwright refuses to click an
+   * `aria-disabled` element, so an ordinary click here would time out on a
+   * PASSING build and pass on a broken one — precisely backwards. Forcing it
+   * dispatches the event in both worlds and lets the URL answer.
+   */
+  async expectTagNotNavigable(tag: Locator, what: string): Promise<void> {
+    await test.step(`${what} does not navigate`, async () => {
+      await expect(tag, `${what} is marked disabled`).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      await expect(tag, `${what} href`).not.toHaveAttribute('href', /./);
+      const before = this.page.url();
+      await tag.click({ force: true });
+      await expect
+        .poll(() => this.page.url(), { message: `URL after clicking ${what}` })
+        .toBe(before);
+    });
+  }
+
+  /**
+   * Hover a tag and read the tooltip it raises. Radix portals tooltip content
+   * out of the cell, so it is looked up at page scope by role rather than
+   * through the tag, and `TooltipWrapper` opens on a timer, so the wait is on
+   * the tooltip appearing rather than on a fixed delay.
+   */
+  async tagTooltipText(tag: Locator): Promise<string> {
+    return test.step('hover the tag and read its tooltip', async () => {
+      await tag.hover();
+      const tooltip = this.page.getByRole('tooltip');
+      await expect(tooltip.first(), 'tooltip raised by the tag').toBeVisible({
+        timeout: 10_000,
+      });
+      return ((await tooltip.first().innerText()) ?? '').trim();
+    });
+  }
+
+  /**
+   * One Configuration row, found by the exact text of its Name cell.
+   *
+   * Anchored with `^…$` rather than matched as a substring: a `hasText`
+   * containment filter for "Prompt version" would also match a user metadata
+   * key called "Prompt version history", and the product deliberately suffixes
+   * the synthetic row "(linked)" so the two can be told apart.
+   */
+  private configRow(rowName: string): Locator {
+    return this.page.locator('tbody tr[data-row-id]').filter({
+      has: this.page
+        .locator('td[data-cell-id$="_name"]')
+        .filter({ hasText: new RegExp(`^\\s*${escapeForRegExp(rowName)}\\s*$`) }),
+    });
+  }
+
+  /** Every Name cell on the Configuration tab, in row order. */
+  private get configNameCells(): Locator {
+    return this.page.locator('tbody tr[data-row-id] td[data-cell-id$="_name"]');
+  }
+
+  /**
+   * The cell where `rowName` meets `experimentId`.
+   *
+   * Resolved in two hops because the Configuration table's row ids are table
+   * indices, not entity ids: the row is identified by its name, its id is read
+   * back, and the cell is then addressed by `<rowId>_<experimentId>`. Both
+   * lookups assert they resolved to exactly one element, so an ambiguous match
+   * fails here rather than quietly asserting against the wrong experiment.
+   */
+  private async configCell(rowName: string, experimentId: string): Promise<Locator> {
+    await this.configTableSettled();
+    const row = this.configRow(rowName);
+    await expect(row, `Configuration row named "${rowName}"`).toHaveCount(1);
+    const rowId = await row.getAttribute('data-row-id');
+    const cell = this.page.locator(`td[data-cell-id="${rowId}_${experimentId}"]`);
+    await expect(
+      cell,
+      `"${rowName}" cell for experiment ${experimentId}`,
+    ).toHaveCount(1);
+    return cell;
+  }
+
+  /**
+   * Wait for the Configuration table to have finished its skeleton render.
+   *
+   * The tab mounts with `showSkeleton` while the by-id experiment reads are in
+   * flight, and the skeleton rows carry no `data-cell-id` — so a row lookup
+   * that ran against it would report "no such row" for a row that simply had
+   * not arrived yet.
+   */
+  private async configTableSettled(): Promise<void> {
+    await expect
+      .poll(
+        async () =>
+          (await this.configNameCells.count()) > 0 ||
+          (await this.page.getByText(/no (search results|configuration)/i).count()) > 0,
+        { message: 'the Configuration table rendered its rows or its empty state' },
+      )
+      .toBe(true);
   }
 
   /**

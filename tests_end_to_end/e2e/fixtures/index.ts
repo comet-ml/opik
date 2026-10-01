@@ -1,4 +1,4 @@
-export { test, expect } from './readability-locale-experiment.fixture';
+export { test, expect } from './compare-prompt-versions.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -246,4 +246,11 @@ export type {
   ReadabilityLocaleExperimentFixtures,
 } from './readability-locale-experiment.fixture';
 export { READABILITY_LANGUAGES } from './readability-locale-experiment.fixture';
+export type {
+  ComparePromptLink,
+  ComparePromptExperimentRef,
+  ComparePromptVersionsRef,
+  ComparePromptVersionsFixtures,
+} from './compare-prompt-versions.fixture';
+export { CONFIG_METADATA_KEYS } from './compare-prompt-versions.fixture';
 export type { ProjectRef } from '../core/backend';

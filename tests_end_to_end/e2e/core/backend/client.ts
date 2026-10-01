@@ -2861,6 +2861,37 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/experiments/{id}`'s `prompt_versions`, exactly as the
+     * wire carried them.
+     *
+     * Raw rather than through the pinned SDK because the contract under test is
+     * the difference between an ABSENT key and a null one. The frontend decides
+     * a linked prompt has been deleted with `isUndefined(prompt_name)`, so a
+     * backend that started sending `prompt_name: null` would silently turn the
+     * deleted tag into an enabled link with an empty label — and the SDK's
+     * camel-cased, optional-typed projection cannot tell the two apart. The
+     * backend omits nulls today (`JsonInclude.Include.NON_NULL`), which is
+     * exactly the assumption worth pinning.
+     *
+     * `null` rather than `[]` when the key is missing altogether: an experiment
+     * that lost its links and one that never had any are different answers.
+     */
+    async getExperimentPromptVersionsRaw(
+      id: string,
+    ): Promise<RawApiResult & { promptVersions: Record<string, unknown>[] | null }> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${id}`,
+      );
+      const raw = (json as { prompt_versions?: unknown } | null)?.prompt_versions;
+      return {
+        status,
+        message,
+        promptVersions: Array.isArray(raw) ? (raw as Record<string, unknown>[]) : null,
+      };
+    },
+
+    /**
      * `POST /v1/private/experiments/execute` — the write path a test-suite run
      * takes, and the one that carries a per-variant `experiment_name`
      * (OPIK-3268). The pinned SDK has no binding for it, so this goes through
