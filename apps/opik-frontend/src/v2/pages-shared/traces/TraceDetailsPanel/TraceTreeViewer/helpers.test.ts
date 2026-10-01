@@ -595,14 +595,18 @@ describe("helpers.ts", () => {
         });
 
         it.each([
-          { key: "['a.b']", value: "2", expected: true },
-          { key: "['a.b']", value: "1", expected: false },
+          { key: '["a.b"]', value: "2", expected: true },
+          { key: '["a.b"]', value: "3", expected: false },
+          { key: '["ctx"]["a.b"]', value: "3", expected: true },
           { key: "a.b", value: "1", expected: true },
           { key: "a.b", value: "2", expected: false },
         ])(
-          "matches bracket-quoted flat key vs nested path ($key = $value)",
+          "reads bracket-quoted keys at the root only ($key = $value)",
           ({ key, value, expected }) => {
-            const trace = { ...mockTrace, metadata: { a: { b: 1 }, "a.b": 2 } };
+            const trace = {
+              ...mockTrace,
+              metadata: { a: { b: 1 }, "a.b": 2, ctx: { "a.b": 3 } },
+            };
             const filter: Filters = [
               {
                 id: "filter-1",
@@ -618,21 +622,30 @@ describe("helpers.ts", () => {
           },
         );
 
-        it("matches a bracket-quoted dotted key in a custom input filter", () => {
-          const span = { ...mockSpan, input: { "req.lang": "es" } };
-          const filter: Filters = [
-            {
-              id: "filter-1",
-              field: COLUMN_CUSTOM_ID,
-              operator: "contains",
-              value: "es",
-              type: COLUMN_TYPE.dictionary,
-              key: "input.['req.lang']",
-            },
-          ];
+        it.each([
+          { value: "es", expected: true },
+          { value: "en", expected: false },
+        ])(
+          "reads a bracket-quoted custom input key at the root only ($value)",
+          ({ value, expected }) => {
+            const span = {
+              ...mockSpan,
+              input: { "req.lang": "es", history: [{ "req.lang": "en" }] },
+            };
+            const filter: Filters = [
+              {
+                id: "filter-1",
+                field: COLUMN_CUSTOM_ID,
+                operator: "=",
+                value,
+                type: COLUMN_TYPE.dictionary,
+                key: 'input.["req.lang"]',
+              },
+            ];
 
-          expect(filterFunction(span, filter)).toBe(true);
-        });
+            expect(filterFunction(span, filter)).toBe(expected);
+          },
+        );
       });
 
       // Test tags (list) column

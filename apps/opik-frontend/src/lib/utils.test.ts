@@ -423,6 +423,15 @@ describe("getJSONPaths", () => {
     ).toEqual(["metadata.a.b", "metadata.a.b", "metadata.items[0].id"]);
   });
 
+  it("writes a leading index without brackets when there is no root", () => {
+    expect(getJSONPaths([{ model: "x", m: [1] }], "", [], true)).toEqual([
+      "0",
+      "0.model",
+      "0.m",
+      "0.m[0]",
+    ]);
+  });
+
   it("matches the default format when no key needs quoting", () => {
     const node = { a: { b: 1 }, items: [{ id: 1 }], tags: ["x"] };
     expect(bracket(node, "metadata")).toEqual(getJSONPaths(node, "metadata"));
@@ -435,22 +444,22 @@ describe("getJSONPaths", () => {
         "metadata",
       ),
     ).toEqual([
-      "metadata.['deepl.request.target_language']",
-      "metadata.['ctx']['user.id']",
+      'metadata.["deepl.request.target_language"]',
+      'metadata.["ctx"]["user.id"]',
     ]);
   });
 
   it("keeps a flat dotted key and a nested object with the same text apart", () => {
     expect(bracket({ a: { b: 1 }, "a.b": 2 }, "metadata")).toEqual([
       "metadata.a.b",
-      "metadata.['a.b']",
+      'metadata.["a.b"]',
     ]);
   });
 
   it("emits intermediate nodes without a root when asked", () => {
     expect(bracket({ ctx: { "a.b": 1 } }, "", true)).toEqual([
       "ctx",
-      "['ctx']['a.b']",
+      '["ctx"]["a.b"]',
     ]);
   });
 });
@@ -473,7 +482,17 @@ describe("buildJSONPath", () => {
         JSON_PATH_FORMAT.bracket,
         "metadata",
       ),
-    ).toBe("metadata.['ctx']['a.b'][1]");
+    ).toBe('metadata.["ctx"]["a.b"][1]');
+  });
+
+  it("keeps the root separator before a leading index in a quoted path", () => {
+    expect(
+      buildJSONPath(
+        [{ index: 0 }, { key: "a.b" }],
+        JSON_PATH_FORMAT.bracket,
+        "input",
+      ),
+    ).toBe('input.[0]["a.b"]');
   });
 
   it("omits the root separator before a leading index", () => {
@@ -492,9 +511,15 @@ describe("buildJSONPath", () => {
     ).toBe("metadata.a.b");
   });
 
-  it("escapes quotes and backslashes", () => {
+  it("escapes backslashes and leaves apostrophes as-is", () => {
     expect(
       buildJSONPath([{ key: "it's.a\\b" }], JSON_PATH_FORMAT.bracket),
-    ).toBe("['it\\'s.a\\\\b']");
+    ).toBe('["it\'s.a\\\\b"]');
+  });
+
+  it("escapes double quotes", () => {
+    expect(
+      buildJSONPath([{ key: 'say "hi".x' }], JSON_PATH_FORMAT.bracket),
+    ).toBe('["say \\"hi\\".x"]');
   });
 });

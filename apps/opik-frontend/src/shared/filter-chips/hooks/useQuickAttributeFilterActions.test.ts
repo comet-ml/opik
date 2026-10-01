@@ -36,9 +36,9 @@ describe("resolveQuickFilterTarget", () => {
   });
 
   it("keeps the root separator before a bracket-quoted path", () => {
-    expect(resolveQuickFilterTarget("output", SPANS, "['a.b']")).toEqual({
+    expect(resolveQuickFilterTarget("output", SPANS, '["a.b"]')).toEqual({
       chipId: "custom",
-      key: "output.['a.b']",
+      key: 'output.["a.b"]',
     });
   });
 

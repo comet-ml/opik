@@ -94,12 +94,12 @@ describe("collectQuickFilterTargets - JSON", () => {
   it("bracket-quotes a flat key containing '.'", () => {
     expect(
       json(JSON.stringify({ "deepl.request.target_language": "ES" })),
-    ).toEqual([{ path: "['deepl.request.target_language']", value: "ES" }]);
+    ).toEqual([{ path: '["deepl.request.target_language"]', value: "ES" }]);
   });
 
   it("bracket-quotes a key containing '[]'", () => {
     expect(json(JSON.stringify({ "x[0]": 2 }))).toEqual([
-      { path: "['x[0]']", value: "2" },
+      { path: '["x[0]"]', value: "2" },
     ]);
   });
 
@@ -108,21 +108,21 @@ describe("collectQuickFilterTargets - JSON", () => {
       "ctx-1": { "a.b": 1, list: [{ "c.d": "v" }] },
     });
     expect(json(doc)).toEqual([
-      { path: "['ctx-1']['a.b']", value: "1" },
-      { path: "['ctx-1']['list'][0]['c.d']", value: "v" },
+      { path: '["ctx-1"]["a.b"]', value: "1" },
+      { path: '["ctx-1"]["list"][0]["c.d"]', value: "v" },
     ]);
   });
 
   it("escapes quotes and backslashes inside a bracket-quoted key", () => {
     expect(json(JSON.stringify({ "it's.a\\b": "v" }))).toEqual([
-      { path: "['it\\'s.a\\\\b']", value: "v" },
+      { path: '["it\'s.a\\\\b"]', value: "v" },
     ]);
   });
 
   it("keeps dot notation for sibling keys without special characters", () => {
     const doc = JSON.stringify({ "a.b": 1, git: { branch: "main" } });
     expect(json(doc)).toEqual([
-      { path: "['a.b']", value: "1" },
+      { path: '["a.b"]', value: "1" },
       { path: "git.branch", value: "main" },
     ]);
   });
@@ -194,7 +194,7 @@ describe("collectQuickFilterTargets - YAML", () => {
   it("bracket-quotes a flat key containing '.'", () => {
     const doc = "deepl.request.target_language: ES\n";
     expect(yaml(doc)).toEqual([
-      { path: "['deepl.request.target_language']", value: "ES" },
+      { path: '["deepl.request.target_language"]', value: "ES" },
     ]);
   });
 
