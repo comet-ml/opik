@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createCompletionAnnouncer,
   getDefaultConfigByProvider,
+  hasUnsupportedMedia,
   restoreMissingConfigKeys,
 } from "@/lib/playground";
 import {
@@ -12,6 +13,66 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { PlaygroundPromptType } from "@/types/playground";
+import { LLM_MESSAGE_ROLE, LLMMessage, MessageContent } from "@/types/llm";
+
+const userMessage = (content: MessageContent): LLMMessage => ({
+  id: "message",
+  role: LLM_MESSAGE_ROLE.user,
+  content,
+});
+
+const imageMessage = userMessage([
+  { type: "text", text: "Describe this" },
+  { type: "image_url", image_url: { url: "https://example.com/cat.png" } },
+]);
+
+const videoMessage = userMessage([
+  { type: "video_url", video_url: { url: "https://example.com/cat.mp4" } },
+]);
+
+describe("hasUnsupportedMedia", () => {
+  it("returns false when no model is selected", () => {
+    expect(hasUnsupportedMedia({ model: "", messages: [imageMessage] })).toBe(
+      false,
+    );
+  });
+
+  it("returns false for text-only prompts on a non-vision model", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO,
+        messages: [userMessage("Hello")],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for images on a vision model", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_4O,
+        messages: [imageMessage],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true for images on a non-vision model", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO,
+        messages: [userMessage("Hello"), imageMessage],
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for videos on a non-vision model", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO,
+        messages: [videoMessage],
+      }),
+    ).toBe(true);
+  });
+});
 
 describe("getDefaultConfigByProvider — Anthropic", () => {
   it("seeds temperature default for models that accept sampling params", () => {
