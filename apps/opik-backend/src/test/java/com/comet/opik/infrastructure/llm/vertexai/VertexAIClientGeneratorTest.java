@@ -541,6 +541,10 @@ class VertexAIClientGeneratorTest {
 
         private static final String STREAM_GENERATE_CONTENT_PATH = ".*:streamGenerateContent";
 
+        private static final String EXPECTED_CUT_OFF_MESSAGE = "Vertex AI used up the max output tokens limit "
+                + "before writing any answer. Thinking tokens count toward this limit, so raise Max output tokens "
+                + "and run again";
+
         private static final String CUT_OFF_BEFORE_ANY_TEXT = """
                 {
                   "candidates": [{"content": {"role": "model"}, "finishReason": "MAX_TOKENS"}],
@@ -614,8 +618,8 @@ class VertexAIClientGeneratorTest {
 
         private static Stream<Arguments> cutOffMessages() {
             return Stream.of(
-                    Arguments.of(1024, LlmProviderVertexAI.CUT_OFF_BEFORE_ANSWERING + ", max output tokens '1024'"),
-                    Arguments.of(null, LlmProviderVertexAI.CUT_OFF_BEFORE_ANSWERING));
+                    Arguments.of(1024, EXPECTED_CUT_OFF_MESSAGE + ", max output tokens '1024'"),
+                    Arguments.of(null, EXPECTED_CUT_OFF_MESSAGE));
         }
 
         @ParameterizedTest(name = "max_completion_tokens {0}")
@@ -639,7 +643,7 @@ class VertexAIClientGeneratorTest {
 
             assertThat(outcome.error())
                     .isInstanceOf(InvalidRequestException.class)
-                    .hasMessage(LlmProviderVertexAI.CUT_OFF_BEFORE_ANSWERING + ", max output tokens '1024'");
+                    .hasMessage(EXPECTED_CUT_OFF_MESSAGE + ", max output tokens '1024'");
             assertThat(outcome.closed()).isFalse();
             assertThat(outcome.content()).isEmpty();
         }
