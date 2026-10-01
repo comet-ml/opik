@@ -6,11 +6,16 @@ on:
   pull_request:
     paths:
       - "apps/opik-frontend/**"
+      # llm.test.ts reads these to fail when the frontend's model lists drift from them.
+      - "apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm/antropic/AnthropicModelName.java"
+      - "scripts/sync_provider_models.py"
   push:
     branches:
       - 'main'
     paths:
       - "apps/opik-frontend/**"
+      - "apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm/antropic/AnthropicModelName.java"
+      - "scripts/sync_provider_models.py"
   workflow_dispatch:
 
 
