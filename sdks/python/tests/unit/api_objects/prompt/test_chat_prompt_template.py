@@ -652,3 +652,194 @@ def test_chat_prompt_template__format__brace_right_before_placeholder__substitut
     result = tested.format({"key": "ok"})
 
     assert result == [{"role": "user", "content": "Reply as JSON: {ok: true}"}]
+
+
+def test_chat_prompt_template__format__multimodal_content__audio_part__happyflow():
+    """An audio part survives formatting when the target model supports audio.
+
+    Mirrors the image case: the rendered part is kept structured so the caller can
+    hand it to a model that accepts audio.
+    """
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe this {{clip}}:"},
+                {"type": "audio_url", "audio_url": {"url": "{{audio_url}}"}},
+            ],
+        }
+    ]
+
+    tested = ChatPromptTemplate(messages)
+
+    result = tested.format(
+        {"clip": "clip-1", "audio_url": "https://example.com/clip.mp3"},
+        supported_modalities={"audio": True},
+    )
+
+    assert result == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe this clip-1:"},
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://example.com/clip.mp3"},
+                },
+            ],
+        }
+    ]
+
+
+def test_chat_prompt_template__format__audio_part__without_supported_modality__placeholder():
+    """Without audio support the part becomes a textual anchor carrying the url.
+
+    This is the documented behaviour for a modality part, and it is what image
+    and video already do.
+    """
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe {{clip}}"},
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://example.com/{{clip}}.mp3"},
+                },
+            ],
+        }
+    ]
+
+    tested = ChatPromptTemplate(messages, validate_placeholders=False)
+
+    result = tested.format({"clip": "call-1"})
+
+    assert result == [
+        {
+            "role": "user",
+            "content": (
+                "Transcribe call-1\n\n"
+                "<<<audio>>>https://example.com/call-1.mp3<<</audio>>>"
+            ),
+        }
+    ]
+
+
+def test_chat_prompt_template__format__audio_only_message__content_not_empty():
+    """An audio-only message used to render to an empty content list."""
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "audio_url", "audio_url": {"url": "https://example.com/a.mp3"}}
+            ],
+        }
+    ]
+
+    tested = ChatPromptTemplate(messages, validate_placeholders=False)
+
+    result = tested.format({})
+
+    assert result == [
+        {
+            "role": "user",
+            "content": "<<<audio>>>https://example.com/a.mp3<<</audio>>>",
+        }
+    ]
+
+
+def test_chat_prompt_template__format__audio_part__preserves_metadata():
+    """Optional metadata the caller supplied is carried through the render."""
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "audio_url",
+                    "audio_url": {
+                        "url": "https://example.com/a.mp3",
+                        "detail": "high",
+                        "mime_type": "audio/mpeg",
+                        "duration": 12,
+                        "format": "mp3",
+                    },
+                }
+            ],
+        }
+    ]
+
+    tested = ChatPromptTemplate(messages)
+
+    result = tested.format({}, supported_modalities={"audio": True})
+
+    assert result == [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "audio_url",
+                    "audio_url": {
+                        "url": "https://example.com/a.mp3",
+                        "detail": "high",
+                        "mime_type": "audio/mpeg",
+                        "duration": 12,
+                        "format": "mp3",
+                    },
+                }
+            ],
+        }
+    ]
+
+
+def test_chat_prompt_template__required_modalities__with_audio():
+    """A caller choosing a model has to be able to see that audio is needed."""
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe"},
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://example.com/a.mp3"},
+                },
+            ],
+        }
+    ]
+
+    tested = ChatPromptTemplate(messages)
+
+    assert tested.required_modalities() == {"audio"}
+
+
+def test_chat_prompt_template__format__placeholder_inside_audio_url__validates():
+    """A placeholder inside an audio url is part of the template's placeholders."""
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://example.com/{{clip}}.mp3"},
+                }
+            ],
+        }
+    ]
+
+    tested = ChatPromptTemplate(messages, validate_placeholders=True)
+
+    result = tested.format({"clip": "call-1"}, supported_modalities={"audio": True})
+
+    assert result == [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://example.com/call-1.mp3"},
+                }
+            ],
+        }
+    ]
+
+    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments):
+        tested.format({}, supported_modalities={"audio": True})
