@@ -1,4 +1,4 @@
-"""A feedback score whose `value` is a bool must be rejected, not recorded as 0/1.
+"""A feedback score whose `value` is a bool must be rejected, not logged.
 
 `bool` is a subclass of `int`, so the pydantic validator behind
 `validate_feedback_score` accepts it, and that helper returns the caller's dict
@@ -14,18 +14,29 @@ import logging
 import pytest
 
 from opik.api_objects import validation_helpers
+from opik import logging_messages
 
 
 @pytest.mark.parametrize("value", [True, False])
-def test_validate_feedback_score__bool_value__is_rejected(value):
-    logger = logging.getLogger(__name__)
+def test_validate_feedback_score__bool_value__is_rejected(capture_log, value):
+    # Rejecting silently is the other half of the same failure: the caller only
+    # finds out from the missing score, so assert the warning names the score and
+    # says why. `capture_log` turns on propagation for the `opik` logger, which is
+    # the logger a caller passes in.
+    logger = logging.getLogger("opik.test_feedback_score_value_contract")
+    score = {"id": "some-id", "name": "accuracy", "value": value}
 
-    assert (
-        validation_helpers.validate_feedback_score(
-            {"id": "some-id", "name": "accuracy", "value": value}, logger
-        )
-        is None
-    )
+    with capture_log.at_level(logging.WARNING, logger=logger.name):
+        assert validation_helpers.validate_feedback_score(score, logger) is None
+
+    assert [
+        record.getMessage()
+        for record in capture_log.records
+        if record.levelno == logging.WARNING
+    ] == [
+        logging_messages.INVALID_FEEDBACK_SCORE_WILL_NOT_BE_LOGGED
+        % (score, "a feedback score value must be a number, not a bool")
+    ]
 
 
 @pytest.mark.parametrize("value", [0, 1, 0.0, 1.0, -1, 0.5])
