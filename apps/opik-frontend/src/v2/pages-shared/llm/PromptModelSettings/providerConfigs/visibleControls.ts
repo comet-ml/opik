@@ -49,8 +49,10 @@ export const getOpenAIVisibleControls = ({
   const showPenalties = supportsPenaltyParams(model);
 
   return {
-    temperature: !isUndefined(temperature),
-    maxCompletionTokens: !isUndefined(configs.maxCompletionTokens),
+    temperature: supports("temperature") && !isUndefined(temperature),
+    maxCompletionTokens:
+      supports("maxCompletionTokens") &&
+      !isUndefined(configs.maxCompletionTokens),
     topP: supports("topP") && !isUndefined(topP),
     frequencyPenalty: showPenalties && !isUndefined(configs.frequencyPenalty),
     presencePenalty: showPenalties && !isUndefined(configs.presencePenalty),
@@ -90,8 +92,10 @@ const getGeminiFamilyVisibleControls = (
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
 
   return {
-    temperature: !isUndefined(temperature),
-    maxCompletionTokens: !isUndefined(configs.maxCompletionTokens),
+    temperature: supports("temperature") && !isUndefined(temperature),
+    maxCompletionTokens:
+      supports("maxCompletionTokens") &&
+      !isUndefined(configs.maxCompletionTokens),
     topP: supports("topP") && !isUndefined(topP),
     thinkingLevel: showThinkingLevel,
     throttling: supports("throttling"),
@@ -129,7 +133,10 @@ export const getOpenRouterVisibleControls = ({
     samplingParams:
       sampling === "exclusive" &&
       (supports("topP") || !isUndefined(temperature) || !isUndefined(topP)),
-    temperature: independent && !isUndefined(configs.temperature),
+    temperature:
+      independent &&
+      supports("temperature") &&
+      !isUndefined(configs.temperature),
     maxTokens: !isUndefined(configs.maxTokens),
     topP: independent && supports("topP") && !isUndefined(configs.topP),
     topK: !isUndefined(configs.topK),

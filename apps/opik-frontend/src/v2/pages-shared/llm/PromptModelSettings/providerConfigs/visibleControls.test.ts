@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { hasVisibleControls } from "./visibleControls";
 import {
+  ModelConfigParam,
   OPTIMIZATION_UNSUPPORTED_PARAMS,
   RULE_UNSUPPORTED_PARAMS,
 } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -15,6 +16,14 @@ const ANTHROPIC_CONFIG = {
 };
 
 const RULE_CONFIG = { temperature: 0.4 };
+
+const TEMPERATURE_AND_MAX_TOKENS_CONFIG = {
+  temperature: 0.4,
+  maxCompletionTokens: 4000,
+};
+
+const RULE_UNSUPPORTED_PARAMS_WITH_TEMPERATURE: ReadonlySet<ModelConfigParam> =
+  new Set([...RULE_UNSUPPORTED_PARAMS, "temperature"]);
 
 describe("hasVisibleControls", () => {
   it("is false for a Claude model without sampling params on a rule", () => {
@@ -58,6 +67,64 @@ describe("hasVisibleControls", () => {
         RULE_UNSUPPORTED_PARAMS,
       ),
     ).toBe(true);
+  });
+
+  it("is false for an OpenAI model on a rule whose config carries max output tokens", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.OPEN_AI,
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+        { maxCompletionTokens: 4000 },
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH],
+  ])(
+    "is false for %s when the surface supports neither temperature nor max output tokens",
+    (provider, model) => {
+      expect(
+        hasVisibleControls(
+          provider,
+          model,
+          TEMPERATURE_AND_MAX_TOKENS_CONFIG,
+          RULE_UNSUPPORTED_PARAMS_WITH_TEMPERATURE,
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH],
+  ])(
+    "is true for %s when the surface supports max output tokens but not temperature",
+    (provider, model) => {
+      expect(
+        hasVisibleControls(
+          provider,
+          model,
+          TEMPERATURE_AND_MAX_TOKENS_CONFIG,
+          new Set<ModelConfigParam>(["temperature"]),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it("is false for openrouter with only a temperature the surface cannot store", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS_WITH_TEMPERATURE,
+      ),
+    ).toBe(false);
   });
 
   it("is false for a Gemini 3 model without a thinking row on a rule", () => {
