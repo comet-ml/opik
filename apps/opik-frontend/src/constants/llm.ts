@@ -318,6 +318,10 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
+  [PROVIDER_MODEL_TYPE.GPT_6_1_SOL]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
+  },
 };
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {

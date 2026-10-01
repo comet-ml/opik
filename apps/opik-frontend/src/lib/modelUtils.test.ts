@@ -1606,6 +1606,12 @@ describe("OpenAI request contract", () => {
       request: REASONING_REQUEST,
     },
     {
+      model: PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
+      reasoning: true,
+      effortOptions: ["low", "medium", "high", "xhigh"],
+      request: REASONING_REQUEST,
+    },
+    {
       model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
       reasoning: true,
       effortOptions: NONE_TO_XHIGH,
