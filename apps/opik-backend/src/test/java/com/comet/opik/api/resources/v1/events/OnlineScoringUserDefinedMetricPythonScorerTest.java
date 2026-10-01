@@ -47,8 +47,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -64,6 +66,10 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
     private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
             + " so there is no data to evaluate. Check the declared paths against the input, output and"
             + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
+
+    /** Restated from the shared helper: the entry line stays, only the false "Sending" claim is dropped. */
+    private static final String EVALUATING_LOG = "Evaluating {} '{}' sampled by rule '{}'";
+    private static final String SENDING_LOG = "Sending {} '{}' to Python evaluator: '{}'";
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -407,6 +413,39 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void doesNotClaimItSentDataWhenNoDeclaredArgumentResolves() {
+            // The user reads one sink, in order. The guarded run used to log "Sending traceId ...
+            // 'arguments=[]'" immediately before the warning saying there was nothing to evaluate, so the
+            // rule log contradicted itself one line apart. Asserted as the whole sequence on purpose: a
+            // test that merely checked the warning was present would still pass with that line back.
+            // Load-bearing: a mock Logger answers isInfoEnabled() false by default, which suppresses the
+            // "Sending" line on its own and would make this assertion pass with or without the fix. Stubbed
+            // true so the suppression under test is the only thing that can keep that line out. lenient()
+            // because the fixed code short-circuits on the empty map and never reaches the level check.
+            lenient().when(userFacingLogger.isInfoEnabled()).thenReturn(true);
+            var message = sampleMessageWithUnresolvableArguments();
+
+            scorer.score(message).block();
+
+            assertThat(userFacingMessages()).containsExactly(EVALUATING_LOG, UNRESOLVED_ARGUMENTS_LOG);
+        }
+
+        @Test
+        void stillReportsSendingWhenThereIsDataToSend() {
+            // The suppression has to be conditional on emptiness, not unconditional — a run that really
+            // does send still has to say so, and still after the "Evaluating" line.
+            when(userFacingLogger.isInfoEnabled()).thenReturn(true);
+            var message = sampleMessage();
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of()));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            assertThat(userFacingMessages()).containsSubsequence(EVALUATING_LOG, SENDING_LOG);
+        }
+
+        @Test
         void propagatesEvaluatorErrorAndLogsMessage() {
             var message = sampleMessage();
             var error = new RuntimeException("Python BE timeout");
@@ -423,6 +462,18 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     eq("Python BE timeout"));
             verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
         }
+    }
+
+    /**
+     * Every format string the user-facing sink received, in call order. Level checks such as
+     * {@code isInfoEnabled()} are recorded as zero-argument invocations and carry no message, so they are
+     * skipped rather than read as one.
+     */
+    private List<String> userFacingMessages() {
+        return mockingDetails(userFacingLogger).getInvocations().stream()
+                .filter(invocation -> invocation.getArguments().length > 0)
+                .map(invocation -> invocation.getArgument(0, String.class))
+                .toList();
     }
 
     private TraceToScoreUserDefinedMetricPython sampleMessage() {

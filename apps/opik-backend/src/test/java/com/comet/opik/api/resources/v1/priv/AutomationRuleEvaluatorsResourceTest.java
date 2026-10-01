@@ -1799,6 +1799,10 @@ class AutomationRuleEvaluatorsResourceTest {
 
                 // A user-configuration mismatch is not a backend fault, so nothing on this rule may be ERROR.
                 assertThat(logPage.content()).noneMatch(log -> log.level() == LogLevel.ERROR);
+
+                // And the rule log must not contradict itself: nothing was sent on this run, so the
+                // "Sending ... to Python evaluator" line must be absent from what the user actually reads.
+                assertThat(logPage.content()).noneMatch(log -> log.message().contains("to Python evaluator"));
             });
         }
 

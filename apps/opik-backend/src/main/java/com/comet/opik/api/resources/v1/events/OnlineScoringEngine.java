@@ -1608,7 +1608,11 @@ public class OnlineScoringEngine {
             userFacingLogger.info("Evaluating {} '{}' sampled by rule '{}'", entityLabel, entityId, ruleName);
             try {
                 Map<String, Object> data = dataSupplier.get();
-                if (userFacingLogger.isInfoEnabled()) {
+                // Only claim a send when there is something to send. An empty map means no declared
+                // argument resolved, and both callers fail the run on it rather than calling the
+                // evaluator (OPIK-8556) — so logging "Sending ... 'arguments=[]'" here would tell the
+                // user, in the same sink and one line earlier, the opposite of the warning that follows.
+                if (!data.isEmpty() && userFacingLogger.isInfoEnabled()) {
                     userFacingLogger.info("Sending {} '{}' to Python evaluator: '{}'",
                             entityLabel, entityId, summarizeEvaluatorInput(data));
                 }
