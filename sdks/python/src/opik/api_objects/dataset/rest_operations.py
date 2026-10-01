@@ -181,7 +181,20 @@ def stream_dataset_items(
         # over a dataset with one unreadable record look complete.
         records_received = len(dataset_items) + dropped_records["count"]
 
-        if should_retrieve_more_items and records_received < batch_size:
+        # A page cut short by nb_samples is truncated, not the end of the data:
+        # read_and_parse_stream stops once that many records have parsed, so the
+        # page never reaches batch_size even though more records follow. Treating
+        # it as a short page ended the stream after the first page, which with
+        # dataset_item_ids missed every item past it.
+        truncated_by_nb_samples = (
+            nb_samples is not None and records_received >= nb_samples
+        )
+
+        if (
+            should_retrieve_more_items
+            and not truncated_by_nb_samples
+            and records_received < batch_size
+        ):
             should_retrieve_more_items = False
 
         if (

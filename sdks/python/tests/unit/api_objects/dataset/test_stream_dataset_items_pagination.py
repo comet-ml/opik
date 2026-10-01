@@ -199,6 +199,30 @@ def test_stream_dataset_items__dataset_item_ids__still_filters_and_stops_when_al
     assert [item.id for item in items] == ["r07", "r05"]
 
 
+def test_stream_dataset_items__nb_samples_with_dataset_item_ids__reaches_the_second_page():
+    # nb_samples cuts read_and_parse_stream short, so the page is truncated rather
+    # than short. Reading that as end-of-stream stopped after the first page and
+    # missed any requested id that sat past it.
+    rows = [_row(f"r{i:02d}") for i in (9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2)]
+
+    client = Mock()
+    source = _RowSource(rows)
+    client.datasets.stream_dataset_items.side_effect = source.stream
+
+    items = list(
+        rest_operations.stream_dataset_items(
+            rest_client=client,
+            dataset_name="d",
+            project_name=None,
+            batch_size=5,
+            nb_samples=2,
+            dataset_item_ids=["r09", "r02"],
+        )
+    )
+
+    assert [item.id for item in items] == ["r09", "r02"]
+
+
 def test_stream_dataset_items__an_api_error_still_propagates():
     client = Mock()
     client.datasets.stream_dataset_items.side_effect = ApiError(status_code=500)
