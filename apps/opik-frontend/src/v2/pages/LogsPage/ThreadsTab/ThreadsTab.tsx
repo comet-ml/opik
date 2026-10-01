@@ -20,8 +20,9 @@ import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
-  useIsOnlyWindowEndBehind,
-  keepDataWhenOnlyWindowEndChanged,
+  useIsOnlyWindowBehind,
+  keepDataWhileWindowMoves,
+  windowQueryOptions,
   DATE_RANGE_PRESET_ALLTIME,
   IntervalWindow,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
@@ -422,8 +423,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       excludePresets: [DATE_RANGE_PRESET_ALLTIME],
       ...dateRangeConfig,
     });
-  const { intervalStart, intervalEnd, refetchInterval, reanchorToNow } =
-    intervalWindow;
+  const {
+    intervalStart,
+    intervalEnd,
+    selectionKey,
+    refetchInterval,
+    reanchorToNow,
+  } = intervalWindow;
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
     StringParam,
@@ -619,12 +625,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     useThreadList(threadListParams, {
       enabled: isTableDataEnabled,
       placeholderData: keepPreviousData,
-      refetchInterval,
+      ...windowQueryOptions(refetchInterval),
       refetchOnMount: false,
     });
-  const isOnlyWindowEndBehind = useIsOnlyWindowEndBehind(
-    threadListParams,
-    "toTime",
+  const isOnlyWindowBehind = useIsOnlyWindowBehind(
+    { ...threadListParams, selectionKey },
+    ["fromTime", "toTime"],
     isPlaceholderData,
   );
 
@@ -657,11 +663,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     logsSource: LOGS_SOURCE.sdk,
   };
   const { data: statisticData } = useThreadsStatistic(threadsStatisticParams, {
-    placeholderData: keepDataWhenOnlyWindowEndChanged(
+    placeholderData: keepDataWhileWindowMoves(
+      refetchInterval,
       threadsStatisticParams,
-      "toTime",
+      ["fromTime", "toTime"],
     ),
-    refetchInterval,
+    ...windowQueryOptions(refetchInterval),
   });
 
   // Cheap "does this project have any thread?" probe for the empty-state decision. Hits the LIMIT-1
@@ -1047,7 +1054,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           stickyHeader
           meta={meta}
           showLoadingOverlay={
-            isPlaceholderData && isFetching && !isOnlyWindowEndBehind
+            isPlaceholderData && isFetching && !isOnlyWindowBehind
           }
         />
         <PageBodyStickyContainer

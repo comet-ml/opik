@@ -1,14 +1,31 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import React from "react";
+import {
+  describe,
+  expect,
+  it,
+  vi,
+  beforeEach,
+  afterEach,
+  onTestFinished,
+} from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { focusManager } from "@tanstack/react-query";
+import {
+  focusManager,
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { DateRangeValue, PRESET_DATE_RANGES } from "@/shared/DateRangeSelect";
 import {
-  keepDataWhenOnlyWindowEndChanged,
+  keepDataWhenOnlyWindowChanged,
   REANCHOR_INTERVAL,
   useIntervalBounds,
-  useIsOnlyWindowEndBehind,
+  useIsOnlyWindowBehind,
+  windowQueryOptions,
+  keepDataWhileWindowMoves,
 } from "./useIntervalBounds";
 
 dayjs.extend(utc);
@@ -25,16 +42,69 @@ const pastCustomRange: DateRangeValue = {
   to: new Date("2024-01-10"),
 };
 
+const createWrapper = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const Wrapper = ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
+  return Wrapper;
+};
+
 const renderIntervalBounds = (dateRange: DateRangeValue) =>
   renderHook(
     ({ range }: { range: DateRangeValue }) => useIntervalBounds(range),
-    { initialProps: { range: dateRange } },
+    { initialProps: { range: dateRange }, wrapper: createWrapper() },
+  );
+
+type FetchWindow = (toTime: string, signal: AbortSignal) => Promise<object>;
+
+const renderWindowQuery = (fetchWindow: FetchWindow) =>
+  renderHook(
+    () => {
+      const intervalWindow = useIntervalBounds(PRESET_DATE_RANGES.past7days);
+      useQuery({
+        queryKey: [
+          "window-query",
+          { toTime: intervalWindow.intervalEnd },
+        ] as const,
+        queryFn: ({ queryKey: [, { toTime }], signal }) =>
+          fetchWindow(toTime, signal),
+        ...windowQueryOptions(intervalWindow.refetchInterval),
+      });
+      return intervalWindow;
+    },
+    { wrapper: createWrapper() },
   );
 
 const tick = (ms = REANCHOR_INTERVAL) =>
   act(() => {
     vi.advanceTimersByTime(ms);
   });
+
+const settle = () =>
+  act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+const mockPageVisibility = () => {
+  let visibilityState: DocumentVisibilityState = "visible";
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => visibilityState,
+  });
+  onTestFinished(() => {
+    Reflect.deleteProperty(document, "visibilityState");
+  });
+
+  return (visibility: DocumentVisibilityState) =>
+    act(async () => {
+      visibilityState = visibility;
+      window.dispatchEvent(new Event("visibilitychange"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+};
+
+const fetchedWindowEnds = (fetchWindow: ReturnType<typeof vi.fn>) =>
+  fetchWindow.mock.calls.map(([toTime]) => toTime);
 
 describe("useIntervalBounds", () => {
   beforeEach(() => {
@@ -44,6 +114,7 @@ describe("useIntervalBounds", () => {
 
   afterEach(() => {
     focusManager.setFocused(undefined);
+    onlineManager.setOnline(true);
     vi.useRealTimers();
   });
 
@@ -149,9 +220,19 @@ describe("useIntervalBounds", () => {
     });
 
     it("should not move the window on the tick when the automatic reanchor is off", () => {
-      const { result } = renderHook(() =>
-        useIntervalBounds(PRESET_DATE_RANGES.past7days, false),
+      const { result } = renderHook(
+        () => useIntervalBounds(PRESET_DATE_RANGES.past7days, false),
+        { wrapper: createWrapper() },
       );
+
+      tick();
+
+      expect(result.current.intervalEnd).toBe(now.utc().format());
+    });
+
+    it("should not move the window while the connection is down", () => {
+      const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
+      onlineManager.setOnline(false);
 
       tick();
 
@@ -209,13 +290,194 @@ describe("useIntervalBounds", () => {
       );
     });
   });
+
+  describe("across local midnight", () => {
+    const midnight = dayjs(PRESET_DATE_RANGES.past24hours.to)
+      .startOf("day")
+      .add(1, "day");
+    const beforeMidnight = midnight.subtract(20, "seconds");
+    const ticksUntil = (time: dayjs.Dayjs) =>
+      Math.max(0, Math.ceil(time.diff(dayjs()) / REANCHOR_INTERVAL)) *
+      REANCHOR_INTERVAL;
+
+    beforeEach(() => {
+      vi.setSystemTime(beforeMidnight.toDate());
+    });
+
+    it("should keep a preset live and roll its start forward like a fresh load", () => {
+      const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
+      const startAtLoad = result.current.intervalStart;
+
+      tick();
+      expect(dayjs().isAfter(midnight)).toBe(true);
+      expect(result.current.intervalEnd).toBe(dayjs().utc().format());
+      expect(result.current.refetchInterval).toBe(false);
+
+      tick(ticksUntil(beforeMidnight.utc().endOf("day")));
+      expect(result.current.intervalEnd).toBe(dayjs().utc().format());
+      expect(result.current.intervalStart).toBe(
+        dayjs().utc().subtract(6, "days").startOf("day").format(),
+      );
+      expect(result.current.intervalStart).not.toBe(startAtLoad);
+
+      vi.setSystemTime(dayjs().add(10, "seconds").toDate());
+      let moved = false;
+      act(() => {
+        moved = result.current.reanchorToNow();
+      });
+      expect(moved).toBe(true);
+      expect(result.current.intervalEnd).toBe(dayjs().utc().format());
+    });
+
+    it("should freeze a custom range ending today into its past window at midnight, as intended", () => {
+      const endingToday: DateRangeValue = {
+        from: midnight.subtract(4, "days").toDate(),
+        to: midnight.subtract(1, "ms").toDate(),
+      };
+      const pastWindowEnd = dayjs(endingToday.to).utc().endOf("day").format();
+      const { result } = renderIntervalBounds(endingToday);
+      expect(result.current.refetchInterval).toBe(false);
+
+      tick();
+      const { intervalStart, intervalEnd } = result.current;
+      tick(5 * REANCHOR_INTERVAL);
+
+      expect(intervalEnd).toBe(pastWindowEnd);
+      expect(result.current.intervalStart).toBe(intervalStart);
+      expect(result.current.intervalEnd).toBe(pastWindowEnd);
+      expect(result.current.refetchInterval).toBe(REANCHOR_INTERVAL);
+      let moved = true;
+      act(() => {
+        moved = result.current.reanchorToNow();
+      });
+      expect(moved).toBe(false);
+    });
+  });
+
+  describe("with the window's queries", () => {
+    it("should not move the window while one of its requests is in flight, then move on the next tick", async () => {
+      let resolveRequest: (data: object) => void = () => {};
+      const fetchWindow = vi.fn<FetchWindow>(
+        () => new Promise((resolve) => (resolveRequest = resolve)),
+      );
+      const { result } = renderWindowQuery(fetchWindow);
+      const [, signal] = fetchWindow.mock.calls[0];
+
+      tick();
+      tick();
+      expect(result.current.intervalEnd).toBe(now.utc().format());
+      expect(signal.aborted).toBe(false);
+
+      await act(async () => resolveRequest({}));
+      tick();
+
+      expect(result.current.intervalEnd).toBe(
+        now
+          .add(3 * REANCHOR_INTERVAL, "ms")
+          .utc()
+          .format(),
+      );
+      expect(fetchedWindowEnds(fetchWindow)).toEqual([
+        now.utc().format(),
+        result.current.intervalEnd,
+      ]);
+    });
+
+    it("should move the window as soon as the page is visible again, with one request for the new window", async () => {
+      const setPageVisibility = mockPageVisibility();
+      const fetchWindow = vi.fn<FetchWindow>().mockResolvedValue({});
+      const { result } = renderWindowQuery(fetchWindow);
+      await settle();
+      await setPageVisibility("hidden");
+      tick(2 * REANCHOR_INTERVAL);
+      expect(result.current.intervalEnd).toBe(now.utc().format());
+
+      await setPageVisibility("visible");
+
+      const returnedAt = now
+        .add(2 * REANCHOR_INTERVAL, "ms")
+        .utc()
+        .format();
+      expect(result.current.intervalEnd).toBe(returnedAt);
+      expect(fetchedWindowEnds(fetchWindow)).toEqual([
+        now.utc().format(),
+        returnedAt,
+      ]);
+    });
+
+    it("should move the window as soon as the connection is back, with one request for the new window", async () => {
+      const fetchWindow = vi.fn<FetchWindow>().mockResolvedValue({});
+      const { result } = renderWindowQuery(fetchWindow);
+      await settle();
+      onlineManager.setOnline(false);
+      tick(2 * REANCHOR_INTERVAL);
+      expect(result.current.intervalEnd).toBe(now.utc().format());
+
+      await act(async () => {
+        onlineManager.setOnline(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      const reconnectedAt = now
+        .add(2 * REANCHOR_INTERVAL, "ms")
+        .utc()
+        .format();
+      expect(result.current.intervalEnd).toBe(reconnectedAt);
+      expect(fetchedWindowEnds(fetchWindow)).toEqual([
+        now.utc().format(),
+        reconnectedAt,
+      ]);
+    });
+  });
 });
 
-describe("keepDataWhenOnlyWindowEndChanged", () => {
+describe("windowQueryOptions", () => {
+  it("should leave focus, reconnect and a short cache life to a moving window", () => {
+    expect(windowQueryOptions(false)).toEqual({
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      gcTime: 2 * 60 * 1000,
+    });
+  });
+
+  it("should keep the query defaults for a fixed window", () => {
+    expect(windowQueryOptions(REANCHOR_INTERVAL)).toEqual({
+      refetchInterval: REANCHOR_INTERVAL,
+    });
+  });
+});
+
+describe("keepDataWhileWindowMoves", () => {
+  const params = { projectId: "project-1", fromTime: "a", toTime: "b" };
+
+  it("should keep data across a slide only while the window moves by itself", () => {
+    const keep = keepDataWhileWindowMoves(false, params, [
+      "fromTime",
+      "toTime",
+    ]);
+    const previousQuery = { queryKey: ["stats", params] };
+
+    expect(keep).toBeTypeOf("function");
+    expect(keep?.({ stats: [] }, previousQuery)).toEqual({ stats: [] });
+  });
+
+  it("should leave a fixed window with the query default of no placeholder", () => {
+    expect(
+      keepDataWhileWindowMoves(REANCHOR_INTERVAL, params, [
+        "fromTime",
+        "toTime",
+      ]),
+    ).toBeUndefined();
+  });
+});
+
+describe("keepDataWhenOnlyWindowChanged", () => {
   const previousData = { stats: [] };
-  const windowStart = "2024-01-03T00:00:00Z";
-  const windowEnd = "2024-01-10T12:00:00Z";
-  const movedWindowEnd = "2024-01-10T12:00:30Z";
+  const windowStart = "2024-01-10T11:00:00Z";
+  const windowEnd = "2024-01-10T11:59:50Z";
+  const movedWindowEnd = "2024-01-10T12:00:20Z";
+  const rolledWindowStart = "2024-01-10T12:00:00Z";
   const statsParams = {
     projectId: "project-1",
     filters: [{ field: "tags", operator: "contains", value: "a" }],
@@ -226,6 +488,7 @@ describe("keepDataWhenOnlyWindowEndChanged", () => {
   const chartParams = {
     projectId: "project-1",
     metricName: "THREAD_COUNT",
+    interval: "HOURLY",
     intervalStart: windowStart,
     intervalEnd: windowEnd,
   };
@@ -233,10 +496,16 @@ describe("keepDataWhenOnlyWindowEndChanged", () => {
     queryKey: ["key", params],
   });
 
-  it("should keep the data when only the window end moved", () => {
-    const placeholder = keepDataWhenOnlyWindowEndChanged(
-      { ...statsParams, toTime: movedWindowEnd },
-      "toTime",
+  it.each([
+    ["only the window end moved", { toTime: movedWindowEnd }],
+    [
+      "the window start rolled forward with its end",
+      { fromTime: rolledWindowStart, toTime: movedWindowEnd },
+    ],
+  ])("should keep the data when %s", (_, change) => {
+    const placeholder = keepDataWhenOnlyWindowChanged(
+      { ...statsParams, ...change },
+      ["fromTime", "toTime"],
     );
 
     expect(placeholder(previousData, previousQuery(statsParams))).toBe(
@@ -245,14 +514,18 @@ describe("keepDataWhenOnlyWindowEndChanged", () => {
   });
 
   it.each([
-    ["window start", { fromTime: "2024-01-04T00:00:00Z" }],
     ["filters", { filters: [] }],
     ["search", { search: "error" }],
     ["project", { projectId: "project-2" }],
   ])("should drop the data when the %s changed", (_, change) => {
-    const placeholder = keepDataWhenOnlyWindowEndChanged(
-      { ...statsParams, ...change, toTime: movedWindowEnd },
-      "toTime",
+    const placeholder = keepDataWhenOnlyWindowChanged(
+      {
+        ...statsParams,
+        ...change,
+        fromTime: rolledWindowStart,
+        toTime: movedWindowEnd,
+      },
+      ["fromTime", "toTime"],
     );
 
     expect(placeholder(previousData, previousQuery(statsParams))).toBe(
@@ -260,10 +533,14 @@ describe("keepDataWhenOnlyWindowEndChanged", () => {
     );
   });
 
-  it("should keep the chart data when only its interval end moved", () => {
-    const placeholder = keepDataWhenOnlyWindowEndChanged(
-      { ...chartParams, intervalEnd: movedWindowEnd },
-      "intervalEnd",
+  it("should keep the chart data when its interval rolled forward", () => {
+    const placeholder = keepDataWhenOnlyWindowChanged(
+      {
+        ...chartParams,
+        intervalStart: rolledWindowStart,
+        intervalEnd: movedWindowEnd,
+      },
+      ["intervalStart", "intervalEnd"],
     );
 
     expect(placeholder(previousData, previousQuery(chartParams))).toBe(
@@ -271,10 +548,13 @@ describe("keepDataWhenOnlyWindowEndChanged", () => {
     );
   });
 
-  it("should drop the chart data when the metric changed", () => {
-    const placeholder = keepDataWhenOnlyWindowEndChanged(
-      { ...chartParams, metricName: "THREAD_COST" },
-      "intervalEnd",
+  it.each([
+    ["metric", { metricName: "THREAD_COST" }],
+    ["interval", { interval: "DAILY" }],
+  ])("should drop the chart data when the %s changed", (_, change) => {
+    const placeholder = keepDataWhenOnlyWindowChanged(
+      { ...chartParams, ...change, intervalEnd: movedWindowEnd },
+      ["intervalStart", "intervalEnd"],
     );
 
     expect(placeholder(previousData, previousQuery(chartParams))).toBe(
@@ -283,9 +563,9 @@ describe("keepDataWhenOnlyWindowEndChanged", () => {
   });
 
   it("should compare only the fields the previous query was keyed on", () => {
-    const placeholder = keepDataWhenOnlyWindowEndChanged(
+    const placeholder = keepDataWhenOnlyWindowChanged(
       { ...statsParams, type: "spans", toTime: movedWindowEnd },
-      "toTime",
+      ["fromTime", "toTime"],
     );
 
     expect(placeholder(previousData, previousQuery(statsParams))).toBe(
@@ -294,63 +574,101 @@ describe("keepDataWhenOnlyWindowEndChanged", () => {
   });
 
   it("should drop the data when there is no previous query", () => {
-    const placeholder = keepDataWhenOnlyWindowEndChanged(statsParams, "toTime");
+    const placeholder = keepDataWhenOnlyWindowChanged(statsParams, [
+      "fromTime",
+      "toTime",
+    ]);
 
     expect(placeholder(undefined, undefined)).toBe(undefined);
   });
 });
 
-describe("useIsOnlyWindowEndBehind", () => {
-  type ListParams = { page: number; toTime: string };
+describe("useIsOnlyWindowBehind", () => {
+  type ListParams = {
+    page: number;
+    fromTime: string;
+    toTime: string;
+    selectionKey: string;
+  };
   type Props = { params: ListParams; isPlaceholderData: boolean };
 
-  const renderIsOnlyWindowEndBehind = (initialProps: Props) =>
+  const settledParams: ListParams = {
+    page: 1,
+    fromTime: "s0",
+    toTime: "t0",
+    selectionKey: "past24hours",
+  };
+
+  const renderIsOnlyWindowBehind = (initialProps: Props) =>
     renderHook(
       ({ params, isPlaceholderData }: Props) =>
-        useIsOnlyWindowEndBehind(params, "toTime", isPlaceholderData),
+        useIsOnlyWindowBehind(
+          params,
+          ["fromTime", "toTime"],
+          isPlaceholderData,
+        ),
       { initialProps },
     );
 
   it("should be false while the rows on screen are the requested ones", () => {
-    const { result } = renderIsOnlyWindowEndBehind({
-      params: { page: 1, toTime: "t0" },
+    const { result } = renderIsOnlyWindowBehind({
+      params: settledParams,
       isPlaceholderData: false,
     });
 
     expect(result.current).toBe(false);
   });
 
-  it("should be true when the rows on screen differ only by an older window end", () => {
-    const { result, rerender } = renderIsOnlyWindowEndBehind({
-      params: { page: 1, toTime: "t0" },
+  it.each([
+    ["an older window end", { toTime: "t1" }],
+    ["an older window start and end", { fromTime: "s1", toTime: "t1" }],
+  ])(
+    "should be true when the rows on screen differ only by %s",
+    (_, change) => {
+      const { result, rerender } = renderIsOnlyWindowBehind({
+        params: settledParams,
+        isPlaceholderData: false,
+      });
+
+      rerender({
+        params: { ...settledParams, ...change },
+        isPlaceholderData: true,
+      });
+
+      expect(result.current).toBe(true);
+    },
+  );
+
+  it.each([
+    ["the page", { page: 2 }],
+    ["the range selection", { selectionKey: "past7days", fromTime: "s1" }],
+  ])("should be false when the user changed %s", (_, change) => {
+    const { result, rerender } = renderIsOnlyWindowBehind({
+      params: settledParams,
       isPlaceholderData: false,
     });
 
-    rerender({ params: { page: 1, toTime: "t1" }, isPlaceholderData: true });
-
-    expect(result.current).toBe(true);
-  });
-
-  it("should be false when the user changed something else", () => {
-    const { result, rerender } = renderIsOnlyWindowEndBehind({
-      params: { page: 1, toTime: "t0" },
-      isPlaceholderData: false,
+    rerender({
+      params: { ...settledParams, ...change },
+      isPlaceholderData: true,
     });
-
-    rerender({ params: { page: 2, toTime: "t0" }, isPlaceholderData: true });
 
     expect(result.current).toBe(false);
   });
 
   it("should compare against the rows that settled last", () => {
-    const { result, rerender } = renderIsOnlyWindowEndBehind({
-      params: { page: 1, toTime: "t0" },
+    const { result, rerender } = renderIsOnlyWindowBehind({
+      params: settledParams,
       isPlaceholderData: false,
     });
-    rerender({ params: { page: 2, toTime: "t0" }, isPlaceholderData: true });
-    rerender({ params: { page: 2, toTime: "t0" }, isPlaceholderData: false });
+    const secondPage = { ...settledParams, page: 2 };
+    rerender({ params: secondPage, isPlaceholderData: true });
+    rerender({ params: secondPage, isPlaceholderData: false });
 
-    rerender({ params: { page: 2, toTime: "t1" }, isPlaceholderData: true });
+    rerender({
+      params: { ...secondPage, toTime: "t1" },
+      isPlaceholderData: true,
+    });
 
     expect(result.current).toBe(true);
   });
