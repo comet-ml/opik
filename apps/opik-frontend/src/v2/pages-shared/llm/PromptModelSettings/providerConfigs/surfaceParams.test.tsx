@@ -83,7 +83,7 @@ describe("controls an evaluator rule cannot store", () => {
     expect(screen.queryByText("Reasoning effort")).not.toBeInTheDocument();
   });
 
-  it("keeps the Anthropic effort, which a rule stores in custom_parameters.output_config", () => {
+  it("renders the Anthropic effort control on a rule", () => {
     renderPanel(
       <AnthropicModelConfigs
         configs={ANTHROPIC_CONFIG}
@@ -147,7 +147,7 @@ describe("a panel left with no control", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("keeps the effort for a Claude model without sampling params on a rule", () => {
+  it("renders the effort control but no temperature on a rule for a Claude model without sampling params", () => {
     renderPanel(
       <AnthropicModelConfigs
         configs={ANTHROPIC_CONFIG}
