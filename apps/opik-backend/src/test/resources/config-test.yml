@@ -932,7 +932,7 @@ serviceToggles:
   # Description: Whether or not automatic annotation queue population is enabled. When false the score
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
   #   automation controls on annotation queues.
-  annotationQueueAutomationEnabled: "false"
+  annotationQueueAutomationEnabled: "true"
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
