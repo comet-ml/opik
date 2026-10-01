@@ -93,7 +93,8 @@ paths:
                   - id: c2d3e4f5-a6b7-4c3e-9a2b-1b1a7f3d2f5a
                     type: threshold:latency
                     config_value:
-                      threshold_ms: '500'
+                      threshold: '500'
+                      window: '3600'
             project_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
   /v1/private/alerts/webhooks/examples:
     get:

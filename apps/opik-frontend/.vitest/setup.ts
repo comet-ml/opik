@@ -25,3 +25,16 @@ global.Worker = class Worker {
     removeEventListener() {}
     dispatchEvent() { return true; }
   } as any;
+// jsdom has no Web Animations API, which MorphDialog uses to morph modal <-> panel
+if (typeof Element.prototype.animate === 'undefined') {
+  Element.prototype.animate = function () {
+    return {
+      cancel() {},
+      finish() {},
+      addEventListener() {},
+      removeEventListener() {},
+      onfinish: null,
+      finished: Promise.resolve(),
+    } as unknown as Animation;
+  };
+}

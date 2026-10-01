@@ -14,6 +14,7 @@ import pytest
 
 from opik.cli import assistants
 from opik.configurator import consent
+from opik.configurator.mcp import install as mcp_install
 
 PROCEED = consent.Verdict(consent.Decision.PROCEED, consent.Reason.REQUESTED)
 DECLINE = consent.Verdict(consent.Decision.SKIP, consent.Reason.DECLINED)
@@ -45,9 +46,15 @@ def _install_result(succeeded=True, **overrides):
     return skills_install.InstallResult(**fields)
 
 
+def _mcp_report(registered=("cursor",), failed=(), verified=True):
+    return mcp_install.InstallReport(
+        registered=tuple(registered), failed=tuple(failed), verified=verified
+    )
+
+
 @pytest.fixture
 def mcp_spy(monkeypatch):
-    spy = mock.Mock(return_value=["cursor"])
+    spy = mock.Mock(return_value=_mcp_report())
     monkeypatch.setattr(assistants.mcp_installer, "setup_mcp_server", spy)
     return spy
 
@@ -117,21 +124,27 @@ class TestTheHalvesAreIndependent:
 
         mcp_spy.assert_called_once()
         skills_spy.assert_not_called()
-        assert outcome == assistants.Outcome(clients=1, skills=False)
+        assert outcome == assistants.Outcome(
+            clients=1,
+            skills=False,
+            registered_clients=("cursor",),
+            verified=True,
+            skills_decision="declined",
+        )
 
     def test_both_declined__nothing_runs(self, mcp_spy, skills_spy, rich_view):
         outcome = assistants.setup(_params(), install_mcp=False, skills=DECLINE)
 
         mcp_spy.assert_not_called()
         skills_spy.assert_not_called()
-        assert outcome is assistants.NOTHING_DONE
+        assert outcome == assistants.NOTHING_DONE._replace(skills_decision="declined")
 
 
 class TestPackTargets:
     def test_pack_goes_to_the_clients_the_server_reached(
         self, mcp_spy, skills_spy, rich_view
     ):
-        mcp_spy.return_value = ["cursor", "codex"]
+        mcp_spy.return_value = _mcp_report(["cursor", "codex"])
 
         assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
@@ -140,11 +153,30 @@ class TestPackTargets:
     def test_server_registered_nothing__falls_back_to_detected(
         self, mcp_spy, skills_spy, rich_view
     ):
-        mcp_spy.return_value = []
+        mcp_spy.return_value = _mcp_report([])
 
         assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
         assert skills_spy.call_args.args[0] == ["vscode"]
+
+    def test_client_not_listed__the_pack_follows_no_client(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """ "None of these is mine" is not an invitation to write to all of them.
+
+        The fallback above is right for "not now" — the clients are still the
+        user's, the server step was just declined. It is wrong for the user who
+        has just said the detected list is not about them: it put the pack in
+        every one of the clients they disowned. Naming none installs the shared
+        copy and links nowhere.
+        """
+        mcp_spy.return_value = mcp_install.InstallReport(
+            registered=(), declined=True, manual=True
+        )
+
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+
+        assert skills_spy.call_args.args[0] == []
 
 
 class TestAsking:
@@ -171,13 +203,20 @@ class TestAsking:
 
         confirm.assert_not_called()
 
-    def test_the_pack_is_recommended_and_defaults_to_yes(
-        self, mcp_spy, skills_spy, rich_view, confirm
-    ):
+    def test_the_pack_defaults_to_yes(self, mcp_spy, skills_spy, rich_view, confirm):
         assistants.setup(_params(), install_mcp=True, skills=ASK)
 
         assert confirm.call_args.kwargs["default"] is True
-        assert "Recommended" in confirm.call_args.args[0]
+
+    def test_the_pack_is_recommended_on_its_headline(
+        self, mcp_spy, skills_spy, rich_view, confirm, capsys
+    ):
+        """Same shape as the MCP question: the recommendation rides the headline."""
+        assistants.setup(_params(), install_mcp=True, skills=ASK)
+
+        out = capsys.readouterr().out
+        assert "Download the Opik skill pack for your AI client?" in out
+        assert "(Recommended)" in out
 
     def test_the_prompt_does_not_relist_the_clients(
         self, mcp_spy, skills_spy, rich_view, confirm
@@ -209,7 +248,7 @@ class TestClosingBlock:
         assert outcome.skills is False
 
     def test_omits_a_server_that_reached_nothing(self, mcp_spy, skills_spy, rich_view):
-        mcp_spy.return_value = []
+        mcp_spy.return_value = _mcp_report([])
 
         assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
@@ -241,3 +280,57 @@ class TestPassThrough:
 
         assert mcp_spy.call_args.kwargs["api_key"] == "key"
         assert mcp_spy.call_args.kwargs["workspace"] == "acme-ai"
+
+
+class TestSkillsDecisionIsRecorded:
+    """The pack's answer is only known here, so only this can report it.
+
+    `skills_installed=False` covered three different things — declined, never
+    asked, and asked-for-but-failed-to-download — which made the pack's own
+    accept rate unmeasurable.
+    """
+
+    def test_asked_and_accepted__requested(
+        self, mcp_spy, skills_spy, rich_view, confirm
+    ):
+        confirm.return_value = True
+
+        outcome = assistants.setup(_params(), install_mcp=True, skills=ASK)
+
+        assert outcome.skills_decision == "requested"
+
+    def test_asked_and_declined__declined(
+        self, mcp_spy, skills_spy, rich_view, confirm
+    ):
+        confirm.return_value = False
+
+        outcome = assistants.setup(_params(), install_mcp=True, skills=ASK)
+
+        assert outcome.skills_decision == "declined"
+
+    def test_flag__requested_without_asking(self, mcp_spy, skills_spy, rich_view):
+        outcome = assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+
+        assert outcome.skills_decision == "requested"
+
+    def test_never_asked__carries_the_verdict_reason(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        nothing_detected = consent.Verdict(
+            consent.Decision.SKIP, consent.Reason.NOTHING_DETECTED
+        )
+
+        outcome = assistants.setup(_params(), install_mcp=True, skills=nothing_detected)
+
+        assert outcome.skills_decision == "nothing_detected"
+
+    def test_accepted_but_install_failed__is_still_requested(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """A failed download is not a decline — the funnel has to tell them apart."""
+        skills_spy.return_value = _install_result(succeeded=False)
+
+        outcome = assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+
+        assert outcome.skills is False
+        assert outcome.skills_decision == "requested"

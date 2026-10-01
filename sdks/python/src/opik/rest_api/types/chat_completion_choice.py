@@ -3,7 +3,9 @@
 import typing
 
 import pydantic
+import typing_extensions
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from ..core.serialization import FieldMetadata
 from .assistant_message import AssistantMessage
 from .delta import Delta
 from .log_probs import LogProbs
@@ -13,7 +15,7 @@ class ChatCompletionChoice(UniversalBaseModel):
     index: typing.Optional[int] = None
     message: typing.Optional[AssistantMessage] = None
     delta: typing.Optional[Delta] = None
-    finish_reason: typing.Optional[str] = None
+    finish_reason: typing_extensions.Annotated[typing.Optional[str], FieldMetadata(alias="finishReason")] = None
     logprobs: typing.Optional[LogProbs] = None
 
     if IS_PYDANTIC_V2:

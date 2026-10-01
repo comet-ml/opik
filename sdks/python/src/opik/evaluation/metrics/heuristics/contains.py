@@ -1,5 +1,6 @@
 from typing import Any, Optional
 
+from opik.exceptions import MetricComputationError
 from .. import base_metric, score_result
 
 
@@ -44,6 +45,12 @@ class Contains(base_metric.BaseMetric):
         Traceback (most recent call last):
             ...
         ValueError: Invalid reference string provided. Reference must be a non-empty string.
+        >>> # A reference that is not a string is invalid
+        >>> contains_metric = Contains(reference=5)
+        >>> contains_metric.score("Hello")
+        Traceback (most recent call last):
+            ...
+        ValueError: Invalid reference string provided. Reference must be a string, got int.
     """
 
     def __init__(
@@ -77,6 +84,10 @@ class Contains(base_metric.BaseMetric):
         Returns:
             score_result.ScoreResult: A ScoreResult object with a value of 1.0 if the reference
                 is found in the output, 0.0 otherwise.
+
+        Raises:
+            ValueError: If no reference is available, or the reference is empty or not a string.
+            MetricComputationError: If `output` is not a string.
         """
         # Use provided reference, else fall back to default
         ref = reference if reference is not None else self._default_reference
@@ -87,10 +98,23 @@ class Contains(base_metric.BaseMetric):
                 "No reference string provided. Either pass `reference` to `score()` or set a default reference when creating the metric."
             )
 
+        # Handle a non-string reference before it reaches `.lower()` / `in`
+        if not isinstance(ref, str):
+            raise ValueError(
+                f"Invalid reference string provided. Reference must be a string, "
+                f"got {type(ref).__name__}."
+            )
+
         # Handle empty string separately
         if ref == "":
             raise ValueError(
                 "Invalid reference string provided. Reference must be a non-empty string."
+            )
+
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"Contains metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
             )
 
         value = output if self._case_sensitive else output.lower()

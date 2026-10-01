@@ -15,6 +15,7 @@ export type LLMMessageFormat =
   | "langchain"
   | "anthropic"
   | "google"
+  | "playground"
   | "openinference";
 
 export type LLMMessagePrettifyConfig = {

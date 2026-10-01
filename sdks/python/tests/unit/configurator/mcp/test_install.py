@@ -718,7 +718,9 @@ class TestWorkspaceAmbiguity:
 
         assert message is not None
         assert "acme" in message and "beta" in message
-        assert "opik configure" in message
+        # Names how to set the workspace, not "run `opik configure`": this fires
+        # from inside `opik configure` too, where that instruction is a loop.
+        assert "OPIK_WORKSPACE" in message
 
     def test_workspace_ambiguity__named_workspace__is_fine(self, monkeypatch):
         list_spy = mock.Mock()
@@ -927,7 +929,9 @@ class TestCandidateAndConfirm:
         candidates = [_target("codex", True, mock.Mock())]
 
         assert (
-            install._confirm_targets(candidates, ["codex"], False, RecordingView())
+            install._confirm_targets(
+                candidates, ["codex"], False, RecordingView()
+            ).targets
             == candidates
         )
 
@@ -938,7 +942,7 @@ class TestCandidateAndConfirm:
         candidates = [_target("codex", True, mock.Mock())]
 
         assert (
-            install._confirm_targets(candidates, None, True, RecordingView())
+            install._confirm_targets(candidates, None, True, RecordingView()).targets
             == candidates
         )
 
@@ -947,7 +951,7 @@ class TestCandidateAndConfirm:
         view = RecordingView()
         view.host_choice = []
 
-        assert install._confirm_targets(candidates, None, False, view) == []
+        assert install._confirm_targets(candidates, None, False, view).targets == []
         assert view.choose_calls
 
 
@@ -986,7 +990,7 @@ class TestTerminalRequired:
             view=view,
         )
 
-        assert result == []
+        assert result == install.NOTHING_INSTALLED
         install_spy.assert_not_called()
         assert view.skips, "the user is told why nothing happened"
 
@@ -1014,7 +1018,7 @@ class TestTerminalRequired:
             view=RecordingView(),
         )
 
-        assert result == ["cursor"]
+        assert result.registered == ("cursor",)
         install_spy.assert_called_once()
 
     def test_confirm_targets__terminal__still_asks(self, monkeypatch):
@@ -1023,5 +1027,162 @@ class TestTerminalRequired:
         view = RecordingView()
         view.host_choice = []
 
-        assert install._confirm_targets(candidates, None, False, view) == []
+        assert install._confirm_targets(candidates, None, False, view).targets == []
         assert view.choose_calls
+
+
+def _stale_install(monkeypatch, version="0.2.12"):
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    monkeypatch.setattr(install.uv_tool, "installed_version", lambda: version)
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    return install_spy
+
+
+def test_setup_mcp_server__stale_tool_install__removed_only_on_approval(monkeypatch):
+    _stale_install(monkeypatch)
+    uninstall = mock.Mock(return_value=(True, "removed"))
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    monkeypatch.setattr(
+        install.interactive_helpers,
+        "ask_user_for_approval_default_no",
+        lambda message: True,
+    )
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    uninstall.assert_called_once()
+    assert any("Removed opik-mcp 0.2.12" in note for note in args["view"].notes)
+
+
+def test_setup_mcp_server__stale_tool_install__declined__is_left_alone(monkeypatch):
+    _stale_install(monkeypatch)
+    uninstall = mock.Mock()
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    monkeypatch.setattr(
+        install.interactive_helpers,
+        "ask_user_for_approval_default_no",
+        lambda message: False,
+    )
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    # Saying no is a decision, not a failure: nothing is deleted and the setup
+    # still completes.
+    uninstall.assert_not_called()
+    assert any("Left in place" in note for note in args["view"].notes)
+
+
+def test_setup_mcp_server__stale_tool_install__headless__reports_without_asking(
+    monkeypatch,
+):
+    _stale_install(monkeypatch)
+    uninstall = mock.Mock()
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    monkeypatch.setattr(install.interactive_helpers, "is_interactive", lambda: False)
+
+    args = _make_args(host_keys=["cursor"])
+    install.setup_mcp_server(**args)
+
+    # No terminal means nobody to ask, so it must not delete on its own.
+    uninstall.assert_not_called()
+    assert any("uv tool uninstall opik-mcp" in note for note in args["view"].notes)
+
+
+def test_setup_mcp_server__stale_install_removed_before_the_prefetch(
+    monkeypatch, prefetch_run
+):
+    # Warming the cache while the install is still there warms an environment the
+    # client would never reach.
+    _stale_install(monkeypatch)
+    order = []
+    monkeypatch.setattr(
+        install.uv_tool,
+        "uninstall",
+        lambda: (order.append("uninstall"), (True, "removed"))[1],
+    )
+    monkeypatch.setattr(
+        install.interactive_helpers,
+        "ask_user_for_approval_default_no",
+        lambda message: True,
+    )
+    prefetch_run.side_effect = lambda *a, **k: (
+        order.append("prefetch"),
+        subprocess.CompletedProcess([], 0, "", ""),
+    )[1]
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**_make_args())
+
+    assert order == ["uninstall", "prefetch"]
+
+
+def test_setup_mcp_server__no_tool_install__asks_nothing(monkeypatch):
+    _stale_install(monkeypatch, version=None)
+    approval = mock.Mock()
+    monkeypatch.setattr(
+        install.interactive_helpers, "ask_user_for_approval_default_no", approval
+    )
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    approval.assert_not_called()
+    assert args["view"].notes == []
+
+
+class TestClientNotListed:
+    """ "My AI client is not listed" has to end in something actionable.
+
+    Without it, a client Opik cannot detect was a silent decline — the user had
+    no way out and the funnel counted them as a refusal.
+    """
+
+    def _run(self, monkeypatch, choice):
+        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+        monkeypatch.setattr(
+            install.mcp_targets,
+            "detected_targets",
+            lambda: [_target("cursor", True, mock.Mock())],
+        )
+        args = _make_args()
+        args["view"].host_choice = choice
+        return install.setup_mcp_server(**args), args["view"]
+
+    def test_not_listed__shows_the_manual_config_and_the_docs_link(self, monkeypatch):
+        _, view = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+
+        said = " ".join(view.problems)
+        assert "mcpServers" in said, "the block to paste"
+        assert install.MCP_DOCS_URL in said, "where the per-client instructions are"
+
+    def test_not_listed__installs_nothing_and_reports_declined(self, monkeypatch):
+        report, _ = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+
+        assert report.registered == ()
+        assert report.declined is True
+
+    def test_not_listed__is_reported_apart_from_a_plain_decline(self, monkeypatch):
+        """Both register nothing, but only one says the detected list is wrong.
+
+        Which matters past the server: the skill pack follows the registered
+        clients and otherwise falls back to every detected one, so without this
+        "none of these is mine" put the pack in all of them.
+        """
+        not_listed, _ = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+        skipped, _ = self._run(monkeypatch, [])
+
+        assert not_listed.manual is True
+        assert skipped.manual is False
+
+    def test_plain_skip__stays_quiet(self, monkeypatch):
+        """Nothing to paste when the user simply said no."""
+        _, view = self._run(monkeypatch, [])
+
+        assert view.problems == []
+        assert view.skips, "still says the step was skipped"

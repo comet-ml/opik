@@ -79,11 +79,12 @@ such as LangChain messages with `type: "human"` or `type: "ai"`.
 
 <Warning>
   Compatibility aliases cover only successfully normalized message fields under
-  `llm.input_messages.*.message.*` and `llm.output_messages.*.message.*`. They are
-  retained in `input` with their original indices. Unknown fields, invalid indices,
-  and values with an unsupported type are preserved under their original keys in
-  `metadata`, not as evaluation aliases in `input`. Prompts, choices, tools outside
-  messages, and invocation parameters use their new structured paths.
+  `llm.input_messages.*.message.*` and `llm.output_messages.*.message.*`. They
+  are retained in `input` with their original indices. Unknown fields, invalid
+  indices, and values with an unsupported type are preserved under their
+  original keys in `metadata`, not as evaluation aliases in `input`. Prompts,
+  choices, tools outside messages, and invocation parameters use their new
+  structured paths.
 </Warning>
 
 The supported message fields are `role`, `content`, `name`, `tool_call_id`,
@@ -95,15 +96,15 @@ Structured text and opaque tool-call arguments retain their string form.
 
 For new evaluation rules, use structured paths:
 
-| Historical variable mapping | Structured variable mapping |
-| --- | --- |
-| `input.llm.input_messages.0.message.content` | `input.messages[0].content` |
-| `input.llm.output_messages.0.message.content` | `output.messages[0].content` |
-| `input.llm.input_messages.0.message.contents.0.message_content.text` | `input.messages[0].contents[0].text` |
-| `input.llm.input_messages.0.message.contents.0.message_content.image.image.url` | `input.messages[0].contents[0].image.url` |
-| `input.llm.input_messages.0.message.contents.0.message_content.audio.audio.url` | `input.messages[0].contents[0].audio.url` |
-| `input.llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments` | `output.messages[0].tool_calls[0].function.arguments` |
-| `input.llm.output_messages.0.message.contents.0.tool_call.function.name` | `output.messages[0].contents[0].tool_call.function.name` |
+| Historical variable mapping                                                     | Structured variable mapping                              |
+| ------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `input.llm.input_messages.0.message.content`                                    | `input.messages[0].content`                              |
+| `input.llm.output_messages.0.message.content`                                   | `output.messages[0].content`                             |
+| `input.llm.input_messages.0.message.contents.0.message_content.text`            | `input.messages[0].contents[0].text`                     |
+| `input.llm.input_messages.0.message.contents.0.message_content.image.image.url` | `input.messages[0].contents[0].image.url`                |
+| `input.llm.input_messages.0.message.contents.0.message_content.audio.audio.url` | `input.messages[0].contents[0].audio.url`                |
+| `input.llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments` | `output.messages[0].tool_calls[0].function.arguments`    |
+| `input.llm.output_messages.0.message.contents.0.tool_call.function.name`        | `output.messages[0].contents[0].tool_call.function.name` |
 
 Within `contents`, Opik accepts `message_content.type`, `text`, `id`, `signature`,
 `data`, and `encrypted_content` (each with the `message_content.` prefix),
@@ -126,11 +127,11 @@ plus a semantic user message becomes
 `{"question":"Hi","messages":[{"role":"user","content":"Hello"}]}`.
 Compatibility aliases may also be present in `input`.
 
-| Raw value | No structured fields | With structured fields |
-| --- | --- | --- |
-| JSON object | The object itself | Top-level merge; normalized fields take precedence |
-| Scalar or array | The scalar or array itself | Stored under `value` alongside structured fields |
-| Text or invalid JSON | The original text | Original text under `value` alongside structured fields |
+| Raw value            | No structured fields       | With structured fields                                  |
+| -------------------- | -------------------------- | ------------------------------------------------------- |
+| JSON object          | The object itself          | Top-level merge; normalized fields take precedence      |
+| Scalar or array      | The scalar or array itself | Stored under `value` alongside structured fields        |
+| Text or invalid JSON | The original text          | Original text under `value` alongside structured fields |
 
 The Messages view displays only the remaining raw content alongside structured
 prompts or tools, so those structured fields are not repeated in a raw JSON block.
@@ -198,3 +199,39 @@ OpenAIInstrumentor().instrument()
   (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), if you use the GRPC
   exporter you will face errors.
 </Warning>
+
+## Opik-specific span attributes
+
+Opik reads a small set of span attributes and maps them to Opik fields. Set them with
+the standard OpenTelemetry API on any span.
+
+| Attribute                                              | Effect                                                                                                                                     |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `opik.tags`                                            | Adds tags to the span. On the root span, Opik also adds the tags to the trace, so you can filter your traces by tag.                       |
+| `opik.metadata.<key>`                                  | Adds `<key>` to the metadata of the span. The metadata of the root span also becomes the metadata of the trace.                            |
+| `thread_id`                                            | Groups traces into one conversational thread. See [Multi-turn conversations](/evaluation/evaluate_threads).                                |
+| `opik.trace_id`, `opik.parent_span_id`, `opik.span_id` | Attaches the span to an Opik trace and parent span that already exist. See [Distributed traces](/tracing/advanced/log_distributed_traces). |
+
+### Tagging traces and spans
+
+Opik accepts three formats for the `opik.tags` attribute:
+
+- A list of strings: `["production", "chatbot"]`
+- A JSON array in a string: `'["production", "chatbot"]'`
+- A comma-separated string: `"production,chatbot"`
+
+```python wordWrap
+with tracer.start_as_current_span("chatbot_conversation") as conversation_span:
+    # The root span carries the tags, so the trace carries them too
+    conversation_span.set_attribute("opik.tags", ["production", "chatbot"])
+    conversation_span.set_attribute("opik.metadata.environment", "staging")
+
+    with tracer.start_as_current_span("llm_completion") as llm_span:
+        # A child span carries the tags on the span only
+        llm_span.set_attribute("opik.tags", ["llm-call"])
+```
+
+<Note>
+  Set `opik.tags` on the root span if you want to filter traces by tag. Tags on
+  a child span apply to that span only.
+</Note>

@@ -8,7 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public sealed interface AutomationRuleModel
-        permits AutomationRuleEvaluatorModel {
+        permits AutomationRuleEvaluatorModel, AutomationRuleAnnotationQueueRouterModel {
 
     UUID id();
     UUID projectId(); // Legacy single project field for backward compatibility (derived from projectIds)

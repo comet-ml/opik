@@ -20,6 +20,7 @@ public record ModelPrice(
         @NonNull BigDecimal audioInputCharacterPrice,
         @NonNull BigDecimal inputAudioTokenPrice,
         @NonNull BigDecimal outputAudioTokenPrice,
+        @NonNull BigDecimal outputReasoningTokenPrice,
         @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator,
         @NonNull List<PromptTier> promptTiers) {
 
@@ -27,8 +28,8 @@ public record ModelPrice(
      * Whole-prompt tier thresholds for the {@code *_above_NNNk_tokens} rates published by
      * LiteLLM. When the total prompt strictly exceeds a threshold the tier's rate replaces the
      * base rate wholesale (matches LiteLLM's {@code _get_token_base_cost}). Reachable models
-     * today: Gemini 1.5 Flash at 128K, Gemini 2.5 Pro / Claude Sonnet 4.5 at 200K, GPT-5.4 /
-     * GPT-5.5 (openai and azure) at 272K.
+     * today: OpenRouter's Qwen3 and ByteDance Seed rows at 128K, Gemini 2.5 Pro / Claude Sonnet 4.5
+     * at 200K, GPT-5.4 / GPT-5.5 (openai and azure) at 272K.
      */
     public static final int TIER_THRESHOLD_128K = 128_000;
 
@@ -67,6 +68,7 @@ public record ModelPrice(
                 .audioInputCharacterPrice(BigDecimal.ZERO)
                 .inputAudioTokenPrice(BigDecimal.ZERO)
                 .outputAudioTokenPrice(BigDecimal.ZERO)
+                .outputReasoningTokenPrice(BigDecimal.ZERO)
                 .calculator(SpanCostCalculator::defaultCost)
                 .promptTiers(List.of());
     }

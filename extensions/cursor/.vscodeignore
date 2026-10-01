@@ -18,6 +18,9 @@ node_modules/**
 scripts/**
 *.vsix
 test/**
+tests/**
+out-test/**
+tsconfig.tests.json
 .npmignore
 package-lock.json
 yarn.lock

@@ -59,6 +59,7 @@ const ERROR_COPY = {
   timeout: "Ollie took too long to respond. Try again.",
   unavailable: "Ollie is unavailable right now. Try again shortly.",
   rate_limited: "Too many requests right now. Try again in a moment.",
+  out_of_credits: "You're out of LLM credits. Add credits and try again.",
 } as const;
 type ErrorCode = keyof typeof ERROR_COPY;
 

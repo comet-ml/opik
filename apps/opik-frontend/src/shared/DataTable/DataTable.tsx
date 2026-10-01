@@ -13,6 +13,7 @@ import {
   GroupingState,
   Row,
   RowData,
+  RowPinningState,
   RowSelectionState,
   TableMeta,
   useReactTable,
@@ -70,6 +71,7 @@ declare module "@tanstack/react-table" {
     rowHeight: ROW_HEIGHT;
     rowHeightStyle: React.CSSProperties;
     onCommentsReply?: (row: TData, idx?: number) => void;
+    subRowHighlightColor?: string;
     aggregationMap?: Record<string, unknown>;
     projectId?: string;
     projectName?: string;
@@ -109,6 +111,11 @@ interface SelectionConfig {
   setRowSelection?: OnChangeFn<RowSelectionState>;
 }
 
+export interface PinningConfig {
+  rowPinning: RowPinningState;
+  setRowPinning: OnChangeFn<RowPinningState>;
+}
+
 interface GroupingConfig {
   groupedColumnMode: false | "reorder" | "remove";
   grouping: GroupingState;
@@ -134,6 +141,7 @@ interface DataTableProps<TData, TValue> {
   sortConfig?: SortConfig;
   resizeConfig?: ResizeConfig;
   selectionConfig?: SelectionConfig;
+  pinningConfig?: PinningConfig;
   groupingConfig?: GroupingConfig;
   expandingConfig?: ExpandingConfig;
   getRowId?: (row: TData) => string;
@@ -170,6 +178,7 @@ const DataTable = <TData, TValue>({
   sortConfig,
   resizeConfig,
   selectionConfig,
+  pinningConfig,
   groupingConfig,
   expandingConfig,
   getRowId,
@@ -210,6 +219,7 @@ const DataTable = <TData, TValue>({
         }
       : {}),
     enableSorting: sortConfig?.enabled ?? false,
+    keepPinnedRows: false,
     enableMultiSort: sortConfig?.enabledMultiSorting ?? false,
     enableSortingRemoval: false,
     onSortingChange: sortConfig?.setSorting,
@@ -217,6 +227,7 @@ const DataTable = <TData, TValue>({
     getExpandedRowModel: getExpandedRowModel(),
     getGroupedRowModel: getGroupedRowModel(),
     onRowSelectionChange: selectionConfig?.setRowSelection,
+    onRowPinningChange: pinningConfig?.setRowPinning,
     onGroupingChange: groupingConfig?.setGrouping,
     onExpandedChange: expandingConfig?.setExpanded,
     onColumnSizingChange: resizeConfig?.onColumnResize,
@@ -224,6 +235,9 @@ const DataTable = <TData, TValue>({
       ...(sortConfig?.sorting && { sorting: sortConfig.sorting }),
       ...(selectionConfig?.rowSelection && {
         rowSelection: selectionConfig.rowSelection,
+      }),
+      ...(pinningConfig?.rowPinning && {
+        rowPinning: pinningConfig.rowPinning,
       }),
       ...(groupingConfig?.grouping && { grouping: groupingConfig.grouping }),
       ...(expandingConfig?.expanded && { expanded: expandingConfig.expanded }),

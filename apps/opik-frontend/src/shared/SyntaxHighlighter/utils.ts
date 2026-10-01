@@ -1,10 +1,83 @@
-import * as yml from "js-yaml";
+import { Document, isScalar, Scalar, visit } from "yaml";
 import { prettifyMessage } from "@/lib/traces";
 import {
   MODE_TYPE,
   DEFAULT_OPTIONS,
 } from "@/shared/SyntaxHighlighter/constants";
 import { PrettifyConfig, CodeOutput } from "@/shared/SyntaxHighlighter/types";
+
+// lineWidth 0 disables folding so long values stay on one line.
+// version 1.1 quotes yes/no/on/off and dates, so copied YAML keeps its
+// strings when loaded by 1.1 parsers such as PyYAML.
+const YAML_OPTIONS = { lineWidth: 0, version: "1.1" } as const;
+
+// A "\r" forces double-quoted style, collapsing Windows-authored text onto one line.
+const normalizeLineEndings = (_key: unknown, value: unknown) =>
+  typeof value === "string" ? value.replace(/\r\n/g, "\n") : value;
+
+// yaml double-quotes any string containing DEL or a C1 control but emits the
+// character raw, which PyYAML rejects (DEL) or reads as a line break (NEL).
+// Double quotes are the only place they can appear, so escaping is always valid.
+const escapeDelAndC1 = (yaml: string) =>
+  yaml.replace(/[\x7f-\x9f]/g, (char) =>
+    char === "\x85"
+      ? "\\N"
+      : `\\x${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
+// "=" and "<<" are the 1.1 value and merge keys, which yaml leaves plain and
+// PyYAML then refuses to load.
+const YAML_11_VALUES_REQUIRING_QUOTES = new Set(["=", "<<"]);
+
+// 1.1 has no 0o octal syntax, so yaml leaves "0o17" plain, but 1.2 parsers
+// such as js-yaml read it as a number.
+const YAML_12_OCTAL = /^[-+]?0o[0-7]+$/;
+
+const needsQuotes = (value: unknown) =>
+  typeof value === "string" &&
+  (YAML_11_VALUES_REQUIRING_QUOTES.has(value) || YAML_12_OCTAL.test(value));
+
+const toYaml = (data: object): string => {
+  // A trace with no output passes undefined, which would otherwise print "null".
+  if (data === undefined) return "";
+
+  const doc = new Document(data, normalizeLineEndings, YAML_OPTIONS);
+  let lastScalar: Scalar | undefined;
+  visit(doc, {
+    Scalar(_key, node) {
+      if (needsQuotes(node.value)) {
+        node.type = Scalar.QUOTE_SINGLE;
+      }
+      lastScalar = node;
+    },
+  });
+
+  // Only the document's own final newline is dropped: trimming more would strip
+  // a trailing NBSP or spaces, and when the last value ends in a newline PyYAML
+  // needs the document newline to keep it.
+  const lastValue = lastScalar?.value;
+  const keepFinalNewline =
+    typeof lastValue === "string" && lastValue.endsWith("\n");
+  const render = () => {
+    const yaml = escapeDelAndC1(doc.toString(YAML_OPTIONS));
+    return keepFinalNewline ? yaml : yaml.replace(/\n$/, "");
+  };
+
+  const yaml = render();
+  if (!isScalar(doc.contents) || !/^[|>]/.test(yaml)) return yaml;
+
+  // yaml writes a top-level block scalar unindented, which PyYAML and js-yaml
+  // cannot load. Indent it, unless it carries an indentation indicator, which
+  // parsers read inconsistently at the top level; quote those instead.
+  if (/^[|>][+-]?\n/.test(yaml)) {
+    return yaml
+      .split("\n")
+      .map((line, i) => (i === 0 || line === "" ? line : `  ${line}`))
+      .join("\n");
+  }
+  doc.contents.type = Scalar.QUOTE_DOUBLE;
+  return render();
+};
 
 export const generateSyntaxHighlighterCode = (
   data: object,
@@ -26,7 +99,7 @@ export const generateSyntaxHighlighterCode = (
   switch (mode) {
     case MODE_TYPE.yaml:
       return {
-        message: yml.dump(data, { lineWidth: -1 }).trim(),
+        message: toYaml(data),
         mode: MODE_TYPE.yaml,
         prettified: false,
         canBePrettified,
@@ -42,14 +115,14 @@ export const generateSyntaxHighlighterCode = (
       return {
         message: response.prettified
           ? (response.message as string)
-          : yml.dump(data, { lineWidth: -1 }).trim(),
+          : toYaml(data),
         mode: canBePrettified ? MODE_TYPE.pretty : MODE_TYPE.yaml,
         prettified: response.prettified,
         canBePrettified,
       };
     default:
       return {
-        message: yml.dump({}, { lineWidth: -1 }).trim(),
+        message: toYaml({}),
         mode: MODE_TYPE.yaml,
         prettified: false,
         canBePrettified: false,

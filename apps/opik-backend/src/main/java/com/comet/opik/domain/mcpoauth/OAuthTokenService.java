@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mcpoauth;
 
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -7,6 +8,9 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_GRANT;
@@ -28,6 +32,7 @@ public class OAuthTokenService {
 
     private final @NonNull OAuthClientService clientService;
     private final @NonNull McpOAuthService mcpOAuthService;
+    private final @NonNull AnalyticsService analyticsService;
 
     public TokenResponse issueToken(String grantType, String code, String redirectUri, String clientId,
             String codeVerifier, String refreshToken) {
@@ -66,18 +71,45 @@ public class OAuthTokenService {
                     clientId);
             throw new OAuthException(ERROR_INVALID_REQUEST);
         }
-        if (clientService.resolve(clientId).isEmpty()) {
-            log.warn("MCP OAuth authorization_code request rejected: unknown client '{}'", clientId);
-            throw new OAuthException(ERROR_INVALID_CLIENT);
-        }
+        McpOAuthClient client = clientService.resolve(clientId)
+                .orElseThrow(() -> {
+                    log.warn("MCP OAuth authorization_code request rejected: unknown client '{}'", clientId);
+                    return new OAuthException(ERROR_INVALID_CLIENT);
+                });
+        CodeExchange exchange;
         try {
-            TokenResponse tokens = mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, clientId);
-            log.info("MCP OAuth authorization_code exchanged '{}'", clientId);
-            return tokens;
+            exchange = mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, client);
         } catch (BadRequestException e) {
             log.warn("MCP OAuth authorization_code exchange failed '{}'", clientId, e);
             throw new OAuthException(ERROR_INVALID_GRANT);
         }
+        log.info("MCP OAuth authorization_code exchanged '{}'", clientId);
+
+        // Outside the try: the tokens are committed by now, and the grant's error handling has no business
+        // wrapping the event.
+        if (exchange.firstConnection()) {
+            Map<String, String> props = new HashMap<>(Map.of(
+                    "user_name", exchange.userName(),
+                    "workspace_id", exchange.tokens().workspaceId(),
+                    "workspace_name", exchange.tokens().workspaceName(),
+                    "client_id", clientId,
+                    "client_name", client.name()));
+            // client_id is minted per registration, so a reinstalled host counts again. software_id is
+            // stable across installs of the same product (RFC 7591 2), which is what lets the warehouse
+            // collapse those back to one adoption. Optional, hence the guards — Map.of rejects nulls.
+            if (client.softwareId() != null) {
+                props.put("software_id", client.softwareId());
+            }
+            if (client.softwareVersion() != null) {
+                props.put("software_version", client.softwareVersion());
+            }
+            // This endpoint is unauthenticated, so RequestContext carries no user and the 2-arg overload
+            // would silently fall back to the installation anonymous ID. Pass the resource owner
+            // explicitly: the warehouse joins this event on the user_name the frontend identifies on.
+            analyticsService.trackEvent("opik_mcp_connected", props, exchange.userName());
+        }
+
+        return exchange.tokens();
     }
 
     private TokenResponse issueFromRefreshToken(String refreshToken, String clientId) {

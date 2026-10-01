@@ -108,6 +108,9 @@ class WorkspacesResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = RandomStringUtils.randomAlphabetic(10);
 
+    /** Usage every span from {@link #createSpansWithUsage} carries, so a total can be asserted exactly. */
+    private static final int TOKENS_PER_SPAN = 10;
+
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
@@ -644,6 +647,38 @@ class WorkspacesResourceTest {
             assertSeriesMatch(seriesFromWorkspace(all.results()), seriesFromWorkspace(selected.results()));
         }
 
+        /**
+         * Every interval the endpoint accepts, because each renders a different bucket expression and ClickHouse
+         * rejects a {@code WITH FILL} whose bucket, {@code FROM} and {@code TO} disagree in width (code 475).
+         * {@code HOURLY} — the only interval the rest of this class uses — cannot detect that on its own:
+         * {@code toStartOfInterval} returns a {@code Date} for {@code WEEKLY} where it returns a {@code DateTime} for
+         * the other two, and {@code TOTAL} emits no {@code WITH FILL} at all, so only running all four reaches every
+         * branch of the bucket pinning (OPIK-8241).
+         *
+         * <p>The token total does not depend on how the window is bucketed, so one expectation covers every interval.
+         */
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void spanTokenUsage_totalIsIndependentOfTheInterval(TimeInterval interval) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var spans = createSpansWithUsage(projectName, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai", "anthropic", "openai"));
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            var actual = workspaceResourceClient.getWorkspaceSpanMetric(
+                    spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, endTime, null, interval),
+                    apiKey, workspaceName);
+
+            assertThat(sumValues(actual.results())).isEqualTo(spans.size() * TOKENS_PER_SPAN);
+        }
+
         @Test
         void allProjects_returnsEmpty_whenWorkspaceHasNoData() {
             var workspaceName = UUID.randomUUID().toString();
@@ -953,9 +988,14 @@ class WorkspacesResourceTest {
 
     private WorkspaceSpanMetricRequest spanRequest(MetricType metricType, Set<UUID> projectIds, Instant startTime,
             Instant endTime, BreakdownConfig breakdown) {
+        return spanRequest(metricType, projectIds, startTime, endTime, breakdown, TimeInterval.HOURLY);
+    }
+
+    private WorkspaceSpanMetricRequest spanRequest(MetricType metricType, Set<UUID> projectIds, Instant startTime,
+            Instant endTime, BreakdownConfig breakdown, TimeInterval interval) {
         return WorkspaceSpanMetricRequest.builder()
                 .metricType(metricType)
-                .interval(TimeInterval.HOURLY)
+                .interval(interval)
                 .intervalStart(startTime)
                 .intervalEnd(endTime)
                 .projectIds(projectIds)
@@ -1012,7 +1052,7 @@ class WorkspacesResourceTest {
                         .projectId(null)
                         .projectName(projectName)
                         .provider(provider)
-                        .usage(Map.of(usageKey, 10))
+                        .usage(Map.of(usageKey, TOKENS_PER_SPAN))
                         .feedbackScores(null)
                         .build())
                 .toList();

@@ -243,3 +243,32 @@ describe("convertFormDataToStudioConfig — Gemini thinking level", () => {
     ).toBeUndefined();
   });
 });
+
+describe("convertFormDataToStudioConfig — controls the optimizer does not offer", () => {
+  const formData = (modelConfig: Record<string, unknown>) =>
+    ({
+      name: "run",
+      datasetId: "d",
+      optimizerType: OPTIMIZER_TYPE.GEPA,
+      optimizerParams: {},
+      metricType: METRIC_TYPE.EQUALS,
+      metricParams: {},
+      messages: [{ id: "1", role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      modelName: PROVIDER_MODEL_TYPE.GPT_4O,
+      modelConfig,
+    }) as unknown as OptimizationConfigFormType;
+
+  // Throttling and max concurrency drive the playground's batch runner, so the optimizer panel
+  // does not offer them. Reloading a run saved before that leaves the values in the form, and
+  // serializing them forwards a parameter nobody can see to the provider.
+  it("drops the playground runner parameters it no longer shows", () => {
+    const parameters = convertFormDataToStudioConfig(
+      formData({ temperature: 0.5, throttling: 3, maxConcurrentRequests: 8 }),
+      "my-dataset",
+    ).llm_model.parameters as Record<string, unknown>;
+
+    expect(parameters.temperature).toBe(0.5);
+    expect(parameters.throttling).toBeUndefined();
+    expect(parameters.maxConcurrentRequests).toBeUndefined();
+  });
+});

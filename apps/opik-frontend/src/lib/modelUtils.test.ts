@@ -1,24 +1,45 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import omit from "lodash/omit";
 import {
+  getAnthropicThinkingEffortOptions,
   getDefaultThinkingLevel,
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
   getThinkingLevelOptions,
+  isReasoningModel,
+  resolveEffort,
+  resolveSamplingParams,
+  SamplingParams,
   sanitizeConfigForRequest,
+  supportsAnthropicThinkingEffort,
+  supportsGeminiSamplingParams,
   supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
+  supportsPenaltyParams,
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
   updateProviderConfig,
 } from "@/lib/modelUtils";
 import {
+  AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
   LLMAnthropicConfigsType,
+  LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
+  LLMOpenRouterConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
+  ReasoningEffort,
 } from "@/types/providers";
+import { ANTHROPIC_MODEL_CAPABILITIES } from "@/constants/llm";
+import {
+  getLatestProviderModelsSnapshot,
+  resetModelRegistryStoreForTesting,
+  setLatestModelFlags,
+  setLatestProviderModelsSnapshot,
+} from "@/lib/modelRegistryStore";
+import { getProviderFromModel } from "@/lib/provider";
 
 const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
 const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
@@ -90,10 +111,75 @@ describe("supportsSamplingParams", () => {
       false,
     );
   });
+
+  // OpenRouter dots the version, sometimes drops the release date and sometimes appends a variant;
+  // Bedrock adds a region and an inference profile. The same model must answer the same either way.
+  it.each([
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7, false],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_1, false],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_1_BATCH, false],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6, true],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6_FAST, true],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_5, true],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5, true],
+    ["us.anthropic.claude-sonnet-4-5-20250929-v1:0", true],
+    ["us.anthropic.claude-sonnet-5-20250101-v1:0", false],
+  ])("reads %s the same as the id it decorates", (model, expected) => {
+    expect(supportsSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(expected);
+  });
+
+  // The backend trims before classifying, so a pasted id with stray whitespace must not be read as
+  // a different model on the two sides — the panel would offer a control the request then drops.
+  // Anthropic names models claude-<family>-<version>. A name that matches no family Anthropic ships
+  // is someone's own deployment name, and says nothing about which Claude is behind it, so it keeps
+  // the params set on it.
+  it.each([
+    "claude-prod",
+    "claude-internal-v3",
+    "custom-llm/gw/my-claude-prod",
+    "claude-30-future",
+    "claude-future-99",
+  ])("treats %s as a deployment name, not an Anthropic id", (model) => {
+    expect(supportsSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(true);
+  });
+
+  // A floating alias has to read as the model it resolves to, so the families cannot share one
+  // answer — and claude-haiku-latest must agree with claude-haiku-4-5 under its own id.
+  it.each([
+    ["~anthropic/claude-haiku-latest", true],
+    ["~anthropic/claude-opus-latest", false],
+    ["~anthropic/claude-sonnet-latest", false],
+    ["~anthropic/claude-fable-latest", false],
+  ])("reads %s as its family's newest member", (model, expected) => {
+    expect(supportsSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(expected);
+  });
+
+  it.each([
+    // The generations that predate the constraint, incl. surviving the -v1 strip.
+    ["anthropic/claude-3.5-sonnet", true],
+    ["anthropic.claude-v2:1", true],
+    ["anthropic.claude-instant-v1", true],
+    // A numeric segment is the next version, not a variant of claude-sonnet-4-6.
+    ["claude-sonnet-4-6-1", false],
+    ["anthropic/claude-opus-4.6-fast", true],
+  ])("classifies %s by generation and segment boundary", (model, expected) => {
+    expect(supportsSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(expected);
+  });
+
+  it("ignores surrounding whitespace, as the backend does", () => {
+    expect(
+      supportsSamplingParams("  claude-opus-4-7  " as PROVIDER_MODEL_TYPE),
+    ).toBe(false);
+    expect(
+      supportsSamplingParams("  claude-opus-4-6  " as PROVIDER_MODEL_TYPE),
+    ).toBe(true);
+  });
 });
 
 describe("updateProviderConfig — Anthropic", () => {
-  it("strips temperature and topP when switching into Opus 4.7", () => {
+  it("retains temperature and topP when switching into Opus 4.7, which rejects them", () => {
+    // Kept in the config, omitted from the request: Opus 4.7 hides both sliders, and dropping the
+    // values here is what used to lose them for good once the user picked a model that takes them.
     const config: LLMAnthropicConfigsType = {
       temperature: 0.5,
       topP: 0.9,
@@ -103,9 +189,16 @@ describe("updateProviderConfig — Anthropic", () => {
       model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
       provider: ANTHROPIC,
     });
-    expect(result?.temperature).toBeUndefined();
-    expect(result?.topP).toBeUndefined();
+    expect(result?.temperature).toBe(0.5);
+    expect(result?.topP).toBe(0.9);
     expect(result?.maxCompletionTokens).toBe(4000);
+
+    const request = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      result as unknown as Record<string, unknown>,
+    );
+    expect(request.temperature).toBeUndefined();
+    expect(request.topP).toBeUndefined();
   });
 
   it("keeps temperature when switching into Opus 4.6", () => {
@@ -118,30 +211,6 @@ describe("updateProviderConfig — Anthropic", () => {
       provider: ANTHROPIC,
     });
     expect(result?.temperature).toBe(0.5);
-  });
-
-  it("coerces invalid thinkingEffort to high when switching to Opus 4.7", () => {
-    const config: LLMAnthropicConfigsType = {
-      maxCompletionTokens: 4000,
-      thinkingEffort: "adaptive",
-    };
-    const result = updateProviderConfig(config, {
-      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-      provider: ANTHROPIC,
-    });
-    expect(result?.thinkingEffort).toBe("high");
-  });
-
-  it("keeps a valid thinkingEffort across model switches", () => {
-    const config: LLMAnthropicConfigsType = {
-      maxCompletionTokens: 4000,
-      thinkingEffort: "medium",
-    };
-    const result = updateProviderConfig(config, {
-      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-      provider: ANTHROPIC,
-    });
-    expect(result?.thinkingEffort).toBe("medium");
   });
 
   it("drops thinkingEffort when switching to a model with no thinking-effort dropdown", () => {
@@ -223,12 +292,6 @@ describe("getOpenAIReasoningEffortOptions", () => {
     expect(opts.map((o) => o.value)).toEqual(["none", "low", "medium", "high"]);
   });
 
-  it("labels the default value as 'High (Default)'", () => {
-    const opts = getOpenAIReasoningEffortOptions(PROVIDER_MODEL_TYPE.GPT_5);
-    const high = opts.find((o) => o.value === "high");
-    expect(high?.label).toBe("High (Default)");
-  });
-
   it("returns empty array for o1-mini and non-reasoning models", () => {
     expect(
       getOpenAIReasoningEffortOptions(PROVIDER_MODEL_TYPE.GPT_O1_MINI),
@@ -240,7 +303,10 @@ describe("getOpenAIReasoningEffortOptions", () => {
 });
 
 describe("updateProviderConfig — OpenAI", () => {
-  it("bumps temperature to 1 when switching into a reasoning model with temp < 1", () => {
+  it("keeps temperature when switching into a reasoning model, which does not take one", () => {
+    // o3 accepts only its own default temperature, so there is nothing to legalise here: the panel
+    // offers no slider and the request omits the field. Rewriting the value would lose the user's
+    // choice for whenever they pick a model that does take one.
     const config: LLMOpenAIConfigsType = {
       temperature: 0,
       maxCompletionTokens: 4000,
@@ -252,13 +318,19 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_O3,
       provider: OPEN_AI,
     });
-    expect(result?.temperature).toBe(1);
+    expect(result?.temperature).toBe(0);
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_O3,
+        result as unknown as Record<string, unknown>,
+      ).temperature,
+    ).toBeUndefined();
   });
 
-  it("does not change temperature when already 1, but still strips topP on a reasoning model", () => {
-    // topP=1 is the slider default and "harmless" in spirit, but OpenAI rejects any topP value
-    // on reasoning models (the constraint is the parameter's presence, not its value). The
-    // reconciler strips it; that's a real change so reference equality no longer holds.
+  it("leaves the config untouched on a reasoning model that already has temperature 1", () => {
+    // OpenAI rejects any topP value on reasoning models — the constraint is the parameter's
+    // presence, not its value — but that is the request builder's job to enforce, so nothing here
+    // needs changing and the reference survives.
     const config: LLMOpenAIConfigsType = {
       temperature: 1,
       maxCompletionTokens: 4000,
@@ -270,8 +342,13 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_O3,
       provider: OPEN_AI,
     });
-    expect(result?.temperature).toBe(1);
-    expect(result?.topP).toBeUndefined();
+    expect(result).toBe(config);
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_O3,
+        result as unknown as Record<string, unknown>,
+      ).topP,
+    ).toBeUndefined();
   });
 
   it("coerces invalid reasoningEffort to high when switching into a model that doesn't support it", () => {
@@ -369,9 +446,9 @@ describe("updateProviderConfig — OpenAI", () => {
     expect(result).toBe(config);
   });
 
-  it("drops topP when switching into a reasoning OpenAI model", () => {
-    // OpenAI rejects top_p with 400 on reasoning models. The reconciler must clear stale
-    // values when the user switches from gpt-4o (where top_p is valid) to gpt-5.5.
+  it("retains both sampling params when switching into a reasoning OpenAI model", () => {
+    // Both are kept so gpt-4o -> gpt-5.5 -> gpt-4o gives the sliders back with the user's own
+    // values; the request builder is what keeps them off a gpt-5.5 call.
     const config: LLMOpenAIConfigsType = {
       temperature: 0.7,
       maxCompletionTokens: 4000,
@@ -383,9 +460,14 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_5_5,
       provider: OPEN_AI,
     });
-    expect(result?.topP).toBeUndefined();
-    // Temperature should also be coerced to 1.0 in the same call.
-    expect(result?.temperature).toBe(1.0);
+    expect(result).toBe(config);
+
+    const request = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      result as unknown as Record<string, unknown>,
+    );
+    expect(request.topP).toBeUndefined();
+    expect(request.temperature).toBeUndefined();
   });
 
   it("keeps topP when switching to a non-reasoning OpenAI model", () => {
@@ -491,11 +573,13 @@ describe("sanitizeConfigForRequest", () => {
     expect(result.reasoningEffort).toBeUndefined();
   });
 
-  it("strips an unsupported reasoningEffort value (xhigh on gpt-5.1)", () => {
+  it("replaces an unsupported reasoningEffort value (xhigh on gpt-5.1)", () => {
+    // Dropping it left the dropdown showing "High" while the provider applied its own
+    // default. gpt-5.1 offers high, so that is what the panel shows and what the request carries.
     const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_1, {
       reasoningEffort: "xhigh",
     });
-    expect(result.reasoningEffort).toBeUndefined();
+    expect(result.reasoningEffort).toBe("high");
   });
 
   it("keeps a valid reasoningEffort value for the model", () => {
@@ -505,31 +589,34 @@ describe("sanitizeConfigForRequest", () => {
     expect(result.reasoningEffort).toBe("minimal");
   });
 
-  it("keeps xhigh for gpt-5.5 (the only OpenAI model that accepts it)", () => {
+  it("keeps xhigh for gpt-5.5", () => {
     const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_5, {
       reasoningEffort: "xhigh",
     });
     expect(result.reasoningEffort).toBe("xhigh");
   });
 
-  it("does not touch reasoningEffort for non-OpenAI providers", () => {
+  it("drops an OpenAI-only reasoningEffort from an Anthropic request", () => {
+    // Anthropic takes thinkingEffort, not reasoning_effort. Only a config left over from before a
+    // provider change carries one, and passing it on would be junk on the wire.
     const result = sanitizeConfigForRequest(
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
       {
         reasoningEffort: "high",
       },
     );
-    expect(result.reasoningEffort).toBe("high");
+    expect(result.reasoningEffort).toBeUndefined();
+    expect(result.thinkingEffort).toBeUndefined();
   });
 
-  it("strips topP for OpenAI reasoning models", () => {
-    // gpt-5.5 is a reasoning model; OpenAI returns 400 if top_p is in the request.
+  it("strips both sampling params for OpenAI reasoning models", () => {
+    // gpt-5.5 returns 400 if top_p is in the request, and accepts only its own default temperature.
     const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_5, {
-      temperature: 1,
+      temperature: 0.3,
       topP: 0.9,
     });
     expect(result.topP).toBeUndefined();
-    expect(result.temperature).toBe(1);
+    expect(result.temperature).toBeUndefined();
   });
 
   it("keeps topP for non-reasoning OpenAI models", () => {
@@ -577,6 +664,7 @@ describe("Gemini thinking level", () => {
 
   it("covers the newer Flash models on both providers", () => {
     for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH,
       PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
       PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
       PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
@@ -588,6 +676,7 @@ describe("Gemini thinking level", () => {
     }
 
     for (const model of [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
@@ -605,7 +694,17 @@ describe("Gemini thinking level", () => {
     const values = (m: PROVIDER_MODEL_TYPE) =>
       getThinkingLevelOptions(m).map((o) => o.value);
 
-    // 3.7 Flash has no "minimal".
+    // 3.8 and 3.7 Flash have no "minimal".
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
+    expect(values(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
     expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toEqual([
       "low",
       "medium",
@@ -623,8 +722,9 @@ describe("Gemini thinking level", () => {
       "medium",
       "high",
     ]);
-    // 3.1 Flash Lite has only minimal and high.
+    // 3.1 Flash Lite has only minimal and high, plus "none" because it does not think by default.
     expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE)).toEqual([
+      "none",
       "minimal",
       "high",
     ]);
@@ -633,18 +733,26 @@ describe("Gemini thinking level", () => {
   });
 
   it("preselects each model's own documented default", () => {
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH)).toBe(
+      "medium",
+    );
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH),
+    ).toBe("medium");
     expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toBe(
       "medium",
     );
     expect(
       getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH),
     ).toBe("medium");
+    // Flash Lite is the exception: measured against the live API it does not think by default, so it
+    // preselects "none" rather than the "minimal" Google's docs table claims.
     expect(
       getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE),
-    ).toBe("minimal");
+    ).toBe("none");
     expect(
       getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE),
-    ).toBe("minimal");
+    ).toBe("none");
   });
 
   it("only ever preselects a level the model actually offers", () => {
@@ -843,6 +951,84 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toEqual({ thinking: { level: "high" } });
   });
 
+  // The Flash Lite models do not think by default, so their preselected level must not switch
+  // thinking on — that regressed latency ~2x for a customer (OPIK-8102 follow-up).
+  it("defaults the Flash Lite models to none, which sends nothing", () => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+    ]) {
+      expect(getDefaultThinkingLevel(model), `default for ${model}`).toBe(
+        "none",
+      );
+      expect(
+        getThinkingLevelOptions(model).map((o) => o.value),
+        `${model} should offer none`,
+      ).toContain("none");
+      expect(
+        sanitizeConfigForRequest(model, { temperature: 0 }).custom_parameters,
+        `${model} should send no thinking block by default`,
+      ).toBeUndefined();
+    }
+  });
+
+  // "none" must REMOVE a persisted block, not merely decline to add one, or the level saved before
+  // this change keeps being sent and the model keeps thinking.
+  it("clears a persisted thinking block when none is selected", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+        thinkingLevel: "none",
+        custom_parameters: {
+          thinking: { level: "minimal" },
+          unrelated: "keep",
+        },
+      }).custom_parameters,
+    ).toEqual({ unrelated: "keep" });
+  });
+
+  it("drops custom_parameters entirely when none leaves it empty", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+        thinkingLevel: "none",
+        custom_parameters: { thinking: { level: "minimal" } },
+      }).custom_parameters,
+    ).toBeUndefined();
+  });
+
+  // auto is the weaker "let the model decide" and must not delete fields the form cannot represent.
+  it("leaves a persisted thinking block alone for auto", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+        custom_parameters: { thinking: { budget_tokens: 4096 } },
+      }).custom_parameters,
+    ).toEqual({ thinking: { budget_tokens: 4096 } });
+  });
+
+  it("sends no thinking block for an explicit none", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+        thinkingLevel: "none",
+      }).custom_parameters,
+    ).toBeUndefined();
+  });
+
+  // A thinking-by-default model keeps its level: none is only for the models that ship without it.
+  it("does not offer none to models that think by default", () => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+    ]) {
+      expect(
+        getThinkingLevelOptions(model).map((o) => o.value),
+        `${model} should not offer none`,
+      ).not.toContain("none");
+    }
+  });
+
   it("adds no thinking block for models without a level control", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH, {
@@ -962,5 +1148,929 @@ describe("updateProviderConfig — Gemini thinking level", () => {
     });
 
     expect(next).toBe(config);
+  });
+});
+
+describe("sampling params survive a model round trip", () => {
+  it("keeps topP across gpt-4o-mini -> gpt-5.5 -> gpt-4o-mini", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 0.9,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+
+    const onReasoning = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      provider: OPEN_AI,
+    });
+    const back = updateProviderConfig(onReasoning, {
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      provider: OPEN_AI,
+    });
+
+    expect(back?.topP).toBe(0.9);
+  });
+
+  it("keeps temperature across sonnet-4.6 -> sonnet-5 -> sonnet-4.6", () => {
+    const config: LLMAnthropicConfigsType = {
+      temperature: 0.7,
+      maxCompletionTokens: 4000,
+    };
+
+    const onSonnet5 = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+      provider: ANTHROPIC,
+    });
+    const back = updateProviderConfig(onSonnet5, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      provider: ANTHROPIC,
+    });
+
+    expect(back?.temperature).toBe(0.7);
+  });
+
+  it("keeps temperature across gpt-4o-mini -> gpt-5.5 -> gpt-4o-mini", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0.3,
+      maxCompletionTokens: 4000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+
+    const onReasoning = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      provider: OPEN_AI,
+    });
+    const back = updateProviderConfig(onReasoning, {
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      provider: OPEN_AI,
+    });
+
+    expect(back?.temperature).toBe(0.3);
+  });
+
+  it("still omits the retained value from the wire while the model rejects it", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        temperature: 0.7,
+        maxCompletionTokens: 4000,
+      }).temperature,
+    ).toBeUndefined();
+
+    const onReasoningModel = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      { temperature: 0.3, topP: 0.9 },
+    );
+    expect(onReasoningModel.topP).toBeUndefined();
+    expect(onReasoningModel.temperature).toBeUndefined();
+  });
+});
+
+describe("resolveSamplingParams", () => {
+  it("re-establishes the temperature/topP pair for an Anthropic config that has neither", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {}),
+    ).toEqual({ temperature: 0 });
+  });
+
+  it("omits both for an Anthropic model that rejects sampling params", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({});
+  });
+
+  it("keeps temperature and drops topP when an Anthropic config carries both", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({ temperature: 0.7 });
+  });
+
+  it("keeps topP alone when the user cleared temperature", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        topP: 0.9,
+      }),
+    ).toEqual({ topP: 0.9 });
+  });
+
+  it("does not invent a topP the config has no value for", () => {
+    // The same panels serve the LLM judge, whose rule stores no topP. Putting a parameter back for
+    // a surface that owns it is that surface's job — restoreMissingConfigKeys for the playground.
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_4O_MINI, {
+        temperature: 0,
+      }).topP,
+    ).toBeUndefined();
+  });
+
+  it("omits both for OpenAI reasoning models, which take neither", () => {
+    // top_p is rejected outright and temperature accepts only the provider's own default, so
+    // neither is tunable and the panel offers no slider for either.
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_5_5, {
+        temperature: 0.3,
+        topP: 0.9,
+      }),
+    ).toEqual({});
+  });
+
+  it("passes other providers' values through untouched", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, {
+        temperature: 0.3,
+        topP: 0.8,
+      }),
+    ).toEqual({ temperature: 0.3, topP: 0.8 });
+  });
+});
+
+describe("every model with an Anthropic capability row", () => {
+  it("never resolves to both temperature and topP, whatever it routes to", () => {
+    // This replaces a narrower guard that required every such model to route to the Anthropic
+    // provider. Some capability rows deliberately cover ids the frontend registry does not offer
+    // (dated variants reachable only through the API or a proxy), and the rule no longer depends on
+    // routing: what must hold is that Anthropic never receives the pair.
+    for (const model of Object.keys(
+      ANTHROPIC_MODEL_CAPABILITIES,
+    ) as PROVIDER_MODEL_TYPE[]) {
+      const resolved = resolveSamplingParams(model, {
+        temperature: 0.7,
+        topP: 0.9,
+      });
+
+      expect(
+        resolved.temperature !== undefined && resolved.topP !== undefined,
+      ).toBe(false);
+    }
+  });
+
+  it("omits both for the ones not marked as taking them", () => {
+    for (const [model, capabilities] of Object.entries(
+      ANTHROPIC_MODEL_CAPABILITIES,
+    )) {
+      if (capabilities?.supportsSamplingParams) continue;
+
+      expect(
+        resolveSamplingParams(model as PROVIDER_MODEL_TYPE, {
+          temperature: 0.7,
+          topP: 0.9,
+        }),
+      ).toEqual({});
+    }
+  });
+});
+
+describe("the settings panel and the request agree on sampling params", () => {
+  // Both shapes are what an earlier model switch left behind in PLAYGROUND_STATE. The panel reads
+  // them through resolveSamplingParams, so the request has to resolve to the same values.
+  it("sends the temperature the panel resolves for an Anthropic config that lost both", () => {
+    const configs: LLMAnthropicConfigsType = { maxCompletionTokens: 4000 };
+
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+        configs as unknown as Record<string, unknown>,
+      ).temperature,
+    ).toBe(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, configs)
+        .temperature,
+    );
+  });
+
+  it("sends the topP the panel resolves for an OpenAI config that carries one", () => {
+    const configs: LLMOpenAIConfigsType = {
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 0.75,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+        configs as unknown as Record<string, unknown>,
+      ).topP,
+    ).toBe(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_4O_MINI, configs).topP,
+    );
+  });
+});
+
+describe("resolveEffort", () => {
+  it("omits reasoningEffort for an OpenAI model with no effort options", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.GPT_4O, { reasoningEffort: "high" }),
+    ).toEqual({});
+  });
+
+  it("keeps a stored reasoningEffort the model offers", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.GPT_5, { reasoningEffort: "minimal" }),
+    ).toEqual({ reasoningEffort: "minimal" });
+  });
+
+  it("falls back to high for a reasoningEffort the model does not offer", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_1, { reasoningEffort: "xhigh" }),
+    ).toEqual({ reasoningEffort: "high" });
+  });
+
+  it("falls back to high when a supporting model has nothing stored", () => {
+    // What the dropdown has always displayed. Leaving it unresolved is how the panel came to show
+    // "High" while the request carried no reasoning_effort at all.
+    expect(resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_5, {})).toEqual({
+      reasoningEffort: "high",
+    });
+  });
+
+  it("omits thinkingEffort for an Anthropic model with no effort options", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, {
+        thinkingEffort: "high",
+      }),
+    ).toEqual({});
+  });
+
+  it("passes other providers' values through untouched", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, {
+        reasoningEffort: "low",
+        thinkingEffort: "max",
+      }),
+    ).toEqual({ reasoningEffort: "low", thinkingEffort: "max" });
+  });
+});
+
+describe("the settings panel and the request agree on effort", () => {
+  it("sends the reasoning effort the dropdown displays after switching into a reasoning model", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+
+    const onReasoning = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      provider: OPEN_AI,
+    });
+
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_5_5,
+        onReasoning as unknown as Record<string, unknown>,
+      ).reasoningEffort,
+    ).toBe(
+      resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_5, onReasoning ?? {})
+        .reasoningEffort,
+    );
+  });
+});
+
+describe("Claude sampling exclusivity across providers", () => {
+  // The constraint is the model's, not the provider's: Bedrock answers a request carrying both with
+  // "temperature and top_p cannot both be specified for this model", and the same Claude models
+  // reach us through Bedrock, OpenRouter and OpenAI-compatible proxies under decorated names.
+  it.each([
+    ["us.anthropic.claude-sonnet-4-5-20250929-v1:0", "Bedrock"],
+    ["bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0", "Bedrock via proxy"],
+    ["claude-opus-4-6", "an OpenAI-compatible proxy"],
+    // Sonnet 5 takes neither, so it belongs to the cases below, not here.
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6, "OpenRouter"],
+  ])("drops topP for %s served by %s", (model) => {
+    expect(
+      resolveSamplingParams(model as PROVIDER_MODEL_TYPE, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({ temperature: 0.7 });
+  });
+
+  it("keeps topP for a Claude model when temperature is not set", () => {
+    expect(
+      resolveSamplingParams(
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0" as PROVIDER_MODEL_TYPE,
+        { topP: 0.9 },
+      ),
+    ).toEqual({ temperature: undefined, topP: 0.9 });
+  });
+
+  it("does not treat a gateway named after Claude as Claude", () => {
+    // The custom id carries the gateway in its prefix, so the model itself has to decide.
+    expect(
+      resolveSamplingParams(
+        "custom-llm/claude-gw/mistral-large-2411" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7, topP: 0.9 },
+      ),
+    ).toEqual({ temperature: 0.7, topP: 0.9 });
+  });
+
+  it("still matches a Claude model behind such a gateway", () => {
+    expect(
+      resolveSamplingParams(
+        "custom-llm/claude-gw/claude-opus-4-6" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7, topP: 0.9 },
+      ),
+    ).toEqual({ temperature: 0.7 });
+  });
+
+  // The adaptive-thinking models reject both parameters outright, not merely together, and arrive
+  // through the same decorated ids as everything else.
+  it.each([
+    "custom-llm/gw/claude-sonnet-5",
+    "anthropic/claude-sonnet-5",
+    "us.anthropic.claude-sonnet-5-20250101-v1:0",
+    "custom-llm/gw/claude-opus-4-7",
+  ])("omits both for %s, which takes neither", (model) => {
+    expect(
+      resolveSamplingParams(model as PROVIDER_MODEL_TYPE, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({});
+  });
+
+  it("omits a lone temperature for a model that takes neither", () => {
+    expect(
+      resolveSamplingParams(
+        "custom-llm/gw/claude-sonnet-5" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7 },
+      ),
+    ).toEqual({});
+  });
+
+  it("leaves a sampling-capable Claude on the same route alone", () => {
+    expect(
+      resolveSamplingParams(
+        "custom-llm/gw/claude-sonnet-4-6" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7 },
+      ),
+    ).toEqual({ temperature: 0.7, topP: undefined });
+  });
+
+  it("does not classify an id whose model segment is empty", () => {
+    // Must agree with the backend, which sees the same id and must not fall back to the gateway.
+    expect(
+      resolveSamplingParams("custom-llm/claude-gw/" as PROVIDER_MODEL_TYPE, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({ temperature: 0.7, topP: 0.9 });
+  });
+
+  it("leaves a non-Claude model on the same provider alone", () => {
+    expect(
+      resolveSamplingParams("mistral-large-2411" as PROVIDER_MODEL_TYPE, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({ temperature: 0.7, topP: 0.9 });
+  });
+
+  it("keeps topP off the request for a Claude model on a non-Anthropic provider", () => {
+    expect(
+      sanitizeConfigForRequest(
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7, topP: 0.9, maxCompletionTokens: 4000 },
+      ),
+    ).toMatchObject({ temperature: 0.7, maxCompletionTokens: 4000 });
+  });
+
+  it("does not leave topP on the request for a Claude model on a non-Anthropic provider", () => {
+    expect(
+      sanitizeConfigForRequest(
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7, topP: 0.9 },
+      ).topP,
+    ).toBeUndefined();
+  });
+});
+
+describe("OpenAI request contract", () => {
+  const FULL_CONFIG: LLMOpenAIConfigsType = {
+    temperature: 0.7,
+    maxCompletionTokens: 4000,
+    topP: 0.9,
+    frequencyPenalty: 0.2,
+    presencePenalty: 0.1,
+    reasoningEffort: "high",
+    throttling: 0,
+    maxConcurrentRequests: 5,
+  };
+  const REASONING_REQUEST = {
+    maxCompletionTokens: 4000,
+    reasoningEffort: "high",
+    throttling: 0,
+    maxConcurrentRequests: 5,
+  };
+  const REASONING_REQUEST_WITHOUT_EFFORT = omit(
+    REASONING_REQUEST,
+    "reasoningEffort",
+  );
+  const SAMPLING_REQUEST = omit(FULL_CONFIG, "reasoningEffort");
+
+  const NONE_TO_XHIGH: ReasoningEffort[] = [
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+  ];
+
+  const sanitize = (model: PROVIDER_MODEL_TYPE) =>
+    sanitizeConfigForRequest(model, {
+      ...(FULL_CONFIG as unknown as Record<string, unknown>),
+    });
+
+  describe.each<{
+    model: PROVIDER_MODEL_TYPE;
+    reasoning: boolean;
+    effortOptions: ReasoningEffort[];
+    request: Record<string, unknown>;
+  }>([
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
+      reasoning: true,
+      effortOptions: ["low", "medium", "high", "xhigh"],
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
+      reasoning: true,
+      effortOptions: ["low", "medium", "high", "xhigh"],
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_6_LUNA,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_6_SOL,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_6_TERRA,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_4,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_4_MINI,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_4_NANO,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_2,
+      reasoning: true,
+      effortOptions: NONE_TO_XHIGH,
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_1,
+      reasoning: true,
+      effortOptions: ["none", "low", "medium", "high"],
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5,
+      reasoning: true,
+      effortOptions: ["minimal", "low", "medium", "high"],
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_O1,
+      reasoning: true,
+      effortOptions: ["low", "medium", "high"],
+      request: REASONING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_O1_MINI,
+      reasoning: true,
+      effortOptions: [],
+      request: REASONING_REQUEST_WITHOUT_EFFORT,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+      reasoning: false,
+      effortOptions: [],
+      request: SAMPLING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
+      reasoning: false,
+      effortOptions: [],
+      request: SAMPLING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST,
+      reasoning: false,
+      effortOptions: [],
+      request: SAMPLING_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      reasoning: false,
+      effortOptions: [],
+      request: SAMPLING_REQUEST,
+    },
+  ])("$model", ({ model, reasoning, effortOptions, request }) => {
+    it(`is ${reasoning ? "" : "not "}a reasoning model`, () => {
+      expect(isReasoningModel(model)).toBe(reasoning);
+    });
+
+    it("offers exactly the effort levels Chat Completions accepts", () => {
+      expect(
+        getOpenAIReasoningEffortOptions(model).map((o) => o.value),
+      ).toEqual(effortOptions);
+    });
+
+    it("sends exactly the parameters it accepts", () => {
+      expect(sanitize(model)).toEqual(request);
+    });
+  });
+
+  it("labels high without claiming it is the provider default", () => {
+    const high = getOpenAIReasoningEffortOptions(
+      PROVIDER_MODEL_TYPE.GPT_5,
+    ).find((o) => o.value === "high");
+    expect(high?.label).toBe("High");
+  });
+
+  describe("a model with no capability row", () => {
+    const UNLISTED = "gpt-7-test" as PROVIDER_MODEL_TYPE;
+
+    afterEach(() => {
+      resetModelRegistryStoreForTesting();
+    });
+
+    it("follows the registry when it flags the model as reasoning", () => {
+      setLatestModelFlags(
+        new Map([[UNLISTED, { reasoning: true, structuredOutput: true }]]),
+      );
+
+      expect(isReasoningModel(UNLISTED)).toBe(true);
+      expect(getOpenAIReasoningEffortOptions(UNLISTED)).toEqual([]);
+      expect(sanitize(UNLISTED)).toEqual(REASONING_REQUEST_WITHOUT_EFFORT);
+    });
+
+    it("is not a reasoning model when the registry does not know it", () => {
+      expect(isReasoningModel(UNLISTED)).toBe(false);
+      expect(sanitize(UNLISTED)).toEqual(SAMPLING_REQUEST);
+    });
+
+    it("cannot override an explicit non-reasoning row", () => {
+      setLatestModelFlags(
+        new Map([
+          [
+            PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+            { reasoning: true, structuredOutput: true },
+          ],
+        ]),
+      );
+
+      expect(isReasoningModel(PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST)).toBe(
+        false,
+      );
+    });
+  });
+});
+
+describe("an OpenAI reasoning model reached through another provider", () => {
+  const SAMPLING: SamplingParams = { temperature: 0.7, topP: 0.9 };
+  const OPEN_ROUTER_ID = PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA;
+  const CUSTOM_ID = "custom-llm/my-gateway/gpt-6-astra" as PROVIDER_MODEL_TYPE;
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("keeps penalties and sampling on OpenRouter even when the registry flags it as reasoning", () => {
+    setLatestModelFlags(
+      new Map([[OPEN_ROUTER_ID, { reasoning: true, structuredOutput: true }]]),
+    );
+
+    expect(getProviderFromModel(OPEN_ROUTER_ID)).toBe(
+      PROVIDER_TYPE.OPEN_ROUTER,
+    );
+    expect(supportsPenaltyParams(OPEN_ROUTER_ID)).toBe(true);
+    expect(resolveSamplingParams(OPEN_ROUTER_ID, SAMPLING)).toEqual(SAMPLING);
+  });
+
+  it("keeps penalties and sampling behind a named custom gateway", () => {
+    setLatestProviderModelsSnapshot({
+      ...getLatestProviderModelsSnapshot(),
+      "custom-llm:my-gateway": [{ value: CUSTOM_ID, label: "gpt-6-astra" }],
+    });
+
+    // getProviderFromModel ignores the composed `custom-llm:<name>` key, so the id falls back to
+    // OpenAI; it keeps its params only because no capability row or registry flag names it.
+    expect(getProviderFromModel(CUSTOM_ID)).toBe(PROVIDER_TYPE.OPEN_AI);
+    expect(supportsPenaltyParams(CUSTOM_ID)).toBe(true);
+    expect(resolveSamplingParams(CUSTOM_ID, SAMPLING)).toEqual(SAMPLING);
+  });
+});
+
+describe("Anthropic request contract while the backend drops thinking effort", () => {
+  const FULL_CONFIG: LLMAnthropicConfigsType = {
+    temperature: 0.7,
+    maxCompletionTokens: 4000,
+    topP: 0.9,
+    thinkingEffort: "high",
+    throttling: 0,
+    maxConcurrentRequests: 5,
+  };
+  const LOW_TO_MAX: AnthropicThinkingEffort[] = [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ];
+  const LOW_TO_MAX_WITHOUT_XHIGH: AnthropicThinkingEffort[] = [
+    "low",
+    "medium",
+    "high",
+    "max",
+  ];
+
+  it.each(Object.keys(ANTHROPIC_MODEL_CAPABILITIES))(
+    "offers no effort control for %s",
+    (model) => {
+      expect(
+        supportsAnthropicThinkingEffort(model as PROVIDER_MODEL_TYPE),
+      ).toBe(false);
+      expect(
+        getAnthropicThinkingEffortOptions(model as PROVIDER_MODEL_TYPE),
+      ).toEqual([]);
+    },
+  );
+
+  it("clears an adaptive effort persisted on Opus 4.6", () => {
+    const config: LLMAnthropicConfigsType = {
+      temperature: 0.5,
+      maxCompletionTokens: 4000,
+      thinkingEffort: "adaptive" as unknown as AnthropicThinkingEffort,
+    };
+
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+      provider: ANTHROPIC,
+    });
+
+    expect(result?.thinkingEffort).toBeUndefined();
+    expect(result?.temperature).toBe(0.5);
+  });
+
+  it("never lists adaptive, which is a thinking mode rather than an effort level", () => {
+    for (const capabilities of Object.values(ANTHROPIC_MODEL_CAPABILITIES)) {
+      expect(capabilities?.thinkingEffortOptions ?? []).not.toContain(
+        "adaptive",
+      );
+    }
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort[]]>([
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
+  ])(
+    "keeps the effort levels %s accepts in its capability row",
+    (model, levels) => {
+      expect(
+        ANTHROPIC_MODEL_CAPABILITIES[model]?.thinkingEffortOptions,
+      ).toEqual(levels);
+    },
+  );
+
+  it("sends Sonnet 5 no sampling params and no effort", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        ...FULL_CONFIG,
+      }),
+    ).toEqual({
+      maxCompletionTokens: 4000,
+      throttling: 0,
+      maxConcurrentRequests: 5,
+    });
+  });
+
+  it("sends Sonnet 4.6 temperature alone and no effort", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        ...FULL_CONFIG,
+      }),
+    ).toEqual({
+      temperature: 0.7,
+      maxCompletionTokens: 4000,
+      throttling: 0,
+      maxConcurrentRequests: 5,
+    });
+  });
+
+  it("drops an adaptive effort persisted on Opus 4.6 from the request", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, {
+        maxCompletionTokens: 4000,
+        thinkingEffort: "adaptive",
+      }),
+    ).toEqual({ maxCompletionTokens: 4000, temperature: 0 });
+  });
+});
+
+describe("Gemini and Vertex AI request contract", () => {
+  const FULL_CONFIG: LLMGeminiConfigsType = {
+    temperature: 0.4,
+    maxCompletionTokens: 2048,
+    topP: 0.9,
+    thinkingLevel: "high",
+    throttling: 0,
+    maxConcurrentRequests: 5,
+  };
+  const BASE_REQUEST = {
+    maxCompletionTokens: 2048,
+    throttling: 0,
+    maxConcurrentRequests: 5,
+  };
+  const SAMPLING: SamplingParams = { temperature: 0.4, topP: 0.9 };
+  const THINKING = { custom_parameters: { thinking: { level: "high" } } };
+
+  describe.each<{
+    model: PROVIDER_MODEL_TYPE;
+    sampling: SamplingParams;
+    request: Record<string, unknown>;
+  }>([
+    {
+      model: PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
+      sampling: {},
+      request: { ...BASE_REQUEST, ...THINKING },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+      sampling: {},
+      request: { ...BASE_REQUEST, ...THINKING },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      sampling: {},
+      request: { ...BASE_REQUEST, ...THINKING },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
+      sampling: {},
+      request: { ...BASE_REQUEST, ...THINKING },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
+      sampling: {},
+      request: { ...BASE_REQUEST, ...THINKING },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      sampling: SAMPLING,
+      request: { ...BASE_REQUEST, ...SAMPLING, ...THINKING },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      sampling: SAMPLING,
+      request: { ...BASE_REQUEST, ...SAMPLING, ...THINKING },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      sampling: SAMPLING,
+      request: { ...BASE_REQUEST, ...SAMPLING },
+    },
+  ])("$model", ({ model, sampling, request }) => {
+    it("resolves the sampling params the panel shows", () => {
+      expect(resolveSamplingParams(model, FULL_CONFIG)).toEqual(sampling);
+    });
+
+    it("sends exactly the parameters it accepts", () => {
+      expect(sanitizeConfigForRequest(model, { ...FULL_CONFIG })).toEqual(
+        request,
+      );
+    });
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+    PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+  ])("takes no sampling params on %s", (model) => {
+    expect(supportsGeminiSamplingParams(model)).toBe(false);
+  });
+
+  it.each([
+    "gemini-30-flash",
+    "vertex_ai/gemini-30-flash",
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
+  ])("keeps sampling params on %s", (model) => {
+    expect(supportsGeminiSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(
+      true,
+    );
+  });
+});
+
+describe("OpenRouter request contract", () => {
+  const CONFIG: LLMOpenRouterConfigsType = {
+    maxTokens: 0,
+    temperature: 0.7,
+    topP: 0.9,
+    topK: 40,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    repetitionPenalty: 1,
+    minP: 0,
+    topA: 0,
+  };
+  const WITHOUT_MAX_TOKENS = omit(CONFIG, "maxTokens");
+
+  describe.each<{
+    model: PROVIDER_MODEL_TYPE;
+    maxTokens: number;
+    request: Record<string, unknown>;
+  }>([
+    {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      maxTokens: 0,
+      request: WITHOUT_MAX_TOKENS,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      maxTokens: 512,
+      request: { ...CONFIG, maxTokens: 512 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
+      maxTokens: 0,
+      request: WITHOUT_MAX_TOKENS,
+    },
+  ])("$model with maxTokens $maxTokens", ({ model, maxTokens, request }) => {
+    it("sends exactly the parameters it accepts", () => {
+      expect(sanitizeConfigForRequest(model, { ...CONFIG, maxTokens })).toEqual(
+        request,
+      );
+    });
+  });
+
+  it("rounds a fractional Top K stored by the old 0.01 slider step", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
+        ...CONFIG,
+        topK: 39.6,
+      }).topK,
+    ).toBe(40);
   });
 });

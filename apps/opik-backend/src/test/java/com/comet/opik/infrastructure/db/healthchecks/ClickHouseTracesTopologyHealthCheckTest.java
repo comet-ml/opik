@@ -23,15 +23,17 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * Behaviour of {@link ClickHouseTracesTopologyHealthCheck}: the flag↔topology assertion in both directions, plus the
- * shared timeout/cancellation contract inherited from {@link AbstractClickHouseHealthCheck}.
+ * shared timeout/abandonment contract inherited from {@link AbstractClickHouseHealthCheck}.
  *
  * <p>The mismatch cases are the point of the check, so each one asserts the actual message, not merely that the probe
  * went unhealthy: the message is the only thing an operator sees on {@code /health-check}, and it has to name the flag,
@@ -46,8 +48,12 @@ class ClickHouseTracesTopologyHealthCheckTest {
     private static final String CLICKHOUSE_SETTING_LOG_COMMENT = "clickhouse_setting_log_comment";
     private static final String EXPECTED_LOG_COMMENT = "health_check:clickhouse-traces-topology";
 
-    private static final String TOPOLOGY_QUERY = "SELECT name, engine FROM system.tables "
-            + "WHERE database = currentDatabase() AND name IN ('traces', 'traces_local')";
+    private static final String TOPOLOGY_QUERY = """
+            SELECT name, engine FROM system.tables \
+            WHERE database = currentDatabase() AND name IN ({table:String}, {localTable:String})\
+            """;
+
+    private static final Map<String, Object> QUERY_PARAMS = Map.of("table", "traces", "localTable", "traces_local");
 
     private static final String FLAG = "databaseAnalyticsDataModel.tracesDistributedWrapEnabled";
 
@@ -93,9 +99,9 @@ class ClickHouseTracesTopologyHealthCheckTest {
         // `traces` are never touched — quieter than the error, and worse.
         assertUnhealthy(actualResult, "%s=true routes trace mutations at 'traces_local', but 'traces' is a "
                 .formatted(FLAG) + "ReplicatedMergeTree, not Distributed: the Distributed wrap has not been applied "
-                + "(or has been rolled back). Apply it (exchange_and_wrap.sh --wrap-only) or set the flag back to "
-                + "false — otherwise trace deletes either fail with UNKNOWN_TABLE (60) when 'traces_local' is absent, "
-                + "or silently delete from a stale 'traces_local' while the live rows in 'traces' are left untouched.");
+                + "(or has been rolled back). Apply it or set the flag back to false — otherwise trace deletes either "
+                + "fail with UNKNOWN_TABLE (60) when 'traces_local' is absent, or silently delete from a stale "
+                + "'traces_local' while the live rows in 'traces' are left untouched.");
     }
 
     /**
@@ -158,17 +164,22 @@ class ClickHouseTracesTopologyHealthCheckTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("failureModes")
-    void check__whenQueryFails__thenUnhealthyAndCancelsQuery(String name, Exception failure) throws Exception {
+    void check__whenQueryFails__thenUnhealthyWithoutCancellingQuery(String name, Exception failure) throws Exception {
         var failingFuture = mock(CompletableFuture.class);
         when(failingFuture.get(HEALTH_CHECK_TIMEOUT.toMilliseconds(), TimeUnit.MILLISECONDS)).thenThrow(failure);
-        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), argThat(probeServerSettings())))
+        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), eq(QUERY_PARAMS), argThat(probeServerSettings())))
                 .thenReturn(failingFuture);
 
         var actualResult = newHealthCheck(true).execute();
 
         assertThat(actualResult.isHealthy()).isFalse();
         assertThat(actualResult.getError()).isSameAs(failure);
-        verify(failingFuture).cancel(true);
+        // The probe never cancels, on any path. Where that matters is the deadline: cancelling there
+        // completes the future exceptionally and the response the client is still building is discarded
+        // unclosed, leaking its connection (OPIK-8576) - covered end-to-end by
+        // ClickHouseHealthCheckConnectionReleaseTest. This future has already failed or is still pending,
+        // so the guard here is on the call itself, keeping the rule from creeping back in.
+        verify(failingFuture, never()).cancel(anyBoolean());
     }
 
     @Test
@@ -176,7 +187,7 @@ class ClickHouseTracesTopologyHealthCheckTest {
         var failingFuture = mock(CompletableFuture.class);
         when(failingFuture.get(HEALTH_CHECK_TIMEOUT.toMilliseconds(), TimeUnit.MILLISECONDS))
                 .thenThrow(new InterruptedException("Interrupted call"));
-        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), argThat(probeServerSettings())))
+        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), eq(QUERY_PARAMS), argThat(probeServerSettings())))
                 .thenReturn(failingFuture);
 
         newHealthCheck(true).execute();
@@ -187,7 +198,7 @@ class ClickHouseTracesTopologyHealthCheckTest {
     private HealthCheck.Result check(boolean wrapEnabled, Map<String, String> tables) {
         // Built before when(...) opens: the row mocks are stubbed themselves, and Mockito rejects that mid-stubbing.
         var records = records(tables);
-        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), argThat(probeServerSettings())))
+        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), eq(QUERY_PARAMS), argThat(probeServerSettings())))
                 .thenReturn(CompletableFuture.completedFuture(records));
 
         return newHealthCheck(wrapEnabled).execute();

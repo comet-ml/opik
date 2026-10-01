@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentBatchUpdate;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
@@ -23,6 +24,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.net.HttpHeaders;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
@@ -151,6 +153,18 @@ public class ExperimentResourceClient {
         return response;
     }
 
+    public void batchUpdate(ExperimentBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(batchUpdate))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
     public void createExperimentItem(Set<ExperimentItem> experimentItems, String apiKey, String workspaceName) {
         try (var response = callCreateExperimentItem(experimentItems, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
@@ -175,6 +189,23 @@ public class ExperimentResourceClient {
             }
         }
         return items;
+    }
+
+    /**
+     * A single item by id. Unlike the stream endpoints above, this returns the item as it was written
+     * rather than joined with its trace, which is what makes it comparable against the submitted object.
+     */
+    public ExperimentItem getExperimentItem(UUID id, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(ExperimentItem.class);
+        }
     }
 
     public List<ExperimentItem> getExperimentItems(String experimentName, String apiKey, String workspaceName) {

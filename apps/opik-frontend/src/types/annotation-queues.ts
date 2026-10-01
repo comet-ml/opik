@@ -10,6 +10,45 @@ export interface AnnotationQueueReviewer {
   status: number;
 }
 
+export enum ANNOTATION_QUEUE_ITEM_SOURCE {
+  MANUAL = "manual",
+  AUTOMATED = "automated",
+}
+
+export interface AnnotationQueueItem {
+  id: string;
+  source: ANNOTATION_QUEUE_ITEM_SOURCE;
+}
+
+export interface AnnotationQueueScoreCondition {
+  score_name: string;
+  operator: ">" | "<" | "=";
+  value: number;
+}
+
+export interface AnnotationQueueConditionGroup {
+  conditions: AnnotationQueueScoreCondition[];
+}
+
+/**
+ * Rules for populating a queue automatically. Groups are OR-ed, conditions within a group AND-ed.
+ * A queue with automation enabled still accepts manual additions.
+ */
+export interface AnnotationQueueAutomation {
+  enabled: boolean;
+  /** Absent means "leave the stored conditions alone", which is what a toggle-only request sends. */
+  conditions?: {
+    groups: AnnotationQueueConditionGroup[];
+  };
+  /**
+   * Automation stops adding once the queue holds this many items. Absent means "leave the stored
+   * ceiling alone", as absent does for every field here; send clear_max_items_in_queue to remove one.
+   */
+  max_items_in_queue?: number | null;
+  /** Write-only: removes the stored ceiling. Cannot be sent together with max_items_in_queue. */
+  clear_max_items_in_queue?: boolean;
+}
+
 export interface AnnotationQueue {
   id: string;
   project_id: string;
@@ -22,6 +61,7 @@ export interface AnnotationQueue {
   annotators_per_item?: number; // optional for opik v1 compat
   lock_timeout_seconds?: number; // optional for opik v1 compat
   scope: ANNOTATION_QUEUE_SCOPE;
+  automation?: AnnotationQueueAutomation;
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];
   items_count: number;

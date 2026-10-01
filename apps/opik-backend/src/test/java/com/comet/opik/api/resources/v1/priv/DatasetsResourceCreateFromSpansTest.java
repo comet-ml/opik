@@ -36,6 +36,7 @@ import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -268,6 +269,108 @@ class DatasetsResourceCreateFromSpansTest {
         // Verify usage is included
         JsonNode usageNode = item1.data().get("usage");
         assertThat(usageNode.isObject()).isTrue();
+    }
+
+    @Nested
+    @DisplayName("Field mappings:")
+    class FieldMappings {
+
+        private UUID createSpan(String apiKey, String workspaceName) {
+            String projectName = GENERATOR.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .input(JsonUtils.getJsonNodeFromString(
+                            "{\"input_text\": \"bonjour\", \"bucket\": \"greeting\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"verdict\": \"correct\", \"score\": 0.94}"))
+                    .tags(Set.of("translation"))
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+            return span.id();
+        }
+
+        @Test
+        @DisplayName("Success - mapped fields replace the enriched input and expected output")
+        void createDatasetItemsFromSpans__withFieldMappings() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+            var spanId = createSpan(apiKey, workspaceName);
+
+            datasetResourceClient.createDatasetItemsFromSpans(datasetId,
+                    CreateDatasetItemsFromSpansRequest.builder()
+                            .spanIds(Set.of(spanId))
+                            .enrichmentOptions(SpanEnrichmentOptions.builder().includeTags(true).build())
+                            .fieldMappings(Map.of(
+                                    "input", "input.input_text",
+                                    "expected_output", "output.verdict",
+                                    "bucket", "input.bucket"))
+                            .build(),
+                    apiKey, workspaceName);
+
+            var items = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName).content();
+
+            assertThat(items).hasSize(1);
+            var data = items.getFirst().data();
+            assertThat(data.get("input").asText()).isEqualTo("bonjour");
+            assertThat(data.get("expected_output").asText()).isEqualTo("correct");
+            assertThat(data.get("bucket").asText()).isEqualTo("greeting");
+            assertThat(data).containsKey("tags");
+        }
+
+        @Test
+        @DisplayName("Success - a mapped path that does not resolve leaves the field out")
+        void createDatasetItemsFromSpans__whenMappedPathDoesNotResolve__thenFieldIsAbsent() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+            var spanId = createSpan(apiKey, workspaceName);
+
+            datasetResourceClient.createDatasetItemsFromSpans(datasetId,
+                    CreateDatasetItemsFromSpansRequest.builder()
+                            .spanIds(Set.of(spanId))
+                            .enrichmentOptions(SpanEnrichmentOptions.builder().build())
+                            .fieldMappings(Map.of("input", "input.input_text", "tone", "input.tone"))
+                            .build(),
+                    apiKey, workspaceName);
+
+            var data = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName)
+                    .content().getFirst().data();
+
+            assertThat(data).doesNotContainKey("tone");
+            assertThat(data.get("input").asText()).isEqualTo("bonjour");
+        }
+
+        @Test
+        @DisplayName("when a mapping uses a banned construct, then return 422")
+        void createDatasetItemsFromSpans__whenMappingUsesBannedConstruct__thenReturn422() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+
+            var request = CreateDatasetItemsFromSpansRequest.builder()
+                    .spanIds(Set.of(GENERATOR.generate()))
+                    .enrichmentOptions(SpanEnrichmentOptions.builder().build())
+                    .fieldMappings(Map.of("score", "feedback_scores[?(@.name == 'x')].value"))
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromSpans(datasetId, request,
+                    apiKey, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
     }
 
     private Dataset buildDataset() {

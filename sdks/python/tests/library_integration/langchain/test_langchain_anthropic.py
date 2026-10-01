@@ -13,8 +13,8 @@ from ...testlib import (
     assert_equal,
 )
 from ...llm_constants import (
-    ANTHROPIC_CLAUDE_SONNET,
-    ANTHROPIC_CLAUDE_SONNET_SHORT,
+    ANTHROPIC_CLAUDE_HAIKU,
+    ANTHROPIC_CLAUDE_HAIKU_SHORT,
 )
 
 
@@ -39,14 +39,12 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
 ):
     # langchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
     llm = langchain_anthropic.ChatAnthropic(
-        max_tokens=100,
-        model_name=ANTHROPIC_CLAUDE_SONNET,
+        max_tokens=10,
+        model_name=ANTHROPIC_CLAUDE_HAIKU,
         name="custom-anthropic-llm-name",
     )
 
-    template = (
-        "Given the title of play, write a short synopsys for that. Title: {title}."
-    )
+    template = "Write a 3-word synopsis for the play titled {title}."
 
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
@@ -94,7 +92,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                         [
                             ANY_DICT.containing(
                                 {
-                                    "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                                    "content": "Write a 3-word synopsis for the play titled Documentary about Bigfoot in Paris.",
                                     "type": "human",
                                 }
                             ),
@@ -109,7 +107,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                 end_time=ANY_BUT_NONE,
                 usage=EXPECTED_USAGE_ANTHROPIC,
                 provider="anthropic",
-                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_HAIKU_SHORT),
                 source="sdk",
             ),
         ],
@@ -127,16 +125,14 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
 ):
     # langchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
     llm = langchain_anthropic.ChatAnthropic(
-        max_tokens=100,
-        model_name=ANTHROPIC_CLAUDE_SONNET,
+        max_tokens=10,
+        model_name=ANTHROPIC_CLAUDE_HAIKU,
         name="custom-anthropic-llm-name",
         streaming=True,
         stream_usage=True,
     )
 
-    template = (
-        "Given the title of play, write a short synopsys for that. Title: {title}."
-    )
+    template = "Write a 3-word synopsis for the play titled {title}."
 
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
@@ -188,7 +184,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                         [
                             ANY_DICT.containing(
                                 {
-                                    "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                                    "content": "Write a 3-word synopsis for the play titled Documentary about Bigfoot in Paris.",
                                     "type": "human",
                                 }
                             ),
@@ -203,7 +199,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                 end_time=ANY_BUT_NONE,
                 usage=EXPECTED_USAGE_ANTHROPIC,
                 provider="anthropic",
-                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_HAIKU_SHORT),
                 source="sdk",
             ),
         ],

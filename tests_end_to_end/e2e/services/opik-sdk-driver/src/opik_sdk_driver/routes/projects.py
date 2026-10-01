@@ -1,6 +1,7 @@
 import atexit
 
 from fastapi import APIRouter, Header, HTTPException
+from opik.rest_api.core.api_error import ApiError
 
 from ..opik_factory import make_opik_client
 from ..schemas import ProjectCreate, ProjectResponse
@@ -18,7 +19,16 @@ def create_project(
     # the SDK is translated to HTTP by the app-wide exception handler.
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     try:
-        client._rest_client.projects.create_project(name=body.name)
+        try:
+            client._rest_client.projects.create_project(name=body.name)
+        except ApiError as err:
+            # 409 means the name is already taken, which for this route is a
+            # success: the caller wants the project to exist and be returned.
+            # It is also what a retried create looks like after the create
+            # committed but the read below was throttled, so swallowing it here
+            # is what makes the whole route safe to retry.
+            if err.status_code != 409:
+                raise
         page = client._rest_client.projects.find_projects(name=body.name, page=1, size=1)
     finally:
         client.end(flush=False)

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -55,11 +56,21 @@ public class ServiceTogglesConfig {
     @NotNull boolean ollamaProviderEnabled;
     @JsonProperty
     @NotNull boolean ollieEnabled;
+    // Defaults on so a config that omits the key keeps Agent Insights as it was before this toggle existed.
+    @JsonProperty
+    @NotNull boolean agentInsightsEnabled = true;
     @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
     @NotNull boolean onlineScoringTracingEnabled;
+    @JsonProperty
+    @NotNull boolean annotationQueueAutomationEnabled;
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;
+
+    @JsonIgnore
+    public boolean isAgentInsightsActive() {
+        return ollieEnabled && agentInsightsEnabled;
+    }
 }

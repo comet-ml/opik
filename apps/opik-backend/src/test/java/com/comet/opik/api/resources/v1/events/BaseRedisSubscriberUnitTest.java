@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.infrastructure.redis.UndecodableStreamMessage;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -13,6 +14,7 @@ import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.options.PlainOptions;
 import org.redisson.api.stream.AutoClaimResult;
+import org.redisson.api.stream.PendingEntry;
 import org.redisson.api.stream.StreamCreateGroupArgs;
 import org.redisson.api.stream.StreamMessageId;
 import org.redisson.api.stream.StreamPendingRangeArgs;
@@ -36,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -269,6 +272,158 @@ class BaseRedisSubscriberUnitTest {
                     });
         }
 
+        /**
+         * OPIK-8192, first half. An undecodable payload now arrives as a <em>value</em> rather than a
+         * throw from inside Redisson, so it carries a messageId at all — previously it never reached
+         * here, was redelivered forever, and at {@code consumerBatchSize > 1} stranded every healthy
+         * entry claimed with it.
+         * <p>
+         * It must NOT be removed on first delivery. "This pod cannot decode it" is not "nobody can":
+         * the reader's {@code maxStringLength} is configuration, and during a rolling upgrade a newer
+         * pod may read what an older one cannot. Deleting on sight would discard recoverable data.
+         */
+        @Test
+        void shouldNotRemoveUndecodableMessageBeforeMaxRetries() {
+            var undecodableId = new StreamMessageId(System.currentTimeMillis(), 0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            whenReadGroupReturnsUndecodableThenHealthy(undecodableId);
+            // Delivery count below maxRetries (3): the entry stays pending for another consumer.
+            // Built before the stubbing call -- Mockito rejects creating a mock inside when(...).
+            var pending = pendingEntry(undecodableId, 1);
+            when(stream.listPending(any(StreamPendingRangeArgs.class)))
+                    .thenReturn(Mono.just(List.of(pending)));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(1));
+
+            verify(stream, never()).ack(eq(CONFIG.getConsumerGroupName()),
+                    eq(new StreamMessageId[]{undecodableId}));
+            verify(stream, never()).remove(eq(new StreamMessageId[]{undecodableId}));
+        }
+
+        /**
+         * OPIK-8192, second half. Retrying must still terminate: once the delivery count reaches
+         * {@code maxRetries} the entry is acked and removed, so a genuinely poisonous payload cannot
+         * wedge the stream the way it did before. This is the bound that makes the retryable
+         * classification safe.
+         */
+        @Test
+        void shouldRemoveUndecodableMessageOnceMaxRetriesReached() {
+            var undecodableId = new StreamMessageId(System.currentTimeMillis(), 0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            whenReadGroupReturnsUndecodableThenHealthy(undecodableId);
+            var pending = pendingEntry(undecodableId, CONFIG.getMaxRetries());
+            when(stream.listPending(any(StreamPendingRangeArgs.class)))
+                    .thenReturn(Mono.just(List.of(pending)));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        verify(stream).ack(eq(CONFIG.getConsumerGroupName()),
+                                eq(new StreamMessageId[]{undecodableId}));
+                        verify(stream).remove(eq(new StreamMessageId[]{undecodableId}));
+                    });
+            // It never reaches processEvent either way, and healthy traffic behind it keeps flowing.
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+        }
+
+        /**
+         * A genuinely absent payload field is deterministic — no pod can invent it — so it keeps the
+         * pre-existing non-retryable treatment and is removed on the FIRST delivery. The delivery count
+         * is stubbed below maxRetries precisely to prove the removal does not depend on exhausting it.
+         */
+        @Test
+        void shouldRemoveMessageWithNoPayloadOnFirstDelivery() {
+            var noPayloadId = new StreamMessageId(System.currentTimeMillis(), 0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            var readCount = new AtomicInteger();
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> readCount.incrementAndGet() == 1
+                            ? Mono.just(Map.of(noPayloadId, Map.of("not-the-payload-field", "ignored")))
+                            : Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), readCount.get()),
+                                    Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                            podamFactory.manufacturePojo(String.class)))));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> verify(stream).remove(eq(new StreamMessageId[]{noPayloadId})));
+            // Deliberately no listPending stub: a non-retryable failure is removed without consulting
+            // the delivery count at all, so needing one would mean the classification had drifted to
+            // retryable. This is the assertion that separates this case from the field-name one below.
+            verify(stream, never()).listPending(any(StreamPendingRangeArgs.class));
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+        }
+
+        /**
+         * A field name the map-key decoder could not decode is a different animal: the sentinel lands
+         * among the KEYS, so the payload lookup misses, but LZ4/Kryo skew can differ between pods. It
+         * must therefore be retryable — NOT removed below maxRetries — unlike the absent-field case
+         * above. Nothing but this test distinguishes the two.
+         */
+        @Test
+        void shouldNotRemoveMessageWithUndecodableFieldNameBeforeMaxRetries() {
+            var badKeyId = new StreamMessageId(System.currentTimeMillis(), 0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            var readCount = new AtomicInteger();
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> {
+                        if (readCount.incrementAndGet() == 1) {
+                            // The sentinel is the KEY, so no entry matches PAYLOAD_FIELD.
+                            Map<Object, Object> entry = new java.util.HashMap<>();
+                            entry.put(UndecodableStreamMessage.builder()
+                                    .encodedBytes(64)
+                                    .cause(new IllegalStateException("not an LZ4 frame"))
+                                    .build(), "unreachable");
+                            return Mono.just(Map.of(badKeyId, entry));
+                        }
+                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), readCount.get()),
+                                Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                        podamFactory.manufacturePojo(String.class))));
+                    });
+            var pending = pendingEntry(badKeyId, 1);
+            when(stream.listPending(any(StreamPendingRangeArgs.class)))
+                    .thenReturn(Mono.just(List.of(pending)));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(1));
+
+            verify(stream, never()).remove(eq(new StreamMessageId[]{badKeyId}));
+        }
+
+        private void whenReadGroupReturnsUndecodableThenHealthy(StreamMessageId undecodableId) {
+            var readCount = new AtomicInteger();
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> readCount.incrementAndGet() == 1
+                            ? Mono.just(Map.of(undecodableId,
+                                    Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                            UndecodableStreamMessage.builder()
+                                                    .encodedBytes(20_054_016)
+                                                    .cause(new IllegalStateException(
+                                                            "String value length (20054016) exceeds the maximum allowed"))
+                                                    .build())))
+                            : Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), readCount.get()),
+                                    Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                            podamFactory.manufacturePojo(String.class)))));
+        }
+
         @Test
         void shouldNotDieOnProcessingError() {
             // Subscriber that throws on first message, succeeds on subsequent
@@ -467,6 +622,58 @@ class BaseRedisSubscriberUnitTest {
     @Nested
     class NoGroupErrorTests {
 
+        /**
+         * Regression for review feedback on OPIK-8240: {@code recoverFromNoGroup} is reached from BOTH
+         * {@code readMessages} and {@code claimPendingMessages}, and the cursor reset was originally only
+         * at the claim call site. The read path is the likelier of the two to notice NOGROUP first, since
+         * reads run on every tick that is not a claim tick.
+         *
+         * <p>A cursor left pointing into the old group's pending list is not self-correcting on a busy
+         * stream: a scan starting above the recreated PEL's entries only wraps once it exhausts the list,
+         * and entries arriving after the stale position keep feeding it at the high end, so the oldest
+         * entries can go unexamined indefinitely -- the exact starvation this fix exists to remove.
+         */
+        @Test
+        void shouldResetTheClaimCursorWhenTheGroupIsRecreatedViaTheReadPath() {
+            whenCreateGroupReturnEmpty();
+            whenRemoveConsumerReturn();
+            var fastConfig = CONFIG.toBuilder().claimIntervalRatio(2).build();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient));
+            var starts = new CopyOnWriteArrayList<StreamMessageId>();
+            var claims = new AtomicInteger();
+
+            // First claim advances the cursor well past the start of the PEL.
+            when(stream.autoClaim(
+                    eq(fastConfig.getConsumerGroupName()),
+                    anyString(),
+                    eq(fastConfig.getPendingMessageDuration().toJavaDuration().toMillis()),
+                    eq(TimeUnit.MILLISECONDS),
+                    any(StreamMessageId.class),
+                    eq(fastConfig.getConsumerBatchSize())))
+                    .thenAnswer(invocation -> {
+                        starts.add(invocation.getArgument(4));
+                        claims.incrementAndGet();
+                        return Mono.just(new AutoClaimResult<>(
+                                new StreamMessageId(9_000L, 0), Map.of(), List.of()));
+                    });
+            // Reads then hit NOGROUP, which recreates the group underneath us.
+            when(stream.readGroup(eq(fastConfig.getConsumerGroupName()), anyString(),
+                    any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> Mono
+                            .error(new RuntimeException("NOGROUP No such key stream or consumer group")));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).until(() -> starts.size() >= 2);
+
+            // The recreated group has a fresh PEL, so the next scan must start from the beginning rather
+            // than from the position it reached in the group that no longer exists.
+            assertThat(starts.getFirst()).isEqualTo(StreamMessageId.MIN);
+            assertThat(starts.get(1)).isEqualTo(StreamMessageId.MIN);
+        }
+
         @Test
         void shouldRecoverOnClaimAndNotDie() {
             whenCreateGroupReturnEmpty();
@@ -601,6 +808,71 @@ class BaseRedisSubscriberUnitTest {
             subscriber.start();
 
             assertThatCode(subscriber::stop).doesNotThrowAnyException();
+        }
+    }
+
+    /** A PendingEntry whose delivery count drives the maxRetries decision. */
+    private static PendingEntry pendingEntry(StreamMessageId messageId, long deliveryCount) {
+        var entry = org.mockito.Mockito.mock(PendingEntry.class);
+        lenient().when(entry.getId()).thenReturn(messageId);
+        lenient().when(entry.getDeliveryCount()).thenReturn(deliveryCount);
+        return entry;
+    }
+
+    /**
+     * OPIK-8240, for the one part of the claim cursor a real Redis cannot be made to produce on demand:
+     * a failing {@code XAUTOCLAIM}.
+     * <p>
+     * The cursor's normal behaviour -- walking past the first {@code COUNT * 10} examine window and
+     * wrapping when Redis reports the pass complete -- is covered end to end in
+     * {@link BaseRedisSubscriberTest.ClaimCursorTests} against a PEL deeper than that window, so it is
+     * deliberately not duplicated here. What is left is the error path: the cursor must NOT advance past
+     * a window whose scan failed, or that window's entries are skipped until the next full wrap. Making
+     * a real Redis fail one XAUTOCLAIM mid-run and succeed on the next is not something the container
+     * exposes, so it is mocked.
+     */
+    @Nested
+    class ClaimCursorTests {
+
+        @BeforeEach
+        void setUp() {
+            whenCreateGroupReturnEmpty();
+            whenRemoveConsumerReturn();
+        }
+
+        @Test
+        void shouldRetryTheSameWindowAfterAFailedScan() {
+            var fastConfig = CONFIG.toBuilder().claimIntervalRatio(2).build();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient));
+            var starts = new CopyOnWriteArrayList<StreamMessageId>();
+            var calls = new AtomicInteger();
+            when(stream.autoClaim(
+                    eq(fastConfig.getConsumerGroupName()),
+                    anyString(),
+                    eq(fastConfig.getPendingMessageDuration().toJavaDuration().toMillis()),
+                    eq(TimeUnit.MILLISECONDS),
+                    any(StreamMessageId.class),
+                    eq(fastConfig.getConsumerBatchSize())))
+                    .thenAnswer(invocation -> {
+                        starts.add(invocation.getArgument(4));
+                        if (calls.incrementAndGet() == 1) {
+                            return Mono.just(new AutoClaimResult<>(
+                                    new StreamMessageId(700L, 0), Map.of(), List.of()));
+                        }
+                        // A failed scan must not advance the cursor, or the window it covered would be
+                        // skipped entirely and its entries left unreachable until the next full wrap.
+                        return Mono.error(new RuntimeException("Redis autoClaim error"));
+                    });
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).until(() -> starts.size() >= 3);
+
+            assertThat(starts.get(1)).isEqualTo(new StreamMessageId(700L, 0));
+            assertThat(starts.get(2)).isEqualTo(new StreamMessageId(700L, 0));
         }
     }
 

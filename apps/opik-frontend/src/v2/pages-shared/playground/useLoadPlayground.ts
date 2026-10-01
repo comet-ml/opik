@@ -7,6 +7,7 @@ import {
   usePromptMap,
   useSetPromptMap,
   useSetDatasetType,
+  useSetExperimentName,
 } from "@/store/PlaygroundStore";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { DATASET_TYPE } from "@/types/datasets";
@@ -51,6 +52,7 @@ function useLoadPlayground() {
   const promptMap = usePromptMap();
   const setPromptMap = useSetPromptMap();
   const setDatasetType = useSetDatasetType();
+  const setExperimentName = useSetExperimentName();
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -220,6 +222,7 @@ function useLoadPlayground() {
       }
 
       setDatasetType(datasetType ?? null);
+      setExperimentName(null);
 
       navigate({
         to: "/$workspaceName/projects/$projectId/playground",
@@ -235,6 +238,7 @@ function useLoadPlayground() {
       setPromptMap,
       setDatasetVersionKey,
       setDatasetType,
+      setExperimentName,
       workspaceName,
       activeProjectId,
     ],

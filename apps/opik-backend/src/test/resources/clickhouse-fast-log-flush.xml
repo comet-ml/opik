@@ -1,0 +1,16 @@
+<clickhouse>
+    <!-- The system log tables buffer and flush on a 7.5s default. Tests that read system.query_log or
+         system.part_log straight after the statement that wrote to them would otherwise have to force a
+         SYSTEM FLUSH LOGS, which pushes only what has already reached the buffer and so races the rows it is
+         meant to reveal. Shortening the interval lets those tests simply poll instead.
+
+         Opt-in per suite via withCopyToContainer, not part of the shared clickhouse.xml: only suites that read
+         the log tables need it, and only a dedicated (non-reused) container should pay for the extra flushing.
+         Harmless to adopt more widely if that changes. -->
+    <query_log>
+        <flush_interval_milliseconds>200</flush_interval_milliseconds>
+    </query_log>
+    <part_log>
+        <flush_interval_milliseconds>200</flush_interval_milliseconds>
+    </part_log>
+</clickhouse>

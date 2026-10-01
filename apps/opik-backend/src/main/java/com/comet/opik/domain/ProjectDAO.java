@@ -4,6 +4,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
@@ -96,6 +97,25 @@ interface ProjectDAO {
     int[] recordLastUpdatedTrace(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
-    @SqlQuery("SELECT * FROM projects WHERE name IN (<names>)")
-    List<Project> findByGlobalNames(@BindList("names") Collection<String> names);
+    /**
+     * Projects with the given names in {@code workspaceIds}. The workspace scope is deliberately not optional:
+     * {@code projects_workspace_id_name_uk} is keyed on {@code (workspace_id, name)}, so without the workspace
+     * neither index applies and the result spans every workspace in the installation. Its only caller is the
+     * demo-project lookup behind the daily usage counts, whose whole point is to be bounded — one demo project is
+     * created per signup — so no overload offers to ask this across the installation.
+     *
+     * <p>An empty or null {@code workspaceIds} reads as unrestricted rather than as "match nothing": the
+     * {@code <if(workspace_ids)>} guard is what stands between it and an empty {@code IN ()}. Callers filtering a
+     * set they built must handle the empty case themselves, as
+     * {@link ProjectService#getDemoProjectIdsInWorkspaces(java.util.Set)} does.
+     */
+    @SqlQuery("""
+            SELECT * FROM projects
+            WHERE name IN (<names>)
+            <if(workspace_ids)> AND workspace_id IN (<workspace_ids>) <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Project> findByGlobalNames(@NonNull @BindList("names") List<String> names,
+            @Define("workspace_ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "workspace_ids") Set<String> workspaceIds);
 }

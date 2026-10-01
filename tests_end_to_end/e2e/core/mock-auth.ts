@@ -32,9 +32,10 @@ export const mockTokenUrlForBackend = `${mockAuthBaseUrlForBackend}/oauth/token`
 export const mockGatewayUrlForBackend = `${mockAuthBaseUrlForBackend}/v1`;
 
 /**
- * Counter map from /stats. Global outcome counters (tokens_issued, chat_ok,
- * chat_refused_unknown, ...) plus model-scoped variants (`chat_ok:<model>`) so
- * parallel specs can assert on their own traffic via unique model names.
+ * Counter map from /stats. Global outcome counters (chat_request, tokens_issued,
+ * chat_ok, chat_refused_unknown, ...) plus model-scoped variants
+ * (`chat_request:<model>`, `chat_ok:<model>`) so parallel specs can assert on their
+ * own traffic via unique model names.
  */
 export type MockAuthStats = Record<string, number>;
 
@@ -44,9 +45,50 @@ export async function mockAuthStats(): Promise<MockAuthStats> {
   return (await response.json()) as MockAuthStats;
 }
 
+/**
+ * How many chat requests the gateway has received for one model, counted before any
+ * outcome branch.
+ *
+ * The number of ATTEMPTS is the only place a retry decision is observable: a retried
+ * evaluation writes the same single "Sending … to LLM" line to the rule log as one that
+ * gave up immediately, so counting log lines cannot tell the two apart.
+ */
+export function mockAuthChatRequests(stats: MockAuthStats, modelName: string): number {
+  return stats[`chat_request:${modelName}`] ?? 0;
+}
+
 export async function mockAuthRevokeAll(): Promise<void> {
   const response = await fetch(`${mockAuthBaseUrl}/revoke`, { method: 'POST' });
   if (!response.ok) throw new Error(`mock-auth /revoke returned ${response.status}`);
+}
+
+/**
+ * Make the gateway answer `status` for every chat request naming `modelName`.
+ *
+ * Scoped to a model rather than the process so one provider can serve several statuses
+ * at once — which is what lets a spec compare two classifications over a single trace,
+ * with the rule shape held constant.
+ *
+ * Prefer `providerKeys.forceChatStatus`, which registers the reset for teardown.
+ */
+export async function mockAuthForceChatStatus(modelName: string, status: number): Promise<void> {
+  await postChatStatus({ model: modelName, status });
+}
+
+/** Drops a forced status, so the model is served normally again. */
+export async function mockAuthClearChatStatus(modelName: string): Promise<void> {
+  await postChatStatus({ model: modelName });
+}
+
+async function postChatStatus(body: { model: string; status?: number }): Promise<void> {
+  const response = await fetch(`${mockAuthBaseUrl}/chat-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`mock-auth /chat-status returned ${response.status}: ${await response.text()}`);
+  }
 }
 
 const AUTH_CONFIG_TEST_PATH = '/auth-config/test';

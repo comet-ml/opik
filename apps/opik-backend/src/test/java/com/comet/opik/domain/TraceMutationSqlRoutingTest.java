@@ -13,8 +13,8 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The one routing check that cannot be an {@code ArchRule}, plus the regression coverage for the detector both halves
- * share.
+ * The one routing check that cannot be an {@code ArchRule}, plus this family's half of the regression coverage for the
+ * shared {@link MutationSql} detector.
  *
  * <p>{@link TraceMutationRoutingArchTest} holds the rest: the flag is read in one place, the routing decision made in
  * one place, and no declared SQL constant names a physical trace table. That third rule reflects over the constants,
@@ -59,8 +59,8 @@ class TraceMutationSqlRoutingTest {
         var literals = STRING_LITERAL.matcher(source);
         while (literals.find()) {
             var literal = literals.group();
-            for (var mutation : TraceMutationSql.findMutations(literal)) {
-                if (TraceMutationSql.targetsATraceTableWithoutTheResolver(mutation)) {
+            for (var mutation : MutationSql.TRACES.findMutations(literal)) {
+                if (MutationSql.TRACES.targetsATableWithoutTheResolver(mutation)) {
                     offenders.add(literal);
                 }
             }
@@ -79,6 +79,10 @@ class TraceMutationSqlRoutingTest {
      * Regression coverage for the detector. Every form here is a way a mutation could reach a trace table without going
      * through the resolver, and each must be flagged — a detector that recognises only the bare, unqualified name is a
      * guard with a hole in it rather than a guard.
+     * <p>
+     * Together with its complement below, this is also what keeps the shared detector safe to share: a suite wired to
+     * the wrong {@link MutationSql} constant fails on the first case here rather than passing while checking a family
+     * it was never pointed at.
      */
     @ParameterizedTest
     @ValueSource(strings = {
@@ -102,7 +106,7 @@ class TraceMutationSqlRoutingTest {
     })
     @DisplayName("the detector flags every way of reaching a trace table without the resolver")
     void detectorFlagsTraceTablesWithoutTheResolver(String mutation) {
-        assertThat(TraceMutationSql.targetsATraceTableWithoutTheResolver(mutation))
+        assertThat(MutationSql.TRACES.targetsATableWithoutTheResolver(mutation))
                 .as("`%s` targets a trace table without the resolver and must be flagged", mutation)
                 .isTrue();
     }
@@ -123,7 +127,7 @@ class TraceMutationSqlRoutingTest {
     })
     @DisplayName("the detector leaves the resolver placeholder and unrelated tables alone")
     void detectorIgnoresPermittedTargets(String mutation) {
-        assertThat(TraceMutationSql.targetsATraceTableWithoutTheResolver(mutation))
+        assertThat(MutationSql.TRACES.targetsATableWithoutTheResolver(mutation))
                 .as("`%s` must not be flagged", mutation)
                 .isFalse();
     }

@@ -320,6 +320,34 @@ class TestRecreateExperiment:
         assert mock_client.get_or_create_dataset.called
         assert mock_client.create_experiment.called
 
+    @pytest.mark.parametrize("metadata", [[{"tagged": True}], "a bare string"])
+    def test_recreate_experiment__non_object_metadata__recreated_with_it_nested(
+        self, mock_client: Mock, experiment_data: ExperimentData, metadata: Any
+    ) -> None:
+        """Experiment metadata is an arbitrary JSON value on the wire.
+
+        The recreation path copies it, pops from it and assigns into it, all of
+        which assume a mapping, so a non-object value used to fail the import.
+        """
+        experiment_data.experiment["metadata"] = metadata
+
+        recreate_experiment(
+            mock_client,
+            experiment_data,
+            "test-project",
+            {"trace-1": "new-trace-1"},
+            {"ds-item-1": "new-ds-item-1"},
+            dry_run=False,
+            debug=False,
+        )
+
+        assert mock_client.create_experiment.called
+        recreated_metadata = mock_client.create_experiment.call_args.kwargs[
+            "experiment_config"
+        ]
+        assert recreated_metadata["_import_metadata"] == metadata
+        assert recreated_metadata["project_name"] == "test-project"
+
     def test_recreate_experiment_dry_run(
         self, mock_client: Mock, experiment_data: ExperimentData
     ) -> None:

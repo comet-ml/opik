@@ -1124,6 +1124,54 @@ class FindSpansResourceTest {
             assertSpan(actualSpans, expectedSpans, USER);
         }
 
+        /**
+         * The cursor is whatever id the previous page ended on, so it can carry a far-future timestamp: a UUIDv7
+         * minted by a broken clock (litellm BerriAI/litellm#31294) sorts above every real id, so it comes back first
+         * under {@code ORDER BY id DESC} and becomes the cursor for page two.
+         *
+         * <p>Each id-range bound in the read path carries a parallel week-start bound on {@code id_at}, a pruning hint
+         * that must never exclude a row the id-range admits. When that bound was {@code toMonday} it broke exactly
+         * here (OPIK-8241): a far-future cursor folded into a past week and every ordinary span — whose week is later
+         * — failed {@code <=}, so the page came back empty and pagination stopped dead.
+         *
+         * <p>This reaches the <b>legacy</b> {@code spans} table, the default topology of this suite and of any install
+         * that has not cut over, because the wrap is on the <b>bound</b> side, which reads the id directly and is
+         * honest whatever width {@code spans.id_at} has. No far-future span is needed — {@code lastRetrievedId} is an
+         * unvalidated cursor on the request, so ingestion, which would reject such an id, is not involved.
+         */
+        @Test
+        void searchSpansStream__whenCursorCarriesAFarFutureTimestamp__thenSpansAreStillReturned() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    span.startTime(), span.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(Span::id).reversed())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Sorts above every seeded id, so `id < :cursor` admits all of them and only the week bound can drop them.
+            var farFutureCursor = idGenerator.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+
+            var streamRequest = SpanSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .lastRetrievedId(farFutureCursor)
+                    .limit(spans.size())
+                    .build();
+            var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
+
+            assertSpan(actualSpans, spans, USER);
+        }
+
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterIdAndNameEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {

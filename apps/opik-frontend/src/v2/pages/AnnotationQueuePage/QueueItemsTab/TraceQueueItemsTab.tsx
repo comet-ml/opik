@@ -72,6 +72,13 @@ import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import { LOGS_TYPE } from "@/constants/traces";
 import useTracesList from "@/api/traces/useTracesList";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import useQueueItemSources from "@/v2/pages-shared/annotation-queues/useQueueItemSources";
+import {
+  createQueueItemSourceColumn,
+  withQueueItemSources,
+} from "@/v2/pages-shared/annotation-queues/queueItemSourceColumn";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -233,6 +240,13 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
   },
 ];
 
+const QUEUE_ITEM_SOURCE_COLUMN = createQueueItemSourceColumn<Trace>();
+
+const TRACE_DISPLAY_COLUMNS: ColumnData<Trace>[] = [
+  ...TRACE_COLUMNS,
+  QUEUE_ITEM_SOURCE_COLUMN,
+];
+
 const TRACE_FILTER_COLUMNS: ColumnData<Trace>[] = [
   {
     id: COLUMN_ID_ID,
@@ -255,6 +269,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "name",
   "input",
   "output",
+  QUEUE_ITEM_SOURCE_COLUMN.id,
   COLUMN_COMMENTS_ID,
 ];
 
@@ -263,6 +278,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "name",
   "input",
   "output",
+  QUEUE_ITEM_SOURCE_COLUMN.id,
   COLUMN_COMMENTS_ID,
   "start_time",
   "end_time",
@@ -281,6 +297,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 
 const SELECTED_COLUMNS_KEY = "queue-trace-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
+const SELECTED_COLUMNS_KEY_V3 = `${SELECTED_COLUMNS_KEY}-v3`;
 const COLUMNS_WIDTH_KEY = "queue-trace-columns-width";
 const COLUMNS_ORDER_KEY = "queue-trace-columns-order";
 const COLUMNS_SORT_KEY = "queue-trace-columns-sort";
@@ -343,12 +360,15 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
+    SELECTED_COLUMNS_KEY_V3,
     {
       defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
-        DEFAULT_SELECTED_COLUMNS,
-        [COLUMN_ID_ID],
+        SELECTED_COLUMNS_KEY_V2,
+        migrateSelectedColumns(SELECTED_COLUMNS_KEY, DEFAULT_SELECTED_COLUMNS, [
+          COLUMN_ID_ID,
+          QUEUE_ITEM_SOURCE_COLUMN.id,
+        ]),
+        [QUEUE_ITEM_SOURCE_COLUMN.id],
       ),
     },
   );
@@ -432,6 +452,23 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
 
   const rows: Trace[] = useMemo(() => data?.content ?? [], [data]);
 
+  // With annotation queue automation off, the queue has no automated items, so the Source
+  // column has nothing to say and its per-page membership lookup is not made.
+  const isAutomationEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
+  );
+
+  const displayColumns = useMemo(
+    () => (isAutomationEnabled ? TRACE_DISPLAY_COLUMNS : TRACE_COLUMNS),
+    [isAutomationEnabled],
+  );
+
+  const sourceById = useQueueItemSources(
+    annotationQueue.id,
+    rows,
+    isAutomationEnabled,
+  );
+
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
@@ -499,7 +536,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
 
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Trace, Trace>(
-      TRACE_COLUMNS,
+      withQueueItemSources(displayColumns, sourceById),
       {
         columnsOrder,
         selectedColumns,
@@ -534,6 +571,8 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     scoresColumnsOrder,
     annotationQueue.id,
     handleThreadIdClick,
+    displayColumns,
+    sourceById,
   ]);
 
   const sortConfig = useMemo(
@@ -601,7 +640,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={TRACE_COLUMNS}
+            columns={displayColumns}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

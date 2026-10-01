@@ -1,6 +1,9 @@
 from unittest import mock
 
+import httpx
 import opik.hooks
+import pytest
+
 from opik import s3_httpx_client
 from opik.s3_httpx_client import (
     CONNECT_TIMEOUT_SECONDS,
@@ -68,3 +71,38 @@ def test_httpx_client_hooks__callable_hook_applied__with_arguments_hook_applied_
 def test_get_httpx_client__no_hooks():
     client = s3_httpx_client.get()
     assert client is not None
+
+
+def test_allowed_to_retry__remote_protocol_error__returns_true():
+    request = httpx.Request("PUT", "https://s3.amazonaws.com/bucket/1")
+    error = httpx.RemoteProtocolError(
+        "Server disconnected without sending a response",
+        request=request,
+    )
+
+    assert s3_httpx_client._allowed_to_retry(error) is True
+
+
+@pytest.mark.parametrize("status_code", [500, 502, 503, 504])
+def test_allowed_to_retry__transient_status__returns_true(status_code):
+    request = httpx.Request("PUT", "https://s3.amazonaws.com/bucket/1")
+    response = httpx.Response(status_code, request=request)
+    error = httpx.HTTPStatusError(
+        "Transient S3 error",
+        request=request,
+        response=response,
+    )
+
+    assert s3_httpx_client._allowed_to_retry(error) is True
+
+
+def test_allowed_to_retry__non_transient_status__returns_false():
+    request = httpx.Request("PUT", "https://s3.amazonaws.com/bucket/1")
+    response = httpx.Response(403, request=request)
+    error = httpx.HTTPStatusError(
+        "Non-transient S3 error",
+        request=request,
+        response=response,
+    )
+
+    assert s3_httpx_client._allowed_to_retry(error) is False

@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
+import com.comet.opik.api.AnnotationQueueItem;
 import com.comet.opik.api.AnnotationQueueItemIds;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.BatchDelete;
@@ -12,6 +13,7 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
+import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.util.SequencedSet;
@@ -114,6 +116,25 @@ public class AnnotationQueuesResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(AnnotationQueueItemIds.builder().ids(itemIds).build()));
+    }
+
+    public AnnotationQueueItem.AnnotationQueueItems searchAnnotationQueueItems(UUID queueId, Set<UUID> itemIds,
+            String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(queueId.toString())
+                .path("items")
+                .path("search")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new AnnotationQueueItemIds(itemIds)))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            return expectedStatus == HttpStatus.SC_OK
+                    ? response.readEntity(AnnotationQueueItem.AnnotationQueueItems.class)
+                    : null;
+        }
     }
 
     public void deleteAnnotationQueueBatch(Set<UUID> queueIds, String apiKey,

@@ -144,7 +144,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -181,6 +180,9 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZE
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItem;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.ignoredFieldsPlus;
 import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -216,8 +218,6 @@ class DatasetsResourceTest {
 
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments", "projectName", "traceMetadata"};
-    public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
-            "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId", "runSummariesByExperiment"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "projectName", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
             "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount",
@@ -4862,9 +4862,7 @@ class DatasetsResourceTest {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
         assertThat(actualEntity.id()).isEqualTo(expectedDatasetItem.id());
-        assertThat(actualEntity).usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
-                .isEqualTo(expectedDatasetItem);
+        assertDatasetItem(actualEntity, expectedDatasetItem);
 
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
@@ -6594,11 +6592,8 @@ class DatasetsResourceTest {
 
     private void assertPage(List<DatasetItem> expectedItems, List<DatasetItem> actualItems) {
 
-        List<String> ignoredFields = new ArrayList<>(Arrays.asList(IGNORED_FIELDS_DATA_ITEM));
-        ignoredFields.add("data");
-
         assertThat(actualItems)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredFields.toArray(String[]::new))
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredFieldsPlus("data"))
                 .isEqualTo(expectedItems);
 
         assertThat(actualItems).hasSize(expectedItems.size());
@@ -7497,6 +7492,102 @@ class DatasetsResourceTest {
             // Verify the experiment items are properly associated using assertion helper
             assertDatasetItemExperiments(actualPage, List.of(expectedDatasetItem),
                     List.of(expectedExperimentItemWithActualDuration));
+        }
+
+        /**
+         * Pins where the target projects come from: the traces, not the denormalized
+         * {@code experiment_items.project_id}. Reading them off the experiment item loses the project of any
+         * item written before its trace existed, and the compare view then returns that item with no trace
+         * data at all instead of failing.
+         */
+        @Test
+        void find__whenExperimentItemHasNoProjectId__thenTraceDataIsResolvedFromTheTrace() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).subList(0, 2);
+            putAndAssert(DatasetItemBatch.builder().items(datasetItems).datasetId(datasetId).build(), workspaceName,
+                    apiKey);
+
+            // This trace exists when its experiment item is written, so the item carries its project_id.
+            var existingTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphabetic(20))
+                    .build();
+            createAndAssert(existingTrace, workspaceName, apiKey);
+
+            // This one is written afterwards, and into another project, so its experiment item ends up with no
+            // project_id of its own.
+            var lateTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphabetic(20))
+                    .build();
+
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            var experimentItems = Set.of(
+                    buildExperimentItem(experimentId, datasetItems.getFirst(), existingTrace),
+                    buildExperimentItem(experimentId, datasetItems.getLast(), lateTrace));
+
+            createAndAssert(ExperimentItemsBatch.builder().experimentItems(experimentItems).build(), apiKey,
+                    workspaceName);
+
+            createAndAssert(lateTrace, workspaceName, apiKey);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(datasetId,
+                    List.of(experimentId), apiKey, workspaceName);
+
+            // The page comes back ordered by id descending, so line the expectations up the same way.
+            var expectedByItemId = Map.of(
+                    datasetItems.getFirst().id(), expectedFrom(experimentItems, datasetItems.getFirst(),
+                            existingTrace, actualPage),
+                    datasetItems.getLast().id(), expectedFrom(experimentItems, datasetItems.getLast(),
+                            lateTrace, actualPage));
+            var expectedDatasetItems = actualPage.content().stream()
+                    .map(item -> datasetItems.stream().filter(di -> di.id().equals(item.id())).findFirst()
+                            .orElseThrow())
+                    .toList();
+
+            assertDatasetItemExperiments(actualPage, expectedDatasetItems,
+                    expectedDatasetItems.stream().map(di -> expectedByItemId.get(di.id())).toList());
+        }
+
+        /**
+         * The experiment item as the API returns it: the one the fixture wrote, with the trace data the read
+         * resolves onto it. Duration is taken from the response because it is computed from the trace's
+         * timestamps rather than stored.
+         */
+        private ExperimentItem expectedFrom(Set<ExperimentItem> written, DatasetItem datasetItem, Trace trace,
+                DatasetItemPage actualPage) {
+            var item = written.stream().filter(ei -> ei.datasetItemId().equals(datasetItem.id())).findFirst()
+                    .orElseThrow();
+            var actual = actualPage.content().stream().filter(di -> di.id().equals(datasetItem.id())).findFirst()
+                    .orElseThrow().experimentItems().getFirst();
+            return item.toBuilder()
+                    .input(trace.input())
+                    .output(trace.output())
+                    .duration(actual.duration())
+                    .totalEstimatedCost(actual.totalEstimatedCost())
+                    .usage(actual.usage())
+                    .traceVisibilityMode(actual.traceVisibilityMode())
+                    .build();
+        }
+
+        private ExperimentItem buildExperimentItem(UUID experimentId, DatasetItem datasetItem, Trace trace) {
+            return factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .id(GENERATOR.generate())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .experimentId(experimentId)
+                    .traceVisibilityMode(VisibilityMode.DEFAULT)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
         }
 
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
@@ -9068,9 +9159,7 @@ class DatasetsResourceTest {
 
             // Compare the whole DatasetItem objects, in order - not just their ids - so the assertion proves
             // the bound key actually drives the ordering. Volatile/derived fields are ignored per suite convention.
-            assertThat(actualItems)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactlyElementsOf(expectedItems);
+            assertDatasetItemsInOrder(actualItems, expectedItems);
         }
 
         private List<DatasetItem> fetchDatasetItems(UUID datasetId, String experimentIdsParam, String sortField,

@@ -10,6 +10,7 @@ export const ValidatedToken: core.serialization.ObjectSchema<serializers.Validat
         workspaceId: core.serialization.property("workspace_id", core.serialization.string().optional()),
         workspaceName: core.serialization.property("workspace_name", core.serialization.string().optional()),
         resource: core.serialization.string().optional(),
+        expiresAt: core.serialization.property("expires_at", core.serialization.date().optional()),
     });
 
 export declare namespace ValidatedToken {
@@ -18,5 +19,6 @@ export declare namespace ValidatedToken {
         workspace_id?: string | null;
         workspace_name?: string | null;
         resource?: string | null;
+        expires_at?: string | null;
     }
 }

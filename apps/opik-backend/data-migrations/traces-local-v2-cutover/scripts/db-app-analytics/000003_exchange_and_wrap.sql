@@ -1,13 +1,129 @@
--- runbook traces-local-v2-cutover — step 3 of 3: EXCHANGE + Distributed wrap (reference statements)
--- The gate test TracesLocalV2CutoverTest reimplements these statements inline; keep the two in step (see its Javadoc).
+-- runbook traces-local-v2-cutover — step 3 of 3: replication-settle gate + EXCHANGE + Distributed wrap
+-- The gate test TracesLocalV2CutoverTest reimplements the EXCHANGE and wrap statements inline; keep the two in step
+-- (see its Javadoc). The settle-gate blocks are read-only and are exercised in the cutover rehearsal instead.
 --
--- ../exchange_and_wrap.sh drives this: it records cutover_start, runs the `exchange` block, and (unless --skip-wrap)
--- the `wrap` block. Run it right after step 2's delta + replay, while the async-insert buffer is still holding writes.
--- Do NOT run this whole file wholesale — the driver runs one marked block at a time. Buffer knob: raise
--- databaseAnalytics.asyncInsertBusyTimeoutMaxMs before the cutover and unset it after (a backend-config action, not SQL).
+-- ../exchange_and_wrap.sh drives this: it runs the settle gate, records cutover_start, runs the `exchange` block, and
+-- runs the `wrap` block only with --with-wrap (or --wrap-only, which runs that block alone). Run it right after step 2's
+-- delta + replay, so the final-delta -> EXCHANGE gap stays small. Do NOT run this whole file wholesale — the driver runs one marked block at a time. Nothing here needs an
+-- ingestion-side config change: the EXCHANGE is atomic per node, so a concurrent insert always commits to a valid
+-- table. Writes that land in the old one — in that gap or during the cross-node skew — stay in the parked backup until
+-- ../reconcile.sh sweeps them into the live table (OPIK-8238); see the runbook's "The final cutover window".
 --
 -- cutover_start is a now64(6) captured RIGHT BEFORE the EXCHANGE; a rollback after this point replays deletes that fired
 -- on the new live table since then. exchange_and_wrap.sh captures and prints it; record it for the rollback.
+
+-- Blocks, in the order the driver runs them: settle-sample, then settle-queue-detail / settle-mutation-detail only when
+-- the gate refuses, then `exchange`, then `wrap`. The first three are read-only. '{cluster}' is the macro, resolved
+-- server-side, as in the 000004 postcondition files.
+--
+-- THE THREE settle-* BLOCKS ARE READ BY TWO DRIVERS. exchange_and_wrap.sh gates the swap with them; reconcile.sh gates
+-- its post-swap sweep and postcondition with the same statements. The predicate is identical in both — a replica short
+-- of a part, or one still applying a mutation, is the same hazard either side of the swap — so the table sets are
+-- placeholders rather than literals and each driver renders its own scope and reaches its own verdict:
+--   ${SETTLE_QUEUE_TABLES}     quoted table list for the replication-queue side
+--   ${SETTLE_MUTATION_TABLES}  quoted table list for the unfinished-mutation side
+-- Duplicating the blocks per driver would mean two copies of a gate whose SQL is the same; parameterising the scope of
+-- a read is not the hazard that keeps the two deletion replays apart (see 000006's header).
+
+-- The gate's one sample, as seven numbers on a single row so the driver can read it as TSV: the replication queue's
+-- depth, its oldest entry's age in seconds, its highest num_tries and how many of its entries carry a last_exception;
+-- then the count of unfinished mutations in the mutation scope, their oldest age and how many carry a
+-- latest_fail_reason (the shadow pre-swap, the parked backup post-swap — see the placeholders above). Every
+-- column is numeric on purpose — the free-text exception columns would need quoting to survive TSV, and the two detail
+-- blocks below print them instead. max()/countIf() over an empty set yield 0, so a drained queue and an idle mutation
+-- list need no special casing. Each side is a single-row aggregate, so the CROSS JOIN is 1x1.
+--
+-- The queue side counts only GET_PART / ATTACH_PART, the entry types that mean a replica does not yet hold a part —
+-- which is the one queue condition that would make it serve an incomplete table after the swap. The queue also carries
+-- MERGE_PARTS and MUTATE_PART entries, and those say nothing about completeness: a pending merge is an optimisation,
+-- and an unfinished mutation is the other half of this sample. Counting them would fail the gate on ordinary post-
+-- backfill merge activity, where one legitimate large merge easily outlives the driver's stuck threshold.
+-- >>> BEGIN settle-sample
+SELECT q.cnt, q.age, q.tries, q.exc, m.cnt, m.age, m.fails
+FROM (
+    SELECT count()                                     AS cnt,
+           max(dateDiff('second', create_time, now())) AS age,
+           max(num_tries)                              AS tries,
+           countIf(last_exception != '')               AS exc
+    FROM clusterAllReplicas('{cluster}', system.replication_queue)
+    WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
+      AND table IN (${SETTLE_QUEUE_TABLES})
+      AND type IN ('GET_PART', 'ATTACH_PART')
+) AS q
+CROSS JOIN (
+    SELECT count()                                     AS cnt,
+           max(dateDiff('second', create_time, now())) AS age,
+           countIf(latest_fail_reason != '')           AS fails
+    FROM clusterAllReplicas('{cluster}', system.mutations)
+    WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
+      AND table IN (${SETTLE_MUTATION_TABLES})
+      AND is_done = 0
+) AS m;
+-- >>> END settle-sample
+
+-- Printed when the gate judges a replica to be lagging rather than merely busy, with the free text the sample above
+-- deliberately omits. Same type filter as the sample, so the rows shown are the population the verdict was reached on.
+--
+-- Selected by RANK PER TRIGGER rather than a top-N, because the driver fails on any of three independent conditions —
+-- an entry older than its age threshold, one past its retry threshold, or any entry carrying a last_exception — and a
+-- single ordering cannot surface all three. Sorting by num_tries hides an old-but-rarely-retried entry behind busier
+-- ones, which is precisely the entry an age verdict is about. So each replica contributes its oldest entry, its
+-- most-retried entry, and up to two carrying an exception: at most four rows, always including whichever tripped the
+-- verdict. Ranking per replica also keeps one noisy replica from crowding the others out of the report.
+-- >>> BEGIN settle-queue-detail
+SELECT replica,
+       table,
+       type,
+       create_time,
+       age_seconds,
+       num_tries,
+       num_postponed,
+       postpone_reason,
+       last_exception
+FROM (
+    SELECT hostName()                             AS replica,
+           table,
+           type,
+           create_time,
+           dateDiff('second', create_time, now()) AS age_seconds,
+           num_tries,
+           num_postponed,
+           postpone_reason,
+           last_exception,
+           row_number() OVER (PARTITION BY hostName() ORDER BY create_time ASC)                          AS oldest_rank,
+           row_number() OVER (PARTITION BY hostName() ORDER BY num_tries DESC)                           AS retried_rank,
+           row_number() OVER (PARTITION BY hostName() ORDER BY (last_exception != '') DESC, create_time) AS failing_rank
+    FROM clusterAllReplicas('{cluster}', system.replication_queue)
+    WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
+      AND table IN (${SETTLE_QUEUE_TABLES})
+      AND type IN ('GET_PART', 'ATTACH_PART')
+)
+WHERE oldest_rank = 1
+   OR retried_rank = 1
+   OR (last_exception != '' AND failing_rank <= 2)
+ORDER BY replica, age_seconds DESC;
+-- >>> END settle-queue-detail
+
+-- Printed when a mutation in the mutation scope has not finished on every replica by the gate's deadline. Bounded per replica
+-- for the same reason as the queue detail above: the point is to name which replicas are behind, and a global cap
+-- would hide them behind whichever replica sorted first. Every row here is unfinished, so there is no equivalent of
+-- that block's decoy problem — only the ordering matters, and one carrying a latest_fail_reason explains more than an
+-- older one that is merely still running, so those come first.
+-- >>> BEGIN settle-mutation-detail
+SELECT hostName() AS replica,
+       mutation_id,
+       command,
+       create_time,
+       parts_to_do,
+       latest_failed_part,
+       latest_fail_reason
+FROM clusterAllReplicas('{cluster}', system.mutations)
+WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
+  AND table IN (${SETTLE_MUTATION_TABLES})
+  AND is_done = 0
+ORDER BY (latest_fail_reason != '') DESC, create_time
+LIMIT 2 BY replica;
+-- >>> END settle-mutation-detail
 
 -- >>> BEGIN exchange
 -- The atomic swap: `traces` now refers to the partitioned data. The displaced old data lands under `traces_local_v2`
@@ -53,6 +169,6 @@ RENAME TABLE
     ON CLUSTER '{cluster}';
 -- >>> END wrap
 
--- After the wrap: restore the buffer ceiling (unset asyncInsertBusyTimeoutMaxMs), verify (README "Verifying the
--- migration"), and keep `traces_pre_cutover_backup` (the parked old data) until the soak completes. Rollback: the
--- 000004_rollback_* files via ../rollback.sh.
+-- After the wrap: size the tail write-gap (README "The final cutover window"), verify (README "Verifying the
+-- migration"), and keep `traces_pre_cutover_backup` (the parked old data) until the soak completes — it is the only
+-- copy of the gap rows. Rollback: the 000004_rollback_* files via ../rollback.sh.

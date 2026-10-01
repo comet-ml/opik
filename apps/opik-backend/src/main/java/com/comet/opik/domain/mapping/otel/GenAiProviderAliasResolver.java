@@ -53,7 +53,15 @@ public class GenAiProviderAliasResolver implements ProviderResolver {
             Map.entry("bedrock_converse", "bedrock"),
             Map.entry("azure.ai.openai", "azure"),
             Map.entry("mistral_ai", "mistral"),
-            Map.entry("x_ai", "xai"));
+            Map.entry("x_ai", "xai"),
+            // quarkus-langchain4j writes LangChain4j's ModelProvider enum, lowercased, into
+            // gen_ai.provider.name instead of the semconv value (plain LangChain4j maps it properly).
+            // Only the providers whose Quarkus extension builds a LangChain4j model that reports its
+            // own enum value: Quarkus' Azure OpenAI and Vertex Gemini models report OTHER, and
+            // google_genai names more than one backend, so neither can be aliased here.
+            Map.entry("open_ai", "openai"),
+            Map.entry("amazon_bedrock", "bedrock"),
+            Map.entry("google_ai_gemini", GoogleProviderResolver.GOOGLE_AI));
 
     /**
      * Claims every span that reported a provider at all, not just the aliased ones: surrounding

@@ -14,7 +14,7 @@ import logging
 import shutil
 import subprocess
 import sys
-from typing import Final, List, Optional, Tuple
+from typing import Final, List, NamedTuple, Optional, Tuple
 
 import opik.config as opik_config
 from opik.configurator import interactive_helpers
@@ -22,6 +22,7 @@ from opik.configurator.mcp import detection as mcp_detection
 from opik.configurator.mcp import env as mcp_env
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp import targets as mcp_targets
+from opik.configurator.mcp import uv_tool
 from opik.configurator.mcp import verification as mcp_verification
 from opik.configurator.mcp import view as mcp_view
 
@@ -29,6 +30,31 @@ LOGGER = logging.getLogger(__name__)
 
 UV_INSTALL_DOCS_URL = "https://docs.astral.sh/uv/"
 MCP_DOCS_URL = "https://www.comet.com/docs/opik/mcp-server"
+
+
+class InstallReport(NamedTuple):
+    """What the install did, for a caller that has to report it.
+
+    ``registered`` alone was the old return value, and it could not tell a run
+    that wrote nothing because the user picked nothing from one that wrote
+    nothing because every write failed — the two are the same empty list. The
+    counts here are what the configure funnel keys on.
+
+    ``verified`` is ``None`` when verification never ran, which is the case
+    whenever nothing was registered: absent, not failed.
+    """
+
+    registered: Tuple[str, ...]
+    failed: Tuple[str, ...] = ()
+    verified: Optional[bool] = None
+    declined: bool = False
+    #: The user picked "my AI client is not listed" rather than "not now". Both
+    #: decline the server, but only this one says the detected clients are the
+    #: wrong ones — which is a claim about more than the server.
+    manual: bool = False
+
+
+NOTHING_INSTALLED = InstallReport(registered=())
 
 
 def setup_mcp_server(
@@ -45,7 +71,7 @@ def setup_mcp_server(
     assume_confirmed: bool = False,
     view: Optional[mcp_view.InstallView] = None,
     announce_next_steps: bool = True,
-) -> List[str]:
+) -> InstallReport:
     """Register the Opik MCP server with the user's AI client(s).
 
     The decision of *whether* to run this lives in the callers; by the time this
@@ -67,8 +93,9 @@ def setup_mcp_server(
     that ``opik.configure()`` stays library-safe. The CLI passes a ``rich`` view.
 
 
-    Returns the host keys actually registered, so a caller can act on the same set
-    without asking the user a second time.
+    Returns an :class:`InstallReport`: the host keys actually registered, so a
+    caller can act on the same set without asking the user a second time, plus
+    the ones that failed and whether the connection verified.
     """
     display = view if view is not None else mcp_view.default_view()
 
@@ -86,7 +113,7 @@ def setup_mcp_server(
             "named. Pass `--ai-client <client>` to set it up unattended, or run "
             "`opik mcp configure` from a shell."
         )
-        return []
+        return NOTHING_INSTALLED
 
     ambiguity = _workspace_ambiguity(
         api_key=api_key,
@@ -97,7 +124,7 @@ def setup_mcp_server(
     )
     if ambiguity is not None:
         display.problem(ambiguity)
-        return []
+        return NOTHING_INSTALLED
 
     # Prefer the Opik-hosted MCP server when the deployment runs one; otherwise
     # fall back to the local `uvx opik-mcp` server. The probe — not the
@@ -129,7 +156,7 @@ def setup_mcp_server(
     )
     if server_spec is None:
         display.problem(unavailable_reason or "")
-        return []
+        return NOTHING_INSTALLED
 
     candidates = _candidate_targets(host_keys)
     if len(candidates) == 0:
@@ -140,7 +167,7 @@ def setup_mcp_server(
             )
         else:
             _report_no_host_detected(server_spec, display)
-        return []
+        return NOTHING_INSTALLED
 
     # Shown before anything is written, and before the confirmation below, so the
     # user is consenting to a change they can see rather than a yes/no in the dark.
@@ -164,16 +191,29 @@ def setup_mcp_server(
         ],
     )
 
-    selected_targets = _confirm_targets(
-        candidates, host_keys, assume_confirmed, display
-    )
+    confirmation = _confirm_targets(candidates, host_keys, assume_confirmed, display)
+    selected_targets = confirmation.targets
     if len(selected_targets) == 0:
-        display.skipped(
-            "Skipped MCP server setup. Run `opik mcp configure` anytime to set it up."
+        if confirmation.manual_requested:
+            _report_manual_setup(server_spec, display)
+        else:
+            display.skipped(
+                "Skipped MCP server setup. Run `opik mcp configure` anytime to set "
+                "it up."
+            )
+        # The one empty result that is a decision rather than a dead end: the
+        # picker is the question now, so choosing nothing in it — or cancelling —
+        # is the user saying no, and the funnel has to be able to tell that from
+        # a run that never got as far as asking.
+        return InstallReport(
+            registered=(), declined=True, manual=confirmation.manual_requested
         )
-        return []
 
     if isinstance(server_spec, mcp_spec.StdioServerSpec):
+        # Before the prefetch, not after: an old tool install captures `uvx
+        # opik-mcp`, so warming the cache while one is present warms something
+        # the client would never reach.
+        _offer_to_remove_tool_install(display)
         with display.step("Preparing the Opik MCP server"):
             _prefetch_opik_mcp()
 
@@ -192,6 +232,7 @@ def setup_mcp_server(
 
     # One verification per run: it exercises the credentials, which are identical
     # for every host, so running it once and reporting once is enough.
+    verified: Optional[bool] = None
     if any(result.succeeded for result in results):
         with display.step("Checking the connection"):
             verification = _verify(
@@ -201,6 +242,7 @@ def setup_mcp_server(
                 api_url=api_url,
                 check_tls_certificate=check_tls_certificate,
             )
+        verified = verification.succeeded
         display.verification(verification.succeeded, verification.detail)
         if verification.succeeded and announce_next_steps:
             display.done(
@@ -208,11 +250,64 @@ def setup_mcp_server(
                 [result.target_display_name for result in results if result.succeeded],
             )
 
-    return [
-        target.key
-        for target, result in zip(selected_targets, results)
-        if result.succeeded
-    ]
+    return InstallReport(
+        registered=tuple(
+            target.key
+            for target, result in zip(selected_targets, results)
+            if result.succeeded
+        ),
+        failed=tuple(
+            target.key
+            for target, result in zip(selected_targets, results)
+            if not result.succeeded
+        ),
+        verified=verified,
+    )
+
+
+def _offer_to_remove_tool_install(display: mcp_view.InstallView) -> None:
+    """Offer to remove an ``opik-mcp`` that an old SDK installed as a uv tool.
+
+    Such an install decides what `uvx opik-mcp` runs, so a client registered here
+    would keep starting it instead of the published release (see ``uv_tool``).
+    Removing it is what makes the plain registration mean what it says.
+
+    Asked, never assumed, and defaulting to no: this deletes from the user's
+    environment, and doing that unannounced is the bug being cleaned up. Without a
+    terminal there is nobody to ask, so it is reported and left alone.
+    """
+    installed = uv_tool.installed_version()
+    if installed is None:
+        return
+
+    problem = (
+        f"opik-mcp {installed} is installed as a uv tool, left by an older Opik "
+        f"SDK. While it is there, `uvx opik-mcp` runs it instead of the published "
+        f"version, so this server would start {installed} however often you "
+        f"restart."
+    )
+
+    if not interactive_helpers.is_interactive():
+        display.note(f"{problem} Remove it with `uv tool uninstall opik-mcp`.")
+        return
+
+    display.note(problem)
+    if not interactive_helpers.ask_user_for_approval_default_no(
+        "Remove it so the MCP server tracks the published version? [y/N]: "
+    ):
+        display.note(
+            "Left in place. `uv tool uninstall opik-mcp` removes it whenever you want."
+        )
+        return
+
+    succeeded, detail = uv_tool.uninstall()
+    if succeeded:
+        display.note(f"Removed opik-mcp {installed} from your uv tools.")
+    else:
+        display.problem(
+            f"Could not remove it: {detail}. Run `uv tool uninstall opik-mcp` "
+            f"yourself — until then this server keeps starting {installed}."
+        )
 
 
 def _deployment_label(
@@ -277,8 +372,9 @@ def _workspace_ambiguity(
         "Your Opik configuration does not name a workspace, but this account has "
         f"{len(workspaces)}: {', '.join(sorted(workspaces))}. The MCP server would "
         "fall back to your default workspace and silently read from the wrong "
-        "place. Run `opik configure` and choose a workspace, then re-run "
-        "`opik mcp configure`."
+        "place. Name the one you want and re-run:\n\n"
+        "    OPIK_WORKSPACE=<workspace> opik mcp configure\n\n"
+        "or set `workspace` in ~/.opik.config."
     )
 
 
@@ -307,19 +403,31 @@ def _candidate_targets(
     return mcp_targets.detected_targets()
 
 
+class _Confirmation(NamedTuple):
+    """What the picker came back with.
+
+    ``manual_requested`` is why this is not just a list: "none of these is my
+    client" and "no thanks" both register nothing, but only one of them has an
+    answer worth printing.
+    """
+
+    targets: List[mcp_targets.HostTarget]
+    manual_requested: bool = False
+
+
 def _confirm_targets(
     candidates: List[mcp_targets.HostTarget],
     host_keys: Optional[List[str]],
     assume_confirmed: bool,
     display: mcp_view.InstallView,
-) -> List[mcp_targets.HostTarget]:
+) -> _Confirmation:
     """Narrow the candidates to what the user actually agreed to.
 
     Naming hosts explicitly, or having already been asked by the caller, is the
     agreement — so neither re-prompts.
     """
     if host_keys or assume_confirmed:
-        return candidates
+        return _Confirmation(candidates)
 
     chosen = display.choose_hosts(
         title="Which AI client should the Opik MCP server be set up for?",
@@ -334,24 +442,54 @@ def _confirm_targets(
         preselected=[],
     )
     if chosen is None:
-        return []
+        return _Confirmation([])
+    if mcp_view.MANUAL_SETUP in chosen:
+        return _Confirmation([], manual_requested=True)
     by_key = {target.key: target for target in candidates}
-    return [by_key[key] for key in chosen if key in by_key]
+    return _Confirmation([by_key[key] for key in chosen if key in by_key])
+
+
+def _manual_setup_text(server_spec: mcp_spec.McpServerSpec) -> str:
+    """The block to paste, and where the per-host instructions live.
+
+    Shared by the two ways of arriving here — nothing was detected, or the user
+    said none of what was detected is their client — because the answer to both
+    is the same config and the same link.
+    """
+    block = mcp_spec.redact_block_for_display(server_spec.to_block())
+    manual_config = json.dumps({"mcpServers": {"opik-mcp": block}}, indent=2)
+    return (
+        f"Add this to your client's MCP config by hand "
+        f'(VS Code uses "servers" instead of "mcpServers"):\n{manual_config}\n\n'
+        f"See {MCP_DOCS_URL} for per-client instructions."
+    )
+
+
+def _report_manual_setup(
+    server_spec: mcp_spec.McpServerSpec, display: mcp_view.InstallView
+) -> None:
+    """Answer "my AI client is not listed" with something to act on.
+
+    The row exists so that a client Opik cannot detect is a dead end with a way
+    out rather than a silent decline — which is what it used to be, and what the
+    funnel counted it as.
+    """
+    display.problem(
+        f"Opik can register itself with "
+        f"{', '.join(target.display_name for target in mcp_targets.HOST_TARGETS)}.\n\n"
+        f"For anything else:\n\n{_manual_setup_text(server_spec)}"
+    )
 
 
 def _report_no_host_detected(
     server_spec: mcp_spec.McpServerSpec, display: mcp_view.InstallView
 ) -> None:
-    block = mcp_spec.redact_block_for_display(server_spec.to_block())
-    manual_config = json.dumps({"mcpServers": {"opik-mcp": block}}, indent=2)
     display.problem(
         f"No supported AI client was detected "
         f"({', '.join(target.display_name for target in mcp_targets.HOST_TARGETS)}).\n\n"
         f"Name one directly:\n"
         f"    opik mcp configure --ai-client claude-code\n\n"
-        f"Or add this to your host's MCP config by hand "
-        f'(VS Code uses "servers" instead of "mcpServers"):\n{manual_config}\n\n'
-        f"See {MCP_DOCS_URL} for per-host instructions."
+        f"Or:\n\n{_manual_setup_text(server_spec)}"
     )
 
 

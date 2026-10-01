@@ -1,5 +1,7 @@
 import logging
+import threading
 import time
+from concurrent import futures
 from typing import Any, Callable, Optional
 
 from ..rest_api import client as rest_api_client
@@ -17,9 +19,18 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def _wait(seconds: float, stop_event: Optional[threading.Event]) -> None:
+    # Without a stop signal this is exactly the old sleep, so other callers are unchanged.
+    if stop_event is None:
+        _sleep(seconds)
+    else:
+        stop_event.wait(seconds)
+
+
 def ensure_rest_api_call_respecting_rate_limit(
     rest_callable: Callable[[], Any],
     operation_name: Optional[str] = None,
+    stop_event: Optional[threading.Event] = None,
 ) -> Any:
     """
     Execute a REST API call with automatic retry on rate limit (429) errors.
@@ -32,15 +43,21 @@ def ensure_rest_api_call_respecting_rate_limit(
         rest_callable: A callable that performs the REST API call.
         operation_name: Optional label included in rate-limit log messages so users
             can identify which SDK operation is being throttled.
+        stop_event: Optional signal to give up. Checked before every attempt, and a
+            rate-limit wait returns as soon as it is set. A call already in flight is
+            not interrupted.
 
     Returns:
         The result of the successful REST API call.
 
     Raises:
         ApiError: If the error is not a 429 rate limit error.
+        concurrent.futures.CancelledError: If `stop_event` is set before an attempt.
     """
     label = f" for '{operation_name}'" if operation_name else ""
     while True:
+        if stop_event is not None and stop_event.is_set():
+            raise futures.CancelledError(f"REST API call{label} stopped")
         try:
             result = rest_callable()
             return result
@@ -55,14 +72,14 @@ def ensure_rest_api_call_respecting_rate_limit(
                             label,
                             retry_after,
                         )
-                        _sleep(retry_after)
+                        _wait(retry_after, stop_event)
                         continue
 
                 LOGGER.warning(
                     "Rate limited (HTTP 429)%s with no retry-after header, continuing in 1 second",
                     label,
                 )
-                _sleep(1)
+                _wait(1, stop_event)
                 continue
 
             raise

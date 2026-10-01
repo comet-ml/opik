@@ -104,7 +104,11 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
-import static com.comet.opik.api.resources.v1.priv.DatasetsResourceTest.IGNORED_FIELDS_DATA_ITEM;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItem;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItems;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsContain;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInAnyOrder;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1078,9 +1082,7 @@ class DatasetVersionResourceTest {
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
             assertThat(v1ItemsAfter).hasSize(3);
-            assertThat(v1ItemsAfter)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .isEqualTo(v1Items);
+            assertDatasetItems(v1ItemsAfter, v1Items);
         }
 
         @Test
@@ -1353,10 +1355,8 @@ class DatasetVersionResourceTest {
             assertThat(v2Items).hasSize(6);
 
             // Every v1 item must appear in v2 with the same fields. id changes per version, so
-            // we ignore it via IGNORED_FIELDS_DATA_ITEM and compare the rest of the entity.
-            assertThat(v2Items)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsAll(v1Items);
+            // the helper ignores it and compares the rest of the entity.
+            assertDatasetItemsContain(v2Items, v1Items);
         }
     }
 
@@ -1561,9 +1561,7 @@ class DatasetVersionResourceTest {
             assertThat(v2Items.stream().map(DatasetItem::datasetItemId))
                     .doesNotContain(itemToDelete.datasetItemId());
 
-            assertThat(v2Items)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsAll(expectedSurvivors);
+            assertDatasetItemsContain(v2Items, expectedSurvivors);
         }
 
         @Test
@@ -3613,18 +3611,14 @@ class DatasetVersionResourceTest {
                     datasetId, List.of(experimentId), null, null, sorting, API_KEY, TEST_WORKSPACE);
 
             // Compare the whole DatasetItem objects, in order - not just their ids.
-            assertThat(sorted.content())
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactlyElementsOf(expected);
+            assertDatasetItemsInOrder(sorted.content(), expected);
 
             // Page boundary: with size=2, page 2 returns only the trailing item in sort order, exercising the
             // push-top-limit OFFSET :top_offset + outer LIMIT path; total stays at the full matching count.
             var pageTwo = datasetResourceClient.getDatasetItemsWithExperimentItems(
                     datasetId, List.of(experimentId), null, null, sorting, 2, 2, API_KEY, TEST_WORKSPACE);
             assertThat(pageTwo.total()).isEqualTo(count);
-            assertThat(pageTwo.content())
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactly(expected.get(count - 1));
+            assertDatasetItemsInOrder(pageTwo.content(), List.of(expected.get(count - 1)));
         }
 
         @Test
@@ -3842,12 +3836,9 @@ class DatasetVersionResourceTest {
             // counter that agrees with it.
             assertThat(stored).extracting(DatasetItem::id)
                     .containsExactlyInAnyOrder(duplicatedId, distinctId);
-            assertThat(stored)
-                    .filteredOn(item -> distinctId.equals(item.id()))
-                    .singleElement()
-                    .usingRecursiveComparison()
-                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .isEqualTo(distinctItem);
+            var storedDistinctItems = stored.stream().filter(item -> distinctId.equals(item.id())).toList();
+            assertThat(storedDistinctItems).hasSize(1);
+            assertDatasetItem(storedDistinctItems.getFirst(), distinctItem);
 
             // items_total must agree with what is actually stored.
             assertThat(version.itemsTotal()).isEqualTo(stored.size());
@@ -3903,9 +3894,7 @@ class DatasetVersionResourceTest {
             var stored = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
 
-            assertThat(stored)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactlyInAnyOrder(updatedShared, otherItem);
+            assertDatasetItemsInAnyOrder(stored, updatedShared, otherItem);
             assertThat(version.itemsTotal()).isEqualTo(stored.size());
         }
 
@@ -4801,9 +4790,7 @@ class DatasetVersionResourceTest {
                     .evaluators(newEvaluators)
                     .description(newDescription)
                     .build();
-            assertThat(v2Items)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactly(expectedItem);
+            assertDatasetItemsInOrder(v2Items, List.of(expectedItem));
         }
 
         @Test
@@ -5372,10 +5359,7 @@ class DatasetVersionResourceTest {
             var expectedItem = items.getFirst().toBuilder()
                     .id(returnedItem.id())
                     .build();
-            assertThat(returnedItem)
-                    .usingRecursiveComparison()
-                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .isEqualTo(expectedItem);
+            assertDatasetItem(returnedItem, expectedItem);
         }
 
         @Test
