@@ -1,3 +1,4 @@
+import isPlainObject from "lodash/isPlainObject";
 import {
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
@@ -15,7 +16,6 @@ import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
-import isPlainObject from "lodash/isPlainObject";
 import omit from "lodash/omit";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 import { PROVIDER_MODELS } from "@/constants/providerModels";
@@ -728,8 +728,9 @@ export type EffortParams = {
  * provider would then apply its own default rather than the one the panel showed.
  *
  * The OpenAI default is "high", which every reasoning row offers. The Anthropic one is the model's
- * own (medium on Opus 5.5), and an Anthropic effort found only under custom_parameters counts as
- * stored, so a reloaded request shape shows the level it will send.
+ * own (medium on Opus 5.5). An Anthropic effort under custom_parameters counts as stored too: the
+ * flat one wins when the model offers it, else the nested one does, so a reloaded request shape
+ * shows the level it will send and a stale flat value cannot override a valid nested one.
  */
 export const resolveEffort = (
   model: PROVIDER_MODEL_TYPE | "",
@@ -758,14 +759,11 @@ export const resolveEffort = (
     if (options.length === 0) {
       return {};
     }
-    const stored =
-      configs.thinkingEffort ??
-      getNestedThinkingEffort(configs.custom_parameters);
-    return {
-      thinkingEffort: options.some((o) => o.value === stored)
-        ? stored
-        : getDefaultThinkingEffort(model),
-    };
+    const stored = [
+      configs.thinkingEffort,
+      getNestedThinkingEffort(configs.custom_parameters),
+    ].find((effort) => options.some((o) => o.value === effort));
+    return { thinkingEffort: stored ?? getDefaultThinkingEffort(model) };
   }
 
   return { ...configs };

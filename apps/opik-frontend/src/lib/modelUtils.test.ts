@@ -1961,6 +1961,34 @@ describe("Anthropic request contract", () => {
     ).toEqual({ thinkingEffort: "max" });
   });
 
+  it("skips a flat effort the model does not offer for a valid nested one", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        thinkingEffort: ADAPTIVE,
+        custom_parameters: { output_config: { effort: "low" } },
+      }),
+    ).toEqual({ thinkingEffort: "low" });
+  });
+
+  it("falls back to the model default when neither stored effort is offered", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        thinkingEffort: ADAPTIVE,
+        custom_parameters: { output_config: { effort: "xhigh" } },
+      }),
+    ).toEqual({ thinkingEffort: "high" });
+  });
+
+  it("sends the valid nested effort rather than replacing it over a stale flat one", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        maxCompletionTokens: 4000,
+        thinkingEffort: ADAPTIVE,
+        custom_parameters: { output_config: { effort: "low" } },
+      }).custom_parameters,
+    ).toEqual({ output_config: { effort: "low" } });
+  });
+
   it("sends Sonnet 4.6 temperature alone and its effort under custom_parameters", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
