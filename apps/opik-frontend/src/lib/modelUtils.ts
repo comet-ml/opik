@@ -766,6 +766,30 @@ export const sanitizeConfigForRequest = (
     sanitized.topK = Math.round(sanitized.topK);
   }
 
+  // Same trap as thinking_level below: ChatCompletionRequest has no field for these, so sent flat
+  // they are dropped, while custom_parameters entries reach OpenRouter as top-level keys.
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    const nested: Record<string, unknown> = {};
+    for (const [key, wireKey] of Object.entries({
+      topK: "top_k",
+      minP: "min_p",
+      topA: "top_a",
+      repetitionPenalty: "repetition_penalty",
+    })) {
+      if (sanitized[key] != null) {
+        nested[wireKey] = sanitized[key];
+      }
+      delete sanitized[key];
+    }
+
+    if (Object.keys(nested).length > 0) {
+      sanitized.custom_parameters = {
+        ...(sanitized.custom_parameters as Record<string, unknown> | undefined),
+        ...nested,
+      };
+    }
+  }
+
   if (
     provider === PROVIDER_TYPE.ANTHROPIC &&
     sanitized.maxCompletionTokens == null
