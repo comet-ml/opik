@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useCallback } from "react";
 import dayjs from "dayjs";
 import { Braces, AlertTriangle, Clock, Coins, LucideIcon } from "lucide-react";
-import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/date";
@@ -17,23 +16,17 @@ import { Filters } from "@/types/filters";
 import { LOGS_SOURCE } from "@/types/traces";
 import { PercentageTrendType } from "@/shared/PercentageTrend/PercentageTrend";
 import MetricContainerChart from "@/v2/pages-shared/dashboards/widgets/ProjectMetricsWidget/MetricChart/MetricChartContainer";
-import {
-  INTERVAL_TYPE,
-  METRIC_NAME_TYPE,
-} from "@/api/projects/useProjectMetric";
-import { CHART_TYPE } from "@/constants/chart";
-import {
-  durationYTickFormatter,
-  renderDurationTooltipValue,
-  costYTickFormatter,
-  renderCostTooltipValue,
-} from "@/v2/pages-shared/dashboards/widgets/ProjectMetricsWidget/chartUtils";
-import { ChartTooltipRenderValueArguments } from "@/shared/Charts/ChartTooltipContent/ChartTooltipContent";
+import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
 import {
   calculateIntervalType,
-  calculateIntervalStartAndEnd,
+  calculateIntervalBounds,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect/utils";
+import {
+  keepDataWhileWindowMoves,
+  windowQueryOptions,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect/useIntervalBounds";
 import { DateRangeValue } from "@/shared/DateRangeSelect";
+import { TOTAL_COST_LABEL, getChartConfig } from "./helpers";
 
 type MetricCardDef = {
   type: KpiMetricType;
@@ -71,91 +64,11 @@ const METRIC_CARDS: MetricCardDef[] = [
   {
     type: "total_cost",
     icon: Coins,
-    label: "Total cost",
+    label: TOTAL_COST_LABEL,
     formatter: (v) => formatCost(v, { noValue: "$0" }),
     trend: "inverted",
   },
 ];
-
-type ChartMetricConfig = {
-  metricName: METRIC_NAME_TYPE;
-  chartType: CHART_TYPE.line | CHART_TYPE.bar;
-  customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
-  renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
-  colorMap?: Record<string, string>;
-  filterLineCallback?: (lineName: string) => boolean;
-  labelsMap?: Record<string, string>;
-};
-
-const CHART_VIOLET = "var(--chart-violet)";
-const CHART_RED = "var(--chart-red)";
-const CHART_BLUE = "var(--chart-blue)";
-const CHART_TEAL = "var(--chart-teal)";
-
-const COUNT_METRIC_MAP: Record<KpiEntityType, METRIC_NAME_TYPE> = {
-  traces: METRIC_NAME_TYPE.TRACE_COUNT,
-  spans: METRIC_NAME_TYPE.SPAN_COUNT,
-  threads: METRIC_NAME_TYPE.THREAD_COUNT,
-};
-
-const ERROR_RATE_METRIC_MAP: Partial<Record<KpiEntityType, METRIC_NAME_TYPE>> =
-  {
-    traces: METRIC_NAME_TYPE.TRACE_ERROR_RATE,
-    spans: METRIC_NAME_TYPE.SPAN_ERROR_RATE,
-  };
-
-const ERROR_RATE_LINE_NAME_MAP: Partial<Record<KpiEntityType, string>> = {
-  traces: "trace_error_rate",
-  spans: "span_error_rate",
-};
-
-const AVG_DURATION_LINE_NAME_MAP: Record<KpiEntityType, string> = {
-  traces: "trace_average_duration",
-  spans: "span_average_duration",
-  threads: "thread_average_duration",
-};
-
-const AVG_DURATION_METRIC_MAP: Record<KpiEntityType, METRIC_NAME_TYPE> = {
-  traces: METRIC_NAME_TYPE.TRACE_AVERAGE_DURATION,
-  spans: METRIC_NAME_TYPE.SPAN_AVERAGE_DURATION,
-  threads: METRIC_NAME_TYPE.THREAD_AVERAGE_DURATION,
-};
-
-const getChartConfig = (
-  kpiType: KpiMetricType,
-  entityType: KpiEntityType,
-): ChartMetricConfig => {
-  switch (kpiType) {
-    case "count":
-      return {
-        metricName: COUNT_METRIC_MAP[entityType],
-        chartType: CHART_TYPE.bar,
-        colorMap: { [entityType]: CHART_VIOLET },
-      };
-    case "errors":
-      return {
-        metricName: ERROR_RATE_METRIC_MAP[entityType]!,
-        chartType: CHART_TYPE.bar,
-        colorMap: { [ERROR_RATE_LINE_NAME_MAP[entityType]!]: CHART_RED },
-      };
-    case "avg_duration":
-      return {
-        metricName: AVG_DURATION_METRIC_MAP[entityType],
-        chartType: CHART_TYPE.bar,
-        customYTickFormatter: durationYTickFormatter,
-        renderValue: renderDurationTooltipValue,
-        colorMap: { [AVG_DURATION_LINE_NAME_MAP[entityType]]: CHART_TEAL },
-      };
-    case "total_cost":
-      return {
-        metricName: METRIC_NAME_TYPE.COST,
-        chartType: CHART_TYPE.bar,
-        customYTickFormatter: costYTickFormatter,
-        renderValue: renderCostTooltipValue,
-        colorMap: { cost: CHART_BLUE },
-      };
-  }
-};
 
 const SKELETON_BAR_COUNT = 30;
 const SKELETON_BAR_HEIGHTS = Array.from(
@@ -219,6 +132,7 @@ export type MetricsSummaryProps = {
   filters?: Filters;
   intervalStart?: string;
   intervalEnd?: string;
+  refetchInterval?: number | false;
   dateRange: DateRangeValue;
   logsSource?: LOGS_SOURCE;
 };
@@ -230,35 +144,36 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
   filters,
   intervalStart,
   intervalEnd,
+  refetchInterval = REFETCH_INTERVAL,
   dateRange,
   logsSource,
 }) => {
   const [selectedMetric, setSelectedMetric] = useState<KpiMetricType>("count");
 
   const chartIntervalConfig = useMemo(() => {
-    const interval = calculateIntervalType(dateRange);
-    const { intervalStart: chartStart, intervalEnd: chartEnd } =
-      calculateIntervalStartAndEnd(dateRange);
+    const fallbackBounds = calculateIntervalBounds(dateRange);
     return {
-      interval,
-      intervalStart: chartStart,
-      intervalEnd: chartEnd ?? dayjs().utc().format(),
+      interval: calculateIntervalType(dateRange),
+      intervalStart: intervalStart ?? fallbackBounds.intervalStart,
+      intervalEnd: intervalEnd ?? fallbackBounds.intervalEnd,
     };
-  }, [dateRange]);
+  }, [dateRange, intervalStart, intervalEnd]);
 
-  const { data, isPending } = useProjectKpiCards(
-    {
-      projectId,
-      entityType,
-      filters,
-      intervalStart: intervalStart ?? chartIntervalConfig.intervalStart,
-      intervalEnd: intervalEnd ?? chartIntervalConfig.intervalEnd,
-      logsSource,
-    },
-    {
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
+  const kpiCardsParams = {
+    projectId,
+    entityType,
+    filters,
+    intervalStart: chartIntervalConfig.intervalStart,
+    intervalEnd: chartIntervalConfig.intervalEnd,
+    logsSource,
+  };
+  const { data, isPending } = useProjectKpiCards(kpiCardsParams, {
+    placeholderData: keepDataWhileWindowMoves(refetchInterval, kpiCardsParams, [
+      "intervalStart",
+      "intervalEnd",
+    ]),
+    ...windowQueryOptions(refetchInterval),
+  });
 
   const metricsMap = useMemo(() => {
     const map = new Map<KpiMetricType, KpiMetric>();
@@ -382,6 +297,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
             interval={chartIntervalConfig.interval}
             intervalStart={chartIntervalConfig.intervalStart}
             intervalEnd={chartIntervalConfig.intervalEnd}
+            refetchInterval={refetchInterval}
             metricName={chartConfig.metricName}
             customYTickFormatter={chartConfig.customYTickFormatter}
             renderValue={chartConfig.renderValue}

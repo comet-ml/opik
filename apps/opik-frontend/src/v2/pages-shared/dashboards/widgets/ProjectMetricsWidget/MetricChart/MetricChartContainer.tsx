@@ -17,6 +17,10 @@ import {
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
 import useMetricData from "@/api/projects/useMetricData";
+import {
+  keepDataWhileWindowMoves,
+  windowQueryOptions,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect/useIntervalBounds";
 import { ChartTooltipRenderValueArguments } from "@/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import NoData from "@/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
@@ -48,6 +52,7 @@ interface MetricContainerChartProps {
   interval: INTERVAL_TYPE;
   intervalStart: string | undefined;
   intervalEnd: string | undefined;
+  refetchInterval?: number | false;
   metricName: METRIC_NAME_TYPE;
   renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
   labelsMap?: Record<string, string>;
@@ -103,6 +108,7 @@ const MetricContainerChart = ({
   interval,
   intervalStart,
   intervalEnd,
+  refetchInterval = 30000,
   renderValue = renderTooltipValue,
   labelsMap,
   customYTickFormatter,
@@ -128,22 +134,26 @@ const MetricContainerChart = ({
   hideXAxis,
   hideYAxis,
 }: MetricContainerChartProps) => {
-  const { data: response, isPending } = useMetricData(
-    {
-      projectId,
-      projectIds,
-      metricName,
-      interval,
-      intervalStart,
-      intervalEnd,
-      traceFilters,
-      threadFilters,
-      spanFilters,
-      breakdown,
-      logsSource,
-    },
-    { refetchInterval: 30000 },
-  );
+  const metricParams = {
+    projectId,
+    projectIds,
+    metricName,
+    interval,
+    intervalStart,
+    intervalEnd,
+    traceFilters,
+    threadFilters,
+    spanFilters,
+    breakdown,
+    logsSource,
+  };
+  const { data: response, isPending } = useMetricData(metricParams, {
+    placeholderData: keepDataWhileWindowMoves(refetchInterval, metricParams, [
+      "intervalStart",
+      "intervalEnd",
+    ]),
+    ...windowQueryOptions(refetchInterval),
+  });
 
   const traces = response?.results;
 
