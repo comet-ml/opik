@@ -5,7 +5,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 
 import { Separator } from "@/ui/separator";
 import { Skeleton } from "@/ui/skeleton";
@@ -20,8 +19,7 @@ import PlaygroundPrompts from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/Playg
 import PlaygroundHeader from "@/v2/pages/PlaygroundPage/PlaygroundHeader";
 import SetupProviderDialog from "@/v2/pages-shared/llm/SetupProviderDialog/SetupProviderDialog";
 import useActionButtonActions from "@/v2/pages/PlaygroundPage/useActionButtonActions";
-import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
-import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
+import useDatasetById from "@/api/datasets/useDatasetById";
 import {
   useTriggerProviderValidation,
   useIsRunning,
@@ -34,15 +32,10 @@ import {
   useSetDatasetVariables,
   useSetExperimentName,
   useSetDatasetType,
-  useDatasetFilters,
-  useDatasetPage,
-  useDatasetSize,
   useLastActiveProjectId,
   useSetLastActiveProjectId,
 } from "@/store/PlaygroundStore";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
-import { Dataset, DatasetItem } from "@/types/datasets";
-import { transformDataColumnFilters } from "@/lib/filters";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
@@ -50,11 +43,6 @@ import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
-
-import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
-
-const EMPTY_ITEMS: DatasetItem[] = [];
-const EMPTY_DATASETS: Dataset[] = [];
 
 const renderPlaygroundLoadingSkeleton = () => (
   <div className="flex min-h-0 flex-1">
@@ -204,13 +192,10 @@ const PlaygroundPage = () => {
   }, [datasetId, clearCreatedExperiments]);
 
   const { DialogComponent } = useNavigationBlocker({
-    condition: isRunning,
-    title: datasetId
-      ? "Experiment execution in progress"
-      : "Prompt execution in progress",
-    description: datasetId
-      ? "Your experiment is currently running. Leaving now will interrupt the execution and may result in incomplete experiment items. Are you sure you want to leave?"
-      : "Your prompt is currently running. Leaving now will interrupt the execution and may result in incomplete traces. Are you sure you want to leave?",
+    condition: isRunning && !datasetId,
+    title: "Prompt execution in progress",
+    description:
+      "Your prompt is currently running. Leaving now will interrupt the execution and may result in incomplete traces. Are you sure you want to leave?",
     confirmText: "Leave anyway",
     cancelText: "Stay and wait",
   });
@@ -234,47 +219,14 @@ const PlaygroundPage = () => {
   const plainDatasetId = parsed?.datasetId || datasetId;
   const parsedVersionId = parsed?.versionId;
 
-  const filters = useDatasetFilters();
-  const page = useDatasetPage();
-  const size = useDatasetSize();
-
-  const transformedFilters = useMemo(
-    () => (filters ? transformDataColumnFilters(filters) : filters),
-    [filters],
+  const { data: selectedDataset } = useDatasetById(
+    { datasetId: plainDatasetId! },
+    { enabled: canViewDatasets && !!plainDatasetId },
   );
-
-  const { data: datasetItemsData } = useDatasetItemsList(
-    {
-      datasetId: plainDatasetId!,
-      page,
-      size,
-      truncate: true,
-      filters: transformedFilters,
-      versionId: versionHash,
-    },
-    {
-      enabled: !!plainDatasetId,
-      placeholderData: plainDatasetId ? keepPreviousData : undefined,
-    },
-  );
-  const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
-
-  const { data: datasetsData } = useProjectDatasetsList(
-    {
-      projectId: activeProjectId ?? "",
-      page: 1,
-      size: DEFAULT_LOADED_DATASETS,
-    },
-    { enabled: canViewDatasets && !!activeProjectId && !!plainDatasetId },
-  );
-  const datasetName =
-    (datasetsData?.content || EMPTY_DATASETS).find(
-      (ds) => ds.id === plainDatasetId,
-    )?.name || null;
+  const datasetName = selectedDataset?.name || null;
 
   const { runAll, stopAll, runSingle, stopSingle } = useActionButtonActions({
     workspaceName,
-    datasetItems,
     datasetName,
     datasetVersionId: parsedVersionId || undefined,
     datasetId: plainDatasetId || undefined,
