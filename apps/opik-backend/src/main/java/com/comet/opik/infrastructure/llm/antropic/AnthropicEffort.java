@@ -13,11 +13,14 @@ import java.util.Optional;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_FABLE_5;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_FABLE_5_1;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_HAIKU_4_5;
+import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_MYTHOS_PREVIEW;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_1;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_5;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_6;
+import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_6_20260205;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_7;
+import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_7_20260416;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_8;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_5;
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_5_5;
@@ -49,10 +52,13 @@ class AnthropicEffort {
             Map.entry(CLAUDE_OPUS_5.getValue(), ALL_LEVELS),
             Map.entry(CLAUDE_OPUS_4_8.getValue(), ALL_LEVELS),
             Map.entry(CLAUDE_OPUS_4_7.getValue(), ALL_LEVELS),
+            Map.entry(CLAUDE_OPUS_4_7_20260416.getValue(), ALL_LEVELS),
             Map.entry(CLAUDE_SONNET_5.getValue(), ALL_LEVELS),
             Map.entry(CLAUDE_FABLE_5.getValue(), ALL_LEVELS),
             Map.entry(CLAUDE_FABLE_5_1.getValue(), ALL_LEVELS),
             Map.entry(CLAUDE_OPUS_4_6.getValue(), LEVELS_WITHOUT_XHIGH),
+            Map.entry(CLAUDE_OPUS_4_6_20260205.getValue(), LEVELS_WITHOUT_XHIGH),
+            Map.entry(CLAUDE_MYTHOS_PREVIEW.getValue(), LEVELS_WITHOUT_XHIGH),
             Map.entry(CLAUDE_SONNET_4_6.getValue(), LEVELS_WITHOUT_XHIGH),
             Map.entry(CLAUDE_OPUS_4_5.getValue(), LEVELS_UP_TO_HIGH),
             Map.entry(CLAUDE_SONNET_3_7.getValue(), List.of()),
