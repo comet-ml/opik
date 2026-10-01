@@ -256,25 +256,32 @@ class TestClosingBlock:
 
         assert rich_view.done.call_count == 1
 
-    def test_lists_both_components(self, mcp_spy, skills_spy, rich_view):
-        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
-
-        assert rich_view.done.call_args.args[0] == ["MCP server", "skill pack"]
-
-    def test_omits_a_pack_that_failed(self, mcp_spy, skills_spy, rich_view):
+    def test_a_pack_that_failed__still_closes_on_the_server(
+        self, mcp_spy, skills_spy, rich_view
+    ):
         skills_spy.return_value = _install_result(succeeded=False)
 
         outcome = assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
-        assert rich_view.done.call_args.args[0] == ["MCP server"]
+        rich_view.done.assert_called_once_with()
         assert outcome.skills is False
 
-    def test_omits_a_server_that_reached_nothing(self, mcp_spy, skills_spy, rich_view):
+    def test_a_server_that_reached_nothing__still_closes_on_the_pack(
+        self, mcp_spy, skills_spy, rich_view
+    ):
         mcp_spy.return_value = _mcp_report([])
 
-        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+        outcome = assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
-        assert rich_view.done.call_args.args[0] == ["skill pack"]
+        rich_view.done.assert_called_once_with()
+        assert outcome.skills is True
+
+    def test_nothing_landed__no_closing_block(self, mcp_spy, skills_spy, rich_view):
+        mcp_spy.return_value = _mcp_report([])
+
+        assistants.setup(_params(), install_mcp=True, skills=DECLINE)
+
+        rich_view.done.assert_not_called()
 
 
 class TestPassThrough:

@@ -1,30 +1,15 @@
 """How the MCP install narrates itself.
 
-The install flow is shared by two callers with different needs. ``opik.configure()``
-is a library call that must not paint boxes on someone's stdout, so it narrates
-through the logger. ``opik mcp configure`` is a wizard a person is watching, and
-it should look like one — the rest of the command group already renders with
-``rich`` (see ``cli.status_view``), so the installer looking like raw log output
-was the odd one out.
-
-Both are served by injecting a view rather than branching inside the flow:
-:class:`LoggingInstallView` is the default and preserves library behaviour;
-``cli.mcp`` passes :class:`RichInstallView`. Tests inject a recording double,
-which also decouples them from exact log strings.
-
-Presentation only — every decision is made by ``install``.
+``install`` makes every decision and reports through an :class:`InstallView`;
+the CLI supplies the ``rich`` one, and tests inject a recording double.
 """
 
 import abc
 import contextlib
 import dataclasses
-import logging
-import pathlib
-from typing import Iterator, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from opik.configurator.mcp import spec as mcp_spec
-
-LOGGER = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -34,14 +19,6 @@ class HostChoice:
     key: str
     label: str
     hint: str = ""
-
-
-@dataclasses.dataclass
-class PlannedTarget:
-    """One AI host the install is about to touch, and where."""
-
-    display_name: str
-    location: str
 
 
 @dataclasses.dataclass
@@ -126,13 +103,7 @@ class InstallView(abc.ABC):
         self._needs_sign_in = False
 
     @abc.abstractmethod
-    def plan(
-        self,
-        deployment: str,
-        transport: str,
-        targets: List[PlannedTarget],
-        needs_sign_in: bool = False,
-    ) -> None:
+    def plan(self, deployment: str, transport: str, needs_sign_in: bool) -> None:
         """Announce what is about to happen, before anything is written."""
 
     @abc.abstractmethod
@@ -148,8 +119,8 @@ class InstallView(abc.ABC):
         """Report whether the registration actually works."""
 
     @abc.abstractmethod
-    def done(self, components: List[str], assistants: List[str]) -> None:
-        """Close the run: what was set up, for whom, and what is left to do."""
+    def done(self) -> None:
+        """Close the run, with whatever is still left for the user to do."""
 
     @abc.abstractmethod
     def skipped(self, message: str) -> None:
@@ -173,78 +144,6 @@ class InstallView(abc.ABC):
         from an empty list, which means "none of them, deliberately". Still a
         list because the manual row answers with its own key rather than a host.
         """
-
-
-class LoggingInstallView(InstallView):
-    """The library-safe default: everything through the logger, no cursor control."""
-
-    def plan(
-        self,
-        deployment: str,
-        transport: str,
-        targets: List[PlannedTarget],
-        needs_sign_in: bool = False,
-    ) -> None:
-        self._needs_sign_in = needs_sign_in
-        LOGGER.info(
-            "Setting up the Opik MCP server (%s, %s) for: %s",
-            deployment,
-            transport,
-            ", ".join(f"{t.display_name} -> {t.location}" for t in targets),
-        )
-
-    @contextlib.contextmanager
-    def step(self, description: str) -> Iterator[None]:
-        LOGGER.info("%s...", description)
-        yield
-
-    def results(self, results: List[TargetResult]) -> None:
-        for result in results:
-            if result.succeeded:
-                LOGGER.info("%s: %s", result.display_name, result.detail)
-            else:
-                LOGGER.warning("%s: %s", result.display_name, result.detail)
-
-    def sign_in_failed(self, client_display_names: List[str]) -> None:
-        # A log has no ending to hold this back for, so it is said where it is
-        # learned — before verification, which could otherwise go first.
-        super().sign_in_failed(client_display_names)
-        for name in client_display_names:
-            LOGGER.warning(sign_in_failed_message(name))
-
-    def verification(self, succeeded: bool, detail: str) -> None:
-        if succeeded:
-            LOGGER.info("Verified: %s.", detail)
-        else:
-            LOGGER.warning(
-                "The Opik MCP server was registered, but verification failed: %s",
-                detail,
-            )
-
-    def done(self, components: List[str], assistants: List[str]) -> None:
-        LOGGER.info(
-            "Done. %s set up for %s. Restart %s, then ask it to 'list my Opik "
-            "projects via Opik MCP'.",
-            " and ".join(components) or "Nothing",
-            ", ".join(assistants) or "your AI client",
-            "them" if len(assistants) > 1 else "it",
-        )
-        if self._needs_sign_in:
-            LOGGER.info("Signing in: %s", SIGN_IN_HINT)
-
-    def skipped(self, message: str) -> None:
-        LOGGER.info(message)
-
-    def problem(self, message: str) -> None:
-        LOGGER.warning(message)
-
-    def note(self, message: str) -> None:
-        LOGGER.info(message)
-
-    def choose_hosts(
-        self, title: str, candidates: List[HostChoice]
-    ) -> Optional[List[str]]:
-        return numbered_menu(title, candidates)
 
 
 def _single_candidate_menu(candidate: HostChoice) -> List[str]:
@@ -274,16 +173,14 @@ def _single_candidate_menu(candidate: HostChoice) -> List[str]:
             return []
         if answer == "2":
             return [MANUAL_SETUP]
-        LOGGER.error("Wrong choice. Please try again.\n")
+        print("  Please enter one of the numbers above.")
 
 
 def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str]]:
     """The portable fallback: type a number.
 
-    A module-level function rather than a base-class method so the rich view can
-    fall back to it without inheriting a logging view it otherwise overrides
-    entirely. A single candidate keeps its own shape; see
-    :func:`_single_candidate_menu`.
+    Used by the rich view where the terminal cannot host its picker. A single
+    candidate keeps its own shape; see :func:`_single_candidate_menu`.
 
     One client, like the picker this stands in for. It used to offer "All of the
     above" and accept ``1,2`` — which registered servers this flow then could not
@@ -325,21 +222,4 @@ def _several_candidates_menu(title: str, candidates: List[HostChoice]) -> List[s
             if 1 <= number <= host_count:
                 return [candidates[number - 1].key]
 
-        LOGGER.error("Wrong choice. Please try again.\n")
-
-
-def display_path(path: pathlib.Path) -> str:
-    """Render a path with the user's home directory collapsed to ``~``."""
-    home = str(pathlib.Path.home())
-    value = str(path)
-    return f"~{value[len(home) :]}" if value.startswith(home) else value
-
-
-_DEFAULT_VIEW: Optional[InstallView] = None
-
-
-def default_view() -> InstallView:
-    global _DEFAULT_VIEW
-    if _DEFAULT_VIEW is None:
-        _DEFAULT_VIEW = LoggingInstallView()
-    return _DEFAULT_VIEW
+        print("  Please enter one of the numbers above.")

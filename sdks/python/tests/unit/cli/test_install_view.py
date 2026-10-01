@@ -14,13 +14,6 @@ import pytest
 from opik.configurator.mcp import view as mcp_view
 
 
-def _targets():
-    return [
-        mcp_view.PlannedTarget("Cursor", "~/.cursor/mcp.json"),
-        mcp_view.PlannedTarget("Claude Code", "via `claude mcp add`"),
-    ]
-
-
 class TestRichInstallView:
     """Rendering only — asserted through rich's own capture, not by eyeballing."""
 
@@ -33,7 +26,7 @@ class TestRichInstallView:
     def test_plan__shows_deployment_and_transport(self, view):
         with view.console.capture() as capture:
             view.RichInstallView().plan(
-                "Opik Cloud · workspace acme-ai", "Local server via uvx", _targets()
+                "Opik Cloud · workspace acme-ai", "Local server via uvx", False
             )
 
         out = capture.get()
@@ -46,7 +39,7 @@ class TestRichInstallView:
         below reports what was actually written."""
         with view.console.capture() as capture:
             view.RichInstallView().plan(
-                "Opik Cloud · workspace acme-ai", "Local server via uvx", _targets()
+                "Opik Cloud · workspace acme-ai", "Local server via uvx", False
             )
 
         out = capture.get()
@@ -84,22 +77,6 @@ class TestRichInstallView:
         assert "Not working" in out
         assert "HTTP 401" in out
 
-    def test_done__marks_completion_without_restating_the_results(self, view):
-        """The rows above already list each component and each client, with marks.
-
-        Summarising them again here put "MCP server and skill pack for Cursor"
-        directly under the two rows that had just said exactly that.
-        """
-        with view.console.capture() as capture:
-            view.RichInstallView().done(
-                ["MCP server", "skill pack"], ["Cursor", "Claude Code", "Codex"]
-            )
-
-        out = capture.get()
-        assert "Done" in out
-        assert "MCP server" not in out
-        assert "Cursor" not in out
-
     def test_done__says_nothing_about_what_to_do_next(self, view):
         """The ending below it does that, in words that fit the ending reached.
 
@@ -107,7 +84,7 @@ class TestRichInstallView:
         above an offer to start the client on a different question.
         """
         with view.console.capture() as capture:
-            view.RichInstallView().done(["MCP server"], ["Cursor"])
+            view.RichInstallView().done()
 
         out = capture.get()
         assert "Restart" not in out
@@ -115,9 +92,9 @@ class TestRichInstallView:
 
     def test_done__sign_in_needed__is_the_one_thing_it_still_says(self, view):
         installer = view.RichInstallView()
-        installer.plan("Opik Cloud", "Hosted server", [], needs_sign_in=True)
+        installer.plan("Opik Cloud", "Hosted server", needs_sign_in=True)
         with view.console.capture() as capture:
-            installer.done(["MCP server"], ["Claude Code"])
+            installer.done()
 
         out = capture.get()
         assert "Signing in" in out
@@ -149,9 +126,9 @@ class TestRichInstallView:
     def test_done__no_sign_in__stays_quiet(self, view):
         """The local server takes its credentials at startup — nothing to sign in to."""
         installer = view.RichInstallView()
-        installer.plan("Local Opik", "Local server via uvx", [], needs_sign_in=False)
+        installer.plan("Local Opik", "Local server via uvx", needs_sign_in=False)
         with view.console.capture() as capture:
-            installer.done(["MCP server"], ["Cursor"])
+            installer.done()
 
         assert "Signing in" not in capture.get()
 
@@ -199,7 +176,7 @@ class TestChooseHosts:
         """A one-item numbered menu would be silly."""
         monkeypatch.setattr("builtins.input", lambda prompt: "y")
 
-        chosen = mcp_view.LoggingInstallView().choose_hosts(
+        chosen = mcp_view.numbered_menu(
             "pick", [mcp_view.HostChoice("cursor", "Cursor")]
         )
 
@@ -208,7 +185,7 @@ class TestChooseHosts:
     def test_logging_view__single_candidate_declined(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda prompt: "n")
 
-        chosen = mcp_view.LoggingInstallView().choose_hosts(
+        chosen = mcp_view.numbered_menu(
             "pick", [mcp_view.HostChoice("cursor", "Cursor")]
         )
 
@@ -223,7 +200,7 @@ class TestChooseHosts:
 
         monkeypatch.setattr("builtins.input", fake_input)
 
-        mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
+        mcp_view.numbered_menu("pick", self._candidates())
 
         assert "Claude Code" in prompts[0]
 
@@ -243,7 +220,7 @@ class TestChooseHosts:
 
         monkeypatch.setattr("builtins.input", fake_input)
 
-        chosen = mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
+        chosen = mcp_view.numbered_menu("pick", self._candidates())
 
         assert "All of the above" not in prompts[0]
         assert "commas" not in prompts[0]
@@ -255,21 +232,19 @@ class TestChooseHosts:
         """3 candidates, so 4 is "not listed" and 5 is Skip."""
         monkeypatch.setattr("builtins.input", lambda prompt: "5")
 
-        assert (
-            mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates()) == []
-        )
+        assert mcp_view.numbered_menu("pick", self._candidates()) == []
 
     def test_logging_view__client_not_listed(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda prompt: "4")
 
-        assert mcp_view.LoggingInstallView().choose_hosts(
-            "pick", self._candidates()
-        ) == [mcp_view.MANUAL_SETUP]
+        assert mcp_view.numbered_menu("pick", self._candidates()) == [
+            mcp_view.MANUAL_SETUP
+        ]
 
     def test_logging_view__invalid_then_valid__retries(self, monkeypatch):
         monkeypatch.setattr("builtins.input", mock.Mock(side_effect=["x", "99", "2"]))
 
-        chosen = mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates())
+        chosen = mcp_view.numbered_menu("pick", self._candidates())
 
         assert chosen == ["cursor"]
 
@@ -685,7 +660,7 @@ class TestTheEndingAfterAFailedSignIn:
         view.sign_in_failed(["Claude Code"])
 
         with recorder.capture() as capture:
-            view.done(["MCP server"], ["Claude Code"])
+            view.done()
 
         out = capture.get()
         assert "not signed in yet" in out

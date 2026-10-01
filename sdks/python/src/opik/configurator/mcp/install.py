@@ -92,7 +92,7 @@ def setup_mcp_server(
     force_local_server: bool = False,
     host_keys: Optional[List[str]] = None,
     assume_confirmed: bool = False,
-    view: Optional[mcp_view.InstallView] = None,
+    view: mcp_view.InstallView,
 ) -> InstallReport:
     """Register the Opik MCP server with the user's AI client(s).
 
@@ -111,15 +111,13 @@ def setup_mcp_server(
     already showed the user a prompt naming the same clients, so consent is
     collected once rather than twice.
 
-    ``view`` decides how the flow narrates itself; it defaults to the logger so
-    that ``opik.configure()`` stays library-safe. The CLI passes a ``rich`` view.
-
+    ``view`` narrates the flow.
 
     Returns an :class:`InstallReport`: the host keys actually registered, so a
     caller can act on the same set without asking the user a second time, plus
     the ones that failed and whether the connection verified.
     """
-    display = view if view is not None else mcp_view.default_view()
+    display = view
 
     # The backstop for every caller, library included: without a terminal we can
     # only proceed on an explicit request, and `host_keys` is what one looks like.
@@ -204,13 +202,6 @@ def setup_mcp_server(
         # to its closing block, which `cli.assistants` prints after the skill
         # pack — by then the spec is out of scope.
         needs_sign_in=isinstance(server_spec, mcp_spec.RemoteServerSpec),
-        targets=[
-            mcp_view.PlannedTarget(
-                display_name=target.display_name,
-                location=_target_location(target, server_spec),
-            )
-            for target in candidates
-        ],
     )
 
     confirmation = _confirm_targets(candidates, host_keys, assume_confirmed, display)
@@ -359,17 +350,6 @@ def _transport_label(server_spec: mcp_spec.McpServerSpec) -> str:
     if isinstance(server_spec, mcp_spec.RemoteServerSpec):
         return "Hosted server, browser sign-in on first connect"
     return "Local server via uvx, credentials in the host config"
-
-
-def _target_location(
-    target: mcp_targets.HostTarget, server_spec: mcp_spec.McpServerSpec
-) -> str:
-    """Where this host's registration will land, in the user's own terms."""
-    if target.key == "claude-code" and shutil.which("claude") is not None:
-        return "via `claude mcp add`"
-    if target.key == "codex":
-        return "via `codex mcp add`"
-    return mcp_view.display_path(target.config_path())
 
 
 def _workspace_ambiguity(

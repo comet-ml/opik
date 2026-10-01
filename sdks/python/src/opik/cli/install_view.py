@@ -463,20 +463,7 @@ def render_note(message: str, hint: Optional[str] = None) -> None:
 
 
 class RichInstallView(mcp_view.InstallView):
-    def plan(
-        self,
-        deployment: str,
-        transport: str,
-        targets: List[mcp_view.PlannedTarget],
-        needs_sign_in: bool = False,
-    ) -> None:
-        # `targets` is deliberately not rendered. It used to head a "Will update"
-        # table of each client and the file it would touch, which by then was the
-        # third time the same clients were listed — after the consent prompt's
-        # "Found:" list and the picker. The results table below reports what was
-        # actually written, per client, which is the version worth reading.
-        # `LoggingInstallView` still logs the paths for the library path, which
-        # has no results table.
+    def plan(self, deployment: str, transport: str, needs_sign_in: bool) -> None:
         self._needs_sign_in = needs_sign_in
         console.print()
         console.print(text.Text("Opik MCP server setup", style="bold"))
@@ -538,18 +525,8 @@ class RichInstallView(mcp_view.InstallView):
             )
         console.print(padding.Padding(row, (0, 0, 0, 2), expand=False))
 
-    def done(self, components: List[str], assistants: List[str]) -> None:
-        """Close the run. Deliberately almost empty.
-
-        `components` and `assistants` are not rendered: the results rows above
-        are those two lists, per item, with a mark saying whether each landed —
-        so the summary grid that used to sit here said the same thing a second
-        time in prose. Nor is there a "next step" row: the ending below this
-        says what to do next, in words that fit the ending actually reached.
-
-        The arguments stay in the signature because `LoggingInstallView` has no
-        results table and so has nothing else to report from.
-        """
+    def done(self) -> None:
+        """Close the run. The results rows above already list what was set up."""
         console.print()
         if self._sign_in_failed:
             # The run's last word, after the skill pack: the one step left for

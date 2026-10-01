@@ -9,7 +9,7 @@ from opik.configurator.mcp import install, spec, targets, verification
 from opik.configurator.mcp import view as mcp_view
 
 
-class RecordingView(mcp_view.LoggingInstallView):
+class RecordingView(mcp_view.InstallView):
     """Captures narration so tests assert on intent, not on log strings."""
 
     #: Set to script the host prompt; ``None`` uses the inherited numbered menu.
@@ -18,7 +18,6 @@ class RecordingView(mcp_view.LoggingInstallView):
     def __init__(self):
         self.choose_calls = []
         self.plans = []
-        self.plan_extras = []
         self.steps = []
         self.target_results = []
         self.verifications = []
@@ -27,10 +26,9 @@ class RecordingView(mcp_view.LoggingInstallView):
         self.problems = []
         self.notes = []
 
-    def plan(self, deployment, transport, targets, needs_sign_in=False, extras=()):
-        super().plan(deployment, transport, targets, needs_sign_in)
-        self.plans.append((deployment, transport, list(targets)))
-        self.plan_extras.append(list(extras))
+    def plan(self, deployment, transport, needs_sign_in):
+        self._needs_sign_in = needs_sign_in
+        self.plans.append((deployment, transport))
 
     @contextlib.contextmanager
     def step(self, description):
@@ -43,8 +41,8 @@ class RecordingView(mcp_view.LoggingInstallView):
     def verification(self, succeeded, detail):
         self.verifications.append((succeeded, detail))
 
-    def done(self, components, assistants):
-        self.done_calls.append((list(components), list(assistants)))
+    def done(self):
+        self.done_calls.append(True)
 
     def skipped(self, message):
         self.skips.append(message)
@@ -59,7 +57,7 @@ class RecordingView(mcp_view.LoggingInstallView):
         self.choose_calls.append((title, list(candidates)))
         if self.host_choice is not None:
             return list(self.host_choice)
-        return super().choose_hosts(title, candidates)
+        return mcp_view.numbered_menu(title, candidates)
 
     @property
     def said(self) -> str:
@@ -70,8 +68,7 @@ class RecordingView(mcp_view.LoggingInstallView):
             + self.notes
             + [d for _, d in self.verifications]
             + [r.detail for r in self.target_results]
-            + [f"{d} {t}" for d, t, _ in self.plans]
-            + [loc for _, _, ts in self.plans for loc in (t.location for t in ts)]
+            + [f"{d} {t}" for d, t in self.plans]
         )
 
 
@@ -820,37 +817,6 @@ class TestPlanLabels:
             spec.StdioServerSpec(command="uvx", args=["opik-mcp"], env={})
         )
         assert "uvx" in label and "host config" in label
-
-    def test_target_location__claude_code_with_cli__names_the_command(
-        self, monkeypatch
-    ):
-        """Saying `~/.claude.json` would be wrong when we shell out to the CLI."""
-        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/claude")
-        target = targets.find_target("claude-code")
-
-        location = install._target_location(target, mock.Mock())
-
-        assert location == "via `claude mcp add`"
-
-    def test_target_location__claude_code_without_cli__names_the_file(
-        self, monkeypatch
-    ):
-        monkeypatch.setattr(install.shutil, "which", lambda name: None)
-        target = targets.find_target("claude-code")
-
-        assert install._target_location(target, mock.Mock()).endswith(".claude.json")
-
-    def test_target_location__codex__names_the_command(self):
-        """Codex config is TOML; we drive its CLI rather than editing the file."""
-        target = targets.find_target("codex")
-
-        assert install._target_location(target, mock.Mock()) == "via `codex mcp add`"
-
-    def test_target_location__file_hosts__collapse_home(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
-        target = targets.find_target("cursor")
-
-        assert install._target_location(target, mock.Mock()).startswith("~/")
 
     def test_setup_mcp_server__plan_is_shown_before_anything_is_written(
         self, monkeypatch

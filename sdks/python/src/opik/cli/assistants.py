@@ -24,7 +24,6 @@ from opik.configurator import consent
 from opik.configurator import mcp as mcp_installer
 from opik.configurator.mcp import install as mcp_install
 from opik.configurator import skills as skills_installer
-from opik.configurator.skills import roots as skills_roots
 
 
 class Outcome(NamedTuple):
@@ -176,15 +175,7 @@ def setup(
             result = skills_installer.setup_skills(skills_targets)
         installed_skills = install_view.render_skill_pack(result, view)
 
-    components = [
-        name
-        for name, done in (
-            ("MCP server", bool(configured_hosts)),
-            ("skill pack", installed_skills),
-        )
-        if done
-    ]
-    if not components:
+    if not configured_hosts and not installed_skills:
         # Nothing landed, but a run where every write failed is not the same as one
         # where nothing was attempted, so the failure count rides along either way.
         return NOTHING_DONE._replace(
@@ -198,9 +189,7 @@ def setup(
             stale_tool=install.stale_tool,
         )
 
-    view.done(
-        components, skills_roots.display_names(configured_hosts or skills_targets)
-    )
+    view.done()
 
     return Outcome(
         clients=len(configured_hosts),
