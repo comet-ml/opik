@@ -260,7 +260,10 @@ public class AnthropicMappersTest {
                 "claude-sonnet-5, xhigh",
                 "claude-opus-5-5, medium",
                 "claude-opus-4-5-20251101, high",
-                "claude-mythos-5-1, xhigh"})
+                "claude-mythos-5-1, xhigh",
+                "claude-opus-4-6-20260205, max",
+                "claude-opus-4-7-20260416, xhigh",
+                "claude-mythos-preview, max"})
         void acceptsAnEffortTheModelOffers(String model, String effort) {
             assertThatCode(() -> provider.validateRequest(requestWithEffort(model, effort)))
                     .doesNotThrowAnyException();
@@ -288,6 +291,12 @@ public class AnthropicMappersTest {
                     Arguments.of("claude-sonnet-4-6", "xhigh",
                             "Unsupported custom_parameters.output_config.effort for the model, "
                                     + "model 'claude-sonnet-4-6', effort 'xhigh', supported '[low, medium, high, max]'"),
+                    Arguments.of("claude-opus-4-6-20260205", "xhigh",
+                            "Unsupported custom_parameters.output_config.effort for the model, "
+                                    + "model 'claude-opus-4-6-20260205', effort 'xhigh', supported '[low, medium, high, max]'"),
+                    Arguments.of("claude-mythos-preview", "xhigh",
+                            "Unsupported custom_parameters.output_config.effort for the model, "
+                                    + "model 'claude-mythos-preview', effort 'xhigh', supported '[low, medium, high, max]'"),
                     Arguments.of("claude-opus-4-5-20251101", "max",
                             "Unsupported custom_parameters.output_config.effort for the model, "
                                     + "model 'claude-opus-4-5-20251101', effort 'max', supported '[low, medium, high]'"),
