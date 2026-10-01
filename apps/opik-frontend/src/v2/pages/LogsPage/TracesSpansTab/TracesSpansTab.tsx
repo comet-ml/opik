@@ -59,12 +59,16 @@ import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
-import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
+import { useLogsQuickAttributeFilter } from "@/v2/pages/LogsPage/TracesSpansTab/useLogsQuickAttributeFilter";
+import {
+  LOGS_DEFAULT_PINNED_CHIPS,
+  LOGS_TABLE_ID,
+  getLogsFiltersUrlKey,
+} from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
 import { ChipDefinition } from "@/shared/filter-chips/types";
 import { STRING_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import {
-  TRACE_DEFAULT_PINNED_CHIPS,
   buildSharedDynamicChips,
   buildTraceChipDefinitions,
 } from "@/v2/pages-shared/traces/traceChipDefinitions";
@@ -524,8 +528,6 @@ const SPAN_CHIP_ORDER: string[] = [
   "custom",
 ];
 
-const SPAN_DEFAULT_PINNED_CHIPS = ["type", "tags", "with_errors", "metadata"];
-
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
@@ -746,13 +748,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     type === TRACE_DATA_TYPE.traces
       ? traceChipDefinitions
       : spanChipDefinitions;
-  const defaultPinned =
-    type === TRACE_DATA_TYPE.traces
-      ? TRACE_DEFAULT_PINNED_CHIPS
-      : SPAN_DEFAULT_PINNED_CHIPS;
-  const tableId =
-    type === TRACE_DATA_TYPE.traces ? "logs.traces" : "logs.spans";
-  const filtersUrlKey = `${type}_filters`;
+  const defaultPinned = LOGS_DEFAULT_PINNED_CHIPS[type];
+  const tableId = LOGS_TABLE_ID[type];
+  const filtersUrlKey = getLogsFiltersUrlKey(type);
 
   const {
     chipsPinned,
@@ -783,12 +781,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     pinChip,
   });
 
-  const quickAttributeFilterApi = useQuickAttributeFilterActions({
+  const quickAttributeFilterApi = useLogsQuickAttributeFilter({
     type,
-    tableId,
-    values: chipValues,
-    applyValue: applyChipValue,
-    pinChip,
+    onLogsTypeChange,
   });
 
   const effectiveFilters = useMemo(() => {
