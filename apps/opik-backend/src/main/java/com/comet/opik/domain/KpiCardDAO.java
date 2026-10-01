@@ -378,8 +378,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
             WITH traces_final AS (
                 SELECT
                     *,
-                    -- Each period is built from its own traces and rows, like the chart for that range.
-                    -- Aggregating both periods as one set moved threads that straddle the start into "previous".
+                    -- The period is set per trace, not per thread, so each card aggregates only its own range's traces and
+                    -- thread rows, exactly as the chart for that range does.
                     id >= :id_current_start AS is_current_period
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
@@ -525,8 +525,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
                            (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                            NULL) AS duration,
                         count(DISTINCT t.id) * 2 as number_of_messages,
-                        <if(trace_thread_first_message_filter)>argMinIf(t.input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as first_message,<endif>
-                        <if(trace_thread_last_message_filter)>argMaxIf(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,<endif>
+                        -- Update-before-create placeholders carry the sentinel start time, so they are skipped while the thread has a real trace.
+                        -- A thread made only of placeholders falls back to them and still shows what the updates carried.
+                        <if(trace_thread_first_message_filter || trace_thread_last_message_filter)>countIf(notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) > 0 as has_non_sentinel_trace,<endif>
+                        <if(trace_thread_first_message_filter)>if(has_non_sentinel_trace, argMinIf(t.input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMin(t.input, t.start_time)) as first_message,<endif>
+                        <if(trace_thread_last_message_filter)>if(has_non_sentinel_trace, argMaxIf(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) as last_message,<endif>
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
                         argMin(t.created_by, t.created_at) as created_by,
