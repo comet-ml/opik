@@ -4,31 +4,37 @@ import sync_provider_models as spm
 
 
 @pytest.mark.parametrize(
-    "total_added, seeded_reasoning_ids, force_regen, fell_back, expected",
+    "total_added, seeded_reasoning_ids, cleared_reasoning_ids, force_regen, fell_back, expected",
     [
-        (1, [], False, True, False),
-        (0, ["o3"], False, True, False),
-        (0, [], False, False, False),
-        (1, [], False, False, True),
-        (0, ["o3"], False, False, True),
-        (1, [], True, True, True),
-        (0, [], True, False, True),
+        (1, [], [], False, True, False),
+        (0, ["o3"], [], False, True, False),
+        (0, [], ["gpt-5-chat-latest"], False, True, False),
+        (0, [], [], False, False, False),
+        (1, [], [], False, False, True),
+        (0, ["o3"], [], False, False, True),
+        (0, [], ["gpt-5-chat-latest"], False, False, True),
+        (1, [], [], True, True, True),
+        (0, [], [], True, False, True),
     ],
     ids=[
         "fallback_with_additions",
         "fallback_with_seeded_reasoning",
+        "fallback_with_cleared_reasoning",
         "no_changes",
         "additions_without_fallback",
         "seeded_reasoning_without_fallback",
+        "cleared_reasoning_without_fallback",
         "force_regen_overrides_fallback",
         "force_regen_without_changes",
     ],
 )
 def test_should_write_files__case__expected(
-    total_added, seeded_reasoning_ids, force_regen, fell_back, expected
+    total_added, seeded_reasoning_ids, cleared_reasoning_ids, force_regen, fell_back, expected
 ):
     assert (
-        spm._should_write_files(total_added, seeded_reasoning_ids, force_regen, fell_back)
+        spm._should_write_files(
+            total_added, seeded_reasoning_ids, cleared_reasoning_ids, force_regen, fell_back
+        )
         is expected
     )
 
@@ -100,3 +106,38 @@ def test_regenerate_llm_models_yaml__litellm_marks_excluded_and_reasoning_models
     )
 
     assert _reasoning_ids(regenerated) == {"o4-mini"}
+
+
+def _existing_yaml_with_stale_flag():
+    model_line = '  - id: "gpt-5-chat-latest"\n'
+    existing = spm.read_file(spm.LLM_MODELS_YAML)
+    assert existing.count(model_line) == 1
+    return existing.replace(model_line, model_line + "    reasoning: true\n")
+
+
+@pytest.mark.parametrize(
+    "existing_yaml, expected_written",
+    [(_existing_yaml_with_stale_flag, True), (lambda: spm.read_file(spm.LLM_MODELS_YAML), False)],
+    ids=["stale_flag_in_existing_yaml", "no_stale_flag"],
+)
+def test_main__only_change_is_a_cleared_stale_flag__yaml_written(monkeypatch, existing_yaml, expected_written):
+    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    existing = existing_yaml()
+    real_read_file = spm.read_file
+    monkeypatch.setattr(
+        spm, "read_file", lambda path: existing if path == spm.LLM_MODELS_YAML else real_read_file(path)
+    )
+    # With no prices and an empty OpenRouter list no provider adds a model, so the stale flag is the only change.
+    monkeypatch.setattr(spm, "load_model_prices", lambda: {})
+    monkeypatch.setattr(spm, "fetch_openrouter_models", lambda: [])
+    written = {}
+    monkeypatch.setattr(spm, "write_file", written.__setitem__)
+    monkeypatch.setattr("sys.argv", ["sync_provider_models.py"])
+
+    with pytest.raises(SystemExit):
+        spm.main()
+
+    assert (spm.LLM_MODELS_YAML in written) is expected_written
+    if expected_written:
+        assert "gpt-5-chat-latest" not in _reasoning_ids(written[spm.LLM_MODELS_YAML])

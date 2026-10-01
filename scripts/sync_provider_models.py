@@ -1162,14 +1162,24 @@ def _seeded_reasoning_ids(
     )
 
 
+def _cleared_reasoning_ids(existing_yaml_content: str, regenerated_yaml_content: str) -> list[str]:
+    before = _parse_yaml_reasoning_flags(existing_yaml_content).get("openai", {})
+    after = _parse_yaml_reasoning_flags(regenerated_yaml_content).get("openai", {})
+    return sorted(before.keys() - after.keys())
+
+
 def _should_write_files(
-    total_added: int, seeded_reasoning_ids: list[str], force_regen: bool, fell_back: bool
+    total_added: int,
+    seeded_reasoning_ids: list[str],
+    cleared_reasoning_ids: list[str],
+    force_regen: bool,
+    fell_back: bool,
 ) -> bool:
     # Any provider falling back blocks every file, not only that provider's: the files ship together, so a partial sync never publishes.
     # A failed provider is rebuilt from the prices JSON, or for OpenRouter from an empty API list, so even a real addition elsewhere would ship degraded data.
     if force_regen:
         return True
-    return not fell_back and (total_added > 0 or bool(seeded_reasoning_ids))
+    return not fell_back and (total_added > 0 or bool(seeded_reasoning_ids) or bool(cleared_reasoning_ids))
 
 
 def main():
@@ -1323,6 +1333,7 @@ def main():
     seeded_reasoning_ids = _seeded_reasoning_ids(
         llm_models_yaml_content, models_by_provider["openai"], openai_reasoning,
     )
+    cleared_reasoning_ids = _cleared_reasoning_ids(llm_models_yaml_content, new_llm_models_yaml)
 
     # 5. Print summary
     total_added = 0
@@ -1361,14 +1372,18 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if seeded_reasoning_ids:
+    if seeded_reasoning_ids or cleared_reasoning_ids:
         print("### Registry")
         for model_id in seeded_reasoning_ids:
             print(f"  + {model_id} (reasoning)")
+        for model_id in cleared_reasoning_ids:
+            print(f"  - {model_id} (reasoning)")
         print()
 
-    if not _should_write_files(total_added, seeded_reasoning_ids, args.force_regen, fell_back):
-        if fell_back and (total_added > 0 or seeded_reasoning_ids):
+    if not _should_write_files(
+        total_added, seeded_reasoning_ids, cleared_reasoning_ids, args.force_regen, fell_back,
+    ):
+        if fell_back and (total_added > 0 or seeded_reasoning_ids or cleared_reasoning_ids):
             print("A provider API call failed: fallback data not published; retry when the API is reachable, or rerun with --force-regen.")
         elif total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
