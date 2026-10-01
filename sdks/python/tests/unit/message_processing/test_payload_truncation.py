@@ -164,7 +164,7 @@ def test_truncate_span_kwargs__non_positive_limit__disables():
 
 
 def _processor(max_payload_size_mb):
-    return online_message_processor.OpikMessageProcessor(
+    processor = online_message_processor.OpikMessageProcessor(
         rest_client=mock.MagicMock(),
         file_upload_manager=mock.MagicMock(),
         fallback_replay_manager=mock.MagicMock(),
@@ -172,6 +172,13 @@ def _processor(max_payload_size_mb):
         data_loss_tracker=mock.MagicMock(),
         max_payload_size_mb=max_payload_size_mb,
     )
+    processor._send_write_batch = mock.Mock()
+    return processor
+
+
+def _sent_batch(processor) -> list:
+    """The batch the processor sent as a prepared span/trace body."""
+    return processor._send_write_batch.call_args.args[2]
 
 
 def _sent(processor, resource: str, method: str) -> dict:
@@ -214,7 +221,7 @@ def test_process_create_spans_batch__oversized_span_truncated_before_send():
 
     processor.process(message)
 
-    sent = _sent(processor, "spans", "create_spans")["spans"]
+    sent = _sent_batch(processor)
     assert sent[0].output["opik_truncated"] is True  # oversized span truncated
     assert sent[1].output == {"result": "small"}  # small span passed through
 
@@ -226,7 +233,7 @@ def test_process_create_spans_batch__limit_disabled__no_truncation():
 
     processor.process(message)
 
-    sent = _sent(processor, "spans", "create_spans")["spans"]
+    sent = _sent_batch(processor)
     assert sent[0].output == big_span.output  # unchanged when disabled
 
 
@@ -397,7 +404,7 @@ def test_process_create_traces_batch__oversized_trace_truncated():
 
     processor.process(message)
 
-    sent = _sent(processor, "traces", "create_traces")["traces"]
+    sent = _sent_batch(processor)
     assert sent[0].output["opik_truncated"] is True
     assert sent[1].output == {"result": "small"}
 

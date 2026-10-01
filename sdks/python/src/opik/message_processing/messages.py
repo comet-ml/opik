@@ -5,6 +5,7 @@ from dataclasses import field
 from typing import Optional, Any, Dict, List, Union, Literal, Set, Type, TypeVar
 
 from . import arguments_utils
+from ..api_objects import streaming_upload
 from .preprocessing import constants
 from ..rest_api.core import pydantic_utilities
 from ..rest_api.types import span_write, trace_write
@@ -316,7 +317,7 @@ class CreateSpansBatchMessage(BaseMessage):
         self.batch = _deserialize_pydantic_batch(self.batch, span_write.SpanWrite)
 
     def as_db_message_dict(self) -> Dict[str, Any]:
-        return _serialize_pydantic_batch_to_dict(self.__dict__, self.batch)
+        return _serialize_write_batch_to_dict(self.__dict__, self.batch)
 
     @staticmethod
     def fields_to_anonymize() -> Set[str]:
@@ -333,7 +334,7 @@ class CreateTraceBatchMessage(BaseMessage):
         self.batch = _deserialize_pydantic_batch(self.batch, trace_write.TraceWrite)
 
     def as_db_message_dict(self) -> Dict[str, Any]:
-        return _serialize_pydantic_batch_to_dict(self.__dict__, self.batch)
+        return _serialize_write_batch_to_dict(self.__dict__, self.batch)
 
     @staticmethod
     def fields_to_anonymize() -> Set[str]:
@@ -496,6 +497,15 @@ def _serialize_base_message_batch_to_dict(
 ) -> Dict[str, Any]:
     """Serialize a BaseMessage batch to dict."""
     batch_items = [item.as_db_message_dict() for item in batch]
+    return {**instance_dict, "batch": batch_items}
+
+
+def _serialize_write_batch_to_dict(
+    instance_dict: Dict[str, Any],
+    batch: List[Any],
+) -> Dict[str, Any]:
+    """Serialize a span/trace write batch to dict without the generated `.dict()` pass."""
+    batch_items = [streaming_upload.wire_fields(item) for item in batch]
     return {**instance_dict, "batch": batch_items}
 
 
