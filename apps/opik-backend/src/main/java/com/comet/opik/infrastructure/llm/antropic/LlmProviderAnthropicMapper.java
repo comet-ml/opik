@@ -94,14 +94,12 @@ interface LlmProviderAnthropicMapper {
                 && !SamplingParamsNormalizer.thinkingEnabled(request);
     }
 
-    // langchain4j's AnthropicOutputConfig has no effort field, so the effort rides customParameters, which
-    // AnthropicCreateMessageRequest flattens into the top level of the body. Mapping outputConfig as well would
-    // put a second output_config key on the wire.
+    // langchain4j's AnthropicOutputConfig has no effort field, so the whole output_config rides customParameters,
+    // which AnthropicCreateMessageRequest flattens into the top level of the body. Mapping outputConfig as well
+    // would put a second output_config key on the wire.
     @Named("resolveCustomParameters")
     default Map<String, Object> resolveCustomParameters(@NonNull ChatCompletionRequest request) {
-        return AnthropicEffort.fromCustomParameters(request.model(), request.customParameters())
-                .map(AnthropicEffort::toCustomParameters)
-                .orElse(null);
+        return AnthropicEffort.toCustomParameters(request.model(), request.customParameters()).orElse(null);
     }
 
     @Named("resolveMaxTokens")

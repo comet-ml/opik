@@ -63,14 +63,14 @@ class AnthropicEffort {
             Map.entry(CLAUDE_SONNET_4_5.getValue(), List.of()),
             Map.entry(CLAUDE_SONNET_4_5_20250929.getValue(), List.of()));
 
-    Optional<String> fromCustomParameters(String model, JsonNode customParameters) {
+    Optional<Map<String, Object>> toCustomParameters(String model, JsonNode customParameters) {
         if (customParameters == null || !customParameters.isObject()) {
             return Optional.empty();
         }
-        return fromCustomParameters(model, JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE));
+        return toCustomParameters(model, JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE));
     }
 
-    Optional<String> fromCustomParameters(String model, Map<String, Object> customParameters) {
+    Optional<Map<String, Object>> toCustomParameters(String model, Map<String, Object> customParameters) {
         if (customParameters == null || customParameters.get(OUTPUT_CONFIG) == null) {
             return Optional.empty();
         }
@@ -78,38 +78,33 @@ class AnthropicEffort {
             throw new BadRequestException(
                     "custom_parameters.output_config must be an object, model '%s'".formatted(model));
         }
-        var effort = outputConfig.get(EFFORT);
+        validateEffort(model, outputConfig.get(EFFORT));
+        return outputConfig.isEmpty() ? Optional.empty() : Optional.of(Map.of(OUTPUT_CONFIG, outputConfig));
+    }
+
+    void requireValid(String model, Map<String, Object> customParameters) {
+        toCustomParameters(model, customParameters);
+    }
+
+    private void validateEffort(String model, Object effort) {
         if (effort == null) {
-            return Optional.empty();
+            return;
         }
         if (!(effort instanceof String level)) {
             throw new BadRequestException(
                     "custom_parameters.output_config.effort must be a string, model '%s', effort '%s'"
                             .formatted(model, effort));
         }
-        return Optional.of(validate(model, level));
-    }
-
-    void requireValid(String model, Map<String, Object> customParameters) {
-        fromCustomParameters(model, customParameters);
-    }
-
-    Map<String, Object> toCustomParameters(String effort) {
-        return Map.of(OUTPUT_CONFIG, Map.of(EFFORT, effort));
-    }
-
-    private String validate(String model, String effort) {
         var supported = Optional.ofNullable(model).map(LEVELS_BY_MODEL::get).orElse(ALL_LEVELS);
         if (supported.isEmpty()) {
             throw new BadRequestException(
                     "The model does not support custom_parameters.output_config.effort, model '%s', effort '%s'"
-                            .formatted(model, effort));
+                            .formatted(model, level));
         }
-        if (!supported.contains(effort)) {
+        if (!supported.contains(level)) {
             throw new BadRequestException(
                     "Unsupported custom_parameters.output_config.effort for the model, model '%s', effort '%s', supported '%s'"
-                            .formatted(model, effort, supported));
+                            .formatted(model, level, supported));
         }
-        return effort;
     }
 }

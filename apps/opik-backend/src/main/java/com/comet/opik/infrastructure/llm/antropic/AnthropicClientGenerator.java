@@ -116,7 +116,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     }
 
     /**
-     * Forwards the rule's {@code custom_parameters} (thinking, max_tokens, output_config.effort) onto the
+     * Forwards the rule's {@code custom_parameters} (thinking, max_tokens, output_config) onto the
      * judge-path builder and guarantees a {@code max_tokens} is always sent. Anthropic requires max_tokens, and
      * without an explicit cap adaptive thinking can consume the whole budget, yielding an empty response
      * (finishReason=LENGTH).
@@ -125,9 +125,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
             JsonNode customParameters, ThinkingParams thinking) {
         Optional.ofNullable(thinking.type()).ifPresent(builder::thinkingType);
 
-        AnthropicEffort.fromCustomParameters(modelName, customParameters)
-                .map(AnthropicEffort::toCustomParameters)
-                .ifPresent(builder::customParameters);
+        AnthropicEffort.toCustomParameters(modelName, customParameters).ifPresent(builder::customParameters);
 
         // budget_tokens is only valid alongside enabled thinking; forwarding it with an absent or "disabled"
         // type produces a partial config that Anthropic rejects with a 400.

@@ -393,6 +393,17 @@ class AnthropicClientGeneratorTest {
         }
 
         @Test
+        void keepsTheOtherOutputConfigFieldsBesideTheEffort() {
+            var outputConfig = """
+                    {"effort": "low", "format": {"type": "json_schema",
+                    "schema": {"type": "object", "properties": {"score": {"type": "number"}}}}}""";
+
+            var body = bodySentToAnthropic("claude-sonnet-4-6", "{\"output_config\": %s}".formatted(outputConfig));
+
+            assertThat(body.path("output_config")).isEqualTo(JsonUtils.getJsonNodeFromString(outputConfig));
+        }
+
+        @Test
         void sendsNoOutputConfigWhenTheRuleHasNoEffort() {
             var body = bodySentToAnthropic("claude-sonnet-4-6", "{\"max_tokens\": 2048}");
 
