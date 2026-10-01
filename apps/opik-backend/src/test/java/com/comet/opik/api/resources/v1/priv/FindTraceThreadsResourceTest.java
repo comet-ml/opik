@@ -62,6 +62,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -1187,6 +1188,108 @@ class FindTraceThreadsResourceTest {
                     .containsExactly(
                             tuple(threadId, realTrace.startTime(), 4L, realTrace.input(), realTrace.output()),
                             tuple(threadId, realTrace.startTime(), 4L, realTrace.input(), realTrace.output()));
+        }
+
+        @ParameterizedTest(name = "truncate={0}, withTimeWindow={1}")
+        @CsvSource({"false, false", "false, true", "true, false", "true, true"})
+        @DisplayName("When a thread has only an update-before-create placeholder trace, then its messages are the placeholder's input and output")
+        void whenThreadHasOnlyPlaceholderTrace__thenMessagesArePlaceholderInputAndOutput(boolean truncate,
+                boolean withTimeWindow) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            var placeholderInput = JsonUtils.getJsonNodeFromString("{\"question\":\"placeholder input\"}");
+            var placeholderOutput = JsonUtils.getJsonNodeFromString("{\"answer\":\"placeholder output\"}");
+
+            var placeholderTraceId = idGenerator.generateId(ranAt);
+            traceResourceClient.updateTrace(placeholderTraceId, TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .input(placeholderInput)
+                    .output(placeholderOutput)
+                    .endTime(ranAt.plus(250, ChronoUnit.MILLIS))
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            assertThat(traceResourceClient.getById(placeholderTraceId, TEST_WORKSPACE, API_KEY))
+                    .extracting(Trace::startTime, Trace::input, Trace::output)
+                    .containsExactly(Instant.EPOCH, placeholderInput, placeholderOutput);
+
+            var queryParams = new HashMap<>(Map.of("truncate", String.valueOf(truncate)));
+            if (withTimeWindow) {
+                queryParams.put("from_time", ranAt.minus(Duration.ofMinutes(10)).toString());
+                queryParams.put("to_time", ranAt.plus(Duration.ofMinutes(10)).toString());
+            }
+
+            // The windowed list inner-joins the thread row, which the update event registers asynchronously
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                                List.of(), List.of(), queryParams);
+                        var thread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                                TEST_WORKSPACE);
+
+                        assertThat(Stream.concat(page.content().stream(), Stream.of(thread)))
+                                .extracting(TraceThread::id, TraceThread::numberOfMessages,
+                                        TraceThread::firstMessage, TraceThread::lastMessage)
+                                .containsExactly(
+                                        tuple(threadId, 2L, placeholderInput, placeholderOutput),
+                                        tuple(threadId, 2L, placeholderInput, placeholderOutput));
+                    });
+        }
+
+        @ParameterizedTest(name = "truncate={0}")
+        @ValueSource(booleans = {false, true})
+        @DisplayName("When a placeholder trace with content precedes a real trace, then the messages and environment come from the real trace")
+        void whenPlaceholderTraceWithContentPrecedesRealTrace__thenMessagesAndEnvironmentComeFromRealTrace(
+                boolean truncate) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+            var placeholderTraceId = idGenerator.generateId(ranAt);
+            traceResourceClient.updateTrace(placeholderTraceId, TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .input(JsonUtils.getJsonNodeFromString("{\"question\":\"placeholder input\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"answer\":\"placeholder output\"}"))
+                    .endTime(ranAt.plus(1000, ChronoUnit.MILLIS))
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            // Registered from the placeholder, the thread row keeps a blank environment, so the thread falls back
+            // to its traces' environment
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(traceResourceClient
+                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId())
+                            .isNotNull());
+
+            var realTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt.plusMillis(1)))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(250, ChronoUnit.MILLIS))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(realTrace), API_KEY, TEST_WORKSPACE);
+
+            var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, List.of(),
+                    List.of(), Map.of("truncate", String.valueOf(truncate)));
+            var thread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY, TEST_WORKSPACE);
+
+            assertThat(Stream.concat(page.content().stream(), Stream.of(thread)))
+                    .extracting(TraceThread::id, TraceThread::numberOfMessages, TraceThread::firstMessage,
+                            TraceThread::lastMessage, TraceThread::environment)
+                    .containsExactly(
+                            tuple(threadId, 4L, realTrace.input(), realTrace.output(), realTrace.environment()),
+                            tuple(threadId, 4L, realTrace.input(), realTrace.output(), realTrace.environment()));
         }
 
         @ParameterizedTest
