@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -37,7 +37,9 @@ import {
   DATE_RANGE_PRESET_PAST_7_DAYS,
   DEFAULT_DATE_PRESET,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import { LOGS_TYPE } from "@/constants/traces";
 import useLogsType from "./useLogsType";
+import useLogsIntervalWindow from "./useLogsIntervalWindow";
 
 dayjs.extend(utc);
 
@@ -46,26 +48,40 @@ const now = dayjs(PRESET_DATE_RANGES.past24hours.to)
   .add(12, "hours")
   .add(30, "minutes");
 
-const renderLogsType = () => {
+const dateRangeConfig = {
+  defaultValue: DEFAULT_DATE_PRESET,
+  storageKeySuffix: "",
+};
+
+const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  const wrapper = ({ children }: { children: React.ReactNode }) => (
+  const Wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-
-  return renderHook(
-    () =>
-      useLogsType({
-        projectId: "project-1",
-        dateRangeConfig: {
-          defaultValue: DEFAULT_DATE_PRESET,
-          storageKeySuffix: "",
-        },
-      }),
-    { wrapper },
-  );
+  return Wrapper;
 };
+
+const renderLogsType = () =>
+  renderHook(
+    () => {
+      const intervalWindow = useLogsIntervalWindow(dateRangeConfig);
+      return {
+        intervalWindow,
+        ...useLogsType({
+          projectId: "project-1",
+          dateRangeConfig,
+          intervalWindow,
+        }),
+      };
+    },
+    { wrapper: createWrapper() },
+  );
+
+const threadStats = (value: number) => ({
+  data: { stats: [{ name: "thread_count", type: "COUNT", value }] },
+});
 
 const probeParams = async () => {
   await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
@@ -118,5 +134,51 @@ describe("useLogsType", () => {
       from_time: now.utc().subtract(29, "days").startOf("day").format(),
       to_time: now.utc().format(),
     });
+  });
+
+  it("should probe its own window with an explicit end when no window is passed", async () => {
+    timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
+
+    renderHook(() => useLogsType({ projectId: "project-1", dateRangeConfig }), {
+      wrapper: createWrapper(),
+    });
+
+    expect(await probeParams()).toMatchObject({
+      from_time: now.utc().subtract(6, "days").startOf("day").format(),
+      to_time: now.utc().format(),
+    });
+  });
+
+  it("should keep the known thread count while a moved window loads, so the page loader stays hidden", async () => {
+    timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
+    mockGet.mockResolvedValueOnce(threadStats(3));
+    mockGet.mockReturnValueOnce(new Promise(() => {}));
+    const { result } = renderLogsType();
+    await waitFor(() =>
+      expect(result.current.logsType).toBe(LOGS_TYPE.threads),
+    );
+    vi.setSystemTime(now.add(30, "seconds").toDate());
+
+    act(() => {
+      result.current.intervalWindow.reanchorToNow();
+    });
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    expect(mockGet.mock.calls[1][1].params.to_time).toBe(
+      now.add(30, "seconds").utc().format(),
+    );
+    expect(result.current.needsDefaultResolution).toBe(false);
+    expect(result.current.logsType).toBe(LOGS_TYPE.threads);
+  });
+
+  it("should not probe when a logs type is already stored", () => {
+    timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
+    storage["project-logsType-project-1"] = LOGS_TYPE.traces;
+
+    const { result } = renderLogsType();
+
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(result.current.needsDefaultResolution).toBe(false);
+    expect(result.current.logsType).toBe(LOGS_TYPE.traces);
   });
 });

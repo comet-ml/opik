@@ -86,20 +86,22 @@ export const calculateIntervalType = (
   return INTERVAL_TYPE.WEEKLY;
 };
 
+export const isEndDateToday = (dateRange: DateRangeValue): boolean =>
+  dayjs(dateRange.to).isSame(dayjs(), "day");
+
 export const calculateIntervalStartAndEnd = (
   dateRange: DateRangeValue,
 ): { intervalStart: string; intervalEnd: string | undefined } => {
   const daysDiff = dayjs(dateRange.to).diff(dayjs(dateRange.from), "days");
   const startOf = daysDiff <= 1 ? "hour" : "day";
 
-  const isEndDateToday = dayjs(dateRange.to).isSame(dayjs(), "day");
   const preset = getRangePreset(dateRange);
   const isPresetRange = preset && preset !== DATE_RANGE_PRESET_ALLTIME;
 
   let endTime: dayjs.Dayjs | undefined;
   let startTime: dayjs.Dayjs;
 
-  if (isEndDateToday) {
+  if (isEndDateToday(dateRange)) {
     if (isPresetRange) {
       endTime = undefined;
       startTime = dayjs()
