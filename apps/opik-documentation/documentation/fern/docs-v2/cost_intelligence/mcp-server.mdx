@@ -14,17 +14,13 @@ Point the Opik MCP server at your Cost Intelligence workspace and you can ask yo
   Only admins can use it. The Cost Intelligence workspace holds company-wide
   data, so access to it is limited to admins, and the MCP server can only read
   what your own API key can.
-
-  For now this works only with the **local** MCP server, which runs on your own
-  machine. The hosted Opik MCP server, the one you sign in to through the
-  browser, can't connect to the Cost Intelligence workspace.
 </Note>
 
 ## Before you begin
 
 You need three things:
 
-- [`uv`](https://docs.astral.sh/uv/), which runs the local server.
+- [`uv`](https://docs.astral.sh/uv/), which runs the MCP server.
 - Your Opik API key, from your [Opik account settings](https://www.comet.com/settings/api-keys?utm_source=opik&utm_medium=docs&utm_campaign=cost_intelligence).
 - The name of your Cost Intelligence workspace. It is `__ai_spend_` followed by your organization ID and two underscores, for example `__ai_spend_XJtf7HIqB9i2K59BxoHmUUGTD__`. To find yours, open **Cost Intelligence** from the user menu in Opik and copy the name from the browser address bar, which reads `https://www.comet.com/opik/<workspace>/ai-spend/...`.
 
