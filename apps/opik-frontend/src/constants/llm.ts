@@ -223,6 +223,9 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
 // gpt-5.1 → none/low/medium/high; gpt-5.2 and later add xhigh (gpt-6-astra
 // and gpt-6.1-sol have no none). Sending an unsupported value 400s; no model
 // here accepts max on Chat Completions.
+// The rows pinned `reasoning: false` must equal OPENAI_NON_REASONING_MODELS in
+// scripts/sync_provider_models.py, or the registry flag the sync seeds would
+// contradict the panel (llm.test.ts enforces it; one source of truth is OPIK-8637).
 export const OPENAI_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,

@@ -76,7 +76,8 @@ OPENAI_EXCLUDE_PATTERNS = [
 OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")
 
 # LiteLLM flags these supports_reasoning, but OpenAI answers reasoning_effort on them with 400 "Invalid 'reasoning_effort' for non-reasoning model".
-# Keep in step with OPENAI_MODEL_CAPABILITIES in apps/opik-frontend/src/constants/llm.ts, which pins the same models non-reasoning; gpt-5.1-chat-latest accepts the parameter and stays out.
+# Must equal the `reasoning: false` rows of OPENAI_MODEL_CAPABILITIES in apps/opik-frontend/src/constants/llm.ts (its llm.test.ts fails otherwise);
+# gpt-5.1-chat-latest accepts the parameter and stays out. Moving these rules into the registry so there is one list is OPIK-8637.
 OPENAI_NON_REASONING_MODELS = {"gpt-5-chat-latest", "gpt-5.2-chat-latest", "gpt-5.3-chat-latest"}
 
 ANTHROPIC_EXCLUDE_PATTERNS = [
