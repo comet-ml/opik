@@ -27,7 +27,7 @@ public class CustomLlmProvider implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        ChatCompletionRequest cleanedRequest = mapMaxTokens(cleanModelName(request));
+        ChatCompletionRequest cleanedRequest = normalizeTokenLimits(cleanModelName(request));
         return openAiClient.chatCompletion(cleanedRequest).execute();
     }
 
@@ -38,7 +38,7 @@ public class CustomLlmProvider implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        ChatCompletionRequest cleanedRequest = mapMaxTokens(cleanModelName(request));
+        ChatCompletionRequest cleanedRequest = normalizeTokenLimits(cleanModelName(request));
         OpenAiStreamingHelper.executeStreamingRequest(openAiClient, cleanedRequest, handleMessage, handleClose,
                 handleError);
     }
@@ -77,28 +77,34 @@ public class CustomLlmProvider implements LlmProviderService {
     }
 
     // Ollama's /v1 endpoint reads only max_tokens and silently drops max_completion_tokens, so the limit never applied.
-    // Bedrock documents max_completion_tokens for its OpenAI-compatible body, so it keeps that field. Neither gets the
-    // 0 the playground slider allows: OpenAI-style APIs reject it, and Ollama passes it to its runner as the budget.
-    // A generic custom server gets the request exactly as sent, since some of them need max_completion_tokens.
-    private ChatCompletionRequest mapMaxTokens(ChatCompletionRequest request) {
+    // Bedrock documents max_completion_tokens for its OpenAI-compatible body, so it gets the limit in that field only.
+    // Neither gets the 0 the playground slider allows: OpenAI-style APIs reject it, and Ollama passes it to its runner
+    // as the budget. A generic custom server gets the request exactly as sent, since some of them need
+    // max_completion_tokens.
+    private ChatCompletionRequest normalizeTokenLimits(ChatCompletionRequest request) {
         if (provider == LlmProvider.OLLAMA) {
             return ChatCompletionRequest.builder()
                     .from(request)
-                    .maxTokens(ObjectUtils.firstNonNull(
-                            positive(request.maxCompletionTokens()), positive(request.maxTokens())))
+                    .maxTokens(firstPositiveTokenLimit(request))
                     .maxCompletionTokens(null)
                     .build();
         }
         if (provider == LlmProvider.BEDROCK) {
             return ChatCompletionRequest.builder()
                     .from(request)
-                    .maxCompletionTokens(positive(request.maxCompletionTokens()))
+                    .maxCompletionTokens(firstPositiveTokenLimit(request))
+                    .maxTokens(null)
                     .build();
         }
         return request;
     }
 
-    private static Integer positive(Integer tokens) {
+    private static Integer firstPositiveTokenLimit(ChatCompletionRequest request) {
+        return ObjectUtils.firstNonNull(
+                positiveOrNull(request.maxCompletionTokens()), positiveOrNull(request.maxTokens()));
+    }
+
+    private static Integer positiveOrNull(Integer tokens) {
         return tokens != null && tokens > 0 ? tokens : null;
     }
 

@@ -84,7 +84,7 @@ class CustomLlmProviderTest {
             Integer expectedMaxTokens, Integer expectedMaxCompletionTokens) {
         newProvider(provider).generate(request(maxCompletionTokens, maxTokens), "workspace-id");
 
-        assertTokenLimit(sentBody(), expectedMaxTokens, expectedMaxCompletionTokens);
+        assertTokenLimit(name, sentBody(), expectedMaxTokens, expectedMaxCompletionTokens);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -102,7 +102,7 @@ class CustomLlmProviderTest {
                 }, () -> done.complete(null), done::completeExceptionally);
         done.get(10, TimeUnit.SECONDS);
 
-        assertTokenLimit(sentBody(), expectedMaxTokens, expectedMaxCompletionTokens);
+        assertTokenLimit(name, sentBody(), expectedMaxTokens, expectedMaxCompletionTokens);
     }
 
     @Test
@@ -137,7 +137,16 @@ class CustomLlmProviderTest {
                         0, 300, 300, null),
                 arguments("Ollama gets no limit when none is set", LlmProvider.OLLAMA, null, null, null, null),
                 arguments("Bedrock keeps max_completion_tokens", LlmProvider.BEDROCK, 4000, null, null, 4000),
+                arguments("Bedrock gets a max_tokens sent on its own as max_completion_tokens", LlmProvider.BEDROCK,
+                        null, 300, null, 300),
+                arguments("Bedrock prefers max_completion_tokens when both are sent", LlmProvider.BEDROCK, 4000,
+                        300, null, 4000),
                 arguments("Bedrock gets no limit for 0", LlmProvider.BEDROCK, 0, null, null, null),
+                arguments("Bedrock gets no limit for a max_tokens of 0", LlmProvider.BEDROCK, null, 0, null, null),
+                arguments("Bedrock falls back to max_tokens when max_completion_tokens is 0", LlmProvider.BEDROCK,
+                        0, 300, null, 300),
+                arguments("Bedrock drops a max_tokens of 0 sent next to max_completion_tokens",
+                        LlmProvider.BEDROCK, 4000, 0, null, 4000),
                 arguments("Bedrock gets no limit when none is set", LlmProvider.BEDROCK, null, null, null, null),
                 arguments("A custom provider keeps max_completion_tokens", LlmProvider.CUSTOM_LLM, 4000, null,
                         null, 4000),
@@ -172,9 +181,13 @@ class CustomLlmProviderTest {
         return JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString());
     }
 
-    private void assertTokenLimit(JsonNode body, Integer expectedMaxTokens, Integer expectedMaxCompletionTokens) {
-        assertThat(body.has("max_tokens") ? body.get("max_tokens").asInt() : null).isEqualTo(expectedMaxTokens);
+    private void assertTokenLimit(
+            String name, JsonNode body, Integer expectedMaxTokens, Integer expectedMaxCompletionTokens) {
+        assertThat(body.has("max_tokens") ? body.get("max_tokens").asInt() : null)
+                .as("[%s] max_tokens", name)
+                .isEqualTo(expectedMaxTokens);
         assertThat(body.has("max_completion_tokens") ? body.get("max_completion_tokens").asInt() : null)
+                .as("[%s] max_completion_tokens", name)
                 .isEqualTo(expectedMaxCompletionTokens);
     }
 }
