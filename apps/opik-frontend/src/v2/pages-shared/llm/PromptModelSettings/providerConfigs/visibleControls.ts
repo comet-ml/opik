@@ -85,7 +85,7 @@ const getGeminiFamilyVisibleControls = (
   }: VisibleControlsInput<
     Partial<LLMGeminiConfigsType> | Partial<LLMVertexAIConfigsType>
   >,
-  thinkingLevel: boolean,
+  showThinkingLevel: boolean,
 ) => {
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
 
@@ -93,7 +93,7 @@ const getGeminiFamilyVisibleControls = (
     temperature: !isUndefined(temperature),
     maxCompletionTokens: !isUndefined(configs.maxCompletionTokens),
     topP: supports("topP") && !isUndefined(topP),
-    thinkingLevel,
+    thinkingLevel: showThinkingLevel,
     throttling: supports("throttling"),
     maxConcurrentRequests: supports("maxConcurrentRequests"),
   };

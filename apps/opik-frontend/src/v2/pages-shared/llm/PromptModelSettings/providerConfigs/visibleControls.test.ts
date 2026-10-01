@@ -6,7 +6,6 @@ import {
   RULE_UNSUPPORTED_PARAMS,
 } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
-import { getDefaultConfigByProvider } from "@/lib/playground";
 
 const ANTHROPIC_CONFIG = {
   temperature: 0.4,
@@ -15,7 +14,6 @@ const ANTHROPIC_CONFIG = {
   maxConcurrentRequests: 5,
 };
 
-// A rule's config holds only temperature and seed.
 const RULE_CONFIG = { temperature: 0.4 };
 
 describe("hasVisibleControls", () => {
@@ -106,15 +104,12 @@ describe("hasVisibleControls", () => {
     ).toBe(false);
   });
 
-  it("is true for openrouter on the playground with its default config", () => {
+  it("is true for openrouter on the playground with only a temperature", () => {
     expect(
       hasVisibleControls(
         PROVIDER_TYPE.OPEN_ROUTER,
         PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
-        getDefaultConfigByProvider(
-          PROVIDER_TYPE.OPEN_ROUTER,
-          PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
-        ),
+        RULE_CONFIG,
       ),
     ).toBe(true);
   });
