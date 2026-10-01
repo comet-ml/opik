@@ -130,6 +130,8 @@ export type PlaygroundStore = {
   experimentByPromptId: Record<string, string>;
   runTotalItems: number;
   datasetItemsTotal: number | null;
+  hasUnseenRunCompletion: boolean;
+  isRunInFlight: boolean;
   scoresByDatasetId: Record<string, string[] | null>;
 
   setPromptMap: (
@@ -152,6 +154,8 @@ export type PlaygroundStore = {
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
   setRunTotalItems: (total: number) => void;
   setDatasetItemsTotal: (total: number | null) => void;
+  setHasUnseenRunCompletion: (value: boolean) => void;
+  setIsRunInFlight: (value: boolean) => void;
   clearCreatedExperiments: () => void;
   setIsRunning: (isRunning: boolean) => void;
   setPromptRunning: (promptId: string, running: boolean) => void;
@@ -198,6 +202,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       experimentByPromptId: {},
       runTotalItems: 0,
       datasetItemsTotal: null,
+      hasUnseenRunCompletion: false,
+      isRunInFlight: false,
       scoresByDatasetId: {},
 
       updatePrompt: (promptId, changes) => {
@@ -337,6 +343,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       },
       setDatasetItemsTotal: (total) => {
         set((state) => ({ ...state, datasetItemsTotal: total }));
+      },
+      setHasUnseenRunCompletion: (value) => {
+        set((state) => ({ ...state, hasUnseenRunCompletion: value }));
+      },
+      setIsRunInFlight: (value) => {
+        set((state) => ({ ...state, isRunInFlight: value }));
       },
       setCreatedExperiments: (experiments) => {
         set((state) => {
@@ -608,6 +620,18 @@ export const useSetRunTotalItems = () =>
 
 export const useDatasetItemsTotal = () =>
   usePlaygroundStore((state) => state.datasetItemsTotal);
+
+export const useIsRunInFlight = () =>
+  usePlaygroundStore((state) => state.isRunInFlight);
+
+export const useSetIsRunInFlight = () =>
+  usePlaygroundStore((state) => state.setIsRunInFlight);
+
+export const useHasUnseenRunCompletion = () =>
+  usePlaygroundStore((state) => state.hasUnseenRunCompletion);
+
+export const useSetHasUnseenRunCompletion = () =>
+  usePlaygroundStore((state) => state.setHasUnseenRunCompletion);
 
 export const useSetDatasetItemsTotal = () =>
   usePlaygroundStore((state) => state.setDatasetItemsTotal);
