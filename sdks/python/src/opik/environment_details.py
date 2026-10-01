@@ -39,10 +39,10 @@ _LAUNCHER = _take_from_launcher(LAUNCHER_ENV_VAR)
 
 #: How this run was entered. Not in `collect_context_once`, which is cached on
 #: the first event: this is learned later in the run.
-_RUN_CONTEXT: Dict[str, Any] = {}
+_RUN_CONTEXT: Dict[str, str] = {}
 
 
-def set_run_context(**values: Any) -> None:
+def set_run_context(**values: str) -> None:
     """Record how this run was entered, for every event enqueued after this.
 
     Process-global and never cleared: call it only from a CLI entry point that

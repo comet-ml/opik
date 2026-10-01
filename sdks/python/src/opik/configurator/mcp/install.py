@@ -80,7 +80,6 @@ def setup_mcp_server(
     force_local_server: bool = False,
     host_keys: Optional[List[str]] = None,
     assume_confirmed: bool = False,
-    picked: Optional[List[str]] = None,
     view: mcp_view.InstallView,
 ) -> InstallReport:
     """Register the Opik MCP server with the user's AI client(s).
@@ -88,20 +87,15 @@ def setup_mcp_server(
     The decision of *whether* to run this lives in the callers; by the time this
     is called the user has opted in.
 
-    ``check_tls_certificate`` and ``force_local_server`` are keyword-only with
-    backward-compatible defaults, so the original positional call pattern
-    (``api_key``, ``workspace``, ``base_url``, ``api_url``, ``use_local``,
-    ``self_hosted_comet``) keeps working. ``force_local_server`` skips the
-    hosted-server probe and always installs the local ``uvx`` server.
+    The connection block is positional; everything after it is keyword-only,
+    and ``view`` is required. ``force_local_server`` skips the hosted-server
+    probe and always installs the local ``uvx`` server.
 
     ``host_keys`` names the AI clients to install for explicitly, which skips
     detection and the picker — but not the terminal requirement above.
     ``assume_confirmed`` suppresses the target confirmation when the caller
     already showed the user a prompt naming the same clients, so consent is
     collected once rather than twice.
-
-    ``picked`` is the picker's answer when the caller asked it earlier, before
-    the deployment was known; it is used instead of asking again.
 
     ``view`` narrates the flow.
 
@@ -214,9 +208,7 @@ def setup_mcp_server(
         needs_sign_in=isinstance(server_spec, mcp_spec.RemoteServerSpec),
     )
 
-    confirmation = _confirm_targets(
-        candidates, host_keys, assume_confirmed, picked, display
-    )
+    confirmation = _confirm_targets(candidates, host_keys, assume_confirmed, display)
     selected_targets = confirmation.targets
     if len(selected_targets) == 0:
         if confirmation.cancelled:
@@ -434,24 +426,10 @@ class _Confirmation(NamedTuple):
     cancelled: bool = False
 
 
-def choose_client(
-    candidates: List[mcp_targets.HostTarget], display: mcp_view.InstallView
-) -> Optional[List[str]]:
-    """Ask which AI client to set up: its key, the manual row, or None on cancel."""
-    return display.choose_hosts(
-        title="Which AI client should the Opik MCP server be set up for?",
-        candidates=[
-            mcp_view.HostChoice(key=target.key, label=target.display_name)
-            for target in candidates
-        ],
-    )
-
-
 def _confirm_targets(
     candidates: List[mcp_targets.HostTarget],
     host_keys: Optional[List[str]],
     assume_confirmed: bool,
-    picked: Optional[List[str]],
     display: mcp_view.InstallView,
 ) -> _Confirmation:
     """Narrow the candidates to what the user actually agreed to.
@@ -462,7 +440,13 @@ def _confirm_targets(
     if host_keys or assume_confirmed:
         return _Confirmation(candidates)
 
-    chosen = picked if picked is not None else choose_client(candidates, display)
+    chosen = display.choose_hosts(
+        title="Which AI client should the Opik MCP server be set up for?",
+        candidates=[
+            mcp_view.HostChoice(key=target.key, label=target.display_name)
+            for target in candidates
+        ],
+    )
     if chosen is None:
         # A cancel, distinct from `[]`, a deliberate "none".
         return _Confirmation([], cancelled=True)

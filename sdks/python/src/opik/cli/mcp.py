@@ -17,7 +17,6 @@ from opik.cli import status_view
 from opik.configurator import consent
 from opik.configurator import interactive_helpers
 from opik.configurator.mcp import handoff as mcp_handoff
-from opik.configurator.mcp import install as mcp_install
 from opik.configurator.mcp import status as mcp_status
 from opik.configurator.mcp import targets as mcp_targets
 
@@ -70,6 +69,11 @@ def _resolve_setup_params(config: opik_config.OpikConfig) -> McpSetupParams:
         "self_hosted_comet": self_hosted_comet,
         "check_tls_certificate": config.check_tls_certificate,
     }
+
+
+#: The deployment question as `opik mcp configure` asks it: here the answer is
+#: what the AI client connects to, not where traces go.
+MCP_DEPLOYMENT_QUESTION = "Which Opik should your AI client connect to?"
 
 
 def _opik_cloud_params() -> McpSetupParams:
@@ -217,8 +221,6 @@ def run_configure(
     params = _resolve_setup_params(opik_config.OpikConfig())
     detected = mcp_targets.detected_targets()
     detected_clients = len(detected)
-    picked: Optional[List[str]] = None
-    cancelled = False
 
     # A scripted run (`--ai-client`) gets no banner, and a redirect already
     # showed the logo.
@@ -232,47 +234,33 @@ def run_configure(
                 "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
                 "`opik configure`, then re-run this command."
             )
-        # No config yet: the client first, then where Opik is. Cloud needs no
-        # API key here — the hosted server signs in with OAuth — so it writes no
-        # config; self-hosted and local go through `opik configure`'s questions.
-        if not host_keys and detected:
-            picked = mcp_install.choose_client(detected, install_view.RichInstallView())
-            cancelled = picked is None
-            # A gap between the picker's key legend and the next question.
-            click.echo()
-        if not cancelled:
-            deployment = configure_cli.ask_for_deployment_type()
-            if deployment is interactive_helpers.DeploymentType.CLOUD:
-                params = _opik_cloud_params()
-            else:
-                configure_cli.run_interactive_configure(
-                    install_mcp=False, deployment=deployment
+        # No config yet: where Opik is first, so the client picker below stays
+        # the step after it, as the funnel orders them. Cloud needs no API key —
+        # the hosted server signs in with OAuth — so it writes no config;
+        # self-hosted and local go through `opik configure`'s questions.
+        deployment = configure_cli.ask_for_deployment_type(MCP_DEPLOYMENT_QUESTION)
+        if deployment is interactive_helpers.DeploymentType.CLOUD:
+            params = _opik_cloud_params()
+        else:
+            configure_cli.run_interactive_configure(
+                install_mcp=False, deployment=deployment
+            )
+            params = _resolve_setup_params(opik_config.OpikConfig())
+            if _needs_opik_configuration(params):
+                raise click.ClickException(
+                    "Opik configuration is still incomplete; aborting MCP install."
                 )
-                params = _resolve_setup_params(opik_config.OpikConfig())
-                if _needs_opik_configuration(params):
-                    raise click.ClickException(
-                        "Opik configuration is still incomplete; aborting MCP install."
-                    )
 
     # Installed unless refused: the pack is what teaches the client to use the
     # server just registered.
     skills_verdict = consent.resolve_installed_by_default(skills_flag)
 
-    outcome = (
-        assistants.NOTHING_DONE._replace(
-            cancelled=True,
-            mcp_declined=True,
-            skills_decision=consent.Reason.CANCELLED.value,
-        )
-        if cancelled
-        else assistants.setup(
-            params,
-            install_mcp=True,
-            skills=skills_verdict,
-            force_local_server=local_server,
-            host_keys=host_keys,
-            picked=picked,
-        )
+    outcome = assistants.setup(
+        params,
+        install_mcp=True,
+        skills=skills_verdict,
+        force_local_server=local_server,
+        host_keys=host_keys,
     )
 
     # Before the result event: the launch branch replaces this process.
@@ -373,10 +361,16 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
     display_name = target.display_name if target is not None else host_key
 
     try:
-        project = mcp_handoff.traced_project(
-            api_key=params["api_key"],
-            workspace=params["workspace"],
-            api_url=params["api_url"],
+        # With no key (Cloud signed in over OAuth) there is nothing to look the
+        # workspace up with, so the instrument prompt it is.
+        project = (
+            mcp_handoff.traced_project(
+                api_key=params["api_key"],
+                workspace=params["workspace"],
+                api_url=params["api_url"],
+            )
+            if params["api_key"] or params["use_local"]
+            else None
         )
     except KeyboardInterrupt:
         # This runs silently after "Done", where Ctrl-C is likely; the run is

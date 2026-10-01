@@ -877,7 +877,7 @@ class TestCandidateAndConfirm:
 
         assert (
             install._confirm_targets(
-                candidates, ["codex"], False, None, RecordingView()
+                candidates, ["codex"], False, RecordingView()
             ).targets
             == candidates
         )
@@ -889,9 +889,7 @@ class TestCandidateAndConfirm:
         candidates = [_target("codex", True, mock.Mock())]
 
         assert (
-            install._confirm_targets(
-                candidates, None, True, None, RecordingView()
-            ).targets
+            install._confirm_targets(candidates, None, True, RecordingView()).targets
             == candidates
         )
 
@@ -900,9 +898,7 @@ class TestCandidateAndConfirm:
         view = RecordingView()
         view.host_choice = []
 
-        assert (
-            install._confirm_targets(candidates, None, False, None, view).targets == []
-        )
+        assert install._confirm_targets(candidates, None, False, view).targets == []
         assert view.choose_calls
 
 
@@ -978,9 +974,7 @@ class TestTerminalRequired:
         view = RecordingView()
         view.host_choice = []
 
-        assert (
-            install._confirm_targets(candidates, None, False, None, view).targets == []
-        )
+        assert install._confirm_targets(candidates, None, False, view).targets == []
         assert view.choose_calls
 
 
@@ -1185,17 +1179,6 @@ class TestAFailedSignInIsWhereTheRunEnds:
         assert order == ["sign-in", "verify"]
         assert view._sign_in_failed == ("Claude Code",)
         assert report.sign_in == "failed"
-
-
-def test_confirm_targets__an_answer_given_earlier__is_not_asked_again():
-    """`opik mcp configure` with no config picks the client before the deployment."""
-    candidates = [_target("codex", True, mock.Mock())]
-    view = RecordingView()
-
-    confirmation = install._confirm_targets(candidates, None, False, ["codex"], view)
-
-    assert confirmation.targets == candidates
-    assert view.choose_calls == []
 
 
 def test_setup_mcp_server__no_api_key_and_no_hosted_server__installs_nothing(

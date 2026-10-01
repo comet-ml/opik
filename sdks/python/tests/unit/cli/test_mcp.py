@@ -105,20 +105,21 @@ class TestInstallCommand:
         setup_spy.assert_not_called()
 
     @staticmethod
-    def _run_without_config(deployment, picked=("claude-code",), configs=None):
+    def _run_without_config(deployment, configs=None):
         """`opik mcp configure` on a machine with no Opik config."""
         runner = CliRunner()
         order = []
         configs = iter(configs or [_config(api_key=None)] * 3)
-        detected = [SimpleNamespace(key="claude-code", display_name="Claude Code")]
 
-        def choose(candidates, view):
-            order.append("client")
-            return None if picked is None else list(picked)
-
-        def ask_deployment():
-            order.append("deployment")
+        def ask_deployment(question):
+            order.append(("deployment", question))
+            if isinstance(deployment, BaseException):
+                raise deployment
             return deployment
+
+        def setup(*args, **kwargs):
+            order.append(("setup",))
+            return assistants.NOTHING_DONE
 
         with (
             patch.object(
@@ -127,10 +128,7 @@ class TestInstallCommand:
             patch.object(
                 mcp_cli.interactive_helpers, "is_interactive", return_value=True
             ),
-            patch.object(
-                mcp_cli.mcp_targets, "detected_targets", return_value=detected
-            ),
-            patch.object(mcp_cli.mcp_install, "choose_client", side_effect=choose),
+            patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
             patch.object(
                 mcp_cli.configure_cli,
                 "ask_for_deployment_type",
@@ -139,57 +137,58 @@ class TestInstallCommand:
             patch.object(
                 mcp_cli.configure_cli, "run_interactive_configure"
             ) as configure_spy,
-            patch.object(
-                mcp_cli.assistants, "setup", return_value=assistants.NOTHING_DONE
-            ) as setup_spy,
+            patch.object(mcp_cli.assistants, "setup", side_effect=setup) as setup_spy,
             patch.object(mcp_cli.install_view, "render_mcp_banner"),
             patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
-            patch.object(mcp_cli.analytics, "track_event") as track,
+            patch.object(mcp_cli.analytics, "track_event"),
         ):
             result = runner.invoke(cli, ["mcp", "configure"])
-        assert result.exit_code == 0, result.output
-        return order, configure_spy, setup_spy, track
+        return result, order, configure_spy, setup_spy
 
-    def test_no_config__the_client_is_picked_before_the_deployment(self):
-        order, _, setup_spy, _ = self._run_without_config(
+    def test_no_config__the_deployment_comes_before_the_client_step(self):
+        """The funnel orders them so: the picker is the step after the deployment."""
+        result, order, _, _ = self._run_without_config(
             mcp_cli.interactive_helpers.DeploymentType.CLOUD
         )
 
-        assert order == ["client", "deployment"]
-        assert setup_spy.call_args.kwargs["picked"] == ["claude-code"]
+        assert result.exit_code == 0, result.output
+        assert order == [("deployment", mcp_cli.MCP_DEPLOYMENT_QUESTION), ("setup",)]
+
+    def test_no_config__the_question_is_about_the_ai_client_not_traces(self):
+        """This is `opik mcp configure`; where traces go is `opik configure`'s question."""
+        assert "AI client" in mcp_cli.MCP_DEPLOYMENT_QUESTION
+        assert "traces" not in mcp_cli.MCP_DEPLOYMENT_QUESTION
 
     def test_no_config__cloud__goes_to_oauth_without_an_api_key_or_a_config(self):
-        _, configure_spy, setup_spy, _ = self._run_without_config(
+        result, _, configure_spy, setup_spy = self._run_without_config(
             mcp_cli.interactive_helpers.DeploymentType.CLOUD
         )
 
+        assert result.exit_code == 0, result.output
         configure_spy.assert_not_called()
         params = setup_spy.call_args.args[0]
         assert params["api_key"] is None
         assert params["api_url"] == mcp_cli.opik_config.OPIK_URL_CLOUD
 
     def test_no_config__self_hosted__asks_opik_configures_questions(self):
-        _, configure_spy, setup_spy, _ = self._run_without_config(
+        result, _, configure_spy, setup_spy = self._run_without_config(
             mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
             configs=[_config(api_key=None), _config(api_key="new-key")],
         )
 
+        assert result.exit_code == 0, result.output
         configure_spy.assert_called_once_with(
             install_mcp=False,
             deployment=mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
         )
         assert setup_spy.call_args.args[0]["api_key"] == "new-key"
 
-    def test_no_config__ctrl_c_at_the_picker__stops_before_the_deployment(self):
-        order, configure_spy, setup_spy, track = self._run_without_config(
-            mcp_cli.interactive_helpers.DeploymentType.CLOUD, picked=None
-        )
+    def test_no_config__ctrl_c_at_the_deployment__writes_nothing(self):
+        result, _, configure_spy, setup_spy = self._run_without_config(click.Abort())
 
-        assert order == ["client"]
+        assert result.exit_code != 0
         configure_spy.assert_not_called()
         setup_spy.assert_not_called()
-        event = track.call_args_list[-1].kwargs
-        assert (event["cancelled"], event["handoff"]) == (True, "cancelled")
 
     def test_status__lists_sdk_env_and_host_drift(self):
         runner = CliRunner()
@@ -850,3 +849,24 @@ class TestResultEventCarriesTheConnectionSignals:
 
         assert event["transport"] == "local_stdio"
         assert event["sign_in"] == "not_attempted"
+
+
+def test_handoff__no_api_key__does_not_look_up_projects(monkeypatch):
+    """Cloud signed in over OAuth leaves this machine nothing to authenticate with."""
+    lookups = []
+    monkeypatch.setattr(mcp_cli.interactive_helpers, "is_interactive", lambda: True)
+    monkeypatch.setattr(
+        mcp_cli.mcp_targets,
+        "find_target",
+        lambda key: SimpleNamespace(display_name="Claude Code"),
+    )
+    monkeypatch.setattr(
+        mcp_cli.mcp_handoff, "traced_project", lambda **kw: lookups.append(kw)
+    )
+    monkeypatch.setattr(mcp_cli.mcp_handoff, "launch_command", lambda key: None)
+    outcome = assistants.Outcome(clients=1, skills=True, registered_clients=("cursor",))
+
+    handoff = mcp_cli._resolve_handoff(mcp_cli._opik_cloud_params(), outcome)
+
+    assert lookups == []
+    assert handoff.prompt_kind == "instrument"

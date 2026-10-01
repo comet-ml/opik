@@ -225,7 +225,7 @@ _DEPLOYMENT_BLURBS = {
 }
 
 
-def ask_for_deployment_type() -> interactive_helpers.DeploymentType:
+def ask_for_deployment_type(question: str) -> interactive_helpers.DeploymentType:
     """The deployment question, rendered by the CLI rather than the configurator.
 
     Presentation only. The answer is still read by
@@ -238,7 +238,6 @@ def ask_for_deployment_type() -> interactive_helpers.DeploymentType:
     ``rich`` drops the styling by itself when stdout is not a terminal, so a
     redirected or styling-less terminal gets the same words without escapes.
     """
-    question = interactive_helpers.DEPLOYMENT_QUESTION
     rows = [
         (str(deployment.value[0]), deployment.value[1], _DEPLOYMENT_BLURBS[deployment])
         for deployment in interactive_helpers.DeploymentType
@@ -290,7 +289,7 @@ def _deployment_type() -> interactive_helpers.DeploymentType:
     than reporting an abort.
     """
     if interactive_helpers.is_interactive():
-        return ask_for_deployment_type()
+        return ask_for_deployment_type(interactive_helpers.DEPLOYMENT_QUESTION)
 
     url = os.environ.get("OPIK_URL_OVERRIDE", "").strip()
     if url:

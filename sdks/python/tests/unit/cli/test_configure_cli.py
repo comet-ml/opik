@@ -835,7 +835,7 @@ class TestTheDeploymentQuestionTakesBothInputs:
                 selector, "_key_reader", return_value=lambda: next(pressed)
             ),
         ):
-            return configure_cli.ask_for_deployment_type()
+            return configure_cli.ask_for_deployment_type("Where?")
 
     def test_typing_the_number__picks_that_row(self):
         from opik.cli import selector
@@ -879,7 +879,7 @@ class TestTheDeploymentQuestionTakesBothInputs:
             mock.patch.object(selector, "is_supported", return_value=False),
             mock.patch("builtins.input", return_value="2") as typed,
         ):
-            result = configure_cli.ask_for_deployment_type()
+            result = configure_cli.ask_for_deployment_type("Where?")
 
         assert typed.called, "the plain prompt is what a pipe or CI log gets"
         assert result is configure_cli.interactive_helpers.DeploymentType.SELF_HOSTED
@@ -891,7 +891,7 @@ class TestTheDeploymentQuestionTakesBothInputs:
             mock.patch.object(selector, "is_supported", return_value=False),
             mock.patch("builtins.input", return_value=""),
         ):
-            result = configure_cli.ask_for_deployment_type()
+            result = configure_cli.ask_for_deployment_type("Where?")
 
         assert result is configure_cli.interactive_helpers.DeploymentType.CLOUD
 

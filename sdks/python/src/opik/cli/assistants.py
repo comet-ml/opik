@@ -80,7 +80,6 @@ def setup(
     host_keys: Optional[List[str]] = None,
     force_local_server: bool = False,
     assume_confirmed: bool = False,
-    picked: Optional[List[str]] = None,
 ) -> Outcome:
     """Register the MCP server and/or install the skill pack.
 
@@ -99,7 +98,6 @@ def setup(
             force_local_server=force_local_server,
             host_keys=host_keys,
             assume_confirmed=assume_confirmed,
-            picked=picked,
             view=view,
         )
         if install_mcp
