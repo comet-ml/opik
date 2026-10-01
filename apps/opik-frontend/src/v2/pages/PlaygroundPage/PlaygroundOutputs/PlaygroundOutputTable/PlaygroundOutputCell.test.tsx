@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { CellContext } from "@tanstack/react-table";
 
 import { DATASET_TYPE } from "@/types/datasets";
+import { PlaygroundExperimentItem } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/usePlaygroundExperimentItem";
 import { TooltipProvider } from "@/ui/tooltip";
 import PlaygroundOutputCell from "./PlaygroundOutputCell";
 
@@ -20,11 +21,28 @@ type Output = {
 
 let output: Output;
 
+let experimentId: string | undefined;
+let experimentItem: PlaygroundExperimentItem;
+
 vi.mock("@/store/PlaygroundStore", () => ({
-  useOutputByPromptDatasetItemId: () => output,
+  useOutputByPromptId: () => output,
   useDatasetType: () => DATASET_TYPE.DATASET,
-  useExperimentIdByPromptId: () => undefined,
+  useExperimentIdByPromptId: () => experimentId,
 }));
+
+vi.mock(
+  "@/v2/pages/PlaygroundPage/PlaygroundOutputs/usePlaygroundExperimentItem",
+  () => ({
+    default: () => experimentItem,
+  }),
+);
+
+vi.mock(
+  "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader",
+  () => ({
+    default: () => <div data-testid="output-loader" />,
+  }),
+);
 
 vi.mock("@/store/AppStore", () => ({
   default: vi.fn((selector) => selector({ activeWorkspaceName: "ws" })),
@@ -65,8 +83,18 @@ const renderCell = () =>
     </TooltipProvider>,
   );
 
+const noExperimentItem: PlaygroundExperimentItem = {
+  hasItem: false,
+  output: null,
+  error: null,
+  traceId: null,
+  runCount: 0,
+};
+
 beforeEach(() => {
   output = { isLoading: false, value: null, stale: false };
+  experimentId = undefined;
+  experimentItem = noExperimentItem;
 });
 
 describe("PlaygroundOutputCell", () => {
@@ -120,6 +148,96 @@ describe("PlaygroundOutputCell", () => {
       renderCell();
 
       expect(screen.getByTestId("metric-chips")).toBeInTheDocument();
+    });
+  });
+
+  // A dataset run executes on the server, so nothing streams into the store: the cell's content,
+  // its failure state and its trace link all come from the experiment item instead.
+  describe("a run that executed on the backend", () => {
+    beforeEach(() => {
+      experimentId = "experiment-1";
+    });
+
+    it("should render the output that came back with the experiment item", () => {
+      experimentItem = {
+        hasItem: true,
+        output: "the server's answer",
+        error: null,
+        traceId: "trace-1",
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.getByTestId("markdown")).toHaveTextContent(
+        "the server's answer",
+      );
+    });
+
+    it("should show a row that failed as an error, not as an empty answer", () => {
+      experimentItem = {
+        hasItem: true,
+        output: null,
+        error: "provider rejected the request",
+        traceId: "trace-1",
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.getByTestId("playground-output-error")).toHaveTextContent(
+        "provider rejected the request",
+      );
+      expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
+    });
+
+    it("should keep loading while the row has no experiment item yet", () => {
+      renderCell();
+
+      expect(screen.getByTestId("output-loader")).toBeInTheDocument();
+      expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
+    });
+
+    it("should settle empty rather than load for ever when the call returned nothing", () => {
+      experimentItem = {
+        hasItem: true,
+        output: null,
+        error: null,
+        traceId: "trace-1",
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.queryByTestId("output-loader")).not.toBeInTheDocument();
+    });
+
+    it("should offer the trace link using the item's trace", () => {
+      experimentItem = {
+        hasItem: true,
+        output: "the server's answer",
+        error: null,
+        traceId: "trace-1",
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.getByRole("button")).toBeInTheDocument();
+    });
+
+    it("should offer no trace link before the item carries a trace", () => {
+      experimentItem = {
+        hasItem: true,
+        output: "the server's answer",
+        error: null,
+        traceId: null,
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.queryByRole("button")).not.toBeInTheDocument();
     });
   });
 });
