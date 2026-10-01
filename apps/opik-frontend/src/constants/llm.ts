@@ -269,6 +269,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
     reasoningEffortOptions: ["minimal", "low", "medium", "high"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST]: { reasoning: false },
+  [PROVIDER_MODEL_TYPE.GPT_5_1_CHAT_LATEST]: { reasoning: false },
 
   // gpt-5.1+ — none replaces minimal
   [PROVIDER_MODEL_TYPE.GPT_5_1]: {

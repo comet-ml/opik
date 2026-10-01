@@ -1065,8 +1065,7 @@ export type ReasoningEffort =
   | "low"
   | "medium"
   | "high"
-  | "xhigh"
-  | "max";
+  | "xhigh";
 
 export interface LLMOpenAIConfigsType {
   temperature: number;
