@@ -20,7 +20,10 @@ import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
+  useIsOnlyWindowEndBehind,
+  keepDataWhenOnlyWindowEndChanged,
   DATE_RANGE_PRESET_ALLTIME,
+  IntervalWindow,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
@@ -108,8 +111,6 @@ import {
 } from "@/v2/pages/LogsPage/ThreadsTab/explainTargets";
 
 const getRowId = (d: Thread) => d.id;
-
-const REFETCH_INTERVAL = 30000;
 
 // Duration/Cost cells get the Ollie Explain button (OPIK-6425). Threads never
 // change entity type, so the builders are bound once at module scope (unlike
@@ -385,6 +386,7 @@ type ThreadsTabProps = {
   logsType: LOGS_TYPE;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
   dateRangeConfig: ProjectDateRangeConfig;
+  intervalWindow: IntervalWindow;
 };
 
 export const ThreadsTab: React.FC<ThreadsTabProps> = ({
@@ -393,21 +395,18 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   logsType,
   onLogsTypeChange,
   dateRangeConfig,
+  intervalWindow,
 }) => {
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
 
-  const {
-    dateRange,
-    handleDateRangeChange,
-    intervalStart,
-    intervalEnd,
-    minDate,
-    maxDate,
-  } = useMetricDateRangeWithQueryAndStorage({
-    excludePresets: [DATE_RANGE_PRESET_ALLTIME],
-    ...dateRangeConfig,
-  });
+  const { dateRange, handleDateRangeChange, minDate, maxDate } =
+    useMetricDateRangeWithQueryAndStorage({
+      excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+      ...dateRangeConfig,
+    });
+  const { intervalStart, intervalEnd, refetchInterval, reanchorToNow } =
+    intervalWindow;
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
     StringParam,
@@ -566,27 +565,30 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
+  const threadListParams = {
+    projectId,
+    sorting: sortedColumns,
+    filters: threadChipFilters,
+    page: page as number,
+    size: size as number,
+    search: trimmedSearch,
+    truncate: truncationEnabled,
+    fromTime: intervalStart,
+    toTime: intervalEnd,
+    logsSource: LOGS_SOURCE.sdk,
+  };
   const { data, isPending, isPlaceholderData, isFetching, refetch } =
-    useThreadList(
-      {
-        projectId,
-        sorting: sortedColumns,
-        filters: threadChipFilters,
-        page: page as number,
-        size: size as number,
-        search: trimmedSearch,
-        truncate: truncationEnabled,
-        fromTime: intervalStart,
-        toTime: intervalEnd,
-        logsSource: LOGS_SOURCE.sdk,
-      },
-      {
-        enabled: isTableDataEnabled,
-        placeholderData: keepPreviousData,
-        refetchInterval: REFETCH_INTERVAL,
-        refetchOnMount: false,
-      },
-    );
+    useThreadList(threadListParams, {
+      enabled: isTableDataEnabled,
+      placeholderData: keepPreviousData,
+      refetchInterval,
+      refetchOnMount: false,
+    });
+  const isOnlyWindowEndBehind = useIsOnlyWindowEndBehind(
+    threadListParams,
+    "toTime",
+    isPlaceholderData,
+  );
 
   const { refetch: refetchExportData } = useThreadList(
     {
@@ -607,19 +609,21 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
   );
 
-  const { data: statisticData } = useThreadsStatistic(
-    {
-      projectId,
-      filters: threadChipFilters,
-      search: search as string,
-      fromTime: intervalStart,
-      toTime: intervalEnd,
-      logsSource: LOGS_SOURCE.sdk,
-    },
-    {
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
+  const threadsStatisticParams = {
+    projectId,
+    filters: threadChipFilters,
+    search: search as string,
+    fromTime: intervalStart,
+    toTime: intervalEnd,
+    logsSource: LOGS_SOURCE.sdk,
+  };
+  const { data: statisticData } = useThreadsStatistic(threadsStatisticParams, {
+    placeholderData: keepDataWhenOnlyWindowEndChanged(
+      threadsStatisticParams,
+      "toTime",
+    ),
+    refetchInterval,
+  });
 
   // Cheap "does this project have any thread?" probe for the empty-state decision. Hits the LIMIT-1
   // existence endpoint scoped to threads — backed by trace_threads (the same table the list reads,
@@ -885,7 +889,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             tooltip="Refresh threads list"
             size="icon-xs"
             isFetching={isFetching}
-            onRefresh={() => refetch()}
+            onRefresh={() => {
+              if (!reanchorToNow()) refetch();
+            }}
           />
         </div>
       </PageBodyStickyContainer>
@@ -901,6 +907,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           filters={threadChipFilters}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
+          refetchInterval={refetchInterval}
           dateRange={dateRange}
           logsSource={LOGS_SOURCE.sdk}
         />
@@ -1011,7 +1018,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           TableWrapper={PageBodyStickyTableWrapper}
           stickyHeader
           meta={meta}
-          showLoadingOverlay={isPlaceholderData && isFetching}
+          showLoadingOverlay={
+            isPlaceholderData && isFetching && !isOnlyWindowEndBehind
+          }
         />
         <PageBodyStickyContainer
           className="bottom-0 -mt-px border-t border-border py-2 pb-4"
