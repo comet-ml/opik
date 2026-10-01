@@ -1165,7 +1165,8 @@ def _seeded_reasoning_ids(
 def _should_write_files(
     total_added: int, seeded_reasoning_ids: list[str], force_regen: bool, fell_back: bool
 ) -> bool:
-    # A run whose provider API failed rebuilds that provider's labels and dropdown from the prices JSON, so even a real addition would ship degraded data.
+    # Any provider falling back blocks every file, not only that provider's: the files ship together, so a partial sync never publishes.
+    # A failed provider is rebuilt from the prices JSON, or for OpenRouter from an empty API list, so even a real addition elsewhere would ship degraded data.
     if force_regen:
         return True
     return not fell_back and (total_added > 0 or bool(seeded_reasoning_ids))
@@ -1197,6 +1198,7 @@ def main():
         print(f"  Found {len(openrouter_api_models)} chat models from API", file=sys.stderr)
     except Exception as e:
         print(f"  WARNING: OpenRouter API fetch failed: {e}", file=sys.stderr)
+        fell_back = True
         openrouter_api_models = []
 
     # OpenAI
