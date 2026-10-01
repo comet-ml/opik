@@ -14,7 +14,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,9 +74,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .then(Mono.defer(() -> Mono.just(request.toBuilder()
                         // Enrich request with UUID bounds derived from time parameters for efficient ID-based filtering
                         .uuidFromTime(instantToUUIDMapper.toLowerBound(request.intervalStart()))
-                        // Use current time as default end time when intervalEnd is null to enable WITH FILL clause
-                        .uuidToTime(instantToUUIDMapper.toUpperBound(
-                                request.intervalEnd() != null ? request.intervalEnd() : Instant.now()))
+                        // No requested end means no upper id bound, so far-future ids count like they do in the list
+                        .uuidToTime(instantToUUIDMapper.toUpperBound(request.intervalEnd()))
                         .build())))
                 .flatMap(enrichedRequest -> getMetricHandler(enrichedRequest.metricType())
                         .apply(projectId, enrichedRequest)
