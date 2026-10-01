@@ -80,6 +80,7 @@ def setup_mcp_server(
     force_local_server: bool = False,
     host_keys: Optional[List[str]] = None,
     assume_confirmed: bool = False,
+    picked: Optional[List[str]] = None,
     view: mcp_view.InstallView,
 ) -> InstallReport:
     """Register the Opik MCP server with the user's AI client(s).
@@ -98,6 +99,9 @@ def setup_mcp_server(
     ``assume_confirmed`` suppresses the target confirmation when the caller
     already showed the user a prompt naming the same clients, so consent is
     collected once rather than twice.
+
+    ``picked`` is the picker's answer when the caller asked it earlier, before
+    the deployment was known; it is used instead of asking again.
 
     ``view`` narrates the flow.
 
@@ -166,6 +170,21 @@ def setup_mcp_server(
         display.problem(unavailable_reason or "")
         return NOTHING_INSTALLED
 
+    if (
+        isinstance(server_spec, mcp_spec.StdioServerSpec)
+        and not use_local
+        and not api_key
+    ):
+        # Signed in with OAuth rather than a key, so a local server would start
+        # with no credentials at all.
+        display.problem(
+            "Could not reach the hosted Opik MCP server, and there is no API key "
+            "for a local one. Check your connection and re-run "
+            "`opik mcp configure`, or run `opik configure` to set up with an API "
+            "key."
+        )
+        return NOTHING_INSTALLED
+
     candidates = _candidate_targets(host_keys)
     if len(candidates) == 0:
         if host_keys:
@@ -180,7 +199,10 @@ def setup_mcp_server(
     # Shown before anything is written, and before the confirmation below, so the
     # user is consenting to a change they can see rather than a yes/no in the dark.
     display.plan(
-        deployment=_deployment_label(use_local, self_hosted_comet, workspace),
+        # Without a key the workspace is whichever the user signs in to.
+        deployment=_deployment_label(
+            use_local, self_hosted_comet, workspace if api_key else None
+        ),
         transport=_transport_label(server_spec),
         # Only the hosted server has a sign-in step, and how it gets triggered is
         # the host's choice, not ours: some open the browser on first use, others
@@ -192,7 +214,9 @@ def setup_mcp_server(
         needs_sign_in=isinstance(server_spec, mcp_spec.RemoteServerSpec),
     )
 
-    confirmation = _confirm_targets(candidates, host_keys, assume_confirmed, display)
+    confirmation = _confirm_targets(
+        candidates, host_keys, assume_confirmed, picked, display
+    )
     selected_targets = confirmation.targets
     if len(selected_targets) == 0:
         if confirmation.cancelled:
@@ -410,10 +434,24 @@ class _Confirmation(NamedTuple):
     cancelled: bool = False
 
 
+def choose_client(
+    candidates: List[mcp_targets.HostTarget], display: mcp_view.InstallView
+) -> Optional[List[str]]:
+    """Ask which AI client to set up: its key, the manual row, or None on cancel."""
+    return display.choose_hosts(
+        title="Which AI client should the Opik MCP server be set up for?",
+        candidates=[
+            mcp_view.HostChoice(key=target.key, label=target.display_name)
+            for target in candidates
+        ],
+    )
+
+
 def _confirm_targets(
     candidates: List[mcp_targets.HostTarget],
     host_keys: Optional[List[str]],
     assume_confirmed: bool,
+    picked: Optional[List[str]],
     display: mcp_view.InstallView,
 ) -> _Confirmation:
     """Narrow the candidates to what the user actually agreed to.
@@ -424,13 +462,7 @@ def _confirm_targets(
     if host_keys or assume_confirmed:
         return _Confirmation(candidates)
 
-    chosen = display.choose_hosts(
-        title="Which AI client should the Opik MCP server be set up for?",
-        candidates=[
-            mcp_view.HostChoice(key=target.key, label=target.display_name)
-            for target in candidates
-        ],
-    )
+    chosen = picked if picked is not None else choose_client(candidates, display)
     if chosen is None:
         # A cancel, distinct from `[]`, a deliberate "none".
         return _Confirmation([], cancelled=True)

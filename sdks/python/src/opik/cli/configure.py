@@ -225,7 +225,7 @@ _DEPLOYMENT_BLURBS = {
 }
 
 
-def _ask_for_deployment_type() -> interactive_helpers.DeploymentType:
+def ask_for_deployment_type() -> interactive_helpers.DeploymentType:
     """The deployment question, rendered by the CLI rather than the configurator.
 
     Presentation only. The answer is still read by
@@ -290,7 +290,7 @@ def _deployment_type() -> interactive_helpers.DeploymentType:
     than reporting an abort.
     """
     if interactive_helpers.is_interactive():
-        return _ask_for_deployment_type()
+        return ask_for_deployment_type()
 
     url = os.environ.get("OPIK_URL_OVERRIDE", "").strip()
     if url:
@@ -343,8 +343,11 @@ def run_interactive_configure(
     install_mcp: Optional[bool] = None,
     install_skills: Optional[bool] = None,
     progress: Optional[Progress] = None,
+    deployment: Optional[interactive_helpers.DeploymentType] = None,
 ) -> assistants.Outcome:
     """Programmatic entry to the interactive ``opik configure`` flow.
+
+    ``deployment`` skips the deployment question for a caller that asked it.
 
     Reused by ``opik connect`` / ``opik endpoint`` so they can auto-launch
     configuration when no ~/.opik.config is present.
@@ -385,7 +388,7 @@ def run_interactive_configure(
         progress.stage = Progress.DONE
         return recorded
 
-    deployment_type_choice = _deployment_type()
+    deployment_type_choice = deployment or _deployment_type()
     progress.deployment = deployment_type_choice.name.lower()
     progress.stage = Progress.CREDENTIALS
 

@@ -17,6 +17,7 @@ from opik.cli import status_view
 from opik.configurator import consent
 from opik.configurator import interactive_helpers
 from opik.configurator.mcp import handoff as mcp_handoff
+from opik.configurator.mcp import install as mcp_install
 from opik.configurator.mcp import status as mcp_status
 from opik.configurator.mcp import targets as mcp_targets
 
@@ -68,6 +69,19 @@ def _resolve_setup_params(config: opik_config.OpikConfig) -> McpSetupParams:
         "use_local": use_local,
         "self_hosted_comet": self_hosted_comet,
         "check_tls_certificate": config.check_tls_certificate,
+    }
+
+
+def _opik_cloud_params() -> McpSetupParams:
+    """Opik Cloud with no API key: the hosted server signs in with OAuth instead."""
+    return {
+        "api_key": None,
+        "workspace": opik_config.OPIK_WORKSPACE_DEFAULT_NAME,
+        "base_url": url_helpers.get_base_url(opik_config.OPIK_URL_CLOUD),
+        "api_url": opik_config.OPIK_URL_CLOUD,
+        "use_local": False,
+        "self_hosted_comet": False,
+        "check_tls_certificate": opik_config.OpikConfig().check_tls_certificate,
     }
 
 
@@ -201,6 +215,15 @@ def run_configure(
         )
 
     params = _resolve_setup_params(opik_config.OpikConfig())
+    detected = mcp_targets.detected_targets()
+    detected_clients = len(detected)
+    picked: Optional[List[str]] = None
+    cancelled = False
+
+    # A scripted run (`--ai-client`) gets no banner, and a redirect already
+    # showed the logo.
+    if not host_keys and invoked_via == "direct":
+        install_view.render_mcp_banner()
 
     if _needs_opik_configuration(params):
         if not interactive_helpers.is_interactive():
@@ -209,40 +232,47 @@ def run_configure(
                 "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
                 "`opik configure`, then re-run this command."
             )
-        if not install_view.confirm_default_yes(
-            "Opik is not configured yet. Configure it now?"
-        ):
-            raise click.ClickException(
-                "Run `opik configure` first, then `opik mcp configure`."
-            )
-        # Skip configure's own MCP prompt — we install right after.
-        configure_cli.run_interactive_configure(install_mcp=False)
-        params = _resolve_setup_params(opik_config.OpikConfig())
+        # No config yet: the client first, then where Opik is. Cloud needs no
+        # API key here — the hosted server signs in with OAuth — so it writes no
+        # config; self-hosted and local go through `opik configure`'s questions.
+        if not host_keys and detected:
+            picked = mcp_install.choose_client(detected, install_view.RichInstallView())
+            cancelled = picked is None
+            # A gap between the picker's key legend and the next question.
+            click.echo()
+        if not cancelled:
+            deployment = configure_cli.ask_for_deployment_type()
+            if deployment is interactive_helpers.DeploymentType.CLOUD:
+                params = _opik_cloud_params()
+            else:
+                configure_cli.run_interactive_configure(
+                    install_mcp=False, deployment=deployment
+                )
+                params = _resolve_setup_params(opik_config.OpikConfig())
+                if _needs_opik_configuration(params):
+                    raise click.ClickException(
+                        "Opik configuration is still incomplete; aborting MCP install."
+                    )
 
-        if _needs_opik_configuration(params):
-            raise click.ClickException(
-                "Opik configuration is still incomplete; aborting MCP install."
-            )
-
-    # Running this command *is* the consent for the server — that is what the
-    # command does — so only the skill pack is still a question here.
-    detected = mcp_targets.detected_targets()
-    detected_clients = len(detected)
-
-    # A scripted run (`--ai-client`) gets no banner, and a redirect already
-    # showed the logo.
-    if not host_keys and invoked_via == "direct":
-        install_view.render_mcp_banner()
     # Installed unless refused: the pack is what teaches the client to use the
     # server just registered.
     skills_verdict = consent.resolve_installed_by_default(skills_flag)
 
-    outcome = assistants.setup(
-        params,
-        install_mcp=True,
-        skills=skills_verdict,
-        force_local_server=local_server,
-        host_keys=host_keys,
+    outcome = (
+        assistants.NOTHING_DONE._replace(
+            cancelled=True,
+            mcp_declined=True,
+            skills_decision=consent.Reason.CANCELLED.value,
+        )
+        if cancelled
+        else assistants.setup(
+            params,
+            install_mcp=True,
+            skills=skills_verdict,
+            force_local_server=local_server,
+            host_keys=host_keys,
+            picked=picked,
+        )
     )
 
     # Before the result event: the launch branch replaces this process.

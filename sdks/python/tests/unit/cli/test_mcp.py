@@ -104,30 +104,22 @@ class TestInstallCommand:
         assert "--ai-client" in result.output, "the error must name the remedy"
         setup_spy.assert_not_called()
 
-    def test_install__no_config_user_declines__errors(self):
+    @staticmethod
+    def _run_without_config(deployment, picked=("claude-code",), configs=None):
+        """`opik mcp configure` on a machine with no Opik config."""
         runner = CliRunner()
-        with (
-            patch.object(
-                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key=None)
-            ),
-            patch.object(
-                mcp_cli.interactive_helpers, "is_interactive", return_value=True
-            ),
-            patch.object(
-                mcp_cli.configure_cli, "run_interactive_configure"
-            ) as configure_spy,
-            patch.object(mcp_cli.assistants, "setup") as setup_spy,
-        ):
-            result = runner.invoke(cli, ["mcp", "configure"], input="n\n")
+        order = []
+        configs = iter(configs or [_config(api_key=None)] * 3)
+        detected = [SimpleNamespace(key="claude-code", display_name="Claude Code")]
 
-        assert result.exit_code != 0
-        assert "opik configure" in result.output
-        configure_spy.assert_not_called()
-        setup_spy.assert_not_called()
+        def choose(candidates, view):
+            order.append("client")
+            return None if picked is None else list(picked)
 
-    def test_install__no_config_user_accepts__runs_configure_then_installs(self):
-        runner = CliRunner()
-        configs = iter([_config(api_key=None), _config(api_key="new-key")])
+        def ask_deployment():
+            order.append("deployment")
+            return deployment
+
         with (
             patch.object(
                 mcp_cli.opik_config, "OpikConfig", side_effect=lambda: next(configs)
@@ -136,16 +128,68 @@ class TestInstallCommand:
                 mcp_cli.interactive_helpers, "is_interactive", return_value=True
             ),
             patch.object(
+                mcp_cli.mcp_targets, "detected_targets", return_value=detected
+            ),
+            patch.object(mcp_cli.mcp_install, "choose_client", side_effect=choose),
+            patch.object(
+                mcp_cli.configure_cli,
+                "ask_for_deployment_type",
+                side_effect=ask_deployment,
+            ),
+            patch.object(
                 mcp_cli.configure_cli, "run_interactive_configure"
             ) as configure_spy,
-            patch.object(mcp_cli.assistants, "setup") as setup_spy,
+            patch.object(
+                mcp_cli.assistants, "setup", return_value=assistants.NOTHING_DONE
+            ) as setup_spy,
+            patch.object(mcp_cli.install_view, "render_mcp_banner"),
+            patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
+            patch.object(mcp_cli.analytics, "track_event") as track,
         ):
-            result = runner.invoke(cli, ["mcp", "configure"], input="y\n")
+            result = runner.invoke(cli, ["mcp", "configure"])
+        assert result.exit_code == 0, result.output
+        return order, configure_spy, setup_spy, track
 
-        assert result.exit_code == 0
-        configure_spy.assert_called_once_with(install_mcp=False)
-        setup_spy.assert_called_once()
+    def test_no_config__the_client_is_picked_before_the_deployment(self):
+        order, _, setup_spy, _ = self._run_without_config(
+            mcp_cli.interactive_helpers.DeploymentType.CLOUD
+        )
+
+        assert order == ["client", "deployment"]
+        assert setup_spy.call_args.kwargs["picked"] == ["claude-code"]
+
+    def test_no_config__cloud__goes_to_oauth_without_an_api_key_or_a_config(self):
+        _, configure_spy, setup_spy, _ = self._run_without_config(
+            mcp_cli.interactive_helpers.DeploymentType.CLOUD
+        )
+
+        configure_spy.assert_not_called()
+        params = setup_spy.call_args.args[0]
+        assert params["api_key"] is None
+        assert params["api_url"] == mcp_cli.opik_config.OPIK_URL_CLOUD
+
+    def test_no_config__self_hosted__asks_opik_configures_questions(self):
+        _, configure_spy, setup_spy, _ = self._run_without_config(
+            mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
+            configs=[_config(api_key=None), _config(api_key="new-key")],
+        )
+
+        configure_spy.assert_called_once_with(
+            install_mcp=False,
+            deployment=mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
+        )
         assert setup_spy.call_args.args[0]["api_key"] == "new-key"
+
+    def test_no_config__ctrl_c_at_the_picker__stops_before_the_deployment(self):
+        order, configure_spy, setup_spy, track = self._run_without_config(
+            mcp_cli.interactive_helpers.DeploymentType.CLOUD, picked=None
+        )
+
+        assert order == ["client"]
+        configure_spy.assert_not_called()
+        setup_spy.assert_not_called()
+        event = track.call_args_list[-1].kwargs
+        assert (event["cancelled"], event["handoff"]) == (True, "cancelled")
 
     def test_status__lists_sdk_env_and_host_drift(self):
         runner = CliRunner()

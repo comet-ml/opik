@@ -877,7 +877,7 @@ class TestCandidateAndConfirm:
 
         assert (
             install._confirm_targets(
-                candidates, ["codex"], False, RecordingView()
+                candidates, ["codex"], False, None, RecordingView()
             ).targets
             == candidates
         )
@@ -889,7 +889,9 @@ class TestCandidateAndConfirm:
         candidates = [_target("codex", True, mock.Mock())]
 
         assert (
-            install._confirm_targets(candidates, None, True, RecordingView()).targets
+            install._confirm_targets(
+                candidates, None, True, None, RecordingView()
+            ).targets
             == candidates
         )
 
@@ -898,7 +900,9 @@ class TestCandidateAndConfirm:
         view = RecordingView()
         view.host_choice = []
 
-        assert install._confirm_targets(candidates, None, False, view).targets == []
+        assert (
+            install._confirm_targets(candidates, None, False, None, view).targets == []
+        )
         assert view.choose_calls
 
 
@@ -974,7 +978,9 @@ class TestTerminalRequired:
         view = RecordingView()
         view.host_choice = []
 
-        assert install._confirm_targets(candidates, None, False, view).targets == []
+        assert (
+            install._confirm_targets(candidates, None, False, None, view).targets == []
+        )
         assert view.choose_calls
 
 
@@ -1179,3 +1185,45 @@ class TestAFailedSignInIsWhereTheRunEnds:
         assert order == ["sign-in", "verify"]
         assert view._sign_in_failed == ("Claude Code",)
         assert report.sign_in == "failed"
+
+
+def test_confirm_targets__an_answer_given_earlier__is_not_asked_again():
+    """`opik mcp configure` with no config picks the client before the deployment."""
+    candidates = [_target("codex", True, mock.Mock())]
+    view = RecordingView()
+
+    confirmation = install._confirm_targets(candidates, None, False, ["codex"], view)
+
+    assert confirmation.targets == candidates
+    assert view.choose_calls == []
+
+
+def test_setup_mcp_server__no_api_key_and_no_hosted_server__installs_nothing(
+    monkeypatch,
+):
+    """A local server for Opik Cloud would start with no credentials at all."""
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    install_spy = mock.Mock()
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+
+    report = install.setup_mcp_server(**(args := _make_args(api_key=None)))
+
+    install_spy.assert_not_called()
+    assert report.registered == ()
+    assert "no API key" in args["view"].said
+
+
+def test_setup_mcp_server__no_api_key__does_not_name_a_workspace(monkeypatch):
+    """Signed in with OAuth, the workspace is whichever the user picks then."""
+    monkeypatch.setattr(
+        install.mcp_detection,
+        "detect_hosted_mcp_server",
+        lambda **kwargs: "https://www.comet.com/opik/api/v1/mcp",
+    )
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**(args := _make_args(api_key=None, workspace="default")))
+
+    assert args["view"].plans[0][0] == "Opik Cloud"
