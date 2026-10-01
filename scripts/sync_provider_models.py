@@ -1008,7 +1008,8 @@ def regenerate_llm_models_yaml(
       entries follow alphabetically with no label.
     - Preserves reasoning flags carried over from the existing file.
     - In the openai section only, also emits `reasoning: true` for models
-      that `openai_reasoning` marks, except OPENAI_NON_REASONING_MODELS.
+      that `openai_reasoning` marks. OPENAI_NON_REASONING_MODELS never get
+      the flag, even when the existing file carries it.
       Other sections stay carry-over only: LiteLLM's flag means "can emit
       reasoning tokens", which is broader than what the frontend treats as
       a reasoning model, and nothing reads the flag for other providers.
@@ -1066,12 +1067,10 @@ def regenerate_llm_models_yaml(
 
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
-            seeded_reasoning = (
-                provider_key == "openai"
-                and openai_reasoning.get(model_id, False)
-                and model_id not in OPENAI_NON_REASONING_MODELS
-            )
-            if provider_reasoning.get(model_id) or seeded_reasoning:
+            is_openai = provider_key == "openai"
+            excluded_from_reasoning = is_openai and model_id in OPENAI_NON_REASONING_MODELS
+            seeded_reasoning = is_openai and openai_reasoning.get(model_id, False)
+            if not excluded_from_reasoning and (provider_reasoning.get(model_id) or seeded_reasoning):
                 lines.append("    reasoning: true")
 
     # Preserve any provider sections not managed by the sync script

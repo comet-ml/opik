@@ -61,3 +61,42 @@ def test_main__openrouter_fetch__sets_fell_back_only_on_failure(
     assert len(publish_calls) == 1
     *_, fell_back = publish_calls[0]
     assert fell_back is expected_fell_back
+
+
+def _openai_entry(model_id):
+    return spm.ModelEntry(enum_name=model_id.upper(), value=model_id, structured_output=False, label=model_id)
+
+
+def _reasoning_ids(yaml_content):
+    return set(spm._parse_yaml_reasoning_flags(yaml_content).get("openai", {}))
+
+
+def test_regenerate_llm_models_yaml__excluded_model_flagged_in_existing_file__flag_dropped():
+    existing = (
+        "openai:\n"
+        '  - id: "gpt-5-chat-latest"\n'
+        "    reasoning: true\n"
+        '  - id: "o3"\n'
+        "    reasoning: true\n"
+    )
+    entries = [_openai_entry("gpt-5-chat-latest"), _openai_entry("o3")]
+
+    regenerated = spm.regenerate_llm_models_yaml(
+        existing,
+        {"openai": entries},
+        openai_reasoning={"gpt-5-chat-latest": True, "o3": True},
+    )
+
+    assert _reasoning_ids(regenerated) == {"o3"}
+
+
+def test_regenerate_llm_models_yaml__litellm_marks_excluded_and_reasoning_models__only_reasoning_seeded():
+    entries = [_openai_entry("gpt-5.2-chat-latest"), _openai_entry("o4-mini"), _openai_entry("gpt-4o")]
+
+    regenerated = spm.regenerate_llm_models_yaml(
+        "openai:\n  []\n",
+        {"openai": entries},
+        openai_reasoning={"gpt-5.2-chat-latest": True, "o4-mini": True, "gpt-4o": False},
+    )
+
+    assert _reasoning_ids(regenerated) == {"o4-mini"}
