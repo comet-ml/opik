@@ -14,7 +14,9 @@ import java.util.Optional;
 @Getter
 @Accessors(fluent = true)
 public enum VertexAIModelName implements StructuredOutputSupported {
+    GEMINI_2_0_FLASH("vertex_ai/gemini-2.0-flash", "gemini-2.0-flash", false),
     GEMINI_2_0_FLASH("vertex_ai/gemini-2.0-flash-001", "gemini-2.0-flash-001", true),
+    GEMINI_2_0_FLASH_LITE("vertex_ai/gemini-2.0-flash-lite", "gemini-2.0-flash-lite", false),
     GEMINI_2_0_FLASH_LITE("vertex_ai/gemini-2.0-flash-lite-001", "gemini-2.0-flash-lite-001", false),
     GEMINI_2_5_FLASH("vertex_ai/gemini-2.5-flash", "gemini-2.5-flash", true),
     GEMINI_2_5_FLASH_LITE_PREVIEW_06_17("vertex_ai/gemini-2.5-flash-lite-preview-06-17",
@@ -34,7 +36,9 @@ public enum VertexAIModelName implements StructuredOutputSupported {
     GEMINI_3_6_FLASH("vertex_ai/gemini-3.6-flash", "gemini-3.6-flash", true),
     GEMINI_3_7_FLASH("vertex_ai/gemini-3.7-flash", "gemini-3.7-flash", true),
     GEMINI_3_8_FLASH("vertex_ai/gemini-3.8-flash", "gemini-3.8-flash", true),
+    GEMINI_3_8_FLASH_CYBER("vertex_ai/gemini-3.8-flash-cyber", "gemini-3.8-flash-cyber", true),
     GEMINI_OMNI_1_1_FLASH("vertex_ai/gemini-omni-1.1-flash", "gemini-omni-1.1-flash", false),
+    GEMINI_OMNI_1_1_FLASH_PREVIEW("vertex_ai/gemini-omni-1.1-flash-preview", "gemini-omni-1.1-flash-preview", false),
     GEMINI_ROBOTICS_ER_2("vertex_ai/gemini-robotics-er-2", "gemini-robotics-er-2", false);
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find VertexAIModelName with name '{}'";
