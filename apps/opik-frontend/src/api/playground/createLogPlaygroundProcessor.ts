@@ -24,6 +24,7 @@ import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
+  OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -44,6 +45,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   promptLibraryMetadata?: PromptLibraryMetadata;
   experimentName?: string;
   configs: LLMPromptConfigsType;
+  openAiPipelineMode?: OpenAiPipelineMode;
   selectedRuleIds: string[] | null;
   datasetItemData?: object;
 }
@@ -255,11 +257,12 @@ const getSpanFromRun = (
  * call never ran at.
  */
 export const getLoggedParameters = (
-  run: Pick<LogQueueParams, "model" | "configs">,
+  run: Pick<LogQueueParams, "model" | "configs" | "openAiPipelineMode">,
 ): Record<string, unknown> =>
   sanitizeConfigForRequest(
     run.model,
     run.configs as unknown as Record<string, unknown>,
+    run.openAiPipelineMode,
   );
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {

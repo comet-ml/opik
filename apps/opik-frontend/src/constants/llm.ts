@@ -221,8 +221,10 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
 // specify the exact set of effort values they accept — OpenAI families
 // differ: o-series → low/medium/high; gpt-5 → minimal/low/medium/high;
 // gpt-5.1 → none/low/medium/high; gpt-5.2 and later add xhigh (gpt-6-astra
-// and gpt-6.1-sol have no none). Sending an unsupported value 400s; no model
-// here accepts max on Chat Completions.
+// and gpt-6.1-sol have no none). Sending an unsupported value 400s.
+// responsesApiOnlyEffortOptions lists the extra values a model accepts only on
+// the Responses API: max is rejected on Chat Completions, so it is offered only
+// when the selected OpenAI key is set to the Responses API.
 // The rows pinned `reasoning: false` must equal OPENAI_NON_REASONING_MODELS in
 // scripts/sync_provider_models.py, or the registry flag the sync seeds would
 // contradict the panel (llm.test.ts enforces it; one source of truth is OPIK-8637).
@@ -232,6 +234,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
     {
       reasoning?: boolean;
       reasoningEffortOptions?: ReasoningEffort[];
+      responsesApiOnlyEffortOptions?: ReasoningEffort[];
     }
   >
 > = {
@@ -300,26 +303,32 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.GPT_5_6_LUNA]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_6_SOL]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_6_TERRA]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
   [PROVIDER_MODEL_TYPE.GPT_6_ASTRA]: {
     reasoning: true,
     reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
   [PROVIDER_MODEL_TYPE.GPT_6_LUNA]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
   [PROVIDER_MODEL_TYPE.GPT_6_SOL]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
   [PROVIDER_MODEL_TYPE.GPT_6_1_SOL]: {
     reasoning: true,

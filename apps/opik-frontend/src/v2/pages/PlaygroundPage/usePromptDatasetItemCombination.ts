@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
+import { OpenAiPipelineMode } from "@/types/providers";
 import usePlaygroundStore, {
   getExperimentNamesForPrompts,
   usePromptIds,
@@ -155,6 +156,7 @@ interface UsePromptDatasetItemCombinationArgs {
   ) => void;
   deleteAbortController: (key: string) => void;
   throttlingSeconds: number;
+  openAiPipelineMode: OpenAiPipelineMode;
 }
 
 const usePromptDatasetItemCombination = ({
@@ -166,6 +168,7 @@ const usePromptDatasetItemCombination = ({
   addAbortController,
   deleteAbortController,
   throttlingSeconds,
+  openAiPipelineMode,
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
@@ -244,6 +247,7 @@ const usePromptDatasetItemCombination = ({
           model: prompt.model,
           messages: providerMessages,
           configs: prompt.configs,
+          openAiPipelineMode,
           signal: controller.signal,
           onAddChunk: (o) => {
             updateOutput(prompt.id, datasetItemId, {
@@ -280,6 +284,7 @@ const usePromptDatasetItemCombination = ({
           promptLibraryMetadata,
           experimentName,
           configs: prompt.configs,
+          openAiPipelineMode,
           model: prompt.model,
           provider: prompt.provider,
           promptId: prompt.id,
@@ -332,6 +337,7 @@ const usePromptDatasetItemCombination = ({
       deleteAbortController,
       selectedRuleIds,
       throttlingSeconds,
+      openAiPipelineMode,
     ],
   );
 
