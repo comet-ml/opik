@@ -172,6 +172,9 @@ export const ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND = false;
 // Newer Claude models increasingly take none, so this way a newly added model omits a parameter
 // rather than having the provider reject the request outright. A model id we cannot place at all
 // stays permissive — see supportsSamplingParams in lib/modelUtils.
+// The rows with `supportsSamplingParams: true` must equal SAMPLING_CAPABLE_MODEL_IDS in the backend's
+// AnthropicModelName.java, or the panel would disagree with what the backend forwards to Anthropic
+// (llm.test.ts enforces it; one source of truth is OPIK-8637).
 export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
@@ -212,6 +215,9 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5_20250929]: {
+    supportsSamplingParams: true,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205]: {
     supportsSamplingParams: true,
   },
 };
