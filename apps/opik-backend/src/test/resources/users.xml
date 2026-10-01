@@ -54,6 +54,19 @@
             <max_concurrent_queries_for_user>5</max_concurrent_queries_for_user>
             <!-- Live on the production profile; kept here so FINAL queries run under the same settings. -->
             <use_skip_indexes_if_final>1</use_skip_indexes_if_final>
+            <!-- Pinned CONST below, as provision_agent_insights_readonly_user.sh does: each can stop row policies
+                 applying, so no default or version change may reach these accounts. -->
+            <allow_ddl>0</allow_ddl>
+            <serialize_query_plan>0</serialize_query_plan>
+            <make_distributed_plan>0</make_distributed_plan>
+            <enable_parallel_replicas>0</enable_parallel_replicas>
+            <max_parallel_replicas>1</max_parallel_replicas>
+            <use_query_cache>0</use_query_cache>
+            <query_cache_share_between_users>0</query_cache_share_between_users>
+            <use_query_condition_cache>0</use_query_condition_cache>
+            <enable_analyzer>1</enable_analyzer>
+            <apply_row_policy_after_final>1</apply_row_policy_after_final>
+            <allow_introspection_functions>0</allow_introspection_functions>
             <!--
                 Production sets SQL_workspace_id = '' / SQL_project_id = '' as defaults, but
                 ClickHouse's XML profile loader rejects an empty Field for custom settings. The
@@ -63,6 +76,18 @@
                 probe.
             -->
             <constraints>
+                <readonly><const/></readonly>
+                <allow_ddl><const/></allow_ddl>
+                <serialize_query_plan><const/></serialize_query_plan>
+                <make_distributed_plan><const/></make_distributed_plan>
+                <enable_parallel_replicas><const/></enable_parallel_replicas>
+                <max_parallel_replicas><const/></max_parallel_replicas>
+                <use_query_cache><const/></use_query_cache>
+                <query_cache_share_between_users><const/></query_cache_share_between_users>
+                <use_query_condition_cache><const/></use_query_condition_cache>
+                <enable_analyzer><const/></enable_analyzer>
+                <apply_row_policy_after_final><const/></apply_row_policy_after_final>
+                <allow_introspection_functions><const/></allow_introspection_functions>
                 <SQL_workspace_id>
                     <changeable_in_readonly/>
                 </SQL_workspace_id>
@@ -90,6 +115,8 @@
                 <query>GRANT SELECT ON opik.spans</query>
                 <query>GRANT SELECT ON opik.traces</query>
                 <query>GRANT SELECT ON opik.authored_feedback_scores</query>
+                <query>GRANT SELECT ON opik.spans_local</query>
+                <query>GRANT SELECT ON opik.traces_local</query>
             </grants>
             <!--
                 Row policies in the per-user <databases> XML form (production uses
@@ -110,6 +137,15 @@
                     <authored_feedback_scores>
                         <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
                     </authored_feedback_scores>
+                    <!-- The local tables behind the Distributed spans and traces: a distributed read evaluates the
+                         initial user's policies on the shard against these, so the wrapper's policy alone does not
+                         scope it. Bound by name, so they cover the tables from the moment a cutover creates them. -->
+                    <spans_local>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
+                    </spans_local>
+                    <traces_local>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
+                    </traces_local>
                 </opik>
             </databases>
         </comet_readonly_freeform_sql_user>
@@ -117,8 +153,8 @@
         <!--
             Extended free-form SQL account. Same profile with comet_readonly_freeform_sql_user shape,
             wider reach: tables carrying project_id in their primary key stay bound to workspace and, when
-            SQL_project_id is not '*', to that project too; experiments, experiment_items and dataset_items
-            are workspace-only.
+            SQL_project_id is not '*', to that project too; experiments, experiment_items, dataset_items and
+            dataset_item_versions are workspace-only.
         -->
         <comet_readonly_freeform_extended_sql_user>
             <password>opik</password>
@@ -135,7 +171,10 @@
                 <query>GRANT SELECT ON opik.experiments</query>
                 <query>GRANT SELECT ON opik.experiment_items</query>
                 <query>GRANT SELECT ON opik.dataset_items</query>
+                <query>GRANT SELECT ON opik.dataset_item_versions</query>
                 <query>GRANT SELECT ON opik.trace_threads</query>
+                <query>GRANT SELECT ON opik.spans_local</query>
+                <query>GRANT SELECT ON opik.traces_local</query>
             </grants>
             <databases>
                 <opik>
@@ -163,6 +202,15 @@
                     <trace_threads>
                         <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
                     </trace_threads>
+                    <dataset_item_versions>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </dataset_item_versions>
+                    <spans_local>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
+                    </spans_local>
+                    <traces_local>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
+                    </traces_local>
                 </opik>
             </databases>
         </comet_readonly_freeform_extended_sql_user>
