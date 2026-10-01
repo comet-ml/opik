@@ -160,10 +160,6 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
-// The backend chat-completions proxy has no field for the Anthropic effort and drops it; flip once
-// OPIK-8605 forwards output_config.effort.
-export const ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND = false;
-
 // Per-model Anthropic capabilities.
 //
 // `supportsSamplingParams` names the models that DO take temperature/top_p, so a Claude we recognise
@@ -172,15 +168,23 @@ export const ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND = false;
 // Newer Claude models increasingly take none, so this way a newly added model omits a parameter
 // rather than having the provider reject the request outright. A model id we cannot place at all
 // stays permissive — see supportsSamplingParams in lib/modelUtils.
+//
+// `thinkingEffortOptions` must match LEVELS_BY_MODEL in the backend's AnthropicEffort, which answers any
+// other level with a 400. `defaultThinkingEffort` is Anthropic's own default, "high" unless stated.
 export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
     {
       supportsSamplingParams?: boolean;
       thinkingEffortOptions?: AnthropicThinkingEffort[];
+      defaultThinkingEffort?: AnthropicThinkingEffort;
     }
   >
 > = {
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5]: {
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    defaultThinkingEffort: "medium",
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5]: {
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
@@ -196,6 +200,9 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5]: {
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
+  [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1]: {
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high", "max"],
@@ -208,7 +215,10 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1]: { supportsSamplingParams: true },
-  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: {
+    supportsSamplingParams: true,
+    thinkingEffortOptions: ["low", "medium", "high"],
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5_20250929]: {

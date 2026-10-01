@@ -143,13 +143,23 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
 
 describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
   it.each([
-    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
-    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
-  ])("seeds no thinkingEffort for %s while the backend drops it", (model) => {
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
+  ])("seeds %s with Anthropic's default effort, %s", (model, effort) => {
     const config = getDefaultConfigByProvider(
       PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
       model,
+    );
+
+    expect(config).toMatchObject({ thinkingEffort: effort });
+  });
+
+  it("seeds no thinkingEffort for a model that takes none", () => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
     );
 
     expect(config).not.toHaveProperty("thinkingEffort");
