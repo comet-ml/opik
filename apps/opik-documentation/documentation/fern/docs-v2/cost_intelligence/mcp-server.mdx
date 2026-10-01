@@ -89,7 +89,9 @@ Cost Intelligence logs Claude Code usage to the `claude-code` project in that wo
 
     <Tip>
       On a self-hosted Comet deployment, also set `COMET_URL_OVERRIDE` to your
-      instance URL.
+      instance URL. The server expects Opik's API at that URL plus `/opik/api`.
+      If your deployment serves it at a different host or path, also set
+      `OPIK_URL` to the full API URL.
     </Tip>
   </Step>
   <Step title="Start a new session and check it works">
