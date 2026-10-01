@@ -118,6 +118,22 @@ def test_opik_usage__from_google_dict__tool_use_prompt_tokens__counted_as_prompt
         usage.provider_usage.tool_use_prompt_token_count
         == usage_data["tool_use_prompt_token_count"]
     )
+    # ...and it has to survive into what a span records: every Google path (the
+    # genai decorator, the ADK streaming branch that reads result_dict
+    # ["usage_metadata"]) hands its metadata to this same builder, so the flat
+    # usage dict is the last place the field can be lost.
+    assert (
+        usage.provider_usage.to_backend_compatible_flat_dict("original_usage")[
+            "original_usage.tool_use_prompt_token_count"
+        ]
+        == usage_data["tool_use_prompt_token_count"]
+    )
+    assert (
+        usage.to_backend_compatible_full_usage_dict()[
+            "original_usage.tool_use_prompt_token_count"
+        ]
+        == usage_data["tool_use_prompt_token_count"]
+    )
 
 
 @pytest.mark.parametrize(
