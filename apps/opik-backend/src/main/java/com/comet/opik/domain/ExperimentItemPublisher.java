@@ -41,7 +41,7 @@ public class ExperimentItemPublisher {
      * The counter is set BEFORE publishing to prevent the race where a fast consumer
      * decrements to zero before all messages are published.
      */
-    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages) {
+    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages, boolean testSuite) {
         if (CollectionUtils.isEmpty(messages)) {
             return Mono.empty();
         }
@@ -53,7 +53,7 @@ public class ExperimentItemPublisher {
 
         return counter.set(messages.size())
                 .then(counter.expire(config.getBatchCounterTtl().toJavaDuration()))
-                .then(setAssertionCounters(messages))
+                .then(testSuite ? setAssertionCounters(messages) : Mono.empty())
                 .thenMany(Flux.fromIterable(messages)
                         .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                                 ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
