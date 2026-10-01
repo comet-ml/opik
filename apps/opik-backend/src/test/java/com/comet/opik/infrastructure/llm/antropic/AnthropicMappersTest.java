@@ -37,6 +37,10 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class AnthropicMappersTest {
+    private static final Map<String, Object> JSON_SCHEMA_FORMAT = Map.of(
+            "type", "json_schema",
+            "schema", Map.of("type", "object", "properties", Map.of("score", Map.of("type", "number"))));
+
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Nested
@@ -339,7 +343,29 @@ public class AnthropicMappersTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource
-        void sendsNoOutputConfigWithoutAnEffort(String description, Map<String, Object> customParameters) {
+        void keepsEveryOtherOutputConfigField(String description, Map<String, Object> outputConfig) {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .addUserMessage("hi")
+                    .customParameters(Map.of("output_config", outputConfig))
+                    .build();
+
+            var wireBody = Json.toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request));
+
+            assertThat(StringUtils.countMatches(wireBody, "\"output_config\"")).isEqualTo(1);
+            assertThat(JsonUtils.getJsonNodeFromString(wireBody).path("output_config"))
+                    .isEqualTo(JsonUtils.getMapper().valueToTree(outputConfig));
+        }
+
+        Stream<Arguments> keepsEveryOtherOutputConfigField() {
+            return Stream.of(
+                    Arguments.of("format beside effort", Map.of("format", JSON_SCHEMA_FORMAT, "effort", "low")),
+                    Arguments.of("format alone", Map.of("format", JSON_SCHEMA_FORMAT)));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void sendsNoOutputConfigWhenThereIsNoneToSend(String description, Map<String, Object> customParameters) {
             var request = ChatCompletionRequest.builder()
                     .model("claude-sonnet-4-6")
                     .addUserMessage("hi")
@@ -352,11 +378,11 @@ public class AnthropicMappersTest {
             assertThat(Json.toJson(actual)).doesNotContain("output_config");
         }
 
-        Stream<Arguments> sendsNoOutputConfigWithoutAnEffort() {
+        Stream<Arguments> sendsNoOutputConfigWhenThereIsNoneToSend() {
             return Stream.of(
                     Arguments.of("no custom_parameters", null),
                     Arguments.of("custom_parameters without output_config", Map.of("max_tokens", 2048)),
-                    Arguments.of("output_config without effort", Map.of("output_config", Map.of())));
+                    Arguments.of("an empty output_config", Map.of("output_config", Map.of())));
         }
     }
 
