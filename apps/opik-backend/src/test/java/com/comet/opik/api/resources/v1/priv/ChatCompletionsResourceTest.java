@@ -46,6 +46,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -68,6 +69,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
@@ -1029,4 +1031,82 @@ class ChatCompletionsResourceTest {
         }
     }
 
+    /// The playground sends the Anthropic effort as
+    /// custom_parameters.output_config.effort, which the langchain4j request DTO
+    /// keeps, while Anthropic reads output_config.effort at the top level of its own
+    /// body. A flat thinking_effort used to be dropped here without a trace
+    /// (OPIK-8605). These post the body exactly as the frontend writes it and assert
+    /// on what reaches Anthropic.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Anthropic provider — output_config.effort")
+    class AnthropicOutputConfigEffort {
+
+        private static final String MESSAGES_PATH = "/v1/messages";
+        private static final String MESSAGES_RESPONSE = """
+                {"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-6",\
+                "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",\
+                "usage":{"input_tokens":1,"output_tokens":1}}""";
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        @ParameterizedTest(name = "{0} at {1}")
+        @CsvSource({"claude-sonnet-4-6, low", "claude-sonnet-5, xhigh"})
+        void forwardsThePlaygroundEffortToAnthropic(String model, String effort) {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, model, effort);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            var sent = WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)));
+            assertThat(sent).hasSize(1);
+            assertThat(JsonUtils.getJsonNodeFromString(sent.getFirst().getBodyAsString()).path("output_config"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"%s\"}".formatted(effort)));
+        }
+
+        @Test
+        void rejectsAStoredAdaptiveEffortWithABadRequest() {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, "claude-sonnet-4-6", "adaptive");
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class))
+                    .contains("Unsupported custom_parameters.output_config.effort for the model, "
+                            + "model 'claude-sonnet-4-6', effort 'adaptive', supported '[low, medium, high, max]'");
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)))).isEmpty();
+        }
+
+        private String prepareWorkspace() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.ANTHROPIC)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + "/v1/")
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            WIRE_MOCK.server().stubFor(post(urlPathEqualTo(MESSAGES_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(MESSAGES_RESPONSE)));
+            return workspaceName;
+        }
+
+        private jakarta.ws.rs.core.Response postFrontendBody(String workspaceName, String model, String effort) {
+            var body = """
+                    {"model": "%s", "messages": [{"role": "user", "content": "ping"}], "stream": false,
+                    "max_completion_tokens": 100, "custom_parameters": {"output_config": {"effort": "%s"}}}"""
+                    .formatted(model, effort);
+            return clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(JsonUtils.getJsonNodeFromString(body)));
+        }
+    }
 }

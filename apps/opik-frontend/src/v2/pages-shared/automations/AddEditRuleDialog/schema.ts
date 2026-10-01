@@ -9,14 +9,19 @@ import {
   EVAL_TRIGGER_SCOPE,
 } from "@/types/automations";
 import {
+  AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 import {
+  getAnthropicThinkingEffortOptions,
+  getNestedThinkingEffort,
   getThinkingLevelOptions,
   resolveSamplingParams,
   updateProviderConfig,
+  withThinkingEffort,
 } from "@/lib/modelUtils";
 import { getProviderFromModel } from "@/lib/provider";
 import {
@@ -214,6 +219,14 @@ const refineDecisionModelRule = (
   });
 };
 
+const THINKING_EFFORTS = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly AnthropicThinkingEffort[];
+
 const LLMJudgeBaseSchema = z.object({
   model: z
     .string({
@@ -234,6 +247,9 @@ const LLMJudgeBaseSchema = z.object({
     thinkingLevel: z
       .enum(["auto", "none", "off", "minimal", "low", "medium", "high"])
       .optional(),
+    // Same arrangement for the Anthropic effort, which the judge reads from
+    // custom_parameters.output_config.effort.
+    thinkingEffort: z.enum(THINKING_EFFORTS).optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -617,6 +633,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   const thinking = (
     persistedCustomParameters as { thinking?: { level?: unknown } } | null
   )?.thinking;
+  const persistedEffort = getNestedThinkingEffort(persistedCustomParameters);
   const rawConfig = {
     temperature: data.model?.temperature,
     seed: data.model?.seed ?? null,
@@ -625,6 +642,8 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
       typeof thinking?.level === "string"
         ? (thinking.level as GeminiThinkingLevel)
         : undefined,
+    // A value outside the enum would fail the form's validation on a field nobody can see.
+    thinkingEffort: THINKING_EFFORTS.find((e) => e === persistedEffort),
   };
   // Normalize stale persisted configs (e.g. Opus 4.7 with `temperature: 0`
   // saved before this PR) so an unedited submit doesn't 400 on Anthropic.
@@ -654,7 +673,13 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsThreadFormType
     | LLMJudgeDetailsSpanFormType,
 ) => {
-  const { temperature, seed, custom_parameters, thinkingLevel } = data.config;
+  const {
+    temperature,
+    seed,
+    custom_parameters,
+    thinkingLevel,
+    thinkingEffort,
+  } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
   };
@@ -750,14 +775,28 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
       ? omit(persistedCustomParameters, "thinking")
       : persistedCustomParameters;
 
-  if (
-    Object.keys(otherCustomParameters).length > 0 ||
-    thinkingCustomParameters
-  ) {
-    model.custom_parameters = {
-      ...otherCustomParameters,
-      ...thinkingCustomParameters,
-    };
+  const mergedCustomParameters = {
+    ...otherCustomParameters,
+    ...thinkingCustomParameters,
+  };
+
+  // Only an Anthropic rule's effort is the form's to manage. A custom provider's JSON editor may hold an
+  // output_config the user typed for their own gateway, and it must survive a save untouched.
+  const finalCustomParameters =
+    getProviderFromModel(data.model as PROVIDER_MODEL_TYPE) ===
+    PROVIDER_TYPE.ANTHROPIC
+      ? withThinkingEffort(
+          mergedCustomParameters,
+          getAnthropicThinkingEffortOptions(
+            data.model as PROVIDER_MODEL_TYPE,
+          ).some((o) => o.value === thinkingEffort)
+            ? thinkingEffort
+            : undefined,
+        )
+      : mergedCustomParameters;
+
+  if (finalCustomParameters && Object.keys(finalCustomParameters).length > 0) {
+    model.custom_parameters = finalCustomParameters;
   }
 
   return {
