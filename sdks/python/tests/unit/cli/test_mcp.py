@@ -9,6 +9,7 @@ from click.testing import CliRunner
 
 from opik.cli import assistants
 from opik.cli import cli
+from opik.cli import install_view
 from opik.cli import mcp as mcp_cli
 from opik.configurator import consent
 from opik.configurator.mcp import install as mcp_install
@@ -153,6 +154,51 @@ class TestInstallCommand:
 
         assert result.exit_code == 0, result.output
         assert order == [("deployment", mcp_cli.MCP_DEPLOYMENT_QUESTION), ("setup",)]
+
+    def test_no_config__the_real_picker_runs_after_the_deployment(self):
+        """Through the real setup path, so moving or dropping the picker fails here."""
+        runner = CliRunner()
+        order = []
+        detected = [mcp_cli.mcp_targets.find_target("cursor")]
+
+        class Picker(install_view.RichInstallView):
+            def choose_hosts(self, title, candidates):
+                order.append("client")
+                return None  # Cancel, so nothing is installed.
+
+        def ask_deployment(question):
+            order.append("deployment")
+            return mcp_cli.interactive_helpers.DeploymentType.CLOUD
+
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key=None)
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(
+                mcp_cli.mcp_targets, "detected_targets", return_value=detected
+            ),
+            patch.object(
+                mcp_cli.configure_cli,
+                "ask_for_deployment_type",
+                side_effect=ask_deployment,
+            ),
+            patch.object(
+                mcp_install.mcp_detection,
+                "detect_hosted_mcp_server",
+                return_value="https://www.comet.com/opik/api/v1/mcp",
+            ),
+            patch.object(mcp_cli.assistants.install_view, "RichInstallView", Picker),
+            patch.object(mcp_cli.install_view, "render_mcp_banner"),
+            patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
+            patch.object(mcp_cli.analytics, "track_event"),
+        ):
+            result = runner.invoke(cli, ["mcp", "configure"])
+
+        assert result.exit_code == 0, result.output
+        assert order == ["deployment", "client"]
 
     def test_no_config__the_question_is_about_the_ai_client_not_traces(self):
         """This is `opik mcp configure`; where traces go is `opik configure`'s question."""
