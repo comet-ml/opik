@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import PlaygroundOutputError from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputError";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
-import { useOutputByPromptDatasetItemId } from "@/store/PlaygroundStore";
+import { useOutputByPromptId } from "@/store/PlaygroundStore";
 import { getAlphabetLetter } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
@@ -28,7 +28,7 @@ const PlaygroundPromptOutput = ({
   // One subscription, not four. This already read the whole output object for
   // `usage`, while three sibling hooks re-ran the same selector for fields that
   // are right there on it. Defaults below are the ones those hooks applied.
-  const output = useOutputByPromptDatasetItemId(promptId);
+  const output = useOutputByPromptId(promptId);
   const value = output?.value ?? null;
   const error = output?.error;
   const isLoading = output?.isLoading ?? false;

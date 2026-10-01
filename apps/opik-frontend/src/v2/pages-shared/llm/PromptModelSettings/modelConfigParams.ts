@@ -35,3 +35,10 @@ export const RULE_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> = new Set([
  */
 export const OPTIMIZATION_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> =
   new Set(["throttling", "maxConcurrentRequests"]);
+
+/**
+ * A run against a dataset executes on the server, which schedules its own work: these two control
+ * the browser's batch loop and reach nothing once the run leaves the page.
+ */
+export const BACKEND_RUN_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> =
+  new Set(["throttling", "maxConcurrentRequests"]);
