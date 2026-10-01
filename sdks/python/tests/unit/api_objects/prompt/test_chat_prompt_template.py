@@ -1,5 +1,8 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from opik.api_objects.prompt import ChatPromptTemplate, PromptType
+from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik import exceptions
 
 
@@ -843,3 +846,93 @@ def test_chat_prompt_template__format__placeholder_inside_audio_url__validates()
 
     with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments):
         tested.format({}, supported_modalities={"audio": True})
+
+
+def test_chat_prompt_template__format__audio_part__missing_argument__diagnostic():
+    """The mismatch has to name the placeholder that was not supplied."""
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe {{clip}}"},
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://example.com/{{clip}}.mp3"},
+                },
+            ],
+        }
+    ]
+
+    tested = ChatPromptTemplate(messages, validate_placeholders=True)
+
+    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as raised:
+        tested.format({"other": "x"}, supported_modalities={"audio": True})
+
+    assert raised.value.prompt_placeholders == {"clip"}
+    assert raised.value.format_arguments == {"other"}
+    assert raised.value.symmetric_difference == {"clip", "other"}
+    assert "clip" in str(raised.value)
+
+
+def test_chat_prompt__format__default_modalities__keep_text_image_and_audio_structured():
+    """`ChatPrompt.format()`'s documented default is "all modalities supported".
+
+    The registry reads an absent modality flag as *unsupported*, and one
+    unsupported part flattens the whole message to a string -- so a modality that
+    is registered but missing from this default map silently downgrades every
+    legacy multimodal prompt. Registering `audio` without listing it here turned a
+    text+image+audio message into
+
+        "describe this\\n\\n{'type': 'image_url', ...}\\n\\n<<<audio>>>...<<<"
+    """
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "describe this"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/a.png"},
+                },
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://example.com/a.mp3"},
+                },
+            ],
+        }
+    ]
+
+    with patch(
+        "opik.api_objects.opik_client.get_client_cached", return_value=MagicMock()
+    ):
+        tested = ChatPrompt(name="test-chat", messages=messages)
+
+    assert tested.format({}) == messages
+
+
+def test_chat_prompt__format__explicit_modalities__audio_unsupported__placeholder():
+    """Naming the modalities explicitly still lets a caller turn audio off."""
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe"},
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://example.com/a.mp3"},
+                },
+            ],
+        }
+    ]
+
+    with patch(
+        "opik.api_objects.opik_client.get_client_cached", return_value=MagicMock()
+    ):
+        tested = ChatPrompt(name="test-chat", messages=messages)
+
+    assert tested.format({}, supported_modalities={"audio": False}) == [
+        {
+            "role": "user",
+            "content": "Transcribe\n\n<<<audio>>>https://example.com/a.mp3<<</audio>>>",
+        }
+    ]
