@@ -120,7 +120,25 @@ class OpikUsage(pydantic.BaseModel):
         # Do something similar as: https://github.com/BerriAI/litellm/blob/4854482af4a2a56060bbfeb4345bce4f1bb7ec41/litellm/llms/vertex_ai/gemini/vertex_and_google_ai_studio_gemini.py#L980-L995
         candidates_token_count = provider_usage.candidates_token_count or 0
 
-        total_token_count = provider_usage.prompt_token_count + candidates_token_count
+        # Google's `total_token_count` is the sum of prompt, candidates,
+        # tool-use prompt and thoughts tokens. The tool-use prompt tokens are the
+        # results of tool executions "which are provided back to the model as
+        # input", so they belong on the input side; `prompt_token_count` only
+        # covers the original prompt (plus any cached content). Without adding them
+        # here, every tool-using Gemini call reported a prompt far below what the
+        # request actually consumed, and prompt + completion no longer added up to
+        # the total.
+        #
+        # Note what the equality check below is and is not: it compares the
+        # provider total against prompt + candidates only, i.e. deliberately
+        # without thoughts. So thoughts always miss here and are added to
+        # completion tokens by the next branch -- that mismatch is the signal for
+        # "there are thoughts", not a sign the arithmetic is off.
+        prompt_token_count = provider_usage.prompt_token_count + (
+            provider_usage.tool_use_prompt_token_count or 0
+        )
+
+        total_token_count = prompt_token_count + candidates_token_count
 
         if provider_usage.total_token_count == total_token_count:
             completion_tokens = candidates_token_count
@@ -136,7 +154,7 @@ class OpikUsage(pydantic.BaseModel):
 
         return cls(
             completion_tokens=completion_tokens,
-            prompt_tokens=provider_usage.prompt_token_count,
+            prompt_tokens=prompt_token_count,
             total_tokens=provider_usage.total_token_count,
             provider_usage=provider_usage,
         )

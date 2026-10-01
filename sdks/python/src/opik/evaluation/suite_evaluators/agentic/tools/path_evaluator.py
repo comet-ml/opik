@@ -43,6 +43,8 @@ import json
 import re
 from typing import Any, Iterable, Iterator, List, Optional, Union
 
+from .. import path_format
+
 DEFAULT_MAX_DEPTH = 200
 DEFAULT_MAX_RESULTS = 10_000
 
@@ -223,7 +225,10 @@ _TOKEN_RE = re.compile(
     re.VERBOSE,
 )
 
-_KEYWORDS = {"and", "or", "not", "select", "strings", "true", "false", "null"}
+# Read the reserved words from the grammar's own source of truth so the two
+# sides of the format cannot drift apart again -- a key the parser lexes as a
+# keyword has to be bracket-quoted by the renderer.
+_KEYWORDS = path_format.RESERVED_KEYWORDS
 
 
 @dataclasses.dataclass
