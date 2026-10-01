@@ -518,7 +518,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(stream)>
             ORDER BY workspace_id, project_id, thread_model_id DESC
             <else>
-            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC <endif>
+            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC, thread_model_id DESC <else> ORDER BY last_updated_at DESC, start_time ASC, nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC, thread_model_id DESC <endif>
             <endif>
             LIMIT :limit <if(page_pushdown)><else><if(offset)>OFFSET :offset<endif><endif>
             SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
