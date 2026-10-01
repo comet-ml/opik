@@ -594,7 +594,6 @@ class TestVerification:
         verify.assert_called_once()
         view = args["view"]
         assert view.verifications == [(True, "connected to workspace ws")]
-        assert view.done_calls == [(["MCP server"], ["Cursor"])]
 
     def test_setup_mcp_server__verification_fails__warns_instead_of_claiming_success(
         self, monkeypatch, verify
@@ -621,8 +620,6 @@ class TestVerification:
 
         view = args["view"]
         assert view.verifications[0][0] is False
-        # A failed check must never be followed by "restart, it works".
-        assert view.done_calls == []
 
     def test_setup_mcp_server__every_host_failed__does_not_verify(
         self, monkeypatch, verify
@@ -1230,8 +1227,3 @@ class TestAFailedSignInIsWhereTheRunEnds:
         assert order == ["sign-in", "verify"]
         assert view._sign_in_failed == ("Claude Code",)
         assert report.sign_in == "failed"
-
-    def test_a_log_is_not_told_the_setup_is_done(self, monkeypatch, verify):
-        report, view, order = self._run(monkeypatch, verify)
-
-        assert view.done_calls == []

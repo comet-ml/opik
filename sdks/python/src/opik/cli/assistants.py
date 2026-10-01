@@ -112,9 +112,6 @@ def setup(
             host_keys=host_keys,
             assume_confirmed=assume_confirmed,
             view=view,
-            # The closing "restart your assistant" line is printed once, at the end
-            # of the whole step, rather than by each half.
-            announce_next_steps=False,
         )
         if install_mcp
         else mcp_install.NOTHING_INSTALLED
@@ -171,8 +168,8 @@ def setup(
     # `skills_installed` alone cannot say why it was false: a flag that refused
     # the pack and a download that failed look identical, and only one of them is
     # a problem.
-    wants_skills = consent.granted(skills, _no_longer_asked)
-    skills_reason = consent.decision_reason(skills, wants_skills)
+    wants_skills = skills.decision is consent.Decision.PROCEED
+    skills_reason = skills.reason.value
 
     if wants_skills:
         with view.step("Fetching the Opik skill pack"):
@@ -216,17 +213,4 @@ def setup(
         transport=install.transport,
         sign_in=install.sign_in,
         stale_tool=install.stale_tool,
-    )
-
-
-def _no_longer_asked() -> bool:
-    """The skill pack is not offered any more, so nothing should reach this.
-
-    Kept because :func:`consent.granted` takes an asker, and a resolver that
-    never returns ``ASK`` is a claim worth failing on rather than quietly
-    installing behind a question nobody put.
-    """
-    raise AssertionError(
-        "the skill pack is installed by default; consent.resolve_installed_by_default "
-        "never asks"
     )

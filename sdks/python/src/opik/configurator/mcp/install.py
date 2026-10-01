@@ -93,7 +93,6 @@ def setup_mcp_server(
     host_keys: Optional[List[str]] = None,
     assume_confirmed: bool = False,
     view: Optional[mcp_view.InstallView] = None,
-    announce_next_steps: bool = True,
 ) -> InstallReport:
     """Register the Opik MCP server with the user's AI client(s).
 
@@ -291,13 +290,6 @@ def setup_mcp_server(
             )
         verified = verification.succeeded
         display.verification(verification.succeeded, verification.detail)
-        # Not "done" while a client has no tools yet: verification only proves
-        # the server is reachable, which it is without a sign-in.
-        if verification.succeeded and announce_next_steps and not sign_in_failed:
-            display.done(
-                ["MCP server"],
-                [result.target_display_name for result in results if result.succeeded],
-            )
 
     return InstallReport(
         registered=tuple(

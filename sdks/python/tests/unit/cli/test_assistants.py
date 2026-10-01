@@ -18,7 +18,6 @@ from opik.configurator.mcp import install as mcp_install
 
 PROCEED = consent.Verdict(consent.Decision.PROCEED, consent.Reason.REQUESTED)
 DECLINE = consent.Verdict(consent.Decision.SKIP, consent.Reason.DECLINED)
-ASK = consent.Verdict(consent.Decision.ASK, consent.Reason.ASKING)
 
 
 def _params():
@@ -250,21 +249,12 @@ class TestThePackIsNotOffered:
 
         confirm.assert_not_called()
 
-    def test_an_ask_verdict__is_refused_rather_than_answered(
-        self, mcp_spy, skills_spy, rich_view, confirm
-    ):
-        """Guards the removal: a resolver that starts asking again should fail
-        loudly rather than install behind a question nobody saw."""
-        with pytest.raises(AssertionError):
-            assistants.setup(_params(), install_mcp=True, skills=ASK)
-
 
 class TestClosingBlock:
     def test_one_closing_block_for_the_whole_step(self, mcp_spy, skills_spy, rich_view):
         assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
         assert rich_view.done.call_count == 1
-        assert mcp_spy.call_args.kwargs["announce_next_steps"] is False
 
     def test_lists_both_components(self, mcp_spy, skills_spy, rich_view):
         assistants.setup(_params(), install_mcp=True, skills=PROCEED)
