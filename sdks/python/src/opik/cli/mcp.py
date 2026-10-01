@@ -234,11 +234,12 @@ def run_configure(
                 "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
                 "`opik configure`, then re-run this command."
             )
-        # No usable config (none, or one without an API key): where Opik is
-        # first, so the client picker below stays the step after it, as the
-        # funnel orders them. Cloud needs no API key —
-        # the hosted server signs in with OAuth — so it writes no config;
-        # self-hosted and local go through `opik configure`'s questions.
+        # No usable config (none, or one without an API key). The deployment
+        # picker comes first; the client picker follows, inside `setup` below,
+        # which is the order the onboarding funnel counts them in.
+        # Cloud needs no API key (the hosted server signs in with OAuth) and
+        # writes no config; self-hosted and local ask `opik configure`'s
+        # questions.
         deployment = configure_cli.ask_for_deployment_type(MCP_DEPLOYMENT_QUESTION)
         if deployment is interactive_helpers.DeploymentType.CLOUD:
             params = _opik_cloud_params()
