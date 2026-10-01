@@ -31,8 +31,11 @@ import dev.langchain4j.model.openai.internal.chat.Tool;
 import dev.langchain4j.model.openai.internal.chat.ToolCall;
 import dev.langchain4j.model.openai.internal.chat.ToolMessage;
 import dev.langchain4j.model.openai.internal.chat.ToolType;
+import dev.langchain4j.model.openai.internal.shared.CompletionTokensDetails;
+import dev.langchain4j.model.openai.internal.shared.PromptTokensDetails;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatRequestParameters;
+import dev.langchain4j.model.openaiofficial.OpenAiOfficialTokenUsage;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.ws.rs.BadRequestException;
@@ -368,11 +371,21 @@ class LlmProviderOpenAiResponsesMapper {
         if (tokenUsage == null) {
             return null;
         }
-        return Usage.builder()
+        var builder = Usage.builder()
                 .promptTokens(tokenUsage.inputTokenCount())
                 .completionTokens(tokenUsage.outputTokenCount())
-                .totalTokens(tokenUsage.totalTokenCount())
-                .build();
+                .totalTokens(tokenUsage.totalTokenCount());
+        if (tokenUsage instanceof OpenAiOfficialTokenUsage responsesUsage) {
+            Optional.ofNullable(responsesUsage.inputTokensDetails())
+                    .map(OpenAiOfficialTokenUsage.InputTokensDetails::cachedTokens)
+                    .map(cached -> PromptTokensDetails.builder().cachedTokens(cached).build())
+                    .ifPresent(builder::promptTokensDetails);
+            Optional.ofNullable(responsesUsage.outputTokensDetails())
+                    .map(OpenAiOfficialTokenUsage.OutputTokensDetails::reasoningTokens)
+                    .map(reasoning -> CompletionTokensDetails.builder().reasoningTokens(reasoning).build())
+                    .ifPresent(builder::completionTokensDetails);
+        }
+        return builder.build();
     }
 
     private String toFinishReasonString(FinishReason finishReason) {
