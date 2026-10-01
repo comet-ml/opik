@@ -329,28 +329,30 @@ describe("useIntervalBounds", () => {
       expect(result.current.intervalEnd).toBe(dayjs().utc().format());
     });
 
-    it("should freeze a custom range ending today into its past window at midnight, as intended", () => {
+    it("should keep the last live window of a custom range ending today after midnight and poll it", () => {
       const endingToday: DateRangeValue = {
         from: midnight.subtract(4, "days").toDate(),
         to: midnight.subtract(1, "ms").toDate(),
       };
-      const pastWindowEnd = dayjs(endingToday.to).utc().endOf("day").format();
       const { result } = renderIntervalBounds(endingToday);
+      const { intervalStart, intervalEnd } = result.current;
+      expect(intervalEnd).toBe(dayjs().utc().format());
       expect(result.current.refetchInterval).toBe(false);
 
       tick();
-      const { intervalStart, intervalEnd } = result.current;
+      expect(dayjs().isAfter(midnight)).toBe(true);
       tick(5 * REANCHOR_INTERVAL);
 
-      expect(intervalEnd).toBe(pastWindowEnd);
       expect(result.current.intervalStart).toBe(intervalStart);
-      expect(result.current.intervalEnd).toBe(pastWindowEnd);
+      expect(result.current.intervalEnd).toBe(intervalEnd);
       expect(result.current.refetchInterval).toBe(REANCHOR_INTERVAL);
+
       let moved = true;
       act(() => {
         moved = result.current.reanchorToNow();
       });
       expect(moved).toBe(false);
+      expect(result.current.intervalEnd).toBe(intervalEnd);
     });
   });
 

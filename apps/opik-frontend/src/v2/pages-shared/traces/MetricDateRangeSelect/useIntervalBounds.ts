@@ -66,6 +66,13 @@ export const useIntervalBounds = (
       ) {
         return;
       }
+      if (!isLiveDateRange(anchored.dateRange)) {
+        // Same bounds, new object: the render re-reads the liveness, clears this
+        // timer and switches the queries to polling the window as it stood before
+        // local midnight, instead of re-anchoring a range that is no longer "today".
+        setAnchored({ ...anchored });
+        return;
+      }
 
       setAnchored(anchorToNow(anchored.dateRange));
     };
@@ -85,6 +92,8 @@ export const useIntervalBounds = (
   }, [anchored, isLive, isAutoReanchorEnabled, queryClient]);
 
   const reanchorToNow = useCallback(() => {
+    if (!isLiveDateRange(current.dateRange)) return false;
+
     const next = reanchorIntervalBounds(current.dateRange, current.bounds);
     if (next === current.bounds) return false;
 
