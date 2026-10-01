@@ -135,5 +135,5 @@ What one session did, step by step, and which cost category dominated it.
 
 ## Troubleshooting
 
-- **The agent finds no spend data, or reports $0.** Check that the workspace starts with `__ai_spend_`. Cost Intelligence support also needs `opik-mcp` 0.2.38 or later; if `uvx` is still running an older copy from its cache, run `uv cache clean opik-mcp`. Restart the coding agent after any change.
+- **The agent says it has no access to spend data.** The server is pointed at the wrong workspace. Set `OPIK_WORKSPACE` to your Cost Intelligence workspace, the one starting with `__ai_spend_`. An `opik-mcp` version older than 0.2.38 shows the same symptom; if `uvx` is still running an older copy from its cache, run `uv cache clean opik-mcp`. Restart the coding agent after any change.
 - **The agent reports an authentication or permission error.** The API key belongs to an account without access to the Cost Intelligence workspace. Use an admin's key.
