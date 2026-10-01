@@ -14,7 +14,7 @@ import {
   addQuickFilter,
   resolveQuickFilterTarget,
   stringifyFilterValue,
-} from "@/shared/filter-chips/lib/quickAttributeFilter";
+} from "@/v2/pages/LogsPage/TracesSpansTab/quickAttributeFilter";
 import { getPinnedChipsStorageKey } from "@/shared/filter-chips/hooks/useFilterChips";
 import {
   LOGS_DEFAULT_PINNED_CHIPS,

@@ -88,7 +88,7 @@ export const addQuickFilter = (
       filter.operator === QUICK_FILTER_OPERATOR &&
       String(filter.value) === value,
   );
-  if (alreadyApplied) return filters;
+  if (alreadyApplied) return validFilters;
 
   return [
     ...validFilters,

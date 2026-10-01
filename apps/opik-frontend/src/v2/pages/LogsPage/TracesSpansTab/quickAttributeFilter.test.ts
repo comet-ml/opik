@@ -122,9 +122,16 @@ describe("addQuickFilter", () => {
     expect(next).toHaveLength(3);
   });
 
-  it("returns the same array when an identical row is already applied", () => {
+  it("leaves filters unchanged when an identical row is already applied", () => {
     const existing = [metadataFilter()];
-    expect(addQuickFilter(existing, metadataTarget, "main")).toBe(existing);
+    expect(addQuickFilter(existing, metadataTarget, "main")).toEqual(existing);
+  });
+
+  it("drops null entries when an identical row is already applied", () => {
+    const existing = [null, metadataFilter()];
+    expect(
+      addQuickFilter(existing as unknown as Filter[], metadataTarget, "main"),
+    ).toEqual([metadataFilter()]);
   });
 
   it("drops null entries from malformed URL filters", () => {
