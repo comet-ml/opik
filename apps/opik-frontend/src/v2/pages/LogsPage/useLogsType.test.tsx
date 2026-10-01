@@ -65,18 +65,18 @@ const createWrapper = () => {
 
 const renderLogsType = () =>
   renderHook(
-    () => {
+    ({ projectId }: { projectId: string }) => {
       const intervalWindow = useLogsIntervalWindow(dateRangeConfig);
       return {
         intervalWindow,
         ...useLogsType({
-          projectId: "project-1",
+          projectId,
           dateRangeConfig,
           intervalWindow,
         }),
       };
     },
-    { wrapper: createWrapper() },
+    { initialProps: { projectId: "project-1" }, wrapper: createWrapper() },
   );
 
 const threadStats = (value: number) => ({
@@ -87,6 +87,19 @@ const probeParams = async () => {
   await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
   return mockGet.mock.calls[0][1].params;
 };
+
+const renderAnsweredLogsType = async () => {
+  timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
+  mockGet.mockResolvedValueOnce(threadStats(3));
+  const rendered = renderLogsType();
+  await waitFor(() =>
+    expect(rendered.result.current.logsType).toBe(LOGS_TYPE.threads),
+  );
+  return rendered;
+};
+
+const flushRequests = () =>
+  act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
 describe("useLogsType", () => {
   beforeEach(() => {
@@ -149,26 +162,60 @@ describe("useLogsType", () => {
     });
   });
 
-  it("should keep the known thread count while a moved window loads, so the page loader stays hidden", async () => {
-    timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
-    mockGet.mockResolvedValueOnce(threadStats(3));
-    mockGet.mockReturnValueOnce(new Promise(() => {}));
-    const { result } = renderLogsType();
-    await waitFor(() =>
-      expect(result.current.logsType).toBe(LOGS_TYPE.threads),
-    );
+  it("should not probe again when the window moves, and keep the tab", async () => {
+    const { result } = await renderAnsweredLogsType();
     vi.setSystemTime(now.add(30, "seconds").toDate());
 
     act(() => {
       result.current.intervalWindow.reanchorToNow();
     });
+    await flushRequests();
 
-    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
-    expect(mockGet.mock.calls[1][1].params.to_time).toBe(
+    expect(result.current.intervalWindow.intervalEnd).toBe(
       now.add(30, "seconds").utc().format(),
     );
+    expect(mockGet).toHaveBeenCalledTimes(1);
     expect(result.current.needsDefaultResolution).toBe(false);
     expect(result.current.logsType).toBe(LOGS_TYPE.threads);
+  });
+
+  it("should keep the probe in flight on its selection's window while the shared window moves", async () => {
+    timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
+    mockGet.mockReturnValueOnce(new Promise(() => {}));
+    const { result } = renderLogsType();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+    vi.setSystemTime(now.add(30, "seconds").toDate());
+
+    act(() => {
+      result.current.intervalWindow.reanchorToNow();
+    });
+    await flushRequests();
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockGet.mock.calls[0][1].signal.aborted).toBe(false);
+    expect(result.current.needsDefaultResolution).toBe(true);
+  });
+
+  it("should keep the first answer's tab when the range changes", async () => {
+    const { result, rerender } = await renderAnsweredLogsType();
+
+    timeRange = DEFAULT_DATE_PRESET;
+    rerender({ projectId: "project-1" });
+    await flushRequests();
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(result.current.needsDefaultResolution).toBe(false);
+    expect(result.current.logsType).toBe(LOGS_TYPE.threads);
+  });
+
+  it("should resolve the default again for another project", async () => {
+    const { result, rerender } = await renderAnsweredLogsType();
+
+    rerender({ projectId: "project-2" });
+
+    await waitFor(() => expect(result.current.logsType).toBe(LOGS_TYPE.traces));
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(mockGet.mock.calls[1][1].params.project_id).toBe("project-2");
   });
 
   it("should not probe when a logs type is already stored", () => {
