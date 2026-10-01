@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.util.Duration;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -36,6 +37,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode;
@@ -44,14 +47,29 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OnlineScoringUserDefinedMetricPythonScorerTest {
+
+    /**
+     * Independently restated: the constant sentence leads and every value trails, so this text is the fixed
+     * prefix an operator greps on. Byte-identical to the span scorer's copy — that is what makes one search
+     * catch both scorers, so a divergence here should fail this test rather than pass quietly.
+     */
+    private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
+            + " so there is no data to evaluate. Check the declared paths against the input, output and"
+            + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
+
+    /** Restated from the shared helper: the entry line stays, only the false "Sending" claim is dropped. */
+    private static final String EVALUATING_LOG = "Evaluating {} '{}' sampled by rule '{}'";
+    private static final String SENDING_LOG = "Sending {} '{}' to Python evaluator: '{}'";
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -329,6 +347,105 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void reportsUnresolvedArgumentsOnTheRuleLogInsteadOfCallingTheEvaluator() {
+            // A metric declaring fields the trace does not carry resolves to an empty replacement map.
+            // That used to reach PythonEvaluatorService.evaluate, whose Preconditions guard threw a raw
+            // IllegalArgumentException; the job was dropped as non-retryable and the user saw nothing
+            // (OPIK-8556). The scorer must now detect it first and name the offending arguments.
+            var message = sampleMessageWithUnresolvableArguments();
+
+            scorer.score(message).block();
+
+            verify(pythonEvaluatorService, never()).evaluate(any(), any());
+            verify(userFacingLogger).warn(
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
+                    eq("traceId"),
+                    eq(traceId),
+                    eq(ruleName),
+                    eq("'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'"));
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+        }
+
+        @Test
+        void sanitisesAndCapsTheArgumentsItReports() {
+            // Argument names and paths are rule configuration the user controls, and this line persists in
+            // automation_rule_evaluator_logs.message. A newline must not forge an entry there, and one long
+            // value must not flood it — same treatment the judge-supplied names in this file already get.
+            var longPath = "input." + RandomStringUtils.secure().nextAlphanumeric(200);
+            var message = sampleMessageWithArguments(Map.of(
+                    "a_newline", "input.first\nWARN forged entry",
+                    "b_long", longPath));
+
+            scorer.score(message).block();
+
+            var reported = ArgumentCaptor.forClass(String.class);
+            verify(userFacingLogger).warn(
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
+                    eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
+
+            // Whole rendered string, not fragments: separator, ordering, truncation point and the absence
+            // of anything extra all have to hold, not just the presence of the two entries.
+            assertThat(reported.getValue()).isEqualTo(
+                    "'a_newline' -> 'input.first WARN forged entry', 'b_long' -> '%s…'"
+                            .formatted(longPath.substring(0, 100)));
+        }
+
+        @Test
+        void capsHowManyArgumentsItReports() {
+            // The count comes from the rule, so one rule would otherwise decide how much this path carries.
+            var arguments = IntStream.range(0, 13).boxed()
+                    .collect(Collectors.toMap("arg_%02d"::formatted, index -> "input.absent_%02d".formatted(index)));
+            var message = sampleMessageWithArguments(arguments);
+
+            scorer.score(message).block();
+
+            var reported = ArgumentCaptor.forClass(String.class);
+            verify(userFacingLogger).warn(
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
+                    eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
+
+            // Built independently from the same inputs so ordering, separator, which ten survive the cap
+            // and the omitted-count text are all pinned, rather than spot-checked.
+            var expected = IntStream.range(0, 10)
+                    .mapToObj(index -> "'arg_%02d' -> 'input.absent_%02d'".formatted(index, index))
+                    .collect(Collectors.joining(", ")) + " and 3 more";
+            assertThat(reported.getValue()).isEqualTo(expected);
+        }
+
+        @Test
+        void doesNotClaimItSentDataWhenNoDeclaredArgumentResolves() {
+            // The user reads one sink, in order. The guarded run used to log "Sending traceId ...
+            // 'arguments=[]'" immediately before the warning saying there was nothing to evaluate, so the
+            // rule log contradicted itself one line apart. Asserted as the whole sequence on purpose: a
+            // test that merely checked the warning was present would still pass with that line back.
+            // Load-bearing: a mock Logger answers isInfoEnabled() false by default, which suppresses the
+            // "Sending" line on its own and would make this assertion pass with or without the fix. Stubbed
+            // true so the suppression under test is the only thing that can keep that line out. lenient()
+            // because the fixed code short-circuits on the empty map and never reaches the level check.
+            lenient().when(userFacingLogger.isInfoEnabled()).thenReturn(true);
+            var message = sampleMessageWithUnresolvableArguments();
+
+            scorer.score(message).block();
+
+            assertThat(userFacingMessages()).containsExactly(EVALUATING_LOG, UNRESOLVED_ARGUMENTS_LOG);
+        }
+
+        @Test
+        void stillReportsSendingWhenThereIsDataToSend() {
+            // The suppression has to be conditional on emptiness, not unconditional — a run that really
+            // does send still has to say so, and still after the "Evaluating" line.
+            when(userFacingLogger.isInfoEnabled()).thenReturn(true);
+            var message = sampleMessage();
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of()));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            assertThat(userFacingMessages()).containsSubsequence(EVALUATING_LOG, SENDING_LOG);
+        }
+
+        @Test
         void propagatesEvaluatorErrorAndLogsMessage() {
             var message = sampleMessage();
             var error = new RuntimeException("Python BE timeout");
@@ -347,6 +464,18 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
     }
 
+    /**
+     * Every format string the user-facing sink received, in call order. Level checks such as
+     * {@code isInfoEnabled()} are recorded as zero-argument invocations and carry no message, so they are
+     * skipped rather than read as one.
+     */
+    private List<String> userFacingMessages() {
+        return mockingDetails(userFacingLogger).getInvocations().stream()
+                .filter(invocation -> invocation.getArguments().length > 0)
+                .map(invocation -> invocation.getArgument(0, String.class))
+                .toList();
+    }
+
     private TraceToScoreUserDefinedMetricPython sampleMessage() {
         return sampleMessageWithArguments(Map.of("input", "input.question", "output", "output.answer"));
     }
@@ -356,10 +485,27 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                 Map.of("input", "input.question", "output", "output.answer", "spans", "spans"));
     }
 
+    /**
+     * Mirrors the production shape: the metric declares `expects_sql` and `execution_plan`, the trace
+     * carries neither, so every declared argument resolves to null and the replacement map comes back
+     * empty.
+     */
+    private TraceToScoreUserDefinedMetricPython sampleMessageWithUnresolvableArguments() {
+        return sampleMessageWithArguments(
+                Map.of("expects_sql", "input.expects_sql", "plan", "output.execution_plan"));
+    }
+
     private TraceToScoreUserDefinedMetricPython sampleMessageWithArguments(Map<String, String> arguments) {
+        // Pin input/output instead of letting Podam fill them: the declared paths have to actually
+        // resolve, or every test here silently hands the evaluator an empty map — which is the very
+        // state OPIK-8556 is about, and is what let that defect through this suite unnoticed.
         var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                 .id(traceId)
                 .projectId(projectId)
+                .input(JsonUtils.getJsonNodeFromString(
+                        "{\"question\":\"%s\"}".formatted(RandomStringUtils.secure().nextAlphanumeric(16))))
+                .output(JsonUtils.getJsonNodeFromString(
+                        "{\"answer\":\"%s\"}".formatted(RandomStringUtils.secure().nextAlphanumeric(16))))
                 .build();
         return podamFactory.manufacturePojo(TraceToScoreUserDefinedMetricPython.class).toBuilder()
                 .trace(trace)
