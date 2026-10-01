@@ -614,6 +614,15 @@ const mapCustomOutputFormat = (
 };
 
 /**
+ * Returns the messages after the last user message, or all of them when there
+ * is no user message.
+ */
+const getReplyMessages = (messages: OpenAIMessage[]): OpenAIMessage[] => {
+  const lastUserIndex = messages.map((m) => m.role).lastIndexOf("user");
+  return lastUserIndex === -1 ? messages : messages.slice(lastUserIndex + 1);
+};
+
+/**
  * Maps OpenAI format data to normalized LLMMapperResult.
  * Supports multiple input and output formats.
  */
@@ -657,13 +666,23 @@ export const mapOpenAIMessages: FormatMapper = (data, prettifyConfig) => {
       return mapOpenAIOutput(data as OpenAIOutputData);
     }
 
-    // Conversation logged as output: [{ role, content }] or { messages: [...] }
+    // Conversation logged as output: [{ role, content }] or { messages: [...] }.
+    // Such outputs usually repeat the whole chat (the Open WebUI Opik filter
+    // logs the full history), and the input already shows the earlier turns,
+    // so keep only what follows the last user message: the reply.
     if (Array.isArray(data)) {
-      return mapDirectArrayInput(data as OpenAIDirectArrayInput, "output");
+      return mapDirectArrayInput(
+        getReplyMessages(data as OpenAIDirectArrayInput),
+        "output",
+      );
     }
 
     if (typeof data === "object" && "messages" in data) {
-      return mapOpenAIInput(data as OpenAIInputData, "output");
+      const { messages } = data as OpenAIInputData;
+      return mapOpenAIInput(
+        { messages: Array.isArray(messages) ? getReplyMessages(messages) : [] },
+        "output",
+      );
     }
   }
 

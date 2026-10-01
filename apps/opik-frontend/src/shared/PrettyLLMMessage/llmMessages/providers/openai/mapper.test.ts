@@ -186,25 +186,44 @@ describe("mapOpenAIMessages", () => {
       }
     });
 
-    it("should map a conversation logged as output", () => {
+    it("should map only the reply of a conversation logged as output", () => {
+      // The Open WebUI Opik filter logs the whole chat as output; the earlier
+      // turns are already in the input, so only the reply is mapped
       const data = {
-        model: "llama3.1:8b",
+        model: "gpt-4o-mini",
         messages: [
-          { id: "m-1", role: "user", content: "Hi" },
-          { id: "m-2", role: "assistant", content: "Hello! How can I help?" },
+          { id: "m-1", role: "user", content: "Capital of France?" },
+          { id: "m-2", role: "assistant", content: "Paris." },
+          { id: "m-3", role: "user", content: "And of Spain?" },
+          {
+            id: "m-4",
+            role: "assistant",
+            content: "Madrid.",
+            info: null,
+            output: [{ type: "message", role: "assistant", content: [] }],
+          },
+        ],
+      };
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("assistant");
+      expect(result.messages[0].id).toContain("output");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe("Madrid.");
+      }
+    });
+
+    it("should keep every message of an output conversation without a user turn", () => {
+      const data = {
+        messages: [
+          { role: "assistant", content: "Let me check." },
+          { role: "assistant", content: "Done." },
         ],
       };
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
       expect(result.messages).toHaveLength(2);
-      expect(result.messages[0].role).toBe("user");
-      expect(result.messages[1].role).toBe("assistant");
-      expect(result.messages[1].id).toContain("output");
-      if (result.messages[1].blocks[0].blockType === "text") {
-        expect(result.messages[1].blocks[0].props.children).toBe(
-          "Hello! How can I help?",
-        );
-      }
     });
 
     it("should map a direct message array logged as output", () => {
