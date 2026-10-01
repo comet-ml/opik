@@ -2,6 +2,7 @@ import {
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
+  OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
   ReasoningEffort,
@@ -479,13 +480,24 @@ export const supportsOpenAIReasoningEffort = (
   !!OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.reasoningEffortOptions;
 
+// An unknown pipeline mode (keys still loading, no OpenAI key, a surface that
+// never reaches Opik's OpenAI pipeline) is treated as Chat Completions, the
+// backend's own default: offering a Responses-only value there would 400.
 export const getOpenAIReasoningEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
-): Array<{ label: string; value: ReasoningEffort }> =>
-  (
-    OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-      ?.reasoningEffortOptions ?? []
-  ).map((value) => ({ label: OPENAI_EFFORT_LABELS[value], value }));
+  openAiPipelineMode?: OpenAiPipelineMode,
+): Array<{ label: string; value: ReasoningEffort }> => {
+  const capabilities = OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
+  const responsesApiOnly =
+    openAiPipelineMode === "responses_api"
+      ? capabilities?.responsesApiOnlyEffortOptions ?? []
+      : [];
+
+  return [
+    ...(capabilities?.reasoningEffortOptions ?? []),
+    ...responsesApiOnly,
+  ].map((value) => ({ label: OPENAI_EFFORT_LABELS[value], value }));
+};
 
 // Single reconciler called by every model-change handler (playground, judge
 // dialog). Keeping the rules here means the form state stays valid even when
@@ -503,6 +515,7 @@ export const updateProviderConfig = <
   params: {
     model: PROVIDER_MODEL_TYPE | "";
     provider: COMPOSED_PROVIDER_TYPE;
+    openAiPipelineMode?: OpenAiPipelineMode;
   },
 ): T | undefined => {
   if (!currentConfig) {
@@ -518,7 +531,10 @@ export const updateProviderConfig = <
     // reasoningEffort: drop it for models without an effort option list,
     // coerce stale values to "high" otherwise. Mirrors the Anthropic
     // thinkingEffort handling below.
-    const effortOptions = getOpenAIReasoningEffortOptions(params.model);
+    const effortOptions = getOpenAIReasoningEffortOptions(
+      params.model,
+      params.openAiPipelineMode,
+    );
     if (effortOptions.length === 0) {
       if (next.reasoningEffort !== undefined) {
         next.reasoningEffort = undefined;
@@ -695,6 +711,7 @@ export type EffortParams = {
 export const resolveEffort = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: EffortParams,
+  openAiPipelineMode?: OpenAiPipelineMode,
 ): EffortParams => {
   if (!model) {
     return { ...configs };
@@ -703,7 +720,7 @@ export const resolveEffort = (
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
   if (provider === PROVIDER_TYPE.OPEN_AI) {
-    const options = getOpenAIReasoningEffortOptions(model);
+    const options = getOpenAIReasoningEffortOptions(model, openAiPipelineMode);
     if (options.length === 0) {
       return {};
     }
@@ -735,6 +752,7 @@ export const resolveEffort = (
 export const sanitizeConfigForRequest = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: Record<string, unknown>,
+  openAiPipelineMode?: OpenAiPipelineMode,
 ): Record<string, unknown> => {
   if (!model) return configs;
 
@@ -779,7 +797,11 @@ export const sanitizeConfigForRequest = (
     provider === PROVIDER_TYPE.ANTHROPIC ||
     provider === PROVIDER_TYPE.OPEN_AI
   ) {
-    const effort = resolveEffort(model, configs as EffortParams);
+    const effort = resolveEffort(
+      model,
+      configs as EffortParams,
+      openAiPipelineMode,
+    );
     for (const key of ["reasoningEffort", "thinkingEffort"] as const) {
       if (effort[key] === undefined) {
         delete sanitized[key];

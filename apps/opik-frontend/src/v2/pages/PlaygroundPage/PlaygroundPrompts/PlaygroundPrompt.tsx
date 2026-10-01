@@ -59,6 +59,7 @@ import {
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
+import useOpenAiPipelineMode from "@/v2/pages-shared/llm/PromptModelSettings/useOpenAiPipelineMode";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -92,6 +93,7 @@ const PlaygroundPrompt = ({
   const datasetVariables = useDatasetVariables();
   const datasetSampleData = useDatasetSampleData();
   const providerValidationTrigger = useProviderValidationTrigger();
+  const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
 
   const [, setLastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -216,6 +218,7 @@ const PlaygroundPrompt = ({
         const adjustedConfigs = updateProviderConfig(configs, {
           model: newModel,
           provider: newProvider,
+          openAiPipelineMode,
         });
         newConfigs = adjustedConfigs || configs;
       }
@@ -227,7 +230,14 @@ const PlaygroundPrompt = ({
       });
       setLastPickedModel(newModel);
     },
-    [updatePrompt, promptId, provider, configs, setLastPickedModel],
+    [
+      updatePrompt,
+      promptId,
+      provider,
+      configs,
+      setLastPickedModel,
+      openAiPipelineMode,
+    ],
   );
 
   const handleAddProvider = useCallback(
@@ -367,6 +377,7 @@ const PlaygroundPrompt = ({
             model={model}
             configs={configs}
             onChange={handleUpdateConfig}
+            openAiPipelineMode={openAiPipelineMode}
             size="icon-xs"
             variant="ghost"
           />
