@@ -14,6 +14,9 @@ import time
 from typing import Tuple
 from unittest import mock
 
+import pytest
+
+from opik.api_objects import opik_client
 from opik.healthcheck import connection_monitor
 from opik.message_processing import (
     data_loss,
@@ -93,25 +96,37 @@ def _delivered(processor: mock.Mock) -> list:
     return sorted(call.args[0].trace_id for call in processor.process.call_args_list)
 
 
+@pytest.fixture
+def streamer_stack(fake_file_upload_manager):
+    """A streamer on a real replay store, torn down whatever the test does.
+
+    A yield fixture rather than a try/finally in each test: a failing assertion in
+    the middle of a test would otherwise skip the cleanup and leave the consumer
+    thread and the replay manager's SQLite connection open for the rest of the
+    session.
+    """
+    st, rm, processor = _build(fake_file_upload_manager)
+    try:
+        yield st, rm, processor
+    finally:
+        st.close(flush=False)
+
+
 class TestReplayBeforeShutdownTeardown:
-    def test_flush_alone__replays_parked_messages(self, fake_file_upload_manager):
+    def test_flush_alone__replays_parked_messages(self, streamer_stack):
         """The control: `flush()` on its own already replays them correctly."""
-        st, rm, processor = _build(fake_file_upload_manager)
-        try:
-            _park_failed(rm)
-            assert rm.database_manager.failed_messages_count() == 3
+        st, rm, processor = streamer_stack
 
-            flushed = st.flush(timeout=5)
-            time.sleep(0.3)
+        _park_failed(rm)
+        assert rm.database_manager.failed_messages_count() == 3
 
-            assert flushed is True
-            assert _delivered(processor) == PARKED_TRACE_IDS
-        finally:
-            st.close(flush=False)
+        flushed = st.flush(timeout=5)
+        time.sleep(0.3)
 
-    def test_close_flush__replays_parked_messages_before_teardown(
-        self, fake_file_upload_manager
-    ):
+        assert flushed is True
+        assert _delivered(processor) == PARKED_TRACE_IDS
+
+    def test_close_flush__replays_parked_messages_before_teardown(self, streamer_stack):
         """`close(flush=True)` must replay, not destroy.
 
         The caller is told everything was fine (`flushed is True`,
@@ -119,7 +134,7 @@ class TestReplayBeforeShutdownTeardown:
         deleted from the replay store, so this is a silent loss on the default
         shutdown path -- which is also what the `atexit` hook uses.
         """
-        st, rm, processor = _build(fake_file_upload_manager)
+        st, rm, processor = streamer_stack
         tracker = data_loss.DataLossTracker()
         reporter = flush_reporter.FlushReporter(streamer=st, data_loss_tracker=tracker)
 
@@ -139,3 +154,35 @@ class TestReplayBeforeShutdownTeardown:
         # Every parked trace has to have reached the processor. On main the
         # replay store was closed before the flush, so none of them did.
         assert _delivered(processor) == PARKED_TRACE_IDS
+
+
+def test_opik_end__flush__replays_parked_messages_through_the_public_boundary(
+    fake_backend, fake_replay_manager
+):
+    """The same guarantee has to hold at the boundary users actually call.
+
+    `Streamer.close()` is what the two tests above drive. The durable shutdown a
+    user performs is `Opik.end()`, which reaches the streamer through
+    `ConnectionResourceManager.release()` -> `SharedConnectionResourcesBundle.close()`,
+    and that indirection is where a regression could hide: the streamer-level
+    tests stop short of it, and the manager-level tests use a fake bundle with no
+    replay store at all.
+
+    `fake_backend` keeps the transport real where it matters -- the streamer, its
+    consumer thread and the replay manager's SQLite store are all genuine -- and
+    only swaps the REST client for the backend emulator, so `process()` records
+    exactly the messages that reached delivery.
+    """
+    client = opik_client.Opik(_show_misconfiguration_message=False)
+
+    _park_failed(fake_replay_manager)
+    assert fake_replay_manager.database_manager.failed_messages_count() == 3
+
+    result = client.end(timeout=5)
+    time.sleep(0.3)
+
+    assert result is not None
+    assert result.success is True
+    assert result.dropped_messages == 0
+    assert result.dropped_items == 0
+    assert sorted(tree.id for tree in fake_backend.trace_trees) == PARKED_TRACE_IDS
