@@ -21,7 +21,10 @@ import {
   calculateIntervalType,
   calculateIntervalBounds,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect/utils";
-import { keepDataWhenOnlyWindowEndChanged } from "@/v2/pages-shared/traces/MetricDateRangeSelect/useIntervalBounds";
+import {
+  keepDataWhileWindowMoves,
+  windowQueryOptions,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect/useIntervalBounds";
 import { DateRangeValue } from "@/shared/DateRangeSelect";
 import { TOTAL_COST_LABEL, getChartConfig } from "./helpers";
 
@@ -165,11 +168,11 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
     logsSource,
   };
   const { data, isPending } = useProjectKpiCards(kpiCardsParams, {
-    placeholderData: keepDataWhenOnlyWindowEndChanged(
-      kpiCardsParams,
+    placeholderData: keepDataWhileWindowMoves(refetchInterval, kpiCardsParams, [
+      "intervalStart",
       "intervalEnd",
-    ),
-    refetchInterval,
+    ]),
+    ...windowQueryOptions(refetchInterval),
   });
 
   const metricsMap = useMemo(() => {

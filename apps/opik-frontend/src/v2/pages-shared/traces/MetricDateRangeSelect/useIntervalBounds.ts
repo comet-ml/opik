@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
-import { focusManager, QueryKey } from "@tanstack/react-query";
+import {
+  focusManager,
+  onlineManager,
+  QueryClient,
+  QueryKey,
+  useQueryClient,
+} from "@tanstack/react-query";
 import isEqual from "lodash/isEqual";
 import isObject from "lodash/isObject";
 import { DateRangeValue } from "@/shared/DateRangeSelect";
 import {
   calculateIntervalBounds,
   IntervalBounds,
-  isEndDateToday,
+  isLiveDateRange,
   reanchorIntervalBounds,
   serializeDateRange,
 } from "./utils";
 
 export const REANCHOR_INTERVAL = 30000;
+const LIVE_WINDOW_GC_TIME = 2 * 60 * 1000;
 
 type AnchoredBounds = {
   selectionKey: string;
@@ -25,10 +32,20 @@ const anchorToNow = (dateRange: DateRangeValue): AnchoredBounds => ({
   bounds: calculateIntervalBounds(dateRange),
 });
 
+const isFetchingWindow = (
+  queryClient: QueryClient,
+  { intervalEnd }: IntervalBounds,
+) =>
+  queryClient.isFetching({
+    predicate: ({ queryKey }) =>
+      isObject(queryKey[1]) && Object.values(queryKey[1]).includes(intervalEnd),
+  }) > 0;
+
 export const useIntervalBounds = (
   dateRange: DateRangeValue,
   isAutoReanchorEnabled = true,
 ) => {
+  const queryClient = useQueryClient();
   const [anchored, setAnchored] = useState(() => anchorToNow(dateRange));
 
   const isNewSelection =
@@ -36,19 +53,36 @@ export const useIntervalBounds = (
   const current = isNewSelection ? anchorToNow(dateRange) : anchored;
   if (isNewSelection) setAnchored(current);
 
-  const isLive = isEndDateToday(dateRange);
+  const isLive = isLiveDateRange(dateRange);
 
   useEffect(() => {
     if (!isLive || !isAutoReanchorEnabled) return;
 
-    const timer = setInterval(() => {
-      if (!focusManager.isFocused()) return;
+    const reanchorWhenIdle = () => {
+      if (
+        !focusManager.isFocused() ||
+        !onlineManager.isOnline() ||
+        isFetchingWindow(queryClient, anchored.bounds)
+      ) {
+        return;
+      }
 
       setAnchored(anchorToNow(anchored.dateRange));
-    }, REANCHOR_INTERVAL);
+    };
+    const reanchorOnReturn = (isBack: boolean) => {
+      if (isBack) reanchorWhenIdle();
+    };
 
-    return () => clearInterval(timer);
-  }, [anchored, isLive, isAutoReanchorEnabled]);
+    const timer = setInterval(reanchorWhenIdle, REANCHOR_INTERVAL);
+    const unsubscribeFocus = focusManager.subscribe(reanchorOnReturn);
+    const unsubscribeOnline = onlineManager.subscribe(reanchorOnReturn);
+
+    return () => {
+      clearInterval(timer);
+      unsubscribeFocus();
+      unsubscribeOnline();
+    };
+  }, [anchored, isLive, isAutoReanchorEnabled, queryClient]);
 
   const reanchorToNow = useCallback(() => {
     const next = reanchorIntervalBounds(current.dateRange, current.bounds);
@@ -60,6 +94,7 @@ export const useIntervalBounds = (
 
   return {
     ...current.bounds,
+    selectionKey: current.selectionKey,
     refetchInterval: isLive ? (false as const) : REANCHOR_INTERVAL,
     reanchorToNow,
   };
@@ -67,20 +102,35 @@ export const useIntervalBounds = (
 
 export type IntervalWindow = ReturnType<typeof useIntervalBounds>;
 
-const isOnlyWindowEndChange = (
+export const windowQueryOptions = (refetchInterval: number | false) =>
+  refetchInterval === false
+    ? {
+        refetchInterval,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        gcTime: LIVE_WINDOW_GC_TIME,
+      }
+    : { refetchInterval };
+
+type WindowFields<TParams> = readonly [
+  start: keyof TParams & string,
+  end: keyof TParams & string,
+];
+
+const isOnlyWindowChange = (
   previousParams: object,
   params: Record<string, unknown>,
-  windowEndField: string,
+  windowFields: readonly string[],
 ) =>
   Object.entries(previousParams).every(
     ([field, value]) =>
-      field === windowEndField || isEqual(value, params[field]),
+      windowFields.includes(field) || isEqual(value, params[field]),
   );
 
-export const keepDataWhenOnlyWindowEndChanged =
+export const keepDataWhenOnlyWindowChanged =
   <TParams extends Record<string, unknown>>(
     params: TParams,
-    windowEndField: keyof TParams & string,
+    windowFields: WindowFields<TParams>,
   ) =>
   <TData>(
     previousData: TData | undefined,
@@ -89,16 +139,25 @@ export const keepDataWhenOnlyWindowEndChanged =
     const previousParams = previousQuery?.queryKey[1];
 
     return isObject(previousParams) &&
-      isOnlyWindowEndChange(previousParams, params, windowEndField)
+      isOnlyWindowChange(previousParams, params, windowFields)
       ? previousData
       : undefined;
   };
 
-export const useIsOnlyWindowEndBehind = <
+export const keepDataWhileWindowMoves = <
   TParams extends Record<string, unknown>,
 >(
+  refetchInterval: number | false,
   params: TParams,
-  windowEndField: keyof TParams & string,
+  windowFields: WindowFields<TParams>,
+) =>
+  refetchInterval === false
+    ? keepDataWhenOnlyWindowChanged(params, windowFields)
+    : undefined;
+
+export const useIsOnlyWindowBehind = <TParams extends Record<string, unknown>>(
+  params: TParams,
+  windowFields: WindowFields<TParams>,
   isPlaceholderData: boolean,
 ) => {
   const [settledParams, setSettledParams] = useState(params);
@@ -107,7 +166,6 @@ export const useIsOnlyWindowEndBehind = <
   }
 
   return (
-    isPlaceholderData &&
-    isOnlyWindowEndChange(settledParams, params, windowEndField)
+    isPlaceholderData && isOnlyWindowChange(settledParams, params, windowFields)
   );
 };
