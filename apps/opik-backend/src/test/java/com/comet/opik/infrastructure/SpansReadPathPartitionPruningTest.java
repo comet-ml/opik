@@ -362,6 +362,40 @@ class SpansReadPathPartitionPruningTest {
                 .containsExactly(expectedWeek);
     }
 
+    @Test
+    void traceStatsCountSpansInWeeksOtherThanTheirTrace() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .projectName(projectName)
+                .feedbackScores(null)
+                .usage(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+        // The trace is in the window, one of its spans two weeks before it: the bound must still read that week.
+        spanResourceClient.batchCreateSpans(List.of(
+                newSpan(now, traceId).toBuilder().projectName(projectName).build(),
+                newSpan(FILLER_MONDAYS.get(1).atTime(12, 0).toInstant(ZoneOffset.UTC), traceId).toBuilder()
+                        .projectName(projectName).build()),
+                API_KEY, WORKSPACE_NAME);
+        // Spans either side of the trace-id window, each week one part, so the primary key cannot exclude it.
+        spanResourceClient.batchCreateSpans(Stream.of(FILLER_MONDAYS.get(0), FILLER_MONDAYS.get(2))
+                .flatMap(monday -> Stream.of(now.minus(Duration.ofHours(2)), now.plus(Duration.ofHours(1)))
+                        .map(traceAt -> newSpan(monday.atTime(12, 0).toInstant(ZoneOffset.UTC),
+                                ID_GENERATOR.getTimeOrderedEpoch(traceAt.toEpochMilli()))
+                                .toBuilder().projectName(projectName).build()))
+                .toList(), API_KEY, WORKSPACE_NAME);
+        var expected = traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY);
+
+        var stats = traceResourceClient.getTraceStats(null, projectId, API_KEY, WORKSPACE_NAME, null, Map.of(
+                "from_time", now.minus(Duration.ofHours(1)).toString(),
+                "to_time", now.plus(Duration.ofMinutes(5)).toString()));
+
+        assertThat(expected.spanCount()).isEqualTo(2);
+        TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectTraceStatItems(List.of(expected)));
+    }
+
     private void batchUpdateTags(Span span, Set<UUID> ids) {
         spanResourceClient.batchUpdateSpans(SpanBatchUpdate.builder()
                 .ids(ids)
