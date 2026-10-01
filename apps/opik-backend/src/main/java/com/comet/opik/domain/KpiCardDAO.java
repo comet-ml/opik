@@ -55,6 +55,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
     private final @NonNull OpikConfiguration configuration;
 
+    // The largest UUIDv7 (version 7, variant 0b10): every valid id sorts at or below it, so as an upper bound it
+    // excludes nothing, and its week bound saturates at the last representable week rather than wrapping.
+    private static final String MAX_UUID_V7 = "ffffffff-ffff-7fff-bfff-ffffffffffff";
+
     /**
      * trace_costs buckets the TOTAL_COST KPI into current/previous periods keyed on trace_id (a
      * UUIDv7 matching the trace id used for the count/error/duration split) and is CROSS JOINed as a
@@ -207,6 +211,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                           \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
                       AND trace_id IN (SELECT id FROM traces_filtered)
+                      <if(spans_partitioned)>
+                      AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT id FROM traces_filtered))
+                      <endif>
                     GROUP BY trace_id
                 )
             )
@@ -323,6 +332,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
+                    <if(spans_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id AND id >= :uuid_from_time AND id \\<= :uuid_to_time)
+                    <endif>
                     <if(span_filters)> AND <span_filters> <endif>
                     <if(span_feedback_scores_filters)>
                     AND id in (
@@ -520,6 +534,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
                           >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
                       AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                           \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
+                      <if(spans_partitioned)>
+                      AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id AND id >= :uuid_from_time AND id \\<= :uuid_to_time)
+                      <endif>
                 ) s
                 JOIN traces_final tr ON s.trace_id = tr.id
                 GROUP BY tr.thread_id
@@ -592,21 +611,34 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private ST buildTemplate(String query, KpiCardCriteria criteria, String workspaceId,
             String queryName) {
-        return getSTWithLogComment(query, "KpiCards_" + queryName, workspaceId, "", criteria.projectId().toString());
+        var template = getSTWithLogComment(query, "KpiCards_" + queryName, workspaceId, "",
+                criteria.projectId().toString());
+        // The span reads' upper bound is open without a requested end, so on the weekly-partitioned spans they carry
+        // the weeks their own matching span ids resolve to; on the legacy table there is nothing to prune.
+        if (spanColumnsNonNullable()) {
+            template.add("spans_partitioned", true);
+        }
+        return template;
     }
 
     private Statement buildStatement(Connection connection, ST template,
             KpiCardCriteria criteria, String workspaceId) {
-        Instant priorStart = getPriorStart(criteria.intervalStart(), criteria.intervalEnd());
+        // Without a requested end, now only sizes the prior period; the current one is open-ended so far-future ids
+        // count in it, as they do in the list.
+        Instant priorStart = getPriorStart(criteria.intervalStart(),
+                Optional.ofNullable(criteria.intervalEnd()).orElseGet(Instant::now));
+        var idEnd = Optional.ofNullable(criteria.intervalEnd())
+                .map(end -> instantToUUIDMapper.toUpperBound(end).toString())
+                .orElse(MAX_UUID_V7);
 
         return connection.createStatement(template.render())
                 .bind("project_id", criteria.projectId())
                 .bind("workspace_id", workspaceId)
                 .bind("uuid_from_time", instantToUUIDMapper.toLowerBound(priorStart).toString())
-                .bind("uuid_to_time", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString())
+                .bind("uuid_to_time", idEnd)
                 .bind("id_current_start", instantToUUIDMapper.toLowerBound(criteria.intervalStart()).toString())
                 .bind("id_prior_start", instantToUUIDMapper.toLowerBound(priorStart).toString())
-                .bind("id_end", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString());
+                .bind("id_end", idEnd);
     }
 
     private void addTraceFilters(ST template, List<? extends Filter> filters) {

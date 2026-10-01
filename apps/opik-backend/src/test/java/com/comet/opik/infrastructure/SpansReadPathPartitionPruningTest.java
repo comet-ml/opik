@@ -11,6 +11,8 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.metrics.KpiCardRequest;
+import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -58,6 +60,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -79,6 +82,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
@@ -394,6 +398,36 @@ class SpansReadPathPartitionPruningTest {
 
         assertThat(expected.spanCount()).isEqualTo(2);
         TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectTraceStatItems(List.of(expected)));
+    }
+
+    @Test
+    void kpiCostCountsAFarFutureSpanOfATraceInTheWindow() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .projectName(projectName)
+                .feedbackScores(null)
+                .usage(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+        // A span with a bad-clock id lands in a far-future week: only the span-weeks bound, not "now", still reads it.
+        spanResourceClient.batchCreateSpans(List.of(
+                newSpan(now, traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("1.25")).build(),
+                newSpan(Instant.parse("2201-08-30T03:18:08Z"), traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("2.5")).build()),
+                API_KEY, WORKSPACE_NAME);
+
+        var response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(KpiCardRequest.EntityType.TRACES)
+                .intervalStart(now.minus(Duration.ofHours(1)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        var totalCost = response.stats().stream()
+                .filter(metric -> metric.type() == KpiCardResponse.KpiMetricType.TOTAL_COST)
+                .findFirst().orElseThrow();
+        assertThat(totalCost.currentValue().doubleValue()).isCloseTo(3.75, within(1e-9));
     }
 
     private void batchUpdateTags(Span span, Set<UUID> ids) {

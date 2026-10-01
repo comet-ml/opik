@@ -271,7 +271,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 ORDER BY name, bucket
                 <if(with_fill)>WITH FILL
                     FROM <fill_from>
-                    TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time)), 0, 'UTC')
+                    TO <fill_to>
                     STEP <step><endif>
             )
             SELECT NULL AS project_id,
@@ -413,9 +413,12 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             if (isTotal) {
                 stTemplate.add("bucket", "toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_from_time)), 0, 'UTC')");
             } else {
+                var fillTo = fillTo(request.intervalEnd() != null);
                 stTemplate.add("step", intervalToSql(interval))
+                        .add("fill_to", fillTo)
                         .add("bucket", pinBucket(
-                                "toStartOfInterval(span_time, %s)".formatted(intervalToSql(interval))))
+                                "toStartOfInterval(least(span_time, %s), %s)".formatted(fillTo,
+                                        intervalToSql(interval))))
                         .add("fill_from", pinBucket(
                                 "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
                                         .formatted(intervalToSql(interval))));
@@ -434,17 +437,23 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                                     .ifPresent(rendered -> stTemplate.add(placeholder, rendered))));
 
             stTemplate.add("uuid_from_time", true);
-            stTemplate.add("uuid_to_time", true);
+            if (spanColumnsNonNullable()) {
+                stTemplate.add("spans_partitioned", true);
+            }
+            if (request.intervalEnd() != null) {
+                stTemplate.add("uuid_to_time", true);
+            }
             if (!isTotal) {
                 stTemplate.add("with_fill", true);
             }
 
-            var intervalEnd = request.intervalEnd() != null ? request.intervalEnd() : Instant.now();
             var statement = connection.createStatement(stTemplate.render())
                     .bind("uuid_from_time", instantToUUIDMapper.toLowerBound(request.intervalStart()).toString())
-                    .bind("uuid_to_time", instantToUUIDMapper.toUpperBound(intervalEnd).toString())
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", request.projectIds().toArray(new UUID[0]));
+            if (request.intervalEnd() != null) {
+                statement.bind("uuid_to_time", instantToUUIDMapper.toUpperBound(request.intervalEnd()).toString());
+            }
 
             if (request.hasBreakdown() && request.breakdown().field() == BreakdownField.METADATA) {
                 statement.bind("metadata_key", request.breakdown().metadataKey());
@@ -472,6 +481,13 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
      * three disagree (code 475). See {@code ProjectMetricsDAO.pinBucket} for why every interval needs it, and for
      * what it does <em>not</em> fix.
      */
+    /** See {@code ProjectMetricsDAO#fillTo}. */
+    private String fillTo(boolean hasEnd) {
+        return hasEnd
+                ? "toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time)), 0, 'UTC')"
+                : "toDateTime64(now64(0, 'UTC'), 0, 'UTC')";
+    }
+
     private String pinBucket(String stmt) {
         return "toDateTime64(%s, 0, 'UTC')".formatted(stmt);
     }
