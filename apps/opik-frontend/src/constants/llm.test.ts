@@ -48,7 +48,9 @@ const readBackendAnthropicModels = () => {
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry) => {
-      const id = idByConstant.get(entry.replace(/\.value$/, ""));
+      const constant = entry.match(/^(\w+)\.value$/)?.[1];
+      const id =
+        constant === undefined ? undefined : idByConstant.get(constant);
       if (!id) {
         throw new Error(
           `SAMPLING_CAPABLE_MODEL_IDS entry ${entry} is not an AnthropicModelName constant's .value`,
