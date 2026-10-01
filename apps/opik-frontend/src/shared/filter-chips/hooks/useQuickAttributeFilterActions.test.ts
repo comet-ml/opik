@@ -35,6 +35,13 @@ describe("resolveQuickFilterTarget", () => {
     ).toEqual({ chipId: "custom", key: "input.messages[0].content" });
   });
 
+  it("keeps the root separator before a bracket-quoted path", () => {
+    expect(resolveQuickFilterTarget("output", SPANS, '["a.b"]')).toEqual({
+      chipId: "custom",
+      key: 'output.["a.b"]',
+    });
+  });
+
   it("routes a span's root provider to the dedicated provider field", () => {
     expect(resolveQuickFilterTarget("metadata", SPANS, "provider")).toEqual({
       chipId: "provider",

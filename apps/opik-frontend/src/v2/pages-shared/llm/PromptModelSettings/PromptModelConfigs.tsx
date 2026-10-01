@@ -28,11 +28,11 @@ import OpenRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/pr
 import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
-import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { parseComposedProviderType } from "@/lib/provider";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 
 interface PromptModelConfigsProps {
   provider: COMPOSED_PROVIDER_TYPE;
@@ -129,7 +129,11 @@ const PromptModelConfigs = ({
     return;
   };
 
-  // Hide, not disable (as for decisions models): an empty panel misleads, and a disabled button can't say why.
+  const providerForm = getProviderForm();
+
+  // Hide, not disable (as for decisions models): an empty panel misleads, and a disabled button can't
+  // say why. Covers providers without a form and models with nothing to set on this surface. No
+  // provider yet keeps the disabled button, so it still hints at settings once a model is picked.
   if (
     composedProviderType &&
     !hasVisibleControls(provider, model ?? "", configs, unsupportedParams)
@@ -159,7 +163,7 @@ const PromptModelConfigs = ({
           className="mb-5 w-72"
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]}
         />
-        {getProviderForm()}
+        {providerForm}
       </DropdownMenuContent>
     </DropdownMenu>
   );
