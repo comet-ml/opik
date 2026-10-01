@@ -88,21 +88,29 @@ describe("OpenAI sampling params", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("offers every sampling slider for a chat-latest model, which is not a reasoning model", () => {
-    renderPanel(
-      <OpenAIModelConfigs
-        configs={OPEN_AI_CONFIG}
-        model={PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST}
-        onChange={vi.fn()}
-      />,
-    );
+  it.each([
+    PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_5_1_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST,
+  ])(
+    "offers every sampling slider for %s, which is not a reasoning model",
+    (model) => {
+      renderPanel(
+        <OpenAIModelConfigs
+          configs={OPEN_AI_CONFIG}
+          model={model}
+          onChange={vi.fn()}
+        />,
+      );
 
-    expect(screen.getByTestId("temperature-input")).toBeInTheDocument();
-    expect(screen.getByTestId("topP-input")).toBeInTheDocument();
-    expect(screen.getByTestId("frequencyPenalty-input")).toBeInTheDocument();
-    expect(screen.getByTestId("presencePenalty-input")).toBeInTheDocument();
-    expect(screen.queryByText("Reasoning effort")).not.toBeInTheDocument();
-  });
+      expect(screen.getByTestId("temperature-input")).toBeInTheDocument();
+      expect(screen.getByTestId("topP-input")).toBeInTheDocument();
+      expect(screen.getByTestId("frequencyPenalty-input")).toBeInTheDocument();
+      expect(screen.getByTestId("presencePenalty-input")).toBeInTheDocument();
+      expect(screen.queryByText("Reasoning effort")).not.toBeInTheDocument();
+    },
+  );
 });
 
 describe("Gemini sampling params", () => {
