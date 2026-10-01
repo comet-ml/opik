@@ -191,11 +191,11 @@ export const getThinkingLevelOptions = (
 // Each model's own default thinking level. Measured against the live API rather than taken from
 // Google's docs table, which disagrees with it: the docs list 3.5 Flash Lite as defaulting to
 // "minimal", but every Flash Lite model returns zero thinking tokens by default on both providers.
-// Preselecting the
-// documented default keeps the control from silently changing a model's behaviour just by being
-// shown: 2.5 Flash Lite ships with thinking off, 2.5 Pro/Flash default to a dynamic budget
-// ("auto"), 3.8/3.7/3.6/3.5 Flash default to medium, and 3.5 Flash Lite to minimal — none of which is
-// "high". Models absent here default to "high", which is what the Gemini 3 Pro rows document.
+// Preselecting the real default keeps the control from silently changing a model's behaviour just
+// by being shown: 2.5 Flash Lite ships with thinking off, 2.5 Pro/Flash default to a dynamic budget
+// ("auto"), 3.8/3.7/3.6/3.5 Flash default to medium, and the 3.x Flash Lite models to none — none
+// of which is "high". Models absent here default to "high", which is what the Gemini 3 Pro rows
+// document.
 const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
   PROVIDER_MODEL_TYPE,
   GeminiThinkingLevel
