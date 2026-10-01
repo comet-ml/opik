@@ -135,13 +135,6 @@ Walk me through my most recent session. What drove most of its cost?
 
 What one session did, step by step, and which cost category dominated it.
 
-## Reading the answers
-
-- **Two kinds of dollar figure.** *Billed* is what your organization pays: seat fees plus over-plan and API charges. *List price* is what the same tokens would cost at API rates. The agent says which one it is quoting.
-- **Rankings are by tokens.** Users on the same plan pay the same seat price, so tokens are what tell them apart. The session with the most tokens is not always the most expensive one, because cache reads cost far less than fresh input.
-- **"My" means you.** For questions about your own usage, the agent filters by your email, and asks for it if it doesn't know it.
-- **Prompt text is usually absent.** Cost Intelligence doesn't collect prompt or response content by default, so the agent describes a session from its tool calls and cost categories instead. See [Data, privacy and security](/cost-intelligence/data-privacy-security).
-
 ## Troubleshooting
 
 - **The agent finds no spend data, or reports $0.** Check that the workspace starts with `__ai_spend_`. Cost Intelligence support also needs `opik-mcp` 0.2.38 or later; if `uvx` is still running an older copy from its cache, run `uv cache clean opik-mcp`. Restart the coding agent after any change.
