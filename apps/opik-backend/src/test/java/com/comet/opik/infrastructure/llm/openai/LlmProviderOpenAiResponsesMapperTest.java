@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.openai.models.ReasoningEffort;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -17,6 +19,7 @@ import dev.langchain4j.model.openai.internal.chat.FunctionCall;
 import dev.langchain4j.model.openai.internal.chat.Tool;
 import dev.langchain4j.model.openai.internal.chat.ToolCall;
 import dev.langchain4j.model.openai.internal.chat.ToolType;
+import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatRequestParameters;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.ws.rs.BadRequestException;
@@ -27,6 +30,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Map;
@@ -146,6 +151,62 @@ class LlmProviderOpenAiResponsesMapperTest {
             var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
 
             assertThat(actual.maxOutputTokens()).isEqualTo(request.maxTokens());
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"none", "minimal", "low", "medium", "high", "xhigh", "max"})
+        void forwardsReasoningEffortUnchanged(String effort) {
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
+                    .reasoningEffort(effort)
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.parameters())
+                    .isInstanceOfSatisfying(OpenAiOfficialResponsesChatRequestParameters.class,
+                            parameters -> assertThat(parameters.reasoningEffort())
+                                    .isEqualTo(ReasoningEffort.of(effort)));
+        }
+
+        @Test
+        void keepsOtherParametersWhenReasoningEffortIsSet() {
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .maxCompletionTokens(512)
+                    .reasoningEffort("max")
+                    .tools(Tool.from(Function.builder()
+                            .name("get_weather")
+                            .parameters(Map.of("type", "object"))
+                            .build()))
+                    .responseFormat(dev.langchain4j.model.openai.internal.chat.ResponseFormat.builder()
+                            .type(dev.langchain4j.model.openai.internal.chat.ResponseFormatType.JSON_OBJECT)
+                            .build())
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.modelName()).isEqualTo(request.model());
+            assertThat(actual.temperature()).isEqualTo(request.temperature());
+            assertThat(actual.topP()).isEqualTo(request.topP());
+            assertThat(actual.maxOutputTokens()).isEqualTo(request.maxCompletionTokens());
+            assertThat(actual.responseFormat().type()).isEqualTo(ResponseFormatType.JSON);
+            assertThat(actual.toolSpecifications())
+                    .extracting(ToolSpecification::name)
+                    .containsExactly("get_weather");
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"  "})
+        void omitsReasoningEffortWhenBlank(String effort) {
+            var request = requestBuilder(DEFAULT_USER_MESSAGE)
+                    .reasoningEffort(effort)
+                    .build();
+
+            var actual = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+
+            assertThat(actual.parameters()).isNotInstanceOf(OpenAiOfficialResponsesChatRequestParameters.class);
         }
 
     }
