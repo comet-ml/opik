@@ -2503,9 +2503,25 @@ class TraceDAOImpl implements TraceDAO {
      * folded into the current week and counted as a recent error. Unlike the week bounds elsewhere in this DAO this
      * is not a pruning hint a wider id-range could recover — the expression <em>is</em> the bucketing decision, and
      * it reads {@code t.id} directly, so it was wrong on both schemas.
+     * <p>
+     * {@code spans_data} (here and in {@code SELECT_FEEDBACK_SCORES_STATS}) is keyed by a trace id-range, but spans
+     * partition on their own id, so under {@code spans_partitioned} it is bounded to {@code span_weeks}: the weeks the
+     * matching spans' own ids resolve to, read off the key and {@code id_at} without {@code FINAL}. Every row the read
+     * can return is in one of those weeks, so the bound prunes without assuming where a span sits relative to its
+     * trace, and a set rather than a min/max range so one far-future id cannot widen it across every week between.
      */
     private static final String SELECT_TRACES_SPANS_STATS = """
-             WITH spans_data AS (
+             WITH <if(spans_partitioned)>
+            span_weeks AS (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+            ),
+            <endif>
+             spans_data AS (
                 SELECT
                     id,
                     trace_id,
@@ -2519,6 +2535,9 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                <if(spans_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT week FROM span_weeks)
+                <endif>
              ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -2943,7 +2962,17 @@ class TraceDAOImpl implements TraceDAO {
     // them).
     private static final String SELECT_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
-            WITH spans_data AS (
+            WITH <if(spans_partitioned)>
+            span_weeks AS (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+            ),
+            <endif>
+            spans_data AS (
                 SELECT
                     id,
                     trace_id,
@@ -2957,6 +2986,9 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                <if(spans_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT week FROM span_weeks)
+                <endif>
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -3201,8 +3233,12 @@ class TraceDAOImpl implements TraceDAO {
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND project_id IN :project_ids
-                    <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                    <if(uuid_from_time)>AND id >= :uuid_from_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     AND <filters>
                 )
                 <endif>
@@ -4735,6 +4771,7 @@ class TraceDAOImpl implements TraceDAO {
                                 SELECT_TRACES_SPANS_STATS, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
                         template.add("log_comment", logComment);
                         template.add("has_legacy_scores", hasLegacyScores);
+                        addSpansPartitionedFlag(template);
 
                         var statement = connection.createStatement(template.render())
                                 .bind("project_ids", List.of(criteria.projectId()))
@@ -4942,6 +4979,7 @@ class TraceDAOImpl implements TraceDAO {
                                 "get_trace_stats_traces_spans_by_project_ids", workspaceId, "", projectIds.size());
                         template.add("project_stats", true);
                         template.add("has_legacy_scores", hasLegacyScores);
+                        addSpansPartitionedFlag(template);
                         if (uuidFromTime != null) {
                             template.add("uuid_from_time", true);
                         }

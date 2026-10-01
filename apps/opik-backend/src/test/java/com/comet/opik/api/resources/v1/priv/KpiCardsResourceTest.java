@@ -28,10 +28,12 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -270,6 +272,33 @@ class KpiCardsResourceTest {
         } else {
             assertNoMetric(response, KpiMetricType.ERRORS);
         }
+    }
+
+    @Test
+    @DisplayName("counts a far-future trace id in the current period when intervalEnd is null")
+    void nullIntervalEndCountsFarFutureTraces(TransactionTemplateAsync templateAsync) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        Instant intervalStart = Instant.now().minus(1, ChronoUnit.MINUTES);
+        traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build(), API_KEY, WORKSPACE_NAME);
+        // Inserted directly: ingestion rejects an id this far outside its validation window.
+        TraceDBUtils.createTraceViaDB(factory.manufacturePojo(Trace.class).toBuilder()
+                .id(idGenerator.generateId(Instant.parse("2201-08-30T03:18:08Z")))
+                .projectId(projectId)
+                .createdBy(USER)
+                .lastUpdatedBy(USER)
+                .build(), WORKSPACE_ID, templateAsync);
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.TRACES)
+                .intervalStart(intervalStart)
+                .intervalEnd(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertMetric(response, KpiMetricType.COUNT, 2.0, 0.0);
     }
 
     @ParameterizedTest
