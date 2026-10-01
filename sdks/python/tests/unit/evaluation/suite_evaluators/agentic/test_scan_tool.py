@@ -164,7 +164,10 @@ class TestScanAgainstActiveTrace:
 
 class TestQuotedSearchPathRoundTrip:
     def test_search__quoted_root_path__scan_recovers_cached_value(self):
-        for key in ("tool-results", "café"):
+        # `select` is an ordinary payload key (a column/projection selector), but
+        # the path parser lexes it as a keyword, so the path `search` reports has
+        # to be bracket-quoted for `scan` to accept it back.
+        for key in ("tool-results", "café", "select"):
             trace = _trace()
             ctx = _ctx(trace, [])
             ref = entity_ref.EntityRef(entity_ref.EntityType.TRACE, trace.id)
