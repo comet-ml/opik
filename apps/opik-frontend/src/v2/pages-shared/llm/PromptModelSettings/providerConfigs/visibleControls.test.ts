@@ -17,12 +17,13 @@ const ANTHROPIC_CONFIG = {
 
 const RULE_CONFIG = { temperature: 0.4 };
 
-const SAMPLING_CONFIG = { temperature: 0.4, maxCompletionTokens: 4000 };
+const TEMPERATURE_AND_MAX_TOKENS_CONFIG = {
+  temperature: 0.4,
+  maxCompletionTokens: 4000,
+};
 
-const NO_TEMPERATURE_RULE_PARAMS: ReadonlySet<ModelConfigParam> = new Set([
-  ...RULE_UNSUPPORTED_PARAMS,
-  "temperature",
-]);
+const RULE_UNSUPPORTED_PARAMS_WITH_TEMPERATURE: ReadonlySet<ModelConfigParam> =
+  new Set([...RULE_UNSUPPORTED_PARAMS, "temperature"]);
 
 describe("hasVisibleControls", () => {
   it("is false for a Claude model without sampling params on a rule", () => {
@@ -90,8 +91,8 @@ describe("hasVisibleControls", () => {
         hasVisibleControls(
           provider,
           model,
-          SAMPLING_CONFIG,
-          NO_TEMPERATURE_RULE_PARAMS,
+          TEMPERATURE_AND_MAX_TOKENS_CONFIG,
+          RULE_UNSUPPORTED_PARAMS_WITH_TEMPERATURE,
         ),
       ).toBe(false);
     },
@@ -108,7 +109,7 @@ describe("hasVisibleControls", () => {
         hasVisibleControls(
           provider,
           model,
-          SAMPLING_CONFIG,
+          TEMPERATURE_AND_MAX_TOKENS_CONFIG,
           new Set<ModelConfigParam>(["temperature"]),
         ),
       ).toBe(true);
@@ -121,7 +122,7 @@ describe("hasVisibleControls", () => {
         PROVIDER_TYPE.OPEN_ROUTER,
         PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
         RULE_CONFIG,
-        NO_TEMPERATURE_RULE_PARAMS,
+        RULE_UNSUPPORTED_PARAMS_WITH_TEMPERATURE,
       ),
     ).toBe(false);
   });
