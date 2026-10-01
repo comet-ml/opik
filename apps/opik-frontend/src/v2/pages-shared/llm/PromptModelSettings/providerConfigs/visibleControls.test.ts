@@ -125,11 +125,20 @@ describe("hasVisibleControls", () => {
     ).toBe(true);
   });
 
-  it.each([
-    PROVIDER_TYPE.OPIK_FREE,
-    PROVIDER_TYPE.OLLAMA,
-    PROVIDER_TYPE.BEDROCK,
-  ])("is false for %s, which has no panel", (provider) => {
-    expect(hasVisibleControls(provider, "", {})).toBe(false);
+  it.each([PROVIDER_TYPE.OLLAMA, PROVIDER_TYPE.BEDROCK])(
+    "is true for %s, which shares the custom panel and its JSON editor",
+    (provider) => {
+      expect(hasVisibleControls(provider, "", {})).toBe(true);
+      expect(
+        hasVisibleControls(provider, "", RULE_CONFIG, RULE_UNSUPPORTED_PARAMS),
+      ).toBe(true);
+      expect(
+        hasVisibleControls(provider, "", {}, OPTIMIZATION_UNSUPPORTED_PARAMS),
+      ).toBe(true);
+    },
+  );
+
+  it("is false for the Opik free model, which has no panel", () => {
+    expect(hasVisibleControls(PROVIDER_TYPE.OPIK_FREE, "", {})).toBe(false);
   });
 });
