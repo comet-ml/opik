@@ -143,7 +143,7 @@ export const DEFAULT_OPEN_ROUTER_CONFIGS = {
 
 export const DEFAULT_VERTEX_AI_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
   THROTTLING: 0,
   MAX_CONCURRENT_REQUESTS: 5,
@@ -159,6 +159,10 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   THROTTLING: 0,
   MAX_CONCURRENT_REQUESTS: 5,
 };
+
+// The backend chat-completions proxy has no field for the Anthropic effort and drops it; flip once
+// OPIK-8605 forwards output_config.effort.
+export const ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND = false;
 
 // Per-model Anthropic capabilities.
 //
@@ -194,11 +198,11 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
     supportsSamplingParams: true,
-    thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+    thinkingEffortOptions: ["low", "medium", "high", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
     supportsSamplingParams: true,
-    thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+    thinkingEffortOptions: ["low", "medium", "high", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: { supportsSamplingParams: true },
@@ -216,7 +220,9 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
 // (sampling params allowed, no reasoning-effort UI). Reasoning models must
 // specify the exact set of effort values they accept — OpenAI families
 // differ: o-series → low/medium/high; gpt-5 → minimal/low/medium/high;
-// gpt-5.1+ → none/low/medium/high. Sending an unsupported value 400s.
+// gpt-5.1 → none/low/medium/high; gpt-5.2 and later add xhigh (gpt-6-astra
+// has no none). Sending an unsupported value 400s; no model here accepts max
+// on Chat Completions.
 export const OPENAI_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
@@ -259,10 +265,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
     reasoning: true,
     reasoningEffortOptions: ["minimal", "low", "medium", "high"],
   },
-  [PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST]: {
-    reasoning: true,
-    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
-  },
+  [PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST]: { reasoning: false },
 
   // gpt-5.1+ — none replaces minimal
   [PROVIDER_MODEL_TYPE.GPT_5_1]: {
@@ -271,27 +274,21 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   },
   [PROVIDER_MODEL_TYPE.GPT_5_2]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
-  [PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST]: {
-    reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
-  },
-  [PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST]: {
-    reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
-  },
+  [PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST]: { reasoning: false },
+  [PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST]: { reasoning: false },
   [PROVIDER_MODEL_TYPE.GPT_5_4]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_4_MINI]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_4_NANO]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_5]: {
     reasoning: true,
@@ -299,39 +296,33 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   },
   [PROVIDER_MODEL_TYPE.GPT_5_6_LUNA]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh", "max"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_6_SOL]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh", "max"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_6_TERRA]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh", "max"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_6_ASTRA]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_6_LUNA]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_6_SOL]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_6_1_SOL]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
   },
 };
-
-// Reasoning models that require temperature = 1.0
-// These models do not support temperature = 0 and will fail if used
-// Note: GPT-5.2 Pro uses Responses API (/v1/responses) not Chat Completions, so it's excluded
-export const REASONING_MODELS = [
-  // GPT-5.2 family (chat models only - GPT-5.2 Pro uses Responses API)
-  PROVIDER_MODEL_TYPE.GPT_5_2,
-  PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
-  // GPT-5.1 family
-  PROVIDER_MODEL_TYPE.GPT_5_1,
-  // GPT-5 family
-  PROVIDER_MODEL_TYPE.GPT_5,
-  PROVIDER_MODEL_TYPE.GPT_5_MINI,
-  PROVIDER_MODEL_TYPE.GPT_5_NANO,
-  PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
-  // O* reasoning models
-  PROVIDER_MODEL_TYPE.GPT_O1,
-  PROVIDER_MODEL_TYPE.GPT_O1_MINI,
-  PROVIDER_MODEL_TYPE.GPT_O3,
-  PROVIDER_MODEL_TYPE.GPT_O3_MINI,
-  PROVIDER_MODEL_TYPE.GPT_O4_MINI,
-] as const;
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",

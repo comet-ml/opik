@@ -342,7 +342,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                         const previousModel = field.value;
                         field.onChange(m);
                         handleModelTransition(previousModel, m);
-                        // Update config to ensure reasoning models have temperature >= 1.0
                         const currentConfig = form.getValues(
                           "llmJudgeDetails.config",
                         );
