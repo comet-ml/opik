@@ -1,9 +1,11 @@
 import React from "react";
-import isUndefined from "lodash/isUndefined";
 import { resolveSamplingParams } from "@/lib/modelUtils";
-import ExclusiveSamplingParams, {
-  resolveSamplingPresentation,
-} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
+import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
+import {
+  createSupports,
+  getOpenRouterVisibleControls,
+  isAnyControlVisible,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import {
@@ -27,12 +29,15 @@ const OpenRouterModelConfigs = ({
   model,
   unsupportedParams,
 }: OpenRouterModelConfigsProps) => {
-  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
-  const sampling = resolveSamplingPresentation(model);
+  const supports = createSupports(unsupportedParams);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const visible = getOpenRouterVisibleControls({ model, configs, supports });
+
+  if (!isAnyControlVisible(visible)) return null;
+
   return (
     <div className="flex w-72 flex-col gap-4">
-      {sampling === "none" ? null : sampling === "exclusive" ? (
+      {visible.samplingParams && (
         <ExclusiveSamplingParams
           temperature={temperature}
           topP={topP}
@@ -41,26 +46,23 @@ const OpenRouterModelConfigs = ({
           offerChoice={supports("topP")}
           onChange={onChange}
         />
-      ) : (
-        <>
-          {!isUndefined(configs.temperature) && (
-            <SliderInputControl
-              value={configs.temperature}
-              onChange={(v) => onChange({ temperature: v })}
-              id="temperature"
-              min={0}
-              max={2}
-              step={0.01}
-              defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
-              label="Temperature"
-              tooltip={
-                <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
-              }
-            />
-          )}
-        </>
       )}
-      {!isUndefined(configs.maxTokens) && (
+      {visible.temperature && (
+        <SliderInputControl
+          value={configs.temperature}
+          onChange={(v) => onChange({ temperature: v })}
+          id="temperature"
+          min={0}
+          max={2}
+          step={0.01}
+          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
+          label="Temperature"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+          }
+        />
+      )}
+      {visible.maxTokens && (
         <SliderInputControl
           value={configs.maxTokens}
           onChange={(v) => onChange({ maxTokens: v })}
@@ -75,24 +77,22 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {sampling === "independent" &&
-        supports("topP") &&
-        !isUndefined(configs.topP) && (
-          <SliderInputControl
-            value={configs.topP}
-            onChange={(v) => onChange({ topP: v })}
-            id="topP"
-            min={0}
-            max={1}
-            step={0.01}
-            defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
-            label="Top P"
-            tooltip={
-              <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
-            }
-          />
-        )}
-      {!isUndefined(configs.topK) && (
+      {visible.topP && (
+        <SliderInputControl
+          value={configs.topP}
+          onChange={(v) => onChange({ topP: v })}
+          id="topP"
+          min={0}
+          max={1}
+          step={0.01}
+          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
+          label="Top P"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
+          }
+        />
+      )}
+      {visible.topK && (
         <SliderInputControl
           value={configs.topK}
           onChange={(v) => onChange({ topK: v })}
@@ -107,7 +107,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.frequencyPenalty) && (
+      {visible.frequencyPenalty && (
         <SliderInputControl
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
@@ -122,7 +122,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.presencePenalty) && (
+      {visible.presencePenalty && (
         <SliderInputControl
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
@@ -137,7 +137,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.repetitionPenalty) && (
+      {visible.repetitionPenalty && (
         <SliderInputControl
           value={configs.repetitionPenalty}
           onChange={(v) => onChange({ repetitionPenalty: v })}
@@ -152,7 +152,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.minP) && (
+      {visible.minP && (
         <SliderInputControl
           value={configs.minP}
           onChange={(v) => onChange({ minP: v })}
@@ -167,7 +167,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.topA) && (
+      {visible.topA && (
         <SliderInputControl
           value={configs.topA}
           onChange={(v) => onChange({ topA: v })}
@@ -186,7 +186,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {supports("throttling") && (
+      {visible.throttling && (
         <SliderInputControl
           value={configs.throttling ?? DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
           onChange={(v) => onChange({ throttling: v })}
@@ -201,7 +201,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {supports("maxConcurrentRequests") && (
+      {visible.maxConcurrentRequests && (
         <SliderInputControl
           value={
             configs.maxConcurrentRequests ??

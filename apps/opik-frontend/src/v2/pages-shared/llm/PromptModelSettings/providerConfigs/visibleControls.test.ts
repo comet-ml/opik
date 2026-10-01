@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { hasVisibleControls } from "./visibleControls";
-import { RULE_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import {
+  OPTIMIZATION_UNSUPPORTED_PARAMS,
+  RULE_UNSUPPORTED_PARAMS,
+} from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { getDefaultConfigByProvider } from "@/lib/playground";
 
 const ANTHROPIC_CONFIG = {
   temperature: 0.4,
@@ -69,14 +73,62 @@ describe("hasVisibleControls", () => {
     ).toBe(false);
   });
 
-  it.each([PROVIDER_TYPE.OPEN_ROUTER, PROVIDER_TYPE.CUSTOM])(
-    "is true for %s, whose panel always has a control",
-    (provider) => {
-      expect(
-        hasVisibleControls(provider, "", RULE_CONFIG, RULE_UNSUPPORTED_PARAMS),
-      ).toBe(true);
-    },
-  );
+  it("is true for openrouter with a temperature on a rule", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        "",
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(true);
+  });
+
+  it("is false for openrouter on the optimizer, whose config starts empty", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        {},
+        OPTIMIZATION_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it("is false for an openrouter Claude model without sampling params on a rule", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it("is true for openrouter on the playground with its default config", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        getDefaultConfigByProvider(
+          PROVIDER_TYPE.OPEN_ROUTER,
+          PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("is true for a custom provider, whose JSON editor always renders", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.CUSTOM,
+        "",
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(true);
+  });
 
   it.each([
     PROVIDER_TYPE.OPIK_FREE,

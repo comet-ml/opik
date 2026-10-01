@@ -76,6 +76,7 @@ OPENAI_EXCLUDE_PATTERNS = [
 OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")
 
 # LiteLLM flags these as reasoning, but OpenAI rejects reasoning_effort on them ("Invalid 'reasoning_effort' for non-reasoning model") and the frontend pins them non-reasoning.
+# gpt-5.1-chat-latest stays out on purpose: Azure's reasoning-models table lists gpt-5.1-chat as a reasoning model that takes reasoning_effort, unlike the 5, 5.2 and 5.3 chat-latest models, which return 400 on it.
 OPENAI_NON_REASONING_MODELS = {"gpt-5-chat-latest", "gpt-5.2-chat-latest", "gpt-5.3-chat-latest"}
 
 ANTHROPIC_EXCLUDE_PATTERNS = [
@@ -479,7 +480,7 @@ def fetch_gemini_models(api_key: str) -> list[tuple[str, str]]:
         page_token = data.get("nextPageToken")
         if not page_token:
             break
-    return sorted(set(results), key=lambda x: x[0])
+    return sorted(set(results))
 
 
 def load_model_prices() -> dict:
@@ -1147,9 +1148,24 @@ def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
     return sorted(vertexai_all.items(), key=lambda x: x[0])
 
 
-def _should_write_files(total_added: int, yaml_changed: bool, force_regen: bool) -> bool:
-    # A seeded capability flag or a dropdown change can alter the YAML on a day without new models.
-    return total_added > 0 or yaml_changed or force_regen
+def _seeded_reasoning_ids(
+    existing_yaml_content: str, openai_entries: list[ModelEntry], openai_reasoning: dict[str, bool]
+) -> list[str]:
+    already_flagged = _parse_yaml_reasoning_flags(existing_yaml_content).get("openai", {})
+    return sorted(
+        entry.value
+        for entry in openai_entries
+        if openai_reasoning.get(entry.value, False)
+        and entry.value not in OPENAI_NON_REASONING_MODELS
+        and entry.value not in already_flagged
+    )
+
+
+def _should_write_files(
+    total_added: int, seeded_reasoning: list[str], force_regen: bool, fell_back: bool
+) -> bool:
+    # A fallback run swaps in the prices JSON's labels, flags and dropdown; publishing that without new models would repeat every day the key stays broken.
+    return total_added > 0 or (bool(seeded_reasoning) and not fell_back) or force_regen
 
 
 def main():
@@ -1163,6 +1179,7 @@ def main():
     openai_key = os.environ.get("OPENAI_API_KEY")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     gemini_key = os.environ.get("GEMINI_API_KEY")
+    fell_back = False
 
     prices = load_model_prices()
     so_lookup = _build_structured_output_lookup(prices)
@@ -1188,6 +1205,7 @@ def main():
             print(f"  Found {len(openai_models)} models from API", file=sys.stderr)
         except Exception as e:
             print(f"  WARNING: OpenAI API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
+            fell_back = True
             openai_models = extract_models_from_prices(prices, "openai", OPENAI_EXCLUDE_PATTERNS)
     else:
         print("  OpenAI: using prices JSON (no OPENAI_API_KEY)", file=sys.stderr)
@@ -1204,6 +1222,7 @@ def main():
             print(f"  Found {len(anthropic_models)} models from API", file=sys.stderr)
         except Exception as e:
             print(f"::warning::Anthropic API fetch failed, falling back to prices JSON (model list will lack API display names): {e}", file=sys.stderr)
+            fell_back = True
             anthropic_models = extract_models_from_prices(prices, "anthropic", ANTHROPIC_EXCLUDE_PATTERNS)
     else:
         print("::warning::Anthropic: using prices JSON (no ANTHROPIC_API_KEY); model list will lack API display names", file=sys.stderr)
@@ -1220,6 +1239,7 @@ def main():
             print(f"  Found {len(gemini_models)} models from API", file=sys.stderr)
         except Exception as e:
             print(f"  WARNING: Gemini API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
+            fell_back = True
             gemini_models = extract_models_from_prices(
                 prices, "gemini", GEMINI_EXCLUDE_PATTERNS, key_prefix="gemini/"
             )
@@ -1290,11 +1310,14 @@ def main():
     # section in curated order and carry human-readable labels; the rest
     # follow alphabetically without a label.
     llm_models_yaml_content = read_file(LLM_MODELS_YAML)
+    openai_reasoning = _build_reasoning_lookup(prices)
     new_llm_models_yaml = regenerate_llm_models_yaml(
         llm_models_yaml_content, models_by_provider, dropdown_by_provider,
-        openai_reasoning=_build_reasoning_lookup(prices),
+        openai_reasoning=openai_reasoning,
     )
-    yaml_changed = new_llm_models_yaml != llm_models_yaml_content
+    seeded_reasoning = _seeded_reasoning_ids(
+        llm_models_yaml_content, models_by_provider["openai"], openai_reasoning,
+    )
 
     # 5. Print summary
     total_added = 0
@@ -1333,13 +1356,16 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if yaml_changed and total_added == 0:
+    if seeded_reasoning:
         print("### Registry")
-        print("- llm-models-default.yaml changed without new models (capability flags or dropdown membership)")
+        for model_id in seeded_reasoning:
+            print(f"  + {model_id} (reasoning)")
         print()
 
-    if not _should_write_files(total_added, yaml_changed, args.force_regen):
-        if total_stale > 0:
+    if not _should_write_files(total_added, seeded_reasoning, args.force_regen, fell_back):
+        if seeded_reasoning:
+            print("A provider API call failed: fallback data not published; retry when the API is reachable.")
+        elif total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
         else:
             print("No changes found.")

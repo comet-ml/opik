@@ -221,8 +221,8 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
 // specify the exact set of effort values they accept — OpenAI families
 // differ: o-series → low/medium/high; gpt-5 → minimal/low/medium/high;
 // gpt-5.1 → none/low/medium/high; gpt-5.2 and later add xhigh (gpt-6-astra
-// has no none). Sending an unsupported value 400s; no model here accepts max
-// on Chat Completions.
+// and gpt-6.1-sol have no none). Sending an unsupported value 400s; no model
+// here accepts max on Chat Completions.
 export const OPENAI_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,

@@ -4,6 +4,7 @@ import {
   LLMAnthropicConfigsType,
   LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
+  LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
   LLMVertexAIConfigsType,
   PROVIDER_MODEL_TYPE,
@@ -18,6 +19,7 @@ import {
   supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { resolveSamplingPresentation } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 
 export type SupportsParam = (param: ModelConfigParam) => boolean;
 
@@ -113,6 +115,34 @@ export const getVertexAIVisibleControls = (
     supportsVertexAIThinkingLevel(input.model),
   );
 
+export const getOpenRouterVisibleControls = ({
+  model,
+  configs,
+  supports,
+}: VisibleControlsInput<Partial<LLMOpenRouterConfigsType>>) => {
+  const sampling = resolveSamplingPresentation(model);
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const independent = sampling === "independent";
+
+  return {
+    // ExclusiveSamplingParams renders nothing when it can offer no choice and neither half is live.
+    samplingParams:
+      sampling === "exclusive" &&
+      (supports("topP") || !isUndefined(temperature) || !isUndefined(topP)),
+    temperature: independent && !isUndefined(configs.temperature),
+    maxTokens: !isUndefined(configs.maxTokens),
+    topP: independent && supports("topP") && !isUndefined(configs.topP),
+    topK: !isUndefined(configs.topK),
+    frequencyPenalty: !isUndefined(configs.frequencyPenalty),
+    presencePenalty: !isUndefined(configs.presencePenalty),
+    repetitionPenalty: !isUndefined(configs.repetitionPenalty),
+    minP: !isUndefined(configs.minP),
+    topA: !isUndefined(configs.topA),
+    throttling: supports("throttling"),
+    maxConcurrentRequests: supports("maxConcurrentRequests"),
+  };
+};
+
 export const hasVisibleControls = (
   provider: PROVIDER_TYPE,
   model: PROVIDER_MODEL_TYPE | "",
@@ -155,6 +185,13 @@ export const hasVisibleControls = (
         }),
       );
     case PROVIDER_TYPE.OPEN_ROUTER:
+      return isAnyControlVisible(
+        getOpenRouterVisibleControls({
+          model,
+          configs: configs as Partial<LLMOpenRouterConfigsType>,
+          supports,
+        }),
+      );
     case PROVIDER_TYPE.CUSTOM:
       return true;
     default:
