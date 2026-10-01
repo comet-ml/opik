@@ -11,10 +11,13 @@ first; testing it second made that branch unreachable.
 
 import pytest
 
-from opik.integrations.haystack import constants
-from opik.integrations.haystack.opik_span_bridge import OpikSpanBridge
+# `opik.integrations.haystack.opik_span_bridge` imports haystack at module
+# level, so the skip has to come before those imports: importing first turns a
+# missing optional dependency into a collection error instead of a skip.
+haystack = pytest.importorskip("haystack")
 
-pytest.importorskip("haystack")
+from opik.integrations.haystack import constants  # noqa: E402
+from opik.integrations.haystack.opik_span_bridge import OpikSpanBridge  # noqa: E402
 
 AZURE_COMPONENTS = [
     component
@@ -22,6 +25,8 @@ AZURE_COMPONENTS = [
     if "Azure" in component
 ]
 
+# Every component the integration advertises, so a newly supported component
+# fails here until its provider is spelled out.
 EXPECTED_PROVIDERS = {
     "AzureOpenAIGenerator": "azure",
     "AzureOpenAIChatGenerator": "azure",
@@ -31,6 +36,8 @@ EXPECTED_PROVIDERS = {
     "AnthropicChatGenerator": "anthropic",
     "HuggingFaceAPIGenerator": "huggingface",
     "HuggingFaceAPIChatGenerator": "huggingface",
+    "HuggingFaceLocalGenerator": "huggingface",
+    "HuggingFaceLocalChatGenerator": "huggingface",
     "CohereGenerator": "cohere",
     "CohereChatGenerator": "cohere",
 }
@@ -40,6 +47,12 @@ EXPECTED_PROVIDERS = {
 def bridge() -> OpikSpanBridge:
     # The method is pure -- it reads only its argument -- so no wiring needed.
     return OpikSpanBridge.__new__(OpikSpanBridge)
+
+
+def test_expected_providers_cover_every_supported_component():
+    # Without this, a component added to the integration would silently go
+    # untested rather than failing.
+    assert sorted(EXPECTED_PROVIDERS) == sorted(constants.ALL_SUPPORTED_GENERATORS)
 
 
 def test_supported_components_contain_the_azure_ones():
@@ -62,7 +75,9 @@ def test_extract_provider_from_component_type(
     assert bridge._extract_provider_from_component_type(component_type) == expected
 
 
-def test_azure_and_openai_spans_are_not_recorded_identically(bridge: OpikSpanBridge):
+def test_azure_and_openai_component_types_extract_different_providers(
+    bridge: OpikSpanBridge,
+):
     # The user-visible consequence: two spans for the same model, one through
     # Azure and one through OpenAI, were indistinguishable by provider.
     azure = bridge._extract_provider_from_component_type("AzureOpenAIChatGenerator")
