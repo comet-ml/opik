@@ -58,7 +58,6 @@ describe("controls an evaluator rule cannot store", () => {
     expect(
       screen.queryByTestId("maxConcurrentRequests-input"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Thinking effort")).not.toBeInTheDocument();
     // LlmAsJudgeModelParameters has no max-tokens field, so the converter drops whatever this
     // slider wrote. Anthropic is the one panel that renders it unconditionally rather than only
     // when the config carries the key, so it reached the rule form.
@@ -83,6 +82,19 @@ describe("controls an evaluator rule cannot store", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Reasoning effort")).not.toBeInTheDocument();
   });
+
+  it("keeps the Anthropic effort, which a rule stores in custom_parameters.output_config", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={ANTHROPIC_CONFIG}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+      />,
+    );
+
+    expect(screen.getByText("Thinking effort")).toBeInTheDocument();
+  });
 });
 
 describe("the playground and the optimizer", () => {
@@ -99,7 +111,7 @@ describe("the playground and the optimizer", () => {
     expect(
       screen.getByTestId("maxConcurrentRequests-input"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Thinking effort")).not.toBeInTheDocument();
+    expect(screen.getByText("Thinking effort")).toBeInTheDocument();
     expect(screen.getByTestId("maxCompletionTokens-input")).toBeInTheDocument();
   });
 
@@ -121,8 +133,22 @@ describe("the playground and the optimizer", () => {
 });
 
 describe("a panel left with no control", () => {
-  it("renders nothing for a Claude model without sampling params on a rule", () => {
+  it("renders nothing on a rule for a newly synced Claude with no capability row", () => {
+    // Taken to accept no sampling params, and without a row there is no effort to offer either.
     const { container } = renderPanel(
+      <AnthropicModelConfigs
+        configs={ANTHROPIC_CONFIG}
+        model={"claude-opus-9" as PROVIDER_MODEL_TYPE}
+        onChange={vi.fn()}
+        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+      />,
+    );
+
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("keeps the effort for a Claude model without sampling params on a rule", () => {
+    renderPanel(
       <AnthropicModelConfigs
         configs={ANTHROPIC_CONFIG}
         model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5}
@@ -131,7 +157,8 @@ describe("a panel left with no control", () => {
       />,
     );
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText("Thinking effort")).toBeInTheDocument();
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
   });
 
   it("renders nothing for an OpenAI reasoning model on a rule", () => {

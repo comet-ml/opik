@@ -126,6 +126,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_MYTHOS_PREVIEW = "claude-mythos-preview",
   CLAUDE_OPUS_4_6_20260205 = "claude-opus-4-6-20260205",
   CLAUDE_OPUS_4_7_20260416 = "claude-opus-4-7-20260416",
+  CLAUDE_OPUS_5_5 = "claude-opus-5-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
