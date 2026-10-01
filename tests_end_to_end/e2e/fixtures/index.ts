@@ -1,4 +1,4 @@
-export { test, expect } from './quick-filter-logs.fixture';
+export { test, expect } from './model-registry-providers.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -262,4 +262,13 @@ export {
   QUICK_FILTER_SEED,
   TRACE_PROVIDER_METADATA_VALUE,
 } from './quick-filter-logs.fixture';
+export type {
+  ModelRegistryProvidersRef,
+  ModelRegistryProvidersFixtures,
+} from './model-registry-providers.fixture';
+export {
+  REGISTRY_PROVIDERS,
+  PROVIDER_GROUP,
+  REGISTRY_MODEL,
+} from './model-registry-providers.fixture';
 export type { ProjectRef } from '../core/backend';

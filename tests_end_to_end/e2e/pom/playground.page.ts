@@ -892,6 +892,82 @@ export class PlaygroundPage {
   }
 
   /**
+   * Select a model from a NAMED provider group.
+   *
+   * `selectModel` takes the first option matching the display name, which is
+   * ambiguous for a model two providers both offer under one label: "Gemini 3
+   * Flash Preview" is `gemini-3-flash-preview` under Gemini and
+   * `vertex_ai/gemini-3-flash-preview` under Vertex AI. Those are the two
+   * spellings the generation gate has to strip a prefix off, so they are
+   * exactly the pair a spec must be able to tell apart — and taking `.first()`
+   * would have it silently assert the same one twice.
+   *
+   * While the search box holds text the picker renders a flat list grouped by
+   * provider, each group labelled, which is what makes the scope available.
+   */
+  async selectModelFromProvider(
+    index: number,
+    providerGroup: string,
+    modelDisplayName: string,
+  ): Promise<void> {
+    return test.step(
+      `select "${modelDisplayName}" from the ${providerGroup} group for variant ${index}`,
+      async () => {
+        assertAllowedModelDisplayName(modelDisplayName);
+        const listbox = this.page.getByRole('listbox');
+        await expect(async () => {
+          await this.modelPicker(index).click();
+          await expect(listbox).toBeVisible({ timeout: 2_000 });
+        }).toPass({ timeout: 15_000 });
+
+        // Re-filtered and re-clicked for the same reason as setModelForVariant:
+        // the option list remounts when /llm/models resolves, detaching options
+        // mid-click.
+        await expect(async () => {
+          await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+          // By the group's accessible NAME, which Radix takes from its
+          // `SelectLabel`, not by its text: a `hasText` filter for "Gemini"
+          // also matches the Vertex AI group, whose options are all called
+          // "Gemini …". Exact, so "Gemini" cannot select "Gemini (legacy)".
+          const group = listbox.getByRole('group', { name: providerGroup, exact: true });
+          // Exactly one group, so a provider label that stopped being unique
+          // fails here instead of selecting from whichever matched first.
+          await expect(group, `the ${providerGroup} provider group`).toHaveCount(1);
+          const option = group.getByRole('option', { name: modelDisplayName, exact: true });
+          await expect(option, `"${modelDisplayName}" under ${providerGroup}`).toHaveCount(1);
+          await option.click({ timeout: 2_000 });
+          await expect(listbox).toBeHidden({ timeout: 2_000 });
+        }).toPass({ timeout: 30_000 });
+      },
+    );
+  }
+
+  /**
+   * A named control's label inside the open model-parameters panel.
+   *
+   * For the controls that are not sliders — "Reasoning effort" and "Thinking
+   * level" are a Radix `Select` whose trigger carries no id (their `<Label
+   * htmlFor>` points at nothing, so `getByLabel` cannot reach them) — the
+   * label text is the available handle. Exact, so "Max output tokens" cannot
+   * be satisfied by a longer label.
+   */
+  modelParameterLabel(label: string): Locator {
+    return this.modelParametersPanel().getByText(label, { exact: true });
+  }
+
+  /** Every slider control mounted in the open panel, by its control id. */
+  async mountedModelParameterIds(): Promise<string[]> {
+    return test.step('read the controls mounted in the model-parameters panel', async () => {
+      const ids = await this.modelParametersPanel()
+        .locator('input[data-testid$="-input"]')
+        .evaluateAll((els) =>
+          els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/-input$/, '')),
+        );
+      return ids;
+    });
+  }
+
+  /**
    * Click Run (free mode) and wait for the "No runs yet" placeholder to disappear.
    * The prompt content must already be loaded — this does NOT fill a message body.
    */
@@ -1115,11 +1191,29 @@ export class PlaygroundPage {
     });
   }
 
-  /** Close the model-parameters popover, and wait until it is really gone. */
+  /**
+   * Close the model-parameters popover, and wait until it is really gone.
+   *
+   * Escape is pressed until the panel actually goes, not once: the dropdown
+   * swallows the first Escape while focus is still on the menu CONTAINER, and
+   * only a second press closes it. A caller that has already clicked an
+   * interactive child (moving focus into the panel) gets out on the first
+   * press, which is why this went unnoticed — but a spec that only reads the
+   * panel never moves focus and would hang on a single press.
+   */
   async closeModelParameters(): Promise<void> {
     return test.step('close model parameters', async () => {
-      await this.page.keyboard.press('Escape');
-      await this.modelParametersPanel().waitFor({ state: 'hidden' });
+      const panel = this.modelParametersPanel();
+      await expect
+        .poll(
+          async () => {
+            if (!(await panel.isVisible().catch(() => false))) return false;
+            await this.page.keyboard.press('Escape');
+            return panel.isVisible().catch(() => false);
+          },
+          { message: 'the model-parameters panel closes', intervals: [100, 250, 500, 1000] },
+        )
+        .toBe(false);
     });
   }
 
