@@ -711,12 +711,12 @@ class TestTheRedirectIntoTheMcpFlow:
     """A "yes" to MCP hands over to `opik mcp configure`, the one implementation."""
 
     @staticmethod
-    def _run(redirect):
+    def _run(redirect, outcome=None):
         runner = CliRunner()
 
         def flow(**kwargs):
             kwargs["progress"].redirect_to_mcp = redirect
-            return assistants.Outcome(clients=1, skills=True)
+            return outcome or assistants.Outcome(clients=1, skills=True)
 
         with (
             mock.patch.object(
@@ -764,6 +764,26 @@ class TestTheRedirectIntoTheMcpFlow:
         _, track = self._run(redirect=False)
 
         assert track.call_args_list[-1].kwargs["mcp_redirected"] is False
+
+    def test_inline__result_event_carries_the_connection_signals(self):
+        """The same signals as `opik mcp configure`'s result, for inline runs."""
+        outcome = assistants.Outcome(
+            clients=1,
+            skills=True,
+            transport="remote",
+            sign_in="failed",
+            stale_tool="removed",
+        )
+
+        _, track = self._run(redirect=False, outcome=outcome)
+
+        event = track.call_args_list[-1].kwargs
+        assert (event["transport"], event["sign_in"], event["cancelled"]) == (
+            "remote",
+            "failed",
+            False,
+        )
+        assert event["stale_tool"] == "removed"
 
 
 class TestTheMcpQuestionIsRecommended:

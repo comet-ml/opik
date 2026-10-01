@@ -48,7 +48,10 @@ def set_run_context(**values: Any) -> None:
     Process-global and never cleared: call it only from a CLI entry point that
     owns the process.
     """
-    _RUN_CONTEXT.update(values)
+    # Replaced, not mutated, so a reader on another thread always copies a
+    # complete snapshot.
+    global _RUN_CONTEXT
+    _RUN_CONTEXT = {**_RUN_CONTEXT, **values}
 
 
 def run_context() -> Dict[str, Any]:

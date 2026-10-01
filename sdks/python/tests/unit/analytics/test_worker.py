@@ -167,3 +167,17 @@ def test_worker__event_properties__beat_the_run_context(worker_factory, monkeypa
     assert worker.flush(timeout=5)
 
     assert sent[0].properties["invoked_via"] == "something_the_caller_knows_better"
+
+
+def test_run_context__an_earlier_snapshot_is_not_changed_by_a_later_update(
+    monkeypatch,
+):
+    """Updates publish a new dict, so a reader's copy can never change under it."""
+    monkeypatch.setattr(environment_details, "_RUN_CONTEXT", {})
+    environment_details.set_run_context(invoked_via="direct")
+    published = environment_details._RUN_CONTEXT
+
+    environment_details.set_run_context(invoked_via="opik_configure")
+
+    assert published == {"invoked_via": "direct"}
+    assert environment_details.run_context()["invoked_via"] == "opik_configure"

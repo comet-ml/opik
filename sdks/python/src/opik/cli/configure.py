@@ -587,6 +587,12 @@ def configure(
         # Why a run that accepted still wrote nothing: the user chose no client,
         # rather than the installer failing or being blocked before it asked.
         picker_skipped=outcome.mcp_declined,
+        # The same connection signals `opik mcp configure` reports, for runs
+        # that set the server up inline.
+        transport=outcome.transport or "",
+        sign_in=outcome.sign_in,
+        cancelled=outcome.cancelled,
+        stale_tool=outcome.stale_tool,
         # Carried onto the result too: the entry event has it, and a funnel whose
         # steps filter on different things is not measuring one population.
         interactive=interactive,
