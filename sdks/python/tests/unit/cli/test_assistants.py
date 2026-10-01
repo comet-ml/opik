@@ -78,6 +78,8 @@ def rich_view(monkeypatch):
     view = mock.MagicMock()
     view.step.return_value.__enter__ = mock.Mock(return_value=None)
     view.step.return_value.__exit__ = mock.Mock(return_value=False)
+    # Reports what the install did, as the real view does.
+    view.skill_pack.side_effect = lambda result: result.succeeded
     monkeypatch.setattr(assistants.install_view, "RichInstallView", lambda: view)
     return view
 

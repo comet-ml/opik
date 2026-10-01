@@ -171,7 +171,10 @@ def _ask_about_mcp() -> bool:
     refusal of a question that never looked like one.
     """
     install_view.render_mcp_intro()
-    return install_view.confirm_default_yes("Set up Opik MCP?")
+    answer = install_view.confirm_default_yes("Set up Opik MCP?")
+    # A gap before whatever the answer leads to — the client picker, on a yes.
+    click.echo()
+    return answer
 
 
 #: Skips worth mentioning, and how to say them. A skip the user asked for

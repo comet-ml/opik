@@ -88,6 +88,10 @@ class InstallView(abc.ABC):
         """Wrap a slow step (a probe, a download, a verification)."""
 
     @abc.abstractmethod
+    def sign_in(self, client_display_name: str, command: List[str]) -> Optional[int]:
+        """Run a client's interactive sign-in; its exit status, or None if it never ran."""
+
+    @abc.abstractmethod
     def results(self, results: List[TargetResult]) -> None:
         """Report what was written, per host."""
 

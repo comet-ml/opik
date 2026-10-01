@@ -308,7 +308,8 @@ def run_configure(
         # A stale uv tool install pins an old opik-mcp that cannot be attributed.
         stale_tool=outcome.stale_tool,
         handoff=handoff.outcome,
-        # Empty rather than absent, so the property always carries a string.
+        # `diagnose`, `instrument`, or `check_first` when there was no key to look
+        # with; empty when nothing was offered.
         closing_prompt=handoff.prompt_kind or "",
         # Resolved again, not reused: this command can run `opik configure` on the
         # way through, which is what turns an unconfigured run into an attributed
@@ -329,12 +330,14 @@ class _Handoff(NamedTuple):
     outcome: str
     #: Whether an AI client's config was written, i.e. whether a restart is due.
     wrote_config: bool = False
-    #: `diagnose` if the workspace has traces of the user's own, else `instrument`.
+    #: Which first prompt: `diagnose`, `instrument` or `check_first`.
     prompt_kind: Optional[str] = None
     display_name: Optional[str] = None
     prompt: Optional[str] = None
     #: How to start the client with the prompt; None for one that cannot be.
     command: Optional[List[str]] = None
+    #: Declined with Ctrl-C rather than `n`, so the ending replaces the prompt line.
+    quit_at_offer: bool = False
 
 
 def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Handoff:
@@ -362,24 +365,23 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
     target = mcp_targets.find_target(host_key)
     display_name = target.display_name if target is not None else host_key
 
-    try:
-        # With no key (Cloud signed in over OAuth) there is nothing to look the
-        # workspace up with, so the instrument prompt it is.
-        project = (
-            mcp_handoff.traced_project(
+    if params["api_key"] or params["use_local"]:
+        try:
+            project = mcp_handoff.traced_project(
                 api_key=params["api_key"],
                 workspace=params["workspace"],
                 api_url=params["api_url"],
             )
-            if params["api_key"] or params["use_local"]
-            else None
-        )
-    except KeyboardInterrupt:
-        # This runs silently after "Done", where Ctrl-C is likely; the run is
-        # still reported, since the config was written.
-        return _Handoff(outcome="interrupted", wrote_config=True)
-    prompt_kind = "diagnose" if project is not None else "instrument"
-    prompt = mcp_handoff.closing_prompt(project)
+        except KeyboardInterrupt:
+            # This runs silently after the rows, where Ctrl-C is likely; the run
+            # is still reported, since the config was written.
+            return _Handoff(outcome="interrupted", wrote_config=True)
+        prompt_kind = "diagnose" if project is not None else "instrument"
+        prompt = mcp_handoff.closing_prompt(project)
+    else:
+        # No key to look with (Cloud signed in over OAuth): the agent can.
+        prompt_kind = "check_first"
+        prompt = mcp_handoff.CHECK_FIRST_PROMPT
 
     command = mcp_handoff.launch_command(host_key)
     if command is None:
@@ -393,14 +395,16 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
 
     # Asked, because starting the agent replaces this process.
     install_view.render_handoff_offer(prompt)
+    quit_at_offer = False
     try:
         accepted = install_view.confirm_default_yes(f"Continue in {display_name}")
     except click.Abort:
         # Ctrl-C here means "not now", the same as `n`.
-        accepted = False
+        accepted, quit_at_offer = False, True
 
     return _Handoff(
         outcome="launch" if accepted else "declined",
+        quit_at_offer=quit_at_offer,
         wrote_config=True,
         prompt_kind=prompt_kind,
         display_name=display_name,
@@ -423,7 +427,9 @@ def _perform_handoff(handoff: _Handoff) -> None:
         return
 
     if handoff.outcome == "declined":
-        install_view.render_handoff_declined(handoff.display_name)
+        install_view.render_handoff_declined(
+            handoff.display_name, replace_offer=handoff.quit_at_offer
+        )
         return
 
     install_view.render_handoff(handoff.display_name)

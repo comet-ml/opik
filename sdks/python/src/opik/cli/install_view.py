@@ -12,9 +12,10 @@ from typing import Iterator, List, Optional, Tuple
 
 import click
 import rich.console
-from rich import padding, table, text
+from rich import control, padding, table, text
 
 from opik.cli import selector
+from opik.cli import terminal_session
 from opik.configurator import configure as opik_configure
 from opik.configurator.mcp import view as mcp_view
 from opik.configurator.skills import install as skills_install
@@ -311,9 +312,21 @@ def render_handoff(client_display_name: str) -> None:
     )
 
 
-def render_handoff_declined(client_display_name: str) -> None:
-    """The ending for a run that turned the offer down."""
-    console.print()
+def render_handoff_declined(client_display_name: str, replace_offer: bool) -> None:
+    """The ending for a run that turned the offer down.
+
+    ``replace_offer`` after a Ctrl-C at the offer, which leaves its line ending in
+    an echoed ``^C``: the ending is written over that line instead of under it.
+    """
+    if replace_offer and console.is_terminal:
+        console.control(
+            control.Control(
+                control.ControlType.CARRIAGE_RETURN,
+                (control.ControlType.ERASE_IN_LINE, 2),
+            )
+        )
+    else:
+        console.print()
     console.print(
         text.Text.assemble(
             ("Restart ", "bold"),
@@ -368,19 +381,29 @@ def render_note(message: str, hint: Optional[str] = None) -> None:
         console.print(_emphasize(hint, base="dim"))
 
 
-class RichInstallView(mcp_view.InstallView):
-    def plan(self, deployment: str, transport: str, needs_sign_in: bool) -> None:
-        self._needs_sign_in = needs_sign_in
-        console.print()
-        console.print(text.Text("Opik MCP server setup", style="bold"))
+#: Wide enough for every status label, so rows printed apart still line up.
+_STATUS_LABEL_WIDTH = 9
 
-        grid = table.Table.grid(padding=(0, 2))
-        grid.add_column(style=_KEY_STYLE, no_wrap=True)
-        grid.add_column(overflow="fold")
-        grid.add_row("Deployment", deployment)
-        grid.add_row("Connection", transport)
-        console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
-        console.print()
+
+def _status_row(mark: str, mark_style: str, label: str, detail: text.Text) -> None:
+    grid = table.Table.grid(padding=(0, 2))
+    grid.add_column(no_wrap=True)
+    grid.add_column(style=_KEY_STYLE, no_wrap=True, min_width=_STATUS_LABEL_WIDTH)
+    grid.add_column(overflow="fold")
+    grid.add_row(text.Text(mark, style=mark_style), label, detail)
+    console.print(padding.Padding(grid, (0, 0, 0, 2), expand=False))
+
+
+class RichInstallView(mcp_view.InstallView):
+    #: Clients the server was added to, named in the row that says it works.
+    _added: Tuple[str, ...] = ()
+    #: Whether the blank line above the status rows is already on screen.
+    _rows_started: bool = False
+
+    def plan(self, deployment: str, transport: str, needs_sign_in: bool) -> None:
+        # Nothing shown: the command already says it is setting up MCP, and the
+        # sign-in walks the user through itself.
+        self._needs_sign_in = needs_sign_in
 
     @contextlib.contextmanager
     def step(self, description: str) -> Iterator[None]:
@@ -389,54 +412,99 @@ class RichInstallView(mcp_view.InstallView):
         with console.status(f"[dim]{description}...[/dim]", spinner="dots"):
             yield
 
+    def sign_in(self, client_display_name: str, command: List[str]) -> Optional[int]:
+        console.print()
+        returncode = terminal_session.run(
+            command,
+            header=f"Starting authentication for Opik MCP in {client_display_name}…",
+            hide_first_line="Starting authentication for",
+            # A new account's sign-up does not come back to this authorization,
+            # but the client is still waiting on it.
+            hint_after=(
+                "Waiting for authorization",
+                "New to Opik? Once your account is created, open the link above "
+                "again to finish.",
+            ),
+        )
+        # A sign-in that worked is erased, leaving the blank line above it for
+        # the rows that follow.
+        self._rows_started = returncode == 0
+        return returncode
+
+    def _start_rows(self) -> None:
+        if not self._rows_started:
+            console.print()
+            self._rows_started = True
+
     def results(self, results: List[mcp_view.TargetResult]) -> None:
-        # One grid for every row, so the host column lines up. A row per grid
-        # aligns each row against itself and nothing else.
-        grid = table.Table.grid(padding=(0, 2))
-        grid.add_column(no_wrap=True)
-        grid.add_column(style=_KEY_STYLE, no_wrap=True)
-        grid.add_column(overflow="fold")
+        # Successes are reported once the server is verified, as one row; only
+        # failures are worth a row of their own here.
+        self._added = tuple(r.display_name for r in results if r.succeeded)
         for result in results:
-            if result.succeeded:
-                # The plan block already showed the path; repeating it here just
-                # wraps and pushes the outcome off the line.
-                grid.add_row(
-                    text.Text("✓", style="green"),
-                    result.display_name,
-                    text.Text(result.short, style="dim"),
-                )
-            else:
-                grid.add_row(
-                    text.Text("✗", style="red"),
+            if not result.succeeded:
+                self._start_rows()
+                _status_row(
+                    "✗",
+                    "red",
                     result.display_name,
                     _emphasize(_collapse_home(result.detail), base="yellow"),
                 )
-        console.print(padding.Padding(grid, (0, 0, 0, 2), expand=False))
 
     def verification(self, succeeded: bool, detail: str) -> None:
-        # Its own block: it reports on the connection, not on a host, and sharing
-        # the grid above would align two things that are not the same kind.
-        console.print()
-        row = table.Table.grid(padding=(0, 2))
-        row.add_column(no_wrap=True)
-        row.add_column(style=_KEY_STYLE, no_wrap=True)
-        row.add_column(overflow="fold")
-        if succeeded:
-            row.add_row(text.Text("✓", style="green"), "Verified", text.Text(detail))
-        else:
-            row.add_row(
-                text.Text("✗", style="red"),
-                "Not working",
-                _emphasize(detail, base="yellow"),
+        self._start_rows()
+        if not succeeded:
+            _status_row(
+                "✗",
+                "red",
+                "Opik MCP",
+                _emphasize(
+                    f"added to {', '.join(self._added)}, but not working: {detail}",
+                    base="yellow",
+                ),
             )
-        console.print(padding.Padding(row, (0, 0, 0, 2), expand=False))
+            return
+        working = [name for name in self._added if name not in self._sign_in_failed]
+        if working:
+            _status_row(
+                "✓",
+                "green",
+                "Opik MCP",
+                text.Text(f"available in {', '.join(working)}"),
+            )
+        for name in self._sign_in_failed:
+            _status_row(
+                "!",
+                "yellow",
+                "Opik MCP",
+                text.Text(f"added to {name}, not signed in yet", style="yellow"),
+            )
+
+    def skill_pack(self, result: skills_install.InstallResult) -> bool:
+        """Report a skill-pack install. Returns whether it succeeded."""
+        if not result.succeeded:
+            self.problem(f"Could not install the Opik skill pack: {result.error}.")
+            return False
+
+        self._start_rows()
+        clients = skills_roots.display_names(list(result.linked))
+        where = (
+            f"available in {', '.join(clients)}"
+            if clients
+            else f"installed in {_collapse_home(str(result.shared_dir))}"
+        )
+        _status_row("✓", "green", "Skills", text.Text(where))
+        for host_key, message in result.link_errors.items():
+            label = ", ".join(skills_roots.display_names([host_key]))
+            self.problem(f"{label}: {message}")
+        return True
 
     def done(self) -> None:
-        """Close the run. The results rows above already list what was set up."""
-        console.print()
+        """Close the run with anything the user still has to do, if there is any.
+
+        No "Done": the run goes on to the suggested first prompt.
+        """
         if self._sign_in_failed:
-            # The run's last word, after the skill pack: the one step left for
-            # the user, and why "done" would not be true yet.
+            console.print()
             console.print(
                 text.Text.assemble(
                     ("! ", "yellow bold"), ("Set up, but not signed in yet", "bold")
@@ -451,13 +519,7 @@ class RichInstallView(mcp_view.InstallView):
                         (0, 0, 0, 2),
                     )
                 )
-            console.print()
             return
-        console.print(
-            text.Text.assemble(("✓ ", "green bold"), ("Done", "bold")),
-        )
-        # The one thing here the user may still have to act on, so it should not
-        # sit between them and the prompt to try.
         if self._needs_sign_in:
             console.print()
             console.print(
@@ -466,10 +528,9 @@ class RichInstallView(mcp_view.InstallView):
                         ("Signing in: ", "bold"),
                         (mcp_view.SIGN_IN_HINT, "dim"),
                     ),
-                    _FIELDS_INDENT,
+                    (0, 0, 0, 2),
                 )
             )
-        console.print()
 
     def skipped(self, message: str) -> None:
         console.print()
@@ -514,33 +575,3 @@ class RichInstallView(mcp_view.InstallView):
 
     def note(self, message: str) -> None:
         console.print(padding.Padding(_emphasize(message, base="dim"), (0, 0, 0, 2)))
-
-
-def render_skill_pack(
-    result: skills_install.InstallResult, view: mcp_view.InstallView
-) -> bool:
-    """Report a skill-pack install. Returns whether it succeeded."""
-    if not result.succeeded:
-        view.problem(f"Could not install the Opik skill pack: {result.error}.")
-        return False
-
-    view.results(
-        [
-            mcp_view.TargetResult(
-                display_name="Skill pack",
-                detail=f"{', '.join(result.skills)} in {result.shared_dir}",
-                succeeded=True,
-                summary=", ".join(result.skills),
-            )
-        ]
-    )
-    for host_key, message in result.link_errors.items():
-        label = ", ".join(skills_roots.display_names([host_key]))
-        view.problem(f"{label}: {message}")
-    if result.plugin_overlap:
-        view.note(
-            "The Opik Claude Code plugin also ships an `opik` skill, so Claude "
-            "Code now has both. Remove the plugin's copy with "
-            "`/plugin uninstall opik` if you prefer the pack alone."
-        )
-    return True

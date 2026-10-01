@@ -90,6 +90,17 @@ class TestTracedProject:
         assert handoff.traced_project(None, None, "https://opik/api/") == "my-app"
 
 
+class TestTheCheckFirstPrompt:
+    """For a run with no API key, which cannot look at the workspace itself."""
+
+    def test_lets_the_agent_choose_between_diagnosing_and_instrumenting(self):
+        assert "/opik-diagnose" in handoff.CHECK_FIRST_PROMPT
+        assert "/opik-instrument" in handoff.CHECK_FIRST_PROMPT
+
+    def test_leaves_the_demo_projects_out(self):
+        assert "demo projects" in handoff.CHECK_FIRST_PROMPT
+
+
 class TestLaunching:
     def test_a_gui_client__has_no_launch_command(self):
         """Nothing to hand a prompt to; the caller shows it instead."""

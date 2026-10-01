@@ -246,12 +246,9 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             target_display_name="Claude Code", succeeded=False, detail=str(error)
         )
     if result.returncode == 0:
-        signed_in = _sign_in_claude_code(claude_executable, server_spec)
         return InstallResult(
             target_display_name="Claude Code",
             succeeded=True,
-            sign_in_attempted=signed_in is not None,
-            sign_in_failed=signed_in is False,
             detail=(
                 f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "
                 f"`claude mcp add` (user scope)"
@@ -267,26 +264,6 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             f"{_first_line(result.stderr) or _first_line(result.stdout) or 'no output'}"
         ),
     )
-
-
-def _run_interactive_client_cli(command: List[str]) -> Optional[int]:
-    """Run a client CLI that talks to the user, on the real terminal.
-
-    Unlike :func:`_run_client_cli`: a sign-in prints a URL to open, needs a tty
-    on stdin and waits on the browser, so its output is not captured, its stdin
-    not closed and it has no timeout. Returns the exit status, or ``None`` when
-    it could not run or was interrupted.
-    """
-    try:
-        return subprocess.run(command).returncode
-    except OSError:
-        # A client shim whose node has moved.
-        return None
-    except KeyboardInterrupt:
-        # Ctrl-C reaches this process too: give up on the sign-in, not the run.
-        # The newline ends the line the terminal echoed `^C` onto.
-        print()
-        return None
 
 
 def _claude_supports_mcp_login(claude_executable: str) -> bool:
@@ -318,48 +295,27 @@ def _claude_supports_mcp_login(claude_executable: str) -> bool:
     )
 
 
-def _sign_in_claude_code(
-    claude_executable: str, server_spec: mcp_spec.McpServerSpec
-) -> Optional[bool]:
-    """Start the browser sign-in for a freshly registered hosted server.
+def sign_in_command(
+    target_key: str, server_spec: mcp_spec.McpServerSpec
+) -> Optional[List[str]]:
+    """The client's own browser sign-in, when this run should start one.
 
-    The hosted server carries no credentials; the client signs in over OAuth. For
-    Codex that is already handled: `codex mcp add --url` performs the login as
-    part of the add, which is why configuring Codex ends in the browser. Claude
-    Code's `mcp add` only records the server, so it sits unauthorized afterwards
-    — and an unauthorized server contributes no tools at all rather than an
-    error, so nothing tells the user to go and finish the job.
-
-    One more call to the client's own CLI, in the same place and with the same
-    guards as the `add` above, closes that gap.
-
-    Best effort throughout: the server is registered by the time this runs, and
-    an old client, a failed login or a user who walks away all leave a working
-    registration plus the sign-in hint the closing block already prints.
-
-    Returns whether an attempted login succeeded, or None when there was
-    nothing to attempt.
+    Only Claude Code: Codex signs in inside `codex mcp add`, and the GUI clients
+    prompt on first use. Only for the hosted server — a local one carries the API
+    key — and only with a terminal, since a coding agent or CI has no browser.
+    Run separately from the install so the caller can show progress for the
+    install and hand the terminal over for the sign-in.
     """
+    if target_key != "claude-code":
+        return None
     if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
-        # A local uvx server authenticates with the API key already written into
-        # the config. There is nothing to sign in to.
         return None
-
     if not interactive_helpers.is_interactive():
-        # A run with no terminal is a coding agent or CI, and a browser there is
-        # at best ignored. Unlike the Codex path — where the login is inside
-        # `codex mcp add` and cannot be separated from it — this one is ours to
-        # not start. The closing block's sign-in hint still covers these runs.
         return None
-
-    if not _claude_supports_mcp_login(claude_executable):
-        # Nothing to attempt on this build, so nothing failed.
+    claude_executable = shutil.which("claude")
+    if claude_executable is None or not _claude_supports_mcp_login(claude_executable):
         return None
-
-    returncode = _run_interactive_client_cli(
-        [claude_executable, "mcp", "login", SERVER_NAME]
-    )
-    return returncode == 0
+    return [claude_executable, "mcp", "login", SERVER_NAME]
 
 
 def _install_cursor(server_spec: mcp_spec.McpServerSpec) -> InstallResult:

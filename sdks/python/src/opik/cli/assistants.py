@@ -150,7 +150,7 @@ def setup(
     if wants_skills:
         with view.step("Fetching the Opik skill pack"):
             result = skills_installer.setup_skills(skills_targets)
-        installed_skills = install_view.render_skill_pack(result, view)
+        installed_skills = view.skill_pack(result)
 
     if configured_hosts or installed_skills:
         view.done()

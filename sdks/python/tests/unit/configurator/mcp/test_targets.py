@@ -626,136 +626,60 @@ def _fake_claude_cli(monkeypatch, help_output, login_returncode=0):
     return recorded
 
 
-def test_install_claude_code__hosted_server__signs_in_after_adding(
-    monkeypatch, interactive
-):
-    """Parity with Codex, whose `mcp add --url` logs in as part of the add."""
+LOGIN = ["/usr/bin/claude", "mcp", "login", "opik-mcp"]
+
+
+def test_install_claude_code__registers_without_signing_in(monkeypatch, interactive):
+    """The sign-in is its own step, run by the caller once the install is done."""
     recorded = _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
 
     result = targets._install_claude_code(REMOTE_SERVER_SPEC)
 
     assert result.succeeded is True
-    assert recorded[-1] == ["/usr/bin/claude", "mcp", "login", "opik-mcp"]
-
-
-def test_install_claude_code__local_server__does_not_sign_in(monkeypatch, interactive):
-    """A uvx server carries the API key already; there is nothing to sign in to."""
-    recorded = _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
-
-    targets._install_claude_code(SERVER_SPEC)
-
     assert not any(command[1:3] == ["mcp", "login"] for command in recorded)
 
 
-def test_install_claude_code__older_client_lists_no_login__skips_sign_in(
+def test_sign_in_command__hosted_claude_code__is_its_login(monkeypatch, interactive):
+    _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
+
+    assert targets.sign_in_command("claude-code", REMOTE_SERVER_SPEC) == LOGIN
+
+
+def test_sign_in_command__local_server__has_nothing_to_sign_in_to(
+    monkeypatch, interactive
+):
+    """A uvx server carries the API key already."""
+    _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
+
+    assert targets.sign_in_command("claude-code", SERVER_SPEC) is None
+
+
+def test_sign_in_command__older_client_without_login__has_none(
     monkeypatch, interactive
 ):
     """`claude mcp login` is recent, so an older build must not be handed it."""
-    recorded = _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITHOUT_LOGIN)
-
-    result = targets._install_claude_code(REMOTE_SERVER_SPEC)
-
-    assert result.succeeded is True
-    assert not any(command[1:3] == ["mcp", "login"] for command in recorded)
-
-
-def test_install_claude_code__sign_in_inherits_the_terminal(monkeypatch, interactive):
-    """The login gets the real terminal: its URL shown, a tty, no timeout. The
-    registration around it is still captured."""
-    calls = {}
-
-    def fake_run(command, **kwargs):
-        calls[tuple(command[1:3])] = kwargs
-        if command[1:] == ["mcp", "--help"]:
-            return subprocess.CompletedProcess(
-                command, 0, stdout=CLAUDE_MCP_HELP_WITH_LOGIN, stderr=""
-            )
-        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-
-    monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/claude")
-    monkeypatch.setattr(targets.subprocess, "run", fake_run)
-
-    targets._install_claude_code(REMOTE_SERVER_SPEC)
-
-    assert calls[("mcp", "login")] == {}
-    assert calls[("mcp", "add")]["capture_output"] is True
-    assert calls[("mcp", "add")]["stdin"] is subprocess.DEVNULL
-
-
-def test_install_claude_code__sign_in_succeeds__result_does_not_flag_it(
-    monkeypatch, interactive
-):
-    _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
-
-    result = targets._install_claude_code(REMOTE_SERVER_SPEC)
-
-    assert result.sign_in_failed is False
-
-
-def test_install_claude_code__nothing_to_sign_in_to__is_not_a_failure(
-    monkeypatch, interactive
-):
-    """A local server and an older client both mean "no login here", not a failed one."""
-    _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
-    assert targets._install_claude_code(SERVER_SPEC).sign_in_failed is False
-
     _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITHOUT_LOGIN)
-    assert targets._install_claude_code(REMOTE_SERVER_SPEC).sign_in_failed is False
+
+    assert targets.sign_in_command("claude-code", REMOTE_SERVER_SPEC) is None
 
 
-def test_install_claude_code__sign_in_fails__registration_still_succeeds(
-    monkeypatch, interactive
-):
-    """The server is registered by the time the login runs; a failure is a hint away."""
-    _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN, login_returncode=1)
+def test_sign_in_command__other_clients__have_none(monkeypatch, interactive):
+    """Codex signs in inside its add; the GUI clients prompt on first use."""
+    _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
 
-    result = targets._install_claude_code(REMOTE_SERVER_SPEC)
-
-    assert result.succeeded is True
-    # Carried out so the caller can say the specific thing: registered, but the
-    # server contributes nothing until the user signs in by hand.
-    assert result.sign_in_failed is True
+    for key in ("codex", "cursor", "vscode"):
+        assert targets.sign_in_command(key, REMOTE_SERVER_SPEC) is None
 
 
-def test_install_claude_code__sign_in_cli_breaks__registration_still_succeeds(
-    monkeypatch, interactive
-):
+def test_sign_in_command__help_cli_breaks__has_none(monkeypatch, interactive):
     monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/claude")
 
     def fake_run(command, **kwargs):
-        if command[1] == "mcp" and command[2] in ("--help", "login"):
-            raise OSError("node is gone")
-        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        raise OSError("node is gone")
 
     monkeypatch.setattr(targets.subprocess, "run", fake_run)
 
-    result = targets._install_claude_code(REMOTE_SERVER_SPEC)
-
-    assert result.succeeded is True
-
-
-def test_install_claude_code__sign_in_interrupted__is_a_failed_sign_in(
-    monkeypatch, interactive
-):
-    """Ctrl-C while waiting on the browser gives up on the login, not the run."""
-
-    def fake_run(command, **kwargs):
-        if command[1:] == ["mcp", "--help"]:
-            return subprocess.CompletedProcess(
-                command, 0, stdout=CLAUDE_MCP_HELP_WITH_LOGIN, stderr=""
-            )
-        if command[1:3] == ["mcp", "login"]:
-            raise KeyboardInterrupt
-        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-
-    monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/claude")
-    monkeypatch.setattr(targets.subprocess, "run", fake_run)
-
-    result = targets._install_claude_code(REMOTE_SERVER_SPEC)
-
-    assert result.succeeded is True
-    assert result.sign_in_attempted is True
-    assert result.sign_in_failed is True
+    assert targets.sign_in_command("claude-code", REMOTE_SERVER_SPEC) is None
 
 
 def test_claude_supports_mcp_login__name_only_in_a_description__false(monkeypatch):
@@ -784,12 +708,9 @@ def test_claude_supports_mcp_login__help_exits_non_zero__false(monkeypatch):
     assert targets._claude_supports_mcp_login("/usr/bin/claude") is False
 
 
-def test_install_claude_code__no_terminal__does_not_sign_in(monkeypatch):
+def test_sign_in_command__no_terminal__has_none(monkeypatch):
     """`--ai-client` runs are coding agents and CI; a browser there helps nobody."""
-    recorded = _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
+    _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
     monkeypatch.setattr(targets.interactive_helpers, "is_interactive", lambda: False)
 
-    result = targets._install_claude_code(REMOTE_SERVER_SPEC)
-
-    assert result.succeeded is True
-    assert not any(command[1:3] == ["mcp", "login"] for command in recorded)
+    assert targets.sign_in_command("claude-code", REMOTE_SERVER_SPEC) is None

@@ -96,7 +96,9 @@ def ran(monkeypatch):
                 return_value=configure_cli.interactive_helpers.DeploymentType.CLOUD,
             ),
             mock.patch.object(
-                cli_assistants.install_view, "render_skill_pack", return_value=True
+                cli_assistants.install_view.RichInstallView,
+                "skill_pack",
+                return_value=True,
             ),
         ):
             result = CliRunner().invoke(cli, ["configure", *flags])

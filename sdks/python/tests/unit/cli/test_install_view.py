@@ -24,16 +24,14 @@ class TestRichInstallView:
 
         return rich_view
 
-    def test_plan__shows_deployment_and_transport(self, view):
+    def test_plan__shows_nothing(self, view):
+        """The command says it is setting up MCP; the sign-in walks the user through."""
         with view.console.capture() as capture:
             view.RichInstallView().plan(
                 "Opik Cloud · workspace acme-ai", "Local server via uvx", False
             )
 
-        out = capture.get()
-        assert "Opik MCP server setup" in out
-        assert "acme-ai" in out
-        assert "Local server via uvx" in out
+        assert capture.get() == ""
 
     def test_plan__does_not_relist_the_clients_and_their_paths(self, view):
         """The prompt listed them, the picker listed them; the results table
@@ -47,20 +45,23 @@ class TestRichInstallView:
         assert "Will update" not in out
         assert "~/.cursor/mcp.json" not in out
 
-    def test_results__success_uses_the_short_form(self, view):
-        """The path was already shown in the plan; repeating it just wraps."""
+    def test_success__is_one_row_saying_mcp_is_available(self, view):
+        """Not a row per step: added, verified and signed in read as one fact."""
+        installer = view.RichInstallView()
         with view.console.capture() as capture:
-            view.RichInstallView().results(
+            installer.results(
                 [
                     mcp_view.TargetResult(
-                        "Cursor", "Added 'opik-mcp' in /very/long/path", True, "Added"
+                        "Cursor", "Added 'opik-mcp' in /long", True, "Added"
                     )
                 ]
             )
+            installer.verification(True, "connected to workspace acme-ai")
 
         out = capture.get()
-        assert "Added" in out
-        assert "/very/long/path" not in out
+        assert "Opik MCP" in out and "available in Cursor" in out
+        assert "Added" not in out
+        assert "/long" not in out
 
     def test_results__failure_keeps_the_full_detail(self, view):
         with view.console.capture() as capture:
@@ -71,11 +72,13 @@ class TestRichInstallView:
         assert "was not found" in capture.get()
 
     def test_verification__failure_says_not_working(self, view):
+        installer = view.RichInstallView()
+        installer.results([mcp_view.TargetResult("Cursor", "Added", True, "Added")])
         with view.console.capture() as capture:
-            view.RichInstallView().verification(False, "HTTP 401")
+            installer.verification(False, "HTTP 401")
 
         out = capture.get()
-        assert "Not working" in out
+        assert "not working" in out
         assert "HTTP 401" in out
 
     def test_done__says_nothing_about_what_to_do_next(self, view):
@@ -93,9 +96,30 @@ class TestRichInstallView:
         with view.console.capture() as capture:
             installer.done()
 
+        assert "Signing in" in capture.get()
+
+    def test_done__does_not_say_done(self, view):
+        """The run goes on to the suggested first prompt, so it is not done yet."""
+        with view.console.capture() as capture:
+            view.RichInstallView().done()
+
+        assert "Done" not in capture.get()
+
+    def test_skill_pack__is_one_row_naming_where_it_is_available(self, view):
+        from opik.configurator.skills import install as skills_install
+
+        result = skills_install.InstallResult(
+            succeeded=True,
+            skills=["opik", "opik-diagnose"],
+            shared_dir=pathlib.Path("/h/.agents/skills"),
+            linked={"claude-code": ["opik", "opik-diagnose"]},
+        )
+        with view.console.capture() as capture:
+            assert view.RichInstallView().skill_pack(result) is True
+
         out = capture.get()
-        assert "Signing in" in out
-        assert out.index("Done") < out.index("Signing in")
+        assert "Skills" in out and "available in Claude Code" in out
+        assert "opik-diagnose" not in out
 
     def test_restart_note__names_the_prompt_in_green(self, view, monkeypatch):
         """The one thing the user is meant to copy, so it stands out."""
@@ -654,3 +678,24 @@ class TestTheEndingAfterAFailedSignIn:
         assert "not signed in yet" in out
         assert "claude mcp login opik-mcp" in out
         assert "Done" not in out
+
+
+class TestTheDeclinedEnding:
+    def test_after_ctrl_c__overwrites_the_offer_line(self, terminal):
+        """Ctrl-C leaves `…[Y/n]: ^C` on screen; the ending takes that line."""
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_handoff_declined("Claude Code", replace_offer=True)
+
+        out = capture.get()
+        assert out.startswith("\r\x1b[2K")
+        assert "Restart" in out
+
+    def test_after_n__goes_under_a_blank_line(self, terminal):
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_handoff_declined("Claude Code", replace_offer=False)
+
+        assert capture.get().startswith("\n")

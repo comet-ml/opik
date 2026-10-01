@@ -898,7 +898,7 @@ class TestResultEventCarriesTheConnectionSignals:
 
 
 def test_handoff__no_api_key__does_not_look_up_projects(monkeypatch):
-    """Cloud signed in over OAuth leaves this machine nothing to authenticate with."""
+    """Cloud signed in over OAuth leaves this machine nothing to look with."""
     lookups = []
     monkeypatch.setattr(mcp_cli.interactive_helpers, "is_interactive", lambda: True)
     monkeypatch.setattr(
@@ -915,4 +915,6 @@ def test_handoff__no_api_key__does_not_look_up_projects(monkeypatch):
     handoff = mcp_cli._resolve_handoff(mcp_cli._opik_cloud_params(), outcome)
 
     assert lookups == []
-    assert handoff.prompt_kind == "instrument"
+    # The agent can look once signed in, so it is asked to check first.
+    assert handoff.prompt_kind == "check_first"
+    assert handoff.prompt == mcp_cli.mcp_handoff.CHECK_FIRST_PROMPT

@@ -17,6 +17,7 @@ class RecordingView(mcp_view.InstallView):
 
     def __init__(self):
         self.choose_calls = []
+        self.sign_ins = []
         self.plans = []
         self.steps = []
         self.target_results = []
@@ -34,6 +35,13 @@ class RecordingView(mcp_view.InstallView):
     def step(self, description):
         self.steps.append(description)
         yield
+
+    #: The exit status the scripted sign-in returns.
+    sign_in_returncode = 0
+
+    def sign_in(self, client_display_name, command):
+        self.sign_ins.append((client_display_name, list(command)))
+        return self.sign_in_returncode
 
     def results(self, results):
         self.target_results.extend(results)
@@ -1210,3 +1218,46 @@ def test_setup_mcp_server__no_api_key__does_not_name_a_workspace(monkeypatch):
     install.setup_mcp_server(**(args := _make_args(api_key=None, workspace="default")))
 
     assert args["view"].plans[0][0] == "Opik Cloud"
+
+
+class TestTheSignInIsItsOwnStep:
+    """Registered under a spinner, then the terminal handed over for the sign-in."""
+
+    @staticmethod
+    def _run(monkeypatch, returncode):
+        monkeypatch.setattr(
+            install.mcp_detection,
+            "detect_hosted_mcp_server",
+            lambda **kwargs: "https://www.comet.com/opik/api/v1/mcp",
+        )
+        install_spy = mock.Mock(
+            return_value=targets.InstallResult("Claude Code", True, "Added")
+        )
+        monkeypatch.setattr(
+            targets, "HOST_TARGETS", [_target("claude-code", True, install_spy)]
+        )
+        monkeypatch.setattr(
+            targets, "sign_in_command", lambda key, spec: ["claude", "mcp", "login"]
+        )
+        monkeypatch.setattr("builtins.input", lambda message: "y")
+        args = _make_args()
+        args["view"].sign_in_returncode = returncode
+        report = install.setup_mcp_server(**args)
+        return report, args["view"]
+
+    def test_the_install_runs_under_a_spinner_before_the_sign_in(self, monkeypatch):
+        _, view = self._run(monkeypatch, returncode=0)
+
+        assert "Adding Opik MCP to claude-code" in view.steps
+        assert view.sign_ins == [("claude-code", ["claude", "mcp", "login"])]
+
+    def test_a_sign_in_that_worked__is_reported_as_succeeded(self, monkeypatch):
+        report, _ = self._run(monkeypatch, returncode=0)
+
+        assert report.sign_in == "succeeded"
+
+    def test_a_sign_in_that_failed__is_reported_as_failed(self, monkeypatch):
+        report, view = self._run(monkeypatch, returncode=1)
+
+        assert report.sign_in == "failed"
+        assert view._sign_in_failed == ("Claude Code",)

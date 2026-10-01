@@ -9,6 +9,7 @@ invisible. The reporting seam is being built on a separate branch; the
 it up is a mechanical change rather than a re-reading of this flow.
 """
 
+import dataclasses
 import json
 import logging
 import shutil
@@ -237,7 +238,23 @@ def setup_mcp_server(
         with display.step("Preparing the Opik MCP server"):
             _prefetch_opik_mcp()
 
-    results = [target.install(server_spec) for target in selected_targets]
+    results = []
+    for target in selected_targets:
+        # Under a spinner: a client's own CLI takes a few seconds to start, and
+        # the run would otherwise sit silent after the picker.
+        with display.step(f"Adding Opik MCP to {target.display_name}"):
+            result = target.install(server_spec)
+            command = (
+                mcp_targets.sign_in_command(target.key, server_spec)
+                if result.succeeded
+                else None
+            )
+        if command is not None:
+            returncode = display.sign_in(target.display_name, command)
+            result = dataclasses.replace(
+                result, sign_in_attempted=True, sign_in_failed=returncode != 0
+            )
+        results.append(result)
 
     # Said per client: the closing block's general hint would describe a
     # sign-in that did not happen.

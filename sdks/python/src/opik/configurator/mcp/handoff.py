@@ -1,7 +1,9 @@
 """How ``opik mcp configure`` ends: inside the agent, on a prompt the user agreed to.
 
-Traces of the user's own get the diagnose prompt; none get the instrument one.
-Demo projects do not count — every workspace starts with them.
+With an API key this process looks at the workspace itself: traces of the user's
+own get the diagnose prompt, none get the instrument one. Demo projects do not
+count — every workspace starts with them. Without a key (Cloud signed in over
+OAuth) it cannot look, so the agent, signed in by then, is asked to check and pick.
 """
 
 import os
@@ -38,6 +40,14 @@ DIAGNOSE_PROMPT: Final[str] = (
 INSTRUMENT_PROMPT: Final[str] = (
     "Using the Opik /opik-instrument skill, add Opik tracing to this app. If it "
     "is already instrumented, tell me what is covered and what is not."
+)
+
+CHECK_FIRST_PROMPT: Final[str] = (
+    "Using Opik, check whether my workspace already has traces from my own "
+    "projects (ignore the Opik demo projects). If it does, use the /opik-diagnose "
+    "skill to give me an overview of the most recently active one over the last 7 "
+    "days — volume, errors, latency and cost — and the items worth my attention. "
+    "If it does not, use the /opik-instrument skill to add Opik tracing to this app."
 )
 
 #: Clients that run in this terminal and take a prompt as an argument.
