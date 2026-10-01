@@ -52,6 +52,11 @@ LOGGER = logging.getLogger(__name__)
 OPIK_BASE_URL_CLOUD: Final[str] = "https://www.comet.com/"
 OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/"
 
+#: Where to read about changing the project traces go to.
+PROJECT_NAME_DOCS_URL: Final[str] = (
+    "https://www.comet.com/docs/opik/tracing/advanced/log_traces#logging-to-a-specific-project"
+)
+
 
 class OpikConfigurator:
     def __init__(
@@ -625,7 +630,7 @@ class OpikConfigurator:
         self._announce(
             f"Configuration completed successfully. Traces will be logged to "
             f"'{self.project_name}' project. To change the destination project, see: "
-            "https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name"
+            f"{PROJECT_NAME_DOCS_URL}"
         )
 
     def _ask_for_url(self) -> None:

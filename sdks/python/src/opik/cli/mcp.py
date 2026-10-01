@@ -351,9 +351,10 @@ class _Handoff(NamedTuple):
     #: `diagnose` or `instrument` — which says whether the workspace already had
     #: traces of the user's own, the one thing the closing prompt turns on.
     prompt_kind: Optional[str] = None
-    host_key: Optional[str] = None
     display_name: Optional[str] = None
     prompt: Optional[str] = None
+    #: How to start the client with the prompt; None for one that cannot be.
+    command: Optional[List[str]] = None
 
 
 def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Handoff:
@@ -396,7 +397,6 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
             api_key=params["api_key"],
             workspace=params["workspace"],
             api_url=params["api_url"],
-            check_tls_certificate=params["check_tls_certificate"],
         )
     except KeyboardInterrupt:
         # This runs after "Done" with nothing on screen, so it is where someone
@@ -407,12 +407,12 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
     prompt_kind = "diagnose" if project is not None else "instrument"
     prompt = mcp_handoff.closing_prompt(project)
 
-    if not mcp_handoff.can_launch(host_key):
+    command = mcp_handoff.launch_command(host_key)
+    if command is None:
         return _Handoff(
             outcome="prompt_shown",
             wrote_config=True,
             prompt_kind=prompt_kind,
-            host_key=host_key,
             display_name=display_name,
             prompt=prompt,
         )
@@ -433,43 +433,34 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
         outcome="launch" if accepted else "declined",
         wrote_config=True,
         prompt_kind=prompt_kind,
-        host_key=host_key,
         display_name=display_name,
         prompt=prompt,
+        command=command,
     )
 
 
 def _perform_handoff(handoff: _Handoff) -> None:
     """End inside the agent, or leave the prompt where the user can reach it."""
-    if handoff.host_key is None or handoff.prompt is None:
-        # Nothing to hand over to and no one client to name. A run that still
-        # wrote a configuration gets the generic instruction, because that
-        # configuration is not read until the client restarts; a cancelled one
-        # gets nothing, having changed nothing. A failed sign-in has already been
-        # told the one thing left to do, and "ask it about your projects" is the
-        # question an unsigned-in server cannot answer.
+    if handoff.display_name is None or handoff.prompt is None:
+        # No one client to hand over to. A run that wrote a configuration still
+        # needs the restart, which is when a client reads it — except after a
+        # failed sign-in, whose ending already named the one thing left to do.
         if handoff.wrote_config and handoff.outcome != "sign_in_failed":
             install_view.render_restart_note(mcp_installed=True)
         return
 
-    # Set together with `host_key`, so this only ever falls back for a client the
-    # target list does not know by name.
-    display_name = handoff.display_name or handoff.host_key
-
-    if handoff.outcome == "prompt_shown":
-        install_view.render_prompt_to_paste(display_name, handoff.prompt)
+    if handoff.command is None:
+        install_view.render_prompt_to_paste(handoff.display_name, handoff.prompt)
         return
 
     if handoff.outcome == "declined":
-        install_view.render_handoff_declined(display_name)
+        install_view.render_handoff_declined(handoff.display_name)
         return
 
-    install_view.render_handoff(display_name)
-    # `launch` replaces this process, so `atexit` never runs and anything still
-    # queued would be lost. The events describing this run are the reason the
-    # run happened.
+    install_view.render_handoff(handoff.display_name)
+    # `launch` replaces this process, so `atexit` never runs.
     analytics.flush()
-    mcp_handoff.launch(handoff.host_key, handoff.prompt)
+    mcp_handoff.launch(handoff.command, handoff.prompt)
 
 
 @mcp.command(name="status")

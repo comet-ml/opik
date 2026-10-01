@@ -143,7 +143,8 @@ def render_configured(
     console.print(
         padding.Padding(
             _emphasize(
-                f"To log to another project: {PROJECT_NAME_DOCS_URL}", base="dim"
+                f"To log to another project: {opik_configure.PROJECT_NAME_DOCS_URL}",
+                base="dim",
             ),
             _FIELDS_INDENT,
         )
@@ -164,12 +165,6 @@ def _without_credentials(url: str) -> str:
     if parsed.port is not None:
         host = f"{host}:{parsed.port}"
     return urllib.parse.urlunsplit(parsed._replace(netloc=host))
-
-
-#: Where the closing block points for changing the destination project.
-PROJECT_NAME_DOCS_URL = (
-    "https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name"
-)
 
 
 def confirm_default_yes(question: str) -> bool:

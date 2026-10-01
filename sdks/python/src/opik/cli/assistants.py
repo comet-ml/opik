@@ -121,13 +121,11 @@ def setup(
     # carrying on would have meant a cancelled run still writing into the user's
     # AI client.
     if install.cancelled:
-        return NOTHING_DONE._replace(
-            transport=install.transport,
-            sign_in=install.sign_in,
-            stale_tool=install.stale_tool,
-            mcp_declined=install.declined,
-            # Not `declined`: nobody refused the pack, the run stopped before it
-            # came up. The funnel has to be able to tell those apart.
+        # Not `declined`: nobody refused the pack, the run stopped before it
+        # came up. The funnel has to be able to tell those apart.
+        return _outcome(
+            install,
+            skills=False,
             skills_decision=consent.Reason.CANCELLED.value,
             cancelled=True,
         )
@@ -175,31 +173,34 @@ def setup(
             result = skills_installer.setup_skills(skills_targets)
         installed_skills = install_view.render_skill_pack(result, view)
 
-    if not configured_hosts and not installed_skills:
-        # Nothing landed, but a run where every write failed is not the same as one
-        # where nothing was attempted, so the failure count rides along either way.
-        return NOTHING_DONE._replace(
-            registered_clients=install.registered,
-            failed_clients=len(install.failed),
-            verified=install.verified,
-            skills_decision=skills_reason,
-            mcp_declined=install.declined,
-            transport=install.transport,
-            sign_in=install.sign_in,
-            stale_tool=install.stale_tool,
-        )
+    if configured_hosts or installed_skills:
+        view.done()
 
-    view.done()
-
-    return Outcome(
-        clients=len(configured_hosts),
+    return _outcome(
+        install,
         skills=installed_skills,
+        skills_decision=skills_reason,
+        cancelled=False,
+    )
+
+
+def _outcome(
+    install: mcp_install.InstallReport,
+    skills: bool,
+    skills_decision: str,
+    cancelled: bool,
+) -> Outcome:
+    """The step's result, with everything the server half reported carried up."""
+    return Outcome(
+        clients=len(install.registered),
+        skills=skills,
         registered_clients=install.registered,
         failed_clients=len(install.failed),
         verified=install.verified,
-        skills_decision=skills_reason,
+        skills_decision=skills_decision,
         mcp_declined=install.declined,
         transport=install.transport,
         sign_in=install.sign_in,
+        cancelled=cancelled,
         stale_tool=install.stale_tool,
     )

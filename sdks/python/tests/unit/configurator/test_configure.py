@@ -1279,7 +1279,7 @@ class TestConfigureCloud:
             (
                 "Configuration completed successfully. Traces will be logged to "
                 "'valid_project_name' project. To change the destination project, "
-                "see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
+                "see: https://www.comet.com/docs/opik/tracing/advanced/log_traces#logging-to-a-specific-project",
             ),
         ]
         assert mock_logger_info.call_count == 2
@@ -1577,7 +1577,7 @@ class TestConfigureLocal:
             ),
             (
                 "Configuration completed successfully. Traces will be logged to 'test_project' project. "
-                "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
+                "To change the destination project, see: https://www.comet.com/docs/opik/tracing/advanced/log_traces#logging-to-a-specific-project",
             ),
         ]
         assert mock_logger_info.call_count == 2

@@ -16,7 +16,6 @@ step. Demo projects do not count: every new workspace has them, and pointing an
 agent at data the user did not produce teaches them nothing about their own app.
 """
 
-import logging
 import os
 import shutil
 import signal
@@ -24,12 +23,8 @@ import subprocess
 import sys
 from typing import Dict, Final, List, Optional
 
-import httpx
+from opik.configurator import opik_rest_helpers
 
-import opik.httpx_client as httpx_client
-import opik.url_helpers as url_helpers
-
-LOGGER = logging.getLogger(__name__)
 
 #: Mirrors `DemoData.PROJECTS` in the backend, which is the list the product
 #: itself excludes when it asks "has this workspace done anything yet".
@@ -67,53 +62,21 @@ LAUNCH_COMMANDS: Final[Dict[str, List[str]]] = {
 
 
 def traced_project(
-    api_key: Optional[str],
-    workspace: Optional[str],
-    api_url: str,
-    check_tls_certificate: bool,
+    api_key: Optional[str], workspace: Optional[str], api_url: str
 ) -> Optional[str]:
     """A project of the user's own that already has traces, if there is one.
 
-    Best-effort: any failure answers "none", which sends the user to the
-    instrument skill. That is the safer way to be wrong — it is the right first
-    step for someone with nothing logged, and merely redundant for someone who
-    has already instrumented their app.
+    Any failure answers "none", which sends the user to the instrument skill:
+    the right first step with nothing logged, and merely redundant otherwise.
     """
-    try:
-        with httpx_client.get(
-            workspace=workspace,
-            api_key=api_key,
-            check_tls_certificate=check_tls_certificate,
-            compress_json_requests=False,
-        ) as client:
-            response = client.get(
-                url=f"{url_helpers.ensure_ending_slash(api_url)}v1/private/projects",
-                params={"page": 1, "size": PROJECT_PAGE_SIZE},
-                timeout=PROJECTS_TIMEOUT_SECONDS,
-            )
-    except (httpx.HTTPError, OSError):
-        LOGGER.debug("Could not list projects for the closing prompt", exc_info=True)
-        return None
-
-    if response.status_code != 200:
-        return None
-
-    try:
-        body = response.json()
-    except ValueError:
-        return None
-
-    # Shape-checked rather than trusted: this runs just before the result event,
-    # and an `AttributeError` here would take the command down without reporting
-    # anything. A body that is not what we expect means "no project", like every
-    # other failure in this function.
-    if not isinstance(body, dict):
-        return None
-    content = body.get("content", [])
-    if not isinstance(content, list):
-        return None
-
-    return _first_traced_project(content)
+    projects = opik_rest_helpers.list_projects(
+        api_key=api_key,
+        workspace=workspace,
+        api_url=api_url,
+        params={"page": 1, "size": PROJECT_PAGE_SIZE},
+        timeout=PROJECTS_TIMEOUT_SECONDS,
+    )
+    return None if projects is None else _first_traced_project(projects)
 
 
 def _first_traced_project(projects: List[dict]) -> Optional[str]:
@@ -149,41 +112,32 @@ def closing_prompt(project: Optional[str]) -> str:
     return DIAGNOSE_PROMPT.format(project=project)
 
 
-def can_launch(host_key: str) -> bool:
-    """Whether this client can be started here, with the prompt already in it."""
-    command = LAUNCH_COMMANDS.get(host_key)
-    return command is not None and shutil.which(command[0]) is not None
+def launch_command(host_key: str) -> Optional[List[str]]:
+    """The command that starts this client here, or None for one that cannot be.
 
-
-def launch(host_key: str, prompt: str) -> None:
-    """Replace this process with the agent, mid-question.
-
-    The prompt goes in as the positional argument, which both CLIs treat as a
-    message to send — so the agent opens already working on it. That is the
-    point: the user was shown this exact prompt and said yes to it a line ago.
-
-    ``execvp`` rather than a subprocess: the agent owns the terminal from here,
-    and a parent sitting behind it would only be something to exit twice. It
-    also means nothing after this line runs, which is why the caller flushes
-    what it has to say first.
+    A GUI client cannot be handed a prompt from a terminal, and a terminal one
+    is only startable when its CLI is on PATH.
     """
     command = LAUNCH_COMMANDS.get(host_key)
-    if command is None:
-        return
+    executable = shutil.which(command[0]) if command is not None else None
+    if command is None or executable is None:
+        return None
+    return [executable, *command[1:]]
 
-    executable = shutil.which(command[0])
-    if executable is None:
-        return
 
+def launch(command: List[str], prompt: str) -> None:
+    """Replace this process with the agent, already working on ``prompt``.
+
+    Both CLIs treat a positional argument as a message to send, and the user
+    agreed to this exact prompt a line ago. ``execvp`` rather than a child
+    process: the agent owns the terminal from here, and nothing after this
+    line runs, which is why the caller flushes analytics first.
+    """
     if sys.platform == "win32":
-        # Windows has no exec. `os.execvp` there starts the agent and exits this
-        # process, handing the console back to the shell while the agent is still
-        # reading from it, and passes the arguments unquoted, so the prompt
-        # arrives split into words. The nearest equivalent is to run the agent as
-        # a child and leave with its status — ignoring Ctrl-C meanwhile, which
-        # the agent uses for itself and would otherwise take this process down,
-        # and the agent with it.
+        # Windows has no exec: `os.execvp` exits this process while the agent
+        # still reads the console, and passes the prompt unquoted. Run it as a
+        # child instead, ignoring the Ctrl-C the agent uses for itself.
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        sys.exit(subprocess.run([executable, *command[1:], prompt]).returncode)
+        sys.exit(subprocess.run([*command, prompt]).returncode)
 
-    os.execvp(executable, [*command, prompt])
+    os.execvp(command[0], [*command, prompt])

@@ -11,6 +11,7 @@ from unittest import mock
 
 import pytest
 
+from opik.configurator import configure as opik_configure
 from opik.configurator.mcp import view as mcp_view
 
 
@@ -542,7 +543,7 @@ class TestTheConfigureEnding:
         assert "~/.opik.config" in out
         assert "acme-ai" in out
         assert "checkout-bot" in out
-        assert rich_view.PROJECT_NAME_DOCS_URL in out
+        assert opik_configure.PROJECT_NAME_DOCS_URL in out
 
     def test_nothing_rewritten__says_it_was_already_configured(self, terminal):
         rich_view, recorder = terminal

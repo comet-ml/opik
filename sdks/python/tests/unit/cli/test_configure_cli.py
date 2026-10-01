@@ -1306,14 +1306,10 @@ class TestTheProjectLink:
         )
 
     @staticmethod
-    def _listing(monkeypatch, content=None, error=None):
-        response = mock.Mock(status_code=200)
-        response.json.return_value = {"content": content or []}
-        client = mock.MagicMock()
-        client.__enter__.return_value.get.side_effect = (
-            error if error is not None else lambda **kwargs: response
+    def _listing(monkeypatch, content):
+        monkeypatch.setattr(
+            configure_cli.opik_rest_helpers, "list_projects", lambda **kwargs: content
         )
-        monkeypatch.setattr(configure_cli.httpx_client, "get", lambda **kwargs: client)
 
     def test_an_existing_project__links_its_page(self, monkeypatch):
         monkeypatch.setattr(configure_cli.opik_config, "OpikConfig", self._config)
@@ -1341,10 +1337,8 @@ class TestTheProjectLink:
         )
 
     def test_an_unreachable_backend__still_gives_a_link(self, monkeypatch):
-        import httpx
-
         monkeypatch.setattr(configure_cli.opik_config, "OpikConfig", self._config)
-        self._listing(monkeypatch, error=httpx.ConnectError("down"))
+        self._listing(monkeypatch, content=None)
 
         assert configure_cli._project_url("checkout-bot") == (
             "https://www.comet.com/opik/acme-ai/projects",

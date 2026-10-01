@@ -1,6 +1,5 @@
 import subprocess
 
-import httpx
 import pytest
 
 from opik.configurator.mcp import handoff
@@ -84,96 +83,54 @@ class TestClosingPrompt:
 
 
 class TestTracedProject:
-    """The lookup itself, which must never be what breaks the command."""
-
-    @staticmethod
-    def _respond(monkeypatch, response):
-        class FakeClient:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-            def get(self, **kwargs):
-                if isinstance(response, Exception):
-                    raise response
-                return response
-
-        monkeypatch.setattr(handoff.httpx_client, "get", lambda **kwargs: FakeClient())
-
-    @pytest.mark.parametrize(
-        "failure",
-        [
-            httpx.ConnectError("no route"),
-            httpx.ReadTimeout("too slow"),
-            OSError("socket closed"),
-        ],
-    )
-    def test_an_unreachable_deployment__answers_none(self, monkeypatch, failure):
-        self._respond(monkeypatch, failure)
-
-        assert handoff.traced_project(None, None, "https://opik/api/", True) is None
-
-    def test_a_rejected_request__answers_none(self, monkeypatch):
-        self._respond(monkeypatch, httpx.Response(403, json={}))
-
-        assert handoff.traced_project(None, None, "https://opik/api/", True) is None
-
-    def test_a_listing__names_the_traced_project(self, monkeypatch):
-        self._respond(
-            monkeypatch,
-            httpx.Response(
-                200,
-                json={
-                    "content": [
-                        {
-                            "name": "my-app",
-                            "last_updated_trace_at": "2026-09-30T10:00:00Z",
-                        }
-                    ]
-                },
-            ),
+    def test_no_listing__answers_none(self, monkeypatch):
+        monkeypatch.setattr(
+            handoff.opik_rest_helpers, "list_projects", lambda **kw: None
         )
 
-        assert handoff.traced_project(None, None, "https://opik/api/", True) == "my-app"
+        assert handoff.traced_project(None, None, "https://opik/api/") is None
 
-    def test_a_body_that_is_not_json__answers_none(self, monkeypatch):
-        self._respond(monkeypatch, httpx.Response(200, text="<html>nope</html>"))
+    def test_a_listing__names_the_traced_project(self, monkeypatch):
+        listing = [{"name": "my-app", "last_updated_trace_at": "2026-09-30T10:00:00Z"}]
+        monkeypatch.setattr(
+            handoff.opik_rest_helpers, "list_projects", lambda **kw: listing
+        )
 
-        assert handoff.traced_project(None, None, "https://opik/api/", True) is None
+        assert handoff.traced_project(None, None, "https://opik/api/") == "my-app"
 
 
 class TestLaunching:
-    def test_a_gui_client__cannot_be_launched(self):
+    def test_a_gui_client__has_no_launch_command(self):
         """Nothing to hand a prompt to; the caller shows it instead."""
-        assert handoff.can_launch("cursor") is False
-        assert handoff.can_launch("vscode") is False
+        assert handoff.launch_command("cursor") is None
+        assert handoff.launch_command("vscode") is None
 
-    def test_a_terminal_agent__can_be_launched_when_it_is_installed(self, monkeypatch):
+    def test_a_terminal_agent__is_started_from_where_it_is_installed(self, monkeypatch):
         monkeypatch.setattr(handoff.shutil, "which", lambda name: "/usr/bin/claude")
 
-        assert handoff.can_launch("claude-code") is True
+        assert handoff.launch_command("claude-code") == ["/usr/bin/claude"]
 
-    def test_a_terminal_agent_that_is_not_installed__cannot(self, monkeypatch):
+    def test_a_terminal_agent_that_is_not_installed__has_none(self, monkeypatch):
         monkeypatch.setattr(handoff.shutil, "which", lambda name: None)
 
-        assert handoff.can_launch("claude-code") is False
+        assert handoff.launch_command("claude-code") is None
 
     def test_launching__execs_the_agent_with_the_prompt(self, monkeypatch):
         """The user agreed to this exact question a line ago, so it is sent."""
         recorded = {}
-        monkeypatch.setattr(handoff.shutil, "which", lambda name: "/usr/bin/claude")
+        monkeypatch.setattr(handoff.sys, "platform", "darwin")
         monkeypatch.setattr(
             handoff.os,
             "execvp",
             lambda executable, argv: recorded.update(executable=executable, argv=argv),
         )
 
-        handoff.launch("claude-code", "look at my traces")
+        handoff.launch(["/usr/bin/claude"], "look at my traces")
 
-        assert recorded["executable"] == "/usr/bin/claude"
-        assert recorded["argv"] == ["claude", "look at my traces"]
+        assert recorded == {
+            "executable": "/usr/bin/claude",
+            "argv": ["/usr/bin/claude", "look at my traces"],
+        }
 
     def test_launching_on_windows__runs_the_agent_and_exits_with_its_status(
         self, monkeypatch
@@ -183,11 +140,8 @@ class TestLaunching:
         arrives split into words. The agent runs as a child instead."""
         recorded = {}
         monkeypatch.setattr(handoff.sys, "platform", "win32")
-        monkeypatch.setattr(handoff.shutil, "which", lambda name: "C:\\bin\\claude.CMD")
         monkeypatch.setattr(
-            handoff.os,
-            "execvp",
-            lambda *args: pytest.fail("Windows must not exec"),
+            handoff.os, "execvp", lambda *args: pytest.fail("Windows must not exec")
         )
         monkeypatch.setattr(handoff.signal, "signal", lambda *args: None)
 
@@ -198,16 +152,7 @@ class TestLaunching:
         monkeypatch.setattr(handoff.subprocess, "run", fake_run)
 
         with pytest.raises(SystemExit) as exited:
-            handoff.launch("claude-code", "look at my traces")
+            handoff.launch(["C:\\bin\\claude.CMD"], "look at my traces")
 
         assert recorded["argv"] == ["C:\\bin\\claude.CMD", "look at my traces"]
         assert exited.value.code == 3
-
-    def test_launching_something_that_cannot_be__does_nothing(self, monkeypatch):
-        monkeypatch.setattr(
-            handoff.os,
-            "execvp",
-            lambda *args: pytest.fail("a GUI client must not be exec'd"),
-        )
-
-        handoff.launch("cursor", "look at my traces")

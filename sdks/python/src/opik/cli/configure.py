@@ -5,17 +5,15 @@ import urllib.parse
 from typing import Any, Mapping, Optional, Tuple
 
 import click
-import httpx
 
 import opik.config as opik_config
-import opik.httpx_client as httpx_client
 import opik.url_helpers as url_helpers
 from opik import analytics
 from opik.cli import account_identity
 from opik.cli import assistants
 from opik.cli import install_view
 from opik.cli import status_view
-from opik.configurator import consent
+from opik.configurator import consent, opik_rest_helpers
 from opik.configurator import configure as opik_configure, interactive_helpers
 from opik.configurator import mcp as mcp_installer
 
@@ -56,34 +54,18 @@ def _project_url(project_name: str) -> Tuple[str, bool]:
 def _find_project_id(
     config: opik_config.OpikConfig, project_name: str
 ) -> Optional[str]:
-    """The id of the project called ``project_name``, or None.
-
-    Best-effort: any failure answers None, which only means the closing block
-    links to the project list instead of the project.
-    """
-    try:
-        with httpx_client.get(
-            workspace=config.workspace,
-            api_key=config.api_key,
-            check_tls_certificate=config.check_tls_certificate,
-            compress_json_requests=False,
-        ) as client:
-            response = client.get(
-                url=f"{url_helpers.ensure_ending_slash(config.url_override)}v1/private/projects",
-                # The filter is a partial match, so the exact one is picked below.
-                params={"name": project_name, "size": 100},
-                timeout=PROJECT_LOOKUP_TIMEOUT_SECONDS,
-            )
-        body = response.json() if response.status_code == 200 else None
-    except (httpx.HTTPError, OSError, ValueError):
-        return None
-
-    if not isinstance(body, dict) or not isinstance(body.get("content"), list):
-        return None
-    for project in body["content"]:
-        if isinstance(project, dict) and project.get("name") == project_name:
-            project_id = project.get("id")
-            return project_id if isinstance(project_id, str) else None
+    """The id of the project called ``project_name``, or None if it cannot be found."""
+    projects = opik_rest_helpers.list_projects(
+        api_key=config.api_key,
+        workspace=config.workspace,
+        api_url=config.url_override,
+        # The name filter is a partial match, so the exact one is picked below.
+        params={"name": project_name, "size": 100},
+        timeout=PROJECT_LOOKUP_TIMEOUT_SECONDS,
+    )
+    for project in projects or []:
+        if project.get("name") == project_name and isinstance(project.get("id"), str):
+            return project["id"]
     return None
 
 

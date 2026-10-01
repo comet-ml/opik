@@ -1,5 +1,5 @@
 import logging
-from typing import Final, List, Optional
+from typing import Any, Dict, Final, List, Optional
 
 import httpx
 
@@ -142,3 +142,33 @@ def get_most_recent_project_name(
     except Exception:
         LOGGER.debug("Failed to fetch projects from %s", api_url, exc_info=True)
         return None
+
+
+def list_projects(
+    api_key: Optional[str],
+    workspace: Optional[str],
+    api_url: str,
+    params: Dict[str, Any],
+    timeout: float,
+) -> Optional[List[Dict[str, Any]]]:
+    """One page of the workspace's projects, or None when it cannot be read.
+
+    Best-effort for callers that only use it to pick wording or a link: any
+    failure, including a body of an unexpected shape, answers None.
+    """
+    try:
+        with _get_httpx_client(api_key=api_key, workspace=workspace) as client:
+            response = client.get(
+                url=f"{url_helpers.ensure_ending_slash(api_url)}v1/private/projects",
+                params=params,
+                timeout=timeout,
+            )
+        body = response.json() if response.status_code == 200 else None
+    except (httpx.HTTPError, OSError, ValueError):
+        LOGGER.debug("Could not list projects at %s", api_url, exc_info=True)
+        return None
+
+    content = body.get("content") if isinstance(body, dict) else None
+    if not isinstance(content, list):
+        return None
+    return [project for project in content if isinstance(project, dict)]

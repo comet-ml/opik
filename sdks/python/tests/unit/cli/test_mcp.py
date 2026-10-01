@@ -592,7 +592,11 @@ class TestResultEventCarriesTheHandoff:
                 return_value=traced_project,
                 side_effect=KeyboardInterrupt if lookup_interrupted else None,
             ),
-            patch.object(mcp_cli.mcp_handoff, "can_launch", return_value=can_launch),
+            patch.object(
+                mcp_cli.mcp_handoff,
+                "launch_command",
+                return_value=["/usr/bin/claude"] if can_launch else None,
+            ),
             patch.object(mcp_cli.mcp_handoff, "launch"),
             patch(
                 "click.confirm",
@@ -770,7 +774,9 @@ class TestResultEventCarriesTheConnectionSignals:
                 return_value=SimpleNamespace(display_name="Claude Code"),
             ),
             patch.object(mcp_cli.mcp_handoff, "traced_project", return_value=None),
-            patch.object(mcp_cli.mcp_handoff, "can_launch", return_value=True),
+            patch.object(
+                mcp_cli.mcp_handoff, "launch_command", return_value=["/usr/bin/claude"]
+            ),
             patch.object(mcp_cli.mcp_handoff, "launch"),
             patch.object(mcp_cli.install_view, "render_handoff"),
             patch.object(mcp_cli.install_view, "render_prompt_to_paste"),
