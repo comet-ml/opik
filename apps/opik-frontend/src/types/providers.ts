@@ -80,6 +80,9 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_5_6_SOL = "gpt-5.6-sol",
   GPT_5_6_TERRA = "gpt-5.6-terra",
   GPT_6_ASTRA = "gpt-6-astra",
+  GPT_6_LUNA = "gpt-6-luna",
+  GPT_6_SOL = "gpt-6-sol",
+  GPT_6_1_SOL = "gpt-6.1-sol",
   GPT_IMAGE_1 = "gpt-image-1",
   GPT_IMAGE_1_MINI = "gpt-image-1-mini",
   GPT_IMAGE_1_5 = "gpt-image-1.5",
@@ -100,9 +103,6 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
-  GPT_6_LUNA = "gpt-6-luna",
-  GPT_6_SOL = "gpt-6-sol",
-  GPT_6_1_SOL = "gpt-6.1-sol",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -1081,7 +1081,6 @@ export interface LLMOpenAIConfigsType {
 }
 
 export type AnthropicThinkingEffort =
-  | "adaptive"
   | "low"
   | "medium"
   | "high"

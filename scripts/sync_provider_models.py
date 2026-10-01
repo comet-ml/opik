@@ -75,6 +75,10 @@ OPENAI_EXCLUDE_PATTERNS = [
 # Only these prefixes are chat/completion models usable in our playground.
 OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")
 
+# LiteLLM flags these as reasoning, but OpenAI rejects reasoning_effort on them ("Invalid 'reasoning_effort' for non-reasoning model") and the frontend pins them non-reasoning.
+# gpt-5.1-chat-latest stays out on purpose: Azure's reasoning-models table lists gpt-5.1-chat as a reasoning model that takes reasoning_effort, unlike the 5, 5.2 and 5.3 chat-latest models, which return 400 on it.
+OPENAI_NON_REASONING_MODELS = {"gpt-5-chat-latest", "gpt-5.2-chat-latest", "gpt-5.3-chat-latest"}
+
 ANTHROPIC_EXCLUDE_PATTERNS = [
     r"-latest$",
     r"^claude-3-",
@@ -476,7 +480,7 @@ def fetch_gemini_models(api_key: str) -> list[tuple[str, str]]:
         page_token = data.get("nextPageToken")
         if not page_token:
             break
-    return sorted(set(results), key=lambda x: x[0])
+    return sorted(set(results))
 
 
 def load_model_prices() -> dict:
@@ -989,6 +993,7 @@ def regenerate_llm_models_yaml(
     existing_content: str,
     models_by_provider: dict[str, list[ModelEntry]],
     dropdown_by_provider: dict[str, list[ModelEntry]] | None = None,
+    openai_reasoning: dict[str, bool] | None = None,
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
@@ -1001,12 +1006,18 @@ def regenerate_llm_models_yaml(
       curated order and carry their human-readable `label`; the remaining
       entries follow alphabetically with no label.
     - Preserves reasoning flags carried over from the existing file.
+    - In the openai section only, also emits `reasoning: true` for models
+      that `openai_reasoning` marks, except OPENAI_NON_REASONING_MODELS.
+      Other sections stay carry-over only: LiteLLM's flag means "can emit
+      reasoning tokens", which is broader than what the frontend treats as
+      a reasoning model, and nothing reads the flag for other providers.
     - Sections for providers not managed here (bedrock, ollama, opik-free,
       custom-llm) are preserved as-is if present.
     """
     # Carry over existing reasoning flags by provider/model-id
     reasoning_flags = _parse_yaml_reasoning_flags(existing_content)
     dropdown_by_provider = dropdown_by_provider or {}
+    openai_reasoning = openai_reasoning or {}
 
     lines: list[str] = []
 
@@ -1054,7 +1065,12 @@ def regenerate_llm_models_yaml(
 
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
-            if provider_reasoning.get(model_id):
+            seeded_reasoning = (
+                provider_key == "openai"
+                and openai_reasoning.get(model_id, False)
+                and model_id not in OPENAI_NON_REASONING_MODELS
+            )
+            if provider_reasoning.get(model_id) or seeded_reasoning:
                 lines.append("    reasoning: true")
 
     # Preserve any provider sections not managed by the sync script
@@ -1096,6 +1112,17 @@ def _build_structured_output_lookup(prices: dict) -> dict[str, bool]:
     return lookup
 
 
+def _build_reasoning_lookup(prices: dict) -> dict[str, bool]:
+    return {
+        key: bool(info.get("supports_reasoning"))
+        for key, info in prices.items()
+        if isinstance(info, dict)
+        and info.get("litellm_provider") == "openai"
+        # LiteLLM lists the Responses-API-only models (codex, -pro, deep-research) with mode "responses", not "chat".
+        and info.get("mode") in ("chat", "responses")
+    }
+
+
 def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
     """Extract VertexAI models from the prices JSON.
 
@@ -1121,6 +1148,26 @@ def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
     return sorted(vertexai_all.items(), key=lambda x: x[0])
 
 
+def _seeded_reasoning_ids(
+    existing_yaml_content: str, openai_entries: list[ModelEntry], openai_reasoning: dict[str, bool]
+) -> list[str]:
+    already_flagged = _parse_yaml_reasoning_flags(existing_yaml_content).get("openai", {})
+    return sorted(
+        entry.value
+        for entry in openai_entries
+        if openai_reasoning.get(entry.value, False)
+        and entry.value not in OPENAI_NON_REASONING_MODELS
+        and entry.value not in already_flagged
+    )
+
+
+def _should_write_files(
+    total_added: int, seeded_reasoning: list[str], force_regen: bool, fell_back: bool
+) -> bool:
+    # A fallback run swaps in the prices JSON's labels, flags and dropdown; publishing that without new models would repeat every day the key stays broken.
+    return total_added > 0 or (bool(seeded_reasoning) and not fell_back) or force_regen
+
+
 def main():
     parser = argparse.ArgumentParser(description="Sync LLM provider model definitions")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing")
@@ -1132,6 +1179,7 @@ def main():
     openai_key = os.environ.get("OPENAI_API_KEY")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     gemini_key = os.environ.get("GEMINI_API_KEY")
+    fell_back = False
 
     prices = load_model_prices()
     so_lookup = _build_structured_output_lookup(prices)
@@ -1157,6 +1205,7 @@ def main():
             print(f"  Found {len(openai_models)} models from API", file=sys.stderr)
         except Exception as e:
             print(f"  WARNING: OpenAI API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
+            fell_back = True
             openai_models = extract_models_from_prices(prices, "openai", OPENAI_EXCLUDE_PATTERNS)
     else:
         print("  OpenAI: using prices JSON (no OPENAI_API_KEY)", file=sys.stderr)
@@ -1173,6 +1222,7 @@ def main():
             print(f"  Found {len(anthropic_models)} models from API", file=sys.stderr)
         except Exception as e:
             print(f"::warning::Anthropic API fetch failed, falling back to prices JSON (model list will lack API display names): {e}", file=sys.stderr)
+            fell_back = True
             anthropic_models = extract_models_from_prices(prices, "anthropic", ANTHROPIC_EXCLUDE_PATTERNS)
     else:
         print("::warning::Anthropic: using prices JSON (no ANTHROPIC_API_KEY); model list will lack API display names", file=sys.stderr)
@@ -1189,6 +1239,7 @@ def main():
             print(f"  Found {len(gemini_models)} models from API", file=sys.stderr)
         except Exception as e:
             print(f"  WARNING: Gemini API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
+            fell_back = True
             gemini_models = extract_models_from_prices(
                 prices, "gemini", GEMINI_EXCLUDE_PATTERNS, key_prefix="gemini/"
             )
@@ -1259,8 +1310,13 @@ def main():
     # section in curated order and carry human-readable labels; the rest
     # follow alphabetically without a label.
     llm_models_yaml_content = read_file(LLM_MODELS_YAML)
+    openai_reasoning = _build_reasoning_lookup(prices)
     new_llm_models_yaml = regenerate_llm_models_yaml(
         llm_models_yaml_content, models_by_provider, dropdown_by_provider,
+        openai_reasoning=openai_reasoning,
+    )
+    seeded_reasoning = _seeded_reasoning_ids(
+        llm_models_yaml_content, models_by_provider["openai"], openai_reasoning,
     )
 
     # 5. Print summary
@@ -1300,8 +1356,16 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if total_added == 0 and not args.force_regen:
-        if total_stale > 0:
+    if seeded_reasoning:
+        print("### Registry")
+        for model_id in seeded_reasoning:
+            print(f"  + {model_id} (reasoning)")
+        print()
+
+    if not _should_write_files(total_added, seeded_reasoning, args.force_regen, fell_back):
+        if seeded_reasoning:
+            print("A provider API call failed: fallback data not published; retry when the API is reachable.")
+        elif total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
         else:
             print("No changes found.")
