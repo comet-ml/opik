@@ -1,7 +1,7 @@
 {
   "name": "opik",
   "description": "Opik TypeScript and JavaScript SDK",
-  "version": "2.2.84",
+  "version": "2.2.86",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
@@ -38,6 +38,9 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     }
+  },
+  "bin": {
+    "opik": "dist/cli.js"
   },
   "main": "dist/index.cjs",
   "module": "dist/index.js",

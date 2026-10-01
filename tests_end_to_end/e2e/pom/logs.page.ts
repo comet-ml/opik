@@ -6,6 +6,18 @@ import { AddToDatasetDialogPage } from './add-to-dataset-dialog.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
+/**
+ * The Logs table's row-height setting — `ROW_HEIGHT` in
+ * apps/opik-frontend/src/types/shared.ts, labelled Compact / Medium / Detailed
+ * in the selector.
+ *
+ * It matters to more than line count: cells switch RENDER PATH on it. At
+ * small/medium a feedback score's reason goes into a hover tooltip; at large it
+ * is written inline into the cell (`FeedbackScoreCell`), which is a different
+ * element with a different white-space rule.
+ */
+export type LogsRowHeight = 'small' | 'medium' | 'large';
+
 // Maps an explain kind to the Traces table column id (used in data-cell-id)
 // and the owl trigger's aria-label, per apps/opik-frontend/src/plugins/comet/explain/registry.ts.
 const EXPLAIN_COLUMN: Record<ExplainKind, string> = {
@@ -24,12 +36,18 @@ export class LogsPage {
 
   constructor(private readonly page: Page) {}
 
-  async goto(projectId: string): Promise<void> {
-    return test.step(`Open Logs for project ${projectId}`, async () => {
-      this.projectId = projectId;
-      const env = loadEnvConfig();
-      await this.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/logs`);
-    });
+  async goto(projectId: string, opts: { rowHeight?: LogsRowHeight } = {}): Promise<void> {
+    return test.step(
+      `Open Logs for project ${projectId}${opts.rowHeight ? ` at ${opts.rowHeight} row height` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const query = opts.rowHeight ? `?height=${opts.rowHeight}` : '';
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs${query}`,
+        );
+      },
+    );
   }
 
   /**
@@ -266,15 +284,30 @@ export class LogsPage {
     });
   }
 
-  /** Open Logs with the Threads tab active for the given project. */
-  async gotoThreads(projectId: string): Promise<void> {
-    return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {
-      this.projectId = projectId;
-      const env = loadEnvConfig();
-      await this.page.goto(
-        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=threads`,
-      );
-    });
+  /**
+   * Open Logs with the Threads tab active for the given project.
+   *
+   * `timeRange` is the page's own `time_range` query param, the same one
+   * `gotoSpans` takes. Two reasons a spec states it rather than inheriting the
+   * default: the value is also persisted in localStorage and the URL is what
+   * outranks it, so an unstated range is whatever the profile last stored; and
+   * it decides whether the read is windowed at all — `alltime` sends no
+   * `from_time`, and only a windowed read takes the `trace_threads` inner-join
+   * branch. A spec about that branch has to say which range it means.
+   */
+  async gotoThreads(projectId: string, opts: { timeRange?: string } = {}): Promise<void> {
+    return test.step(
+      `Open Logs (Threads) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'threads' });
+        if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+      },
+    );
   }
 
   async waitForReady(): Promise<void> {
@@ -523,6 +556,77 @@ export class LogsPage {
    */
   durationCell(traceId: string): Locator {
     return this.page.locator(`[data-cell-id="${traceId}_duration"]`);
+  }
+
+  /**
+   * A trace row's cell for ONE named feedback score.
+   *
+   * Each score in the project is its own dynamic column, and every score the
+   * project has ever carried is auto-selected into the table on a fresh profile
+   * (`useDynamicColumnsCache`), so a seeded score needs no column configuration
+   * to be visible.
+   *
+   * The column is declared with `id: 'feedback_scores.<name>'`, which
+   * `mapColumnDataFields` hands to TanStack as an `accessorKey` and no explicit
+   * id — and TanStack derives the id from an accessorKey by replacing the first
+   * `.` with `_`. Hence `feedback_scores_<name>` here while the wire-level
+   * `sorting`/`filters` params still take the dotted form. Same idiom as
+   * `CompareExperimentsPage.readItemScore`.
+   */
+  feedbackScoreCell(traceId: string, scoreName: string): Locator {
+    return this.page.locator(`td[data-cell-id="${traceId}_feedback_scores_${scoreName}"]`);
+  }
+
+  /**
+   * A feedback-score cell's text AS RENDERED, and its height.
+   *
+   * `innerText`, never `textContent`, and that is the whole point of this
+   * helper: the reason is seeded with a real `\n`, so a `textContent` read
+   * reports the newline back from the DOM even on a build whose CSS collapsed it
+   * on screen — and the spec would pass having verified nothing. `innerText` is
+   * computed from the rendered box, so `white-space: normal` shows up in it as a
+   * space.
+   *
+   * The height comes back with it because the two are one observation: at
+   * Detailed row height the reason is written inline into the cell, so "the
+   * newline survived" and "the cell grew to hold two lines" are the same claim
+   * seen twice, and a caller that reads them in separate round-trips could have
+   * them straddle a re-render.
+   *
+   * Counted before reading: a dynamic feedback-score column is named by the
+   * score, so an ambiguous match would mean the table is rendering two columns
+   * for one score — worth failing on rather than silently taking `.first()`.
+   */
+  async readFeedbackScoreCell(
+    traceId: string,
+    scoreName: string,
+  ): Promise<{ text: string; height: number }> {
+    return test.step(`read the rendered "${scoreName}" cell of trace ${traceId}`, async () => {
+      const cell = this.feedbackScoreCell(traceId, scoreName);
+      await expect(cell, `exactly one "${scoreName}" cell for trace ${traceId}`).toHaveCount(1);
+      await expect(cell, `the "${scoreName}" cell for trace ${traceId}`).toBeVisible();
+      return cell.evaluate((el) => ({
+        text: (el as HTMLElement).innerText,
+        height: el.getBoundingClientRect().height,
+      }));
+    });
+  }
+
+  /**
+   * The hover trigger that holds a feedback score's reason at Compact/Medium
+   * height — `FeedbackScoreReasonTooltip`'s `MessageSquareMore` icon.
+   *
+   * Addressed by the Lucide icon class because the trigger is a bare `div` with
+   * no role, name or `data-testid`; the same idiom `CompareExperimentsPage` uses
+   * for the shared table's icon-only controls, and for the same reason — these
+   * specs run against a pre-built deployment, so a front-end attribute added
+   * beside them would not exist in the build under test.
+   *
+   * Only ever used to tell the two render paths apart: its presence is what says
+   * the cell took the tooltip branch rather than the inline one.
+   */
+  feedbackScoreReasonTooltipTrigger(traceId: string, scoreName: string): Locator {
+    return this.feedbackScoreCell(traceId, scoreName).locator('svg.lucide-message-square-more');
   }
 
   /** The Errors/Duration/Estimated cost cell for a trace row, keyed by Ollie explain kind. */

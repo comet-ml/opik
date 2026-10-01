@@ -1,0 +1,36 @@
+suite: clickhouse pod lifecycle and termination grace period
+
+# Both are opt-in: unset, the pod template carries neither field, so the default render is unchanged.
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: renders neither field by default
+    asserts:
+      - notExists:
+          path: spec.templates.podTemplates[0].spec.terminationGracePeriodSeconds
+      - notExists:
+          path: spec.templates.podTemplates[0].spec.containers[0].lifecycle
+
+  - it: passes lifecycle to the clickhouse container and the grace period to the pod
+    set:
+      clickhouse:
+        lifecycle:
+          preStop:
+            sleep:
+              seconds: 15
+        terminationGracePeriodSeconds: 60
+    asserts:
+      - equal:
+          path: spec.templates.podTemplates[0].spec.terminationGracePeriodSeconds
+          value: 60
+      - equal:
+          path: spec.templates.podTemplates[0].spec.containers[0].name
+          value: clickhouse
+      - equal:
+          path: spec.templates.podTemplates[0].spec.containers[0].lifecycle
+          value:
+            preStop:
+              sleep:
+                seconds: 15

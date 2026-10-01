@@ -5,8 +5,14 @@ unsupported form has a parse-error test, so the prompt-taught surface
 can't drift silently.
 """
 
+import re
+
 import pytest
 
+from opik.evaluation.suite_evaluators.agentic.compression import (
+    path_aware_truncator,
+)
+from opik.evaluation.suite_evaluators.agentic import path_format
 from opik.evaluation.suite_evaluators.agentic.tools import path_evaluator
 
 
@@ -110,6 +116,62 @@ class TestIterate:
         assert results == ["agent.run", "tool_call", "broken"]
 
 
+# Bracket-quoted keys ---------------------------------------------------------
+
+
+class TestQuotedKeyPaths:
+    def test_evaluate__quoted_key_at_root__returns_value(self):
+        assert path_evaluator.evaluate('.["a-b"].c', {"a-b": {"c": 1}}) == [1]
+
+    def test_evaluate__quoted_key_after_dotted_step__returns_value(self):
+        doc = {"trace": {"gen_ai.tool.input": "hello"}}
+        results = path_evaluator.evaluate('.trace["gen_ai.tool.input"]', doc)
+        assert results == ["hello"]
+
+    def test_evaluate__quoted_key_then_index__returns_element(self):
+        doc = {"a-b": ["first", "second"]}
+        assert path_evaluator.evaluate('.["a-b"][1]', doc) == ["second"]
+
+    def test_evaluate__escaped_quote_in_key__returns_value(self):
+        assert path_evaluator.evaluate(r'.["say\"hi"]', {'say"hi': 1}) == [1]
+
+    def test_normalize__quoted_key_at_root__gets_leading_dot(self):
+        assert path_evaluator.normalize_expression('["a-b"]') == '.["a-b"]'
+
+    @pytest.mark.parametrize("expression", ['[ "a-b"]', '[ "a-b" ]'])
+    def test_evaluate__whitespace_in_root_quoted_key__returns_value(self, expression):
+        normalized = path_evaluator.normalize_expression(expression)
+
+        assert path_evaluator.evaluate(normalized, {"a-b": "value"}) == ["value"]
+
+    @pytest.mark.parametrize(
+        "key", ["a-bé", "café", "é", r"a\n", 'say"hi', "line\nbreak"]
+    )
+    def test_evaluate__path_format_key__round_trips(self, key):
+        document = {key: "value"}
+        expression = path_evaluator.normalize_expression(path_format.field_step(key))
+
+        assert path_evaluator.evaluate(expression, document) == ["value"]
+
+    @pytest.mark.parametrize("expression", ["[0]", "[ 0]", "[]", "[:2]", "[ :2]"])
+    def test_normalize__root_index_or_slice__does_not_add_dot(self, expression):
+        normalized = path_evaluator.normalize_expression(expression)
+
+        assert normalized == expression
+        with pytest.raises(path_evaluator.PathError):
+            path_evaluator.evaluate(normalized, ["value"])
+
+    def test_evaluate__path_taken_from_truncation_hint__recovers_the_value(self):
+        # `read` renders these hints, and the prompt tells the model to paste
+        # them verbatim, so both sides have to speak the same grammar.
+        payload = {"tool-results": "z" * 80}
+        truncated = path_aware_truncator.truncate_strings(payload, max_string_chars=5)
+        hint = re.search(r"scan\('([^']+)'\)", truncated["tool-results"]).group(1)
+        expression = path_evaluator.normalize_expression(hint)
+
+        assert path_evaluator.evaluate(expression, payload) == ["z" * 80]
+
+
 # Recursive descent -----------------------------------------------------------
 
 
@@ -145,6 +207,25 @@ class TestRecursiveDescent:
         # Should match the span dict whose name is `tool_call`.
         names = [r["name"] for r in results if isinstance(r, dict)]
         assert names == ["tool_call"]
+
+    def test_evaluate__select_with_unicode_string_literal__matches_value(self):
+        document = {"spans": [{"name": "café"}]}
+
+        results = path_evaluator.evaluate('..|select(.name == "café")', document)
+
+        assert results == [{"name": "café"}]
+
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            r'..|select(.path == "C:\users")',
+            r'..|select(.path == "a\x41b")',
+            '..|select(.path == "raw\ttab")',
+        ],
+    )
+    def test_parse__invalid_json_string_literal__raises_path_error(self, expression):
+        with pytest.raises(path_evaluator.PathError, match="Invalid quoted string"):
+            path_evaluator.parse(expression)
 
     def test_evaluate__select_with_inequality__matches_not_equal_value(self):
         results = path_evaluator.evaluate('..|select(.type != "tool")', _trace_doc())
@@ -194,6 +275,7 @@ class TestUnsupportedSyntax:
             ".foo +",  # arithmetic not supported
             ".foo | length",  # pipe outside of `..`
             ".foo[",  # unterminated bracket
+            ".foo[.bar]",  # a bracket body is an index, slice or quoted key
             "..|wat",  # unknown post-descent filter
             ".foo == ",  # equality without literal
             ".foo as $x",  # bindings not supported

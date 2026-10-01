@@ -31,7 +31,30 @@
 -- and on `traces` per 000113, but not here). Retention is off, so the bridged set is user-scale and the mutation is one
 -- statement — but its wall time is a real component of the rollback window on a table this size. rollback.sh passes
 -- --time so the figure is recorded rather than estimated.
+--
+-- ${PARTITION_SCOPE}, AND WHY IT RENDERS EMPTY HERE (OPIK-8607). The other two replays carry this placeholder because
+-- an unbounded mutation allocates a block number in every partition in one atomic ZooKeeper request, which past
+-- `jute.maxbuffer` kills the session (see 000002 step 3). THIS replay does not have that problem: its target is the
+-- RESTORED ORIGINAL `spans`, created by 000001_init_script with no `PARTITION BY` at all, so the table has exactly one
+-- partition and an unbounded mutation locks exactly one block number. Stages B and C both rename the original back
+-- under this name BEFORE the driver runs this file, and reconcile.sh's reverse direction re-runs it against the same
+-- restored original, so this statement never meets the partitioned successor.
+--
+-- Scoping it unconditionally would not merely be pointless, it would BREAK THE ROLLBACK: `DELETE ... IN PARTITION <p>`
+-- against a table whose partition key has no columns is rejected outright (`INVALID_PARTITION_VALUE`). So the
+-- placeholder is here and rollback.sh renders it EMPTY, because it asks `system.tables.partition_key` what the live
+-- target is rather than assuming — the same check all four drivers make, from one shared code path. What that buys is
+-- that the day `spans` itself becomes weekly-partitioned (OPIK-6900) this file needs no edit: the driver starts
+-- scoping it because the table started reporting the weekly key. Until then the rendered statement is byte-identical
+-- to what shipped before OPIK-8607.
+--
+-- ${BRIDGE_WINDOW_END} rides along for the same reason and renders empty here too. It closes the bridge match at the
+-- instant the scope was derived, which is what stops a scoped statement matching an id whose partition the scope does
+-- not name; the unbounded form names no partitions and so needs no such bound, and must not carry one — closing its
+-- window would narrow the pass for nothing.
+-- >>> BEGIN reverse-replay
 DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.spans
+${PARTITION_SCOPE}
 WHERE (workspace_id, project_id, id) IN (
     SELECT
         workspace_id,
@@ -40,6 +63,7 @@ WHERE (workspace_id, project_id, id) IN (
     FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
     WHERE source_table = 'spans'
       AND event_time >= toDateTime64('${CUTOVER_START}', 6, 'UTC')
+      ${BRIDGE_WINDOW_END}
       AND project_id != ''
       AND length(project_id) = 36
       AND length(deleted_id) = 36
@@ -49,3 +73,4 @@ WHERE (workspace_id, project_id, id) IN (
 SETTINGS allow_nondeterministic_mutations = 1,
          lightweight_deletes_sync = 2,
          log_comment = 'spans_local_v2_rollback:reverse_replay';
+-- >>> END reverse-replay

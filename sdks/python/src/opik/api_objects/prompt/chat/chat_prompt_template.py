@@ -6,7 +6,6 @@ messages. Rendering is handled by a registry of part renderers so additional
 modalities can be plugged in without changing the core implementation.
 """
 
-import re
 from typing import Any, Dict, List, Optional, Set, Union, cast
 from typing_extensions import override
 
@@ -209,7 +208,7 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
             and resolved_template_type == prompt_types.PromptType.MUSTACHE
         ):
             placeholders = self._extract_placeholders(resolved_template_type)
-            variables_keys: Set[str] = set(variables.keys())
+            variables_keys: Set[str] = {key.strip() for key in variables}
 
             if variables_keys != placeholders:
                 raise exceptions.PromptPlaceholdersDontMatchFormatArguments(
@@ -336,8 +335,7 @@ def _extract_placeholders_from_string(
     Only supports Mustache templates for now.
     """
     if template_type == prompt_types.PromptType.MUSTACHE:
-        pattern = r"\{\{(.*?)\}\}"
-        return set(re.findall(pattern, text))
+        return prompt_template.extract_mustache_placeholder_keys(text)
     return set()
 
 
