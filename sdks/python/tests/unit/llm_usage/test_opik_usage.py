@@ -114,6 +114,77 @@ def test_opik_usage__to_backend_compatible_full_usage_dict__anthropic_source():
     }
 
 
+def test_opik_usage__to_backend_compatible_full_usage_dict__bedrock_source():
+    usage_data = {
+        "inputTokens": 200,
+        "outputTokens": 100,
+        "cacheWriteInputTokens": 50,
+        "cacheReadInputTokens": 30,
+    }
+    usage = OpikUsage.from_bedrock_dict(usage_data)
+    full_dict = usage.to_backend_compatible_full_usage_dict()
+    assert full_dict == {
+        "completion_tokens": 100,
+        "prompt_tokens": 280,  # 200 + 30 cacheRead + 50 cacheWrite
+        "total_tokens": 380,
+        "original_usage.inputTokens": 200,
+        "original_usage.outputTokens": 100,
+        "original_usage.cacheWriteInputTokens": 50,
+        "original_usage.cacheReadInputTokens": 30,
+    }
+
+
+def test_opik_usage__from_bedrock_dict__no_cache_tokens__counts_input_tokens_only():
+    # Non-anthropic Bedrock subproviders (llama, mistral, nova) never report cache
+    # counters, and a cache hit reports them as an explicit 0, so both must keep
+    # the plain input count.
+    usage = OpikUsage.from_bedrock_dict(
+        {"inputTokens": 200, "outputTokens": 100, "totalTokens": 300}
+    )
+    assert usage.prompt_tokens == 200
+    assert usage.completion_tokens == 100
+    assert usage.total_tokens == 300
+
+    usage_with_zero_cache = OpikUsage.from_bedrock_dict(
+        {
+            "inputTokens": 200,
+            "outputTokens": 100,
+            "totalTokens": 300,
+            "cacheReadInputTokens": 0,
+            "cacheWriteInputTokens": 0,
+        }
+    )
+    assert usage_with_zero_cache.prompt_tokens == 200
+    assert usage_with_zero_cache.total_tokens == 300
+
+
+def test_opik_usage__equivalent_bedrock_and_anthropic_usage__agree_on_token_counts():
+    # Bedrock runs the same Claude models as the Anthropic API and reports the
+    # same two cache counters under different names, so two usage records that
+    # describe the same call must normalise to the same numbers. These are two
+    # separately written dicts, not a captured pair of responses.
+    anthropic_usage = OpikUsage.from_anthropic_dict(
+        {
+            "input_tokens": 12,
+            "output_tokens": 7,
+            "cache_creation_input_tokens": 1024,
+            "cache_read_input_tokens": 4096,
+        }
+    )
+    bedrock_usage = OpikUsage.from_bedrock_dict(
+        {
+            "inputTokens": 12,
+            "outputTokens": 7,
+            "cacheWriteInputTokens": 1024,
+            "cacheReadInputTokens": 4096,
+        }
+    )
+
+    assert bedrock_usage.prompt_tokens == anthropic_usage.prompt_tokens == 5132
+    assert bedrock_usage.completion_tokens == anthropic_usage.completion_tokens
+    assert bedrock_usage.total_tokens == anthropic_usage.total_tokens == 5139
+
+
 def test_opik_usage__from_unknown_usage_dict__both_tokens_present__total_is_calculated():
     usage_data = {
         "prompt_tokens": 200,

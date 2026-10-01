@@ -491,6 +491,74 @@ class ExperimentCompareSeedResponse(BaseModel):
     experiments: list[CompareExperimentResult]
 
 
+class ReadabilityItemSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: Stable handle for the row, echoed back on every score so the caller can
+    #: pair a score with the text that produced it without matching on the text.
+    key: str
+    text: str
+
+
+class ReadabilityEvaluateRequest(BaseModel):
+    workspace: str | None = None
+    project_name: str
+    dataset_name: str
+    dataset_description: str | None = None
+    experiment_name: str
+    items: list[ReadabilityItemSeed]
+    #: One `Readability` metric is built per language, all scored in the SAME
+    #: `evaluate()` run — which is the only way to reach the module-wide lock.
+    languages: list[str]
+    task_threads: int = 4
+
+
+class ReadabilityLocaleScore(BaseModel):
+    dataset_item_id: str
+    key: str
+    language: str
+    metric_name: str
+    #: The score `evaluate()` produced, with every language's metric running
+    #: concurrently in the scoring thread pool.
+    evaluated_value: float
+    #: The same text and language scored on its own, sequentially, outside
+    #: `evaluate()`. This is the uncontended ground truth: if the locale lock
+    #: stops holding, `evaluated_value` drifts away from it while this stays put.
+    serial_value: float
+    #: Surfaced rather than folded into the value, so the caller can refuse a
+    #: run whose scores are the 0.0 of a failed metric rather than a real score.
+    scoring_failed: bool
+
+
+class ReadabilityEvaluateResponse(BaseModel):
+    experiment_id: str
+    experiment_name: str
+    dataset_id: str
+    item_count: int
+    scored_item_count: int
+    scores: list[ReadabilityLocaleScore]
+
+
+class ReadabilityScoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    language: str
+
+
+class ReadabilityScoreResponse(BaseModel):
+    language: str
+    scored: bool
+    value: float | None = None
+    reading_ease: float | None = None
+    #: The exception's class name rather than a boolean, so the caller asserts
+    #: WHICH error it got. Before opik#8318 an unknown locale surfaced as a bare
+    #: `KeyError(None)` from pyphen; the fix is that it is now a named
+    #: `MetricComputationError`, and only the class name can tell those apart.
+    error_type: str | None = None
+    error_message: str | None = None
+
+
 class TestSuiteItemSeed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

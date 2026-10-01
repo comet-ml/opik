@@ -128,6 +128,13 @@ const PromptModelConfigs = ({
     return;
   };
 
+  const providerForm = getProviderForm();
+
+  // No provider yet keeps the disabled button, so it still hints at settings once a model is picked.
+  if (composedProviderType && !providerForm) {
+    return null;
+  }
+
   const disabled = disabledProp || !composedProviderType;
 
   return (
@@ -150,7 +157,7 @@ const PromptModelConfigs = ({
           className="mb-5 w-72"
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]}
         />
-        {getProviderForm()}
+        {providerForm}
       </DropdownMenuContent>
     </DropdownMenu>
   );

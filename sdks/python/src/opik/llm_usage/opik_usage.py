@@ -187,8 +187,7 @@ class OpikUsage(pydantic.BaseModel):
     def from_bedrock_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
         provider_usage = bedrock_usage.BedrockUsage.from_original_usage_dict(usage)
 
-        prompt_tokens = provider_usage.inputTokens
-        completion_tokens = provider_usage.outputTokens
+        prompt_tokens, completion_tokens = provider_usage.get_billable_tokens()
 
         total_tokens = prompt_tokens + completion_tokens
 

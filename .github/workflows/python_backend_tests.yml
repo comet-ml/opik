@@ -35,10 +35,10 @@ jobs:
         with:
           fetch-depth: 1
       
-      - name: Set up Python 3.12
+      - name: Set up Python 3.14
         uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.2.0

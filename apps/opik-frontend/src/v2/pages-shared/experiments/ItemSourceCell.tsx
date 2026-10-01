@@ -2,7 +2,7 @@ import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import {
   ChevronDown,
-  ChevronUp,
+  ChevronRight,
   Database,
   GitCommitVertical,
   ListChecks,
@@ -223,9 +223,9 @@ export const createItemSourceGroupCell = <TData,>(
             }}
           >
             {row.getIsExpanded() ? (
-              <ChevronUp className="mr-1 size-4 shrink-0" />
-            ) : (
               <ChevronDown className="mr-1 size-4 shrink-0" />
+            ) : (
+              <ChevronRight className="mr-1 size-4 shrink-0" />
             )}
             <TooltipWrapper content={prefix}>
               <span className="max-w-56 truncate">{prefix}</span>

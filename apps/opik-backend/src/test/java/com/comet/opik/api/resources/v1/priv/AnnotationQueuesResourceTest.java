@@ -684,6 +684,75 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
+        @DisplayName("should remove the ceiling when a request asks for it to be cleared")
+        void ceilingIsRemovedWhenTheRequestClearsIt() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(25)
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(automation.toBuilder()
+                                    .maxItemsInQueue(null)
+                                    .clearMaxItemsInQueue(true)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation())
+                    .isEqualTo(automation.toBuilder().maxItemsInQueue(null).build());
+        }
+
+        @Test
+        @DisplayName("should keep the ceiling when a request restates the conditions without it")
+        void ceilingSurvivesAConditionsOnlyUpdate() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(25)
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            // Null means "leave it alone" here as everywhere else, so only the conditions change.
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(AnnotationQueueAutomation.builder()
+                                    .enabled(true)
+                                    .conditions(conditionsOn("safety", 0.9))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation())
+                    .isEqualTo(automation.toBuilder().conditions(conditionsOn("safety", 0.9)).build());
+        }
+
+        @Test
+        @DisplayName("should reject a request that both sets and clears the ceiling")
+        void settingAndClearingTheCeilingTogetherIsRejected() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(25)
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(automation.toBuilder().clearMaxItemsInQueue(true).build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
+
+            assertThat(readBack(queue.id()).automation()).isEqualTo(automation);
+        }
+
+        @Test
         @DisplayName("should reject an enabled automation that has never been given conditions, and create no queue")
         void enabledWithoutConditionsIsRejected() {
             var queue = createQueue(AnnotationQueueAutomation.builder().enabled(true).build(),
