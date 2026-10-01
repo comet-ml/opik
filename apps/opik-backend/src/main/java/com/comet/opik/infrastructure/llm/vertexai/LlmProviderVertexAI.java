@@ -7,13 +7,17 @@ import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageType;
+import dev.langchain4j.exception.InvalidRequestException;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
+import dev.langchain4j.model.output.FinishReason;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
@@ -26,6 +30,9 @@ import java.util.function.Consumer;
 @Slf4j
 public class LlmProviderVertexAI implements LlmProviderService {
 
+    static final String CUT_OFF_BEFORE_ANSWERING = "Vertex AI used up the max output tokens limit before writing any "
+            + "answer. Thinking tokens count toward this limit, so raise Max output tokens and run again";
+
     private final @NonNull VertexAIClientGenerator llmProviderClientGenerator;
     private final @NonNull LlmProviderClientApiConfig config;
 
@@ -33,6 +40,9 @@ public class LlmProviderVertexAI implements LlmProviderService {
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         try (var client = llmProviderClientGenerator.newVertexAIClient(config, request)) {
             ChatResponse response = client.chat(getChatMessages(request));
+            if (isCutOffBeforeAnswering(response)) {
+                throw cutOffBeforeAnswering(request);
+            }
             return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
         }
     }
@@ -86,9 +96,9 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
                     try {
                         List<ChatMessage> chatMessages = getChatMessages(request);
-                        client.chat(chatMessages,
+                        client.chat(chatMessages, failingWhenCutOffBeforeAnswering(request,
                                 new ChunkedResponseHandler(handleMessage, handleCloseAndRelease, handleErrorAndRelease,
-                                        request.model()));
+                                        request.model())));
                     } catch (Exception e) {
                         if (terminalReached.compareAndSet(false, true)) {
                             // Synchronous failure before any terminal — deliver the error and close the stream.
@@ -108,6 +118,44 @@ public class LlmProviderVertexAI implements LlmProviderService {
                         closeOnce.run();
                     }
                 });
+    }
+
+    // Gemini can spend the whole cap on thinking and finish with no text. Passed through, that reaches the playground
+    // as an empty response it asks the user to retry, and no retry can help: only a higher cap can.
+    private static boolean isCutOffBeforeAnswering(ChatResponse response) {
+        return response.finishReason() == FinishReason.LENGTH && StringUtils.isBlank(response.aiMessage().text());
+    }
+
+    // InvalidRequestException is non-retriable, so the cut-off is not re-run (and re-billed) by the retry policy,
+    // and it is classified as a 400 on both the streaming and the non-streaming path.
+    private static InvalidRequestException cutOffBeforeAnswering(ChatCompletionRequest request) {
+        return new InvalidRequestException(VertexAIClientGenerator.maxOutputTokens(request)
+                .map(limit -> CUT_OFF_BEFORE_ANSWERING + ", max output tokens '%s'".formatted(limit))
+                .orElse(CUT_OFF_BEFORE_ANSWERING));
+    }
+
+    private static StreamingChatResponseHandler failingWhenCutOffBeforeAnswering(ChatCompletionRequest request,
+            StreamingChatResponseHandler delegate) {
+        return new StreamingChatResponseHandler() {
+            @Override
+            public void onPartialResponse(String partialResponse) {
+                delegate.onPartialResponse(partialResponse);
+            }
+
+            @Override
+            public void onCompleteResponse(ChatResponse response) {
+                if (isCutOffBeforeAnswering(response)) {
+                    delegate.onError(cutOffBeforeAnswering(request));
+                    return;
+                }
+                delegate.onCompleteResponse(response);
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                delegate.onError(error);
+            }
+        };
     }
 
     private List<ChatMessage> getChatMessages(ChatCompletionRequest request) {
