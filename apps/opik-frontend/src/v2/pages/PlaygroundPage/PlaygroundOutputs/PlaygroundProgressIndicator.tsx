@@ -1,19 +1,26 @@
 import React from "react";
 import {
+  useDatasetType,
   useProgressCompleted,
   useProgressPhase,
   useProgressTotal,
 } from "@/store/PlaygroundStore";
+import { DATASET_TYPE } from "@/types/datasets";
 
-const PHASE_LABELS: Record<string, string> = {
+const TEST_SUITE_PHASE_LABELS: Record<string, string> = {
   running: "Step 1: Gathering LLM output",
   evaluating: "Step 2: Evaluating assertions",
+};
+
+const DATASET_PHASE_LABELS: Record<string, string> = {
+  running: "Gathering LLM output",
 };
 
 const PlaygroundProgressIndicator: React.FC = () => {
   const progressTotal = useProgressTotal();
   const progressCompleted = useProgressCompleted();
   const progressPhase = useProgressPhase();
+  const datasetType = useDatasetType();
 
   if (progressTotal === 0) {
     return null;
@@ -23,8 +30,13 @@ const PlaygroundProgressIndicator: React.FC = () => {
     (progressCompleted / progressTotal) * 100,
   );
 
+  const phaseLabels =
+    datasetType === DATASET_TYPE.TEST_SUITE
+      ? TEST_SUITE_PHASE_LABELS
+      : DATASET_PHASE_LABELS;
+
   const phaseLabel =
-    (progressPhase && PHASE_LABELS[progressPhase]) || "Progress";
+    (progressPhase && phaseLabels[progressPhase]) || "Progress";
 
   return (
     <div className="flex flex-col gap-2">

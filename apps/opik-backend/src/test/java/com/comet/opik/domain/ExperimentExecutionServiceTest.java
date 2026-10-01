@@ -1,7 +1,9 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.ExecutionPolicy;
@@ -12,6 +14,9 @@ import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.events.ExperimentItemToProcess;
+import com.comet.opik.api.filter.DatasetItemField;
+import com.comet.opik.api.filter.DatasetItemFilter;
+import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.TestSuiteConfig;
@@ -35,9 +40,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -53,6 +61,9 @@ class ExperimentExecutionServiceTest {
 
     @Mock
     private ExperimentService experimentService;
+
+    @Mock
+    private DatasetService datasetService;
 
     @Mock
     private DatasetItemService datasetItemService;
@@ -76,10 +87,11 @@ class ExperimentExecutionServiceTest {
         var testSuiteConfig = new TestSuiteConfig();
         var evaluatorMapper = new TestSuiteEvaluatorMapper(testSuiteConfig);
         service = new ExperimentExecutionService(
-                experimentService, datasetItemService, datasetVersionService,
+                experimentService, datasetService, datasetItemService, datasetVersionService,
                 itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService);
 
-        lenient().when(itemPublisher.publish(any(), any())).thenReturn(Mono.empty());
+        lenient().when(itemPublisher.publish(any(), any(), anyBoolean())).thenReturn(Mono.empty());
+        stubDatasetType(DatasetType.TEST_SUITE);
         // Default empty stub so tests that don't care about the version-info bulk lookup
         // (used by resolveOpikPromptsByVariant for prompt-name fallback) don't NPE the
         // Mono.zip on an un-stubbed call.
@@ -99,7 +111,12 @@ class ExperimentExecutionServiceTest {
     }
 
     private ExperimentExecutionResponse executeRequest(ExperimentExecutionRequest request) {
-        return service.createAndExecute(request)
+        return executeRequest(request, List.of());
+    }
+
+    private ExperimentExecutionResponse executeRequest(ExperimentExecutionRequest request,
+            List<DatasetItemFilter> filters) {
+        return service.createAndExecute(request, filters)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME)
@@ -113,6 +130,11 @@ class ExperimentExecutionServiceTest {
                 .data(Map.of("input", new TextNode("hello")))
                 .executionPolicy(executionPolicy)
                 .build();
+    }
+
+    private void stubDatasetType(DatasetType type) {
+        lenient().when(datasetService.findById(any(UUID.class), any(), any()))
+                .thenReturn(Dataset.builder().id(UUID.randomUUID()).name("test-dataset").type(type).build());
     }
 
     private void stubDatasetItems(List<DatasetItem> items) {
@@ -208,6 +230,28 @@ class ExperimentExecutionServiceTest {
             var experiment = captor.getValue();
             assertThat(experiment.evaluationMethod()).isEqualTo(EvaluationMethod.TEST_SUITE);
             assertThat(experiment.status()).isEqualTo(ExperimentStatus.RUNNING);
+        }
+
+        @Test
+        void createAndExecuteSetsDatasetMethodForARegularDataset() {
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build();
+
+            stubDatasetType(DatasetType.DATASET);
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(request);
+
+            var captor = ArgumentCaptor.forClass(Experiment.class);
+            verify(experimentService).create(captor.capture());
+
+            assertThat(captor.getValue().evaluationMethod()).isEqualTo(EvaluationMethod.DATASET);
         }
 
         @Test
@@ -558,6 +602,144 @@ class ExperimentExecutionServiceTest {
     }
 
     @Nested
+    @DisplayName("Dataset item streaming")
+    class DatasetItemStreaming {
+
+        private static final int STREAM_PAGE_SIZE = 2000;
+
+        private ExperimentExecutionRequest buildRequest(List<UUID> selectedRuleIds, String filters) {
+            return ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .selectedRuleIds(selectedRuleIds)
+                    .filters(filters)
+                    .build();
+        }
+
+        @Test
+        void createAndExecutePagesPastTheSingleCallLimit() {
+            var firstPage = IntStream.range(0, STREAM_PAGE_SIZE)
+                    .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
+                    .toList();
+            var secondPage = List.of(buildDatasetItem(UUID.randomUUID(), null));
+
+            when(datasetItemService.getItems(any(DatasetItemStreamRequest.class), any()))
+                    .thenReturn(Flux.fromIterable(firstPage))
+                    .thenReturn(Flux.fromIterable(secondPage));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            var response = executeRequest(buildRequest(null, null));
+
+            assertThat(response.totalItems()).isEqualTo(STREAM_PAGE_SIZE + 1);
+
+            var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
+            verify(datasetItemService, times(2)).getItems(captor.capture(), any());
+
+            var requests = captor.getAllValues();
+            assertThat(requests.getFirst().steamLimit()).isEqualTo(STREAM_PAGE_SIZE);
+            assertThat(requests.getFirst().lastRetrievedId()).isNull();
+            assertThat(requests.get(1).lastRetrievedId()).isEqualTo(firstPage.getLast().id());
+        }
+
+        @Test
+        void createAndExecuteStopsPagingOnAShortPage() {
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(buildRequest(null, null));
+
+            verify(datasetItemService, times(1)).getItems(any(DatasetItemStreamRequest.class), any());
+        }
+
+        @Test
+        void createAndExecutePassesDatasetItemFiltersThrough() {
+            List<DatasetItemFilter> filters = List.of(DatasetItemFilter.builder()
+                    .field(DatasetItemField.DATA)
+                    .key("input")
+                    .operator(Operator.CONTAINS)
+                    .value("hello")
+                    .build());
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(buildRequest(null, "[]"), filters);
+
+            verify(datasetItemService).getItems(any(DatasetItemStreamRequest.class), eq(filters));
+        }
+
+        @Test
+        void createAndExecutePutsSelectedRuleIdsOnEveryMessage() {
+            var ruleIds = List.of(UUID.randomUUID(), UUID.randomUUID());
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(buildRequest(ruleIds, null));
+
+            var captor = ArgumentCaptor.<List<ExperimentItemToProcess>>captor();
+            verify(itemPublisher).publish(any(UUID.class), captor.capture(), anyBoolean());
+
+            assertThat(captor.getValue())
+                    .isNotEmpty()
+                    .allSatisfy(message -> assertThat(message.selectedRuleIds()).isEqualTo(ruleIds));
+        }
+    }
+
+    @Nested
+    @DisplayName("Dataset type propagation")
+    class DatasetTypePropagation {
+
+        private List<ExperimentItemToProcess> runAndCaptureMessages(DatasetType type) {
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build();
+
+            stubDatasetType(type);
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(request);
+
+            var captor = ArgumentCaptor.<List<ExperimentItemToProcess>>captor();
+            verify(itemPublisher).publish(any(UUID.class), captor.capture(), anyBoolean());
+            return captor.getValue();
+        }
+
+        @Test
+        void createAndExecuteMarksMessagesFromARegularDatasetAsNotTestSuite() {
+            assertThat(runAndCaptureMessages(DatasetType.DATASET))
+                    .allSatisfy(message -> assertThat(message.isTestSuite()).isFalse());
+        }
+
+        @Test
+        void createAndExecuteMarksMessagesFromATestSuiteAsTestSuite() {
+            assertThat(runAndCaptureMessages(DatasetType.TEST_SUITE))
+                    .allSatisfy(message -> assertThat(message.isTestSuite()).isTrue());
+        }
+
+        @Test
+        void createAndExecuteSkipsAssertionCountersForARegularDataset() {
+            runAndCaptureMessages(DatasetType.DATASET);
+
+            verify(itemPublisher).publish(any(UUID.class), any(), eq(false));
+        }
+    }
+
+    @Nested
     @DisplayName("opik_prompts resolution")
     class OpikPromptsResolution {
 
@@ -576,7 +758,7 @@ class ExperimentExecutionServiceTest {
         @SuppressWarnings("unchecked")
         private List<ExperimentItemToProcess> capturePublishedMessages() {
             var captor = ArgumentCaptor.forClass(List.class);
-            verify(itemPublisher).publish(any(UUID.class), captor.capture());
+            verify(itemPublisher).publish(any(UUID.class), captor.capture(), anyBoolean());
             return (List<ExperimentItemToProcess>) captor.getValue();
         }
 
