@@ -22,6 +22,7 @@ import {
   COLUMN_METADATA_ID,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import { JSON_PATH_FORMAT } from "@/lib/utils";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -89,6 +90,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
             type: dataType,
             placeholder: "key",
             excludeRoot: true,
+            pathFormat: JSON_PATH_FORMAT.bracket,
           },
         },
         [COLUMN_CUSTOM_ID]: {
@@ -104,6 +106,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
             type: dataType,
             placeholder: "key",
             excludeRoot: false,
+            pathFormat: JSON_PATH_FORMAT.bracket,
           },
           validateFilter: (filter: Filter) => {
             if (
