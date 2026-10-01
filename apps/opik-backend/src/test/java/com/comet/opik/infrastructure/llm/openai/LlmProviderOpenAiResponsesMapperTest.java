@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.utils.JsonUtils;
 import com.openai.models.ReasoningEffort;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -14,12 +15,15 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.ChatResponseMetadata;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.openai.internal.chat.Function;
 import dev.langchain4j.model.openai.internal.chat.FunctionCall;
 import dev.langchain4j.model.openai.internal.chat.Tool;
 import dev.langchain4j.model.openai.internal.chat.ToolCall;
 import dev.langchain4j.model.openai.internal.chat.ToolType;
+import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatRequestParameters;
+import dev.langchain4j.model.openaiofficial.OpenAiOfficialTokenUsage;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.ws.rs.BadRequestException;
@@ -35,6 +39,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -368,6 +373,84 @@ class LlmProviderOpenAiResponsesMapperTest {
             var chunk = LlmProviderOpenAiResponsesMapper.toFinalChunk(chatResponse, originalRequest);
 
             assertThat(chunk.model()).isEqualTo(originalRequest.model());
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UsageDetails {
+
+        static Stream<Arguments> conversions() {
+            BiFunction<ChatResponse, ChatCompletionRequest, ChatCompletionResponse> blocking = LlmProviderOpenAiResponsesMapper::toChatCompletionResponse;
+            BiFunction<ChatResponse, ChatCompletionRequest, ChatCompletionResponse> streaming = LlmProviderOpenAiResponsesMapper::toFinalChunk;
+            return Stream.of(Arguments.of("blocking", blocking), Arguments.of("streaming", streaming));
+        }
+
+        private Usage convertUsage(
+                BiFunction<ChatResponse, ChatCompletionRequest, ChatCompletionResponse> conversion,
+                TokenUsage tokenUsage) {
+            var chatResponse = ChatResponse.builder()
+                    .aiMessage(AiMessage.from("62"))
+                    .metadata(ChatResponseMetadata.builder()
+                            .id("resp_x")
+                            .modelName("gpt-5.5")
+                            .tokenUsage(tokenUsage)
+                            .finishReason(FinishReason.STOP)
+                            .build())
+                    .build();
+            return conversion.apply(chatResponse, requestBuilder(DEFAULT_USER_MESSAGE).build()).usage();
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("conversions")
+        void mapsReasoningAndCachedTokensInTheChatCompletionsShape(String path,
+                BiFunction<ChatResponse, ChatCompletionRequest, ChatCompletionResponse> conversion) {
+            var tokenUsage = OpenAiOfficialTokenUsage.builder()
+                    .inputTokenCount(25)
+                    .outputTokenCount(90)
+                    .totalTokenCount(115)
+                    .inputTokensDetails(OpenAiOfficialTokenUsage.InputTokensDetails.builder()
+                            .cachedTokens(0)
+                            .build())
+                    .outputTokensDetails(OpenAiOfficialTokenUsage.OutputTokensDetails.builder()
+                            .reasoningTokens(85)
+                            .build())
+                    .build();
+
+            var usage = convertUsage(conversion, tokenUsage);
+
+            assertThat(JsonUtils.valueToTree(usage)).isEqualTo(JsonUtils.getJsonNodeFromString(
+                    """
+                            {"prompt_tokens":25,"completion_tokens":90,"total_tokens":115,
+                             "prompt_tokens_details":{"cached_tokens":0},
+                             "completion_tokens_details":{"reasoning_tokens":85}}
+                            """));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("conversions")
+        void omitsTheBreakdownWhenTheResponsesUsageHasNone(String path,
+                BiFunction<ChatResponse, ChatCompletionRequest, ChatCompletionResponse> conversion) {
+            var tokenUsage = OpenAiOfficialTokenUsage.builder()
+                    .inputTokenCount(25)
+                    .outputTokenCount(90)
+                    .totalTokenCount(115)
+                    .build();
+
+            var usage = convertUsage(conversion, tokenUsage);
+
+            assertThat(usage.promptTokensDetails()).isNull();
+            assertThat(usage.completionTokensDetails()).isNull();
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("conversions")
+        void omitsTheBreakdownForAPlainTokenUsage(String path,
+                BiFunction<ChatResponse, ChatCompletionRequest, ChatCompletionResponse> conversion) {
+            var usage = convertUsage(conversion, new TokenUsage(25, 90, 115));
+
+            assertThat(usage.promptTokensDetails()).isNull();
+            assertThat(usage.completionTokensDetails()).isNull();
         }
     }
 
