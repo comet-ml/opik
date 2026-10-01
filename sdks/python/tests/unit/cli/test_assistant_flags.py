@@ -179,13 +179,7 @@ class TestSkipIsExplainedHonestly:
 
 
 class TestThePickerIsReallyExercised:
-    """End-to-end through the real installer and picker, not a fabricated Outcome.
-
-    Every other test here stubs `assistants.setup` or `setup_mcp_server`, so a
-    broken picker or a lost `InstallReport.declined` would pass unnoticed —
-    which is exactly how select-all came to resolve to "my client is not
-    listed" and install nothing, back when this question took several answers.
-    """
+    """Through the real installer and picker, which the stubbed tests cannot cover."""
 
     @staticmethod
     def _pick(keys, detected=("claude-code", "cursor")):
@@ -259,13 +253,7 @@ class TestThePickerIsReallyExercised:
         return outcome, installed
 
     def test_one_answer_only__no_key_registers_a_second_client(self):
-        """The question takes one client, so nothing typed into it can take two.
-
-        `a` used to mean select-all, and `_normalise` now maps it to nothing at
-        all. The guard here is that a key the picker has no meaning for stays
-        inert rather than growing one: the flow ends by starting the chosen
-        client, which only means anything for one of them.
-        """
+        """A key the picker has no meaning for stays inert: it takes one client."""
         from opik.cli import selector
 
         outcome, installed = self._pick(["", selector.ACCEPT])
@@ -274,12 +262,7 @@ class TestThePickerIsReallyExercised:
         assert outcome.clients == 1
 
     def test_enter_on_the_first_row__registers_that_client_alone(self):
-        """Enter takes the row under the cursor, which starts on the first client.
-
-        It used to confirm a pre-ticked set and write into three tools' configs
-        at once, which is not what "move to Claude Code, press Enter" looks like
-        it does.
-        """
+        """Enter takes the highlighted row, which starts on the first client."""
         from opik.cli import selector
 
         outcome, installed = self._pick([selector.ACCEPT])
@@ -307,12 +290,7 @@ class TestThePickerIsReallyExercised:
         assert outcome.cancelled is True, "Ctrl-C is not an answer, it is stop"
 
     def test_cancelling__does_not_install_the_skill_pack(self):
-        """Ctrl-C ends the step, rather than declining only the half in front of it.
-
-        The pack is installed by default now, so a cancel that only stopped the
-        server half would leave a cancelled run still writing into the user's AI
-        client.
-        """
+        """Ctrl-C ends the whole step, so a cancelled run writes no pack."""
         from opik.cli import selector
 
         outcome, installed = self._pick([selector.CANCEL])

@@ -1,9 +1,7 @@
-"""The ``rich`` rendering of the MCP install, used by ``opik mcp configure``.
+"""The ``rich`` rendering of the onboarding flows, used by both configure commands.
 
-Kept in the CLI layer on purpose: ``configurator.mcp.install`` is reachable from
-``opik.configure()``, which is a library call and must not take over someone's
-stdout. See ``configurator.mcp.view`` for the injection point and the
-logger-based default.
+Kept in the CLI layer: ``configurator`` is reachable from ``opik.configure()``,
+a library call that must not take over someone's stdout.
 """
 
 import contextlib
@@ -56,20 +54,11 @@ _CODE_STYLE = "bold not dim default"
 
 
 def _emphasize(message: str, base: str = "") -> text.Text:
-    """Style a message so the parts to act on stand out from the prose.
+    """Style a message so the links to open and the commands to type stand out.
 
-    URLs are coloured and made clickable; commands — in backticks, or on a line
-    of their own indented by four spaces — are set in full weight. Everything
-    else keeps ``base``, which is usually dim or yellow, so a line that is mostly
-    context still leads the eye to the link to open or the thing to type.
-
-    ``rich`` emits the OSC 8 hyperlink only where the terminal advertises
-    support, keeps the colour where it does not, and drops every escape when
-    stdout is not a terminal at all — so a pipe or a CI log still gets the text
-    unchanged, backticks and URLs included, and still copy-pasteable.
-
-    Styles are applied over ranges rather than by splitting the string, so the
-    surrounding text keeps ``base`` and the message stays one paragraph.
+    URLs become clickable; commands in backticks or on a four-space-indented line
+    are set in full weight; the rest keeps ``base``. ``rich`` drops every escape
+    when stdout is not a terminal, so piped output keeps the plain text.
     """
     rendered = text.Text(message, style=base)
     for pattern in (_CODE_LINE, _CODE_SPAN):
@@ -99,24 +88,14 @@ def render_hint(message: str) -> None:
 
 
 def render_configure_hint(message: str) -> None:
-    """A line the configurator says between its questions.
-
-    Indented like the questions it sits among, so a hint reads as belonging to
-    the prompt under it rather than as a stray log line in the margin.
-    """
+    """A configurator hint, indented with the questions it sits among."""
     console.print(padding.Padding(_emphasize(message, base="dim"), (0, 0, 0, 2)))
 
 
 def render_configured(
     configured: opik_configure.Configured, project_url: str, project_exists: bool
 ) -> None:
-    """How `opik configure` closes: what was set up, and where, at a glance.
-
-    A block rather than the sentence `opik.configure()` logs, which ran the
-    file, the project and a docs link together into one long grey line — the
-    part of the run people most need to find again later, and the easiest to
-    skim past.
-    """
+    """How `opik configure` closes: what was set up, and where to open it."""
     console.print()
     headline = (
         "Opik is configured" if configured.saved else "Opik is already configured"
@@ -152,12 +131,7 @@ def render_configured(
 
 
 def _without_credentials(url: str) -> str:
-    """``url`` with any ``user:password@`` removed, for putting on screen.
-
-    An Opik URL can carry basic-auth credentials, and the summary both prints
-    it and makes it a link — so the password would be on screen and in the
-    link target.
-    """
+    """``url`` without any ``user:password@``, so a password is never shown or linked."""
     parsed = urllib.parse.urlsplit(url)
     if parsed.username is None and parsed.password is None:
         return url
@@ -168,12 +142,7 @@ def _without_credentials(url: str) -> str:
 
 
 def confirm_default_yes(question: str) -> bool:
-    """A yes/no question that Enter answers yes.
-
-    Every question in the onboarding flow defaults to yes, so they all come
-    through here and are indented and worded the same way. ``click``'s
-    capitalised ``[Y/n]`` is left to say which answer Enter gives.
-    """
+    """A yes/no question that Enter answers yes, indented like every other prompt."""
     return click.confirm(f"  {question}", default=True)
 
 
@@ -247,25 +216,11 @@ def choose_one_numbered(
     )
 
 
-#: The orange the mark itself is drawn in - the first stop of the gradient in
-#: `opik-logo.svg`, which fades from it to crimson.
-#:
-#: Deliberately NOT `--primary` from the frontend's main.scss. That is indigo,
-#: and it is what the product UI accents *with* - buttons, links, focus rings -
-#: rather than what Opik looks *like*. This banner is a drawing of the logo, so
-#: it takes the logo's colour.
-#:
-#: Spelled as hex rather than a named ANSI colour, because `yellow` or `red` is
-#: whatever the user's terminal theme decided it is, and this is the one piece of
-#: branding the CLI shows. Rich degrades it to the nearest available colour where
-#: truecolor is missing. The status colours elsewhere in this module stay as they
-#: are: green, yellow and red mean something, and are not ours to restyle.
+#: The logo's own orange (the first stop of `opik-logo.svg`), as hex so it does not
+#: depend on the terminal theme.
 OPIK_ORANGE = "#FB9341"
 
 
-#: Drawn rather than written: this is the first thing either configure command
-#: puts on screen, and a command that is about to edit a tool's configuration
-#: should look like it knows what it is.
 _BANNER = r"""
    ___        _ _
   / _ \ _ __ (_) | __
@@ -277,13 +232,7 @@ _BANNER = r"""
 
 
 def _render_banner(headline: str, detail: str) -> None:
-    """The mark, then what the command about to run is for.
-
-    Shared so the two entry points into onboarding open in the same hand. They
-    are one flow seen from different ends — `opik configure` can run
-    `opik mcp configure` — and looking like two programs is what made that
-    surprising rather than continuous.
-    """
+    """The logo, then what the command is for — shared by both configure commands."""
     console.print(text.Text(_BANNER, style=f"bold {OPIK_ORANGE}"))
     console.print(
         padding.Padding(
@@ -303,13 +252,8 @@ def render_configure_banner() -> None:
 
 
 def render_mcp_banner() -> None:
-    """How `opik mcp configure` opens.
-
-    Not :func:`render_mcp_intro`, which asks whether to set MCP up: by the time
-    this renders, the user has typed the command that does it. What is left to
-    say is what the command is for, so the first screen states it rather than
-    putting a question mark after a decision already made.
-    """
+    """How `opik mcp configure` opens. States the purpose rather than asking:
+    running the command was the answer."""
     _render_banner(
         "Connect your AI client to Opik.",
         "It can then read your traces, find the failing ones, score them,\n"
@@ -318,15 +262,8 @@ def render_mcp_banner() -> None:
 
 
 def render_mcp_intro() -> None:
-    """What the MCP step is, before ``opik configure`` asks about it.
-
-    States what the thing is; the ``click`` prompt underneath asks about it. Both
-    used to be questions, so the same one arrived twice in a row in slightly
-    different words, and the second read as the first not having registered.
-
-    Does not list the detected clients: the picker directly below is that list,
-    and naming them twice pushed the question off the screen.
-    """
+    """What MCP is, above `opik configure`'s question about it. The picker below
+    lists the clients, so this does not."""
     console.print()
     console.print(
         text.Text.assemble(
@@ -350,25 +287,13 @@ def render_mcp_intro() -> None:
 
 
 def render_handoff_offer(prompt: str) -> None:
-    """The question the run would open the agent on, above the offer to do it.
-
-    Only the prompt: the ``click`` prompt underneath is where "Continue in X" is
-    asked, and saying it here as well put the same question on screen twice.
-
-    Printed at all because saying yes sends it — so this is the user's one
-    chance to read what they are agreeing to ask.
-    """
+    """The prompt that saying yes will send, above the question that asks."""
     _render_suggested_prompt(prompt)
 
 
 def _render_suggested_prompt(prompt: str) -> None:
-    """The prompt the run ends on, set so that it is actually read.
-
-    Full weight under an orange heading rather than grey: it is the one thing on
-    screen the user either agrees to send or has to paste themselves, and dim
-    text is what people skip. No box around it, because the paste path copies it
-    straight out of the terminal and a border would come along.
-    """
+    """The closing prompt, in full weight rather than grey so it is read. No box:
+    the paste path copies it straight out of the terminal."""
     console.print()
     console.print(text.Text("Suggested first prompt", style=f"bold {OPIK_ORANGE}"))
     console.print(padding.Padding(text.Text(prompt, style="bold"), (0, 0, 1, 2)))
@@ -387,11 +312,7 @@ def render_handoff(client_display_name: str) -> None:
 
 
 def render_handoff_declined(client_display_name: str) -> None:
-    """What to do later, for a run that turned the offer down.
-
-    The restart matters and nothing else says so any more: a client that was
-    running while its configuration was rewritten has not read it yet.
-    """
+    """The ending for a run that turned the offer down."""
     console.print()
     console.print(
         text.Text.assemble(
@@ -403,12 +324,7 @@ def render_handoff_declined(client_display_name: str) -> None:
 
 
 def render_prompt_to_paste(client_display_name: str, prompt: str) -> None:
-    """The same ending for a client this command cannot start.
-
-    A GUI app cannot be launched from here, so the question it should open with
-    is printed instead. Worth printing rather than dropping: the prompt is the
-    part that turns a configured server into something the user has seen work.
-    """
+    """The ending for a client that cannot be started from here."""
     _render_suggested_prompt(prompt)
     console.print(
         text.Text.assemble(
@@ -420,15 +336,10 @@ def render_prompt_to_paste(client_display_name: str, prompt: str) -> None:
 
 
 def render_restart_note(mcp_installed: bool) -> None:
-    """The closing instruction for a run with no one client to name.
+    """The ending for a run with no one client to name.
 
-    Every ending says what to do next exactly once. This is the one for the
-    endings with nothing more specific to say — several clients written at once,
-    or a scripted run with no terminal to hand over from.
-
-    ``mcp_installed`` because ``opik configure --install-skills --no-install-mcp``
-    reaches this too, and telling that run to ask its client about a server it
-    never registered would send the user looking for tools that are not there.
+    ``mcp_installed`` is False for `--install-skills --no-install-mcp`, which
+    must not be told to ask about a server it never registered.
     """
     console.print()
     if not mcp_installed:
@@ -580,16 +491,8 @@ class RichInstallView(mcp_view.InstallView):
         if not selector.is_supported():
             return mcp_view.numbered_menu(title, candidates)
 
-        # One client, not a set of them. The flow this belongs to ends by handing
-        # the chosen client a prompt and starting it, which only means anything
-        # for a single client — and registering into several config files at once
-        # was never what most runs wanted. `--ai-client` is still repeatable for
-        # scripted runs, which skip this picker entirely.
-        #
-        # The clients come first and the manual row last: it is the way out for
-        # someone whose client detection missed, not one of the things being
-        # chosen between. A one-item list still gets the picker, because skipping
-        # it would skip that row too.
+        # One client: the flow ends by starting it. The manual row goes last, and
+        # is kept for a single client too, as the way out when detection missed.
         chosen = selector.choose_one(
             title=title,
             choices=[
@@ -604,10 +507,7 @@ class RichInstallView(mcp_view.InstallView):
                 )
             ],
         )
-        # Escape cancels the run rather than declining the server: there is no
-        # "skip" row, so the only way out of the list is to stop. The manual row
-        # is the other kind of no — the detection missed their client — and it is
-        # worth its place because the answer to it is a link rather than nothing.
+        # There is no "skip" row, so Escape is a cancel rather than a decline.
         if chosen is None:
             return None
         return [chosen]

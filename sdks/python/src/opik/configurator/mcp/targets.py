@@ -23,12 +23,9 @@ class InstallResult:
     # "Updated"). Falls back to `detail`, which spells the path out in full and is
     # what a log line or a failure needs.
     summary: Optional[str] = None
-    # The registration worked but the client's own sign-in did not, so this host
-    # has a server it cannot use until the user signs in by hand.
+    # Added, but the client's sign-in failed: no tools until the user signs in.
     sign_in_failed: bool = False
-    # Whether a sign-in was started at all. Without it `sign_in_failed is False`
-    # means both "it worked" and "there was nothing to do", and only the first of
-    # those says the user can expect the server to answer.
+    # Separates "signed in" from "nothing to sign in to".
     sign_in_attempted: bool = False
 
 
@@ -273,30 +270,20 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
 
 
 def _run_interactive_client_cli(command: List[str]) -> Optional[int]:
-    """Run a client CLI that has to talk to the user, and give it the terminal.
+    """Run a client CLI that talks to the user, on the real terminal.
 
-    The deliberate opposite of :func:`_run_client_cli`. A sign-in prints an
-    authorization URL, opens a browser and waits for the redirect: capturing its
-    output hides the URL from the person who has to act on it, closing its stdin
-    makes the client refuse outright ("stdin isn't a terminal, so authentication
-    can't be completed here"), and a timeout kills it while they are still in the
-    browser. All three are right for the non-interactive commands the other
-    runner exists for, and all three are wrong here.
-
-    Returns the exit status, or ``None`` when the command could not be run at all
-    or was interrupted.
+    Unlike :func:`_run_client_cli`: a sign-in prints a URL to open, needs a tty
+    on stdin and waits on the browser, so its output is not captured, its stdin
+    not closed and it has no timeout. Returns the exit status, or ``None`` when
+    it could not run or was interrupted.
     """
     try:
         return subprocess.run(command).returncode
     except OSError:
-        # Same shape as `_run_client_cli`'s FileNotFoundError case: a client shim
-        # whose node has moved out from under it. Nothing to report but "it did
-        # not run" — this module speaks through its result, not a logger.
+        # A client shim whose node has moved.
         return None
     except KeyboardInterrupt:
-        # The terminal is shared with the command, so Ctrl-C in a browser wait
-        # reaches this process too. It gives up on the sign-in, not on the run:
-        # the server is already registered, and the caller says how to finish.
+        # Ctrl-C reaches this process too: give up on the sign-in, not the run.
         # The newline ends the line the terminal echoed `^C` onto.
         print()
         return None
@@ -350,9 +337,8 @@ def _sign_in_claude_code(
     an old client, a failed login or a user who walks away all leave a working
     registration plus the sign-in hint the closing block already prints.
 
-    Returns True or False for a login that was attempted, and None when there was
-    nothing to attempt. A caller that treats those last two the same cannot tell
-    a server the user can use from one nobody tried to sign into.
+    Returns whether an attempted login succeeded, or None when there was
+    nothing to attempt.
     """
     if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
         # A local uvx server authenticates with the API key already written into
@@ -367,8 +353,7 @@ def _sign_in_claude_code(
         return None
 
     if not _claude_supports_mcp_login(claude_executable):
-        # Nothing to attempt on this build, so nothing failed: the closing
-        # block's general sign-in hint is the right level of noise here.
+        # Nothing to attempt on this build, so nothing failed.
         return None
 
     returncode = _run_interactive_client_cli(
@@ -452,10 +437,7 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         return InstallResult(
             target_display_name="Codex",
             succeeded=True,
-            # Unlike Claude Code, the sign-in is inside the add and cannot be
-            # separated from it, so a zero exit is the whole step succeeding.
-            # Only for the hosted server: a local one authenticates with the API
-            # key already in the config and has nothing to sign in to.
+            # The sign-in is part of `codex mcp add`, for the hosted server only.
             sign_in_attempted=isinstance(server_spec, mcp_spec.RemoteServerSpec),
             detail=(
                 f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "

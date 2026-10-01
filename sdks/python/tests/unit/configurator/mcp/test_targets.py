@@ -358,12 +358,7 @@ class TestInstallCodex:
         assert "opik-mcp" in add_cmd
 
     def test_install_codex__hosted__reports_the_sign_in_it_performed(self, monkeypatch):
-        """`codex mcp add --url` signs in as part of the add, and said nothing.
-
-        So a hosted Codex run reported `not_attempted` — and then printed the
-        closing hint telling the user to expect a browser prompt that had
-        already been and gone.
-        """
+        """`codex mcp add --url` signs in as part of the add."""
         monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/codex")
         monkeypatch.setattr(
             targets.subprocess,
@@ -665,14 +660,8 @@ def test_install_claude_code__older_client_lists_no_login__skips_sign_in(
 
 
 def test_install_claude_code__sign_in_inherits_the_terminal(monkeypatch, interactive):
-    """The login is interactive, and the other runner's habits break it.
-
-    It prints an authorization URL and waits for the redirect: capturing its
-    output hides the URL from the person who has to act on it, a closed stdin
-    makes the client refuse outright, and a timeout kills it while they are still
-    in the browser. The registration either side of it still captures, because we
-    report its outcome ourselves.
-    """
+    """The login gets the real terminal: its URL shown, a tty, no timeout. The
+    registration around it is still captured."""
     calls = {}
 
     def fake_run(command, **kwargs):
@@ -748,13 +737,7 @@ def test_install_claude_code__sign_in_cli_breaks__registration_still_succeeds(
 def test_install_claude_code__sign_in_interrupted__is_a_failed_sign_in(
     monkeypatch, interactive
 ):
-    """Ctrl-C in the browser wait gives up on the login, not on the whole run.
-
-    The terminal is shared with the login, so the interrupt reaches this process
-    too. Letting it through aborted `opik mcp configure` after the server was
-    registered, skipping the skill pack, the result event, and the note that says
-    how to finish signing in.
-    """
+    """Ctrl-C while waiting on the browser gives up on the login, not the run."""
 
     def fake_run(command, **kwargs):
         if command[1:] == ["mcp", "--help"]:

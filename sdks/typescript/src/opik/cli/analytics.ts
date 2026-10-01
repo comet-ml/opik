@@ -35,20 +35,12 @@ export const LAUNCHER = "npx";
 export const LAUNCHER_ENV_VAR = "OPIK_CLI_LAUNCHER";
 
 /**
- * Carries this run's `session_id` to the Python CLI, so both halves of the
- * handoff report the same one.
- *
- * Without it the two sides invent their own and nothing joins them: the events
- * describing why a run started live here, and the events describing what it did
- * live there. The Python SDK reads this in `environment_details`.
+ * Carries this run's `session_id` to the Python CLI (read in its
+ * `environment_details`), so both halves of the run report the same one.
  */
 export const SESSION_ID_ENV_VAR = "OPIK_CLI_SESSION_ID";
 
-/**
- * Nine ASCII letters, which is exactly what the Python SDK generates. Same shape
- * on both sides means one column reads the whole run rather than needing a
- * mapping table to tell the two formats apart.
- */
+/** Nine ASCII letters, the same shape the Python SDK generates. */
 const SESSION_ID_LENGTH = 9;
 const SESSION_ID_ALPHABET =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -178,8 +170,7 @@ export function createReporter(
   const url = env.OPIK_ANALYTICS_URL ?? ANALYTICS_URL_DEFAULT;
   const id = enabled ? userIdentifier(env) : "";
   const { command, flags } = summarizeArgs(args);
-  // Ties this run's events together, and — because it is passed to the Python
-  // CLI and reported there too — ties them to what the run went on to do.
+  // Shared with the Python CLI, so its events join these.
   const sessionId = newSessionId();
   const inFlight: Promise<void>[] = [];
 

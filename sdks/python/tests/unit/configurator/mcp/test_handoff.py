@@ -18,12 +18,7 @@ class TestFirstTracedProject:
         assert handoff._first_traced_project(projects) is None
 
     def test_demo_projects__do_not_count(self):
-        """Every workspace is born with them, and they are nobody's own app.
-
-        Diagnosing data the user did not produce teaches them nothing about
-        their code, so a workspace holding only demos is still "nothing to look
-        at yet".
-        """
+        """Every workspace starts with demos, and they are nobody's own app."""
         projects = [
             {"name": name, "last_updated_trace_at": "2026-09-30T10:00:00Z"}
             for name in handoff.DEMO_PROJECT_NAMES
@@ -71,11 +66,7 @@ class TestClosingPrompt:
         assert "my-app" in prompt
 
     def test_traces__asks_what_is_there__not_for_a_fix(self):
-        """The first thing an agent does with a new connection should be to look.
-
-        Opening on "fix this" commits the user to a change before they have seen
-        their own data, and picks the target for them.
-        """
+        """The first question looks at the data rather than asking for a fix."""
         prompt = handoff.closing_prompt("my-app")
 
         assert "overview" in prompt

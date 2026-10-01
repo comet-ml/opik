@@ -55,8 +55,7 @@ def should_create_project(
     if not sys.stdin.isatty():
         return False, False
     workspace_label = f" in workspace '{workspace}'" if workspace else ""
-    # The same asker the configure flow uses, so the CLI's yes/no questions all
-    # look alike wherever the user meets one.
+    # The configure flow's asker, so every yes/no question looks the same.
     confirmed = install_view.confirm_default_yes(
         f"Project '{project_name}'{workspace_label} does not exist. Create it?"
     )
@@ -87,14 +86,11 @@ def maybe_auto_configure(
     # cold-start path unless we actually need it here.
     from ..configure import run_interactive_configure
 
-    # `run_interactive_configure` rather than the click command, so the banner
-    # stays with the command the user actually typed — the same reason
-    # `opik mcp configure` calls it this way when it has to configure first.
+    # Not the click command, so no second banner.
     install_view.render_hint(
         "No Opik config file found. Running `opik configure` first."
     )
-    # The configure flow opens straight on its first question with no leading
-    # blank of its own — it normally follows a banner that supplies one.
+    # The flow normally follows a banner that supplies this blank.
     click.echo()
     run_interactive_configure()
     click.echo()

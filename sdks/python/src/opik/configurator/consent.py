@@ -90,23 +90,11 @@ def resolve(
 
 
 def resolve_installed_by_default(flag: Optional[bool]) -> Verdict:
-    """Decide a step that is done unless refused, rather than offered.
+    """Decide a step that is done unless refused, rather than offered: the pack.
 
-    The skill pack. It used to go through :func:`resolve` like the server, which
-    meant a question — and the question was the wrong shape: it arrived after the
-    server's results table, when the user had already got what they came for, and
-    it asked about something that is part of the setup rather than an extra.
-
-    Only an explicit refusal skips it now, which is why this is a separate
-    resolver rather than a flag on the other one: none of that table's rules
-    apply. A terminal is irrelevant with nothing to ask, `-y` has nothing to
-    assume, and "nothing detected" is the installer's business — it places the
-    pack for the clients it finds, or leaves a shared copy.
-
-    `INSTALLED_BY_DEFAULT` is deliberately its own reason rather than reusing
-    `REQUESTED` or `ASSUME_YES`: the funnel has a history of accept rates for
-    this step, and reusing a value would blend a behaviour change into it
-    silently instead of showing the day the question went away.
+    None of :func:`resolve`'s rules apply with nothing to ask. Its own
+    `INSTALLED_BY_DEFAULT` reason keeps the funnel's history of accept rates
+    from blending with runs that were never asked.
     """
     if flag is False:
         return Verdict(Decision.SKIP, Reason.DECLINED)

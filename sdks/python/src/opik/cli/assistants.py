@@ -60,18 +60,12 @@ class Outcome(NamedTuple):
     #: run that never got as far as asking. The caller turns this into
     #: ``mcp_decision``; only the installer can tell the two apart.
     mcp_declined: bool = False
-    #: Carried straight up from the installer: which server was registered, and
-    #: whether its sign-in went through. The funnel cannot be joined to what the
-    #: MCP server reported without the first, and cannot explain the drop to
-    #: "connected" without the second.
+    #: From the installer, for analytics: which server, and whether it signed in.
     transport: Optional[str] = None
     sign_in: str = "not_attempted"
-    #: The user cancelled at the picker. Carried so the caller can stop rather
-    #: than treat it as a decision about the server alone.
+    #: Ctrl-C at the picker.
     cancelled: bool = False
-    #: Whether a stale `opik-mcp` uv tool install was in the way, and whether it
-    #: could be cleared. One left behind pins the server at a version that may
-    #: predate identity resolution.
+    #: `absent`, `removed` or `removal_failed`, for a stale `opik-mcp` uv tool.
     stale_tool: str = "absent"
 
 
@@ -89,15 +83,9 @@ def setup(
 ) -> Outcome:
     """Register the MCP server and/or install the skill pack.
 
-    ``setup_params`` is the connection block ``configurator.mcp`` needs — api key,
-    workspace, base and api urls, deployment flags.
-
-    The skill pack is no longer a question: it is part of the setup, installed
-    unless a flag refused it. See :func:`consent.resolve_installed_by_default`.
-
-    ``install_mcp`` is already resolved: the question names the clients it would
-    write to, so the caller asks it before this runs. ``skills`` arrives as a
-    verdict, and a default one yields to a server refused at the picker.
+    ``setup_params`` is the connection block ``configurator.mcp`` needs. The
+    caller has already resolved ``install_mcp``; ``skills`` is a verdict, and a
+    default one yields to a server refused at the picker.
     """
     # One view for the whole step, not one per half: it carries what the server
     # install learned — notably whether the connection needs a sign-in — through
@@ -115,14 +103,9 @@ def setup(
         if install_mcp
         else mcp_install.NOTHING_INSTALLED
     )
-    # Ctrl-C is not an answer to the MCP question, it is "stop" — so nothing else
-    # in this step runs. The pack used to be a separate question and survived a
-    # cancel by being asked separately; now it is installed by default, and
-    # carrying on would have meant a cancelled run still writing into the user's
-    # AI client.
+    # Ctrl-C means "stop": nothing else in this step runs, the pack included.
     if install.cancelled:
-        # Not `declined`: nobody refused the pack, the run stopped before it
-        # came up. The funnel has to be able to tell those apart.
+        # Not `declined`: nobody refused the pack, the run stopped first.
         return _outcome(
             install,
             skills=False,
@@ -130,10 +113,8 @@ def setup(
             cancelled=True,
         )
 
-    # "Skip" at the picker refused the server, and with it the only thing this
-    # run had been asked to write into an AI client. A pack that is installed by
-    # default follows that refusal, the rule `opik configure` applies to a "no" to
-    # its MCP question; an explicit `--skills` is a request of its own and stands.
+    # "Skip" refused the only thing this run was writing into an AI client, so
+    # a default pack follows it. An explicit `--skills` still installs.
     if (
         install.declined
         and not install.manual
@@ -162,9 +143,7 @@ def setup(
 
     installed_skills = False
 
-    # `skills_installed` alone cannot say why it was false: a flag that refused
-    # the pack and a download that failed look identical, and only one of them is
-    # a problem.
+    # The reason separates a refused pack from one whose download failed.
     wants_skills = skills.decision is consent.Decision.PROCEED
     skills_reason = skills.reason.value
 

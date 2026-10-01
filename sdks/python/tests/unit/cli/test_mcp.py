@@ -549,12 +549,7 @@ class TestResultEventCarriesTheFunnelProperties:
 
 
 class TestResultEventCarriesTheHandoff:
-    """How the run ends is the point of the command, so the funnel must see it.
-
-    The handoff replaces this process with the user's agent, so it is resolved
-    before the result event rather than after: anything reported later would
-    never be reported at all.
-    """
+    """How the run ends, resolved before the result event so it can be reported."""
 
     @staticmethod
     def _result_event(
@@ -614,11 +609,7 @@ class TestResultEventCarriesTheHandoff:
         return track.call_args_list[-1].kwargs
 
     def test_ctrl_c_during_the_project_lookup__still_reports_the_run(self):
-        """The lookup runs after "Done" and before the result event, with nothing
-        on screen, so it is where a user who thinks the run is over presses
-        Ctrl-C. Aborting there lost the result event, and the funnel filed a run
-        that wrote a config as one abandoned before the AI-client step.
-        """
+        """Ctrl-C during the silent lookup after "Done" still reports the run."""
         event = self._result_event(("claude-code",), lookup_interrupted=True)
 
         assert event["handoff"] == "interrupted"
@@ -642,11 +633,7 @@ class TestResultEventCarriesTheHandoff:
         assert event["handoff"] == "prompt_shown"
 
     def test_saying_no_to_the_offer__is_its_own_ending(self):
-        """The last stage of the funnel, and the only one the user drives.
-
-        A registered server nobody wanted to try is a different outcome from one
-        that ended inside the agent, and neither is a failure.
-        """
+        """Declining is an outcome of its own, not a failure."""
         event = self._result_event(("claude-code",), accepted=False)
 
         assert event["handoff"] == "declined"
@@ -655,11 +642,7 @@ class TestResultEventCarriesTheHandoff:
         assert event["closing_prompt"] == "instrument"
 
     def test_ctrl_c_at_the_offer__ends_the_same_way_as_saying_no(self):
-        """Nothing is left half-done by then: the server and the pack are in.
-
-        Letting the abort propagate would lose the result event, which would make
-        the run that got furthest the one the funnel cannot see.
-        """
+        """By then the server and pack are in; aborting would lose the result."""
         event = self._result_event(("claude-code",), abort=True)
 
         assert event["handoff"] == "declined"
@@ -679,12 +662,7 @@ class TestResultEventCarriesTheHandoff:
         assert event["handoff"] == "not_single_client"
 
     def test_ctrl_c_at_the_picker__is_not_filed_as_a_client_count(self):
-        """A cancelled run registers nothing, which the count check also matches.
-
-        Whichever is tested first wins, and `not_single_client` describes a
-        scripted run that wrote several configurations — the opposite of a run
-        that wrote none.
-        """
+        """A cancel registers nothing, but is not `not_single_client`."""
         runner = CliRunner()
         outcome = assistants.Outcome(
             clients=0, skills=False, registered_clients=(), cancelled=True
@@ -710,10 +688,7 @@ class TestResultEventCarriesTheHandoff:
         restart.assert_not_called()
 
     def test_sign_in_failed__ends_on_the_sign_in_note_alone(self):
-        """The installer has just said the server has no tools until the user
-        signs in, and named the command. Following that with "restart it, then
-        ask it to list your projects" sends them to a question it cannot answer.
-        """
+        """The sign-in ending already said what to do; no "ask about your projects"."""
         runner = CliRunner()
         outcome = assistants.Outcome(
             clients=1,
@@ -742,14 +717,8 @@ class TestResultEventCarriesTheHandoff:
 
 
 class TestResultEventCarriesTheConnectionSignals:
-    """What the adoption board (dashboard 2057363) needs to be joinable.
-
-    That board counts people who CONNECTED an MCP server, keyed on the Comet
-    login for the hosted transport and on the API key digest for the local one.
-    A configure run that does not say which transport it registered cannot pick
-    the right key, and one that does not say whether the sign-in worked cannot
-    explain the drop between registering and connecting.
-    """
+    """What the adoption board (dashboard 2057363) needs to join a run to its
+    connection: the transport, and whether the sign-in worked."""
 
     @staticmethod
     def _result_event(install_report):
@@ -801,11 +770,7 @@ class TestResultEventCarriesTheConnectionSignals:
         assert event["sign_in"] == "succeeded"
 
     def test_sign_in_failed__is_not_hidden_by_a_passing_verification(self):
-        """The one case `verification_succeeded` cannot see.
-
-        On the hosted transport it is a 401/403 reachability probe, which passes
-        just as well for a user who never signed in.
-        """
+        """The hosted probe passes without a sign-in; `sign_in` is what shows it."""
         event = self._result_event(
             mcp_install.InstallReport(
                 registered=("claude-code",),

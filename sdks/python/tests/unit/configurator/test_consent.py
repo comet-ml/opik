@@ -92,18 +92,3 @@ class TestGranted:
         verdict = consent.Verdict(ASK, R.ASKING)
 
         assert consent.granted(verdict, lambda: answer) is answer
-
-
-class TestPrompts:
-    """No prompt copy lives here any more.
-
-    The plain-text MCP and skills prompts went with the library path:
-    `opik.configure()` no longer offers either, so the CLI is the only thing
-    left that words these questions and it renders its own. The skill pack's
-    one-liner went with the question it was the body of — the pack is installed
-    rather than offered.
-    """
-
-    def test_the_prompts_are_gone(self):
-        for name in ("MCP_PROMPT", "SKILLS_PROMPT", "mcp_prompt", "SKILL_PACK_PITCH"):
-            assert not hasattr(consent, name), name

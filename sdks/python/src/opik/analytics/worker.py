@@ -87,17 +87,9 @@ class Worker(threading.Thread):
     def enqueue(self, event: Event) -> bool:
         """False when the queue was full and the event was dropped.
 
-        Merges the run context into the event's properties, with the event's
-        own value winning on a collision: the context is a default describing
-        how the run was entered, not an override of what a call site stated
-        outright.
-
-        Read here rather than in :meth:`_enrich`, which runs on the worker
-        thread when a batch is sent. It is the one property source that changes
-        during a run — `opik configure` sets `invoked_via` when it hands over to
-        the MCP flow — so reading it at send time wrote the later value onto
-        events queued before it, and `opik configure`'s own events came out
-        labelled as the flow they handed to.
+        Merges in the run context, the event's own values winning on a
+        collision. Read here rather than at send time, because the context
+        changes mid-run and must describe the event as it was when queued.
         """
         event = event._replace(
             properties={**environment_details.run_context(), **event.properties}

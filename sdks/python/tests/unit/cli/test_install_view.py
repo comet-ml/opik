@@ -79,11 +79,7 @@ class TestRichInstallView:
         assert "HTTP 401" in out
 
     def test_done__says_nothing_about_what_to_do_next(self, view):
-        """The ending below it does that, in words that fit the ending reached.
-
-        This block said "restart it, then ask to list my Opik projects" directly
-        above an offer to start the client on a different question.
-        """
+        """The ending below says what to do next, so this does not."""
         with view.console.capture() as capture:
             view.RichInstallView().done()
 
@@ -208,11 +204,7 @@ class TestChooseHosts:
     def test_logging_view__one_client_like_the_picker_it_stands_in_for(
         self, monkeypatch
     ):
-        """No "All of the above", and `1,3` is not an answer.
-
-        Both registered servers this flow could not then finish for: it ends by
-        starting the one client that was chosen.
-        """
+        """One client: no "all", and `1,3` is not an answer."""
         prompts = []
 
         def fake_input(prompt):
@@ -329,12 +321,7 @@ class TestChooseHosts:
 
 
 class TestThePickerRows:
-    """One client, and a way out for the user whose client is not listed.
-
-    The flow ends by starting the chosen client with a prompt, which only means
-    anything for one of them, so the picker takes one answer. `--ai-client` is
-    still repeatable for scripted runs, and those skip this picker entirely.
-    """
+    """One client, plus a way out for one that is not listed."""
 
     @staticmethod
     def _candidates():

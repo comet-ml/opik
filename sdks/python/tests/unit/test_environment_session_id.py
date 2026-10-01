@@ -1,10 +1,6 @@
 """
-`session_id` is what ties one run's events together, across the handoff as well as
-within a process.
-
-`npx opik …` reports why a run started and then execs `uvx opik …`, which reports
-what it did. Two halves of one command, so they have to carry one id: the launcher
-mints it and passes it down rather than each side inventing its own.
+`session_id` ties one run's events together, across the `npx opik` → `uvx opik`
+handoff too: the launcher mints it and passes it down.
 """
 
 import importlib
@@ -79,12 +75,7 @@ def test_launcher_values__blank__are_not_used(reimported):
 
 
 def test_launcher_values__are_not_passed_on_to_child_processes(reimported):
-    """The launcher described this command, not whatever it starts.
-
-    `opik mcp configure` ends by exec'ing into the user's agent, and `opik run`
-    starts the user's app. Left in the environment, every Opik process under
-    either would report this run's `session_id` and `cli_launcher` as its own.
-    """
+    """The launcher's values describe this command, not what it starts."""
     import os
 
     reimported(OPIK_CLI_SESSION_ID="AbCdEfGhI", OPIK_CLI_LAUNCHER="npx")

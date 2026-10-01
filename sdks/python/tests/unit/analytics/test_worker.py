@@ -139,13 +139,7 @@ def test_worker__queue_full__events_dropped_instead_of_blocking():
 def test_worker__run_context__is_fixed_when_the_event_is_enqueued(
     worker_factory, monkeypatch
 ):
-    """Not when the batch is sent, which is a different moment and a later one.
-
-    The run context is the one property source that changes during a run:
-    `opik configure` sets `invoked_via` when it hands over to the MCP flow. Read
-    at send time, that value landed on the events queued before it too, so
-    `opik configure`'s own pair came out labelled as the flow it handed to.
-    """
+    """At enqueue, not at send: the context changes mid-run."""
     sent = []
     worker = worker_factory(sent.extend)
     monkeypatch.setattr(environment_details, "_RUN_CONTEXT", {})

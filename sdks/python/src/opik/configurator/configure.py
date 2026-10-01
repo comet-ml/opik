@@ -36,15 +36,14 @@ class Configured(NamedTuple):
     #: writing, and the settings were only applied to the running session.
     saved: bool
     config_file: str
-    #: Only when it is not Opik Cloud, which is the one the user does not need
-    #: reminding of.
+    #: None for Opik Cloud, which needs no reminding.
     url: Optional[str]
     workspace: str
     project_name: str
 
 
-#: Shows how the run ended. Injected by the CLI, which renders it as a block;
-#: without one the configurator logs the sentences `opik.configure()` always has.
+#: Shows how the run ended; the CLI renders it as a block, and without one the
+#: configurator logs what `opik.configure()` always has.
 ReportConfigured = Callable[[Configured], None]
 
 LOGGER = logging.getLogger(__name__)
@@ -112,8 +111,7 @@ class OpikConfigurator:
             ConnectionError
         """
 
-        # Per run, so a configurator used twice does not report the first run's
-        # write as the second's.
+        # Per run, in case one configurator is used twice.
         self._saved = False
 
         # if there is already cached Opik client instance
@@ -370,14 +368,11 @@ class OpikConfigurator:
                 url=current_iteration_url,
             ):
                 self.api_key = user_input_api_key
-                # Closes the key's question before the workspace one opens, so
-                # the two do not run together into one block of prompts.
+                # A gap before the workspace question.
                 print()
                 return
             else:
-                # Printed like the prompt it answers rather than logged: this
-                # runs only at a terminal, mid-question, where an `OPIK:` log
-                # line reads as something other than the reply to what was typed.
+                # Printed like the prompt it answers, not logged.
                 print(
                     f"  That API key is not valid on {current_iteration_url}. "
                     "Please try again."

@@ -44,13 +44,7 @@ MANUAL_SETUP = "__manual__"
 MANUAL_SETUP_LABEL = "My AI client is not listed"
 
 
-#: How the sign-in step is phrased, once, so both views agree.
-#:
-#: Only reaches a user whose run attempted no sign-in at all — a client that
-#: takes the config and prompts on first use, rather than one like Codex or
-#: Claude Code that opens the browser during setup. That is what lets it say
-#: plainly what will happen; it used to hedge with "may have opened it during
-#: setup" because it also printed after a login that had already succeeded.
+#: For a client that prompts for the sign-in on first use, rather than during setup.
 SIGN_IN_HINT = (
     "Signing in to Opik happens in your browser. Your AI client will prompt you "
     "the first time it uses Opik, or you can authorize the opik-mcp server from "
@@ -70,36 +64,19 @@ def sign_in_failed_message(client_display_name: str) -> str:
 class InstallView(abc.ABC):
     """Narration hooks for the MCP install flow."""
 
-    #: Whether :meth:`done` should still explain the sign-in. Set from the
-    #: transport in :meth:`plan` and cleared by :meth:`sign_in_handled` once the
-    #: run knows better. Kept here rather than passed to :meth:`done` because the
-    #: CLI closes the run from ``cli.assistants``, which never sees the server
-    #: spec — the view carries the fact across that gap. A class attribute, so a
-    #: view that is never planned still renders.
+    #: Whether :meth:`done` should explain the sign-in; carried on the view because
+    #: the caller that ends the run never sees the server spec.
     _needs_sign_in: bool = False
 
-    #: Clients registered without a working sign-in. Carried to :meth:`done`,
-    #: which must not call the run done while one of them has no tools yet.
+    #: Clients registered without a working sign-in, which :meth:`done` reports.
     _sign_in_failed: Tuple[str, ...] = ()
 
     def sign_in_failed(self, client_display_names: List[str]) -> None:
-        """Record clients that were registered but could not be signed in.
-
-        Recorded rather than printed where it happens: the run goes on to verify
-        the server and install the skill pack, and the one thing left for the
-        user to do has to be what the run ends on.
-        """
+        """Record clients that could not be signed in, for the run's ending."""
         self._sign_in_failed = tuple(client_display_names)
 
     def sign_in_handled(self) -> None:
-        """Drop the closing hint: this run has already said what applies.
-
-        Two ways to get here, and the hint is wrong in both. A sign-in that
-        succeeded is done — the browser came and went during setup, so a closing
-        note about a prompt to expect describes the past. One that failed has
-        already been answered by a note naming the exact command to run, which
-        the general version would only repeat more vaguely.
-        """
+        """Drop the closing sign-in hint: this run already signed in, or failed to."""
         self._needs_sign_in = False
 
     @abc.abstractmethod
@@ -140,9 +117,8 @@ class InstallView(abc.ABC):
     ) -> Optional[List[str]]:
         """Ask which host to install for.
 
-        Returns the chosen keys, or ``None`` if the user cancelled — distinct
-        from an empty list, which means "none of them, deliberately". Still a
-        list because the manual row answers with its own key rather than a host.
+        Returns the chosen keys, ``[]`` for a deliberate "none", or ``None`` on
+        cancel. A list because the manual row answers with its own key.
         """
 
 
@@ -177,17 +153,10 @@ def _single_candidate_menu(candidate: HostChoice) -> List[str]:
 
 
 def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str]]:
-    """The portable fallback: type a number.
+    """The fallback where the terminal cannot host the picker: type a number.
 
-    Used by the rich view where the terminal cannot host its picker. A single
-    candidate keeps its own shape; see :func:`_single_candidate_menu`.
-
-    One client, like the picker this stands in for. It used to offer "All of the
-    above" and accept ``1,2`` — which registered servers this flow then could not
-    finish for, since it ends by starting the one client that was chosen.
-
-    Ctrl-C answers ``None``, as it does at the picker: a cancel rather than an
-    abort, so the flow can still report the run and stop cleanly.
+    One client, like the picker. Ctrl-C answers ``None``, a cancel, as it does
+    at the picker.
     """
     try:
         if len(candidates) == 1:

@@ -17,25 +17,19 @@ from . import environment, package_version
 LOGGER = logging.getLogger(__name__)
 
 
-#: Set by a launcher that reported events of its own before starting this
-#: process - today `npx opik`, which posts why the run began and then hands over
-#: to `uvx opik`. Honoured so both halves land under one `session_id`; without it
-#: each side invents its own and nothing joins them.
+#: Set by a launcher that reported events before starting this process (today
+#: `npx opik`), so both halves of the run share one `session_id`.
 SESSION_ID_ENV_VAR = "OPIK_CLI_SESSION_ID"
 
-#: Set by a launcher that started this process - today `npx opik`, which reports
-#: why the run began and then hands over to `uvx opik`.
+#: Set by a launcher that started this process (today `npx opik`).
 LAUNCHER_ENV_VAR = "OPIK_CLI_LAUNCHER"
 
 
 def _take_from_launcher(name: str) -> str:
-    """A value the launcher handed this process, removed so that it goes no further.
+    """A value the launcher handed this process, removed from the environment.
 
-    Removed, not only read, because what this process starts is not the command
-    the launcher reported: the agent `opik mcp configure` execs into, and the app
-    `opik run` starts, would otherwise report this run's `session_id` and
-    launcher on every event of their own. Read at import so that it is gone
-    before any of them can be started.
+    Removed at import so nothing this process starts — the agent the handoff
+    execs into, the app `opik run` starts — reports this run as its own.
     """
     return os.environ.pop(name, "").strip()
 
@@ -43,35 +37,22 @@ def _take_from_launcher(name: str) -> str:
 _INHERITED_SESSION_ID = _take_from_launcher(SESSION_ID_ENV_VAR)
 _LAUNCHER = _take_from_launcher(LAUNCHER_ENV_VAR)
 
-#: How this run was entered, reported on every event from the moment it is known.
-#: Deliberately NOT part of `collect_context_once`: that is cached on the first
-#: event, and the things recorded here are learned later - `opik configure` only
-#: hands over to the MCP flow once the user has said yes. Anything set here lands
-#: on the events that follow, which is what lets one funnel separate populations
-#: that reached it different ways without joining to another command's events.
+#: How this run was entered. Not in `collect_context_once`, which is cached on
+#: the first event: this is learned later in the run.
 _RUN_CONTEXT: Dict[str, Any] = {}
 
 
 def set_run_context(**values: Any) -> None:
     """Record how this run was entered, for every event enqueued after this.
 
-    Process-global and never cleared, which is safe only because the one caller
-    is a CLI entry point that owns the process and ends by exiting or by
-    `execvp`. A long-lived or library caller would leak its value onto every
-    later event in that process, including ordinary SDK use that has nothing to
-    do with how a command was started — and `_reset_after_fork` would not undo
-    it, since a forked child inherits the dict. Set this from a command, not
-    from a code path something else can call.
+    Process-global and never cleared: call it only from a CLI entry point that
+    owns the process.
     """
     _RUN_CONTEXT.update(values)
 
 
 def run_context() -> Dict[str, Any]:
-    """The run context, including the launcher that started this process.
-
-    Read rather than cached: the point of it is to carry facts learned partway
-    through a run, so a cache would freeze it at the first event.
-    """
+    """The run context, including the launcher. Not cached: it changes mid-run."""
     if _LAUNCHER:
         return {"cli_launcher": _LAUNCHER, **_RUN_CONTEXT}
     return dict(_RUN_CONTEXT)
@@ -81,11 +62,7 @@ SESSION_ID_LENGTH = 9
 
 
 def _session_id() -> str:
-    """This process's session, inherited from a launcher when there was one.
-
-    A launcher only ever passes this to a CLI it is about to exec, and the CLI
-    takes it out of the environment, so the id it pins describes one command.
-    """
+    """This process's session, inherited from a launcher when there was one."""
     if _INHERITED_SESSION_ID:
         return _INHERITED_SESSION_ID
 

@@ -192,12 +192,7 @@ def test_metric_created__opik_own_metric__reported_by_name(recording_worker):
 
 
 def _in_module(function, module_name):
-    """The same function, reported as living in `module_name`.
-
-    The module test in `_reported_from_inside_the_sdk` reads `__name__` off the
-    frame's globals, and a test module is not an `opik` one - so a caller that
-    looks like the SDK has to be built rather than imported.
-    """
+    """The same function, as if defined in `module_name` (read off its globals)."""
     globals_ = dict(function.__globals__)
     globals_["__name__"] = module_name
     return types.FunctionType(
@@ -212,11 +207,7 @@ def _in_module(function, module_name):
 def test_entry_point__handed_over_by_another_opik_module__still_reports(
     recording_worker,
 ):
-    """`opik configure` calling `opik mcp configure` is the user's own flow.
-
-    Without the marker this is indistinguishable from an internal call, and the
-    whole redirect - the path most people take to MCP setup - reports nothing.
-    """
+    """`opik configure` handing over to `opik mcp configure` is the user's own flow."""
 
     @api.entry_point
     def run_configure():

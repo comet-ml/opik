@@ -66,9 +66,7 @@ async function main(): Promise<number> {
   // `uvx`, because that is what detection can tell us about.
   const result = spawnSync(uv.path, ["tool", "run", "opik", ...args], {
     stdio: "inherit",
-    // The session id goes down with the launcher name so the Python CLI's own
-    // events land under the same `session_id` as the three reported here. It is
-    // the only thing joining why a run started to what it went on to do.
+    // So the Python CLI's events share this run's `session_id`.
     env: {
       ...process.env,
       [LAUNCHER_ENV_VAR]: LAUNCHER,

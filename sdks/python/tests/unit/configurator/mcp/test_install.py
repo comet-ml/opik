@@ -232,12 +232,7 @@ def test_setup_mcp_server__menu_lists_detected_hosts(monkeypatch):
 
 
 def test_setup_mcp_server__the_menu_installs_the_one_client_chosen(monkeypatch):
-    """No "all", no `1,3`: the fallback menu matches the picker it stands in for.
-
-    The flow ends by starting the chosen client, which only means anything for
-    one of them — so a menu that could register three left those runs with a
-    registration and no way to finish.
-    """
+    """The fallback menu takes one client, like the picker it stands in for."""
     monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
     claude_spy = mock.Mock(return_value=targets.InstallResult("Claude", True, "Added"))
     cursor_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
@@ -992,12 +987,7 @@ def _stale_install(monkeypatch, version="0.2.12"):
 
 
 def test_setup_mcp_server__stale_tool_install__is_removed_without_asking(monkeypatch):
-    """It used to ask, defaulting to no. The question weighed the wrong risk.
-
-    The tool install is one an older Opik SDK left behind, and leaving it pins
-    `uvx opik-mcp` at a version old enough to predate identity resolution — so a
-    user who said no was not merely behind, they became unidentifiable.
-    """
+    """A stale tool install is removed without asking: it pins an old opik-mcp."""
     _stale_install(monkeypatch)
     uninstall = mock.Mock(return_value=(True, "removed"))
     monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
@@ -1018,11 +1008,7 @@ def test_setup_mcp_server__stale_tool_install__is_removed_without_asking(monkeyp
 
 
 def test_setup_mcp_server__stale_tool_removed__says_what_it_removed(monkeypatch):
-    """A deletion nobody is told about is one nobody can undo.
-
-    The removal is no longer offered, so this is what is left of the consent the
-    prompt used to carry: the version that went, and how to put it back.
-    """
+    """The removal says which version went and how to put it back."""
     _stale_install(monkeypatch)
     monkeypatch.setattr(install.uv_tool, "uninstall", lambda: (True, "removed"))
     monkeypatch.setattr("builtins.input", lambda message: "y")

@@ -160,24 +160,14 @@ def run_configure(
     skills_flag: Optional[bool],
     invoked_via: str,
 ) -> None:
-    """The `opik mcp configure` flow, callable without going through click.
+    """The `opik mcp configure` flow, also entered from `opik configure`.
 
-    `opik configure` redirects into this when the user says yes to MCP, so that
-    there is one MCP setup flow rather than two that drift: one picker, one
-    sign-in, one ending inside the agent, and one funnel describing all of it.
-
-    `@entry_point` is what keeps that last part true. Analytics drops an event
-    reported from a function another `opik` module called, so on the redirect both
-    events below would be suppressed and the flow would be measured only when
-    typed directly - which is not the path most people take to it.
+    `@entry_point` keeps its events reported on that redirect, where analytics
+    would otherwise drop them as a nested SDK call.
     """
-    # Before the first event, so every event this flow reports carries it - the
-    # result, and a failure once there is one to report. A run reached through
-    # `opik configure` has already said yes to MCP and already has a working
-    # config, so it converts differently from a cold `uvx opik mcp configure`;
-    # pooling the two without being able to separate them moves the headline and
-    # hides why. Recorded here rather than passed to each event because the two
-    # populations have to stay separable further down the flow as well.
+    # Before the first event, so every event of this run carries how it was
+    # entered: a redirect from `opik configure` converts differently from a cold
+    # run, and the funnel has to tell them apart.
     environment_details.set_run_context(invoked_via=invoked_via)
 
     # Same reason as `opik configure`: the click frame is what makes this visible.
@@ -239,17 +229,12 @@ def run_configure(
     detected = mcp_targets.detected_targets()
     detected_clients = len(detected)
 
-    # The banner, not `opik configure`'s "Opik MCP (Recommended)" block: that one
-    # introduces a question this command has already been answered by being run,
-    # and asking it again reads as a second chance to decline. A client named
-    # with `--ai-client` gets neither — it is a scripted run — and neither does a
-    # redirect from `opik configure`, which opened on the same logo a moment ago.
+    # A scripted run (`--ai-client`) gets no banner, and a redirect already
+    # showed the logo.
     if not host_keys and invoked_via == "direct":
         install_view.render_mcp_banner()
-    # Installed rather than offered: the pack is what teaches the client to use
-    # the server this command just registered, so a run that set one up without
-    # the other did half the job. `--no-skills` is still honoured, because a
-    # script saying no is a decision rather than an unanswered question.
+    # Installed unless refused: the pack is what teaches the client to use the
+    # server just registered.
     skills_verdict = consent.resolve_installed_by_default(skills_flag)
 
     outcome = assistants.setup(
@@ -260,9 +245,7 @@ def run_configure(
         host_keys=host_keys,
     )
 
-    # Resolved before the result event, not after the handoff is performed: the
-    # launch branch replaces this process, so anything left unreported here would
-    # never be reported at all.
+    # Before the result event: the launch branch replaces this process.
     handoff = _resolve_handoff(params, outcome)
 
     # A sibling of the entry event, not a nested one: reporting is suppressed
@@ -294,29 +277,18 @@ def run_configure(
         # nothing because the user chose no client in the picker.
         picker_skipped=outcome.mcp_declined,
         interactive=interactive_helpers.is_interactive(),
-        # How the run ends, resolved just above so that it can be reported at all:
-        # the handoff replaces this process, so nothing after it would be said.
-        # Which server was registered, so a run can be matched to what the MCP
-        # server went on to report: the hosted one authenticates over OAuth and is
-        # counted per Comet login, the local one by the API key digest both sides
-        # already report. Without it neither join can be chosen.
+        # Which server was registered picks the join to the MCP server's own
+        # events: the Comet login for hosted, the API key digest for local.
         transport=outcome.transport or "",
-        # The hosted server answers nothing at all until the client has signed in,
-        # so this is the difference between a registration and a usable server —
-        # and `verification_succeeded` cannot see it, being a reachability probe
-        # against an endpoint that challenges everyone.
+        # `verification_succeeded` cannot see this: the hosted probe passes
+        # without a sign-in, but the server serves no tools until there is one.
         sign_in=outcome.sign_in,
-        # Ctrl-C at the picker, which is not the same answer as choosing no
-        # client: one is "stop", the other is a decision about the server.
+        # Ctrl-C at the picker: "stop", not "no client".
         cancelled=outcome.cancelled,
-        # A stale uv tool install pins `uvx opik-mcp` at whatever was current when
-        # it was left behind, and the versions still out there predate identity
-        # resolution — so one we could not clear produces a server whose events
-        # nothing can attribute.
+        # A stale uv tool install pins an old opik-mcp that cannot be attributed.
         stale_tool=outcome.stale_tool,
         handoff=handoff.outcome,
-        # Empty rather than absent when there was no handoff, so one property key
-        # never carries a string on one event and nothing on another.
+        # Empty rather than absent, so the property always carries a string.
         closing_prompt=handoff.prompt_kind or "",
         # Resolved again, not reused: this command can run `opik configure` on the
         # way through, which is what turns an unconfigured run into an attributed
@@ -328,28 +300,16 @@ def run_configure(
 
 
 class _Handoff(NamedTuple):
-    """How the run ends, decided before it is reported so it can be.
-
-    The handoff is what the command is for, so a run that registered a server and
-    then could not hand over is a different outcome from one that dropped the user
-    into their agent — and neither was visible while this was decided after the
-    result event.
-    """
+    """How the run ends, decided before the result event so it can be reported."""
 
     #: `launch`, `declined`, `prompt_shown`, `no_terminal`, `not_single_client`,
     #: `sign_in_failed`, `cancelled` (at the picker, nothing written) or
-    #: `interrupted` (after the config was written, before the offer). `launch` and `declined` are the two
-    #: answers to a question that is actually asked, so together they are the
-    #: number of runs that got as far as being offered their first question —
-    #: the last stage of the funnel, and the only one the user drives.
+    #: `interrupted` (after writing, before the offer). `launch` + `declined` are
+    #: the runs that were offered the first question.
     outcome: str
-    #: Whether this run wrote into an AI client's configuration. The closing
-    #: "restart it" note is only true for a run that changed something, and the
-    #: endings that reach it cover both — a cancel writes nothing, a scripted
-    #: multi-client run writes several.
+    #: Whether an AI client's config was written, i.e. whether a restart is due.
     wrote_config: bool = False
-    #: `diagnose` or `instrument` — which says whether the workspace already had
-    #: traces of the user's own, the one thing the closing prompt turns on.
+    #: `diagnose` if the workspace has traces of the user's own, else `instrument`.
     prompt_kind: Optional[str] = None
     display_name: Optional[str] = None
     prompt: Optional[str] = None
@@ -358,21 +318,13 @@ class _Handoff(NamedTuple):
 
 
 def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Handoff:
-    """Settle how to end, including asking, without doing it yet.
+    """Decide how to end, asking if needed, without doing it yet.
 
-    Registering a server is not the point — using it is. Which question depends
-    on what the user has: traces of their own mean there is something to
-    diagnose, and nothing logged yet means the next step is instrumenting an app
-    rather than staring at an empty project.
-
-    Only for a single registered client, which is what the picker now returns,
-    and only with a terminal: `--ai-client` in a script is a request to
-    configure, not to be replaced by an agent.
+    Only a single registered client in a terminal is offered the handoff:
+    `--ai-client` in a script asks to configure, not to be replaced by an agent.
     """
-    # First, because a cancelled run registers nothing and so would otherwise be
-    # claimed by the client-count check below — which would file every Ctrl-C
-    # under `not_single_client` and print a restart note for a run that wrote
-    # nothing to restart for.
+    # First: a cancel registers nothing, and the count check below would
+    # otherwise file it as `not_single_client`.
     if outcome.cancelled:
         return _Handoff(outcome="cancelled")
 
@@ -382,10 +334,8 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
     if len(outcome.registered_clients) != 1:
         return _Handoff(outcome="not_single_client", wrote_config=wrote_config)
     if outcome.sign_in == "failed":
-        # An unauthorized hosted server advertises no tools at all, so dropping
-        # the user into their agent on a question it cannot answer would teach
-        # them the integration is broken. The installer has already told them how
-        # to finish the sign-in by hand.
+        # Without a sign-in the server has no tools, so the agent could not
+        # answer; the installer has already said how to finish signing in.
         return _Handoff(outcome="sign_in_failed", wrote_config=True)
 
     host_key = outcome.registered_clients[0]
@@ -399,10 +349,8 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
             api_url=params["api_url"],
         )
     except KeyboardInterrupt:
-        # This runs after "Done" with nothing on screen, so it is where someone
-        # who reads the run as over presses Ctrl-C. Letting it through lost the
-        # result event, and the funnel filed a run that wrote a config as one
-        # abandoned before the AI-client step.
+        # This runs silently after "Done", where Ctrl-C is likely; the run is
+        # still reported, since the config was written.
         return _Handoff(outcome="interrupted", wrote_config=True)
     prompt_kind = "diagnose" if project is not None else "instrument"
     prompt = mcp_handoff.closing_prompt(project)
@@ -417,16 +365,12 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
             prompt=prompt,
         )
 
-    # Asked rather than done. Starting the agent replaces this process, which is
-    # a large enough thing to happen unannounced that it was worth a question —
-    # and the answer is the one piece of this funnel that measures wanting to
-    # use the server rather than having one installed.
+    # Asked, because starting the agent replaces this process.
     install_view.render_handoff_offer(prompt)
     try:
         accepted = install_view.confirm_default_yes(f"Continue in {display_name}")
     except click.Abort:
-        # Ctrl-C here is not a failed run: the server is registered and the pack
-        # is installed. It means "not now", which is the same answer as `n`.
+        # Ctrl-C here means "not now", the same as `n`.
         accepted = False
 
     return _Handoff(
@@ -442,9 +386,8 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
 def _perform_handoff(handoff: _Handoff) -> None:
     """End inside the agent, or leave the prompt where the user can reach it."""
     if handoff.display_name is None or handoff.prompt is None:
-        # No one client to hand over to. A run that wrote a configuration still
-        # needs the restart, which is when a client reads it — except after a
-        # failed sign-in, whose ending already named the one thing left to do.
+        # No one client to hand over to: tell a run that wrote config to restart
+        # its client, unless the sign-in ending already said what is left.
         if handoff.wrote_config and handoff.outcome != "sign_in_failed":
             install_view.render_restart_note(mcp_installed=True)
         return

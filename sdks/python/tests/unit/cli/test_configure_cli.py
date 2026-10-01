@@ -67,16 +67,8 @@ def test_configure_no_subcommand__runs_configurator():
 
 
 class TestAssistantConfirmation:
-    """`opik configure` must ask before editing another tool's config.
-
-    Registering an MCP server writes into files owned by Claude Code, Cursor and
-    friends. Configuring Opik is not consent for that, so it is asked for.
-
-    A yes in a terminal is then answered by redirecting into `opik mcp
-    configure`, which owns that flow; this command runs the installer inline
-    only where there is no interactive flow to redirect into — a `--install-mcp`
-    flag, or an unattended run.
-    """
+    """`opik configure` asks before editing another tool's config; a terminal
+    "yes" redirects to `opik mcp configure`, flags and unattended runs stay inline."""
 
     @staticmethod
     def _run(
@@ -130,11 +122,7 @@ class TestAssistantConfirmation:
         assert setup_calls == [], "the inline installer must not also run"
 
     def test_no_flags__permission_refused__does_not_register_or_redirect(self):
-        """Nothing runs at all now: the pack used to keep the installer alive.
-
-        It was a separate question then, so a no to the server still reached
-        `setup` to ask it. With no question left there is nothing to go in for.
-        """
+        """With no pack question left, a "no" to the server runs nothing."""
         confirm, setup_calls, outcome, redirected = self._run(answer=False)
 
         assert confirm.called
@@ -156,25 +144,15 @@ class TestAssistantConfirmation:
         assert outcome.mcp_declined is True, "deliberately, not a failure"
 
     def test_declining_the_server__skips_the_pack_too(self):
-        """The pack is no longer a separate question, so it has no separate answer.
-
-        It used to be asked about on its own, on the reasoning that it needs no
-        MCP server. True, but it still writes into Cursor and Claude Code — and
-        somebody who just said no to Opik touching their AI client has not asked
-        for that. `--install-skills` still overrides, which is where a user who
-        genuinely wants one without the other says so.
-        """
+        """Refusing the server refuses the pack, which also writes into AI
+        clients; `--install-skills` still overrides."""
         _, setup_calls, outcome, _ = self._run(answer=False, install_skills=None)
 
         assert setup_calls == []
         assert outcome.skills_decision == "declined"
 
     def test_install_mcp_flag__is_the_consent__skips_the_picker(self):
-        """A flag in a script registers here rather than starting a flow.
-
-        The redirect ends by replacing the process with an agent, which is not
-        what a script asking for a server registration wants.
-        """
+        """A script's flag registers inline rather than ending inside an agent."""
         _, setup_calls, _, redirected = self._run(install_mcp=True)
 
         assert redirected is False
@@ -723,22 +701,14 @@ class TestBothDecisionsReachTheEvent:
         assert event["skills_decision"] == "requested"
 
     def test_declining_the_server__reports_the_pack_as_declined_too(self):
-        """One decision now, so one reason — and it is the honest one.
-
-        The event still separates it from a pack that was asked for and failed
-        to download, which is what `skills_decision` exists for.
-        """
+        """One decision, one reason — still distinct from a failed download."""
         _, _, outcome, _ = TestAssistantConfirmation._run(answer=False)
 
         assert outcome.skills_decision == "declined"
 
 
 class TestTheRedirectIntoTheMcpFlow:
-    """A yes to MCP hands over to `opik mcp configure` rather than half-doing it.
-
-    Two implementations of the same setup is how they drift, and only one of
-    them has the picker, the sign-in and the ending inside the agent.
-    """
+    """A "yes" to MCP hands over to `opik mcp configure`, the one implementation."""
 
     @staticmethod
     def _run(redirect):
@@ -777,11 +747,7 @@ class TestTheRedirectIntoTheMcpFlow:
         assert not run_configure.called
 
     def test_the_result_event_is_reported_first(self):
-        """The MCP flow ends by replacing this process with the user's agent.
-
-        Anything this command had left to say would never be said, so it says it
-        before handing over.
-        """
+        """Reported before handing over: the MCP flow may replace this process."""
         run_configure, track = self._run(redirect=True)
 
         reported_before_redirect = track.call_args_list[-1].args[:3]
@@ -789,11 +755,7 @@ class TestTheRedirectIntoTheMcpFlow:
         assert run_configure.called
 
     def test_redirect__result_event_says_the_mcp_step_was_handed_over(self):
-        """Otherwise the funnel reads a handover as a failure.
-
-        A redirect reports `mcp_decision='requested'` with nothing written, which
-        is the exact shape of someone accepting and then registering no client.
-        """
+        """Otherwise a handover reads as `requested` with nothing written."""
         _, track = self._run(redirect=True)
 
         assert track.call_args_list[-1].kwargs["mcp_redirected"] is True
@@ -1110,12 +1072,7 @@ class TestPickerSkippedSeparatesTheTwoRefusals:
 
 
 class TestTheRedirectCarriesTheFlags:
-    """What `opik configure` was told has to survive the handover.
-
-    The MCP flow installs the skill pack unless refused, so a refusal that does
-    not reach it becomes "never said" — and the pack is written into the user's
-    AI client anyway.
-    """
+    """Flags survive the handover; a lost refusal would install the pack anyway."""
 
     @staticmethod
     def _redirected(*args):
@@ -1152,13 +1109,10 @@ class TestTheRedirectCarriesTheFlags:
 
 
 class TestTheRedirectReportsTheWholeFlow:
-    """The redirect must emit `opik mcp configure`'s events, not just run its code.
+    """The redirect emits `opik mcp configure`'s events (`@entry_point`).
 
-    Analytics drops an event reported from a function another `opik` module
-    called, so without `@analytics.entry_point` on `run_configure` both MCP
-    events vanish on this path — and it is the path most people reach MCP setup
-    by. Nothing here mocks `run_configure`: the suppression is decided by the
-    real frame chain, so a test that stubs it cannot see this.
+    Nothing here mocks `run_configure`: suppression is decided by the real frame
+    chain.
     """
 
     @staticmethod
@@ -1173,11 +1127,7 @@ class TestTheRedirectReportsTheWholeFlow:
 
         class Recorder:
             def enqueue(self, event):
-                # Mirrors the real worker: the run context is snapshotted here,
-                # at enqueue, and the cached session properties are added when
-                # the batch is sent. A recorder that merged the context later
-                # would show every event the last value set, which is the bug
-                # this ordering exists to avoid.
+                # Like the real worker: run context at enqueue, session at send.
                 event = event._replace(
                     properties={
                         **environment_details.run_context(),

@@ -164,14 +164,7 @@ class TestPackTargets:
     def test_client_not_listed__the_pack_follows_no_client(
         self, mcp_spy, skills_spy, rich_view
     ):
-        """ "None of these is mine" is not an invitation to write to all of them.
-
-        The fallback above is right for a server step that reached nothing on
-        its own — the clients are still the user's. It is wrong for the user who
-        has just said the detected list is not about them: it put the pack in
-        every one of the clients they disowned. Naming none installs the shared
-        copy and links nowhere.
-        """
+        """ "Not listed" disowns the detected clients, so the pack goes to none of them."""
         mcp_spy.return_value = mcp_install.InstallReport(
             registered=(), declined=True, manual=True
         )
@@ -183,13 +176,7 @@ class TestPackTargets:
     def test_server_skipped_at_the_picker__a_default_pack_does_not_follow(
         self, mcp_spy, skills_spy, rich_view
     ):
-        """ "Skip" refused the one thing this run was writing into AI clients.
-
-        The pack is no longer a question, so falling back to every detected
-        client here wrote into all of them without anyone having said yes to
-        anything — the case `opik configure` already refuses for a "no" to its
-        MCP question.
-        """
+        """ "Skip" refused writing into AI clients, so a default pack does not follow."""
         mcp_spy.return_value = mcp_install.InstallReport(registered=(), declined=True)
 
         outcome = assistants.setup(
@@ -213,12 +200,7 @@ class TestPackTargets:
 
 
 class TestThePackIsNotOffered:
-    """It is part of the setup now, not a question asked after it.
-
-    The question used to arrive under the server's results table, when the user
-    had already got what they came for, and it asked about something that makes
-    the thing they just installed usable. Only an explicit flag skips it.
-    """
+    """The pack is part of the setup, not a question; only a flag skips it."""
 
     def test_no_flag__installs_without_asking(
         self, mcp_spy, skills_spy, rich_view, confirm
@@ -312,23 +294,12 @@ class TestPassThrough:
 
 
 class TestSkillsDecisionIsRecorded:
-    """The pack's answer is only known here, so only this can report it.
-
-    `skills_installed=False` covered three different things — declined, never
-    asked, and asked-for-but-failed-to-download — which made the pack's own
-    accept rate unmeasurable. The question is gone, but the distinction is not:
-    a flag that refused it and a download that failed still look identical
-    without this.
-    """
+    """Only `setup` can tell a refused pack from a failed download, so it reports it."""
 
     def test_installed_by_default__says_so_rather_than_claiming_a_request(
         self, mcp_spy, skills_spy, rich_view
     ):
-        """Its own value, so the day the question went away is visible.
-
-        Reusing `requested` would blend a behaviour change into the accept rate
-        the funnel already has history for.
-        """
+        """Its own value, so the accept rate's history is not blended."""
         verdict = consent.resolve_installed_by_default(None)
 
         outcome = assistants.setup(_params(), install_mcp=True, skills=verdict)

@@ -77,15 +77,8 @@ def _in_colab_environment() -> bool:
 def ask_user_for_approval(question: str) -> bool:
     """Ask a yes/no question that Enter answers yes.
 
-    ``question`` is the question alone. The ``[Y/n]`` and the indent are added
-    here so that this and the CLI's ``install_view.confirm_default_yes`` put the
-    same shape on screen — `opik configure` runs both, and each call site used
-    to spell its own suffix, which is how ``(Y/n)`` with the cursor jammed
-    against the bracket ended up next to ``[Y/n]: ``.
-
-    Plain ``input`` rather than ``click`` or ``rich``: this half is reachable
-    from ``opik.configure()``, which is a library call and must not take over
-    someone's stdout.
+    Adds the indent and ``[Y/n]`` itself, matching the CLI's prompts. Plain
+    ``input``: this is reachable from ``opik.configure()``, a library call.
     """
     while True:
         answer = input(f"  {question} [Y/n]: ").strip().upper()
@@ -93,8 +86,7 @@ def ask_user_for_approval(question: str) -> bool:
             return True
         if answer in ("N", "NO"):
             return False
-        # Printed, indented like the question, rather than logged: an `OPIK:`
-        # log line between two copies of a prompt reads as unrelated output.
+        # Printed like the prompt, not logged as an `OPIK:` line.
         print("  Please answer y or n.")
 
 
@@ -117,9 +109,7 @@ class DeploymentType(enum.Enum):
         raise ValueError(f"No DeploymentType with value '{value}'")
 
 
-#: Asked by `opik configure` and by `opik.configure()`, which render it very
-#: differently — `rich` rows against plain text — but must not word it
-#: differently. The CLI passes its own rendered version through ``prompt``.
+#: Shared by `opik configure` and `opik.configure()`, so both word it the same.
 DEPLOYMENT_QUESTION = "Where should Opik log your traces?"
 
 #: What follows the options, wherever they were drawn.
@@ -143,10 +133,6 @@ def ask_user_for_deployment_type(prompt: Optional[str] = None) -> DeploymentType
     if prompt is not None:
         message_string = prompt
     else:
-        # The same question the CLI asks, in the same words. It used to be
-        # "Which Opik deployment do you want to log your traces to?" here and
-        # "Where should Opik log your traces?" there — one question with two
-        # wordings, picked by which surface the user came in through.
         msg = [DEPLOYMENT_QUESTION]
 
         for deployment in DeploymentType:

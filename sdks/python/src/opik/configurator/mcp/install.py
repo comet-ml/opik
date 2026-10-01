@@ -48,32 +48,20 @@ class InstallReport(NamedTuple):
     failed: Tuple[str, ...] = ()
     verified: Optional[bool] = None
     declined: bool = False
-    #: Which server was registered: `remote` for the Comet-hosted one, reached
-    #: over HTTP with a browser sign-in, or `local_stdio` for `uvx opik-mcp` with
-    #: the API key in the host config. The two authenticate differently and are
-    #: counted by different funnels, so a run that does not say which it was
-    #: cannot be matched to what the server went on to report.
+    #: `remote` (hosted, browser sign-in) or `local_stdio` (`uvx opik-mcp`); they
+    #: authenticate differently, so analytics joins them differently.
     transport: Optional[str] = None
-    #: `succeeded`, `failed` or `not_attempted`. Only the hosted server has a
-    #: sign-in, and only Claude Code's own CLI can be driven through it, so
-    #: `not_attempted` is the ordinary answer rather than a gap.
+    #: `succeeded`, `failed` or `not_attempted` (the usual answer: only Claude
+    #: Code's hosted sign-in is driven from here).
     sign_in: str = "not_attempted"
-    #: `absent`, `removed` or `removal_failed`. A stale uv tool install pins
-    #: `uvx opik-mcp` at an old version, and the ones still in the wild predate
-    #: identity resolution - so a run that could not clear one produces a server
-    #: nothing can attribute.
+    #: `absent`, `removed` or `removal_failed`, for a stale `opik-mcp` uv tool.
     stale_tool: str = "absent"
     #: The user picked "my AI client is not listed" rather than "not now". Both
     #: decline the server, but only this one says the detected clients are the
     #: wrong ones — which is a claim about more than the server.
     manual: bool = False
-    #: The user pressed Ctrl-C or Escape at the picker. A cancel is not a
-    #: decision about the server, it is "stop" — so the caller must not carry on
-    #: to the skill pack, which is the same step continuing under another name.
-    #:
-    #: Appended rather than slotted in beside `declined`, where it belongs by
-    #: meaning: this is a NamedTuple, so a field added in the middle silently
-    #: changes what a positional read of the ones after it returns.
+    #: Ctrl-C or Escape at the picker: "stop", so the skill pack must not follow.
+    #: Last rather than beside `declined`, to keep positional reads stable.
     cancelled: bool = False
 
 
@@ -235,17 +223,15 @@ def setup_mcp_server(
 
     results = [target.install(server_spec) for target in selected_targets]
 
-    # Said here rather than left to the closing block's general hint: that hint
-    # describes sign-in as something the assistant may have done for you, which
-    # is exactly what did not happen when a login we started came back failing.
+    # Said per client: the closing block's general hint would describe a
+    # sign-in that did not happen.
     sign_in = "not_attempted"
     if any(result.sign_in_failed for result in results):
         sign_in = "failed"
     elif any(result.sign_in_attempted for result in results):
         sign_in = "succeeded"
 
-    # The plan set the hint from the transport alone, which is all it could know
-    # then. By here the run knows whether a sign-in actually happened.
+    # The plan guessed from the transport; now the run knows.
     if sign_in != "not_attempted":
         display.sign_in_handled()
 
@@ -301,17 +287,10 @@ def setup_mcp_server(
 
 
 def _remove_stale_tool_install(display: mcp_view.InstallView) -> str:
-    """Remove an ``opik-mcp`` that an older Opik SDK left installed as a uv tool.
+    """Remove an ``opik-mcp`` an older Opik SDK left as a uv tool, which would
+    otherwise pin what `uvx opik-mcp` runs.
 
-    Such an install decides what `uvx opik-mcp` runs, so a client registered here
-    would keep starting that pinned version instead of the published release (see
-    ``uv_tool``). Removed without asking, because leaving it defeats the
-    registration this command is making.
-
-    On success, notes which version was removed and the command that puts it
-    back. On failure, reports uv's reason and the command to remove it by hand,
-    since the server keeps starting the old version until someone does.
-
+    Says what was removed and how to put it back, or why it could not be.
     Returns ``absent``, ``removed`` or ``removal_failed``.
     """
     installed = uv_tool.installed_version()
@@ -453,10 +432,7 @@ def _confirm_targets(
         ],
     )
     if chosen is None:
-        # Distinct from an empty list, which is "I deliberately chose nothing".
-        # The picker keeps the two apart and this used to collapse them, so a
-        # Ctrl-C read as declining the server and the flow carried on into the
-        # skill pack.
+        # A cancel, distinct from `[]`, a deliberate "none".
         return _Confirmation([], cancelled=True)
     if mcp_view.MANUAL_SETUP in chosen:
         return _Confirmation([], manual_requested=True)
