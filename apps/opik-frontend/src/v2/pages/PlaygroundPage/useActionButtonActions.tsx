@@ -29,6 +29,7 @@ import usePlaygroundStore, {
   useSelectedRuleIds,
   useSetCreatedExperiments,
   useSetRunTotalItems,
+  useSetIsRunInFlight,
   useClearCreatedExperiments,
   useIsRunning,
   useSetAllRunning,
@@ -107,6 +108,7 @@ const useActionButtonActions = ({
   const isToStopRef = useRef(false);
   const setCreatedExperiments = useSetCreatedExperiments();
   const setRunTotalItems = useSetRunTotalItems();
+  const setIsRunInFlight = useSetIsRunInFlight();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const promptIds = usePromptIds();
   const promptMap = usePromptMap();
@@ -264,6 +266,7 @@ const useActionButtonActions = ({
   const handlePollTimeout = useCallback(
     (description: string) => {
       announcePendingRef.current = false;
+      setIsRunInFlight(false);
       clearRunningMap();
       isToStopRef.current = false;
       resetProgress();
@@ -271,11 +274,12 @@ const useActionButtonActions = ({
       queryClient.invalidateQueries({ queryKey: [COMPARE_EXPERIMENTS_KEY] });
       toast({ title: "Timeout", description, variant: "destructive" });
     },
-    [clearRunningMap, resetProgress, queryClient, toast],
+    [clearRunningMap, resetProgress, queryClient, toast, setIsRunInFlight],
   );
 
   const finishPollScope = useCallback(
     (scope?: PollScope) => {
+      setIsRunInFlight(false);
       if (scope?.scopedPromptIds) {
         scope.scopedPromptIds.forEach((id) => setPromptRunning(id, false));
       } else {
@@ -283,7 +287,7 @@ const useActionButtonActions = ({
         isToStopRef.current = false;
       }
     },
-    [clearRunningMap, setPromptRunning],
+    [clearRunningMap, setPromptRunning, setIsRunInFlight],
   );
 
   const handlePollError = useCallback(
@@ -598,6 +602,7 @@ const useActionButtonActions = ({
       storeExperiments(experiments);
       setExperimentByPromptId(experimentPromptMap);
       setRunTotalItems(response.total_items);
+      setIsRunInFlight(true);
       setProgressPhase("running");
       setProgress(0, response.total_items);
 
@@ -629,6 +634,7 @@ const useActionButtonActions = ({
     setProgress,
     setProgressPhase,
     setRunTotalItems,
+    setIsRunInFlight,
     queryClient,
     projectName,
     pollExperimentCompletion,
@@ -778,6 +784,7 @@ const useActionButtonActions = ({
           [promptId]: experiment.experiment_id,
         });
         setRunTotalItems(response.total_items);
+        setIsRunInFlight(true);
 
         queryClient.invalidateQueries({ queryKey: ["experiments"] });
 
@@ -814,6 +821,7 @@ const useActionButtonActions = ({
       setPromptRunning,
       setExperimentByPromptId,
       setRunTotalItems,
+      setIsRunInFlight,
       queryClient,
       pollExperimentCompletion,
       reportDatasetNotReady,
@@ -861,6 +869,7 @@ const useActionButtonActions = ({
         }
 
         entries.forEach(([promptId]) => setPromptRunning(promptId, true));
+        setIsRunInFlight(true);
         setProgressPhase("running");
         // Seeded from the traces already logged, the same count the poll uses, so a run that is
         // nearly done reopens near the end rather than at zero until the first poll lands.
@@ -883,6 +892,7 @@ const useActionButtonActions = ({
     setProgress,
     setProgressPhase,
     pollExperimentCompletion,
+    setIsRunInFlight,
   ]);
 
   return {
