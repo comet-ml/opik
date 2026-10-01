@@ -2861,6 +2861,40 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/experiments/{id}`'s `metadata`, exactly as the wire
+     * carried it.
+     *
+     * Raw rather than through the pinned SDK because the contract under test is
+     * what the run STORED, key for key: the Playground writes its config there
+     * (`metadata.messages` is the authored prompt template, as a JSON string),
+     * and the compare Configuration tab is a view over the same object. A
+     * camel-cased projection would rename a user's own metadata keys.
+     *
+     * Throws rather than answering `{}` when the key is absent: an experiment
+     * that lost its metadata is the failure a caller is here to catch, and an
+     * empty object compares equal to "nothing was stored" in every assertion
+     * that follows.
+     */
+    async getExperimentMetadata(id: string): Promise<Record<string, unknown>> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getExperimentMetadata: experiment ${id} read answered ${status}: ${message}`);
+      }
+      const metadata = (json as { metadata?: unknown } | null)?.metadata;
+      if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        throw new Error(
+          `getExperimentMetadata: experiment ${id} carried no metadata object (got ${
+            Array.isArray(metadata) ? 'an array' : typeof metadata
+          })`,
+        );
+      }
+      return metadata as Record<string, unknown>;
+    },
+
+    /**
      * `GET /v1/private/experiments/{id}`'s `prompt_versions`, exactly as the
      * wire carried them.
      *

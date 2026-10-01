@@ -39,6 +39,21 @@ const GRID_READ_TIMEOUT_MS = 60_000;
 const PAGE_LOAD_ATTEMPTS = 3;
 
 /**
+ * One column of the compare row-detail panel: the dataset item's, or one
+ * compared experiment's.
+ *
+ * A discriminated value rather than an index because `DataTab` renders the
+ * columns as a `ResizablePanelGroup` — dataset item first, then one panel per
+ * compared experiment — and position is the only thing an index could name. A
+ * spec comparing two experiments would then be one off-by-one away from
+ * asserting against its neighbour and never knowing.
+ */
+export type PanelColumn = 'dataset' | { experimentName: string };
+
+const describeColumn = (column: PanelColumn): string =>
+  column === 'dataset' ? 'dataset item' : `experiment "${column.experimentName}"`;
+
+/**
  * The compare view lives at /experiments/{datasetId}/compare?experiments=[...]
  * and renders the SAME page in single- and multi-experiment mode. This POM
  * targets multi-experiment (comparison) mode: two experiments over one dataset.
@@ -510,6 +525,101 @@ export class CompareExperimentsPage {
   /** The compare row-detail slide-over. */
   private get rowPanel(): Locator {
     return this.page.getByTestId('compare-experiments');
+  }
+
+  /**
+   * One column of the row-detail panel, resolved by what it is HEADED with.
+   *
+   * The dataset item's column is the one headed "Test suite item"; an
+   * experiment's is the one headed by its own name (the `h2` the viewer
+   * renders). `[data-panel]` is the wrapper react-resizable-panels stamps on
+   * each, so the heading identifies the column and the attribute bounds it —
+   * neither half is positional. Every caller below asserts its own lookup
+   * resolved to exactly one element before reading from it, so a column that
+   * matched twice fails loudly rather than answering for the first one.
+   */
+  private panelColumn(column: PanelColumn): Locator {
+    const heading =
+      column === 'dataset'
+        ? this.page.getByRole('heading', { level: 4, name: 'Test suite item' })
+        : this.page.getByRole('heading', { level: 2, name: column.experimentName });
+    return this.rowPanel.locator('[data-panel]').filter({ has: heading });
+  }
+
+  /**
+   * The roles of the message bubbles one column renders, in order.
+   *
+   * `PrettyLLMMessageHeader` is an accordion trigger, which Radix wraps in an
+   * `h3` — so a bubble's role is readable as a heading rather than through the
+   * icon or the styling that carries it visually. The panel's other sections
+   * (Attachments, Feedback scores, Comments) are buttons, not headings, so a
+   * level-3 heading inside a column is a message and nothing else.
+   *
+   * In order, because the order IS part of what the view has to get right: a
+   * conversation whose System bubble rendered after its User one is a different
+   * conversation, and a set comparison cannot see it.
+   */
+  async panelMessageRoles(column: PanelColumn): Promise<string[]> {
+    return test.step(`read the message roles in the ${describeColumn(column)} column`, async () => {
+      const col = this.panelColumn(column);
+      await expect(col, `exactly one ${describeColumn(column)} column`).toHaveCount(1);
+      return (await col.getByRole('heading', { level: 3 }).allInnerTexts()).map((t) => t.trim());
+    });
+  }
+
+  /**
+   * The rendered body of the one message carrying this role, in one column.
+   *
+   * The body is reached from the header through the accordion relationship
+   * rather than by index: `PrettyLLMMessage.Content` is a `role="region"`
+   * sibling of the header inside the same item, so this returns the text
+   * belonging to THIS role even when the column renders several bubbles. A role
+   * appearing twice fails the count rather than silently taking the first.
+   */
+  async panelMessageText(column: PanelColumn, role: string): Promise<string> {
+    return test.step(`read the ${role} message in the ${describeColumn(column)} column`, async () => {
+      const header = this.panelColumn(column).getByRole('heading', {
+        level: 3,
+        name: role,
+        exact: true,
+      });
+      await expect(
+        header,
+        `exactly one ${role} message in the ${describeColumn(column)} column`,
+      ).toHaveCount(1);
+      const body = header.locator('xpath=following-sibling::*[@role="region"][1]');
+      await expect(body, `the ${role} message's body`).toHaveCount(1);
+      return ((await body.innerText()) ?? '').trim();
+    });
+  }
+
+  /**
+   * The lines of the leftover-keys block in one column — the keys the
+   * conversation view does not itself render, which the panel shows beneath it.
+   *
+   * Lines rather than one string, so a caller can compare the WHOLE block and
+   * catch a key that was dropped as well as one that leaked in.
+   *
+   * Read off CodeMirror's own line elements, which means this only sees the
+   * block in its YAML/JSON mode. That is the mode a leftover block of two or
+   * more keys renders in — `generateSyntaxHighlighterCode` falls back to YAML
+   * whenever the payload cannot be prettified — but a SINGLE leftover key can
+   * be prettified, and then the block renders as markdown with no lines at all
+   * (and, today, without naming the key). Seed at least two.
+   */
+  async panelRemainingKeyLines(column: PanelColumn): Promise<string[]> {
+    return test.step(`read the leftover-key lines in the ${describeColumn(column)} column`, async () => {
+      const col = this.panelColumn(column);
+      await expect(col, `exactly one ${describeColumn(column)} column`).toHaveCount(1);
+      const block = col.locator('.cm-line');
+      // Waited for before reading: a block that has not rendered yet and one
+      // that rendered empty are the same DOM, and reading the second as the
+      // first would report "every leftover key disappeared" — which is exactly
+      // the claim callers are here to make.
+      await expect(block.first(), `the leftover-key block in the ${describeColumn(column)} column`)
+        .toBeVisible();
+      return (await block.allInnerTexts()).map((line) => line.trim()).filter((line) => line !== '');
+    });
   }
 
   async expectExperimentColumnsInConfiguration(experiments: { id: string; name: string }[]): Promise<void> {

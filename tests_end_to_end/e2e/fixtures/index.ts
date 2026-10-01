@@ -1,4 +1,4 @@
-export { test, expect } from './model-registry-providers.fixture';
+export { test, expect } from './experiment-message-panel.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -202,6 +202,7 @@ export {
 export type { BulkTagTraceRef, BulkTagTracesFixtures } from './bulk-tag-traces.fixture';
 export type {
   ImageOutputItemRef,
+  InputImageItemRef,
   ExperimentImageOutputRef,
   ExperimentImageOutputFixtures,
 } from './experiment-image-output.fixture';
@@ -271,4 +272,16 @@ export {
   PROVIDER_GROUP,
   REGISTRY_MODEL,
 } from './model-registry-providers.fixture';
+export type {
+  ExperimentMessagePanelRef,
+  ExperimentMessagePanelFixtures,
+} from './experiment-message-panel.fixture';
+export {
+  DATASET_CONVERSATION,
+  DATASET_SCALARS,
+  OUTPUT_TEXT,
+  OUTPUT_SIBLINGS,
+  EXPECTED_DATASET_REMAINING_LINES,
+  EXPECTED_OUTPUT_REMAINING_LINES,
+} from './experiment-message-panel.fixture';
 export type { ProjectRef } from '../core/backend';
