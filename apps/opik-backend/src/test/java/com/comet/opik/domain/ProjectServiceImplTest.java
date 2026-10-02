@@ -131,4 +131,25 @@ class ProjectServiceImplTest {
             when(handle.attach(ProjectDAO.class)).thenReturn(projectDAO);
         }
     }
+
+    @Nested
+    class GroupByName {
+
+        /**
+         * Callers look up with {@code WorkspaceUtils.getProjectName}, which strips, while MySQL's PAD SPACE collation
+         * still returns a project stored with trailing spaces. Keying by the raw name made the lookup miss and the
+         * feedback-score batch fail with an NPE on {@code project.id()}.
+         */
+        @Test
+        void groupByName__whenStoredNameHasSurroundingWhitespace__thenFoundByStrippedName() {
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name("  Padded Project  ")
+                    .build();
+
+            var projectsByName = ProjectService.groupByName(List.of(project));
+
+            assertThat(projectsByName.get("Padded Project")).isEqualTo(project);
+            assertThat(projectsByName.get("padded project")).isEqualTo(project);
+        }
+    }
 }
