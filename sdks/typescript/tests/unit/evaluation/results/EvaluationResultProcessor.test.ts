@@ -89,6 +89,26 @@ describe("EvaluationResultProcessor summary", () => {
     expect(lines.join("\n")).not.toContain(TASK_ERROR_SCORE_NAME);
   });
 
+  test("still shows a computed score whose metric uses the reserved task-error name", async () => {
+    const lines = await summaryLines([
+      testResult([{ name: TASK_ERROR_SCORE_NAME, value: 1 }]),
+    ]);
+
+    expect(lines).toContain(`${TASK_ERROR_SCORE_NAME}: 1.0000 (avg)`);
+  });
+
+  test("leaves out a metric whose scores are not numbers", async () => {
+    const lines = await summaryLines([
+      testResult([
+        { name: "exact_match", value: 1 },
+        { name: "broken", value: null as unknown as number },
+      ]),
+    ]);
+
+    expect(lines).toContain("exact_match: 1.0000 (avg)");
+    expect(lines.join("\n")).not.toContain("broken");
+  });
+
   test("keeps the plain average when nothing failed", async () => {
     const lines = await summaryLines([
       testResult([{ name: "exact_match", value: 1 }]),

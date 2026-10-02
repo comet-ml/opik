@@ -34,8 +34,15 @@ export class EvaluationResultProcessor {
 
     for (const result of testResults ?? []) {
       for (const score of result?.scoreResults ?? []) {
+        if (!score) {
+          continue;
+        }
         // Task failures are reported separately, not as a metric.
-        if (!score || score.name === TASK_ERROR_SCORE_NAME) {
+        const isTaskFailure =
+          score.scoringFailed && score.name === TASK_ERROR_SCORE_NAME;
+        const isComputed =
+          !score.scoringFailed && typeof score.value === "number";
+        if (isTaskFailure || (!score.scoringFailed && !isComputed)) {
           continue;
         }
 
@@ -44,11 +51,11 @@ export class EvaluationResultProcessor {
           count: 0,
           failed: 0
         };
-        if (score.scoringFailed) {
-          current.failed += 1;
-        } else if (typeof score.value === "number") {
+        if (isComputed) {
           current.sum += score.value;
           current.count += 1;
+        } else {
+          current.failed += 1;
         }
         totals.set(score.name, current);
       }
