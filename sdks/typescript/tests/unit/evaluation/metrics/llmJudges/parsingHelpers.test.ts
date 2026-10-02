@@ -233,3 +233,50 @@ describe("extractJsonContentOrRaise", () => {
     });
   });
 });
+
+describe("review feedback hardening", () => {
+  it("should throw error when a trailing verdict object is malformed", () => {
+    const malformedRepeat =
+      '{"score": 0.8, "reason": "Good"}\n{"score": broken}';
+
+    expect(() => extractJsonContentOrRaise(malformedRepeat)).toThrow(
+      JSONParsingError
+    );
+  });
+
+  it("should keep the original parse error when no JSON object is found", () => {
+    const noObject = '{"a": "oops } trailing';
+
+    try {
+      extractJsonContentOrRaise(noObject);
+      expect.fail("Should have thrown an error");
+    } catch (error) {
+      expect(error).toBeInstanceOf(JSONParsingError);
+      expect((error as JSONParsingError).message).toContain(
+        "full-span parse error"
+      );
+    }
+  });
+
+  it("should throw error instead of overflowing the stack on deeply nested repeated verdicts", () => {
+    let nested = '{"verdict": true}';
+    for (let depth = 0; depth < 150; depth += 1) {
+      nested = `{"nested": ${nested}}`;
+    }
+    const repeated = `${nested}\n${nested}`;
+
+    expect(() => extractJsonContentOrRaise(repeated)).toThrow(
+      JSONParsingError
+    );
+  });
+
+  it("should throw error when output contains more object candidates than the scan bound", () => {
+    const repeated = Array.from({ length: 70 }, () => '{"score": 1}').join(
+      "\n"
+    );
+
+    expect(() => extractJsonContentOrRaise(repeated)).toThrow(
+      JSONParsingError
+    );
+  });
+});

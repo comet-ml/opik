@@ -55,14 +55,21 @@ function extractPresumablyJsonDictOrRaise(content: string): unknown {
     }
 
     // Fast path: the span from the first `{` to the last `}` is a single
-    // JSON document (e.g. prose-wrapped output).
+    // JSON document (e.g. prose-wrapped output). The diagnostic is kept so a
+    // later "no valid object" error stays actionable.
+    let fastPathDiagnostic: unknown;
     try {
       return JSON.parse(content.substring(firstBrace, lastBrace + 1));
-    } catch {
+    } catch (error) {
+      fastPathDiagnostic = error;
       // Fall through to the candidate scan below.
     }
 
-    return extractSingleRepeatedJsonObjectOrRaise(content, firstBrace);
+    return extractUnambiguousJsonObjectOrRaise(
+      content,
+      firstBrace,
+      fastPathDiagnostic
+    );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new JSONParsingError(
@@ -78,22 +85,38 @@ function extractPresumablyJsonDictOrRaise(content: string): unknown {
  * Reasoning models occasionally repeat their verdict object (`{...}\n{...}`),
  * which is fine: when every candidate parses to the same value, the first one
  * is returned. Two different objects are ambiguous, so an error is raised
- * instead of guessing by position.
+ * instead of guessing by position. A brace-balanced span that fails to parse
+ * is a malformed verdict and also raises: silently skipping it could score
+ * garbled model output as a successful verdict.
+ *
+ * Each `{` is scanned with fresh string state (a quote in surrounding prose
+ * must not swallow a later verdict), and the number of candidates is bounded
+ * so brace-heavy malformed output cannot trigger quadratic rescanning.
  *
  * @param content - The string content to scan
  * @param firstBrace - Index of the first `{` in the content
+ * @param fastPathDiagnostic - The error from the failed full-span parse, if any
  * @returns The parsed JSON object
  * @throws {Error} If no JSON object is found or the objects differ
  */
-function extractSingleRepeatedJsonObjectOrRaise(
+function extractUnambiguousJsonObjectOrRaise(
   content: string,
-  firstBrace: number
+  firstBrace: number,
+  fastPathDiagnostic?: unknown
 ): unknown {
-  const found: unknown[] = [];
-  const seen = new Set<string>();
+  let reference: unknown = undefined;
+  let foundAny = false;
+  let candidates = 0;
 
   let index = firstBrace;
   while (index !== -1) {
+    candidates += 1;
+    if (candidates > MAX_JSON_OBJECT_CANDIDATES) {
+      throw new Error(
+        "Too many JSON object candidates in LLM output; refusing to scan further"
+      );
+    }
+
     const end = findJsonValueEnd(content, index);
 
     if (end !== -1) {
@@ -101,22 +124,17 @@ function extractSingleRepeatedJsonObjectOrRaise(
       try {
         parsed = JSON.parse(content.substring(index, end + 1));
       } catch {
-        parsed = undefined;
+        throw new Error("Malformed JSON object in LLM output");
       }
 
       if (isPlainObject(parsed)) {
-        // Compare parsed values rather than raw strings, so key order does
-        // not matter while types stay distinct (`true` and `1` differ).
-        const key = stableStringify(parsed);
-        if (!seen.has(key)) {
-          seen.add(key);
-          found.push(parsed);
-
-          if (found.length > 1) {
-            throw new Error(
-              "Ambiguous LLM output: found several different JSON objects; refusing to pick one by position"
-            );
-          }
+        if (!foundAny) {
+          reference = parsed;
+          foundAny = true;
+        } else if (!jsonValuesAreEqual(reference, parsed)) {
+          throw new Error(
+            "Ambiguous LLM output: found several different JSON objects; refusing to pick one by position"
+          );
         }
       }
 
@@ -126,11 +144,15 @@ function extractSingleRepeatedJsonObjectOrRaise(
     }
   }
 
-  if (found.length === 0) {
-    throw new Error("No valid JSON object found in content");
+  if (!foundAny) {
+    const detail =
+      fastPathDiagnostic instanceof Error
+        ? ` (full-span parse error: ${fastPathDiagnostic.message})`
+        : "";
+    throw new Error(`No valid JSON object found in content${detail}`);
   }
 
-  return found[0];
+  return reference;
 }
 
 /**
@@ -172,31 +194,96 @@ function findJsonValueEnd(content: string, startIndex: number): number {
   return -1;
 }
 
+/**
+ * Caps the number of `{` candidates examined in one scan. Each candidate
+ * scan is linear in the remaining content, so the bound keeps brace-heavy
+ * malformed output from degrading into quadratic rescanning; well-formed
+ * judge verdicts never approach it.
+ */
+const MAX_JSON_OBJECT_CANDIDATES = 64;
+
+/**
+ * Caps the nesting depth compared by {@link jsonValuesAreEqual}. Model output
+ * is untrusted, so the comparison runs on an explicit stack with a depth
+ * limit instead of recursing into potentially adversarial nesting.
+ */
+const MAX_VERDICT_COMPARE_DEPTH = 100;
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
- * Serializes a JSON value with object keys sorted recursively, so two parsed
- * values can be compared for equality regardless of key order. Types are
- * preserved: `true` and `1` stringify differently.
+ * Compares two parsed JSON values for equality, ignoring object key order.
+ * Types stay distinct (`true` and `1` differ; key order does not matter).
+ *
+ * The comparison runs on an explicit stack with a depth cap: verdicts come
+ * from untrusted model output, so unbounded recursion could overflow the
+ * call stack on adversarially nested input.
  */
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
+function jsonValuesAreEqual(a: unknown, b: unknown): boolean {
+  const stack: Array<{ left: unknown; right: unknown; depth: number }> = [
+    { left: a, right: b, depth: 0 },
+  ];
+
+  while (stack.length > 0) {
+    const { left, right, depth } = stack.pop() as {
+      left: unknown;
+      right: unknown;
+      depth: number;
+    };
+
+    if (depth > MAX_VERDICT_COMPARE_DEPTH) {
+      throw new Error(
+        "Verdict objects are too deeply nested to compare safely"
+      );
+    }
+
+    if (typeof left !== typeof right) {
+      return false;
+    }
+
+    if (left === null || right === null || typeof left !== "object") {
+      if (left !== right) {
+        return false;
+      }
+      continue;
+    }
+
+    const leftIsArray = Array.isArray(left);
+    const rightIsArray = Array.isArray(right);
+    if (leftIsArray !== rightIsArray) {
+      return false;
+    }
+
+    if (leftIsArray && rightIsArray) {
+      if (left.length !== right.length) {
+        return false;
+      }
+      for (let index = 0; index < left.length; index += 1) {
+        stack.push({ left: left[index], right: right[index], depth: depth + 1 });
+      }
+      continue;
+    }
+
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord);
+    const rightKeys = Object.keys(rightRecord);
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+    for (const key of leftKeys) {
+      if (!Object.prototype.hasOwnProperty.call(rightRecord, key)) {
+        return false;
+      }
+      stack.push({
+        left: leftRecord[key],
+        right: rightRecord[key],
+        depth: depth + 1,
+      });
+    }
   }
 
-  if (isPlainObject(value)) {
-    const entries = Object.entries(value).sort(([a], [b]) =>
-      a < b ? -1 : a > b ? 1 : 0
-    );
-    return `{${entries
-      .map(
-        ([key, entryValue]) =>
-          `${JSON.stringify(key)}:${stableStringify(entryValue)}`
-      )
-      .join(",")}}`;
-  }
-
-  return JSON.stringify(value) ?? "null";
+  return true;
 }
