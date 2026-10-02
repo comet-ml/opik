@@ -169,15 +169,15 @@ export const DEFAULT_CUSTOM_CONFIGS = {
 // Newer Claude models increasingly take none, so this way a newly added model omits a parameter
 // rather than having the provider reject the request outright. A model id we cannot place at all
 // stays permissive — see supportsSamplingParams in lib/modelUtils.
-//
-// `thinkingEffortOptions` must match LEVELS_BY_MODEL in the backend's AnthropicEffort, which answers any
-// other level with a 400. `defaultThinkingEffort` is Anthropic's own default, "high" unless stated.
 export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
     {
       supportsSamplingParams?: boolean;
+      // Must be a subset of the model's levels in EFFORT_LEVELS_BY_MODEL_ID in the backend's
+      // AnthropicModelName, which answers any other level with a 400.
       thinkingEffortOptions?: AnthropicThinkingEffort[];
+      // Anthropic's own default, "high" unless stated.
       defaultThinkingEffort?: AnthropicThinkingEffort;
     }
   >
@@ -203,6 +203,15 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1]: {
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5]: {
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1]: {
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW]: {
+    thinkingEffortOptions: ["low", "medium", "high", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
     supportsSamplingParams: true,
