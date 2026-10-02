@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List, Set
 import json
 import opik.exceptions as exceptions
 
@@ -48,15 +48,32 @@ def _extract_presumably_json_dict_or_raise(content: str) -> Any:
     except json.JSONDecodeError:
         pass
 
-    # Fallback: under reasoning models with response_format the LLM
-    # occasionally emits multiple complete JSON objects glued together
-    # (e.g. ``{...}\n{...}``). Streaming-decode the first complete object
-    # so the call doesn't fail when the model duplicates its answer.
+    # Fallback: reasoning models occasionally repeat their answer object
+    # (``{...}\n{...}``), which is fine. Two different top-level objects are
+    # ambiguous: the first may be text the judge quoted from the evaluated
+    # answer (#7848), so refuse to pick one by position.
     decoder = json.JSONDecoder()
-    try:
-        obj, _ = decoder.raw_decode(content[first_paren:])
-        return obj
-    except json.JSONDecodeError as e:
+    found: List[Any] = []
+    seen: Set[str] = set()
+    index = first_paren
+    while index != -1:
+        try:
+            obj, end = decoder.raw_decode(content, index)
+        except json.JSONDecodeError:
+            index = content.find("{", index + 1)
+            continue
+        key = json.dumps(obj, sort_keys=True)
+        if isinstance(obj, dict) and key not in seen:
+            seen.add(key)
+            found.append(obj)
+            if len(found) > 1:
+                raise exceptions.JSONParsingError(
+                    "Ambiguous LLM output: found several different JSON objects; "
+                    "refusing to pick one by position"
+                )
+        index = content.find("{", end)
+    if not found:
         raise exceptions.JSONParsingError(
-            f"Failed to extract presumably JSON dictionary: {str(e)}"
-        ) from e
+            "Failed to extract presumably JSON dictionary: no JSON object found in content"
+        )
+    return found[0]
