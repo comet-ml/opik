@@ -1,0 +1,23 @@
+--liquibase formatted sql
+--changeset petrot:000129_add_skills_to_cipx_session_analysis
+--comment: Per-skill turn ranges and skill-pass version for the cost API session analysis (OPIK-8522)
+
+-- `skills` is a nested group, one row per turn range a skill drove (slug, origin, trigger, ordinal, turns, trace ids, judge_status, description, summary).
+-- `skills_version` is the task version whose skill pass completed for the row (0 = not run).
+-- Rows written before these columns existed read empty arrays / 0, i.e. "skills not analysed".
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{cluster}'
+    ADD COLUMN IF NOT EXISTS `skills.slug`            Array(String),
+    ADD COLUMN IF NOT EXISTS `skills.origin`          Array(LowCardinality(String)),
+    ADD COLUMN IF NOT EXISTS `skills.trigger`         Array(LowCardinality(String)),
+    ADD COLUMN IF NOT EXISTS `skills.ordinal`         Array(UInt16),
+    ADD COLUMN IF NOT EXISTS `skills.activation_turn` Array(UInt32),
+    ADD COLUMN IF NOT EXISTS `skills.start_turn`      Array(UInt32),
+    ADD COLUMN IF NOT EXISTS `skills.end_turn`        Array(UInt32),
+    ADD COLUMN IF NOT EXISTS `skills.first_trace_id`  Array(FixedString(36)),
+    ADD COLUMN IF NOT EXISTS `skills.last_trace_id`   Array(FixedString(36)),
+    ADD COLUMN IF NOT EXISTS `skills.judge_status`    Array(LowCardinality(String)),
+    ADD COLUMN IF NOT EXISTS `skills.description`     Array(String),
+    ADD COLUMN IF NOT EXISTS `skills.summary`         Array(String),
+    ADD COLUMN IF NOT EXISTS skills_version           UInt16 DEFAULT 0;
+
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS `skills.slug`, DROP COLUMN IF EXISTS `skills.origin`, DROP COLUMN IF EXISTS `skills.trigger`, DROP COLUMN IF EXISTS `skills.ordinal`, DROP COLUMN IF EXISTS `skills.activation_turn`, DROP COLUMN IF EXISTS `skills.start_turn`, DROP COLUMN IF EXISTS `skills.end_turn`, DROP COLUMN IF EXISTS `skills.first_trace_id`, DROP COLUMN IF EXISTS `skills.last_trace_id`, DROP COLUMN IF EXISTS `skills.judge_status`, DROP COLUMN IF EXISTS `skills.description`, DROP COLUMN IF EXISTS `skills.summary`, DROP COLUMN IF EXISTS skills_version;
