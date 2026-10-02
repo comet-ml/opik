@@ -44,6 +44,17 @@ public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
         return config.getHealthCheckTimeout();
     }
 
+    /**
+     * The health check has to ask Redisson for the node group matching the configured topology, so it needs to know
+     * whether sentinel mode is on.
+     */
+    @Provides
+    @Singleton
+    @Named("redis_sentinel_enabled")
+    public boolean isSentinelEnabled(@Config("redis") RedisConfig config) {
+        return config.getSentinel().isEnabled();
+    }
+
     @Provides
     @Singleton
     public StringRedisClient stringRedisClient(RedissonClient syncClient) {
