@@ -13,8 +13,8 @@ score them, and fix the code against real data instead of your description of it
 ## Install in 30 seconds
 
 One command connects your assistant to your traces and teaches it how to create
-them in the first place. It needs [`uv`](https://docs.astral.sh/uv/) and no Opik
-SDK:
+them in the first place. It needs Node.js and [`uv`](https://docs.astral.sh/uv/),
+and no Opik SDK:
 
 <Steps>
   <Step title="Install uv, if you don't have it">
@@ -25,23 +25,11 @@ SDK:
     ```powershell title="Windows"
     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
-
-    Open a new terminal afterwards so `uvx` is on your `PATH`.
   </Step>
   <Step title="Run the setup command">
-    <CodeBlocks>
-      ```bash title="uvx"
-      uvx opik mcp configure
-      ```
-
-      ```bash title="npx"
-      npx opik mcp configure
-      ```
-    </CodeBlocks>
-
-    Both run the same setup: `npx opik` hands everything to `uvx opik`, so it
-    needs `uv` as well as Node. Wherever these docs show `uvx opik …`,
-    `npx opik …` works the same way.
+    ```bash
+    npx opik mcp configure
+    ```
 
     It detects your AI client (Claude Code, Cursor, VS Code Copilot, Codex,
     opencode), picks the right server for your Opik deployment, configures it,

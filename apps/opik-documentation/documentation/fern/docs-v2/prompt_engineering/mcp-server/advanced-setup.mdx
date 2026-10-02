@@ -6,7 +6,7 @@ og:title: Opik MCP server advanced setup
 title: Advanced setup
 ---
 
-`uvx opik mcp configure` covers the five clients it detects. This page is for
+`npx opik mcp configure` covers the five clients it detects. This page is for
 everything else: writing the config yourself, checking what each client points
 at, and the difference between the hosted and local server.
 
@@ -16,7 +16,7 @@ Each AI client keeps its own copy of the MCP configuration, and it isn't updated
 when your Opik configuration changes. To see what every detected client points at:
 
 ```bash
-uvx opik mcp status
+npx opik mcp status
 ```
 
 ```text
@@ -28,7 +28,7 @@ uvx opik mcp status
 ```
 
 A client flagged `✗ OUT OF SYNC` has drifted from your Opik configuration —
-re-run `uvx opik mcp configure` to fix it.
+re-run `npx opik mcp configure` to fix it.
 
 <Warning>
 A client keeps its MCP connection for the lifetime of its process. After changing
@@ -38,7 +38,7 @@ reconnects.
 
 ## Hosted or local server
 
-`uvx opik mcp configure` picks the right one automatically. The difference
+`npx opik mcp configure` picks the right one automatically. The difference
 matters when you configure by hand:
 
 | | Hosted server | Local server |
@@ -54,8 +54,8 @@ On the local server your workspace is written into the client's config, so it ha
 to be the right one. If your Opik configuration doesn't name a workspace and your
 account has more than one, setup **stops** rather than guessing — otherwise your
 agent would read real traces from the wrong workspace and report them
-confidently. Run `uvx opik configure`, pick a workspace, then re-run
-`uvx opik mcp configure`.
+confidently. Run `npx opik configure`, pick a workspace, then re-run
+`npx opik mcp configure`.
 </Warning>
 
 ## Set it up by hand
@@ -301,7 +301,7 @@ connect to a named cloud workspace.
     ```
 
     <Note>
-    `uvx opik mcp configure --ai-client codex` drives the `codex` CLI rather than
+    `npx opik mcp configure --ai-client codex` drives the `codex` CLI rather than
     editing `config.toml`, so your comments and formatting are left alone.
     </Note>
 
@@ -341,15 +341,9 @@ if Opik lives at a non-default path.
 Setup writes into your AI client's own configuration, so a run with no terminal
 writes nothing unless you name the client:
 
-<CodeBlocks>
-```bash title="uvx"
-uvx opik mcp configure --ai-client cursor --skills
-```
-
-```bash title="npx"
+```bash
 npx opik mcp configure --ai-client cursor --skills
 ```
-</CodeBlocks>
 
 Credentials come from `~/.opik.config`, or from `OPIK_API_KEY` and
 `OPIK_WORKSPACE` already in the environment, such as a CI secret — do not paste
