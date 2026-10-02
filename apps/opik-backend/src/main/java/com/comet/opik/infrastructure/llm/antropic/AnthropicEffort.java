@@ -88,7 +88,7 @@ class AnthropicEffort {
         return outputConfig.isEmpty() ? Optional.empty() : Optional.of(Map.of(OUTPUT_CONFIG, outputConfig));
     }
 
-    void requireValid(String model, Map<String, Object> customParameters) {
+    void validateOutputConfigEffort(String model, Map<String, Object> customParameters) {
         toCustomParameters(model, customParameters);
     }
 
