@@ -2097,6 +2097,21 @@ describe("OpenRouter request contract", () => {
     });
   });
 
+  it.each([
+    ["an array", ["middle-out"]],
+    ["a string", "middle-out"],
+  ])(
+    "replaces a custom_parameters that is %s instead of spreading it into numeric keys",
+    (_, malformed) => {
+      expect(
+        sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
+          topK: 40,
+          custom_parameters: malformed,
+        }).custom_parameters,
+      ).toEqual({ top_k: 40 });
+    },
+  );
+
   it("nests only the parameters a stored prompt carries", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {

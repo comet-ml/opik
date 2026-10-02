@@ -298,7 +298,7 @@ class ExperimentMessageRendererTest {
         @ParameterizedTest
         @ValueSource(strings = {"0", "\"512\"", "null"})
         @DisplayName("should send no max_tokens for 0, which the OpenRouter panel uses for no limit, or a non-number")
-        void skipMaxTokensWithoutALimit(String json) {
+        void skipMaxTokensForZeroOrNonNumericValue(String json) {
             var messages = List.of(
                     ExperimentExecutionRequest.PromptVariant.Message.builder()
                             .role("user")

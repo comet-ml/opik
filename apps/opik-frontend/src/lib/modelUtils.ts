@@ -16,6 +16,7 @@ import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
+import isPlainObject from "lodash/isPlainObject";
 import omit from "lodash/omit";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 import { PROVIDER_MODELS } from "@/constants/providerModels";
@@ -784,7 +785,9 @@ export const sanitizeConfigForRequest = (
 
     if (Object.keys(nested).length > 0) {
       sanitized.custom_parameters = {
-        ...(sanitized.custom_parameters as Record<string, unknown> | undefined),
+        ...(isPlainObject(sanitized.custom_parameters)
+          ? (sanitized.custom_parameters as Record<string, unknown>)
+          : {}),
         ...nested,
       };
     }
