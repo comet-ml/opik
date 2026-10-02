@@ -73,6 +73,7 @@ class OpikConfigurator:
         assistant_setup: Optional[AssistantSetup] = None,
         announce: Optional[Announce] = None,
         report_configured: Optional[ReportConfigured] = None,
+        connection_only: bool = False,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -87,6 +88,11 @@ class OpikConfigurator:
         self.assistant_setup = assistant_setup
         self._announce: Announce = announce if announce is not None else LOGGER.info
         self._report_configured = report_configured
+        # Only which Opik to connect to — URL, API key, workspace — with nothing
+        # saved or reported: for a caller connecting something else to Opik (the
+        # MCP server), not configuring this SDK. The answers reach it through
+        # `assistant_setup`.
+        self.connection_only = connection_only
         self._saved = False
 
         # Handle URL
@@ -218,6 +224,10 @@ class OpikConfigurator:
 
         # Step 1: If the URL is provided and active, update the configuration
         if url_was_provided and opik_rest_helpers.is_instance_active(self.base_url):
+            if self.connection_only:
+                # Taken without a question, and with no closing block to name it:
+                # a second local Opik on another port would otherwise go unseen.
+                self._announce(f"Using the local Opik at {self.base_url}")
             self._update_config_local_mode(save_to_file=self.force)
             return
 
@@ -509,6 +519,10 @@ class OpikConfigurator:
         Returns:
             bool: Indicates whether a new project name was explicitly set or not.
         """
+        if self.connection_only:
+            # Where this SDK logs traces; not part of which Opik to connect to.
+            return False
+
         # Case 1: Project name was provided by the user and is valid
         if self.project_name is not None:
             return True if self.force else False
@@ -574,6 +588,9 @@ class OpikConfigurator:
         Raises:
             ConfigurationError: Raised if there is an issue saving the configuration or updating the session.
         """
+        if self.connection_only:
+            return
+
         try:
             url = self.api_url
 
@@ -610,6 +627,9 @@ class OpikConfigurator:
         """
         Say where traces will go, now that the configuration is settled.
         """
+        if self.connection_only:
+            return
+
         if self._report_configured is not None:
             self._report_configured(
                 Configured(

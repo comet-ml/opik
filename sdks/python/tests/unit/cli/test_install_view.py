@@ -699,3 +699,40 @@ class TestTheDeclinedEnding:
             rich_view.render_handoff_declined("Claude Code", replace_offer=False)
 
         assert capture.get().startswith("\n")
+
+
+class TestTheSavedConnection:
+    """How `opik mcp configure` says which Opik the AI client is connected to."""
+
+    @staticmethod
+    def _render(*args):
+        from opik.cli import install_view as rich_view
+
+        with rich_view.console.capture() as capture:
+            rich_view.render_connection(*args)
+        return [line.rstrip() for line in capture.get().splitlines()]
+
+    def test_saved__the_opik__its_workspace__and_where_they_came_from(self):
+        lines = self._render(
+            "https://www.comet.com/",
+            "acme-ai",
+            str(pathlib.Path.home() / ".opik.config"),
+        )
+
+        assert lines == [
+            "Connecting to",
+            "    Opik       https://www.comet.com",
+            "    Workspace  acme-ai",
+            "    From       ~/.opik.config",
+            "    To connect to a different Opik: opik mcp configure --ignore-opik-config",
+            "",
+        ]
+
+    def test_without_a_workspace__no_workspace_row(self):
+        lines = self._render("http://localhost:5173/", None, "OPIK_URL_OVERRIDE")
+
+        assert lines[:3] == [
+            "Connecting to",
+            "    Opik  http://localhost:5173",
+            "    From  OPIK_URL_OVERRIDE",
+        ]

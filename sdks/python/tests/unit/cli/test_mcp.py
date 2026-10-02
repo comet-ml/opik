@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import click
+import pytest
 from click.testing import CliRunner
 
 from opik.cli import assistants
@@ -106,11 +107,10 @@ class TestInstallCommand:
         setup_spy.assert_not_called()
 
     @staticmethod
-    def _run_without_config(deployment, configs=None):
+    def _run_without_config(deployment, connection=None):
         """`opik mcp configure` on a machine with no Opik config."""
         runner = CliRunner()
         order = []
-        configs = iter(configs or [_config(api_key=None)] * 3)
 
         def ask_deployment(question):
             order.append(("deployment", question))
@@ -124,7 +124,9 @@ class TestInstallCommand:
 
         with (
             patch.object(
-                mcp_cli.opik_config, "OpikConfig", side_effect=lambda: next(configs)
+                mcp_cli.opik_config,
+                "OpikConfig",
+                side_effect=lambda **values: _config(**{"api_key": None, **values}),
             ),
             patch.object(
                 mcp_cli.interactive_helpers, "is_interactive", return_value=True
@@ -136,7 +138,7 @@ class TestInstallCommand:
                 side_effect=ask_deployment,
             ),
             patch.object(
-                mcp_cli.configure_cli, "run_interactive_configure"
+                mcp_cli.configure_cli, "ask_for_connection", return_value=connection
             ) as configure_spy,
             patch.object(mcp_cli.assistants, "setup", side_effect=setup) as setup_spy,
             patch.object(mcp_cli.install_view, "render_mcp_banner"),
@@ -216,18 +218,22 @@ class TestInstallCommand:
         assert params["api_key"] is None
         assert params["api_url"] == mcp_cli.opik_config.OPIK_URL_CLOUD
 
-    def test_no_config__self_hosted__asks_opik_configures_questions(self):
+    def test_no_config__self_hosted__connects_to_the_opik_the_answers_name(self):
+        """The answers go to the AI client, not to ~/.opik.config."""
+        connection = mcp_cli._resolve_setup_params(
+            _config(api_key="new-key", url_override="https://opik.acme.com/opik/api/")
+        )
+
         result, _, configure_spy, setup_spy = self._run_without_config(
             mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
-            configs=[_config(api_key=None), _config(api_key="new-key")],
+            connection=connection,
         )
 
         assert result.exit_code == 0, result.output
         configure_spy.assert_called_once_with(
-            install_mcp=False,
-            deployment=mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
+            mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED
         )
-        assert setup_spy.call_args.args[0]["api_key"] == "new-key"
+        assert setup_spy.call_args.args[0] == connection
 
     def test_no_config__ctrl_c_at_the_deployment__writes_nothing(self):
         result, _, configure_spy, setup_spy = self._run_without_config(click.Abort())
@@ -300,6 +306,221 @@ class TestInstallCommand:
         assert result.exit_code == 0
         setup_spy.assert_called_once()
         assert setup_spy.call_args.args[0]["use_local"] is True
+
+
+class TestTheSavedOpikConfiguration:
+    """Read, never written: a reused one is named up front, and the flag sets it
+    aside for a run that should connect somewhere else."""
+
+    @staticmethod
+    def _run(saved, args=(), deployment=None, connection=None, interactive=True):
+        runner = CliRunner()
+
+        def opik_config_for(**values):
+            # No arguments: the saved configuration. With them: one built for a
+            # connection, as the identity lookup does.
+            return _config(**values) if values else saved
+
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", side_effect=opik_config_for
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers,
+                "is_interactive",
+                return_value=interactive,
+            ),
+            patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+            patch.object(
+                mcp_cli.configure_cli,
+                "ask_for_deployment_type",
+                return_value=deployment,
+            ) as asked,
+            patch.object(
+                mcp_cli.configure_cli, "ask_for_connection", return_value=connection
+            ) as connection_asked,
+            patch.object(
+                mcp_cli.assistants, "setup", return_value=assistants.NOTHING_DONE
+            ) as setup,
+            patch.object(mcp_cli.install_view, "render_mcp_banner"),
+            patch.object(mcp_cli.install_view, "render_connection") as named,
+            patch.object(
+                mcp_cli.account_identity, "event_properties", return_value={}
+            ) as identity,
+            patch.object(mcp_cli.analytics, "track_event") as track,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure", *args])
+        return SimpleNamespace(
+            result=result,
+            asked=asked,
+            connection_asked=connection_asked,
+            setup=setup,
+            named=named,
+            identity=identity,
+            track=track,
+        )
+
+    def test_a_usable_one__is_used__and_named_before_anything_else(self):
+        run = self._run(saved=_config(api_key="key"))
+
+        assert run.result.exit_code == 0, run.result.output
+        run.asked.assert_not_called()
+        run.named.assert_called_once_with(
+            opik_url="https://www.comet.com/",
+            workspace="acme-ai",
+            source="your Opik configuration",
+        )
+        assert run.setup.call_args.args[0]["api_key"] == "key"
+
+    def test_a_local_one__is_named_without_its_one_workspace(self):
+        run = self._run(
+            saved=_config(api_key=None, url_override="http://localhost:5173/api/")
+        )
+
+        assert run.named.call_args.kwargs["opik_url"] == "http://localhost:5173/"
+        assert run.named.call_args.kwargs["workspace"] is None
+
+    def test_after_opik_configure__it_is_not_named_again(self):
+        """That run has just shown the settings it wrote."""
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+            patch.object(
+                mcp_cli.assistants, "setup", return_value=assistants.NOTHING_DONE
+            ),
+            patch.object(mcp_cli.install_view, "render_connection") as named,
+            patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
+            patch.object(mcp_cli.analytics, "track_event"),
+        ):
+            mcp_cli.run_configure(
+                local_server=False,
+                hosts=(),
+                skills_flag=None,
+                ignore_opik_config=False,
+                invoked_via="opik_configure",
+            )
+
+        named.assert_not_called()
+
+    def test_the_flag__asks_which_opik__even_with_a_usable_one(self):
+        run = self._run(
+            saved=_config(api_key="saved-key"),
+            args=("--ignore-opik-config",),
+            deployment=mcp_cli.interactive_helpers.DeploymentType.CLOUD,
+        )
+
+        assert run.result.exit_code == 0, run.result.output
+        run.asked.assert_called_once_with(mcp_cli.MCP_DEPLOYMENT_QUESTION)
+        run.named.assert_not_called()
+        assert run.setup.call_args.args[0]["api_key"] is None
+
+    def test_the_flag__self_hosted__connects_to_the_answers(self):
+        connection = mcp_cli._resolve_setup_params(
+            _config(
+                api_key="answer-key", url_override="https://opik.acme.com/opik/api/"
+            )
+        )
+
+        run = self._run(
+            saved=_config(api_key="saved-key"),
+            args=("--ignore-opik-config",),
+            deployment=mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
+            connection=connection,
+        )
+
+        assert run.result.exit_code == 0, run.result.output
+        assert run.setup.call_args.args[0] == connection
+        # Not repeated back: the user has just typed it.
+        run.named.assert_not_called()
+
+    def test_the_flag__the_account_reported_is_the_one_connected_to(self):
+        """Not the saved one: the run sets that aside."""
+        connection = mcp_cli._resolve_setup_params(
+            _config(
+                api_key="answer-key", url_override="https://opik.acme.com/opik/api/"
+            )
+        )
+
+        run = self._run(
+            saved=_config(api_key="saved-key"),
+            args=("--ignore-opik-config",),
+            deployment=mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
+            connection=connection,
+        )
+
+        entry, result = (call.args[0] for call in run.identity.call_args_list)
+        assert entry.api_key is None
+        assert result.api_key == "answer-key"
+        assert result.url_override == "https://opik.acme.com/opik/api/"
+
+    def test_the_flag__is_reported_on_both_events(self):
+        run = self._run(
+            saved=_config(api_key="key"),
+            args=("--ignore-opik-config",),
+            deployment=mcp_cli.interactive_helpers.DeploymentType.CLOUD,
+        )
+
+        assert [
+            call.kwargs["ignore_opik_config"] for call in run.track.call_args_list
+        ] == [
+            True,
+            True,
+        ]
+
+    def test_the_flag__without_a_terminal__says_it_needs_one(self):
+        run = self._run(
+            saved=_config(api_key="key"),
+            args=("--ignore-opik-config", "--ai-client", "cursor"),
+            interactive=False,
+        )
+
+        assert run.result.exit_code != 0
+        assert "--ignore-opik-config" in run.result.output
+        assert "terminal" in run.result.output
+        run.setup.assert_not_called()
+
+
+def test_help__describes_the_flag_that_sets_the_saved_opik_aside():
+    result = CliRunner().invoke(cli, ["mcp", "configure", "--help"])
+
+    assert result.exit_code == 0
+    assert "--ignore-opik-config" in result.output
+    assert "left unchanged" in result.output
+
+
+class TestWhereTheSavedConnectionCameFrom:
+    @pytest.fixture(autouse=True)
+    def no_connection_variables(self, monkeypatch, tmp_path):
+        for name in mcp_cli._CONNECTION_ENV_VARS:
+            monkeypatch.delenv(name, raising=False)
+        self.config_file = tmp_path / "opik.config"
+        monkeypatch.setenv("OPIK_CONFIG_PATH", str(self.config_file))
+
+    def test_the_file__by_its_path(self):
+        self.config_file.write_text("[opik]\n")
+
+        assert mcp_cli._saved_source(OpikConfig()) == str(self.config_file)
+
+    def test_a_variable_that_overrides_it__is_named_too(self, monkeypatch):
+        """Otherwise the user edits a file that changes nothing."""
+        self.config_file.write_text("[opik]\n")
+        monkeypatch.setenv("OPIK_URL_OVERRIDE", "http://localhost:5173/api/")
+
+        assert (
+            mcp_cli._saved_source(OpikConfig())
+            == f"{self.config_file} and OPIK_URL_OVERRIDE"
+        )
+
+    def test_variables_alone(self, monkeypatch):
+        monkeypatch.setenv("OPIK_API_KEY", "key")
+        monkeypatch.setenv("OPIK_WORKSPACE", "acme-ai")
+
+        assert mcp_cli._saved_source(OpikConfig()) == "OPIK_API_KEY and OPIK_WORKSPACE"
 
 
 class TestIdentityIsReportedWithBothEvents:

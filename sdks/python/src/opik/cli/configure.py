@@ -2,7 +2,7 @@
 
 import os
 import urllib.parse
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 import click
 
@@ -339,6 +339,24 @@ class Progress:
         self.redirect_to_mcp = False
 
 
+#: How each answer to the deployment question sets up the configurator.
+_DEPLOYMENT_OPTIONS: Dict[interactive_helpers.DeploymentType, Dict[str, Any]] = {
+    interactive_helpers.DeploymentType.CLOUD: {
+        "url": opik_configure.OPIK_BASE_URL_CLOUD,
+        "use_local": False,
+        "self_hosted_comet": False,
+    },
+    interactive_helpers.DeploymentType.SELF_HOSTED: {
+        "use_local": False,
+        "self_hosted_comet": True,
+    },
+    interactive_helpers.DeploymentType.LOCAL: {
+        "use_local": True,
+        "self_hosted_comet": False,
+    },
+}
+
+
 def run_interactive_configure(
     use_local: bool = False,
     automatic_approvals: bool = False,
@@ -394,50 +412,45 @@ def run_interactive_configure(
     progress.deployment = deployment_type_choice.name.lower()
     progress.stage = Progress.CREDENTIALS
 
-    if deployment_type_choice == interactive_helpers.DeploymentType.CLOUD:
-        configurator = opik_configure.OpikConfigurator(
-            url=opik_configure.OPIK_BASE_URL_CLOUD,
-            use_local=False,
-            force=True,
-            self_hosted_comet=False,
-            automatic_approvals=automatic_approvals,
-            install_mcp=install_mcp,
-            install_skills=install_skills,
-            assistant_setup=record,
-            announce=install_view.render_configure_hint,
-            report_configured=_report_configured,
-        )
-    elif deployment_type_choice == interactive_helpers.DeploymentType.SELF_HOSTED:
-        configurator = opik_configure.OpikConfigurator(
-            use_local=False,
-            force=True,
-            self_hosted_comet=True,
-            automatic_approvals=automatic_approvals,
-            install_mcp=install_mcp,
-            install_skills=install_skills,
-            assistant_setup=record,
-            announce=install_view.render_configure_hint,
-            report_configured=_report_configured,
-        )
-    elif deployment_type_choice == interactive_helpers.DeploymentType.LOCAL:
-        configurator = opik_configure.OpikConfigurator(
-            use_local=True,
-            force=True,
-            self_hosted_comet=False,
-            automatic_approvals=automatic_approvals,
-            install_mcp=install_mcp,
-            install_skills=install_skills,
-            assistant_setup=record,
-            announce=install_view.render_configure_hint,
-            report_configured=_report_configured,
-        )
-    else:
-        raise click.ClickException("Unknown deployment type was selected. Exiting.")
-
-    configurator.configure()
+    opik_configure.OpikConfigurator(
+        **_DEPLOYMENT_OPTIONS[deployment_type_choice],
+        force=True,
+        automatic_approvals=automatic_approvals,
+        install_mcp=install_mcp,
+        install_skills=install_skills,
+        assistant_setup=record,
+        announce=install_view.render_configure_hint,
+        report_configured=_report_configured,
+    ).configure()
     progress.stage = Progress.DONE
 
     return recorded
+
+
+def ask_for_connection(
+    deployment: interactive_helpers.DeploymentType,
+) -> Dict[str, Any]:
+    """Ask the questions that say which Opik ``deployment`` is, and save nothing.
+
+    For `opik mcp configure`, which connects an AI client to Opik rather than
+    configuring this SDK: no project name, and ~/.opik.config is neither used for
+    the answers nor written. Returns the connection block the configurator hands
+    over at the end, the same one `opik configure` gives the MCP step.
+    """
+    connection: Dict[str, Any] = {}
+
+    def keep(params: Dict[str, Any], *flags: Any) -> None:
+        connection.update(params)
+
+    opik_configure.OpikConfigurator(
+        **_DEPLOYMENT_OPTIONS[deployment],
+        # Asks every question rather than reusing the saved answers.
+        force=True,
+        connection_only=True,
+        assistant_setup=keep,
+        announce=install_view.render_configure_hint,
+    ).configure()
+    return connection
 
 
 @click.group(
@@ -527,7 +540,7 @@ def configure(
         install_skills=str(install_skills),
         # Whoever is already configured, if anyone: a first-ever run has no
         # credential yet at this point, and says so.
-        **account_identity.event_properties(),
+        **account_identity.event_properties(opik_config.OpikConfig()),
     )
 
     # With no terminal there is nobody to ask, and every question here has a sane
@@ -561,7 +574,7 @@ def configure(
             # key, or the AI client step — three very different problems.
             stage=progress.stage,
             deployment=progress.deployment,
-            **account_identity.event_properties(),
+            **account_identity.event_properties(opik_config.OpikConfig()),
         )
         raise
 
@@ -609,7 +622,7 @@ def configure(
         # Resolved again rather than reused from the entry event: this is the run
         # that just wrote ~/.opik.config, so it is the first point at which a
         # first-ever configure has an account to name at all.
-        **account_identity.event_properties(),
+        **account_identity.event_properties(opik_config.OpikConfig()),
     )
 
     if progress.redirect_to_mcp:
@@ -623,6 +636,8 @@ def configure(
             local_server=False,
             hosts=(),
             skills_flag=install_skills,
+            # The config this run just wrote is the one to use.
+            ignore_opik_config=False,
             invoked_via="opik_configure",
         )
 

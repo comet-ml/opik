@@ -262,6 +262,35 @@ def render_mcp_banner() -> None:
     )
 
 
+def render_connection(opik_url: str, workspace: Optional[str], source: str) -> None:
+    """Which saved Opik the AI client is being connected to, from where, and how
+    to choose another.
+
+    Said up front because nothing later names it, and a wrong Opik is otherwise
+    only found out once the AI client cannot reach it. Laid out like the block
+    `opik configure` closes on, which says the same things about the same file.
+    """
+    console.print(text.Text("Connecting to", style="bold"))
+    grid = table.Table.grid(padding=(0, 2))
+    grid.add_column(style=_KEY_STYLE, no_wrap=True)
+    grid.add_column(overflow="fold")
+    grid.add_row("Opik", _emphasize(_without_credentials(opik_url.rstrip("/"))))
+    if workspace:
+        grid.add_row("Workspace", workspace)
+    grid.add_row("From", _collapse_home(source))
+    console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
+    console.print(
+        padding.Padding(
+            text.Text.assemble(
+                ("To connect to a different Opik: ", "dim"),
+                ("opik mcp configure --ignore-opik-config", _CODE_STYLE),
+            ),
+            _FIELDS_INDENT,
+        )
+    )
+    console.print()
+
+
 def render_mcp_intro() -> None:
     """What MCP is, above `opik configure`'s question about it. The picker below
     lists the clients, so this does not."""

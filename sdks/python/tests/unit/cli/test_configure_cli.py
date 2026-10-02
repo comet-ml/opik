@@ -1340,3 +1340,126 @@ class TestTheProjectLink:
         assert configure_cli._project_url("checkout-bot")[0] == (
             "http://localhost:5173/acme-ai/projects"
         )
+
+
+class TestAskForConnection:
+    """Which Opik `opik mcp configure` connects to: asked for the AI client, never
+    saved to ~/.opik.config, and not taken from it either."""
+
+    @pytest.fixture
+    def config_file(self, monkeypatch, tmp_path):
+        path = tmp_path / "opik.config"
+        path.write_text(
+            "[opik]\n"
+            "url_override = https://www.comet.com/opik/api/\n"
+            "api_key = saved-key\n"
+            "workspace = saved-ws\n"
+        )
+        monkeypatch.setenv("OPIK_CONFIG_PATH", str(path))
+        return path
+
+    def test_local__the_saved_file_is_left_as_it_was(self, config_file):
+        """It used to be overwritten with the local URL, after which every run
+        reused that URL without asking again."""
+        before = config_file.read_text()
+
+        with (
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+                return_value=True,
+            ),
+            mock.patch.object(configure_cli.install_view, "render_configure_hint"),
+        ):
+            connection = configure_cli.ask_for_connection(
+                configure_cli.interactive_helpers.DeploymentType.LOCAL
+            )
+
+        assert config_file.read_text() == before
+        assert connection["use_local"] is True
+        assert connection["base_url"] == "http://localhost:5173/"
+        assert connection["api_key"] is None, "the saved key is not this Opik's"
+
+    def test_local_found_without_asking__says_which(self, config_file):
+        """Another local Opik on a different port would otherwise go unseen."""
+        with (
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+                return_value=True,
+            ),
+            mock.patch.object(
+                configure_cli.install_view, "render_configure_hint"
+            ) as hint,
+        ):
+            configure_cli.ask_for_connection(
+                configure_cli.interactive_helpers.DeploymentType.LOCAL
+            )
+
+        hint.assert_called_once_with("Using the local Opik at http://localhost:5173/")
+
+    def test_local_url_typed__is_not_repeated_back(self, config_file):
+        def active(url):
+            return url == "http://localhost:5174/"
+
+        with (
+            mock.patch("opik.configurator.configure.is_interactive", return_value=True),
+            mock.patch("builtins.input", return_value="http://localhost:5174"),
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+                side_effect=active,
+            ),
+            mock.patch.object(
+                configure_cli.install_view, "render_configure_hint"
+            ) as hint,
+        ):
+            connection = configure_cli.ask_for_connection(
+                configure_cli.interactive_helpers.DeploymentType.LOCAL
+            )
+
+        assert connection["base_url"] == "http://localhost:5174/"
+        assert not any("localhost:5174" in call.args[0] for call in hint.call_args_list)
+
+    def test_self_hosted__asks_for_key_and_workspace__but_not_a_project(
+        self, config_file
+    ):
+        """The project is where this SDK logs, not part of which Opik to reach."""
+        before = config_file.read_text()
+        questions = []
+
+        def approve(question):
+            questions.append(question)
+            return True
+
+        with (
+            mock.patch("opik.configurator.configure.is_interactive", return_value=True),
+            mock.patch("builtins.input", return_value="https://opik.acme.com"),
+            mock.patch(
+                "opik.configurator.configure.getpass.getpass", return_value="answer-key"
+            ),
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+                return_value=True,
+            ),
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
+                return_value=True,
+            ),
+            mock.patch.object(
+                configure_cli.opik_configure.OpikConfigurator,
+                "_get_default_workspace",
+                return_value="team-ws",
+            ),
+            mock.patch(
+                "opik.configurator.configure.ask_user_for_approval",
+                side_effect=approve,
+            ),
+        ):
+            connection = configure_cli.ask_for_connection(
+                configure_cli.interactive_helpers.DeploymentType.SELF_HOSTED
+            )
+
+        assert config_file.read_text() == before
+        assert connection["api_key"] == "answer-key"
+        assert connection["workspace"] == "team-ws"
+        assert connection["self_hosted_comet"] is True
+        assert connection["base_url"] == "https://opik.acme.com/"
+        assert questions == ['Use the "team-ws" workspace?']
