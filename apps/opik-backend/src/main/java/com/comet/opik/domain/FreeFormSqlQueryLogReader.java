@@ -1,10 +1,12 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
 import com.comet.opik.infrastructure.RateLimitConfig;
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -15,9 +17,9 @@ import java.util.function.Supplier;
  * Reads a free-form query's {@code system.query_log} entries for the post-run check, flushing only when they are not
  * there yet. It queries first: a flush that already happened after the query finished, the server's own or another
  * request's, has written its entries. Only when the initial entry is missing does it wait {@code retryDelayMillis},
- * flag a flush with the {@link FreeFormSqlQueryLogFlusher}, at most one per second across the cluster, and query
- * again, up to {@code maxAttempts} flushes. The wait gives a flush already on its way, the server's or another
- * request's, the chance to land first. One flush per second is the worst case, not the rule. The reader owns the
+ * flag a flush with the {@link FreeFormSqlQueryLogFlusher}, at most one per {@code minFlushInterval} across the cluster, and query
+ * again, up to {@code maxFlushAttempts} flushes. The timings are in {@link FreeFormSqlPostRunCheckConfig}. The wait gives a flush already on its way, the server's or another
+ * request's, the chance to land first. One flush per interval is the worst case, not the rule. The reader owns the
  * flusher and its cluster-wide permit; the DAO only runs the two statements.
  *
  * <p>The initial entry being there proves the rest is only when the query read nothing remotely: with
@@ -28,16 +30,7 @@ import java.util.function.Supplier;
 @Singleton
 class FreeFormSqlQueryLogReader {
 
-    private static final long MIN_FLUSH_INTERVAL_MILLIS = 1_000;
-    /** How soon a request whose flush was denied the cluster-wide permit asks for it again. */
-    private static final long FLUSH_PERMIT_RETRY_MILLIS = 200;
-    /** The cluster-wide flush budget: one per second, across every backend instance. */
-    private static final RateLimitConfig.LimitConfig FLUSH_PERMITS = new RateLimitConfig.LimitConfig(
-            "unused", "free-form-sql-query-log-flush", 1, 1, "");
-    /** The wait between a read that misses the query's entry and the next attempt. */
-    private static final long LOG_RETRY_DELAY_MILLIS = 500;
-    /** Flushes tried before the check fails closed: the first that started after the query should be enough. */
-    private static final int MAX_FLUSH_ATTEMPTS = 3;
+    private static final String FLUSH_BUCKET = "free-form-sql-query-log-flush";
 
     /** Queries the log, as (query id, account user); never flushes. */
     private final BiFunction<String, String, CompletableFuture<List<FreeFormSqlQueryLogEntry>>> fetch;
@@ -47,13 +40,23 @@ class FreeFormSqlQueryLogReader {
     private final FreeFormSqlQueryLogFlusher.Scheduler scheduler;
 
     @Inject
-    FreeFormSqlQueryLogReader(@NonNull FreeFormSqlQueryDAO dao, @NonNull RateLimitService rateLimitService) {
-        this(dao::fetchQueryLog, new FreeFormSqlQueryLogFlusher(dao::flushQueryLog, MIN_FLUSH_INTERVAL_MILLIS,
-                FLUSH_PERMIT_RETRY_MILLIS, System::currentTimeMillis, FreeFormSqlQueryLogFlusher.Scheduler.DELAYED,
-                () -> rateLimitService.isLimitExceeded(1, FLUSH_PERMITS.userFacingBucketName(), FLUSH_PERMITS)
+    FreeFormSqlQueryLogReader(@NonNull FreeFormSqlQueryDAO dao, @NonNull RateLimitService rateLimitService,
+            @NonNull @Config("freeFormSqlPostRunCheck") FreeFormSqlPostRunCheckConfig config) {
+        this(dao::fetchQueryLog, flusher(dao, rateLimitService, config)::awaitFlush, config.getMaxFlushAttempts(),
+                config.getLogRetryDelay().toMilliseconds(), FreeFormSqlQueryLogFlusher.Scheduler.DELAYED);
+    }
+
+    /** The cluster-wide permit allows one flush per {@code minFlushInterval} across every backend instance. */
+    private static FreeFormSqlQueryLogFlusher flusher(FreeFormSqlQueryDAO dao, RateLimitService rateLimitService,
+            FreeFormSqlPostRunCheckConfig config) {
+        var permits = new RateLimitConfig.LimitConfig("unused", FLUSH_BUCKET, 1,
+                config.getMinFlushInterval().toSeconds(), "");
+        return new FreeFormSqlQueryLogFlusher(dao::flushQueryLog, config.getMinFlushInterval().toMilliseconds(),
+                config.getFlushPermitRetry().toMilliseconds(), System::currentTimeMillis,
+                FreeFormSqlQueryLogFlusher.Scheduler.DELAYED,
+                () -> rateLimitService.isLimitExceeded(1, FLUSH_BUCKET, permits)
                         .map(exceeded -> !exceeded)
-                        .toFuture())::awaitFlush,
-                MAX_FLUSH_ATTEMPTS, LOG_RETRY_DELAY_MILLIS, FreeFormSqlQueryLogFlusher.Scheduler.DELAYED);
+                        .toFuture());
     }
 
     FreeFormSqlQueryLogReader(

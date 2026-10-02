@@ -261,6 +261,23 @@ customCharts:
   #   than labelling some and not others.
   maxNameLookupIds: ${CUSTOM_CHARTS_MAX_NAME_LOOKUP_IDS:-5000}
 
+# Description: timing of the free-form SQL post-run check, which reads each query's system.query_log entries and
+#   flushes the log only when they are not written yet.
+freeFormSqlPostRunCheck:
+  #  Default: 1s
+  #  Description: At most one query_log flush per interval, per instance and across the cluster (Redis). Whole
+  #   seconds, at least 1s.
+  minFlushInterval: ${FREE_FORM_SQL_POST_RUN_CHECK_MIN_FLUSH_INTERVAL:-1s}
+  #  Default: 200ms
+  #  Description: How soon a flush denied the cluster-wide permit asks for it again
+  flushPermitRetry: ${FREE_FORM_SQL_POST_RUN_CHECK_FLUSH_PERMIT_RETRY:-200ms}
+  #  Default: 500ms
+  #  Description: Wait between a log read that misses the query's entry and the next attempt
+  logRetryDelay: ${FREE_FORM_SQL_POST_RUN_CHECK_LOG_RETRY_DELAY:-500ms}
+  #  Default: 3
+  #  Description: Flushes tried before the check fails closed and withholds the result (1 to 10)
+  maxFlushAttempts: ${FREE_FORM_SQL_POST_RUN_CHECK_MAX_FLUSH_ATTEMPTS:-3}
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
