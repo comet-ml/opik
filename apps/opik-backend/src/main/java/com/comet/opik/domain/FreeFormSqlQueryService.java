@@ -27,6 +27,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -178,13 +179,16 @@ public class FreeFormSqlQueryService {
                     : mapExecutionError(error, startMillis);
         }
         var scalarReads = FreeFormSqlSubqueries.scalarReads(queryTree, database);
-        if (!scalarReads.isEmpty()) {
-            String tables = scalarReads.stream().map(table -> table.substring(database.length() + 1)).sorted()
-                    .collect(Collectors.joining(", "));
-            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, startMillis, SCALAR_SUBQUERY_MESSAGE.formatted(tables),
-                    null);
+        if (!scalarReads.none()) {
+            var reads = scalarReads.tables().stream().map(table -> table.substring(database.length() + 1)).sorted()
+                    .collect(Collectors.toCollection(ArrayList::new));
+            if (scalarReads.opaque()) {
+                reads.add("a subquery whose result is too large to inspect");
+            }
+            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, startMillis,
+                    SCALAR_SUBQUERY_MESSAGE.formatted(String.join(", ", reads)), null);
         }
-        return scalarReads;
+        return scalarReads.tables();
     }
 
     /**
@@ -228,7 +232,7 @@ public class FreeFormSqlQueryService {
     private CompletableFuture<Void> verifyPolicies(FreeFormSqlAccount account, String workspaceId, String projectScope,
             String query, String queryId, Set<String> scalarReads, long startMillis) {
         var plan = freeFormSqlQueryDAO.explainPlan(account, workspaceId, projectScope, query);
-        var entries = freeFormSqlQueryDAO.queryLogEntries(queryId);
+        var entries = freeFormSqlQueryDAO.queryLogEntries(queryId, users.get(account));
         return plan.thenCombine(entries, Evidence::new)
                 .handle((evidence, error) -> {
                     if (error != null) {
@@ -278,7 +282,7 @@ public class FreeFormSqlQueryService {
         }
     }
 
-    private record Evidence(String plan, List<FreeFormSqlPolicyCheck.LogEntry> entries) {
+    private record Evidence(String plan, List<FreeFormSqlQueryLogEntry> entries) {
     }
 
     private static AnalyticsQueryResponse toResponse(List<JsonNode> rows) {

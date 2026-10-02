@@ -6,7 +6,6 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -22,6 +21,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Stream;
@@ -184,7 +184,7 @@ class FreeFormSqlPostRunCheckTest {
         assertThatThrownBy(() -> service(partial, PARTIAL_USER).executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE_A,
                 PROJECT_A, count("authored_feedback_scores")).join())
                 .isInstanceOf(CompletionException.class)
-                .hasCauseInstanceOf(InternalServerErrorException.class);
+                .cause().satisfies(FreeFormSqlQueryServiceTest.withheld(500));
     }
 
     void assertRejected(String query, Class<? extends WebApplicationException> type, String... message) {
@@ -197,5 +197,48 @@ class FreeFormSqlPostRunCheckTest {
 
     FreeFormSqlQueryService partialService() {
         return service(partial, PARTIAL_USER);
+    }
+
+    static Stream<Arguments> scalarReads() {
+        String traces = DATABASE_NAME + ".traces";
+        String spans = DATABASE_NAME + ".spans";
+        return Stream.of(
+                arguments("top-level, JOIN, derived, UNION", "SELECT count() FROM traces AS t INNER JOIN (SELECT id "
+                        + "FROM traces) AS u ON t.id = u.id, (SELECT id FROM spans UNION ALL SELECT id FROM traces) AS w",
+                        Set.of()),
+                arguments("CTE", "WITH c AS (SELECT id FROM spans) SELECT count() FROM c", Set.of()),
+                arguments("IN and EXISTS", "SELECT count() FROM traces WHERE id IN (SELECT id FROM spans) "
+                        + "AND EXISTS (SELECT 1 FROM authored_feedback_scores)", Set.of()),
+                arguments("scalar with no table", "SELECT (SELECT 1)", Set.of()),
+                arguments("scalar", "SELECT (SELECT count() FROM traces)", Set.of(traces)),
+                arguments("scalar over a CTE resolves to its table",
+                        "WITH c AS (SELECT id FROM spans) SELECT (SELECT count() FROM c)", Set.of(spans)),
+                arguments("scalar nested inside IN", "SELECT count() FROM traces WHERE id IN (SELECT id FROM traces "
+                        + "WHERE id != (SELECT max(id) FROM spans))", Set.of(spans)),
+                arguments("scalar nested inside EXISTS", "SELECT count() FROM traces WHERE EXISTS (SELECT 1 FROM "
+                        + "traces WHERE id = (SELECT min(id) FROM spans))", Set.of(spans)),
+                arguments("scalar as a function argument",
+                        "SELECT count() FROM traces WHERE id != (SELECT max(id) FROM spans)", Set.of(spans)));
+    }
+
+    @Test
+    @DisplayName("a scalar subquery stored by reference hides its reads, so it is rejected too")
+    void storedScalarIsOpaque() {
+        String query = "SELECT count() FROM traces WHERE has((SELECT groupArray(id) FROM spans), id)";
+        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin)
+                .explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A.toString(), query).join();
+        assertThat(FreeFormSqlSubqueries.scalarReads(tree, DATABASE_NAME).opaque()).isTrue();
+        assertRejected("SELECT toJSONString(map('n', toString(count()))) AS result FROM traces "
+                + "WHERE has((SELECT groupArray(id) FROM spans), id)", BadRequestException.class, "cannot read a table",
+                "too large to inspect");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    @DisplayName("the scalar gate classifies subqueries from ClickHouse's real resolved query tree")
+    void scalarReads(String name, String query, Set<String> expected) {
+        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin)
+                .explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A.toString(), query).join();
+        assertThat(FreeFormSqlSubqueries.scalarReads(tree, DATABASE_NAME).tables()).isEqualTo(expected);
     }
 }

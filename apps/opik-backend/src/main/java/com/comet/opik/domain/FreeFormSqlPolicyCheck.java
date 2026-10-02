@@ -4,7 +4,6 @@ import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
 import com.jayway.jsonpath.ParseContext;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -50,22 +49,13 @@ class FreeFormSqlPolicyCheck {
     private static final Set<String> UNCHECKED_READS = Set.of("ReadFromSystemOne", "ReadFromSystemNumbers",
             "ReadFromSystemZeros", "ReadFromRemote", "ReadFromRemoteParallelReplicas");
 
-    /**
-     * One {@code query_log} entry: the {@code <db>.<table>} names it read, and those its applied row policies cover,
-     * resolved through {@code system.row_policies}.
-     */
-    @Builder
-    record LogEntry(boolean initial, @NonNull String user, @NonNull List<String> tables,
-            @NonNull List<String> policedTables) {
-    }
-
     /** A table read that could not be shown to be under a row policy, and why. */
     record Violation(String table, String reason) {
     }
 
     /** @return the first read that cannot be shown to have run under its row policy; empty when there is none. */
     static Optional<Violation> violation(@NonNull String database, @NonNull String user,
-            @NonNull List<LogEntry> entries,
+            @NonNull List<FreeFormSqlQueryLogEntry> entries,
             @NonNull String planJson, @NonNull Set<String> scalarReads) {
         if (entries.stream().noneMatch(entry -> entry.initial() && entry.user().equals(user))) {
             return Optional.of(new Violation("", "no query log entry for the query as " + user));

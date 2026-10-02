@@ -67,10 +67,11 @@ public interface FreeFormSqlQueryDAO {
 
     /**
      * Flushes {@code system.query_log} on every node, at most once a second across requests, and returns the finished
-     * entries of {@code queryId}, initial and shard-side, from every replica, with the tables their applied row
-     * policies cover. Runs on the main analytics account: the read-only ones can do neither.
+     * entries of {@code queryId}, initial and shard-side, from every replica, with the tables covered by the applied
+     * row policies that apply to {@code user}, the account the query ran as. Runs on the main analytics account: the
+     * read-only ones can do neither.
      */
-    CompletableFuture<List<FreeFormSqlPolicyCheck.LogEntry>> queryLogEntries(@NonNull String queryId);
+    CompletableFuture<List<FreeFormSqlQueryLogEntry>> queryLogEntries(@NonNull String queryId, @NonNull String user);
 }
 
 @Singleton
@@ -89,12 +90,17 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
 
     /** Flushes only query_log, on every node; a node that does not answer in time fails the check, not the server. */
     static final String FLUSH_QUERY_LOG = "SYSTEM FLUSH LOGS ON CLUSTER '{cluster}' query_log";
-    /** Each applied policy resolved to the table it covers through system.row_policies; an unknown one covers nothing. */
+    /**
+     * Each applied policy resolved to the table it covers through system.row_policies, among the policies that apply
+     * to the account the query ran as; any other, or an unknown one, covers nothing.
+     */
     static final String QUERY_LOG_ENTRIES = """
             SELECT is_initial_query, user, tables,
                 arrayFilter(t -> t != '', arrayMap(p -> transform(p,
-                    (SELECT groupArray(name) FROM system.row_policies),
-                    (SELECT groupArray(concat(database, '.', table)) FROM system.row_policies), ''),
+                    (SELECT groupArray(name) FROM system.row_policies
+                        WHERE apply_to_all OR has(apply_to_list, {user:String})),
+                    (SELECT groupArray(concat(database, '.', table)) FROM system.row_policies
+                        WHERE apply_to_all OR has(apply_to_list, {user:String})), ''),
                     used_row_policies)) AS policed_tables
             FROM clusterAllReplicas('{cluster}', system.query_log)
             WHERE event_date >= yesterday() AND event_time >= now() - INTERVAL 1 HOUR
@@ -170,10 +176,11 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
 
     @Override
     @WithSpan
-    public CompletableFuture<List<FreeFormSqlPolicyCheck.LogEntry>> queryLogEntries(@NonNull String queryId) {
+    public CompletableFuture<List<FreeFormSqlQueryLogEntry>> queryLogEntries(@NonNull String queryId,
+            @NonNull String user) {
         return flusher.awaitFlush()
                 .thenCompose(flushed -> analyticsClient.queryRecords(QUERY_LOG_ENTRIES,
-                        Map.<String, Object>of("query_id", queryId)))
+                        Map.<String, Object>of("query_id", queryId, "user", user)))
                 .thenApply(FreeFormSqlQueryDAOImpl::readLogEntries);
     }
 
@@ -188,10 +195,10 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
         });
     }
 
-    private static List<FreeFormSqlPolicyCheck.LogEntry> readLogEntries(Records records) {
+    private static List<FreeFormSqlQueryLogEntry> readLogEntries(Records records) {
         try (records) {
             return StreamSupport.stream(records.spliterator(), false)
-                    .map(row -> FreeFormSqlPolicyCheck.LogEntry.builder()
+                    .map(row -> FreeFormSqlQueryLogEntry.builder()
                             .initial(row.getInteger("is_initial_query") == 1)
                             .user(row.getString("user"))
                             .tables(row.<String>getList("tables"))

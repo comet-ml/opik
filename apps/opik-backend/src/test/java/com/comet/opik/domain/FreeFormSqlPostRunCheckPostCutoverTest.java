@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.api.Client;
-import jakarta.ws.rs.InternalServerErrorException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -39,7 +38,7 @@ class FreeFormSqlPostRunCheckPostCutoverTest extends FreeFormSqlPostRunCheckTest
         assertThatThrownBy(() -> partialService().executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A,
                 "SELECT toJSONString(map('n', toString(count()))) AS result FROM traces").join())
                 .isInstanceOf(CompletionException.class)
-                .hasCauseInstanceOf(InternalServerErrorException.class);
+                .cause().satisfies(FreeFormSqlQueryServiceTest.withheld(500));
     }
 
     private static void run(Client admin, String sql, String table) {

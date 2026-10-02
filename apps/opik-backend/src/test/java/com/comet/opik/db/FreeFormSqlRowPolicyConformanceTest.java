@@ -86,8 +86,36 @@ class FreeFormSqlRowPolicyConformanceTest {
                     + "toString(generateUUIDv7()), toString(generateUUIDv7()) FROM numbers(%d) "
                     + "SETTINGS distributed_foreground_insert = 1")
                     .formatted(DATABASE_NAME, scope.get(0), scope.get(1), ROWS));
+            for (var table : EXTENDED_ONLY_TABLES) {
+                admin.queryAll("INSERT INTO %s.%s (%s) SELECT %s FROM numbers(%d)".formatted(DATABASE_NAME,
+                        table.name(), table.columns(), table.values(scope.get(0), scope.get(1)), ROWS));
+            }
         }
     }
+
+    /**
+     * The extended account's other tables, as provision_agent_insights_readonly_user.sh scopes them: the project
+     * binds those with project_id in the key, the rest are workspace-only. {@code id} is the key column each row
+     * varies, so ReplacingMergeTree keeps every row.
+     */
+    private record ExtendedTable(String name, boolean projectBound, String id) {
+        String columns() {
+            return "workspace_id, " + (projectBound ? "project_id, " : "") + id;
+        }
+
+        String values(String workspaceId, String projectId) {
+            return "'%s', %stoString(generateUUIDv7())".formatted(workspaceId,
+                    projectBound ? "'" + projectId + "', " : "");
+        }
+    }
+
+    private static final List<ExtendedTable> EXTENDED_ONLY_TABLES = List.of(
+            new ExtendedTable("feedback_scores", true, "entity_id"),
+            new ExtendedTable("trace_threads", true, "id"),
+            new ExtendedTable("experiments", false, "id"),
+            new ExtendedTable("experiment_items", false, "id"),
+            new ExtendedTable("dataset_items", false, "id"),
+            new ExtendedTable("dataset_item_versions", false, "id"));
 
     /** The table topology the tests run on: the migrated schema as is, pre-cutover. */
     void prepareTopology(Client admin) {
@@ -156,6 +184,22 @@ class FreeFormSqlRowPolicyConformanceTest {
                 assertThat(single(extended, count + " WHERE workspace_id = '" + WORKSPACE_B + "'", WORKSPACE_A, "*"))
                         .as(table).isEqualTo("0");
             });
+        }
+    }
+
+    @Test
+    @DisplayName("the extended account's other tables: its workspace only, and its project where the key binds it")
+    void extendedOnlyTablesAreScoped() {
+        try (var extended = client(EXTENDED)) {
+            for (var table : EXTENDED_ONLY_TABLES) {
+                String count = "SELECT count() FROM %s.%s".formatted(DATABASE_NAME, table.name());
+                assertThat(single(extended, count, WORKSPACE_A, "*")).as(table.name())
+                        .isEqualTo(String.valueOf(2 * ROWS));
+                assertThat(single(extended, count, WORKSPACE_A, PROJECT_A1)).as(table.name())
+                        .isEqualTo(String.valueOf(table.projectBound() ? ROWS : 2 * ROWS));
+                assertThat(single(extended, count + " WHERE workspace_id = '" + WORKSPACE_B + "'", WORKSPACE_A, "*"))
+                        .as(table.name()).isEqualTo("0");
+            }
         }
     }
 

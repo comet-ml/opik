@@ -18,9 +18,9 @@ class FreeFormSqlPolicyCheckTest {
 
     private static final String USER = "comet_readonly_freeform_sql_user";
 
-    private static FreeFormSqlPolicyCheck.LogEntry entry(boolean initial, String user, List<String> tables,
+    private static FreeFormSqlQueryLogEntry entry(boolean initial, String user, List<String> tables,
             List<String> policies) {
-        return FreeFormSqlPolicyCheck.LogEntry.builder().initial(initial).user(user).tables(tables)
+        return FreeFormSqlQueryLogEntry.builder().initial(initial).user(user).tables(tables)
                 .policedTables(policies).build();
     }
 
@@ -56,7 +56,7 @@ class FreeFormSqlPolicyCheckTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource
     @DisplayName("reads shown to be under their policy pass")
-    void passes(String name, List<FreeFormSqlPolicyCheck.LogEntry> entries, String plan, Set<String> scalarReads) {
+    void passes(String name, List<FreeFormSqlQueryLogEntry> entries, String plan, Set<String> scalarReads) {
         assertThat(FreeFormSqlPolicyCheck.violation("opik", USER, entries, plan, scalarReads)).isEmpty();
     }
 
@@ -88,7 +88,7 @@ class FreeFormSqlPolicyCheckTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource
     @DisplayName("anything else is a violation, naming what was not covered")
-    void fails(String name, List<FreeFormSqlPolicyCheck.LogEntry> entries, String plan, Set<String> scalarReads,
+    void fails(String name, List<FreeFormSqlQueryLogEntry> entries, String plan, Set<String> scalarReads,
             String named) {
         assertThat(FreeFormSqlPolicyCheck.violation("opik", USER, entries, plan, scalarReads)).hasValueSatisfying(
                 violation -> assertThat(violation.table() + " " + violation.reason()).contains(named));

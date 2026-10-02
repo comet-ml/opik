@@ -4,8 +4,7 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.ServiceUnavailableException;
+import jakarta.ws.rs.WebApplicationException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -71,8 +70,8 @@ class FreeFormSqlQueryServiceTest {
     }
 
     private void givenQueryLog(String user, List<String> tables, List<String> policies) {
-        when(dao.queryLogEntries(anyString())).thenReturn(CompletableFuture.completedFuture(List.of(
-                FreeFormSqlPolicyCheck.LogEntry.builder().initial(true).user(user).tables(tables)
+        when(dao.queryLogEntries(anyString(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of(
+                FreeFormSqlQueryLogEntry.builder().initial(true).user(user).tables(tables)
                         .policedTables(policies).build())));
     }
 
@@ -129,7 +128,7 @@ class FreeFormSqlQueryServiceTest {
                         "[{\"Plan\": {\"Node Type\": \"ReadFromMergeTree\", \"Description\": \"opik.traces\"}}]"));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
-                .join()).hasCauseInstanceOf(InternalServerErrorException.class);
+                .join()).cause().satisfies(withheld(500));
         verify(enricher, never()).enrich(any(), anyString());
     }
 
@@ -137,21 +136,21 @@ class FreeFormSqlQueryServiceTest {
     @DisplayName("results are withheld when the query has no log entry as the account it ran on")
     void resultsWithheldWithoutLogEntry() {
         givenClickHouseReturnsOneRow();
-        when(dao.queryLogEntries(anyString())).thenReturn(CompletableFuture.completedFuture(List.of()));
+        when(dao.queryLogEntries(anyString(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of()));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
-                .join()).hasCauseInstanceOf(InternalServerErrorException.class);
+                .join()).cause().satisfies(withheld(500));
     }
 
     @Test
     @DisplayName("results are withheld when the check itself cannot run")
     void resultsWithheldWhenCheckFails() {
         givenClickHouseReturnsOneRow();
-        when(dao.queryLogEntries(anyString()))
+        when(dao.queryLogEntries(anyString(), anyString()))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("flush timed out")));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
-                .join()).hasCauseInstanceOf(ServiceUnavailableException.class);
+                .join()).cause().satisfies(withheld(503));
     }
 
     @Test
@@ -163,6 +162,17 @@ class FreeFormSqlQueryServiceTest {
 
         var queryId = ArgumentCaptor.forClass(String.class);
         verify(dao).execute(any(), anyString(), anyString(), anyString(), queryId.capture());
-        verify(dao).queryLogEntries(queryId.getValue());
+        verify(dao).queryLogEntries(queryId.getValue(), STANDARD_USER);
+    }
+
+    /** A withheld result: the status, and the constant message, with no row and no ClickHouse detail. */
+    static java.util.function.Consumer<Throwable> withheld(int status) {
+        return error -> {
+            assertThat(error).isInstanceOf(WebApplicationException.class);
+            var response = ((WebApplicationException) error).getResponse();
+            assertThat(response.getStatus()).isEqualTo(status);
+            assertThat(String.valueOf(response.getEntity())).contains("Query result withheld: its scope could not be "
+                    + "verified");
+        };
     }
 }

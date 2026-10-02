@@ -23,6 +23,10 @@ import java.util.regex.Pattern;
  * {@code EXISTS}; and scalar anywhere else, which is where analysis folds it into a {@code CONSTANT}'s
  * {@code EXPRESSION}. A position not recognised as source or filter counts as scalar, so an unknown shape is
  * rejected rather than trusted.
+ *
+ * <p>A scalar subquery with a large result is not in the tree at all: analysis stores the result and leaves
+ * {@code FUNCTION ... function_name: __getScalar} in its place, so its reads cannot be seen. Its presence is reported
+ * as {@link ScalarReads#opaque()}, which rejects the query the same way.
  */
 @UtilityClass
 class FreeFormSqlSubqueries {
@@ -30,7 +34,8 @@ class FreeFormSqlSubqueries {
     private static final Set<String> FILTER_FUNCTIONS = Set.of("in", "notIn", "globalIn", "globalNotIn", "nullIn",
             "notNullIn", "globalNullIn", "globalNotNullIn", "exists", "notExists");
     private static final Set<String> SOURCE_PARENTS = Set.of("JOIN TREE", "LEFT TABLE EXPRESSION",
-            "RIGHT TABLE EXPRESSION");
+            "RIGHT TABLE EXPRESSION", "TABLE EXPRESSION");
+    private static final String STORED_SCALAR = "__getScalar";
     private static final Pattern TABLE_NAME = Pattern.compile("(?:^|, )table_name: ([^,]+)");
     private static final Pattern FUNCTION_NAME = Pattern.compile("(?:^|, )function_name: ([^,]+)");
     private static final Pattern SUBQUERY = Pattern.compile("(?:^|, )is_subquery: 1(?:,|$)");
@@ -52,20 +57,34 @@ class FreeFormSqlSubqueries {
         }
     }
 
-    /** @return the {@code <database>.<table>} names read inside scalar subqueries */
-    static Set<String> scalarReads(@NonNull List<String> queryTreeLines, @NonNull String database) {
-        var scalar = new HashSet<String>();
-        collect(parse(queryTreeLines), database + ".", scalar);
-        return Set.copyOf(scalar);
+    /**
+     * @param tables the {@code <database>.<table>} names read inside scalar subqueries
+     * @param opaque whether a scalar subquery was replaced by its stored result, so its reads are unknown
+     */
+    record ScalarReads(Set<String> tables, boolean opaque) {
+
+        boolean none() {
+            return tables.isEmpty() && !opaque;
+        }
     }
 
-    private static void collect(Node node, String prefix, Set<String> scalar) {
+    static ScalarReads scalarReads(@NonNull List<String> queryTreeLines, @NonNull String database) {
+        var tables = new HashSet<String>();
+        boolean[] opaque = {false};
+        collect(parse(queryTreeLines), database + ".", tables, opaque);
+        return new ScalarReads(Set.copyOf(tables), opaque[0]);
+    }
+
+    private static void collect(Node node, String prefix, Set<String> tables, boolean[] opaque) {
         if (node.is("TABLE")) {
             node.attribute(TABLE_NAME)
                     .filter(table -> table.startsWith(prefix) && inScalar(node))
-                    .ifPresent(scalar::add);
+                    .ifPresent(tables::add);
         }
-        node.children().forEach(child -> collect(child, prefix, scalar));
+        if (node.is("FUNCTION") && node.attribute(FUNCTION_NAME).filter(STORED_SCALAR::equals).isPresent()) {
+            opaque[0] = true;
+        }
+        node.children().forEach(child -> collect(child, prefix, tables, opaque));
     }
 
     /** Whether any subquery enclosing {@code node} is used as a value. */
