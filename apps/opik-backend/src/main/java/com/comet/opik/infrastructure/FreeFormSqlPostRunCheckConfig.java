@@ -19,19 +19,17 @@ public class FreeFormSqlPostRunCheckConfig {
      * a Redis rate limiter counted in seconds.
      */
     @JsonProperty
-    private @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) Duration minFlushInterval = Duration.seconds(1);
+    private @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) Duration minFlushInterval;
 
     /** How soon a flush denied the cluster-wide permit asks for it again. */
     @JsonProperty
-    private @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS) Duration flushPermitRetry = Duration
-            .milliseconds(200);
+    private @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS) Duration flushPermitRetry;
 
     /** The wait between a log read that misses the query's entry and the next attempt. */
     @JsonProperty
-    private @NotNull @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS) Duration logRetryDelay = Duration
-            .milliseconds(500);
+    private @NotNull @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS) Duration logRetryDelay;
 
     /** Flushes tried before the check fails closed and withholds the result. */
     @JsonProperty
-    private @Min(1) @Max(10) int maxFlushAttempts = 3;
+    private @Min(1) @Max(10) int maxFlushAttempts;
 }

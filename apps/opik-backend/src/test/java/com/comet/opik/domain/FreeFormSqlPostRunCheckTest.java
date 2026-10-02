@@ -5,7 +5,7 @@ import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
-import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
+import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfigTest;
 import com.comet.opik.infrastructure.RateLimitConfig;
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import jakarta.ws.rs.BadRequestException;
@@ -152,7 +152,8 @@ class FreeFormSqlPostRunCheckTest {
         extendedConfig.setUsername(EXTENDED_USER);
         var dao = new FreeFormSqlQueryDAOImpl(standardClient, extended, admin);
         return new FreeFormSqlQueryService(dao, mock(FreeFormSqlEntityNameEnricher.class),
-                new FreeFormSqlQueryLogReader(dao, ALWAYS_GRANTS, new FreeFormSqlPostRunCheckConfig()), analytics,
+                new FreeFormSqlQueryLogReader(dao, ALWAYS_GRANTS, FreeFormSqlPostRunCheckConfigTest.config()),
+                analytics,
                 standardConfig, extendedConfig);
     }
 

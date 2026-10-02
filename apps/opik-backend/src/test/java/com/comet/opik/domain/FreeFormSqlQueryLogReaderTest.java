@@ -59,18 +59,29 @@ class FreeFormSqlQueryLogReaderTest {
     }
 
     @Test
-    @DisplayName("entries not written yet are read after a flush")
-    void missingEntriesAreFlushedOnce() {
+    @DisplayName("entries written during the wait after a miss are read without a flush")
+    void entriesWrittenDuringTheWaitNeedNoFlush() {
         assertThat(reader(List.of(NOT_YET, WRITTEN)).entries(QUERY_ID, USER, false).join()).isEqualTo(WRITTEN);
-        assertThat(flushes).hasValue(1);
+        assertThat(flushes).hasValue(0);
         assertThat(fetches).hasValue(2);
-        assertThat(waits).as("500 ms before the attempt after the miss").containsExactly(500L);
+        assertThat(waits).as("500 ms before reading again").containsExactly(500L);
+    }
+
+    @Test
+    @DisplayName("entries still missing after the wait are read after a flush")
+    void missingEntriesAreFlushedOnce() {
+        assertThat(reader(List.of(NOT_YET, NOT_YET, WRITTEN)).entries(QUERY_ID, USER, false).join())
+                .isEqualTo(WRITTEN);
+        assertThat(flushes).hasValue(1);
+        assertThat(fetches).hasValue(3);
+        assertThat(waits).as("500 ms before reading again, then the flush at once").containsExactly(500L);
     }
 
     @Test
     @DisplayName("an entry as another account does not count, so the reader flushes")
     void anotherAccountsEntryDoesNotCount() {
-        reader(List.of(List.of(entry("default")), WRITTEN)).entries(QUERY_ID, USER, false).join();
+        reader(List.of(List.of(entry("default")), List.of(entry("default")), WRITTEN)).entries(QUERY_ID, USER, false)
+                .join();
         assertThat(flushes).hasValue(1);
     }
 
@@ -88,7 +99,7 @@ class FreeFormSqlQueryLogReaderTest {
     void neverWrittenStopsAfterMaxAttempts() {
         assertThat(reader(List.of(NOT_YET)).entries(QUERY_ID, USER, false).join()).isEqualTo(NOT_YET);
         assertThat(flushes).hasValue(3);
-        assertThat(fetches).hasValue(4);
+        assertThat(fetches).hasValue(5);
         assertThat(waits).as("500 ms between every attempt").containsExactly(500L, 500L, 500L);
     }
 }

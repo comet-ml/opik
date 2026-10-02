@@ -17,7 +17,7 @@ import java.util.function.Supplier;
  * Reads a free-form query's {@code system.query_log} entries for the post-run check, flushing only when they are not
  * there yet. It queries first: a flush that already happened after the query finished, the server's own or another
  * request's, has written its entries. Only when the initial entry is missing does it wait {@code retryDelayMillis},
- * flag a flush with the {@link FreeFormSqlQueryLogFlusher}, at most one per {@code minFlushInterval} across the cluster, and query
+ * query again, and if it is still missing flag a flush with the {@link FreeFormSqlQueryLogFlusher}, at most one per {@code minFlushInterval} across the cluster, and query
  * again, up to {@code maxFlushAttempts} flushes. The timings are in {@link FreeFormSqlPostRunCheckConfig}. The wait gives a flush already on its way, the server's or another
  * request's, the chance to land first. One flush per interval is the worst case, not the rule. The reader owns the
  * flusher and its cluster-wide permit; the DAO only runs the two statements.
@@ -79,9 +79,21 @@ class FreeFormSqlQueryLogReader {
         if (readsRemotely) {
             return flushThenFetch(queryId, user, 1);
         }
-        return fetch.apply(queryId, user).thenCompose(entries -> hasInitial(entries, user)
-                ? CompletableFuture.completedFuture(entries)
-                : afterRetryDelay().thenCompose(waited -> flushThenFetch(queryId, user, 1)));
+        // Read again after the wait before flushing: a flush that landed meanwhile has written the entry.
+        return fetchUnlessWritten(queryId, user, CompletableFuture.completedFuture(null))
+                .thenCompose(first -> first != null
+                        ? CompletableFuture.completedFuture(first)
+                        : fetchUnlessWritten(queryId, user, afterRetryDelay()))
+                .thenCompose(second -> second != null
+                        ? CompletableFuture.completedFuture(second)
+                        : flushThenFetch(queryId, user, 1));
+    }
+
+    /** The entries read once {@code after} completes, or {@code null} when the initial one is not among them. */
+    private CompletableFuture<List<FreeFormSqlQueryLogEntry>> fetchUnlessWritten(String queryId, String user,
+            CompletableFuture<Void> after) {
+        return after.thenCompose(ready -> fetch.apply(queryId, user))
+                .thenApply(entries -> hasInitial(entries, user) ? entries : null);
     }
 
     private CompletableFuture<List<FreeFormSqlQueryLogEntry>> flushThenFetch(String queryId, String user,
