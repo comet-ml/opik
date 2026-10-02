@@ -1,16 +1,23 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.domain.llm.ModelCapabilities;
+import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.AnthropicChatRequestParameters;
+import dev.langchain4j.model.chat.request.ChatRequest;
 import jakarta.ws.rs.BadRequestException;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +30,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.List;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -359,6 +368,7 @@ class AnthropicClientGeneratorTest {
     class EffortForwarding {
 
         private static final String MESSAGES_PATH = "/v1/messages";
+        private static final String SCORE_NAME = "Correctness";
         private static final String MESSAGES_RESPONSE = """
                 {"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-6",\
                 "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",\
@@ -412,6 +422,53 @@ class AnthropicClientGeneratorTest {
         }
 
         @ParameterizedTest(name = "{0} at {1}")
+        @CsvSource({"claude-sonnet-4-6, low", "claude-sonnet-4-6, max", "claude-opus-5-5, xhigh"})
+        void keepsTheJudgeSchemaBesideTheEffortInOneOutputConfig(String model, String effort) {
+            var rawBody = rawBodySentToAnthropic(model,
+                    "{\"output_config\": {\"effort\": \"%s\"}}".formatted(effort), judgeRequest());
+            var outputConfig = JsonUtils.getJsonNodeFromString(rawBody).path("output_config");
+
+            assertThat(countOutputConfigKeys(rawBody)).isEqualTo(1);
+            assertThat(outputConfig.path("effort").asText()).isEqualTo(effort);
+            assertThat(outputConfig.path("format").path("type").asText()).isEqualTo("json_schema");
+            assertThat(outputConfig.path("format").path("schema").path("properties").has(SCORE_NAME)).isTrue();
+        }
+
+        @Test
+        void keepsTheOtherRuleOutputConfigFieldsWhenMergingTheJudgeSchema() {
+            var rawBody = rawBodySentToAnthropic("claude-sonnet-4-6",
+                    "{\"output_config\": {\"effort\": \"low\", \"future_option\": true}}", judgeRequest());
+            var outputConfig = JsonUtils.getJsonNodeFromString(rawBody).path("output_config");
+
+            assertThat(countOutputConfigKeys(rawBody)).isEqualTo(1);
+            assertThat(outputConfig.path("effort").asText()).isEqualTo("low");
+            assertThat(outputConfig.path("future_option").asBoolean()).isTrue();
+            assertThat(outputConfig.path("format").path("type").asText()).isEqualTo("json_schema");
+        }
+
+        @Test
+        void sendsOnlyTheJudgeSchemaWhenTheRuleHasNoEffort() {
+            var rawBody = rawBodySentToAnthropic("claude-sonnet-4-6", "{\"max_tokens\": 2048}", judgeRequest());
+            var outputConfig = JsonUtils.getJsonNodeFromString(rawBody).path("output_config");
+
+            assertThat(countOutputConfigKeys(rawBody)).isEqualTo(1);
+            assertThat(outputConfig.has("effort")).isFalse();
+            assertThat(outputConfig.path("format").path("type").asText()).isEqualTo("json_schema");
+        }
+
+        @Test
+        void sendsTheEffortOnceWhenAJudgeRequestUsesNoSchema() {
+            var request = ChatRequest.builder().messages(UserMessage.from("hi")).build();
+
+            var rawBody = rawBodySentToAnthropic("claude-sonnet-4-6", "{\"output_config\": {\"effort\": \"low\"}}",
+                    request);
+
+            assertThat(countOutputConfigKeys(rawBody)).isEqualTo(1);
+            assertThat(JsonUtils.getJsonNodeFromString(rawBody).path("output_config"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"low\"}"));
+        }
+
+        @ParameterizedTest(name = "{0} at {1}")
         @CsvSource({"claude-sonnet-4-6, adaptive", "claude-sonnet-4-6, xhigh", "claude-haiku-4-5-20251001, low"})
         void rejectsAnEffortTheModelDoesNotOfferBeforeCallingAnthropic(String model, String effort) {
             var modelParameters = LlmAsJudgeModelParameters.builder()
@@ -437,6 +494,35 @@ class AnthropicClientGeneratorTest {
             var sent = wireMock.findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)));
             assertThat(sent).hasSize(1);
             return JsonUtils.getJsonNodeFromString(sent.getFirst().getBodyAsString());
+        }
+
+        private ChatRequest judgeRequest() {
+            List<ChatMessage> messages = List.of(UserMessage.from("Is Paris the capital of France?"));
+            var schema = List.of(LlmAsJudgeOutputSchema.builder()
+                    .name(SCORE_NAME)
+                    .type(LlmAsJudgeOutputSchemaType.INTEGER)
+                    .description("1 if correct")
+                    .build());
+            var builder = ChatRequest.builder().messages(messages);
+            return new ToolCallingStrategy().apply(builder, messages, schema).build();
+        }
+
+        private String rawBodySentToAnthropic(String model, String customParameters, ChatRequest request) {
+            var chatModel = generator.generateChat(wireMockConfig(), LlmAsJudgeModelParameters.builder()
+                    .name(model)
+                    .customParameters(JsonUtils.getJsonNodeFromString(customParameters))
+                    .build());
+
+            chatModel.chat(request);
+
+            var sent = wireMock.findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)));
+            assertThat(sent).hasSize(1);
+            return sent.getFirst().getBodyAsString();
+        }
+
+        // Parsing would hide a duplicate: Jackson keeps only the last of two equal keys.
+        private int countOutputConfigKeys(String rawBody) {
+            return StringUtils.countMatches(rawBody, "\"output_config\"");
         }
 
         private LlmProviderClientApiConfig wireMockConfig() {
