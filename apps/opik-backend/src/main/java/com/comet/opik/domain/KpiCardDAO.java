@@ -396,10 +396,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                -- Membership follows the thread's traces, not this row's id: the row id is when the row was written, which a backfill
-                -- or the now() fallback in TraceThreadIdService puts outside the traces' window. The sort key starts with thread_id,
-                -- so the set also skips granules and keeps every lookup of this CTE window-sized (OPIK-8335).
-                AND thread_id IN (SELECT thread_id FROM traces_final)
+                -- Deliberately not narrowed by the window. Membership comes from the traces joined below, not from this row's id: the
+                -- row id is when the row was written, which a backfill or the now() fallback in TraceThreadIdService puts outside the
+                -- traces' window. The sort key starts with thread_id, so a row id range skips no granules, and a thread_id set built
+                -- from the window's traces was measured as a net cost: an extra traces scan for no memory saved (OPIK-8335).
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
