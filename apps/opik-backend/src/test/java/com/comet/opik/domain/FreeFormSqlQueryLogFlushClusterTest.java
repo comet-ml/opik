@@ -71,10 +71,16 @@ class FreeFormSqlQueryLogFlushClusterTest {
         }
         long elapsedSeconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start);
 
-        // Counted rather than timed apart, so a slow runner cannot fail it: the limiter hands out one permit per
-        // second, so the whole run gets at most one per started second, however the flushes are spaced.
+        // The limiter hands out one permit per second, so the run gets at most one per started second.
         assertThat(starts).as("flushes happened").hasSizeGreaterThanOrEqualTo(2);
         assertThat(starts).as("flushes across both instances in %d s", elapsedSeconds)
                 .hasSizeLessThanOrEqualTo((int) elapsedSeconds + 1);
+        // And no two close together: without the limiter they land milliseconds apart. Half the interval leaves
+        // room for runner and network jitter around the one-second refill.
+        List<Long> sorted = starts.stream().sorted().toList();
+        for (int i = 1; i < sorted.size(); i++) {
+            assertThat(sorted.get(i) - sorted.get(i - 1)).as("gap between flush %d and %d", i, i + 1)
+                    .isGreaterThanOrEqualTo(500);
+        }
     }
 }

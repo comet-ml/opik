@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
@@ -18,10 +19,11 @@ public class FreeFormSqlPostRunCheckConfig {
 
     /**
      * At most one flush per interval across the cluster. Whole seconds: the cluster-wide permit is
-     * a Redis rate limiter counted in seconds.
+     * a Redis rate limiter counted in seconds. At most 60 s: queries that miss their entry wait for the next permit, so a
+     * longer interval withholds their results instead.
      */
     @JsonProperty
-    private @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) Duration minFlushInterval;
+    private @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) @MaxDuration(value = 60, unit = TimeUnit.SECONDS, message = "must be at most 60 seconds: a longer interval leaves misses unflushed and withholds results") Duration minFlushInterval;
 
     /** A fractional interval would be truncated to a shorter Redis window, flushing more often than configured. */
     @JsonIgnore

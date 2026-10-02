@@ -16,6 +16,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -80,40 +81,37 @@ public class FreeFormSqlPostRunCheckConfigTest {
 
     static Stream<Arguments> bounds() {
         return Stream.of(
-                // Whole seconds, at least one: the cluster-wide permit is a Redis rate limiter counted in seconds.
-                arguments("minFlushInterval", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
-                        .setMinFlushInterval(Duration.milliseconds(999)), false),
-                arguments("minFlushIntervalInWholeSeconds", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
-                        .setMinFlushInterval(Duration.milliseconds(1_500)), false),
-                arguments("minFlushInterval", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
-                        .setMinFlushInterval(Duration.seconds(2)), true),
-                arguments("minFlushInterval", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
-                        .setMinFlushInterval(Duration.seconds(1)), true),
-                arguments("logRetryDelay", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
-                        .setLogRetryDelay(Duration.milliseconds(0)), true),
-                arguments("maxFlushAttempts", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
-                        .setMaxFlushAttempts(0), false),
-                arguments("maxFlushAttempts", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
-                        .setMaxFlushAttempts(1), true),
-                arguments("maxFlushAttempts", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
-                        .setMaxFlushAttempts(10), true),
-                arguments("maxFlushAttempts", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
-                        .setMaxFlushAttempts(11), false));
+                // Whole seconds from 1s to 60s: the cluster-wide permit is a Redis rate limiter counted in seconds.
+                arguments("minFlushInterval 999ms", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMinFlushInterval(Duration.milliseconds(999)),
+                        List.of("minFlushInterval", "minFlushIntervalInWholeSeconds")),
+                arguments("minFlushInterval 1s", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMinFlushInterval(Duration.seconds(1)), List.of()),
+                arguments("minFlushInterval 1.5s", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMinFlushInterval(Duration.milliseconds(1_500)), List.of("minFlushIntervalInWholeSeconds")),
+                arguments("minFlushInterval 60s", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMinFlushInterval(Duration.seconds(60)), List.of()),
+                arguments("minFlushInterval 61s", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMinFlushInterval(Duration.seconds(61)), List.of("minFlushInterval")),
+                arguments("logRetryDelay 0ms", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setLogRetryDelay(Duration.milliseconds(0)), List.of()),
+                arguments("maxFlushAttempts 0", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMaxFlushAttempts(0), List.of("maxFlushAttempts")),
+                arguments("maxFlushAttempts 1", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMaxFlushAttempts(1), List.of()),
+                arguments("maxFlushAttempts 10", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMaxFlushAttempts(10), List.of()),
+                arguments("maxFlushAttempts 11", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMaxFlushAttempts(11), List.of("maxFlushAttempts")));
     }
 
-    @ParameterizedTest(name = "{0}: valid={2}")
+    @ParameterizedTest(name = "{0}")
     @MethodSource("bounds")
     @DisplayName("each setting is checked at its limits")
-    void bounds(String property, Consumer<FreeFormSqlPostRunCheckConfig> change, boolean valid) {
+    void bounds(String name, Consumer<FreeFormSqlPostRunCheckConfig> change, List<String> expectedViolations) {
         var config = config();
         change.accept(config);
-        var violations = validator.validate(config).stream()
-                .map(violation -> violation.getPropertyPath().toString())
-                .toList();
-        if (valid) {
-            assertThat(violations).isEmpty();
-        } else {
-            assertThat(violations).contains(property);
-        }
+        assertThat(validator.validate(config)).extracting(violation -> violation.getPropertyPath().toString())
+                .containsExactlyInAnyOrderElementsOf(expectedViolations);
     }
 }
