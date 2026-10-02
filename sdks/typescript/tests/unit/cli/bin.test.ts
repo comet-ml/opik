@@ -32,6 +32,7 @@ function stubUvDir(exitCode = 0): string {
 if [ "$1" = "--version" ]; then echo "uv 0.0.0-stub"; exit 0; fi
 echo "HANDOFF: $@"
 echo "LAUNCHER: $OPIK_CLI_LAUNCHER"
+echo "SESSION: $OPIK_CLI_SESSION_ID"
 exit ${exitCode}
 `,
   );
@@ -93,6 +94,15 @@ describe.skipIf(process.platform === "win32")("the built opik bin", () => {
     const result = runCli(["mcp", "configure"], { PATH: stubUvDir() });
 
     expect(result.stdout).toContain("LAUNCHER: npx");
+  });
+
+  it("hands the Opik CLI its session id, so both halves report one run", () => {
+    // The wrapper's events say why the run started and the Python CLI's say what
+    // it did. Nine ASCII letters is the shape the Python SDK generates, so an
+    // inherited one is indistinguishable from an id of its own.
+    const result = runCli(["mcp", "configure"], { PATH: stubUvDir() });
+
+    expect(result.stdout).toMatch(/SESSION: [a-zA-Z]{9}\n/);
   });
 
   it("exits with the code the Opik CLI exited with", () => {
