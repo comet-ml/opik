@@ -17,19 +17,25 @@ them in the first place. It needs Node.js and [`uv`](https://docs.astral.sh/uv/)
 and no Opik SDK:
 
 <Steps>
-  <Step title="Install uv, if you don't have it">
-    ```bash title="macOS / Linux"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-
-    ```powershell title="Windows"
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-    ```
-  </Step>
   <Step title="Run the setup command">
     ```bash
     npx opik mcp configure
     ```
+
+    {/* The title is the anchor `npx opik` links to when uv is missing
+        (sdks/typescript/src/opik/cli/bin.ts): keep it unchanged. The group is
+        what makes that link open it; a lone Accordion stays shut. */}
+    <AccordionGroup>
+      <Accordion title="Install uv, if you don't have it">
+        ```bash title="macOS / Linux"
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        ```
+
+        ```powershell title="Windows"
+        powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+        ```
+      </Accordion>
+    </AccordionGroup>
 
     It detects your AI client (Claude Code, Cursor, VS Code Copilot, Codex,
     opencode), picks the right server for your Opik deployment, configures it,
