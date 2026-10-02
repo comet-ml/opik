@@ -55,13 +55,16 @@ class FreeFormSqlQueryServiceTest {
     private void givenClickHouseReturnsOneRow() {
         chRows = List.of(JsonUtils.getJsonNodeFromString("{\"dataset_id\":\"" + UUID.randomUUID() + "\"}"));
         when(dao.explainAst(any(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of("SelectQuery")));
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of("QUERY id: 0", "  JOIN TREE",
+                        "    TABLE id: 1, table_name: opik.traces")));
         when(dao.explainPlan(any(), anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture("[{\"Plan\": {\"Node Type\": \"ReadFromSystemOne\"}}]"));
         when(dao.execute(any(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(
                         FreeFormSqlResult.builder().rows(chRows).resultRows(1).readBytes(1).build()));
         // By default the query ran under its policy, as the account it ran on.
-        givenQueryLog(STANDARD_USER, List.of("opik.traces"), List.of("traces_isolation ON opik.traces"));
+        givenQueryLog(STANDARD_USER, List.of("opik.traces"), List.of("opik.traces"));
         var analytics = new DatabaseAnalyticsFactory();
         analytics.setDatabaseName(DATABASE);
         service = new FreeFormSqlQueryService(dao, enricher, analytics, account(STANDARD_USER), account(EXTENDED_USER));
@@ -70,7 +73,7 @@ class FreeFormSqlQueryServiceTest {
     private void givenQueryLog(String user, List<String> tables, List<String> policies) {
         when(dao.queryLogEntries(anyString())).thenReturn(CompletableFuture.completedFuture(List.of(
                 FreeFormSqlPolicyCheck.LogEntry.builder().initial(true).user(user).tables(tables)
-                        .usedRowPolicies(policies).build())));
+                        .policedTables(policies).build())));
     }
 
     private static DatabaseAnalyticsReadOnlyFreeFormSqlConfig account(String user) {
@@ -83,7 +86,7 @@ class FreeFormSqlQueryServiceTest {
     @DisplayName("EXTENDED results pass through enrichment")
     void extendedResultsAreEnriched() {
         givenClickHouseReturnsOneRow();
-        givenQueryLog(EXTENDED_USER, List.of("opik.experiments"), List.of("experiments_isolation ON opik.experiments"));
+        givenQueryLog(EXTENDED_USER, List.of("opik.experiments"), List.of("opik.experiments"));
         var enriched = List.of(JsonUtils.getJsonNodeFromString("{\"dataset_name\":\"resolved\"}"));
         when(enricher.enrich(any(), anyString())).thenReturn(enriched);
 
@@ -97,7 +100,7 @@ class FreeFormSqlQueryServiceTest {
     @DisplayName("a failing enrichment keeps the rows ClickHouse returned")
     void failedEnrichmentKeepsClickHouseRows() {
         givenClickHouseReturnsOneRow();
-        givenQueryLog(EXTENDED_USER, List.of("opik.experiments"), List.of("experiments_isolation ON opik.experiments"));
+        givenQueryLog(EXTENDED_USER, List.of("opik.experiments"), List.of("opik.experiments"));
         when(enricher.enrich(any(), anyString())).thenThrow(new IllegalStateException("MySQL unavailable"));
 
         var response = service.executeQuery(FreeFormSqlAccount.EXTENDED, WORKSPACE, null, QUERY).join();

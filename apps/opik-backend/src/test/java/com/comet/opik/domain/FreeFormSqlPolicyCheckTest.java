@@ -21,7 +21,7 @@ class FreeFormSqlPolicyCheckTest {
     private static FreeFormSqlPolicyCheck.LogEntry entry(boolean initial, String user, List<String> tables,
             List<String> policies) {
         return FreeFormSqlPolicyCheck.LogEntry.builder().initial(initial).user(user).tables(tables)
-                .usedRowPolicies(policies).build();
+                .policedTables(policies).build();
     }
 
     /** An EXPLAIN json plan with the given read nodes, each {@code type|description|filtered}. */
@@ -39,15 +39,15 @@ class FreeFormSqlPolicyCheckTest {
     static Stream<Arguments> passes() {
         return Stream.of(
                 arguments("top-level read, policy logged", List.of(entry(true, USER, List.of("opik.traces"),
-                        List.of("p ON opik.traces"))), plan("ReadFromMergeTree|opik.traces|filtered"), Set.of()),
+                        List.of("opik.traces"))), plan("ReadFromMergeTree|opik.traces|filtered"), Set.of()),
                 arguments("CTE read: no policy logged, filtered in the plan", List.of(entry(true, USER,
                         List.of("opik.spans"), List.of())), plan("ReadFromMergeTree|opik.spans|filtered"), Set.of()),
                 arguments("IN / EXISTS read: in neither source, not scalar", List.of(entry(true, USER,
-                        List.of("opik.traces", "opik.feedback_scores"), List.of("p ON opik.traces"))),
+                        List.of("opik.traces", "opik.feedback_scores"), List.of("opik.traces"))),
                         plan("ReadFromMergeTree|opik.traces|filtered"), Set.of()),
                 arguments("Distributed wrapper covered by its local read", List.of(
                         entry(true, USER, List.of("opik.traces"), List.of()),
-                        entry(false, "default", List.of("opik.traces_local"), List.of("p ON opik.traces_local"))),
+                        entry(false, "default", List.of("opik.traces_local"), List.of("opik.traces_local"))),
                         plan("ReadFromRemote|Read from remote replica"), Set.of()),
                 arguments("tables outside the database and row generators", List.of(entry(true, USER,
                         List.of("system.one"), List.of())), plan("ReadFromSystemOne|system.one"), Set.of()));
@@ -61,24 +61,25 @@ class FreeFormSqlPolicyCheckTest {
     }
 
     static Stream<Arguments> fails() {
-        var traces = List.of(entry(true, USER, List.of("opik.traces"), List.of("p ON opik.traces")));
+        var traces = List.of(entry(true, USER, List.of("opik.traces"), List.of("opik.traces")));
         return Stream.of(
                 arguments("a planned read without its row filter", traces, plan("ReadFromMergeTree|opik.traces"),
                         Set.of(), "opik.traces"),
                 arguments("a count answered from metadata", List.of(entry(true, USER, List.of(), List.of())),
                         plan("ReadFromPreparedSource|Optimized trivial count"), Set.of(), "ReadFromPreparedSource"),
                 arguments("a scalar subquery read, in neither source", List.of(entry(true, USER,
-                        List.of("opik.traces", "opik.feedback_scores"), List.of("p ON opik.traces"))),
-                        plan("ReadFromMergeTree|opik.traces|filtered"), Set.of("feedback_scores"), "feedback_scores"),
+                        List.of("opik.traces", "opik.feedback_scores"), List.of("opik.traces"))),
+                        plan("ReadFromMergeTree|opik.traces|filtered"), Set.of("opik.feedback_scores"),
+                        "feedback_scores"),
                 arguments("one shard skipped the policy another applied", List.of(
                         entry(true, USER, List.of("opik.traces"), List.of()),
-                        entry(false, "default", List.of("opik.traces_local"), List.of("p ON opik.traces_local")),
+                        entry(false, "default", List.of("opik.traces_local"), List.of("opik.traces_local")),
                         entry(false, "default", List.of("opik.traces_local"), List.of())),
                         plan("ReadFromRemote|Read from remote replica"), Set.of(), "opik.traces_local"),
                 arguments("a read the shard query nests, in neither source", List.of(
                         entry(true, USER, List.of("opik.traces"), List.of()),
                         entry(false, "default", List.of("opik.traces_local", "opik.feedback_scores"),
-                                List.of("p ON opik.traces_local"))),
+                                List.of("opik.traces_local"))),
                         plan("ReadFromRemote|Read from remote replica"), Set.of(), "opik.feedback_scores"),
                 arguments("no log entry as the account", List.of(entry(true, "default", List.of(), List.of())),
                         plan(), Set.of(), USER));

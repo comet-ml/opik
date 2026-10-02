@@ -50,10 +50,13 @@ class FreeFormSqlPolicyCheck {
     private static final Set<String> UNCHECKED_READS = Set.of("ReadFromSystemOne", "ReadFromSystemNumbers",
             "ReadFromSystemZeros", "ReadFromRemote", "ReadFromRemoteParallelReplicas");
 
-    /** One {@code query_log} entry: the tables it read and the row policies applied, as {@code <policy> ON <db>.<table>}. */
+    /**
+     * One {@code query_log} entry: the {@code <db>.<table>} names it read, and those its applied row policies cover,
+     * resolved through {@code system.row_policies}.
+     */
     @Builder
     record LogEntry(boolean initial, @NonNull String user, @NonNull List<String> tables,
-            @NonNull List<String> usedRowPolicies) {
+            @NonNull List<String> policedTables) {
     }
 
     /** A table read that could not be shown to be under a row policy, and why. */
@@ -91,10 +94,10 @@ class FreeFormSqlPolicyCheck {
             filteredReads.add(description);
         }
         Set<String> policedAnywhere = entries.stream()
-                .flatMap(entry -> policedTables(entry).stream())
+                .flatMap(entry -> entry.policedTables().stream())
                 .collect(Collectors.toSet());
         for (var entry : entries) {
-            Set<String> policed = policedTables(entry);
+            Set<String> policed = Set.copyOf(entry.policedTables());
             for (String table : entry.tables()) {
                 if (!table.startsWith(prefix) || policed.contains(table)
                         || policedAnywhere.contains(table + "_local")) {
@@ -103,7 +106,7 @@ class FreeFormSqlPolicyCheck {
                 // The initiator's entry has no policies for its nested reads: a planned one shows its filter in the
                 // plan, and one absent from the plan was evaluated during analysis, accepted unless scalar.
                 boolean shownElsewhere = entry.initial() && (filteredReads.contains(table)
-                        || (!plannedReads.contains(table) && !scalarReads.contains(table.substring(prefix.length()))));
+                        || (!plannedReads.contains(table) && !scalarReads.contains(table)));
                 if (!shownElsewhere) {
                     return Optional.of(new Violation(table,
                             entry.initial() ? "read without a row policy" : "read without a row policy on a shard"));
@@ -111,11 +114,5 @@ class FreeFormSqlPolicyCheck {
             }
         }
         return Optional.empty();
-    }
-
-    private static Set<String> policedTables(LogEntry entry) {
-        return entry.usedRowPolicies().stream()
-                .map(policy -> policy.substring(policy.lastIndexOf(" ON ") + " ON ".length()))
-                .collect(Collectors.toSet());
     }
 }

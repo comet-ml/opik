@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
@@ -159,8 +160,31 @@ public class FreeFormSqlQueryService {
 
         return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> runQuery(account, workspaceId, projectScope, query,
-                        FreeFormSqlSubqueries.scalarReads(nodeLabels), startMillis));
+                .thenCompose(nodeLabels -> freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope,
+                        query))
+                .handle((queryTree, error) -> rejectScalarReads(queryTree, error, startMillis))
+                .thenCompose(scalarReads -> runQuery(account, workspaceId, projectScope, query, scalarReads,
+                        startMillis));
+    }
+
+    /**
+     * A scalar subquery reading a table cannot be shown to have run under its row policy (see
+     * {@link FreeFormSqlPolicyCheck}), so it is rejected before running, with the rewrite the caller can apply.
+     */
+    private Set<String> rejectScalarReads(List<String> queryTree, Throwable error, long startMillis) {
+        if (error != null) {
+            throw findCause(error, WebApplicationException.class) != null
+                    ? findCause(error, WebApplicationException.class)
+                    : mapExecutionError(error, startMillis);
+        }
+        var scalarReads = FreeFormSqlSubqueries.scalarReads(queryTree, database);
+        if (!scalarReads.isEmpty()) {
+            String tables = scalarReads.stream().map(table -> table.substring(database.length() + 1)).sorted()
+                    .collect(Collectors.joining(", "));
+            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, startMillis, SCALAR_SUBQUERY_MESSAGE.formatted(tables),
+                    null);
+        }
+        return scalarReads;
     }
 
     /**
@@ -178,11 +202,6 @@ public class FreeFormSqlQueryService {
         if (containsSetNode(nodeLabels)) {
             throw reject(Outcome.SETTINGS_CLAUSE, startMillis,
                     "Query rejected: SETTINGS/SET clauses are not allowed", null);
-        }
-        var unverifiable = FreeFormSqlSubqueries.scalarReads(nodeLabels).stream().sorted().toList();
-        if (!unverifiable.isEmpty()) {
-            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, startMillis,
-                    SCALAR_SUBQUERY_MESSAGE.formatted(String.join(", ", unverifiable)), null);
         }
         return nodeLabels;
     }
@@ -220,12 +239,6 @@ public class FreeFormSqlQueryService {
                     FreeFormSqlPolicyCheck.violation(database, users.get(account), evidence.entries(), evidence.plan(),
                             scalarReads).ifPresent(violation -> {
                                 String table = violation.table().substring(violation.table().lastIndexOf('.') + 1);
-                                if (scalarReads.contains(table)) {
-                                    // A scalar subquery over a table this installation has not wrapped as Distributed: no
-                                    // evidence can cover it, so the caller gets the same rewrite as for any other table.
-                                    throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, startMillis,
-                                            SCALAR_SUBQUERY_MESSAGE.formatted(table), null);
-                                }
                                 // Not the query's fault: a row policy did not apply where it should. Loud on purpose.
                                 log.error(
                                         "Free-form SQL post-run policy check FAILED for account '{}', query '{}': {} ({})",
