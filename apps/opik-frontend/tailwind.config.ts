@@ -139,6 +139,7 @@ module.exports = {
         "chart-orange": "var(--chart-orange)",
         "chart-teal": "var(--chart-teal)",
         "chart-gray-light": "var(--chart-gray-light)",
+        "chart-yellow-light": "var(--chart-yellow-light)",
         "chart-gray-dark": "var(--chart-gray-dark)",
 
         /* Accent colors */

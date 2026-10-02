@@ -261,6 +261,150 @@ class AgentInsightsJobsResourceTest {
         }
     }
 
+    // A zero-timeout reap is cross-workspace, so it also frees the claims other tests left behind. The sweep that
+    // follows one is uncapped, so it re-claims them all rather than leaving them to crowd other tests' sweeps.
+    private static final int SWEEP_ALL = 1_000;
+
+    // Enrols a new project and lets the sweep claim its automatic run, as the rollout does.
+    private UUID createProjectWithClaimedAutoFirstRun() {
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        jobsClient.enrolInAutoFirstRun(true, List.of(projectId)).close();
+        traceResourceClient.batchCreateTraces(IntStream.range(0, AgentInsightsAutoFirstRunJob.MIN_TRACES)
+                .mapToObj(__ -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .build())
+                .toList(), API_KEY, WORKSPACE_NAME);
+
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(triggerCount(projectId)).isEqualTo(1));
+        return projectId;
+    }
+
+    private long triggerCount(UUID projectId) {
+        return TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).count();
+    }
+
+    private AgentInsightsJob getJob(UUID projectId) {
+        try (var response = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            return response.readEntity(AgentInsightsJob.class);
+        }
+    }
+
+    @Test
+    @DisplayName("Clearing a failed automatic run forgets it, so enrolling the project again runs it anew")
+    void enrol__falseAfterFailedRun__resetsTheRun() {
+        var projectId = createProjectWithClaimedAutoFirstRun();
+        reportFailuresClient.create(agentInsightsFailure(projectId, "out_of_credits", null),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+
+        try (var response = jobsClient.enrolInAutoFirstRun(false, List.of(projectId))) {
+            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
+            assertThat(result.cleared()).isEqualTo(1);
+            assertThat(result.resetProjectIds()).containsExactly(projectId);
+        }
+        assertThat(getJob(projectId).autoFirstRunAt()).isNull();
+
+        try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
+            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
+            assertThat(result.enrolled()).isEqualTo(1);
+            assertThat(result.alreadyRunProjectIds()).isEmpty();
+        }
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(triggerCount(projectId)).isEqualTo(2));
+    }
+
+    @Test
+    @DisplayName("Clearing forgets an automatic run claimed longer ago than the run timeout")
+    void enrol__falseAfterTimedOutRun__resetsTheRun() {
+        var projectId = createProjectWithClaimedAutoFirstRun();
+
+        // A zero timeout makes the claim just made count as dead, without waiting out the real one.
+        var result = jobService.enrolInAutoFirstRun(false, List.of(projectId), Duration.ZERO);
+
+        assertThat(result.resetProjectIds()).containsExactly(projectId);
+        assertThat(getJob(projectId).autoFirstRunAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("Clearing keeps the claim of an automatic run still in progress")
+    void enrol__falseDuringLiveRun__keepsTheClaim() {
+        var projectId = createProjectWithClaimedAutoFirstRun();
+
+        try (var response = jobsClient.enrolInAutoFirstRun(false, List.of(projectId))) {
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class).resetProjectIds()).isEmpty();
+        }
+        assertThat(getJob(projectId).autoFirstRunAt()).isNotNull();
+
+        try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class).alreadyRunProjectIds())
+                    .containsExactly(projectId);
+        }
+    }
+
+    @Test
+    @DisplayName("Clearing keeps the claim of a completed automatic run, even one past the run timeout")
+    void enrol__falseAfterCompletedRun__keepsTheClaim() {
+        var projectId = createProjectWithClaimedAutoFirstRun();
+        insightsClient.reportIssues(
+                AgentInsightsReport.builder().projectId(projectId).reportDay(LocalDate.now()).issues(List.of())
+                        .build(),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+
+        var result = jobService.enrolInAutoFirstRun(false, List.of(projectId), Duration.ZERO);
+
+        assertThat(result.resetProjectIds()).isEmpty();
+        assertThat(getJob(projectId).autoFirstRunAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Reaping records an automatic run that died without reporting, and the sweep runs it again")
+    void reapTimedOutAutoFirstRuns__recordsTheRunAndRetriesIt() {
+        var projectId = createProjectWithClaimedAutoFirstRun();
+
+        // A zero timeout makes the claim just made count as dead, without waiting out the real one.
+        jobService.reapTimedOutAutoFirstRuns(Duration.ZERO, 1);
+
+        var job = getJob(projectId);
+        assertThat(job.lastFailureReason()).isEqualTo(AgentInsightsJob.FailureReason.TIMED_OUT);
+        assertThat(job.autoFirstRunAt()).isNull();
+        assertThat(job.autoFirstRunEnrolled()).isTrue();
+
+        autoFirstRunJob.runSweep(Instant.now(), SWEEP_ALL).block();
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(triggerCount(projectId)).isEqualTo(2));
+    }
+
+    @Test
+    @DisplayName("Reaping stops retrying an automatic run once it has used up its retries")
+    void reapTimedOutAutoFirstRuns__givesUpAfterMaxRetries() {
+        var projectId = createProjectWithClaimedAutoFirstRun();
+
+        jobService.reapTimedOutAutoFirstRuns(Duration.ZERO, 1);
+        autoFirstRunJob.runSweep(Instant.now(), SWEEP_ALL).block();
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(triggerCount(projectId)).isEqualTo(2));
+
+        jobService.reapTimedOutAutoFirstRuns(Duration.ZERO, 1);
+
+        // The second timeout is recorded, but the claim stays, so no sweep runs it again.
+        var job = getJob(projectId);
+        assertThat(job.lastFailureReason()).isEqualTo(AgentInsightsJob.FailureReason.TIMED_OUT);
+        assertThat(job.autoFirstRunAt()).isNotNull();
+        autoFirstRunJob.runSweep(Instant.now(), SWEEP_ALL).block();
+        assertThat(triggerCount(projectId)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Reaping leaves an automatic run still within the timeout alone")
+    void reapTimedOutAutoFirstRuns__leavesLiveRunAlone() {
+        var projectId = createProjectWithClaimedAutoFirstRun();
+
+        jobService.reapTimedOutAutoFirstRuns();
+
+        var job = getJob(projectId);
+        assertThat(job.lastFailureReason()).isNull();
+        assertThat(job.autoFirstRunAt()).isNotNull();
+    }
+
     Stream<Arguments> invalidEnrolmentProjectIds() {
         return Stream.of(
                 Arguments.of("empty list", (Function<UUID, List<UUID>>) projectId -> List.of()),
@@ -624,6 +768,22 @@ class AgentInsightsJobsResourceTest {
         autoFirstRunJob.runSweep(Instant.now(), 10).block();
 
         assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Auto-first-run candidates come oldest job first, so none is passed over for newer ones")
+    void findAwaitingFirstRun__oldestJobFirst() {
+        var older = createProject();
+        var newer = createProject();
+        // Enrolled newest first: the order is the job's, not the enrolment call's.
+        jobsClient.create(older, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.enrolInAutoFirstRun(true, List.of(newer)).close();
+        jobsClient.enrolInAutoFirstRun(true, List.of(older)).close();
+
+        var candidates = jobService.findAwaitingFirstRun().stream().map(AgentInsightsJob.EnabledJob::projectId)
+                .toList();
+
+        assertThat(candidates).containsSubsequence(older, newer);
     }
 
     @Test

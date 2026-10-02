@@ -6,7 +6,7 @@ import useUser from "@/plugins/comet/useUser";
 import { ORGANIZATION_ROLE_TYPE } from "@/plugins/comet/types";
 import { buildUrl } from "@/plugins/comet/utils";
 
-type BillingLinkVariant = "inline" | "action" | "popover";
+type BillingLinkVariant = "inline" | "action" | "popover" | "external";
 
 const VARIANT_CLASS: Record<BillingLinkVariant, string> = {
   inline: "underline underline-offset-4 hover:text-primary",
@@ -14,6 +14,8 @@ const VARIANT_CLASS: Record<BillingLinkVariant, string> = {
     "inline-flex items-center gap-1 text-xs font-normal hover:text-primary-hover",
   popover:
     "comet-body-xs mt-1.5 flex h-6 items-center gap-1 rounded border-t border-border px-1 pt-1.5 text-foreground hover:bg-primary-foreground",
+  external:
+    "comet-body-xs flex w-fit items-center gap-1 text-foreground-secondary underline underline-offset-4",
 };
 
 export type BillingLinkProps = {
@@ -64,6 +66,7 @@ const BillingLink = ({
       {variant === "popover" && (
         <ArrowUpRight className="size-3 text-light-slate" />
       )}
+      {variant === "external" && <ArrowUpRight className="size-3.5" />}
     </a>
   );
 };

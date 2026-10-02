@@ -1,10 +1,10 @@
 import React from "react";
-import { ArrowUpRight, Eye, Play } from "lucide-react";
+import { ArrowUpRight, Coins, Eye, Play } from "lucide-react";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { Button } from "@/ui/button";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
-import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
+import usePluginsStore from "@/store/PluginsStore";
 import sampleIssuesLightUrl from "/images/diagnostics-sample-issues-light.svg";
 import sampleIssuesDarkUrl from "/images/diagnostics-sample-issues-dark.svg";
 
@@ -30,6 +30,7 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
   isRunPending,
 }) => {
   const { themeMode } = useTheme();
+  const BillingLink = usePluginsStore((state) => state.BillingLink);
   const sampleIssuesUrl =
     themeMode === THEME_MODE.DARK ? sampleIssuesDarkUrl : sampleIssuesLightUrl;
 
@@ -65,6 +66,28 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
         View docs
         <ArrowUpRight className="size-3.5" />
       </a>
+    </div>
+  );
+
+  const outOfCreditsPanel = (
+    <div className="flex w-full gap-2 rounded-md bg-chart-yellow-light p-4">
+      <span className="flex size-4 shrink-0 items-center justify-center rounded-md bg-chart-yellow">
+        <Coins className="size-3 text-black" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="comet-body-s-accented mb-0.5 text-foreground-secondary">
+          Add Ollie credits to run diagnostics
+        </span>
+        <p className="comet-body-xs text-muted-slate">
+          You need Ollie credits to run a diagnostic. Ollie credits are shared
+          across AI features in Opik — a workspace admin can add more.
+        </p>
+        {BillingLink && (
+          <div className="pt-1">
+            <BillingLink label="View billing" variant="external" />
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -126,11 +149,7 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
         ) : !canConfigure ? (
           limitedAccessPanel
         ) : isOutOfCredits ? (
-          <OutOfCreditsButton
-            large
-            label="Add Ollie credits to run diagnostic"
-            description="You need Ollie credits to run diagnostic. Ollie credits are shared across AI features in Opik — a workspace admin can add more."
-          />
+          outOfCreditsPanel
         ) : (
           <Button onClick={onRun} disabled={isRunPending}>
             <Play className="mr-2 size-4" />
