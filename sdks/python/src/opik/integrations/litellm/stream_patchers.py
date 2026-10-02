@@ -162,8 +162,9 @@ async def _anext_wrapper(self: streaming_handler.CustomStreamWrapper) -> Any:
 def _iterate_until_closed(
     stream: streaming_handler.CustomStreamWrapper, state: _TrackedStreamState
 ) -> Iterator[Any]:
-    # The `for` loop holds only this generator, so a `break`, a `return` or an
-    # exception in the loop body closes it right away and runs the `finally`.
+    # The `for` loop holds only this generator, so on CPython a `break`, a
+    # `return` or an exception in the loop body closes it right away and runs
+    # the `finally`. Elsewhere it runs when the generator is collected.
     try:
         while True:
             try:
@@ -213,7 +214,17 @@ async def _aclose_wrapper(self: streaming_handler.CustomStreamWrapper) -> None:
             state.finish_abandoned()
 
 
+_stream_class_patched = False
+
+
 def _patch_stream_class() -> None:
+    # Once only: patching again on every call would throw away whatever another
+    # library installed on top of our methods in the meantime.
+    global _stream_class_patched
+    if _stream_class_patched:
+        return
+    _stream_class_patched = True
+
     streaming_handler.CustomStreamWrapper.__iter__ = _iter_wrapper  # type: ignore[method-assign]
     streaming_handler.CustomStreamWrapper.__aiter__ = _aiter_wrapper  # type: ignore[method-assign]
     streaming_handler.CustomStreamWrapper.__next__ = _next_wrapper  # type: ignore[method-assign]

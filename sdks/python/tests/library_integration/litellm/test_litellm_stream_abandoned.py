@@ -78,6 +78,8 @@ def test_litellm_completion_stream__consumer_breaks_after_finish_reason__finish_
 
     logged_span = fake_backend.trace_trees[0].spans[0]
 
+    assert logged_span.end_time is not None
+    assert logged_span.metadata["stream_completed"] is False
     assert logged_span.output["choices"][0]["finish_reason"] == "stop"
 
 
@@ -300,3 +302,27 @@ async def test_litellm_acompletion_stream__timeout_while_waiting_for_chunk__span
     # caller that simply stopped reading.
     assert logged_span.end_time is not None
     assert logged_span.error_info["exception_type"] == "CancelledError"
+
+
+def test_litellm_completion_stream__another_library_patches_after_us__its_patch_is_kept(
+    fake_backend, monkeypatch
+):
+    for _ in _tracked_stream():
+        pass
+
+    stream_class = litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper
+    patched_next = stream_class.__next__
+    calls = []
+
+    def other_library_next(self):
+        calls.append(1)
+        return patched_next(self)
+
+    monkeypatch.setattr(stream_class, "__next__", other_library_next)
+
+    received = "".join(
+        chunk.choices[0].delta.content or "" for chunk in _tracked_stream()
+    )
+
+    assert received == MOCK_RESPONSE
+    assert calls, "a later patch of CustomStreamWrapper was overwritten"
