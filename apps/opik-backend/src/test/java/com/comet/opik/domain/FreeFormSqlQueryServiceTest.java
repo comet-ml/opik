@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -70,7 +71,8 @@ class FreeFormSqlQueryServiceTest {
     }
 
     private void givenQueryLog(String user, List<String> tables, List<String> policies) {
-        when(dao.queryLogEntries(anyString(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of(
+        // Stubbed for the account the query runs as only; checksTheExecutedQuery pins the query id.
+        when(dao.queryLogEntries(anyString(), eq(user))).thenReturn(CompletableFuture.completedFuture(List.of(
                 FreeFormSqlQueryLogEntry.builder().initial(true).user(user).tables(tables)
                         .policedTables(policies).build())));
     }
@@ -136,7 +138,8 @@ class FreeFormSqlQueryServiceTest {
     @DisplayName("results are withheld when the query has no log entry as the account it ran on")
     void resultsWithheldWithoutLogEntry() {
         givenClickHouseReturnsOneRow();
-        when(dao.queryLogEntries(anyString(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of()));
+        when(dao.queryLogEntries(anyString(), eq(STANDARD_USER)))
+                .thenReturn(CompletableFuture.completedFuture(List.of()));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
                 .join()).cause().satisfies(withheld(500));
@@ -146,7 +149,7 @@ class FreeFormSqlQueryServiceTest {
     @DisplayName("results are withheld when the check itself cannot run")
     void resultsWithheldWhenCheckFails() {
         givenClickHouseReturnsOneRow();
-        when(dao.queryLogEntries(anyString(), anyString()))
+        when(dao.queryLogEntries(anyString(), eq(STANDARD_USER)))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("flush timed out")));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)

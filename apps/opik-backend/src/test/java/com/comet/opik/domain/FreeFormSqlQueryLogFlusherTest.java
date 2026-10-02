@@ -85,4 +85,25 @@ class FreeFormSqlQueryLogFlusherTest {
             Thread.onSpinWait();
         }
     }
+
+    @Test
+    @DisplayName("a flush slower than the interval is never overlapped: the next starts after it finishes")
+    void slowFlushIsNeverOverlapped() throws InterruptedException {
+        var flusher = flusher();
+        var first = flusher.awaitFlush();
+        waitUntil(() -> flushStarts.size() == 1);
+        var slow = running.get();
+
+        var second = flusher.awaitFlush();
+        Thread.sleep(3 * INTERVAL_MILLIS);
+        assertThat(flushStarts).as("no second flush while the first runs").hasSize(1);
+        // Still pending, so a request flagged now shares it.
+        assertThat(flusher.awaitFlush()).isSameAs(second);
+
+        slow.complete(null);
+        first.join();
+        waitUntil(() -> flushStarts.size() == 2);
+        running.get().complete(null);
+        second.join();
+    }
 }

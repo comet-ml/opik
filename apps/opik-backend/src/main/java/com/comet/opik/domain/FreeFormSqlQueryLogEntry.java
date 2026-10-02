@@ -10,7 +10,7 @@ import java.util.List;
  * read, and those its applied row policies cover, resolved through {@code system.row_policies}. The lists are copied,
  * so the evidence the post-run check reads cannot change underneath it.
  */
-@Builder
+@Builder(toBuilder = true)
 public record FreeFormSqlQueryLogEntry(boolean initial, @NonNull String user, @NonNull List<String> tables,
         @NonNull List<String> policedTables) {
 
