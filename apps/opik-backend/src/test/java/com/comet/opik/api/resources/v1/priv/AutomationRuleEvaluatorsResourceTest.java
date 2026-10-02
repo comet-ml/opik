@@ -105,6 +105,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -1734,6 +1735,81 @@ class AutomationRuleEvaluatorsResourceTest {
                 var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
                 assertTraceLogResponse(logPage, id, trace);
             });
+        }
+
+        @Test
+        void getLogsUserDefinedMetricPythonScorerWhenNoDeclaredArgumentResolves() throws JsonProcessingException {
+            // OPIK-8556. Deliberately no WireMock stub for the Python evaluator: the scorer must not call
+            // it at all when nothing resolved. If it did, the unstubbed endpoint would 404 and surface as
+            // an ERROR log, which the second assertion below rejects — that is also the shape this used to
+            // produce, when the empty map reached evaluate() and its Preconditions guard threw.
+            var ruleName = "rule-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
+                    .name(ruleName)
+                    .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
+                            .metric(USER_DEFINED_METRIC)
+                            .arguments(Map.of(
+                                    "expects_sql", "input.expects_sql",
+                                    "plan", "output.execution_plan"))
+                            .build())
+                    .samplingRate(1f)
+                    .filters(List.of())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // Carries neither declared path, so every argument resolves to null and the map comes back empty.
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
+                    .threadId(null) // Must be null for trace-level evaluation
+                    .input(OBJECT_MAPPER.readTree("""
+                            {
+                                "question": "how many rows?"
+                            }
+                            """))
+                    .output(OBJECT_MAPPER.readTree("""
+                            {
+                                "response": "abc"
+                            }
+                            """))
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Constant sentence first, every value trailing, so the leading text is a fixed prefix an operator
+            // can grep on. Asserted as the fully rendered line, which is what actually lands in the table.
+            var expectedMessage = ("None of the metric's declared arguments resolved, so there is no data to"
+                    + " evaluate. Check the declared paths against the input, output and metadata present on the"
+                    + " entity. traceId '%s', rule '%s', unresolved arguments: 'expects_sql' ->"
+                    + " 'input.expects_sql', 'plan' -> 'output.execution_plan'").formatted(trace.id(), ruleName);
+
+            // Explicit window rather than Awaitility's 10s default: these rule logs reach ClickHouse through
+            // an async batching appender, so under load the write can outrun the default and time out on a
+            // correct result. Matches TraceThreadOnlineScoringAgenticToolsE2ETest, which waits on the same
+            // sink the same way.
+            Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(500, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+
+                        // The whole point of the ticket: the line the user needs has to survive the round-trip
+                        // into automation_rule_evaluator_logs and come back off the API, naming both arguments.
+                        assertThat(logPage.content()).anySatisfy(log -> {
+                            assertThat(log.level()).isEqualTo(LogLevel.WARN);
+                            assertThat(log.ruleId()).isEqualTo(id);
+                            assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
+                            assertThat(log.message()).isEqualTo(expectedMessage);
+                        });
+
+                        // A user-configuration mismatch is not a backend fault, so nothing on this rule may be ERROR.
+                        assertThat(logPage.content()).noneMatch(log -> log.level() == LogLevel.ERROR);
+
+                        // And the rule log must not contradict itself: nothing was sent on this run, so the
+                        // "Sending ... to Python evaluator" line must be absent from what the user actually reads.
+                        assertThat(logPage.content()).noneMatch(log -> log.message().contains("to Python evaluator"));
+                    });
         }
 
         @Test
