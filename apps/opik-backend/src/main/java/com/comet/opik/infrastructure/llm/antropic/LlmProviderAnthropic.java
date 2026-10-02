@@ -67,7 +67,8 @@ class LlmProviderAnthropic implements LlmProviderService {
         if (CollectionUtils.isEmpty(request.messages())) {
             throw new BadRequestException(ERROR_EMPTY_MESSAGES);
         }
-        AnthropicEffort.validateOutputConfigEffort(request.model(), request.customParameters());
+        // Called for its 400s only. The mapper runs the same check again while sending, but a throw there is a 500.
+        AnthropicEffort.toCustomParameters(request.model(), request.customParameters());
         // maxCompletionTokens is required by Anthropic but defaulted (with a log line) inside
         // LlmProviderAnthropicMapper.resolveMaxTokens, so callers without an explicit cap still
         // succeed — same UX as OpenAI in the same flows.
