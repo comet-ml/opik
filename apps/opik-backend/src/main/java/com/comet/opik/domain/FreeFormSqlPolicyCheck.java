@@ -53,6 +53,14 @@ class FreeFormSqlPolicyCheck {
     record Violation(String table, String reason) {
     }
 
+    private static final Set<String> REMOTE_READS = Set.of("ReadFromRemote", "ReadFromRemoteParallelReplicas");
+
+    /** Whether the plan reads from a remote shard, whose log entries only a flush after the query proves written. */
+    static boolean readsRemotely(@NonNull String planJson) {
+        List<Map<String, Object>> reads = JSON.parse(planJson).read(READS);
+        return reads.stream().anyMatch(read -> REMOTE_READS.contains(String.valueOf(read.get("Node Type"))));
+    }
+
     /** @return the first read that cannot be shown to have run under its row policy; empty when there is none. */
     static Optional<Violation> violation(@NonNull String database, @NonNull String user,
             @NonNull List<FreeFormSqlQueryLogEntry> entries,

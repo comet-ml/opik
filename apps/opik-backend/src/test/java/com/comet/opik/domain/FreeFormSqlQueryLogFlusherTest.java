@@ -16,6 +16,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class FreeFormSqlQueryLogFlusherTest {
 
     private static final long INTERVAL_MILLIS = 1_000;
+    private static final long GATE_RETRY_MILLIS = 200;
+
+    /** Whether the cluster-wide permit is granted: false while another instance has just flushed. */
+    private boolean gateOpen = true;
 
     private long now;
     private final List<Task> scheduled = new ArrayList<>();
@@ -31,7 +35,9 @@ class FreeFormSqlQueryLogFlusherTest {
         var flush = new CompletableFuture<Void>();
         flushes.add(flush);
         return flush;
-    }, INTERVAL_MILLIS, () -> now, (delayMillis, task) -> scheduled.add(new Task(now + delayMillis, task)));
+    }, INTERVAL_MILLIS, GATE_RETRY_MILLIS, () -> now,
+            (delayMillis, task) -> scheduled.add(new Task(now + delayMillis, task)),
+            () -> CompletableFuture.completedFuture(gateOpen));
 
     /** Moves the clock to {@code millis}, running every task due by then, in due order. */
     private void advanceTo(long millis) {
@@ -108,5 +114,22 @@ class FreeFormSqlQueryLogFlusherTest {
         assertThat(flushStarts).containsExactly(0L, INTERVAL_MILLIS);
         flushes.getLast().complete(null);
         assertThat(next).isDone();
+    }
+
+    @Test
+    @DisplayName("without the cluster-wide permit no flush starts; it asks again and starts once granted")
+    void deniedPermitDefersTheFlush() {
+        gateOpen = false;
+        var waiter = flusher.awaitFlush();
+        advanceTo(0);
+        advanceTo(5 * GATE_RETRY_MILLIS);
+        assertThat(flushStarts).as("another instance holds this interval").isEmpty();
+        assertThat(flusher.awaitFlush()).as("still pending, so shared").isSameAs(waiter);
+
+        gateOpen = true;
+        advanceTo(6 * GATE_RETRY_MILLIS);
+        assertThat(flushStarts).containsExactly(6 * GATE_RETRY_MILLIS);
+        flushes.getFirst().complete(null);
+        assertThat(waiter).isDone();
     }
 }

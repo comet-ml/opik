@@ -231,9 +231,11 @@ public class FreeFormSqlQueryService {
     /** The post-run check: fails closed on a violation and on any failure to establish there is none. */
     private CompletableFuture<Void> verifyPolicies(FreeFormSqlAccount account, String workspaceId, String projectScope,
             String query, String queryId, Set<String> scalarReads, long startMillis) {
-        var plan = freeFormSqlQueryDAO.explainPlan(account, workspaceId, projectScope, query);
-        var entries = freeFormSqlQueryDAO.queryLogEntries(queryId, users.get(account));
-        return plan.thenCombine(entries, Evidence::new)
+        // The plan first: whether the query read remotely decides if its log entries need a flush to be complete.
+        return freeFormSqlQueryDAO.explainPlan(account, workspaceId, projectScope, query)
+                .thenCompose(plan -> freeFormSqlQueryDAO.queryLogEntries(queryId, users.get(account),
+                        FreeFormSqlPolicyCheck.readsRemotely(plan))
+                        .thenApply(entries -> new Evidence(plan, entries)))
                 .handle((evidence, error) -> {
                     if (error != null) {
                         log.error("Free-form SQL post-run policy check could not run for query '{}'", queryId, error);

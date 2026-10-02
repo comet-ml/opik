@@ -21,6 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -72,9 +73,10 @@ class FreeFormSqlQueryServiceTest {
 
     private void givenQueryLog(String user, List<String> tables, List<String> policies) {
         // Stubbed for the account the query runs as only; checksTheExecutedQuery pins the query id.
-        when(dao.queryLogEntries(anyString(), eq(user))).thenReturn(CompletableFuture.completedFuture(List.of(
-                FreeFormSqlQueryLogEntry.builder().initial(true).user(user).tables(tables)
-                        .policedTables(policies).build())));
+        when(dao.queryLogEntries(anyString(), eq(user), anyBoolean()))
+                .thenReturn(CompletableFuture.completedFuture(List.of(
+                        FreeFormSqlQueryLogEntry.builder().initial(true).user(user).tables(tables)
+                                .policedTables(policies).build())));
     }
 
     private static DatabaseAnalyticsReadOnlyFreeFormSqlConfig account(String user) {
@@ -138,7 +140,7 @@ class FreeFormSqlQueryServiceTest {
     @DisplayName("results are withheld when the query has no log entry as the account it ran on")
     void resultsWithheldWithoutLogEntry() {
         givenClickHouseReturnsOneRow();
-        when(dao.queryLogEntries(anyString(), eq(STANDARD_USER)))
+        when(dao.queryLogEntries(anyString(), eq(STANDARD_USER), anyBoolean()))
                 .thenReturn(CompletableFuture.completedFuture(List.of()));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
@@ -149,7 +151,7 @@ class FreeFormSqlQueryServiceTest {
     @DisplayName("results are withheld when the check itself cannot run")
     void resultsWithheldWhenCheckFails() {
         givenClickHouseReturnsOneRow();
-        when(dao.queryLogEntries(anyString(), eq(STANDARD_USER)))
+        when(dao.queryLogEntries(anyString(), eq(STANDARD_USER), anyBoolean()))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("flush timed out")));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
@@ -165,7 +167,8 @@ class FreeFormSqlQueryServiceTest {
 
         var queryId = ArgumentCaptor.forClass(String.class);
         verify(dao).execute(any(), anyString(), anyString(), anyString(), queryId.capture());
-        verify(dao).queryLogEntries(queryId.getValue(), STANDARD_USER);
+        // The stubbed plan reads nothing remotely, so the reader may use entries already written.
+        verify(dao).queryLogEntries(queryId.getValue(), STANDARD_USER, false);
     }
 
     /** A withheld result: the status, and the constant message, with no row and no ClickHouse detail. */

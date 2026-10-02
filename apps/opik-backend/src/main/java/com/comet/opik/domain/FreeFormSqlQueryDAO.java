@@ -3,7 +3,9 @@ package com.comet.opik.domain;
 import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.query.QuerySettings;
 import com.clickhouse.client.api.query.Records;
+import com.comet.opik.infrastructure.RateLimitConfig;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
+import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -13,6 +15,7 @@ import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -66,12 +69,14 @@ public interface FreeFormSqlQueryDAO {
             @NonNull String projectId, @NonNull String query);
 
     /**
-     * Flushes {@code system.query_log} on every node, at most once a second across requests, and returns the finished
-     * entries of {@code queryId}, initial and shard-side, from every replica, with the tables covered by the applied
-     * row policies that apply to {@code user}, the account the query ran as. Runs on the main analytics account: the
-     * read-only ones can do neither.
+     * Returns the finished entries of {@code queryId}, initial and shard-side, from every replica, with the tables
+     * covered by the applied row policies that apply to {@code user}, the account the query ran as. Queries first and
+     * flushes {@code system.query_log} only when the entries are not written yet, at most once a second across
+     * requests ({@link FreeFormSqlQueryLogReader}); {@code readsRemotely} always goes through a flush. Runs on the
+     * main analytics account: the read-only ones can do neither.
      */
-    CompletableFuture<List<FreeFormSqlQueryLogEntry>> queryLogEntries(@NonNull String queryId, @NonNull String user);
+    CompletableFuture<List<FreeFormSqlQueryLogEntry>> queryLogEntries(@NonNull String queryId, @NonNull String user,
+            boolean readsRemotely);
 }
 
 @Singleton
@@ -108,22 +113,40 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
             """;
     private static final String FLUSH_TIMEOUT_SECONDS = "10";
     private static final long MIN_FLUSH_INTERVAL_MILLIS = 1_000;
+    /** How soon a flush denied the cluster-wide permit, because another instance just flushed, asks again. */
+    private static final long FLUSH_PERMIT_RETRY_MILLIS = 200;
+    /** The cluster-wide flush budget: one per second, across every backend instance. */
+    private static final RateLimitConfig.LimitConfig FLUSH_PERMITS = new RateLimitConfig.LimitConfig(
+            "unused", "free-form-sql-query-log-flush", 1, 1, "");
+    /** Flushes tried before the check fails closed: the first that started after the query should be enough. */
+    private static final int MAX_FLUSH_ATTEMPTS = 3;
 
     private final Client readOnlyClient;
     private final Client extendedReadOnlyClient;
     private final Client analyticsClient;
     private final FreeFormSqlQueryLogFlusher flusher;
+    private final FreeFormSqlQueryLogReader reader;
 
     @Inject
     FreeFormSqlQueryDAOImpl(
             @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client readOnlyClient,
             @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT) @NonNull Client extendedReadOnlyClient,
-            @NonNull Client analyticsClient) {
+            @NonNull Client analyticsClient,
+            @NonNull RateLimitService rateLimitService) {
         this.readOnlyClient = readOnlyClient;
         this.extendedReadOnlyClient = extendedReadOnlyClient;
         this.analyticsClient = analyticsClient;
         this.flusher = new FreeFormSqlQueryLogFlusher(this::flushQueryLog, MIN_FLUSH_INTERVAL_MILLIS,
-                System::currentTimeMillis, FreeFormSqlQueryLogFlusher.Scheduler.DELAYED);
+                FLUSH_PERMIT_RETRY_MILLIS, System::currentTimeMillis, FreeFormSqlQueryLogFlusher.Scheduler.DELAYED,
+                () -> rateLimitService.isLimitExceeded(1, FLUSH_PERMITS.userFacingBucketName(), FLUSH_PERMITS)
+                        .map(exceeded -> !exceeded)
+                        .onErrorResume(error -> {
+                            // Redis down: flush under the per-instance limit; the cluster-wide limit is about load.
+                            log.warn("Free-form SQL query log flush permit unavailable; flushing locally", error);
+                            return Mono.just(true);
+                        })
+                        .toFuture());
+        this.reader = new FreeFormSqlQueryLogReader(this::fetchQueryLog, flusher::awaitFlush, MAX_FLUSH_ATTEMPTS);
     }
 
     private Client clientFor(FreeFormSqlAccount account) {
@@ -177,10 +200,13 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     @Override
     @WithSpan
     public CompletableFuture<List<FreeFormSqlQueryLogEntry>> queryLogEntries(@NonNull String queryId,
-            @NonNull String user) {
-        return flusher.awaitFlush()
-                .thenCompose(flushed -> analyticsClient.queryRecords(QUERY_LOG_ENTRIES,
-                        Map.<String, Object>of("query_id", queryId, "user", user)))
+            @NonNull String user, boolean readsRemotely) {
+        return reader.entries(queryId, user, readsRemotely);
+    }
+
+    private CompletableFuture<List<FreeFormSqlQueryLogEntry>> fetchQueryLog(String queryId, String user) {
+        return analyticsClient
+                .queryRecords(QUERY_LOG_ENTRIES, Map.<String, Object>of("query_id", queryId, "user", user))
                 .thenApply(FreeFormSqlQueryDAOImpl::readLogEntries);
     }
 

@@ -5,6 +5,8 @@ import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
+import com.comet.opik.infrastructure.RateLimitConfig;
+import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.WebApplicationException;
 import org.junit.jupiter.api.AfterAll;
@@ -19,6 +21,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Set;
@@ -51,6 +54,23 @@ class FreeFormSqlPostRunCheckTest {
     static final UUID PROJECT_A = UUID.randomUUID();
     static final String PROJECT_B = UUID.randomUUID().toString();
     static final int ROWS = 100;
+    /** The cluster-wide flush permit always granted: the flush limit has its own tests. */
+    static final RateLimitService ALWAYS_GRANTS = new RateLimitService() {
+        @Override
+        public Mono<Boolean> isLimitExceeded(long events, String bucketName, RateLimitConfig.LimitConfig limitConfig) {
+            return Mono.just(false);
+        }
+
+        @Override
+        public Mono<Long> availableEvents(String bucketName, RateLimitConfig.LimitConfig limitConfig) {
+            return Mono.just(1L);
+        }
+
+        @Override
+        public Mono<Long> getRemainingTTL(String bucket, RateLimitConfig.LimitConfig limitConfig) {
+            return Mono.just(0L);
+        }
+    };
 
     // Not reused: each run starts from a freshly migrated, empty database, so the rows are exactly the ones below.
     private final Network network = Network.newNetwork();
@@ -129,7 +149,7 @@ class FreeFormSqlPostRunCheckTest {
         standardConfig.setUsername(standardUser);
         var extendedConfig = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
         extendedConfig.setUsername(EXTENDED_USER);
-        return new FreeFormSqlQueryService(new FreeFormSqlQueryDAOImpl(standardClient, extended, admin),
+        return new FreeFormSqlQueryService(new FreeFormSqlQueryDAOImpl(standardClient, extended, admin, ALWAYS_GRANTS),
                 mock(FreeFormSqlEntityNameEnricher.class), analytics, standardConfig, extendedConfig);
     }
 
@@ -225,7 +245,7 @@ class FreeFormSqlPostRunCheckTest {
     @DisplayName("a scalar subquery stored by reference hides its reads, so it is rejected too")
     void storedScalarIsOpaque() {
         String query = "SELECT count() FROM traces WHERE has((SELECT groupArray(id) FROM spans), id)";
-        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin)
+        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin, ALWAYS_GRANTS)
                 .explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A.toString(), query).join();
         assertThat(FreeFormSqlSubqueries.scalarReads(tree, DATABASE_NAME).opaque()).isTrue();
         assertRejected("SELECT toJSONString(map('n', toString(count()))) AS result FROM traces "
@@ -237,7 +257,7 @@ class FreeFormSqlPostRunCheckTest {
     @MethodSource
     @DisplayName("the scalar gate classifies subqueries from ClickHouse's real resolved query tree")
     void scalarReads(String name, String query, Set<String> expected) {
-        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin)
+        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin, ALWAYS_GRANTS)
                 .explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A.toString(), query).join();
         assertThat(FreeFormSqlSubqueries.scalarReads(tree, DATABASE_NAME).tables()).isEqualTo(expected);
     }
