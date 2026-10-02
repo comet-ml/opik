@@ -11,6 +11,14 @@ import { ExperimentItem } from "@/types/datasets";
 import { Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { safelyParseJSON } from "@/lib/utils";
 import isEmpty from "lodash/isEmpty";
+import {
+  extractLegacyOpenInferenceOutputText,
+  extractOpenInferencePrettyText,
+  hasLegacyOpenInferenceAttributes,
+  hasLegacyOpenInferenceOutputAttributes,
+  hasOpenInferenceHint,
+  isOpenInferenceField,
+} from "@/lib/openinference";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
@@ -39,8 +47,10 @@ export const traceExist = (item: ExperimentItem) =>
 export const traceVisible = (item: ExperimentItem) =>
   item.trace_visibility_mode === TRACE_VISIBILITY_MODE.default;
 
-type PrettifyMessageConfig = {
+export type PrettifyMessageConfig = {
   type: "input" | "output";
+  openInferenceInput?: object | string;
+  openInferenceHint?: boolean;
 };
 
 type PrettifyMessageResponse = {
@@ -629,12 +639,16 @@ const extractTextFieldFromTruncatedJson = (
 };
 
 export const prettifyMessage = (
-  message: object | string | undefined,
+  message: object | string | number | boolean | undefined,
   config: PrettifyMessageConfig = {
     type: "input",
   },
 ): PrettifyMessageResponse => {
-  if (isString(message)) {
+  if (typeof message === "number" || typeof message === "boolean") {
+    return { message: String(message), prettified: true };
+  }
+
+  if (isString(message) && message.trim().length > 0) {
     const extracted = extractTextFieldFromTruncatedJson(message, config);
     return {
       message: extracted || message,
@@ -642,7 +656,17 @@ export const prettifyMessage = (
     } as PrettifyMessageResponse;
   }
   try {
-    let processedMessage = prettifyOpenAIMessageLogic(message, config);
+    const shouldExtractOpenInference =
+      config.openInferenceHint ||
+      hasLegacyOpenInferenceAttributes(message) ||
+      hasLegacyOpenInferenceAttributes(config.openInferenceInput);
+    let processedMessage = shouldExtractOpenInference
+      ? extractOpenInferencePrettyText(message, config.type)
+      : undefined;
+
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyOpenAIMessageLogic(message, config);
+    }
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyOpenAIAgentsMessageLogic(message, config);
@@ -676,6 +700,17 @@ export const prettifyMessage = (
       processedMessage = prettifyGenericLogic(message, config);
     }
 
+    if (
+      (!isString(processedMessage) || processedMessage.trim().length === 0) &&
+      config.type === "output" &&
+      hasLegacyOpenInferenceOutputAttributes(config.openInferenceInput) &&
+      !isOpenInferenceField(message, "output", true)
+    ) {
+      processedMessage = extractLegacyOpenInferenceOutputText(
+        config.openInferenceInput,
+      );
+    }
+
     // attempt to improve JSON string if the message is serialised JSON string
     if (isString(processedMessage)) {
       const json = safelyParseJSON(processedMessage, true);
@@ -696,3 +731,56 @@ export const prettifyMessage = (
     } as PrettifyMessageResponse;
   }
 };
+
+export type PrettifySource = {
+  input?: object | string;
+  output?: object | string;
+  metadata?: unknown;
+};
+
+export const getPrettifyConfig = (
+  source: PrettifySource,
+  type: "input" | "output",
+): PrettifyMessageConfig => ({
+  type,
+  openInferenceHint: hasOpenInferenceHint(
+    source.metadata,
+    source.input,
+    source.output,
+  ),
+  openInferenceInput: type === "output" ? source.input : undefined,
+});
+
+export const prettifyTraceField = (
+  source: PrettifySource,
+  type: "input" | "output",
+) => prettifyMessage(source[type], getPrettifyConfig(source, type));
+
+type ThreadPrettifySource = Partial<
+  Pick<Thread, "first_message" | "last_message">
+>;
+
+export const getThreadPrettifyConfig = (
+  source: ThreadPrettifySource,
+  type: "input" | "output",
+): PrettifyMessageConfig => ({
+  type,
+  // Thread aggregates omit the source trace's metadata. Recognize structured
+  // messages from the field itself without enabling synthetic raw fallbacks.
+  openInferenceHint: isOpenInferenceField(
+    type === "input" ? source.first_message : source.last_message,
+    type,
+    true,
+    false,
+  ),
+});
+
+export const prettifyThreadField = (
+  source: ThreadPrettifySource,
+  type: "input" | "output",
+) =>
+  prettifyMessage(
+    (type === "input" ? source.first_message : source.last_message) ??
+      undefined,
+    getThreadPrettifyConfig(source, type),
+  );

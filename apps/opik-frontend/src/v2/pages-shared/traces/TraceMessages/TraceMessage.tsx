@@ -10,7 +10,7 @@ import LikeFeedback from "@/v2/pages-shared/traces/TraceMessages/LikeFeedback";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
-import { prettifyMessage } from "@/lib/traces";
+import { prettifyTraceField } from "@/lib/traces";
 import { toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 
@@ -32,7 +32,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   }, [trace.feedback_scores]);
 
   const input = useMemo(() => {
-    const message = prettifyMessage(trace.input).message;
+    const message = prettifyTraceField(trace, "input").message;
 
     if (isObject(message)) {
       return (
@@ -49,10 +49,10 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.input, jsonViewTheme]);
+  }, [trace, jsonViewTheme]);
 
   const output = useMemo(() => {
-    const message = prettifyMessage(trace.output, { type: "output" }).message;
+    const message = prettifyTraceField(trace, "output").message;
 
     if (isObject(message)) {
       return (
@@ -69,7 +69,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.output, jsonViewTheme]);
+  }, [trace, jsonViewTheme]);
 
   return (
     <div className="flex flex-col gap-2" data-trace-message-id={trace.id}>

@@ -1,15 +1,19 @@
 import React, { useMemo } from "react";
 import isObject from "lodash/isObject";
 import { CellContext } from "@tanstack/react-table";
-import { ROW_HEIGHT } from "@/types/shared";
+import { JsonNode, ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
-import { prettifyMessage } from "@/lib/traces";
+import { prettifyMessage, PrettifyMessageConfig } from "@/lib/traces";
 import useLocalStorageState from "use-local-storage-state";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 
-type CustomMeta = {
+type CustomMeta<TData> = {
+  getPrettifyConfig?: (
+    row: TData,
+    field: "input" | "output",
+  ) => PrettifyMessageConfig;
   fieldType: "input" | "output";
   colorIndicator?: boolean;
 };
@@ -17,20 +21,30 @@ type CustomMeta = {
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
 
-const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
+const PrettyCell = <TData,>(context: CellContext<TData, JsonNode>) => {
   const truncationEnabled = useTruncationEnabled();
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
     defaultValue: MAX_DATA_LENGTH,
   });
   const { custom } = context.column.columnDef.meta ?? {};
-  const { fieldType = "input", colorIndicator = false } = (custom ??
-    {}) as CustomMeta;
-  const value = context.getValue() as string | object | undefined | null;
+  const {
+    fieldType = "input",
+    colorIndicator = false,
+    getPrettifyConfig,
+  } = (custom ?? {}) as CustomMeta<TData>;
+  const value = context.getValue();
+  const prettifyConfig = getPrettifyConfig?.(context.row.original, fieldType);
+  const rowInput = prettifyConfig?.openInferenceInput;
+  const openInferenceHint = prettifyConfig?.openInferenceHint;
 
   const displayMessage = useMemo(() => {
-    if (!value) return "-";
+    const pretty = prettifyMessage(value ?? undefined, {
+      type: fieldType,
+      openInferenceInput: fieldType === "output" ? rowInput : undefined,
+      openInferenceHint,
+    });
 
-    const pretty = prettifyMessage(value, { type: fieldType });
+    if (!pretty.message) return "-";
 
     let message: string;
     if (isObject(pretty.message)) {
@@ -44,7 +58,14 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     }
 
     return message;
-  }, [value, fieldType, truncationEnabled, maxDataLength]);
+  }, [
+    value,
+    fieldType,
+    rowInput,
+    openInferenceHint,
+    truncationEnabled,
+    maxDataLength,
+  ]);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??
