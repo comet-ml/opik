@@ -14,9 +14,7 @@ import java.util.Optional;
 @Getter
 @Accessors(fluent = true)
 public enum VertexAIModelName implements StructuredOutputSupported {
-    GEMINI_2_0_FLASH("vertex_ai/gemini-2.0-flash", "gemini-2.0-flash", false),
     GEMINI_2_0_FLASH("vertex_ai/gemini-2.0-flash-001", "gemini-2.0-flash-001", true),
-    GEMINI_2_0_FLASH_LITE("vertex_ai/gemini-2.0-flash-lite", "gemini-2.0-flash-lite", false),
     GEMINI_2_0_FLASH_LITE("vertex_ai/gemini-2.0-flash-lite-001", "gemini-2.0-flash-lite-001", false),
     GEMINI_2_5_FLASH("vertex_ai/gemini-2.5-flash", "gemini-2.5-flash", true),
     GEMINI_2_5_FLASH_LITE_PREVIEW_06_17("vertex_ai/gemini-2.5-flash-lite-preview-06-17",
