@@ -341,9 +341,15 @@ if Opik lives at a non-default path.
 Setup writes into your AI client's own configuration, so a run with no terminal
 writes nothing unless you name the client:
 
-```bash
+<CodeBlocks>
+```bash title="uvx"
 uvx opik mcp configure --ai-client cursor --skills
 ```
+
+```bash title="npx"
+npx opik mcp configure --ai-client cursor --skills
+```
+</CodeBlocks>
 
 Credentials come from `~/.opik.config`, or from `OPIK_API_KEY` and
 `OPIK_WORKSPACE` already in the environment, such as a CI secret — do not paste

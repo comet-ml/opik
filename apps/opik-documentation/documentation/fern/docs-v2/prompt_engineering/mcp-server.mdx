@@ -29,9 +29,19 @@ SDK:
     Open a new terminal afterwards so `uvx` is on your `PATH`.
   </Step>
   <Step title="Run the setup command">
-    ```bash
-    uvx opik mcp configure
-    ```
+    <CodeBlocks>
+      ```bash title="uvx"
+      uvx opik mcp configure
+      ```
+
+      ```bash title="npx"
+      npx opik mcp configure
+      ```
+    </CodeBlocks>
+
+    Both run the same setup: `npx opik` hands everything to `uvx opik`, so it
+    needs `uv` as well as Node. Wherever these docs show `uvx opik …`,
+    `npx opik …` works the same way.
 
     It detects your AI client (Claude Code, Cursor, VS Code Copilot, Codex,
     opencode), picks the right server for your Opik deployment, configures it,
