@@ -1,4 +1,5 @@
 import functools
+import inspect
 from typing import Any, Callable, Dict, Optional, List, Union
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -61,7 +62,23 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         Returns:
             ScoreResult from the wrapped scorer function
         """
-        return self.scorer(dataset_item=dataset_item, task_outputs=task_outputs)
+        return self._call_scorer(dataset_item=dataset_item, task_outputs=task_outputs)
+
+    def _call_scorer(
+        self, **arguments: Any
+    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+        # A scorer may declare only some of the arguments (e.g. only task_span),
+        # so pass just the ones its signature accepts.
+        parameters = inspect.signature(self.scorer).parameters
+        accepts_var_keyword = any(
+            parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        if not accepts_var_keyword:
+            arguments = {
+                name: value for name, value in arguments.items() if name in parameters
+            }
+        return self.scorer(**arguments)
 
 
 class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
@@ -98,13 +115,13 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
         if task_span is not None and scorer_function.has_task_span_in_parameters(
             self.scorer
         ):
-            return self.scorer(
+            return self._call_scorer(
                 dataset_item=dataset_item,
                 task_outputs=task_outputs,
                 task_span=task_span,
             )
 
-        return self.scorer(dataset_item=dataset_item, task_outputs=task_outputs)
+        return self._call_scorer(dataset_item=dataset_item, task_outputs=task_outputs)
 
 
 def _scorer_name(scorer: Callable) -> str:
