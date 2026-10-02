@@ -1,28 +1,15 @@
 """How the MCP install narrates itself.
 
-The install flow is shared by two callers with different needs. ``opik.configure()``
-is a library call that must not paint boxes on someone's stdout, so it narrates
-through the logger. ``opik mcp configure`` is a wizard a person is watching, and
-it should look like one — the rest of the command group already renders with
-``rich`` (see ``cli.status_view``), so the installer looking like raw log output
-was the odd one out.
-
-Both are served by injecting a view rather than branching inside the flow:
-:class:`LoggingInstallView` is the default and preserves library behaviour;
-``cli.mcp`` passes :class:`RichInstallView`. Tests inject a recording double,
-which also decouples them from exact log strings.
-
-Presentation only — every decision is made by ``install``.
+``install`` makes every decision and reports through an :class:`InstallView`;
+the CLI supplies the ``rich`` one, and tests inject a recording double.
 """
 
 import abc
 import contextlib
 import dataclasses
-import logging
-import pathlib
-from typing import Iterator, List, Optional
+from typing import List, Optional, Tuple
 
-LOGGER = logging.getLogger(__name__)
+from opik.configurator.mcp import spec as mcp_spec
 
 
 @dataclasses.dataclass
@@ -32,14 +19,6 @@ class HostChoice:
     key: str
     label: str
     hint: str = ""
-
-
-@dataclasses.dataclass
-class PlannedTarget:
-    """One AI host the install is about to touch, and where."""
-
-    display_name: str
-    location: str
 
 
 @dataclasses.dataclass
@@ -65,42 +44,52 @@ MANUAL_SETUP = "__manual__"
 MANUAL_SETUP_LABEL = "My AI client is not listed"
 
 
-#: How the sign-in step is phrased, once, so both views agree.
-#:
-#: Written to hold whether or not the sign-in already happened: Codex signs in
-#: inside `codex mcp add`, and Claude Code is signed in right after it, so for
-#: those two the browser has usually opened by the time this prints. Promising a
-#: prompt that already came and went is what this wording avoids.
+#: For a client that prompts for the sign-in on first use, rather than during setup.
 SIGN_IN_HINT = (
-    "Signing in to Opik happens in your browser. Your assistant may have opened "
-    "it during setup; otherwise it will prompt you the first time it uses Opik, "
-    "or wait for you to authorize the opik-mcp server from its MCP settings."
+    "Signing in to Opik happens in your browser. Your AI client will prompt you "
+    "the first time it uses Opik, or you can authorize the opik-mcp server from "
+    "its MCP settings."
 )
+
+
+def sign_in_failed_message(client_display_name: str) -> str:
+    """What to do about a client that was registered but not signed in."""
+    return (
+        f"{client_display_name} is registered but not signed in. Run "
+        f"`claude mcp login {mcp_spec.SERVER_NAME}` to finish it — until then the server "
+        "contributes no tools."
+    )
 
 
 class InstallView(abc.ABC):
     """Narration hooks for the MCP install flow."""
 
-    #: Whether the connection needs a sign-in, as decided by ``install`` and
-    #: handed over in :meth:`plan`. Kept here rather than passed to :meth:`done`
-    #: because the CLI closes the run from ``cli.assistants``, which never sees
-    #: the server spec — the view carries the fact across that gap. A class
-    #: attribute, so a view that is never planned still renders.
+    #: Whether :meth:`done` should explain the sign-in; carried on the view because
+    #: the caller that ends the run never sees the server spec.
     _needs_sign_in: bool = False
 
+    #: Clients registered without a working sign-in, which :meth:`done` reports.
+    _sign_in_failed: Tuple[str, ...] = ()
+
+    def sign_in_failed(self, client_display_names: List[str]) -> None:
+        """Record clients that could not be signed in, for the run's ending."""
+        self._sign_in_failed = tuple(client_display_names)
+
+    def sign_in_handled(self) -> None:
+        """Drop the closing sign-in hint: this run already signed in, or failed to."""
+        self._needs_sign_in = False
+
     @abc.abstractmethod
-    def plan(
-        self,
-        deployment: str,
-        transport: str,
-        targets: List[PlannedTarget],
-        needs_sign_in: bool = False,
-    ) -> None:
+    def plan(self, deployment: str, transport: str, needs_sign_in: bool) -> None:
         """Announce what is about to happen, before anything is written."""
 
     @abc.abstractmethod
     def step(self, description: str) -> "contextlib.AbstractContextManager[None]":
         """Wrap a slow step (a probe, a download, a verification)."""
+
+    @abc.abstractmethod
+    def sign_in(self, client_display_name: str, command: List[str]) -> Optional[int]:
+        """Run a client's interactive sign-in; its exit status, or None if it never ran."""
 
     @abc.abstractmethod
     def results(self, results: List[TargetResult]) -> None:
@@ -111,8 +100,8 @@ class InstallView(abc.ABC):
         """Report whether the registration actually works."""
 
     @abc.abstractmethod
-    def done(self, components: List[str], assistants: List[str]) -> None:
-        """Close the run: what was set up, for whom, and what is left to do."""
+    def done(self) -> None:
+        """Close the run, with whatever is still left for the user to do."""
 
     @abc.abstractmethod
     def skipped(self, message: str) -> None:
@@ -128,78 +117,13 @@ class InstallView(abc.ABC):
 
     @abc.abstractmethod
     def choose_hosts(
-        self, title: str, candidates: List[HostChoice], preselected: List[str]
+        self, title: str, candidates: List[HostChoice]
     ) -> Optional[List[str]]:
-        """Ask which hosts to install for.
+        """Ask which host to install for.
 
-        Returns the chosen keys, or ``None`` if the user cancelled — distinct
-        from an empty list, which means "none of them, deliberately".
+        Returns the chosen keys, ``[]`` for a deliberate "none", or ``None`` on
+        cancel. A list because the manual row answers with its own key.
         """
-
-
-class LoggingInstallView(InstallView):
-    """The library-safe default: everything through the logger, no cursor control."""
-
-    def plan(
-        self,
-        deployment: str,
-        transport: str,
-        targets: List[PlannedTarget],
-        needs_sign_in: bool = False,
-    ) -> None:
-        self._needs_sign_in = needs_sign_in
-        LOGGER.info(
-            "Setting up the Opik MCP server (%s, %s) for: %s",
-            deployment,
-            transport,
-            ", ".join(f"{t.display_name} -> {t.location}" for t in targets),
-        )
-
-    @contextlib.contextmanager
-    def step(self, description: str) -> Iterator[None]:
-        LOGGER.info("%s...", description)
-        yield
-
-    def results(self, results: List[TargetResult]) -> None:
-        for result in results:
-            if result.succeeded:
-                LOGGER.info("%s: %s", result.display_name, result.detail)
-            else:
-                LOGGER.warning("%s: %s", result.display_name, result.detail)
-
-    def verification(self, succeeded: bool, detail: str) -> None:
-        if succeeded:
-            LOGGER.info("Verified: %s.", detail)
-        else:
-            LOGGER.warning(
-                "The Opik MCP server was registered, but verification failed: %s",
-                detail,
-            )
-
-    def done(self, components: List[str], assistants: List[str]) -> None:
-        LOGGER.info(
-            "Done. %s set up for %s. Restart %s, then ask it to 'list my Opik "
-            "projects via Opik MCP'.",
-            " and ".join(components) or "Nothing",
-            ", ".join(assistants) or "your AI client",
-            "them" if len(assistants) > 1 else "it",
-        )
-        if self._needs_sign_in:
-            LOGGER.info("Signing in: %s", SIGN_IN_HINT)
-
-    def skipped(self, message: str) -> None:
-        LOGGER.info(message)
-
-    def problem(self, message: str) -> None:
-        LOGGER.warning(message)
-
-    def note(self, message: str) -> None:
-        LOGGER.info(message)
-
-    def choose_hosts(
-        self, title: str, candidates: List[HostChoice], preselected: List[str]
-    ) -> Optional[List[str]]:
-        return numbered_menu(title, candidates)
 
 
 def _single_candidate_menu(candidate: HostChoice) -> List[str]:
@@ -229,67 +153,46 @@ def _single_candidate_menu(candidate: HostChoice) -> List[str]:
             return []
         if answer == "2":
             return [MANUAL_SETUP]
-        LOGGER.error("Wrong choice. Please try again.\n")
+        print("  Please enter one of the numbers above.")
 
 
 def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str]]:
-    """The portable fallback: type a number.
+    """The fallback where the terminal cannot host the picker: type a number.
 
-    A module-level function rather than a base-class method so the rich view can
-    fall back to it without inheriting a logging view it otherwise overrides
-    entirely. A single candidate keeps its own shape; see
-    :func:`_single_candidate_menu`.
+    One client, like the picker. Ctrl-C answers ``None``, a cancel, as it does
+    at the picker.
     """
-    if len(candidates) == 1:
-        return _single_candidate_menu(candidates[0])
+    try:
+        if len(candidates) == 1:
+            return _single_candidate_menu(candidates[0])
+        return _several_candidates_menu(title, candidates)
+    except KeyboardInterrupt:
+        return None
 
+
+def _several_candidates_menu(title: str, candidates: List[HostChoice]) -> List[str]:
     host_count = len(candidates)
-    all_choice = host_count + 1
-    manual_choice = host_count + 2
-    skip_choice = host_count + 3
+    manual_choice = host_count + 1
+    skip_choice = host_count + 2
 
     lines = [title]
     for index, candidate in enumerate(candidates, start=1):
         lines.append(f"  {index} - {candidate.label}")
-    lines.append(f"  {all_choice} - All of the above")
     lines.append(f"  {manual_choice} - {MANUAL_SETUP_LABEL}")
     lines.append(f"  {skip_choice} - Skip")
-    lines.append("\nEnter a number, or several separated by commas (e.g. 1,2)\n> ")
+    lines.append("\nEnter a number\n> ")
     prompt = "\n".join(lines)
 
     while True:
-        raw = [token.strip() for token in input(prompt).split(",") if token.strip()]
+        answer = input(prompt).strip()
 
-        if not raw or not all(token.isdigit() for token in raw):
-            LOGGER.error("Wrong choice. Please try again.\n")
-            continue
+        if answer.isdigit():
+            number = int(answer)
+            if number == skip_choice:
+                return []
+            if number == manual_choice:
+                return [MANUAL_SETUP]
+            if 1 <= number <= host_count:
+                return [candidates[number - 1].key]
 
-        numbers = [int(token) for token in raw]
-
-        if skip_choice in numbers:
-            return []
-        if manual_choice in numbers:
-            return [MANUAL_SETUP]
-        if all_choice in numbers:
-            return [candidate.key for candidate in candidates]
-        if all(1 <= number <= host_count for number in numbers):
-            return [candidates[number - 1].key for number in dict.fromkeys(numbers)]
-
-        LOGGER.error("Wrong choice. Please try again.\n")
-
-
-def display_path(path: pathlib.Path) -> str:
-    """Render a path with the user's home directory collapsed to ``~``."""
-    home = str(pathlib.Path.home())
-    value = str(path)
-    return f"~{value[len(home) :]}" if value.startswith(home) else value
-
-
-_DEFAULT_VIEW: Optional[InstallView] = None
-
-
-def default_view() -> InstallView:
-    global _DEFAULT_VIEW
-    if _DEFAULT_VIEW is None:
-        _DEFAULT_VIEW = LoggingInstallView()
-    return _DEFAULT_VIEW
+        print("  Please enter one of the numbers above.")

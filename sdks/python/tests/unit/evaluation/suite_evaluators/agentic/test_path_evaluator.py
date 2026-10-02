@@ -5,6 +5,7 @@ unsupported form has a parse-error test, so the prompt-taught surface
 can't drift silently.
 """
 
+import json
 import re
 
 import pytest
@@ -145,11 +146,40 @@ class TestQuotedKeyPaths:
         assert path_evaluator.evaluate(normalized, {"a-b": "value"}) == ["value"]
 
     @pytest.mark.parametrize(
-        "key", ["a-bé", "café", "é", r"a\n", 'say"hi', "line\nbreak"]
+        "key",
+        [
+            "a-bé",
+            "café",
+            "é",
+            r"a\n",
+            'say"hi',
+            "line\nbreak",
+            # A key the parser lexes as a keyword cannot be written as `.key`:
+            # `.select` fails to parse with "Expected IDENT but found
+            # KW_SELECT", so `field_step` has to bracket-quote it. Read the list
+            # from the grammar so this test cannot drift from it.
+            *sorted(path_format.RESERVED_KEYWORDS),
+        ],
     )
     def test_evaluate__path_format_key__round_trips(self, key):
         document = {key: "value"}
         expression = path_evaluator.normalize_expression(path_format.field_step(key))
+
+        assert path_evaluator.evaluate(expression, document) == ["value"]
+
+    @pytest.mark.parametrize("key", sorted(path_format.RESERVED_KEYWORDS))
+    def test_evaluate__reserved_word_key_is_quoted_not_dotted(self, key):
+        # A plain identifier check is not enough: `select` looks like one but
+        # lexes as a keyword, so the dotted form the renderer used to emit could
+        # not be read back.
+        assert path_format.field_step(key) == f"[{json.dumps(key)}]"
+
+    @pytest.mark.parametrize("key", sorted(path_format.RESERVED_KEYWORDS))
+    def test_evaluate__reserved_word_key_nested_in_a_path__returns_value(self, key):
+        document = {"input": {key: "value"}}
+        expression = path_format.render_path(
+            [path_format.field_step("input"), path_format.field_step(key)]
+        )
 
         assert path_evaluator.evaluate(expression, document) == ["value"]
 

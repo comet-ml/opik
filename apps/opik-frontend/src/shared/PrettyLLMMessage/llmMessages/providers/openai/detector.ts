@@ -189,6 +189,11 @@ export const detectOpenAIFormat: FormatDetector = (data, prettifyConfig) => {
     if (hasCustomOutputFormat(data)) {
       return true;
     }
+    // Conversation logged as output: { messages: [...] } or [{ role, content }]
+    // (e.g. the Open WebUI Opik filter logs the whole chat as the span output)
+    if (hasOpenAIInputFormat(data) || isOpenAIMessageArray(data)) {
+      return true;
+    }
   }
 
   return false;

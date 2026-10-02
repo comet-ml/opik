@@ -37,6 +37,11 @@ class Reason(enum.Enum):
     ASSUME_YES = "assume_yes"
     NOTHING_DETECTED = "nothing_detected"
     ASKING = "asking"
+    INSTALLED_BY_DEFAULT = "installed_by_default"
+    CANCELLED = "cancelled"
+    #: A default skill pack follows the server, and the server step registered it
+    #: nowhere — a failed write, nothing reachable — without anyone refusing it.
+    NO_SERVER = "no_server"
 
 
 class Verdict(NamedTuple):
@@ -87,6 +92,20 @@ def resolve(
     return Verdict(Decision.ASK, Reason.ASKING)
 
 
+def resolve_installed_by_default(flag: Optional[bool]) -> Verdict:
+    """Decide a step that is done unless refused, rather than offered: the pack.
+
+    None of :func:`resolve`'s rules apply with nothing to ask. Its own
+    `INSTALLED_BY_DEFAULT` reason keeps the funnel's history of accept rates
+    from blending with runs that were never asked.
+    """
+    if flag is False:
+        return Verdict(Decision.SKIP, Reason.DECLINED)
+    if flag is True:
+        return Verdict(Decision.PROCEED, Reason.REQUESTED)
+    return Verdict(Decision.PROCEED, Reason.INSTALLED_BY_DEFAULT)
+
+
 def decision_reason(verdict: Verdict, granted_: bool) -> str:
     """What this step decided and why, as one value for analytics.
 
@@ -115,15 +134,3 @@ def granted(verdict: Verdict, ask: Callable[[], bool]) -> bool:
     if verdict.decision is Decision.ASK:
         return ask()
     return verdict.decision is Decision.PROCEED
-
-
-SKILL_PACK_PITCH: str = (
-    "It teaches your AI client how to instrument code with Opik, wire up "
-    "integrations, run test suites and agent logs diagnostics."
-)
-"""The case for the pack, as one line — used by the CLI, which wraps it itself.
-
-The only prompt text left here. Its plain-text siblings went with the library
-path: `opik.configure()` no longer offers the MCP server or the skill pack, so
-there is nothing outside the CLI left to word. "AI client" is the term the rest
-of the CLI uses for these tools."""

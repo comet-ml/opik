@@ -158,6 +158,13 @@ class SpanCostCalculator {
         int inputTokens = usage.getOrDefault("original_usage.prompt_token_count",
                 usage.getOrDefault("prompt_tokens", 0));
 
+        // Tool results fed back to the model (URL context, grounding, code execution) are billed as input, but
+        // Google reports them in tool_use_prompt_token_count, outside prompt_token_count. Add them only next to
+        // the raw provider count: the normalized prompt_tokens fallback already includes them.
+        if (usage.containsKey("original_usage.prompt_token_count")) {
+            inputTokens += usage.getOrDefault("original_usage.tool_use_prompt_token_count", 0);
+        }
+
         // Get the cached read tokens (cached_content_token_count); fall back to OTel bare key for LiteLLM/OTel spans
         int cachedReadInputTokens = usage.getOrDefault("original_usage.cached_content_token_count",
                 usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0));
@@ -172,7 +179,8 @@ class SpanCostCalculator {
                 usage.getOrDefault("original_usage.candidates_token_count", 0));
 
         // Whole-prompt tier check: Google's prompt_token_count already includes the cached portion,
-        // so totalPromptTokens == inputTokens + cachedReadInputTokens (i.e. the raw prompt_token_count).
+        // so totalPromptTokens == inputTokens + cachedReadInputTokens (the raw prompt_token_count plus any
+        // tool-use prompt tokens).
         int totalPromptTokens = inputTokens + cachedReadInputTokens;
 
         return modelPrice.effectiveInputPrice(totalPromptTokens).multiply(BigDecimal.valueOf(inputTokens))

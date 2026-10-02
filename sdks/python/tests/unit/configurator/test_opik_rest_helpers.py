@@ -317,3 +317,63 @@ class TestIsApiKeyCorrect:
 
         with pytest.raises(ConnectionError):
             opik_rest_helpers.is_api_key_correct(api_key, url="https://some-url.com")
+
+
+class TestListProjects:
+    """Callers only pick wording or a link from it, so it must never raise."""
+
+    @staticmethod
+    def _respond(monkeypatch, response):
+        client = MagicMock()
+        client.__enter__.return_value.get.side_effect = (
+            response if isinstance(response, Exception) else lambda **kw: response
+        )
+        monkeypatch.setattr(
+            opik_rest_helpers, "_get_httpx_client", lambda **kwargs: client
+        )
+
+    def _list(self):
+        return opik_rest_helpers.list_projects(
+            api_key=None,
+            workspace=None,
+            api_url="https://opik/api/",
+            params={},
+            timeout=1.0,
+        )
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            httpx.ConnectError("no route"),
+            httpx.ReadTimeout("too slow"),
+            OSError("closed"),
+        ],
+    )
+    def test_an_unreachable_deployment__answers_none(self, monkeypatch, failure):
+        self._respond(monkeypatch, failure)
+
+        assert self._list() is None
+
+    def test_a_rejected_request__answers_none(self, monkeypatch):
+        self._respond(monkeypatch, httpx.Response(403, json={}))
+
+        assert self._list() is None
+
+    def test_a_body_that_is_not_json__answers_none(self, monkeypatch):
+        self._respond(monkeypatch, httpx.Response(200, text="<html>nope</html>"))
+
+        assert self._list() is None
+
+    @pytest.mark.parametrize("body", [[], {"content": "nope"}, {"content": None}])
+    def test_a_body_of_the_wrong_shape__answers_none(self, monkeypatch, body):
+        self._respond(monkeypatch, httpx.Response(200, json=body))
+
+        assert self._list() is None
+
+    def test_a_listing__keeps_only_project_objects(self, monkeypatch):
+        self._respond(
+            monkeypatch,
+            httpx.Response(200, json={"content": [{"name": "my-app"}, "junk"]}),
+        )
+
+        assert self._list() == [{"name": "my-app"}]

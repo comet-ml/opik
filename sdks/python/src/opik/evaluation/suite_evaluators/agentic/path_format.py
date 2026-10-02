@@ -17,6 +17,18 @@ import json
 from typing import Any, List
 
 
+RESERVED_KEYWORDS = frozenset(
+    {"and", "or", "not", "select", "strings", "true", "false", "null"}
+)
+"""Identifiers the path parser lexes as keywords rather than as a dotted field.
+
+They still have to be reachable as dict keys, so `field_step` bracket-quotes
+them. The parser reads this set from here — see `tools/path_evaluator.py` — so
+that the producer and the consumer cannot disagree about which keys the dotted
+form can express.
+"""
+
+
 def render_path(path_stack: List[str]) -> str:
     """Render an accumulated path stack into a single jq expression.
 
@@ -41,6 +53,12 @@ def index_step(index: int) -> str:
 
 
 def _is_bare_identifier(text: str) -> bool:
+    # A bare key is rendered as `.foo`, so it must be something the dotted form
+    # can actually express. A reserved word would lex as a keyword on the way
+    # back in, so `.select` could not be pasted into `scan` — the grammar in
+    # `tools/path_evaluator.py` reserves exactly these.
+    if text in RESERVED_KEYWORDS:
+        return False
     if not text or not text.isascii():
         return False
     if not (text[0].isalpha() or text[0] == "_"):

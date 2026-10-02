@@ -10,10 +10,14 @@ import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import {
+  createSupports,
+  getAnthropicVisibleControls,
+  isAnyControlVisible,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
+import {
   getAnthropicThinkingEffortOptions,
   resolveEffort,
   resolveSamplingParams,
-  supportsSamplingParams,
 } from "@/lib/modelUtils";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
@@ -33,17 +37,19 @@ const AnthropicModelConfigs = ({
   model,
   unsupportedParams,
 }: AnthropicModelConfigsProps) => {
-  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
-  const showSamplingParams = supportsSamplingParams(model);
+  const supports = createSupports(unsupportedParams);
   const thinkingEffortOptions = getAnthropicThinkingEffortOptions(model);
   // Read the pair through the resolver rather than off the config: it is what the request will
   // carry, and it guarantees exactly one half is live, which is what the choice below reflects.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const { thinkingEffort } = resolveEffort(model ?? "", configs);
+  const visible = getAnthropicVisibleControls({ model, configs, supports });
+
+  if (!isAnyControlVisible(visible)) return null;
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {showSamplingParams && (
+      {visible.samplingParams && (
         <ExclusiveSamplingParams
           temperature={temperature}
           topP={topP}
@@ -54,7 +60,7 @@ const AnthropicModelConfigs = ({
         />
       )}
 
-      {supports("maxCompletionTokens") && (
+      {visible.maxCompletionTokens && (
         <SliderInputControl
           value={
             configs.maxCompletionTokens ??
@@ -73,7 +79,7 @@ const AnthropicModelConfigs = ({
         />
       )}
 
-      {supports("throttling") && (
+      {visible.throttling && (
         <SliderInputControl
           value={configs.throttling ?? DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}
           onChange={(v) => onChange({ throttling: v })}
@@ -89,7 +95,7 @@ const AnthropicModelConfigs = ({
         />
       )}
 
-      {supports("maxConcurrentRequests") && (
+      {visible.maxConcurrentRequests && (
         <SliderInputControl
           value={
             configs.maxConcurrentRequests ??
@@ -108,7 +114,7 @@ const AnthropicModelConfigs = ({
         />
       )}
 
-      {supports("thinkingEffort") && thinkingEffort !== undefined && (
+      {visible.thinkingEffort && thinkingEffort !== undefined && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingEffort" className="text-sm font-medium">

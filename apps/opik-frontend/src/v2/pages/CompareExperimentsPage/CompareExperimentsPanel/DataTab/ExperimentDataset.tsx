@@ -176,7 +176,11 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
         </div>
       </div>
 
-      <ExperimentDatasetItems data={data} selectedKeys={selectedKeys || []} />
+      <ExperimentDatasetItems
+        key={datasetItemId}
+        data={data}
+        selectedKeys={selectedKeys || []}
+      />
     </div>
   );
 };

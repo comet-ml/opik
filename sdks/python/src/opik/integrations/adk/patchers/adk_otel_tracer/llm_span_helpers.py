@@ -6,6 +6,7 @@ SPAN_STATUS = "_OPIK_SPAN_STATUS"
 
 class LLMSpanStatus(str, enum.Enum):
     STARTED = "started"
+    AWAITING_AFTER_MODEL_CALLBACK = "awaiting_after_model_callback"
     READY_FOR_FINALIZATION = "ready_for_finalization"
 
 
@@ -27,4 +28,15 @@ def is_externally_created_llm_span_that_just_started(
         span_data.type == "llm"
         and span_data.metadata is not None
         and span_data.metadata.get(SPAN_STATUS, None) == LLMSpanStatus.STARTED
+    )
+
+
+def is_externally_created_llm_span_awaiting_after_model_callback(
+    span_data: span.SpanData,
+) -> bool:
+    return (
+        span_data.type == "llm"
+        and span_data.metadata is not None
+        and span_data.metadata.get(SPAN_STATUS, None)
+        == LLMSpanStatus.AWAITING_AFTER_MODEL_CALLBACK
     )
