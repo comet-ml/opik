@@ -1088,12 +1088,16 @@ export interface LLMOpenAIConfigsType {
   maxConcurrentRequests?: number;
 }
 
+export const ANTHROPIC_THINKING_EFFORT_VALUES = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+
 export type AnthropicThinkingEffort =
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh"
-  | "max";
+  (typeof ANTHROPIC_THINKING_EFFORT_VALUES)[number];
 
 export interface LLMAnthropicConfigsType {
   temperature?: number;

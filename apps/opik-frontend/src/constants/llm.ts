@@ -11,6 +11,7 @@ import {
   PythonCodeDetailsSpanForm,
 } from "@/types/automations";
 import {
+  ANTHROPIC_THINKING_EFFORT_VALUES,
   AnthropicThinkingEffort,
   PROVIDER_MODEL_TYPE,
   ReasoningEffort,
@@ -176,39 +177,39 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
       supportsSamplingParams?: boolean;
       // Must be a subset of the model's levels in EFFORT_LEVELS_BY_MODEL_ID in the backend's
       // AnthropicModelName, which answers any other level with a 400.
-      thinkingEffortOptions?: AnthropicThinkingEffort[];
+      thinkingEffortOptions?: readonly AnthropicThinkingEffort[];
       // Anthropic's own default, "high" unless stated.
       defaultThinkingEffort?: AnthropicThinkingEffort;
     }
   >
 > = {
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
     defaultThinkingEffort: "medium",
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW]: {
     thinkingEffortOptions: ["low", "medium", "high", "max"],

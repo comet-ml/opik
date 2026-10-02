@@ -9,7 +9,7 @@ import {
   EVAL_TRIGGER_SCOPE,
 } from "@/types/automations";
 import {
-  AnthropicThinkingEffort,
+  ANTHROPIC_THINKING_EFFORT_VALUES,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
   PROVIDER_MODEL_TYPE,
@@ -219,14 +219,6 @@ const refineDecisionModelRule = (
   });
 };
 
-const THINKING_EFFORTS = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-] as const satisfies readonly AnthropicThinkingEffort[];
-
 const LLMJudgeBaseSchema = z.object({
   model: z
     .string({
@@ -249,7 +241,7 @@ const LLMJudgeBaseSchema = z.object({
       .optional(),
     // Same arrangement for the Anthropic effort, which the judge reads from
     // custom_parameters.output_config.effort.
-    thinkingEffort: z.enum(THINKING_EFFORTS).optional(),
+    thinkingEffort: z.enum(ANTHROPIC_THINKING_EFFORT_VALUES).optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -643,7 +635,9 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
         ? (thinking.level as GeminiThinkingLevel)
         : undefined,
     // A value outside the enum would fail the form's validation on a field nobody can see.
-    thinkingEffort: THINKING_EFFORTS.find((e) => e === persistedEffort),
+    thinkingEffort: ANTHROPIC_THINKING_EFFORT_VALUES.find(
+      (e) => e === persistedEffort,
+    ),
   };
   // Normalize stale persisted configs (e.g. Opus 4.7 with `temperature: 0`
   // saved before this PR) so an unedited submit doesn't 400 on Anthropic.
