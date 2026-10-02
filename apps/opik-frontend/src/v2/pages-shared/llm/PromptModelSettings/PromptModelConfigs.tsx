@@ -30,7 +30,10 @@ import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/prov
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import { parseComposedProviderType } from "@/lib/provider";
+import {
+  isOpenAICompatibleProvider,
+  parseComposedProviderType,
+} from "@/lib/provider";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 
@@ -115,7 +118,7 @@ const PromptModelConfigs = ({
       );
     }
 
-    if (provider === PROVIDER_TYPE.CUSTOM) {
+    if (isOpenAICompatibleProvider(provider)) {
       return (
         <CustomModelConfigs
           configs={configs as LLMCustomConfigsType}

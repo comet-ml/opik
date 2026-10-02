@@ -49,6 +49,13 @@ export const buildComposedProviderKey = (
   return providerType;
 };
 
+// The backend sends all three through the same OpenAI-compatible client, so they take the same
+// parameters and share one settings panel and one set of defaults.
+export const isOpenAICompatibleProvider = (provider: PROVIDER_TYPE) =>
+  provider === PROVIDER_TYPE.CUSTOM ||
+  provider === PROVIDER_TYPE.OLLAMA ||
+  provider === PROVIDER_TYPE.BEDROCK;
+
 export const parseComposedProviderType = (provider: COMPOSED_PROVIDER_TYPE) => {
   if (provider.startsWith(PROVIDER_TYPE.CUSTOM)) {
     return PROVIDER_TYPE.CUSTOM;
