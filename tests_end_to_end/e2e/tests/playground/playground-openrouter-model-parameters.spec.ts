@@ -79,6 +79,13 @@ async function nextCompletionBody(
   await act();
   const body = (await sent).postDataJSON() as Record<string, unknown> | null;
   expect(body, 'the Run posted a JSON completion body').not.toBeNull();
+  // The POST goes out as the run starts, so wait for the run to settle before the next panel edit.
+  await expect(
+    page
+      .getByTestId('playground-run-button')
+      .and(page.locator('[data-mode="run"], [data-mode="re-run"]')),
+    'the run finished and the playground is idle again',
+  ).toBeVisible();
   return body!;
 }
 
