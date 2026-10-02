@@ -11,6 +11,7 @@ import logging
 import httpx
 import openai
 import pytest
+import pytest_asyncio
 
 import opik
 from opik.integrations.openai import track_openai
@@ -95,12 +96,18 @@ def _handler(request):
 
 @pytest.fixture
 def tracked_client():
-    return track_openai(
-        openai.OpenAI(
-            api_key="fake-api-key",
-            http_client=httpx.Client(transport=httpx.MockTransport(_handler)),
-        )
+    http_client = httpx.Client(transport=httpx.MockTransport(_handler))
+    yield track_openai(openai.OpenAI(api_key="fake-api-key", http_client=http_client))
+    http_client.close()
+
+
+@pytest_asyncio.fixture
+async def tracked_async_client():
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(_handler))
+    yield track_openai(
+        openai.AsyncOpenAI(api_key="fake-api-key", http_client=http_client)
     )
+    await http_client.aclose()
 
 
 def _span(fake_backend, name_prefix):
@@ -112,23 +119,28 @@ def _span(fake_backend, name_prefix):
     )
 
 
+def _error_records(caplog):
+    return [record for record in caplog.records if record.levelno >= logging.ERROR]
+
+
 def test_openai_chat_stream__responses_stream_created_before_it_is_read__chat_output_logged(
     fake_backend, tracked_client, caplog
 ):
     chat_stream = tracked_client.chat.completions.create(
         model=MODEL, messages=[{"role": "user", "content": "hi"}], stream=True
     )
-    tracked_client.responses.create(model=MODEL, input="hi", stream=True)
+    other_stream = tracked_client.responses.create(model=MODEL, input="hi", stream=True)
 
     with caplog.at_level(logging.ERROR):
         text = "".join(chunk.choices[0].delta.content or "" for chunk in chat_stream)
+    other_stream.close()
 
     opik.flush_tracker()
 
     chat_span = _span(fake_backend, "chat_completion")
     assert text == "".join(CHAT_WORDS)
     assert chat_span.output["choices"][0]["message"]["content"] == text
-    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert not _error_records(caplog)
 
 
 def test_openai_responses_stream__chat_stream_created_before_it_is_read__responses_output_logged(
@@ -137,44 +149,65 @@ def test_openai_responses_stream__chat_stream_created_before_it_is_read__respons
     responses_stream = tracked_client.responses.create(
         model=MODEL, input="hi", stream=True
     )
-    tracked_client.chat.completions.create(
+    other_stream = tracked_client.chat.completions.create(
         model=MODEL, messages=[{"role": "user", "content": "hi"}], stream=True
     )
 
     with caplog.at_level(logging.ERROR):
         for _ in responses_stream:
             pass
+    other_stream.close()
 
     opik.flush_tracker()
 
     responses_span = _span(fake_backend, "responses")
     assert responses_span.output["output"][0]["content"][0]["text"] == RESPONSES_TEXT
-    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert not _error_records(caplog)
 
 
 @pytest.mark.asyncio
 async def test_openai_async_chat_stream__responses_stream_created_before_it_is_read__chat_output_logged(
-    fake_backend, caplog
+    fake_backend, tracked_async_client, caplog
 ):
-    client = track_openai(
-        openai.AsyncOpenAI(
-            api_key="fake-api-key",
-            http_client=httpx.AsyncClient(transport=httpx.MockTransport(_handler)),
-        )
-    )
-    chat_stream = await client.chat.completions.create(
+    chat_stream = await tracked_async_client.chat.completions.create(
         model=MODEL, messages=[{"role": "user", "content": "hi"}], stream=True
     )
-    await client.responses.create(model=MODEL, input="hi", stream=True)
+    other_stream = await tracked_async_client.responses.create(
+        model=MODEL, input="hi", stream=True
+    )
 
     text = ""
     with caplog.at_level(logging.ERROR):
         async for chunk in chat_stream:
             text += chunk.choices[0].delta.content or ""
+    await other_stream.close()
 
     opik.flush_tracker()
 
     chat_span = _span(fake_backend, "chat_completion")
     assert text == "".join(CHAT_WORDS)
     assert chat_span.output["choices"][0]["message"]["content"] == text
-    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert not _error_records(caplog)
+
+
+@pytest.mark.asyncio
+async def test_openai_async_responses_stream__chat_stream_created_before_it_is_read__responses_output_logged(
+    fake_backend, tracked_async_client, caplog
+):
+    responses_stream = await tracked_async_client.responses.create(
+        model=MODEL, input="hi", stream=True
+    )
+    other_stream = await tracked_async_client.chat.completions.create(
+        model=MODEL, messages=[{"role": "user", "content": "hi"}], stream=True
+    )
+
+    with caplog.at_level(logging.ERROR):
+        async for _ in responses_stream:
+            pass
+    await other_stream.close()
+
+    opik.flush_tracker()
+
+    responses_span = _span(fake_backend, "responses")
+    assert responses_span.output["output"][0]["content"][0]["text"] == RESPONSES_TEXT
+    assert not _error_records(caplog)
