@@ -190,6 +190,49 @@ class TestPackTargets:
         skills_spy.assert_not_called()
         assert outcome.skills_decision == "declined"
 
+    def test_server_failed_to_land__a_default_pack_does_not_go_elsewhere(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """`--ai-client cursor` whose write failed must not put the pack into the
+        other clients on the machine: nobody chose them."""
+        mcp_spy.return_value = _mcp_report([], failed=["cursor"])
+
+        outcome = assistants.setup(
+            _params(),
+            install_mcp=True,
+            skills=consent.resolve_installed_by_default(None),
+            host_keys=["cursor"],
+        )
+
+        skills_spy.assert_not_called()
+        assert outcome.skills_decision == "no_server", "a failure is not a refusal"
+
+    def test_no_client_reached_at_all__a_default_pack_installs_nowhere(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        mcp_spy.return_value = mcp_install.NOTHING_INSTALLED
+
+        outcome = assistants.setup(
+            _params(),
+            install_mcp=True,
+            skills=consent.resolve_installed_by_default(None),
+        )
+
+        skills_spy.assert_not_called()
+        assert outcome.skills_decision == "no_server"
+
+    def test_server_failed_to_land__an_explicit_pack_goes_to_the_named_client(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """`--skills` was asked for, and `--ai-client` said where."""
+        mcp_spy.return_value = _mcp_report([], failed=["cursor"])
+
+        assistants.setup(
+            _params(), install_mcp=True, skills=PROCEED, host_keys=["cursor"]
+        )
+
+        assert skills_spy.call_args.args[0] == ["cursor"]
+
     def test_server_skipped_at_the_picker__an_explicit_pack_request_still_installs(
         self, mcp_spy, skills_spy, rich_view
     ):

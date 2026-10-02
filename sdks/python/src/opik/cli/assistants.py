@@ -85,7 +85,7 @@ def setup(
 
     ``setup_params`` is the connection block ``configurator.mcp`` needs. The
     caller has already resolved ``install_mcp``; ``skills`` is a verdict, and a
-    default one yields to a server refused at the picker.
+    default one goes only where the server went.
     """
     # One view for the whole step, not one per half: it carries what the server
     # install learned — notably whether the connection needs a sign-in — through
@@ -113,19 +113,26 @@ def setup(
             cancelled=True,
         )
 
-    # "Skip" refused the only thing this run was writing into an AI client, so
-    # a default pack follows it. An explicit `--skills` still installs.
+    # A default pack teaches a client the server just registered, so it goes
+    # only where the server went. When that is nowhere — "Skip", a failed write,
+    # nothing reachable — falling back to every client on the machine would put
+    # it into ones nobody chose. An explicit `--skills` still installs, and "my
+    # AI client is not listed" still gets the shared copy below.
     if (
-        install.declined
+        not install.registered
         and not install.manual
         and skills.reason is consent.Reason.INSTALLED_BY_DEFAULT
     ):
-        skills = consent.Verdict(consent.Decision.SKIP, consent.Reason.DECLINED)
+        skills = consent.Verdict(
+            consent.Decision.SKIP,
+            # Only "Skip" is a refusal; a server that failed to land is not one.
+            consent.Reason.DECLINED if install.declined else consent.Reason.NO_SERVER,
+        )
 
     configured_hosts = list(install.registered)
 
     # Where the pack goes: the clients we just registered, or — when the server
-    # step was declined or skipped — whatever is on this machine.
+    # step reached none — the ones named, or else whatever is on this machine.
     #
     # Except when the user picked "my AI client is not listed", where falling
     # back to every detected client would put the pack in the very ones they
@@ -138,6 +145,8 @@ def setup(
         skills_targets = configured_hosts
     elif install.manual:
         skills_targets = []
+    elif host_keys:
+        skills_targets = host_keys
     else:
         skills_targets = skills_installer.detected_host_keys()
 

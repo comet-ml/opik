@@ -39,6 +39,9 @@ class Reason(enum.Enum):
     ASKING = "asking"
     INSTALLED_BY_DEFAULT = "installed_by_default"
     CANCELLED = "cancelled"
+    #: A default skill pack follows the server, and the server step registered it
+    #: nowhere — a failed write, nothing reachable — without anyone refusing it.
+    NO_SERVER = "no_server"
 
 
 class Verdict(NamedTuple):
