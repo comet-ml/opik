@@ -9,6 +9,7 @@ import {
   eventName,
   summarizeArgs,
   userIdentifier,
+  newSessionId,
 } from "@/cli/analytics";
 
 describe("analyticsEnabled", () => {
@@ -203,7 +204,18 @@ describe("createReporter", () => {
     expect(event.event_properties.launcher).toBe("npx");
 
     const second = JSON.parse(fetchMock.mock.calls[1][1].body);
-    expect(second.event_properties.run_id).toBe(event.event_properties.run_id);
+    expect(second.event_properties.session_id).toBe(
+      event.event_properties.session_id,
+    );
+  });
+
+  it("reports a session_id shaped like the Python SDK's", () => {
+    // Nine ASCII letters either side, so one column reads the whole run rather
+    // than needing the two formats told apart.
+    const id = newSessionId();
+
+    expect(id).toMatch(/^[a-zA-Z]{9}$/);
+    expect(newSessionId()).not.toBe(id);
   });
 
   it("a failing collector neither throws nor hangs the command", async () => {
