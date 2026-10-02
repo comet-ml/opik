@@ -36,12 +36,16 @@ const useLogsType = (options: UseLogsTypeOptions) => {
     intervalWindow ?? ownIntervalWindow;
 
   const [probeWindow, setProbeWindow] = useState({
+    projectId,
     selectionKey,
     intervalStart,
     intervalEnd,
   });
-  if (probeWindow.selectionKey !== selectionKey) {
-    setProbeWindow({ selectionKey, intervalStart, intervalEnd });
+  if (
+    probeWindow.projectId !== projectId ||
+    probeWindow.selectionKey !== selectionKey
+  ) {
+    setProbeWindow({ projectId, selectionKey, intervalStart, intervalEnd });
   }
 
   const [firstAnswer, setFirstAnswer] = useState<{
