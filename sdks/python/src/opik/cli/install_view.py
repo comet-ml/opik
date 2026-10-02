@@ -285,7 +285,7 @@ def render_connection(opik_url: str, workspace: Optional[str], source: str) -> N
     console.print(
         padding.Padding(
             text.Text.assemble(
-                ("To connect to a different Opik: ", "dim"),
+                ("To change the MCP connection config: ", "dim"),
                 ("opik mcp configure --ignore-opik-config", _CODE_STYLE),
             ),
             _FIELDS_INDENT,

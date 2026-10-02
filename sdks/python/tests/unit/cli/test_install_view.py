@@ -740,7 +740,7 @@ class TestTheSavedConnection:
             "    Opik       https://www.comet.com",
             "    Workspace  acme-ai",
             "    From       ~/.opik.config",
-            "    To connect to a different Opik: opik mcp configure --ignore-opik-config",
+            "    To change the MCP connection config: opik mcp configure --ignore-opik-config",
             "",
         ]
 

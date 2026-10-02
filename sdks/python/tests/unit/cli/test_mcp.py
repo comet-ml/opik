@@ -313,7 +313,16 @@ class TestTheSavedOpikConfiguration:
     aside for a run that should connect somewhere else."""
 
     @staticmethod
-    def _run(saved, args=(), deployment=None, connection=None, interactive=True):
+    def _run(
+        saved,
+        args=(),
+        deployment=None,
+        connection=None,
+        interactive=True,
+        deployment_error=None,
+        connection_error=None,
+        setup_error=None,
+    ):
         runner = CliRunner()
 
         def opik_config_for(**values):
@@ -335,12 +344,19 @@ class TestTheSavedOpikConfiguration:
                 mcp_cli.configure_cli,
                 "ask_for_deployment_type",
                 return_value=deployment,
+                side_effect=deployment_error,
             ) as asked,
             patch.object(
-                mcp_cli.configure_cli, "ask_for_connection", return_value=connection
+                mcp_cli.configure_cli,
+                "ask_for_connection",
+                return_value=connection,
+                side_effect=connection_error,
             ) as connection_asked,
             patch.object(
-                mcp_cli.assistants, "setup", return_value=assistants.NOTHING_DONE
+                mcp_cli.assistants,
+                "setup",
+                return_value=assistants.NOTHING_DONE,
+                side_effect=setup_error,
             ) as setup,
             patch.object(mcp_cli.install_view, "render_mcp_banner"),
             patch.object(mcp_cli.install_view, "render_connection") as named,
@@ -503,6 +519,59 @@ class TestTheSavedOpikConfiguration:
         assert "--ignore-opik-config" in run.result.output
         assert "terminal" in run.result.output
         run.setup.assert_not_called()
+
+
+class TestARunThatStopsSaysWhere:
+    """A run that ends before its result reports a failure event naming the step,
+    so the drop between the entry event and the result has a place."""
+
+    _run = staticmethod(TestTheSavedOpikConfiguration._run)
+
+    @staticmethod
+    def _events(run):
+        return [
+            call.args[2] if len(call.args) > 2 else "start"
+            for call in run.track.call_args_list
+        ]
+
+    def test_ctrl_c_at_the_deployment_question(self):
+        run = self._run(saved=_config(api_key=None), deployment_error=click.Abort())
+
+        assert run.result.exit_code != 0
+        assert self._events(run) == ["start", "failed"]
+        failed = run.track.call_args_list[-1].kwargs
+        assert failed["stage"] == "deployment"
+        assert failed["error_type"] == "Abort"
+
+    def test_ctrl_c_at_the_url_or_key_questions(self):
+        run = self._run(
+            saved=_config(api_key=None),
+            deployment=mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
+            connection_error=KeyboardInterrupt(),
+        )
+
+        assert self._events(run) == ["start", "failed"]
+        assert run.track.call_args_list[-1].kwargs["stage"] == "credentials"
+
+    def test_a_crash_in_the_ai_client_step(self):
+        run = self._run(saved=_config(api_key="key"), setup_error=RuntimeError("boom"))
+
+        assert self._events(run) == ["start", "failed"]
+        failed = run.track.call_args_list[-1].kwargs
+        assert failed["stage"] == "assistants"
+        assert failed["error_type"] == "RuntimeError"
+
+    def test_no_terminal_and_no_client_named__before_any_step(self):
+        run = self._run(saved=_config(api_key="key"), interactive=False)
+
+        assert self._events(run) == ["start", "failed"]
+        assert run.track.call_args_list[-1].kwargs["stage"] == "start"
+
+    def test_a_run_that_finishes__reports_its_result_and_no_failure(self):
+        run = self._run(saved=_config(api_key="key"))
+
+        assert run.result.exit_code == 0, run.result.output
+        assert self._events(run) == ["start", "result"]
 
 
 def test_help__describes_the_flag_that_sets_the_saved_opik_aside():

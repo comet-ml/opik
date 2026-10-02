@@ -260,78 +260,106 @@ def run_configure(
         **_identity(params),
     )
 
-    host_keys = _resolve_host_keys(hosts)
-    # Without a terminal we cannot ask which client to write to, so one has to be
-    # named. That is also what separates a coding agent running this for the user
-    # from a CI job that was never asked to: the agent can pass the flag.
-    if host_keys is None and not interactive_helpers.is_interactive():
-        raise click.ClickException(
-            "`opik mcp configure` needs either a terminal or an explicit client, "
-            "because it writes into that client's own configuration. Name one to "
-            "run unattended:\n\n"
-            f"    opik mcp configure --ai-client {mcp_targets.HOST_KEYS[0]}\n\n"
-            f"Valid values: {', '.join(mcp_targets.HOST_KEYS)}, all."
+    # Where the run is, for the failure event below. Ctrl-C at a question or a
+    # crash would otherwise end the run with no event at all, and a drop between
+    # the entry event and the result would have no place.
+    stage = "start"
+    try:
+        host_keys = _resolve_host_keys(hosts)
+        # Without a terminal we cannot ask which client to write to, so one has to be
+        # named. That is also what separates a coding agent running this for the user
+        # from a CI job that was never asked to: the agent can pass the flag.
+        if host_keys is None and not interactive_helpers.is_interactive():
+            raise click.ClickException(
+                "`opik mcp configure` needs either a terminal or an explicit client, "
+                "because it writes into that client's own configuration. Name one to "
+                "run unattended:\n\n"
+                f"    opik mcp configure --ai-client {mcp_targets.HOST_KEYS[0]}\n\n"
+                f"Valid values: {', '.join(mcp_targets.HOST_KEYS)}, all."
+            )
+
+        detected = mcp_targets.detected_targets()
+        detected_clients = len(detected)
+
+        # A scripted run (`--ai-client`) gets no banner, and a redirect already
+        # showed the logo.
+        if not host_keys and invoked_via == "direct":
+            install_view.render_mcp_banner()
+
+        if saved is not None and not _needs_opik_configuration(params):
+            # A redirect from `opik configure` has just shown these settings.
+            if invoked_via == "direct":
+                install_view.render_connection(
+                    opik_url=params["base_url"],
+                    # A local deployment has the one workspace, `default`.
+                    workspace=None if params["use_local"] else params["workspace"],
+                    source=_saved_source(saved),
+                )
+        else:
+            if not interactive_helpers.is_interactive():
+                raise click.ClickException(
+                    "`--ignore-opik-config` asks which Opik to connect to, which needs "
+                    "an interactive terminal."
+                    if ignore_opik_config
+                    else "Opik is not configured yet, and configuring it needs an "
+                    "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
+                    "`opik configure`, then re-run this command."
+                )
+            # No usable config (none, one without an API key, or one the flag set
+            # aside). The deployment picker comes first; the client picker follows,
+            # inside `setup` below, which is the order the onboarding funnel counts
+            # them in. Nothing is written to ~/.opik.config either way: the answers
+            # go to the AI client's config. Cloud needs no API key at all (the
+            # hosted server signs in with OAuth).
+            stage = "deployment"
+            deployment = configure_cli.ask_for_deployment_type(MCP_DEPLOYMENT_QUESTION)
+            if deployment is interactive_helpers.DeploymentType.CLOUD:
+                params = _opik_cloud_params()
+            else:
+                stage = "credentials"
+                params = cast(
+                    McpSetupParams, configure_cli.ask_for_connection(deployment)
+                )
+                # A gap before the client picker, which the questions do not leave.
+                click.echo()
+            if ignore_opik_config:
+                # A saved "don't check certificates" was made for the saved Opik; this
+                # run connects to another one, and sends it the API key to verify.
+                params["check_tls_certificate"] = True
+
+        # Installed unless refused: the pack is what teaches the client to use the
+        # server just registered.
+        skills_verdict = consent.resolve_installed_by_default(skills_flag)
+
+        stage = "assistants"
+
+        outcome = assistants.setup(
+            params,
+            install_mcp=True,
+            skills=skills_verdict,
+            force_local_server=local_server,
+            host_keys=host_keys,
         )
 
-    detected = mcp_targets.detected_targets()
-    detected_clients = len(detected)
-
-    # A scripted run (`--ai-client`) gets no banner, and a redirect already
-    # showed the logo.
-    if not host_keys and invoked_via == "direct":
-        install_view.render_mcp_banner()
-
-    if saved is not None and not _needs_opik_configuration(params):
-        # A redirect from `opik configure` has just shown these settings.
-        if invoked_via == "direct":
-            install_view.render_connection(
-                opik_url=params["base_url"],
-                # A local deployment has the one workspace, `default`.
-                workspace=None if params["use_local"] else params["workspace"],
-                source=_saved_source(saved),
-            )
-    else:
-        if not interactive_helpers.is_interactive():
-            raise click.ClickException(
-                "`--ignore-opik-config` asks which Opik to connect to, which needs "
-                "an interactive terminal."
-                if ignore_opik_config
-                else "Opik is not configured yet, and configuring it needs an "
-                "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
-                "`opik configure`, then re-run this command."
-            )
-        # No usable config (none, one without an API key, or one the flag set
-        # aside). The deployment picker comes first; the client picker follows,
-        # inside `setup` below, which is the order the onboarding funnel counts
-        # them in. Nothing is written to ~/.opik.config either way: the answers
-        # go to the AI client's config. Cloud needs no API key at all (the
-        # hosted server signs in with OAuth).
-        deployment = configure_cli.ask_for_deployment_type(MCP_DEPLOYMENT_QUESTION)
-        if deployment is interactive_helpers.DeploymentType.CLOUD:
-            params = _opik_cloud_params()
-        else:
-            params = cast(McpSetupParams, configure_cli.ask_for_connection(deployment))
-            # A gap before the client picker, which the questions do not leave.
-            click.echo()
-        if ignore_opik_config:
-            # A saved "don't check certificates" was made for the saved Opik; this
-            # run connects to another one, and sends it the API key to verify.
-            params["check_tls_certificate"] = True
-
-    # Installed unless refused: the pack is what teaches the client to use the
-    # server just registered.
-    skills_verdict = consent.resolve_installed_by_default(skills_flag)
-
-    outcome = assistants.setup(
-        params,
-        install_mcp=True,
-        skills=skills_verdict,
-        force_local_server=local_server,
-        host_keys=host_keys,
-    )
-
-    # Before the result event: the launch branch replaces this process.
-    handoff = _resolve_handoff(params, outcome)
+        # Before the result event: the launch branch replaces this process.
+        stage = "handoff"
+        handoff = _resolve_handoff(params, outcome)
+    except BaseException as exception:
+        # `opik configure`'s failure event, in the same shape so one query reads
+        # both. From this frame, beside the entry event: one raised further down
+        # would be dropped as nested. Only the exception's type is reported: its
+        # message can carry a URL, a workspace or a key.
+        analytics.track_event(
+            "configuration",
+            "mcp_configure",
+            "failed",
+            stage=stage,
+            error_type=type(exception).__name__,
+            interactive=interactive_helpers.is_interactive(),
+            ignore_opik_config=ignore_opik_config,
+            **_identity(params),
+        )
+        raise
 
     # A sibling of the entry event, not a nested one: reporting is suppressed
     # inside an already-reporting stack, but two calls from this same frame both
