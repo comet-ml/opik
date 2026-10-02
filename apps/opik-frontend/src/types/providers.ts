@@ -1067,13 +1067,21 @@ export type ReasoningEffort =
   | "high"
   | "xhigh";
 
+// Kept out of ReasoningEffort so a Chat Completions option list cannot hold
+// max: OpenAI accepts it only on the Responses API.
+export type ResponsesApiOnlyReasoningEffort = "max";
+
+export type OpenAIReasoningEffort =
+  | ReasoningEffort
+  | ResponsesApiOnlyReasoningEffort;
+
 export interface LLMOpenAIConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
-  reasoningEffort?: ReasoningEffort;
+  reasoningEffort?: OpenAIReasoningEffort;
   seed?: number | null;
   throttling?: number;
   maxConcurrentRequests?: number;

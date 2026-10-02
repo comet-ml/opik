@@ -1,8 +1,20 @@
-import { describe, expect, it } from "vitest";
-import {
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderHook } from "@testing-library/react";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import useCompletionProxyStreaming, {
   processSSEChunk,
   pythonProxyErrorMessage,
 } from "./useCompletionProxyStreaming";
+import {
+  LLMPromptConfigsType,
+  OpenAiPipelineMode,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
+
+// The app registers this plugin at startup (lib/date.ts); the hook timestamps every run with it.
+dayjs.extend(utc);
 
 describe("processSSEChunk", () => {
   describe("basic line processing", () => {
@@ -312,4 +324,45 @@ describe("pythonProxyErrorMessage", () => {
       );
     }
   });
+});
+
+describe("the reasoning effort a playground run sends", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const sentReasoningEffort = async (mode?: OpenAiPipelineMode) => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(""));
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    await result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {
+        maxCompletionTokens: 4000,
+        reasoningEffort: "max",
+      } as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+      openAiPipelineMode: mode,
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    return JSON.parse(init?.body as string).reasoning_effort;
+  };
+
+  it("sends a stored max on a Responses API key", async () => {
+    expect(await sentReasoningEffort("responses_api")).toBe("max");
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "sends a stored max as high when the mode is %s",
+    async (mode) => {
+      expect(await sentReasoningEffort(mode)).toBe("high");
+    },
+  );
 });

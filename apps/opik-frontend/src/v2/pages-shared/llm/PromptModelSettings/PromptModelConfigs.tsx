@@ -9,6 +9,7 @@ import {
   LLMPromptConfigsType,
   LLMVertexAIConfigsType,
   LLMCustomConfigsType,
+  OpenAiPipelineMode,
   PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
   COMPOSED_PROVIDER_TYPE,
@@ -44,6 +45,12 @@ interface PromptModelConfigsProps {
   disabled?: boolean;
   /** Defaults to every parameter supported, which is the playground. */
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
+  /**
+   * Pass only where the request goes through Opik's OpenAI pipeline, which honours the key's mode.
+   * The optimizer calls OpenAI through LiteLLM on Chat Completions whatever the key says, so it must
+   * leave this out and keep the Chat Completions effort values.
+   */
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const PromptModelConfigs = ({
@@ -55,6 +62,7 @@ const PromptModelConfigs = ({
   onChange,
   disabled: disabledProp = false,
   unsupportedParams,
+  openAiPipelineMode,
 }: PromptModelConfigsProps) => {
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
@@ -67,6 +75,7 @@ const PromptModelConfigs = ({
           unsupportedParams={unsupportedParams}
           model={model}
           onChange={onChange}
+          openAiPipelineMode={openAiPipelineMode}
         />
       );
     }

@@ -9,8 +9,9 @@ import {
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import {
   LLMOpenAIConfigsType,
+  OpenAiPipelineMode,
+  OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
-  ReasoningEffort,
 } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import {
@@ -34,6 +35,7 @@ interface OpenAIModelSettingsProps {
   model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMOpenAIConfigsType>) => void;
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const OpenAIModelConfigs = ({
@@ -41,9 +43,14 @@ const OpenAIModelConfigs = ({
   model,
   onChange,
   unsupportedParams,
+  openAiPipelineMode,
 }: OpenAIModelSettingsProps) => {
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
-  const { reasoningEffort } = resolveEffort(model ?? "", configs);
+  const { reasoningEffort } = resolveEffort(
+    model ?? "",
+    configs,
+    openAiPipelineMode,
+  );
   const visible = getOpenAIVisibleControls({
     model,
     configs,
@@ -144,7 +151,7 @@ const OpenAIModelConfigs = ({
           </div>
           <Select
             value={reasoningEffort}
-            onValueChange={(value: ReasoningEffort) =>
+            onValueChange={(value: OpenAIReasoningEffort) =>
               onChange({ reasoningEffort: value })
             }
           >
@@ -152,11 +159,13 @@ const OpenAIModelConfigs = ({
               <SelectValue placeholder="Select reasoning effort" />
             </SelectTrigger>
             <SelectContent>
-              {getOpenAIReasoningEffortOptions(model).map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
+              {getOpenAIReasoningEffortOptions(model, openAiPipelineMode).map(
+                (opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ),
+              )}
             </SelectContent>
           </Select>
         </div>
