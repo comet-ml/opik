@@ -115,18 +115,12 @@ class ThreadDAOImpl implements ThreadDAO {
                         max(last_updated_at) AS trace_last_updated_at
                     FROM (
                         SELECT id, thread_id, start_time, end_time, last_updated_at
-                        FROM (
-                            SELECT *
-                            FROM traces
-                            WHERE workspace_id = :workspace_id
-                              AND project_id = :project_id
-                              AND thread_id \\<> ''
-                            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                            LIMIT 1 BY id
-                        )
-                        WHERE 1 = 1
-                        <if(filters)> AND <filters> <endif>
-                        <if(search_text)> AND <search_text> <endif>
+                        FROM traces FINAL
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND thread_id \\<> ''
+                          <if(filters)> AND <filters> <endif>
+                          <if(search_text)> AND <search_text> <endif>
                     ) AS t
                     GROUP BY thread_id
                 ) AS pt
