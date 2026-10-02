@@ -491,7 +491,7 @@ class FindTraceThreadsResourceTest {
             assertThat(page.total()).isEqualTo(1);
             var listedThread = page.content().getFirst();
             assertThat(List.of(listedThread.firstMessage(), listedThread.lastMessage()))
-                    .allSatisfy(message -> assertThat(message.asText()).doesNotContain(marker));
+                    .allSatisfy(message -> assertThat(message.toString()).doesNotContain(marker));
         }
 
         @Test
