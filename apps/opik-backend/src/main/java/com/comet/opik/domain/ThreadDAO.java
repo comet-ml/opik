@@ -242,7 +242,9 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                -- Not the row id range: membership follows the traces, as in ProjectMetricsDAO THREAD_FILTERED_PREFIX (OPIK-8335).
+                -- Not the row id range: membership follows the window's traces (OPIK-8335). Narrowed to their threads, unlike the chart,
+                -- because the join, the feedback-score lookups and the annotation-queue lookup each read this CTE, and unnarrowed each
+                -- would dedupe every thread row of the project.
                 <if(traces_final_ids)>
                     AND thread_id IN (SELECT thread_id FROM traces_final_ids)
                 <elseif(uuid_from_time || uuid_to_time)>
@@ -588,7 +590,9 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                -- Not the row id range: membership follows the traces, as in ProjectMetricsDAO THREAD_FILTERED_PREFIX (OPIK-8335).
+                -- Not the row id range: membership follows the window's traces (OPIK-8335). Narrowed to their threads, unlike the chart,
+                -- because the join, the feedback-score lookups and the annotation-queue lookup each read this CTE, and unnarrowed each
+                -- would dedupe every thread row of the project.
                 <if(traces_final_ids)>
                     AND thread_id IN (SELECT thread_id FROM traces_final_ids)
                 <elseif(uuid_from_time || uuid_to_time)>
@@ -1264,7 +1268,9 @@ class ThreadDAOImpl implements ThreadDAO {
                     FROM trace_threads
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    -- Not the row id range: membership follows the traces, as in ProjectMetricsDAO THREAD_FILTERED_PREFIX (OPIK-8335).
+                    -- Not the row id range: membership follows the window's traces (OPIK-8335). Narrowed to their threads, unlike the chart,
+                    -- because the join, the feedback-score lookups and the annotation-queue lookup each read this CTE, and unnarrowed each
+                    -- would dedupe every thread row of the project.
                     <if(traces_final_ids)>
                         AND thread_id IN (SELECT thread_id FROM traces_final_ids)
                     <elseif(uuid_from_time || uuid_to_time)>
