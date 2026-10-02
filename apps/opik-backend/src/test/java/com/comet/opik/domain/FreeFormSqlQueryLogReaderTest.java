@@ -9,7 +9,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -44,6 +43,8 @@ class FreeFormSqlQueryLogReaderTest {
     private final AtomicInteger flushes = new AtomicInteger();
     /** The waits the reader asked for, in order; each runs at once, so the tests need no real time. */
     private final List<Long> waits = new ArrayList<>();
+    /** The log reads and flushes, in the order they ran. */
+    private final List<String> operations = new ArrayList<>();
 
     private static FreeFormSqlQueryLogEntry entry(String user) {
         return FreeFormSqlQueryLogEntry.builder().initial(true).user(user).tables(List.of())
@@ -61,9 +62,11 @@ class FreeFormSqlQueryLogReaderTest {
             assertThat(queryId).isEqualTo(QUERY_ID);
             assertThat(user).isEqualTo(USER);
             fetches.incrementAndGet();
+            operations.add("fetch");
             return CompletableFuture.completedFuture(next(this.answers));
         }, () -> {
             flushes.incrementAndGet();
+            operations.add("flush");
             return CompletableFuture.completedFuture(null);
         }, () -> {
             permitRequests.incrementAndGet();
@@ -78,7 +81,7 @@ class FreeFormSqlQueryLogReaderTest {
 
     private void givenPermits(Boolean... answers) {
         permits.clear();
-        permits.addAll(Arrays.asList(answers));
+        permits.addAll(List.of(answers));
     }
 
     @Test
@@ -143,8 +146,7 @@ class FreeFormSqlQueryLogReaderTest {
     @DisplayName("a query with remote shard reads goes straight to a flush attempt")
     void remoteReadsFlushFirst() {
         assertThat(reader(List.of(WRITTEN)).entries(QUERY_ID, USER, true).join()).isEqualTo(WRITTEN);
-        assertThat(flushes).hasValue(1);
-        assertThat(fetches).as("no read before the flush").hasValue(1);
+        assertThat(operations).as("the flush before the only read").containsExactly("flush", "fetch");
         assertThat(waits).isEmpty();
     }
 

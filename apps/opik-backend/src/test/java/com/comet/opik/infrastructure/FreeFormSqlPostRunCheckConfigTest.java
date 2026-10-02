@@ -83,6 +83,10 @@ public class FreeFormSqlPostRunCheckConfigTest {
                 // Whole seconds, at least one: the cluster-wide permit is a Redis rate limiter counted in seconds.
                 arguments("minFlushInterval", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
                         .setMinFlushInterval(Duration.milliseconds(999)), false),
+                arguments("minFlushIntervalInWholeSeconds", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMinFlushInterval(Duration.milliseconds(1_500)), false),
+                arguments("minFlushInterval", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
+                        .setMinFlushInterval(Duration.seconds(2)), true),
                 arguments("minFlushInterval", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
                         .setMinFlushInterval(Duration.seconds(1)), true),
                 arguments("logRetryDelay", (Consumer<FreeFormSqlPostRunCheckConfig>) c -> c
@@ -109,7 +113,7 @@ public class FreeFormSqlPostRunCheckConfigTest {
         if (valid) {
             assertThat(violations).isEmpty();
         } else {
-            assertThat(violations).containsExactly(property);
+            assertThat(violations).contains(property);
         }
     }
 }

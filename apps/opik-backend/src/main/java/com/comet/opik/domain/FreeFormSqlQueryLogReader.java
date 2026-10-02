@@ -21,8 +21,8 @@ import java.util.function.Supplier;
  * still missing ask for a flush, up to {@code maxFlushAttempts} times, waiting between attempts.
  *
  * <p>Flushes are limited by a Redis rate limiter alone: one permit per {@code minFlushInterval} across every backend
- * instance, so one flush per interval is the worst case, not the rule. A request denied the permit knows another
- * instance flushed within the interval, so it only reads the log again. The timings are in
+ * instance, so one flush per interval is the worst case, not the rule. A request denied the permit knows some request took it within the
+ * interval, so that request's flush has run or is running, and it only reads the log again. The timings are in
  * {@link FreeFormSqlPostRunCheckConfig}.
  *
  * <p>The initial entry being there proves the rest is only when the query read nothing remotely: with
@@ -97,7 +97,10 @@ class FreeFormSqlQueryLogReader {
                         : attempt(queryId, user, 1));
     }
 
-    /** Flushes if the permit allows; when denied, another instance just flushed, so only reads the log again. */
+    /**
+     * Flushes if the permit allows. When denied, some request took this interval's permit, so its flush has run or is
+     * running; this one only reads the log again.
+     */
     private CompletableFuture<List<FreeFormSqlQueryLogEntry>> attempt(String queryId, String user, int attempt) {
         return permit.get()
                 .thenCompose(granted -> granted ? flush.get() : CompletableFuture.<Void>completedFuture(null))

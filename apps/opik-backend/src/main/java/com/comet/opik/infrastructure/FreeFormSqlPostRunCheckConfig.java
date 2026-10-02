@@ -1,8 +1,10 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MinDuration;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -20,6 +22,12 @@ public class FreeFormSqlPostRunCheckConfig {
      */
     @JsonProperty
     private @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) Duration minFlushInterval;
+
+    /** A fractional interval would be truncated to a shorter Redis window, flushing more often than configured. */
+    @JsonIgnore
+    @AssertTrue(message = "must be a whole number of seconds") public boolean isMinFlushIntervalInWholeSeconds() {
+        return minFlushInterval == null || minFlushInterval.toMilliseconds() % 1_000 == 0;
+    }
 
     /** The wait between a log read that misses the query's entry, or a denied flush permit, and the next attempt. */
     @JsonProperty
