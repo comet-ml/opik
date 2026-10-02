@@ -1151,7 +1151,7 @@ clickhouse:
       tolerations: []  # Defaults to .Values.clickhouse.tolerations if not specified
   backupServer:
     enabled: false
-    image: altinity/clickhouse-backup:2.6.39
+    image: altinity/clickhouse-backup:2.7.4
     port: 7171
     # Service the restore job uses to reach the clickhouse-backup REST API.
     # The backup port is exposed on the operator's per-replica service, so this

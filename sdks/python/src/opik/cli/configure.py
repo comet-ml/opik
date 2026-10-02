@@ -2,19 +2,67 @@
 
 import os
 import urllib.parse
-from typing import Any, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 import click
 
 import opik.config as opik_config
+import opik.url_helpers as url_helpers
 from opik import analytics
 from opik.cli import account_identity
 from opik.cli import assistants
 from opik.cli import install_view
 from opik.cli import status_view
-from opik.configurator import consent
+from opik.configurator import consent, opik_rest_helpers
 from opik.configurator import configure as opik_configure, interactive_helpers
 from opik.configurator import mcp as mcp_installer
+
+
+#: The lookup only picks which link to print, so it must not stall the ending.
+PROJECT_LOOKUP_TIMEOUT_SECONDS = 5.0
+
+
+def _report_configured(configured: opik_configure.Configured) -> None:
+    """Render the closing block, with a link to the project it configured."""
+    project_url, project_exists = _project_url(configured.project_name)
+    install_view.render_configured(
+        configured, project_url=project_url, project_exists=project_exists
+    )
+
+
+def _project_url(project_name: str) -> Tuple[str, bool]:
+    """Where to open the configured project, and whether it exists yet.
+
+    A project is created by its first trace, so a fresh setup links the
+    workspace's project list, where it will appear, instead of a page that 404s.
+    """
+    config = opik_config.OpikConfig()
+    # The UI is the API URL minus `api/`: under `/opik/` on Comet, at the root locally.
+    ui_root = url_helpers.ensure_ending_slash(config.url_override).removesuffix("api/")
+    projects_url = f"{ui_root}{urllib.parse.quote(config.workspace, safe='')}/projects"
+
+    project_id = _find_project_id(config, project_name)
+    if project_id is None:
+        return projects_url, False
+    return f"{projects_url}/{urllib.parse.quote(project_id, safe='')}/", True
+
+
+def _find_project_id(
+    config: opik_config.OpikConfig, project_name: str
+) -> Optional[str]:
+    """The id of the project called ``project_name``, or None if it cannot be found."""
+    projects = opik_rest_helpers.list_projects(
+        api_key=config.api_key,
+        workspace=config.workspace,
+        api_url=config.url_override,
+        # The name filter is a partial match, so the exact one is picked below.
+        params={"name": project_name, "size": 100},
+        timeout=PROJECT_LOOKUP_TIMEOUT_SECONDS,
+    )
+    for project in projects or []:
+        if project.get("name") == project_name and isinstance(project.get("id"), str):
+            return project["id"]
+    return None
 
 
 def _setup_assistants(
@@ -22,11 +70,11 @@ def _setup_assistants(
     install_mcp: Optional[bool],
     install_skills: Optional[bool],
     automatic_approvals: bool,
-) -> assistants.Outcome:
-    """The CLI's assistant step: resolve consent, then hand off to the installers.
+) -> Tuple[assistants.Outcome, bool]:
+    """The CLI's assistant step: resolve consent, then run the installers.
 
-    Both questions go through :func:`consent.resolve`, so this function no longer
-    holds a policy of its own — it wires the flags to it and does the asking.
+    Also returns whether `opik mcp configure` should take over once this command
+    has reported, which is how a terminal "yes" is answered.
     """
     interactive = interactive_helpers.is_interactive()
     detected = mcp_installer.detected_host_keys()
@@ -37,11 +85,31 @@ def _setup_assistants(
     )
 
     mcp_verdict = consent.resolve(install_mcp, **situation)
-    skills_verdict = consent.resolve(install_skills, **situation)
-
     wants_mcp = consent.granted(mcp_verdict, _ask_about_mcp)
-
     mcp_decision = consent.decision_reason(mcp_verdict, wants_mcp)
+
+    # The pack comes with the server here, since this command may never touch an
+    # AI client; an explicit `--install-skills` still installs it on its own.
+    skills_verdict = (
+        consent.resolve_installed_by_default(install_skills)
+        if wants_mcp or install_skills is True
+        # `mcp_decision`, not the verdict's reason, so a refusal is not `asking`.
+        else consent.Verdict(consent.Decision.SKIP, consent.Reason(mcp_decision))
+    )
+
+    # A terminal "yes" hands over to `opik mcp configure` after this command
+    # reports. Flag-driven runs stay inline: `--install-mcp` in a script asks to
+    # register a server, not to end inside an agent.
+    if wants_mcp and interactive and mcp_verdict.reason is not consent.Reason.REQUESTED:
+        return (
+            assistants.NOTHING_DONE._replace(
+                detected=len(detected),
+                detected_keys=tuple(detected),
+                mcp_decision=mcp_decision,
+                skills_decision=skills_verdict.reason.value,
+            ),
+            True,
+        )
 
     # Only when the pack was skipped for a reason of its own. Declining the
     # server no longer declines the pack: they were coupled because the MCP
@@ -52,34 +120,36 @@ def _setup_assistants(
         _announce_skip(mcp_verdict, skills_verdict)
         # The pack was never asked about on this path, so its decision comes
         # straight off the verdict — nobody said no, the question never arose.
-        return assistants.NOTHING_DONE._replace(
-            detected=len(detected),
-            detected_keys=tuple(detected),
-            mcp_decision=mcp_decision,
-            skills_decision=skills_verdict.reason.value,
+        return (
+            assistants.NOTHING_DONE._replace(
+                detected=len(detected),
+                detected_keys=tuple(detected),
+                mcp_decision=mcp_decision,
+                skills_decision=skills_verdict.reason.value,
+            ),
+            False,
         )
 
     outcome = assistants.setup(
         setup_params,
         install_mcp=wants_mcp,
         skills=skills_verdict,
-        # A named flag covers whatever is detected, so it needs no picker. A yes to
-        # the prompt above does not: the picker is where a subset can be chosen,
-        # and its first row is "All", which is where the cursor starts — so the
-        # second step costs a keystroke rather than a decision, and Enter no
-        # longer silently takes whichever client happened to be listed first.
+        # A flag covers every detected client; a "yes" still picks one.
         assume_confirmed=mcp_verdict.reason is consent.Reason.REQUESTED,
     )
-    # `mcp_decision` answers the permission question and nothing else. Folding a
-    # skipped picker into it relabelled those runs as never having accepted,
-    # which hid the one drop the funnel exists to show: said yes, then chose no
-    # client. That drop is `clients_written == 0` after `requested`, and
-    # `mcp_declined` says whether it was deliberate.
-    # `skills_decision` is left as `setup` recorded it: it did the asking.
-    return outcome._replace(
-        detected=len(detected),
-        detected_keys=tuple(detected),
-        mcp_decision=mcp_decision,
+    # This path does not redirect, so it ends the run itself, if anything was written.
+    if outcome.clients or outcome.skills:
+        install_view.render_restart_note(mcp_installed=bool(outcome.clients))
+
+    # `mcp_decision` stays the answer to the question; a skipped picker is
+    # `mcp_declined`, so "said yes, then chose no client" remains visible.
+    return (
+        outcome._replace(
+            detected=len(detected),
+            detected_keys=tuple(detected),
+            mcp_decision=mcp_decision,
+        ),
+        False,
     )
 
 
@@ -101,7 +171,10 @@ def _ask_about_mcp() -> bool:
     refusal of a question that never looked like one.
     """
     install_view.render_mcp_intro()
-    return click.confirm("  Set up Opik MCP?", default=True)
+    answer = install_view.confirm_default_yes("Set up Opik MCP?")
+    # A gap before whatever the answer leads to — the client picker, on a yes.
+    click.echo()
+    return answer
 
 
 #: Skips worth mentioning, and how to say them. A skip the user asked for
@@ -155,7 +228,7 @@ _DEPLOYMENT_BLURBS = {
 }
 
 
-def _ask_for_deployment_type() -> interactive_helpers.DeploymentType:
+def ask_for_deployment_type(question: str) -> interactive_helpers.DeploymentType:
     """The deployment question, rendered by the CLI rather than the configurator.
 
     Presentation only. The answer is still read by
@@ -168,7 +241,6 @@ def _ask_for_deployment_type() -> interactive_helpers.DeploymentType:
     ``rich`` drops the styling by itself when stdout is not a terminal, so a
     redirected or styling-less terminal gets the same words without escapes.
     """
-    question = "Where should Opik log your traces?"
     rows = [
         (str(deployment.value[0]), deployment.value[1], _DEPLOYMENT_BLURBS[deployment])
         for deployment in interactive_helpers.DeploymentType
@@ -181,6 +253,8 @@ def _ask_for_deployment_type() -> interactive_helpers.DeploymentType:
             # prompt this replaces; falling through would re-ask the question
             # the user just backed out of.
             raise click.Abort()
+        # A gap between the picker and the credential questions.
+        click.echo()
         return interactive_helpers.DeploymentType.find_by_value(int(chosen))
 
     # No picker here — a pipe, a CI log, a terminal without raw-mode key reading.
@@ -188,7 +262,7 @@ def _ask_for_deployment_type() -> interactive_helpers.DeploymentType:
     # the same ones and nothing driving this from a script notices a difference.
     install_view.render_numbered_choices(question, rows)
     return interactive_helpers.ask_user_for_deployment_type(
-        prompt="  Enter 1, 2 or 3 [1]: "
+        prompt=interactive_helpers.DEPLOYMENT_ANSWER_PROMPT.lstrip("\n")
     )
 
 
@@ -218,7 +292,7 @@ def _deployment_type() -> interactive_helpers.DeploymentType:
     than reporting an abort.
     """
     if interactive_helpers.is_interactive():
-        return _ask_for_deployment_type()
+        return ask_for_deployment_type(interactive_helpers.DEPLOYMENT_QUESTION)
 
     url = os.environ.get("OPIK_URL_OVERRIDE", "").strip()
     if url:
@@ -261,6 +335,26 @@ class Progress:
     def __init__(self) -> None:
         self.stage = self.DEPLOYMENT
         self.deployment: Optional[str] = None
+        #: Run `opik mcp configure` once this command has reported.
+        self.redirect_to_mcp = False
+
+
+#: How each answer to the deployment question sets up the configurator.
+_DEPLOYMENT_OPTIONS: Dict[interactive_helpers.DeploymentType, Dict[str, Any]] = {
+    interactive_helpers.DeploymentType.CLOUD: {
+        "url": opik_configure.OPIK_BASE_URL_CLOUD,
+        "use_local": False,
+        "self_hosted_comet": False,
+    },
+    interactive_helpers.DeploymentType.SELF_HOSTED: {
+        "use_local": False,
+        "self_hosted_comet": True,
+    },
+    interactive_helpers.DeploymentType.LOCAL: {
+        "use_local": True,
+        "self_hosted_comet": False,
+    },
+}
 
 
 def run_interactive_configure(
@@ -269,8 +363,11 @@ def run_interactive_configure(
     install_mcp: Optional[bool] = None,
     install_skills: Optional[bool] = None,
     progress: Optional[Progress] = None,
+    deployment: Optional[interactive_helpers.DeploymentType] = None,
 ) -> assistants.Outcome:
     """Programmatic entry to the interactive ``opik configure`` flow.
+
+    ``deployment`` skips the deployment question for a caller that asked it.
 
     Reused by ``opik connect`` / ``opik endpoint`` so they can auto-launch
     configuration when no ~/.opik.config is present.
@@ -289,7 +386,7 @@ def run_interactive_configure(
         # Reached only once the credentials are written, so this is also what
         # says the run got past them.
         progress.stage = Progress.ASSISTANTS
-        recorded = _setup_assistants(*args)
+        recorded, progress.redirect_to_mcp = _setup_assistants(*args)
 
     if use_local:
         # `--use_local` answers the deployment question, so it is never asked.
@@ -305,56 +402,55 @@ def run_interactive_configure(
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=record,
-            announce=install_view.render_hint,
+            announce=install_view.render_configure_hint,
+            report_configured=_report_configured,
         ).configure()
         progress.stage = Progress.DONE
         return recorded
 
-    deployment_type_choice = _deployment_type()
+    deployment_type_choice = deployment or _deployment_type()
     progress.deployment = deployment_type_choice.name.lower()
     progress.stage = Progress.CREDENTIALS
 
-    if deployment_type_choice == interactive_helpers.DeploymentType.CLOUD:
-        configurator = opik_configure.OpikConfigurator(
-            url=opik_configure.OPIK_BASE_URL_CLOUD,
-            use_local=False,
-            force=True,
-            self_hosted_comet=False,
-            automatic_approvals=automatic_approvals,
-            install_mcp=install_mcp,
-            install_skills=install_skills,
-            assistant_setup=record,
-            announce=install_view.render_hint,
-        )
-    elif deployment_type_choice == interactive_helpers.DeploymentType.SELF_HOSTED:
-        configurator = opik_configure.OpikConfigurator(
-            use_local=False,
-            force=True,
-            self_hosted_comet=True,
-            automatic_approvals=automatic_approvals,
-            install_mcp=install_mcp,
-            install_skills=install_skills,
-            assistant_setup=record,
-            announce=install_view.render_hint,
-        )
-    elif deployment_type_choice == interactive_helpers.DeploymentType.LOCAL:
-        configurator = opik_configure.OpikConfigurator(
-            use_local=True,
-            force=True,
-            self_hosted_comet=False,
-            automatic_approvals=automatic_approvals,
-            install_mcp=install_mcp,
-            install_skills=install_skills,
-            assistant_setup=record,
-            announce=install_view.render_hint,
-        )
-    else:
-        raise click.ClickException("Unknown deployment type was selected. Exiting.")
-
-    configurator.configure()
+    opik_configure.OpikConfigurator(
+        **_DEPLOYMENT_OPTIONS[deployment_type_choice],
+        force=True,
+        automatic_approvals=automatic_approvals,
+        install_mcp=install_mcp,
+        install_skills=install_skills,
+        assistant_setup=record,
+        announce=install_view.render_configure_hint,
+        report_configured=_report_configured,
+    ).configure()
     progress.stage = Progress.DONE
 
     return recorded
+
+
+def ask_for_connection(
+    deployment: interactive_helpers.DeploymentType,
+) -> Dict[str, Any]:
+    """Ask the questions that say which Opik ``deployment`` is, and save nothing.
+
+    For `opik mcp configure`, which connects an AI client to Opik rather than
+    configuring this SDK: no project name, and ~/.opik.config is neither used for
+    the answers nor written. Returns the connection block the configurator hands
+    over at the end, the same one `opik configure` gives the MCP step.
+    """
+    connection: Dict[str, Any] = {}
+
+    def keep(params: Dict[str, Any], *flags: Any) -> None:
+        connection.update(params)
+
+    opik_configure.OpikConfigurator(
+        **_DEPLOYMENT_OPTIONS[deployment],
+        # Asks every question rather than reusing the saved answers.
+        force=True,
+        connection_only=True,
+        assistant_setup=keep,
+        announce=install_view.render_configure_hint,
+    ).configure()
+    return connection
 
 
 @click.group(
@@ -386,8 +482,8 @@ def run_interactive_configure(
     "--install-skills/--no-install-skills",
     default=None,
     help="Install the Opik skill pack into detected AI clients, teaching your "
-    "AI client how to instrument code with Opik. When omitted, you are prompted "
-    "interactively.",
+    "AI client how to instrument code with Opik. When omitted it comes with the "
+    "MCP server; pass --no-install-skills to leave it out.",
 )
 @click.pass_context
 def configure(
@@ -428,6 +524,11 @@ def configure(
     # client step outright — so the funnel needs to see it. It was invisible.
     automatic_approvals = yes or not interactive
 
+    # Only in a terminal. Not in `run_interactive_configure`, which
+    # `opik mcp configure` also calls under its own banner.
+    if interactive:
+        install_view.render_configure_banner()
+
     analytics.track_event(
         "configuration",
         "configure",
@@ -439,7 +540,7 @@ def configure(
         install_skills=str(install_skills),
         # Whoever is already configured, if anyone: a first-ever run has no
         # credential yet at this point, and says so.
-        **account_identity.event_properties(),
+        **account_identity.event_properties(opik_config.OpikConfig()),
     )
 
     # With no terminal there is nobody to ask, and every question here has a sane
@@ -473,7 +574,7 @@ def configure(
             # key, or the AI client step — three very different problems.
             stage=progress.stage,
             deployment=progress.deployment,
-            **account_identity.event_properties(),
+            **account_identity.event_properties(opik_config.OpikConfig()),
         )
         raise
 
@@ -494,6 +595,8 @@ def configure(
         mcp_decision=outcome.mcp_decision,
         skills_decision=outcome.skills_decision,
         verification_succeeded=outcome.verified,
+        # Without this a redirect looks like `requested` with nothing written.
+        mcp_redirected=progress.redirect_to_mcp,
         # Which clients, not only how many. Sorted and joined so one string is a
         # stable breakdown value, and `splitByChar` gets back to per-client
         # counts — the two together say what was on offer and what was taken.
@@ -502,6 +605,12 @@ def configure(
         # Why a run that accepted still wrote nothing: the user chose no client,
         # rather than the installer failing or being blocked before it asked.
         picker_skipped=outcome.mcp_declined,
+        # The same connection signals `opik mcp configure` reports, for runs
+        # that set the server up inline.
+        transport=outcome.transport or "",
+        sign_in=outcome.sign_in,
+        cancelled=outcome.cancelled,
+        stale_tool=outcome.stale_tool,
         # Carried onto the result too: the entry event has it, and a funnel whose
         # steps filter on different things is not measuring one population.
         interactive=interactive,
@@ -513,8 +622,24 @@ def configure(
         # Resolved again rather than reused from the entry event: this is the run
         # that just wrote ~/.opik.config, so it is the first point at which a
         # first-ever configure has an account to name at all.
-        **account_identity.event_properties(),
+        **account_identity.event_properties(opik_config.OpikConfig()),
     )
+
+    if progress.redirect_to_mcp:
+        # Last: the MCP flow may replace this process with the agent. Imported
+        # here because `cli.mcp` imports this module.
+        from opik.cli import mcp as mcp_cli
+
+        # Carries `--no-install-skills` over, which the MCP flow would otherwise
+        # read as "never said".
+        mcp_cli.run_configure(
+            local_server=False,
+            hosts=(),
+            skills_flag=install_skills,
+            # The config this run just wrote is the one to use.
+            ignore_opik_config=False,
+            invoked_via="opik_configure",
+        )
 
 
 @configure.command(name="status")

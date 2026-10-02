@@ -7,6 +7,7 @@ import api, {
   ANNOTATION_QUEUES_KEY,
   ANNOTATION_QUEUE_KEY,
   TRACES_KEY,
+  TRACE_KEY,
   THREADS_KEY,
 } from "@/api/api";
 
@@ -56,6 +57,7 @@ const useAnnotationQueueAddItemsMutation = () => {
           ],
         }),
         queryClient.invalidateQueries({ queryKey: [TRACES_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [TRACE_KEY] }),
         queryClient.invalidateQueries({ queryKey: [THREADS_KEY] }),
       ]);
     },
