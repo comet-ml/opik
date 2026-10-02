@@ -480,9 +480,9 @@ export const supportsOpenAIReasoningEffort = (
   !!OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.reasoningEffortOptions;
 
-// An unknown pipeline mode (keys still loading, no OpenAI key, a surface that
-// never reaches Opik's OpenAI pipeline) is treated as Chat Completions, the
-// backend's own default: offering a Responses-only value there would 400.
+// An unknown pipeline mode (keys still loading, a surface that never reaches
+// Opik's OpenAI pipeline) is treated as Chat Completions, the backend's own
+// default: offering a Responses-only value there would 400.
 export const getOpenAIReasoningEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
   openAiPipelineMode?: OpenAiPipelineMode,
@@ -531,9 +531,12 @@ export const updateProviderConfig = <
     // reasoningEffort: drop it for models without an effort option list,
     // coerce stale values to "high" otherwise. Mirrors the Anthropic
     // thinkingEffort handling below.
+    // An unknown mode (keys still loading) is checked against the Responses
+    // API list, a superset of the Chat Completions one, so a stored max is
+    // kept: assuming Chat Completions here would rewrite it to high for good.
     const effortOptions = getOpenAIReasoningEffortOptions(
       params.model,
-      params.openAiPipelineMode,
+      params.openAiPipelineMode ?? "responses_api",
     );
     if (effortOptions.length === 0) {
       if (next.reasoningEffort !== undefined) {

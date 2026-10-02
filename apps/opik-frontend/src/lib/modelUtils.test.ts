@@ -1805,6 +1805,22 @@ describe("max on the OpenAI Responses API only", () => {
       mode,
     ).reasoningEffort;
 
+  const STORED_MAX: LLMOpenAIConfigsType = {
+    temperature: 0,
+    maxCompletionTokens: 4000,
+    topP: 1,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    reasoningEffort: "max",
+  };
+
+  const switchTo = (model: PROVIDER_MODEL_TYPE, mode?: OpenAiPipelineMode) =>
+    updateProviderConfig(STORED_MAX, {
+      model,
+      provider: OPEN_AI,
+      openAiPipelineMode: mode,
+    })?.reasoningEffort;
+
   describe.each<{
     model: PROVIDER_MODEL_TYPE;
     chatCompletions: ReasoningEffort[];
@@ -1893,27 +1909,38 @@ describe("max on the OpenAI Responses API only", () => {
       },
     );
 
-    it.each(MODES)(
+    it.each(["chat_completions_api", "responses_api"] as const)(
       "keeps a switched-in max only where it is sent, when the mode is %s",
       (mode) => {
-        const config: LLMOpenAIConfigsType = {
-          temperature: 0,
-          maxCompletionTokens: 4000,
-          topP: 1,
-          frequencyPenalty: 0,
-          presencePenalty: 0,
-          reasoningEffort: "max",
-        };
-
-        const result = updateProviderConfig(config, {
-          model,
-          provider: OPEN_AI,
-          openAiPipelineMode: mode,
-        });
-
-        expect(result?.reasoningEffort).toBe(storedMax(model, mode));
+        expect(switchTo(model, mode)).toBe(storedMax(model, mode));
       },
     );
+
+    it("keeps a switched-in max while the mode is unknown, if a Responses API key could send it", () => {
+      expect(switchTo(model, undefined)).toBe(offersMax ? "max" : "high");
+    });
+  });
+
+  describe("a model switch made while the provider keys are loading", () => {
+    it("keeps the stored max, then coerces it once the key turns out to be on Chat Completions", () => {
+      const whileLoading = updateProviderConfig(STORED_MAX, {
+        model: PROVIDER_MODEL_TYPE.GPT_5_6_SOL,
+        provider: OPEN_AI,
+        openAiPipelineMode: undefined,
+      });
+      expect(whileLoading?.reasoningEffort).toBe("max");
+
+      const onceKnown = updateProviderConfig(whileLoading, {
+        model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+        provider: OPEN_AI,
+        openAiPipelineMode: "chat_completions_api",
+      });
+      expect(onceKnown?.reasoningEffort).toBe("high");
+    });
+
+    it("still drops the effort for a model that takes none", () => {
+      expect(switchTo(PROVIDER_MODEL_TYPE.GPT_4O, undefined)).toBeUndefined();
+    });
   });
 });
 

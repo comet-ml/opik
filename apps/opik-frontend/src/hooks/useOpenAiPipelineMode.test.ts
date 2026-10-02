@@ -44,8 +44,11 @@ describe("useOpenAiPipelineMode", () => {
     ).toBe("responses_api");
   });
 
-  it.each<[string, Partial<ProviderObject>[] | undefined]>([
-    ["keys are still loading", undefined],
+  it("knows no mode while the keys are still loading", () => {
+    expect(modeFor(undefined)).toBeUndefined();
+  });
+
+  it.each<[string, Partial<ProviderObject>[]]>([
     ["the workspace has no OpenAI key", []],
     [
       "only another provider is set to the Responses API",

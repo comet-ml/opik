@@ -156,7 +156,7 @@ interface UsePromptDatasetItemCombinationArgs {
   ) => void;
   deleteAbortController: (key: string) => void;
   throttlingSeconds: number;
-  openAiPipelineMode: OpenAiPipelineMode;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const usePromptDatasetItemCombination = ({
