@@ -1,23 +1,28 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicMessage;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicRole;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicTextContent;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
+import dev.langchain4j.model.anthropic.internal.client.Json;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.shared.Usage;
+import jakarta.ws.rs.BadRequestException;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -29,8 +34,13 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class AnthropicMappersTest {
+    private static final Map<String, Object> JSON_SCHEMA_FORMAT = Map.of(
+            "type", "json_schema",
+            "schema", Map.of("type", "object", "properties", Map.of("score", Map.of("type", "number"))));
+
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Nested
@@ -243,5 +253,153 @@ public class AnthropicMappersTest {
 
             assertThatCode(() -> provider.validateRequest(request)).doesNotThrowAnyException();
         }
+
+        @ParameterizedTest(name = "{0} at {1}")
+        @CsvSource({
+                "claude-sonnet-4-6, low",
+                "claude-sonnet-5, xhigh",
+                "claude-opus-5-5, medium",
+                "claude-opus-4-5-20251101, high",
+                "claude-mythos-5-1, xhigh",
+                "claude-opus-4-6-20260205, max",
+                "claude-opus-4-7-20260416, xhigh",
+                "claude-mythos-preview, max"})
+        void acceptsAnEffortTheModelOffers(String model, String effort) {
+            assertThatCode(() -> provider.validateRequest(requestWithEffort(model, effort)))
+                    .doesNotThrowAnyException();
+        }
+
+        @ParameterizedTest(name = "{0} at {1}")
+        @MethodSource
+        void rejectsAnEffortTheModelDoesNotOffer(String model, Object effort, String expectedMessage) {
+            var request = ChatCompletionRequest.builder()
+                    .model(model)
+                    .addUserMessage("hi")
+                    .customParameters(Map.of("output_config", Map.of("effort", effort)))
+                    .build();
+
+            assertThatThrownBy(() -> provider.validateRequest(request))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessage(expectedMessage);
+        }
+
+        Stream<Arguments> rejectsAnEffortTheModelDoesNotOffer() {
+            return Stream.of(
+                    Arguments.of("claude-sonnet-4-6", "adaptive",
+                            "Unsupported custom_parameters.output_config.effort for the model, "
+                                    + "model 'claude-sonnet-4-6', effort 'adaptive', supported '[low, medium, high, max]'"),
+                    Arguments.of("claude-sonnet-4-6", "xhigh",
+                            "Unsupported custom_parameters.output_config.effort for the model, "
+                                    + "model 'claude-sonnet-4-6', effort 'xhigh', supported '[low, medium, high, max]'"),
+                    Arguments.of("claude-opus-4-6-20260205", "xhigh",
+                            "Unsupported custom_parameters.output_config.effort for the model, "
+                                    + "model 'claude-opus-4-6-20260205', effort 'xhigh', supported '[low, medium, high, max]'"),
+                    Arguments.of("claude-mythos-preview", "xhigh",
+                            "Unsupported custom_parameters.output_config.effort for the model, "
+                                    + "model 'claude-mythos-preview', effort 'xhigh', supported '[low, medium, high, max]'"),
+                    Arguments.of("claude-opus-4-5-20251101", "max",
+                            "Unsupported custom_parameters.output_config.effort for the model, "
+                                    + "model 'claude-opus-4-5-20251101', effort 'max', supported '[low, medium, high]'"),
+                    Arguments.of("claude-sonnet-5", "High",
+                            "Unsupported custom_parameters.output_config.effort for the model, "
+                                    + "model 'claude-sonnet-5', effort 'High', supported '[low, medium, high, xhigh, max]'"),
+                    Arguments.of("claude-mythos-5-1", "adaptive",
+                            "Unsupported custom_parameters.output_config.effort for the model, "
+                                    + "model 'claude-mythos-5-1', effort 'adaptive', supported '[low, medium, high, xhigh, max]'"),
+                    Arguments.of("claude-haiku-4-5-20251001", "low",
+                            "The model does not support custom_parameters.output_config.effort, "
+                                    + "model 'claude-haiku-4-5-20251001', effort 'low'"),
+                    Arguments.of("claude-sonnet-4-6", 1,
+                            "custom_parameters.output_config.effort must be a string, "
+                                    + "model 'claude-sonnet-4-6', effort '1'"));
+        }
+
+        @Test
+        void rejectsAnOutputConfigThatIsNotAnObject() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .addUserMessage("hi")
+                    .customParameters(Map.of("output_config", "low"))
+                    .build();
+
+            assertThatThrownBy(() -> provider.validateRequest(request))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessage("custom_parameters.output_config must be an object, model 'claude-sonnet-4-6'");
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("output_config.effort forwarding")
+    class EffortForwarding {
+
+        @ParameterizedTest(name = "{0} at {1}")
+        @CsvSource({
+                "claude-sonnet-4-6, low",
+                "claude-sonnet-5, xhigh",
+                "claude-opus-5-5, medium"})
+        void sendsTheEffortAsTheTopLevelOutputConfig(String model, String effort) {
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(requestWithEffort(model, effort));
+
+            // Serialised by the same codec AnthropicClient puts on the wire, so this is the body Anthropic reads.
+            var wireBody = Json.toJson(actual);
+
+            assertThat(StringUtils.countMatches(wireBody, "\"output_config\"")).isEqualTo(1);
+            assertThat(JsonUtils.getJsonNodeFromString(wireBody).path("output_config"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"%s\"}".formatted(effort)));
+            assertThat(wireBody).doesNotContain("custom_parameters");
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void keepsEveryOtherOutputConfigField(String description, Map<String, Object> outputConfig) {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .addUserMessage("hi")
+                    .customParameters(Map.of("output_config", outputConfig))
+                    .build();
+
+            var wireBody = Json.toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request));
+
+            assertThat(StringUtils.countMatches(wireBody, "\"output_config\"")).isEqualTo(1);
+            assertThat(JsonUtils.getJsonNodeFromString(wireBody).path("output_config"))
+                    .isEqualTo(JsonUtils.getMapper().valueToTree(outputConfig));
+        }
+
+        Stream<Arguments> keepsEveryOtherOutputConfigField() {
+            return Stream.of(
+                    Arguments.of("format beside effort", Map.of("format", JSON_SCHEMA_FORMAT, "effort", "low")),
+                    Arguments.of("format alone", Map.of("format", JSON_SCHEMA_FORMAT)));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void sendsNoOutputConfigWhenThereIsNoneToSend(String description, Map<String, Object> customParameters) {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .addUserMessage("hi")
+                    .customParameters(customParameters)
+                    .build();
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            assertThat(actual.customParameters).isNull();
+            assertThat(Json.toJson(actual)).doesNotContain("output_config");
+        }
+
+        Stream<Arguments> sendsNoOutputConfigWhenThereIsNoneToSend() {
+            return Stream.of(
+                    Arguments.of("no custom_parameters", null),
+                    Arguments.of("custom_parameters without output_config", Map.of("max_tokens", 2048)),
+                    Arguments.of("an empty output_config", Map.of("output_config", Map.of())));
+        }
+    }
+
+    private static ChatCompletionRequest requestWithEffort(String model, String effort) {
+        return ChatCompletionRequest.builder()
+                .model(model)
+                .addUserMessage("hi")
+                .customParameters(Map.of("output_config", Map.of("effort", effort)))
+                .build();
     }
 }
