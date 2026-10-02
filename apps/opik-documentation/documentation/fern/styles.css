@@ -108,3 +108,10 @@
   width: 14px;
   height: 14px;
 }
+
+/* The title is flex, which drops the space before `uv`; a margin restores it. */
+#install-uv-if-you-dont-have-it .fern-accordion-trigger-title code {
+  margin-left: 0.3em;
+  padding-top: 0;
+  padding-bottom: 0;
+}
