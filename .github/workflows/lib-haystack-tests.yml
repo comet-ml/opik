@@ -7,6 +7,11 @@ run-name: "SDK Lib Haystack Tests ${{ github.ref_name }} by @${{ github.actor }}
 permissions:
   contents: read
 env:
+  # Transient PyPI/network failures otherwise red the build on first error.
+  PIP_RETRIES: 5
+  PIP_DEFAULT_TIMEOUT: 60
+  UV_HTTP_TIMEOUT: 60
+  UV_HTTP_RETRIES: 8
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False

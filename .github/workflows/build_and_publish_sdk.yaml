@@ -1,6 +1,12 @@
 name: "Build and Publish SDK"
 run-name: "Build SDK ${{ github.ref_name }} by @${{ github.actor }}"
 
+env:
+  # Transient PyPI/network failures otherwise red the build on first error.
+  PIP_RETRIES: 5
+  PIP_DEFAULT_TIMEOUT: 60
+  UV_HTTP_TIMEOUT: 60
+  UV_HTTP_RETRIES: 8
 on:
     workflow_dispatch:
       inputs:
