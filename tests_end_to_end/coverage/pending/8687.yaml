@@ -1,0 +1,13 @@
+# pending capabilities from opik#8687 — applied by the release job
+#
+# Both name the automated fill, which is what #8687 turned on by default. The
+# existing `add-traces-to-queue` and `create-queue` keys are already covered by
+# the manual-add and config round-trip specs, and neither says anything about
+# automation: a queue that stopped filling itself would leave both green. Folding
+# these under them would retire the question permanently.
+- area: annotation-queues
+  capability: automated-queue-fill
+  note: "A feedback score matching the queue's condition routes its trace in with source 'automated', and a non-matching score keeps its trace out"
+- area: annotation-queues
+  capability: automation-max-items
+  note: "max_items_in_queue caps automated adds (deterministically, lowest ids first) while a manual add still bypasses the ceiling; the list's Automation cell reads 'Cap reached'"
