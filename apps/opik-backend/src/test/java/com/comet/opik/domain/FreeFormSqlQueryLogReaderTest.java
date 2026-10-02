@@ -1,7 +1,11 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfigTest;
+import com.comet.opik.infrastructure.ratelimit.RateLimitService;
+import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -9,10 +13,18 @@ import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @DisplayName("Free-form SQL query log reader")
 class FreeFormSqlQueryLogReaderTest {
@@ -101,8 +113,10 @@ class FreeFormSqlQueryLogReaderTest {
     @DisplayName("an entry as another account does not count, so the reader flushes")
     void anotherAccountsEntryDoesNotCount() {
         var other = List.of(entry("default"));
-        reader(List.of(other, other, WRITTEN)).entries(QUERY_ID, USER, false).join();
+        assertThat(reader(List.of(other, other, WRITTEN)).entries(QUERY_ID, USER, false).join()).isEqualTo(WRITTEN);
         assertThat(flushes).hasValue(1);
+        assertThat(fetches).hasValue(3);
+        assertThat(waits).containsExactly(500L);
     }
 
     @Test
@@ -141,6 +155,28 @@ class FreeFormSqlQueryLogReaderTest {
         assertThat(reader(List.of(WRITTEN)).entries(QUERY_ID, USER, true).join()).isEqualTo(WRITTEN);
         assertThat(flushes).hasValue(0);
         assertThat(fetches).hasValue(1);
+    }
+
+    @Test
+    @DisplayName("the configured attempts and retry delay reach the reader the application builds")
+    void configuredTimingsReachTheReader() {
+        var dao = mock(FreeFormSqlQueryDAO.class);
+        when(dao.fetchQueryLog(QUERY_ID, USER)).thenReturn(CompletableFuture.completedFuture(NOT_YET));
+        when(dao.flushQueryLog()).thenReturn(CompletableFuture.completedFuture(null));
+        var rateLimit = mock(RateLimitService.class);
+        when(rateLimit.isLimitExceeded(anyLong(), anyString(), any())).thenReturn(Mono.just(false));
+        var config = FreeFormSqlPostRunCheckConfigTest.config();
+        config.setMaxFlushAttempts(2);
+        config.setLogRetryDelay(Duration.milliseconds(300));
+
+        long start = System.nanoTime();
+        assertThat(new FreeFormSqlQueryLogReader(dao, rateLimit, config).entries(QUERY_ID, USER, false).join())
+                .isEqualTo(NOT_YET);
+
+        verify(dao, times(2)).flushQueryLog();
+        verify(dao, times(4)).fetchQueryLog(QUERY_ID, USER);
+        // Two waits: after the first miss, and between the two flush attempts.
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isGreaterThanOrEqualTo(600);
     }
 
     @Test
