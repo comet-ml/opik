@@ -11,6 +11,7 @@ import {
   PythonCodeDetailsSpanForm,
 } from "@/types/automations";
 import {
+  ANTHROPIC_THINKING_EFFORT_VALUES,
   AnthropicThinkingEffort,
   PROVIDER_MODEL_TYPE,
   ReasoningEffort,
@@ -160,10 +161,6 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
-// The backend chat-completions proxy has no field for the Anthropic effort and drops it; flip once
-// OPIK-8605 forwards output_config.effort.
-export const ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND = false;
-
 // Per-model Anthropic capabilities.
 //
 // `supportsSamplingParams` names the models that DO take temperature/top_p, so a Claude we recognise
@@ -177,24 +174,44 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
     PROVIDER_MODEL_TYPE,
     {
       supportsSamplingParams?: boolean;
-      thinkingEffortOptions?: AnthropicThinkingEffort[];
+      // Must be a subset of the model's levels in EFFORT_LEVELS_BY_MODEL_ID in the backend's
+      // AnthropicModelName, which answers any other level with a 400.
+      thinkingEffortOptions?: readonly AnthropicThinkingEffort[];
+      // Anthropic's own default, "high" unless stated.
+      defaultThinkingEffort?: AnthropicThinkingEffort;
     }
   >
 > = {
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    defaultThinkingEffort: "medium",
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5]: {
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW]: {
+    thinkingEffortOptions: ["low", "medium", "high", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
     supportsSamplingParams: true,
@@ -208,7 +225,10 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1]: { supportsSamplingParams: true },
-  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: {
+    supportsSamplingParams: true,
+    thinkingEffortOptions: ["low", "medium", "high"],
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5_20250929]: {
