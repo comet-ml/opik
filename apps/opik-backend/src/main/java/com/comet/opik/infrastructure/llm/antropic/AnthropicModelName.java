@@ -58,6 +58,11 @@ public enum AnthropicModelName implements StructuredOutputSupported {
      * opt-out and reopened issue #7526. Keeping the capability here lets syncs add, remove and
      * reorder constants freely. Referencing the constants rather than duplicating the string
      * literals means a sync that renames or removes one breaks compilation instead of drifting.
+     *
+     * <p>Must name the same models as the {@code supportsSamplingParams: true} rows of
+     * {@code ANTHROPIC_MODEL_CAPABILITIES} in {@code apps/opik-frontend/src/constants/llm.ts}; the
+     * frontend's {@code llm.test.ts} parses this set and fails on any difference. One source of truth
+     * for both is OPIK-8637.
      */
     private static final Set<String> SAMPLING_CAPABLE_MODEL_IDS = Set.of(
             CLAUDE_SONNET_3_7.value,
