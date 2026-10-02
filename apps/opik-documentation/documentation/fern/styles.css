@@ -85,3 +85,26 @@
 .mcp-clients a.mcp-client.is-failed svg[icon="xmark"] {
   display: inline-block;
 }
+
+/* MCP server page: "Install uv" under the setup command. A compact row rather
+   than a full card; `npx opik` links to it by this id, so it is targeted by the
+   id alone. */
+.fern-accordion:has(> #install-uv-if-you-dont-have-it) {
+  padding: 0 !important;
+  margin: 10px 0 18px !important;
+}
+
+#install-uv-if-you-dont-have-it > summary {
+  padding: 9px 14px !important;
+  gap: 8px;
+}
+
+#install-uv-if-you-dont-have-it .fern-accordion-trigger-title {
+  font-size: 15px !important;
+  font-weight: 500 !important;
+}
+
+#install-uv-if-you-dont-have-it > summary svg {
+  width: 14px;
+  height: 14px;
+}
