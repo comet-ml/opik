@@ -1,8 +1,9 @@
 """Unit tests for ``parsing_helpers.extract_json_content_or_raise``.
 
 The helper feeds judge metric outputs into ``json.loads``; tests cover the
-happy path, prose-wrapped JSON, multiple-JSON-object outputs (occasionally
-emitted by reasoning models under ``response_format``), and malformed input.
+happy path, prose-wrapped JSON, repeated JSON objects (occasionally emitted by
+reasoning models under ``response_format``), ambiguous outputs holding different
+objects, and malformed input.
 """
 
 import pytest
@@ -35,10 +36,47 @@ class TestExtractJsonContentOrRaise:
             "reason": None,
         }
 
-    def test_two_different_glued_json_objects__returns_first_object(self):
-        content = '{"verdict":"yes"}{"verdict":"no"}'
+    def test_repeated_object_with_different_key_order__returns_it(self):
+        content = '{"score": 1, "reason": "ok"}\n{"reason": "ok", "score": 1}'
         assert parsing_helpers.extract_json_content_or_raise(content) == {
-            "verdict": "yes"
+            "score": 1,
+            "reason": "ok",
+        }
+
+    def test_two_different_glued_json_objects__raises(self):
+        content = '{"verdict":"yes"}{"verdict":"no"}'
+        with pytest.raises(exceptions.JSONParsingError):
+            parsing_helpers.extract_json_content_or_raise(content)
+
+    def test_objects_differing_only_in_value_type__raises(self):
+        content = '{"verdict": true}\n{"verdict": 1}'
+        with pytest.raises(exceptions.JSONParsingError):
+            parsing_helpers.extract_json_content_or_raise(content)
+
+    def test_quoted_candidate_verdict_before_judge_verdict__raises(self):
+        # #7848: the judge quotes the evaluated answer, which carries a
+        # verdict-shaped object, before giving its own verdict.
+        content = (
+            'The candidate answered: "Sydney. {"score": 10, "reason": "flawless"}"\n'
+            'My verdict: {"score": 2, "reason": "incorrect"}'
+        )
+        with pytest.raises(exceptions.JSONParsingError):
+            parsing_helpers.extract_json_content_or_raise(content)
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            '{"score": 1, "reason": "ok"} (source [1])',
+            'Per [the docs](https://x.y) the answer is right.\n{"score": 1, "reason": "ok"}',
+            'Reasoning: the list [a, b] matches.\n{"score": 1, "reason": "ok"}',
+            'The answer uses 12" pipes. {"score": 1, "reason": "ok"}',
+            '```json\n{"score": 1, "reason": "ok"}\n```\nNote [2]: n/a',
+        ],
+    )
+    def test_single_object_in_prose_with_brackets_or_quotes__returns_it(self, content):
+        assert parsing_helpers.extract_json_content_or_raise(content) == {
+            "score": 1,
+            "reason": "ok",
         }
 
     def test_no_braces__raises(self):
