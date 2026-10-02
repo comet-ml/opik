@@ -339,7 +339,7 @@ EvaluationEngine.calculateScores()
 └──────────────────────────────┘
 ```
 
-**Error Handling**: If validation fails, the metric is skipped and a descriptive error is logged:
+**Error Handling**: If validation fails, or `score()` throws, the metric gets a failed score (`value: 0`, `scoringFailed: true`) with the error message as its `reason`, and the error is logged:
 
 ```
 Metric 'contains_metric' is skipped, missing required arguments: substring.

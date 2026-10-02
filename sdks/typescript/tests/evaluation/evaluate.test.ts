@@ -11,6 +11,20 @@ import {
 } from "../mockUtils";
 import { SpanType } from "@/rest_api/api";
 import { ExactMatch } from "opik";
+import { BaseMetric } from "@/evaluation/metrics/BaseMetric";
+import { z } from "zod";
+
+class ThrowingMetric extends BaseMetric {
+  public readonly validationSchema = z.object({}).passthrough();
+
+  constructor() {
+    super("throwing-metric", false);
+  }
+
+  async score(): Promise<never> {
+    throw new Error("judge returned no JSON");
+  }
+}
 
 describe("evaluate function", () => {
   // Client and mocks
@@ -284,6 +298,34 @@ describe("evaluate function", () => {
     expect(result.testResults[0].scoreResults[0].name).toBe(
       TASK_ERROR_SCORE_NAME,
     );
+  });
+
+  test("records a failed score when a metric throws", async () => {
+    const mockTask: EvaluationTask = async () => {
+      return { output: "generated output" };
+    };
+
+    const result = await evaluate({
+      dataset: testDataset,
+      task: mockTask,
+      experimentName: "test-experiment",
+      scoringMetrics: [new ThrowingMetric(), new ExactMatch("test-metric")],
+      client: opikClient,
+    });
+
+    expect(result.testResults[0].scoreResults).toEqual([
+      {
+        name: "throwing-metric",
+        value: 0,
+        reason: "judge returned no JSON",
+        scoringFailed: true,
+      },
+      expect.objectContaining({ name: "test-metric", value: 0 }),
+    ]);
+    expect(result.errors).toEqual([]);
+
+    const { scores } = scoreBatchOfTracesSpy.mock.calls[0][0];
+    expect(scores.map((score) => score.name)).toEqual(["test-metric"]);
   });
 
   test("should execute evaluation with scoring metrics", async () => {

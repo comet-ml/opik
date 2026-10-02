@@ -44,7 +44,9 @@ vi.mock("@/evaluation/suite_evaluators/LLMJudge", async () => {
 });
 
 import { evaluate } from "@/evaluation/evaluate";
+import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import { evaluateTestSuite } from "@/evaluation/suite/evaluateTestSuite";
+import { buildSuiteResult } from "@/evaluation/suite/suiteResultConstructor";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
 import { BaseMetric } from "@/evaluation/metrics/BaseMetric";
@@ -209,6 +211,35 @@ describe("EvaluationEngine routes scores to the right batch queue", () => {
     });
     expect(batchPayload.assertionResults[0].entityId).toBeTruthy();
 
+    expect(getScoreBatchOfTracesSpy()).not.toHaveBeenCalled();
+  });
+
+  test("evaluateTestSuite: a suite evaluator that throws records a failed score and sends no assertion results", async () => {
+    vi.mocked(LLMJudge.fromConfig).mockImplementationOnce(() => {
+      const judge = new LLMJudge({ assertions: ["Response is helpful"] });
+      vi.mocked(judge.score).mockRejectedValue(new Error("judge timed out"));
+      return judge;
+    });
+
+    const result = await evaluateTestSuite({
+      dataset: testDataset,
+      task: mockTask,
+      experimentName: "suite-experiment",
+      client: opikClient,
+    });
+
+    await opikClient.flush({ silent: true });
+
+    expect(result.testResults[0].scoreResults).toEqual([
+      {
+        name: "llm_judge",
+        value: 0,
+        reason: "judge timed out",
+        scoringFailed: true,
+      },
+    ]);
+    expect(buildSuiteResult(result).allItemsPassed).toBe(false);
+    expect(getStoreAssertionsBatchSpy()).not.toHaveBeenCalled();
     expect(getScoreBatchOfTracesSpy()).not.toHaveBeenCalled();
   });
 

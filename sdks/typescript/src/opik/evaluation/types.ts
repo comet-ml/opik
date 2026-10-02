@@ -79,10 +79,11 @@ export type EvaluationScoreResult = {
   reason?: string;
 
   /**
-   * Whether the scoring failed due to a task-level error rather than a metric
-   * failure. When `true`, `name` will equal {@link TASK_ERROR_SCORE_NAME},
-   * which is a reserved name injected by the engine — user-defined metrics
-   * should never produce a score with that name.
+   * Whether the score could not be computed. The engine sets it when a metric
+   * throws, with `name` set to the metric's name, and when the task throws,
+   * with `name` set to {@link TASK_ERROR_SCORE_NAME}, which is a reserved name
+   * injected by the engine — user-defined metrics should never produce a
+   * score with that name.
    */
   scoringFailed?: boolean;
 

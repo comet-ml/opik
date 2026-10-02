@@ -506,6 +506,12 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         logger.error(`Metric ${metric.name} failed: ${errorMessage}`);
+        scoreResults.push({
+          name: metric.name,
+          value: 0,
+          reason: errorMessage,
+          scoringFailed: true,
+        });
       }
 
       logger.debug(`Finished calculating score for metric ${metric.name}`);
