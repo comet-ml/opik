@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.BreakdownQueryBuilder;
 import com.comet.opik.api.metrics.MetricType;
@@ -24,6 +25,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -309,7 +311,23 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     private static final String THREAD_FILTERED_PREFIX = """
-            WITH trace_threads_final AS (
+            WITH traces_final AS (
+                SELECT
+                    *
+                FROM traces FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id \\<> ''
+                -- Source/environment chips filter each trace, not the thread row, so a thread with mixed traces aggregates only its matching ones,
+                -- as the thread list does (ThreadDAO traces_final_ids). A thread-row filter would count such threads whole and drift from the list.
+                <if(trace_filters)> AND <trace_filters> <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+            ), trace_threads_final AS (
                 SELECT
                     workspace_id,
                     project_id,
@@ -324,15 +342,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-            ), traces_final AS (
-                SELECT
-                    *
-                FROM traces FINAL
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND thread_id IN (SELECT thread_id FROM trace_threads_final)
+                -- Membership follows the thread's traces, not this row's id: the row id is when the row was written, which a backfill
+                -- or the now() fallback in TraceThreadIdService puts outside the traces' window. The sort key starts with thread_id,
+                -- so the set also skips granules and keeps every lookup of this CTE window-sized (OPIK-8335).
+                <if(uuid_from_time || uuid_to_time)> AND thread_id IN (SELECT thread_id FROM traces_final)<endif>
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -385,6 +398,21 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
+            <if(annotation_queue_filters)>
+            thread_annotation_queue_ids AS (
+                 SELECT thread_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'thread'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                 ) AS annotation_queue_ids_with_thread_id
+                 GROUP BY thread_id
+            ),
+            <endif>
             <if(thread_feedback_scores_empty_filters)>
                fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -402,7 +430,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
-                    UUIDv7ToDateTime(toUUID(tt.thread_model_id)) as trace_time,
+                    -- Placed by its first in-window trace id, not start_time: membership is decided on trace ids, so a start_time
+                    -- before the window (ids minted at ingest by a backfill) would drop a thread the thread list shows.
+                    UUIDv7ToDateTime(toUUID(t.first_trace_id), 'UTC') as thread_time,
                     t.end_time as end_time,
                     t.duration as duration,
                     t.first_message as first_message,
@@ -420,14 +450,18 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
-                        min(t.start_time) as start_time,
-                        max(t.end_time) as end_time,
-                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
-                               AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
+                        min(t.id) as first_trace_id,
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
+                        maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as end_time,
+                        if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                               AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                            NULL) AS duration,
-                        <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                        <if(truncate)> replaceRegexpAll(argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message<endif>,
+                        -- Update-before-create placeholders carry the sentinel start time, so they are skipped while the thread has a real trace.
+                        -- A thread made only of placeholders falls back to them and still shows what the updates carried.
+                        countIf(notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) > 0 as has_non_sentinel_trace,
+                        <if(truncate)> replaceRegexpAll(if(has_non_sentinel_trace, argMinIf(t.input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMin(t.input, t.start_time)), '<truncate>', '"[image]"') as first_message <else> if(has_non_sentinel_trace, argMinIf(t.input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMin(t.input, t.start_time)) as first_message<endif>,
+                        <if(truncate)> replaceRegexpAll(if(has_non_sentinel_trace, argMaxIf(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)))), '<truncate>', '"[image]"') as last_message <else> if(has_non_sentinel_trace, argMaxIf(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) as last_message<endif>,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
@@ -438,6 +472,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
                 JOIN trace_threads_final AS tt ON t.id = tt.thread_id
+                <if(annotation_queue_filters)>
+                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(thread_feedback_scores_filters)>
                 AND thread_model_id IN (
@@ -461,6 +498,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 )
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             )
             """;
 
@@ -903,14 +941,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_THREAD_FEEDBACK_SCORES = """
             %s, thread_feedback_scores AS (
-                SELECT t.trace_time,
+                SELECT t.thread_time,
                         fs.name,
                         fs.value
                 FROM feedback_scores_final fs
                 JOIN (
                     SELECT
                         thread_model_id,
-                        trace_time
+                        thread_time
                     FROM threads_filtered
                 ) t ON t.thread_model_id = fs.entity_id
             )
@@ -921,15 +959,15 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY name, bucket
             ORDER BY name, bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
-                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time)), 0, 'UTC')
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_THREAD_FEEDBACK_SCORES_WITH_BREAKDOWN = """
             %s, thread_feedback_scores AS (
-                SELECT t.trace_time,
+                SELECT t.thread_time,
                         <group_expression> AS group_name,
                         fs.name,
                         fs.value
@@ -937,7 +975,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 JOIN (
                     SELECT
                         thread_model_id,
-                        trace_time,
+                        thread_time,
                         tags,
                         project_id
                     FROM threads_filtered
@@ -1022,8 +1060,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
-                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time)), 0, 'UTC')
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
@@ -1056,8 +1094,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
-                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time)), 0, 'UTC')
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
@@ -1165,8 +1203,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
-                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time)), 0, 'UTC')
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
@@ -1174,7 +1212,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_THREAD_COST = """
             %s, thread_costs AS (
                 SELECT tf.id AS thread_id,
-                       tf.trace_time AS trace_time,
+                       tf.thread_time AS thread_time,
                        s.total_estimated_cost AS value
                 FROM threads_filtered tf
                 JOIN traces_final tr ON tr.thread_id = tf.id
@@ -1185,12 +1223,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    -- Bounded by trace_id, as in the thread list (ThreadDAO spans_deduped): a thread's cost is its traces' whole span set,
+                    -- including spans minted outside the range, and the trace_id range still prunes through the spans sort key.
+                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 ) s ON s.trace_id = tr.id
             )
             SELECT <bucket> AS bucket,
@@ -1199,8 +1235,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM <fill_from>
-                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time)), 0, 'UTC')
+                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 0, 'UTC')
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
             """
@@ -1637,9 +1673,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             if (THREAD_METRICS.contains(metricType)) {
                 Optional.ofNullable(request.threadFilters())
                         .ifPresent(filters -> {
+                            addTraceFilters(template, filters);
                             FilterQueryBuilder.toAnalyticsDbFilters(
                                     filters, FilterStrategy.TRACE_THREAD, traceColumnsNonNullable())
                                     .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_AGGREGATION)
+                                    .ifPresent(annotationQueueFilters -> template.add("annotation_queue_filters",
+                                            annotationQueueFilters));
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                                     .ifPresent(
                                             scoresFilters -> template.add("thread_feedback_scores_filters",
@@ -1670,9 +1710,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             } else {
                 Optional.ofNullable(request.traceFilters())
                         .ifPresent(filters -> {
-                            FilterQueryBuilder.toAnalyticsDbFilters(
-                                    filters, FilterStrategy.TRACE, traceColumnsNonNullable())
-                                    .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
+                            addTraceFilters(template, filters);
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                                     .ifPresent(
                                             scoresFilters -> template.add("trace_feedback_scores_filters",
@@ -1722,7 +1760,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             if (THREAD_METRICS.contains(metricType)) {
                 Optional.ofNullable(request.threadFilters())
                         .ifPresent(filters -> {
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                             filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
                             filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                             filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                         });
@@ -1747,6 +1787,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             return Mono.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    private void addTraceFilters(ST template, List<? extends Filter> filters) {
+        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
+                .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
     }
 
     private boolean traceColumnsNonNullable() {
@@ -1794,6 +1839,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             MetricType.SPAN_TOKEN_USAGE);
 
     private String getTimeField(MetricType metricType) {
+        if (THREAD_METRICS.contains(metricType)) {
+            return "thread_time";
+        }
         return SPAN_TIME_METRICS.contains(metricType) ? "span_time" : "trace_time";
     }
 
