@@ -6,30 +6,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.BadRequestException;
 import lombok.experimental.UtilityClass;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_FABLE_5;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_FABLE_5_1;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_HAIKU_4_5;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_MYTHOS_PREVIEW;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_1;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_5;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_6;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_6_20260205;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_7;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_7_20260416;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_4_8;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_5;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_OPUS_5_5;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_SONNET_3_7;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_SONNET_4;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_SONNET_4_5;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_SONNET_4_5_20250929;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_SONNET_4_6;
-import static com.comet.opik.infrastructure.llm.antropic.AnthropicModelName.CLAUDE_SONNET_5;
 
 @UtilityClass
 class AnthropicEffort {
@@ -38,37 +16,8 @@ class AnthropicEffort {
     static final String EFFORT = "effort";
     static final String FORMAT = "format";
 
-    private static final List<String> ALL_LEVELS = List.of("low", "medium", "high", "xhigh", "max");
-    private static final List<String> LEVELS_WITHOUT_XHIGH = List.of("low", "medium", "high", "max");
-    private static final List<String> LEVELS_UP_TO_HIGH = List.of("low", "medium", "high");
-
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
-
-    // Must match thinkingEffortOptions in ANTHROPIC_MODEL_CAPABILITIES (apps/opik-frontend/src/constants/llm.ts):
-    // the playground only offers what this accepts. A model missing here is checked against ALL_LEVELS only and
-    // Anthropic has the final word, so an unlisted new model is never blocked by a stale table.
-    private static final Map<String, List<String>> LEVELS_BY_MODEL = Map.ofEntries(
-            Map.entry(CLAUDE_OPUS_5_5.getValue(), ALL_LEVELS),
-            Map.entry(CLAUDE_OPUS_5.getValue(), ALL_LEVELS),
-            Map.entry(CLAUDE_OPUS_4_8.getValue(), ALL_LEVELS),
-            Map.entry(CLAUDE_OPUS_4_7.getValue(), ALL_LEVELS),
-            Map.entry(CLAUDE_OPUS_4_7_20260416.getValue(), ALL_LEVELS),
-            Map.entry(CLAUDE_SONNET_5.getValue(), ALL_LEVELS),
-            Map.entry(CLAUDE_FABLE_5.getValue(), ALL_LEVELS),
-            Map.entry(CLAUDE_FABLE_5_1.getValue(), ALL_LEVELS),
-            Map.entry(CLAUDE_OPUS_4_6.getValue(), LEVELS_WITHOUT_XHIGH),
-            Map.entry(CLAUDE_OPUS_4_6_20260205.getValue(), LEVELS_WITHOUT_XHIGH),
-            Map.entry(CLAUDE_MYTHOS_PREVIEW.getValue(), LEVELS_WITHOUT_XHIGH),
-            Map.entry(CLAUDE_SONNET_4_6.getValue(), LEVELS_WITHOUT_XHIGH),
-            Map.entry(CLAUDE_OPUS_4_5.getValue(), LEVELS_UP_TO_HIGH),
-            Map.entry(CLAUDE_SONNET_3_7.getValue(), List.of()),
-            Map.entry(CLAUDE_HAIKU_4_5.getValue(), List.of()),
-            Map.entry(CLAUDE_OPUS_4.getValue(), List.of()),
-            Map.entry(CLAUDE_OPUS_4_1.getValue(), List.of()),
-            Map.entry(CLAUDE_SONNET_4.getValue(), List.of()),
-            Map.entry(CLAUDE_SONNET_4_5.getValue(), List.of()),
-            Map.entry(CLAUDE_SONNET_4_5_20250929.getValue(), List.of()));
 
     Optional<Map<?, ?>> toOutputConfig(String model, JsonNode customParameters) {
         if (customParameters == null || !customParameters.isObject()) {
@@ -79,10 +28,6 @@ class AnthropicEffort {
 
     Optional<Map<String, Object>> toCustomParameters(String model, Map<String, Object> customParameters) {
         return toOutputConfig(model, customParameters).map(outputConfig -> Map.of(OUTPUT_CONFIG, outputConfig));
-    }
-
-    void validateOutputConfigEffort(String model, Map<String, Object> customParameters) {
-        toOutputConfig(model, customParameters);
     }
 
     private Optional<Map<?, ?>> toOutputConfig(String model, Map<String, Object> customParameters) {
@@ -106,7 +51,9 @@ class AnthropicEffort {
                     "custom_parameters.output_config.effort must be a string, model '%s', effort '%s'"
                             .formatted(model, effort));
         }
-        var supported = Optional.ofNullable(model).map(LEVELS_BY_MODEL::get).orElse(ALL_LEVELS);
+        // A model without a row, such as one the model sync just added, is only checked for a known level name.
+        // Anthropic has the final word on it, so a stale table never blocks a new model.
+        var supported = AnthropicModelName.effortLevels(model).orElse(AnthropicModelName.ALL_EFFORT_LEVELS);
         if (supported.isEmpty()) {
             throw new BadRequestException(
                     "The model does not support custom_parameters.output_config.effort, model '%s', effort '%s'"
