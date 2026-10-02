@@ -1,45 +1,68 @@
 import { createLink, logger } from "@/utils/logger";
 import { Experiment } from "../../experiment/Experiment";
-import { EvaluationError, EvaluationResult, EvaluationTestResult } from "../types";
+import {
+  EvaluationError,
+  EvaluationResult,
+  EvaluationTestResult,
+  TASK_ERROR_SCORE_NAME
+} from "../types";
 import chalk from "chalk";
 import boxen from "boxen";
+
+type MetricScoreStats = {
+  /** Average of the computed scores; undefined when every score failed. */
+  average: number | undefined;
+  /** Number of scores that could not be computed. */
+  failed: number;
+};
 
 /**
  * Helper class to process evaluation results and generate summary statistics
  */
 export class EvaluationResultProcessor {
-  private static calculateAverageScores(
+  /**
+   * Per-metric average over the scores that were computed, plus how many
+   * scores failed. The average is undefined when every score failed.
+   */
+  private static calculateScoreStats(
     testResults: EvaluationTestResult[]
-  ): Map<string, number> {
-    if (!testResults || testResults.length === 0) {
-      return new Map<string, number>();
-    }
+  ): Map<string, MetricScoreStats> {
+    const totals = new Map<
+      string,
+      { sum: number; count: number; failed: number }
+    >();
 
-    const metricScores = new Map<string, { sum: number; count: number }>();
-
-    for (const result of testResults) {
-      if (!result || !result.scoreResults || result.scoreResults.length === 0) {
-        continue;
-      }
-
-      for (const score of result.scoreResults) {
-        if (!score || score.scoringFailed || typeof score.value !== "number") {
+    for (const result of testResults ?? []) {
+      for (const score of result?.scoreResults ?? []) {
+        // Task failures are reported separately, not as a metric.
+        if (!score || score.name === TASK_ERROR_SCORE_NAME) {
           continue;
         }
 
-        const current = metricScores.get(score.name) || { sum: 0, count: 0 };
-        current.sum += score.value;
-        current.count += 1;
-        metricScores.set(score.name, current);
+        const current = totals.get(score.name) || {
+          sum: 0,
+          count: 0,
+          failed: 0
+        };
+        if (score.scoringFailed) {
+          current.failed += 1;
+        } else if (typeof score.value === "number") {
+          current.sum += score.value;
+          current.count += 1;
+        }
+        totals.set(score.name, current);
       }
     }
 
-    const averages = new Map<string, number>();
-    metricScores.forEach((value, key) => {
-      averages.set(key, value.count > 0 ? value.sum / value.count : 0);
+    const stats = new Map<string, MetricScoreStats>();
+    totals.forEach((value, key) => {
+      stats.set(key, {
+        average: value.count > 0 ? value.sum / value.count : undefined,
+        failed: value.failed
+      });
     });
 
-    return averages;
+    return stats;
   }
 
   private static formatScore(score: number): string {
@@ -57,7 +80,7 @@ export class EvaluationResultProcessor {
   private static async generateResultTable(
     testResults: EvaluationTestResult[],
     experiment: Experiment,
-    averageScores: Map<string, number>,
+    scoreStats: Map<string, MetricScoreStats>,
     totalTime: number,
     experimentUrl?: string
   ) {
@@ -66,7 +89,7 @@ export class EvaluationResultProcessor {
       return;
     }
 
-    const metricNames = [...averageScores.keys()].sort();
+    const metricNames = [...scoreStats.keys()].sort();
     const timeFormatted = this.formatTime(totalTime);
 
     const contentLines: string[] = [];
@@ -88,8 +111,14 @@ export class EvaluationResultProcessor {
     if (metricNames.length > 0) {
       contentLines.push("");
       for (const metric of metricNames) {
-        const score = this.formatScore(averageScores.get(metric) || 0);
-        contentLines.push(chalk.green(`${metric}: ${score} (avg)`));
+        const { average, failed } = scoreStats.get(metric)!;
+        const score =
+          average === undefined ? "None" : this.formatScore(average);
+        let line = chalk.green(`${metric}: ${score} (avg)`);
+        if (failed > 0) {
+          line += chalk.red(` - ${failed} failed`);
+        }
+        contentLines.push(line);
       }
     }
 
@@ -114,7 +143,7 @@ export class EvaluationResultProcessor {
     totalTime: number = 0,
     errors: EvaluationError[] = []
   ): Promise<EvaluationResult> {
-    const averageScores = this.calculateAverageScores(testResults);
+    const scoreStats = this.calculateScoreStats(testResults);
 
     let experimentUrl: string | undefined;
     try {
@@ -126,7 +155,7 @@ export class EvaluationResultProcessor {
     await this.generateResultTable(
       testResults,
       experiment,
-      averageScores,
+      scoreStats,
       totalTime,
       experimentUrl
     );
