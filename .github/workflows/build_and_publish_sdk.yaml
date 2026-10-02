@@ -13,6 +13,11 @@ on:
           type: boolean
           required: false
           default: false
+        preflight_only:
+          type: boolean
+          required: false
+          default: false
+          description: Only check that PyPI Trusted Publishing accepts this workflow; build and upload nothing
     workflow_call:
       inputs:
         version:
@@ -23,6 +28,11 @@ on:
           type: boolean
           required: false
           default: false
+        preflight_only:
+          type: boolean
+          required: false
+          default: false
+          description: Only check that PyPI Trusted Publishing accepts this workflow; build and upload nothing
 
     push:
         branches:
@@ -30,9 +40,48 @@ on:
         paths:
           - "sdks/python/**"
 
+# PyPI Trusted Publishing (OIDC): no stored token. id-token: write is per job,
+# and callers must grant it too — permissions only narrow down a call chain.
+permissions:
+    contents: read
+
 jobs:
-    build-and-publish:
+    # Mints a PyPI upload token from this workflow's OIDC identity and discards
+    # it, so release.yaml can prove the Trusted Publisher matches before tagging.
+    pypi-oidc-preflight:
+        if: inputs.preflight_only
         runs-on: ubuntu-latest
+        permissions:
+            id-token: write
+        timeout-minutes: 5
+        steps:
+        - name: PyPI Trusted Publishing preflight
+          run: |
+            set -euo pipefail
+            # Tokens go via stdin, never argv; a 200 body holds a live upload
+            # token, so it lands in a 0600 mktemp file removed on exit.
+            MINT=$(mktemp)
+            trap 'rm -f "$MINT"' EXIT
+            AUDIENCE=$(curl -fsS https://pypi.org/_/oidc/audience | jq -r .audience)
+            OIDC=$(printf 'Authorization: bearer %s\n' "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              | curl -fsS -H @- "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" | jq -r .value)
+            echo "::add-mask::${OIDC}"
+            CODE=$(printf '{"token": "%s"}' "${OIDC}" \
+              | curl -sS -o "$MINT" -w '%{http_code}' -X POST https://pypi.org/_/oidc/mint-token \
+                  -H 'Content-Type: application/json' --data-binary @-)
+            if [ "${CODE}" != "200" ]; then
+              # Error bodies carry no token, only codes like invalid-publisher.
+              echo "::error title=PyPI preflight::Trusted Publishing rejected this workflow (HTTP ${CODE}): $(jq -c '.errors // .' "$MINT")"
+              exit 1
+            fi
+            echo "OK: PyPI accepts this workflow as a Trusted Publisher for opik."
+
+    build-and-publish:
+        if: ${{ !inputs.preflight_only }}
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write
         timeout-minutes: 5
         steps:
         - name: Setup
@@ -57,13 +106,6 @@ jobs:
           with:
                 python-version: "3.10"
 
-        - name: PyPI token preflight
-          if: inputs.is_release
-          uses: ./.github/actions/pypi-token-preflight
-          with:
-            pypi_token: ${{ secrets.PYPI_API_TOKEN }}
-            package_name: opik
-
         - name: Build pip package
           env:
             INPUT_VERSION: ${{ inputs.version }}
@@ -77,8 +119,10 @@ jobs:
           if: inputs.is_release
           uses: pypa/gh-action-pypi-publish@v1.14.2
           with:
-            password: ${{ secrets.PYPI_API_TOKEN }}
             packages-dir: sdks/python/dist
+            # Releases call this as a reusable workflow, and PyPI rejects the
+            # attestation from a nested call (pypi/warehouse#11096) with a 400.
+            attestations: false
             # Symmetric to OPIK-6624's npm publish 403-skip: replays / races where
             # the version is already on PyPI should not fail the release. PyPI returns
             # `400 Bad Request` (filename already exists) — `skip-existing: true`
