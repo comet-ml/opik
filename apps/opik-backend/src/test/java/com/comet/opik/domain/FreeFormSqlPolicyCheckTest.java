@@ -1,0 +1,114 @@
+package com.comet.opik.domain;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+
+/** The rule alone; FreeFormSqlPostRunCheckTest runs it on ClickHouse's real query log and plans. */
+@DisplayName("Free-form SQL post-run policy check")
+class FreeFormSqlPolicyCheckTest {
+
+    private static final String USER = "comet_readonly_freeform_sql_user";
+
+    private static FreeFormSqlQueryLogEntry entry(boolean initial, String user, List<String> tables,
+            List<String> policies) {
+        return FreeFormSqlQueryLogEntry.builder().initial(initial).user(user).tables(tables)
+                .policedTables(policies).build();
+    }
+
+    /** An EXPLAIN json plan with the given read nodes, each {@code type|description|filtered}. */
+    private static String plan(String... reads) {
+        var nodes = Stream.of(reads).map(read -> {
+            String[] parts = read.split("\\|");
+            String prewhere = parts.length > 2 && parts[2].equals("filtered")
+                    ? ", \"Prewhere info\": {\"Row level filter\": {\"Row level filter column\": \"x\"}}"
+                    : "";
+            return "{\"Node Type\": \"%s\", \"Description\": \"%s\"%s}".formatted(parts[0], parts[1], prewhere);
+        }).toList();
+        return "[{\"Plan\": {\"Node Type\": \"Expression\", \"Plans\": [%s]}}]".formatted(String.join(", ", nodes));
+    }
+
+    static Stream<Arguments> passes() {
+        return Stream.of(
+                arguments("top-level read, policy logged", List.of(entry(true, USER, List.of("opik.traces"),
+                        List.of("opik.traces"))), plan("ReadFromMergeTree|opik.traces|filtered"), Set.of()),
+                arguments("CTE read: no policy logged, filtered in the plan", List.of(entry(true, USER,
+                        List.of("opik.spans"), List.of())), plan("ReadFromMergeTree|opik.spans|filtered"), Set.of()),
+                arguments("IN / EXISTS read: in neither source, not scalar", List.of(entry(true, USER,
+                        List.of("opik.traces", "opik.feedback_scores"), List.of("opik.traces"))),
+                        plan("ReadFromMergeTree|opik.traces|filtered"), Set.of()),
+                arguments("Distributed wrapper covered by its local read", List.of(
+                        entry(true, USER, List.of("opik.traces"), List.of()),
+                        entry(false, "default", List.of("opik.traces_local"), List.of("opik.traces_local"))),
+                        plan("ReadFromRemote|Read from remote replica"), Set.of()),
+                arguments("tables outside the database and row generators", List.of(entry(true, USER,
+                        List.of("system.one"), List.of())), plan("ReadFromSystemOne|system.one"), Set.of()));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    @DisplayName("reads shown to be under their policy pass")
+    void passes(String name, List<FreeFormSqlQueryLogEntry> entries, String plan, Set<String> scalarReads) {
+        assertThat(FreeFormSqlPolicyCheck.violation("opik", USER, entries, plan, scalarReads)).isEmpty();
+    }
+
+    static Stream<Arguments> fails() {
+        var traces = List.of(entry(true, USER, List.of("opik.traces"), List.of("opik.traces")));
+        return Stream.of(
+                arguments("a planned read without its row filter", traces, plan("ReadFromMergeTree|opik.traces"),
+                        Set.of(), "opik.traces"),
+                arguments("a count answered from metadata", List.of(entry(true, USER, List.of(), List.of())),
+                        plan("ReadFromPreparedSource|Optimized trivial count"), Set.of(), "ReadFromPreparedSource"),
+                arguments("a scalar subquery read, in neither source", List.of(entry(true, USER,
+                        List.of("opik.traces", "opik.feedback_scores"), List.of("opik.traces"))),
+                        plan("ReadFromMergeTree|opik.traces|filtered"), Set.of("opik.feedback_scores"),
+                        "feedback_scores"),
+                arguments("one shard skipped the policy another applied", List.of(
+                        entry(true, USER, List.of("opik.traces"), List.of()),
+                        entry(false, "default", List.of("opik.traces_local"), List.of("opik.traces_local")),
+                        entry(false, "default", List.of("opik.traces_local"), List.of())),
+                        plan("ReadFromRemote|Read from remote replica"), Set.of(), "opik.traces_local"),
+                arguments("a read the shard query nests, in neither source", List.of(
+                        entry(true, USER, List.of("opik.traces"), List.of()),
+                        entry(false, "default", List.of("opik.traces_local", "opik.feedback_scores"),
+                                List.of("opik.traces_local"))),
+                        plan("ReadFromRemote|Read from remote replica"), Set.of(), "opik.feedback_scores"),
+                arguments("no log entry as the account", List.of(entry(true, "default", List.of(), List.of())),
+                        plan(), Set.of(), USER));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    @DisplayName("anything else is a violation, naming what was not covered")
+    void fails(String name, List<FreeFormSqlQueryLogEntry> entries, String plan, Set<String> scalarReads,
+            String named) {
+        assertThat(FreeFormSqlPolicyCheck.violation("opik", USER, entries, plan, scalarReads)).hasValueSatisfying(
+                violation -> assertThat(violation.table() + " " + violation.reason()).contains(named));
+    }
+
+    static Stream<Arguments> readsRemotely() {
+        return Stream.of(
+                arguments(plan("ReadFromRemote|Read from remote replica"), true),
+                arguments(plan("ReadFromRemoteParallelReplicas|Read from remote replicas"), true),
+                arguments(
+                        plan("ReadFromMergeTree|opik.traces_local|filtered", "ReadFromRemote|Read from remote replica"),
+                        true),
+                arguments(plan("ReadFromMergeTree|opik.traces_local|filtered"), false),
+                arguments(plan("ReadFromSystemOne|system.one"), false));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("a plan reads remotely when any read is from a remote shard or replica")
+    void readsRemotely(String plan, boolean expected) {
+        assertThat(FreeFormSqlPolicyCheck.readsRemotely(plan)).isEqualTo(expected);
+    }
+}

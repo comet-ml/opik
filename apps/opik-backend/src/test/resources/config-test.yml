@@ -206,6 +206,12 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
   password: opik
   socketTimeout: 200s
 
+# Description: timing of the free-form SQL post-run check's query_log reads and flushes. Plain values (no env var).
+freeFormSqlPostRunCheck:
+  minFlushInterval: 1s
+  logRetryDelay: 500ms
+  maxFlushAttempts: 3
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]

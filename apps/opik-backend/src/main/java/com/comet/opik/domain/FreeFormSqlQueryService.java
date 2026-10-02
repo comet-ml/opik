@@ -4,6 +4,8 @@ import com.clickhouse.client.api.ServerException;
 import com.clickhouse.client.api.metadata.NoSuchColumnException;
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Throwables;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -22,12 +24,16 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
@@ -40,6 +46,11 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * execution, and an unparseable query is rejected too — execution never runs on a validation failure. The
  * workspace/project bounds are pushed as ClickHouse server settings consumed by the restrictive row policies, never
  * concatenated into the SQL.
+ *
+ * <p>After a query runs, its results are returned only if every table it read can be shown to have been read under a
+ * row policy, from its {@code system.query_log} entries and its plan ({@link FreeFormSqlPolicyCheck}). Anything else,
+ * a missing entry or a failure to read them included, withholds the results. A scalar subquery reading a table
+ * cannot be shown either way, so it is rejected before running, with a rewrite the caller can apply.
  */
 @Slf4j
 @Singleton
@@ -59,6 +70,9 @@ public class FreeFormSqlQueryService {
         SETTINGS_CLAUSE("rejected", "settings_clause_rejected"),
         PARSE_ERROR("rejected", "parse_error"),
         PERMISSION_DENIED("error", "permission_denied"),
+        SCALAR_SUBQUERY_NOT_ALLOWED("rejected", "scalar_subquery_not_allowed"),
+        POLICY_UNVERIFIED("error", "policy_unverified"),
+        POLICY_CHECK_FAILED("error", "policy_check_failed"),
         CH_LIMIT("error", "ch_limit"),
         OTHER("error", "other");
 
@@ -77,6 +91,13 @@ public class FreeFormSqlQueryService {
      */
     private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
 
+    /** Returned to the caller, an LLM agent, so it says what to change and how. */
+    static final String SCALAR_SUBQUERY_MESSAGE = "Query rejected: a scalar subquery (a subquery used as a value, "
+            + "e.g. SELECT (SELECT count() FROM spans)) cannot read a table; this one reads %s. Compute the value in a "
+            + "CTE and select from it instead, e.g. WITH s AS (SELECT count() AS n FROM spans) "
+            + "SELECT toJSONString(map('n', toString(s.n))) AS result FROM s, or join it to the main query. "
+            + "Subqueries under IN and EXISTS are allowed.";
+
     /** ClickHouse error codes surfaced to the caller as a clean 4xx rather than a 500. */
     private static final int CH_TOO_MANY_ROWS = 158;
     private static final int CH_TIMEOUT_EXCEEDED = 159;
@@ -89,6 +110,9 @@ public class FreeFormSqlQueryService {
 
     private final FreeFormSqlQueryDAO freeFormSqlQueryDAO;
     private final FreeFormSqlEntityNameEnricher entityNameEnricher;
+    private final FreeFormSqlQueryLogReader queryLogReader;
+    private final String database;
+    private final Map<FreeFormSqlAccount, String> users;
 
     private final LongHistogram duration;
     private final LongHistogram resultRows;
@@ -96,9 +120,17 @@ public class FreeFormSqlQueryService {
 
     @Inject
     public FreeFormSqlQueryService(@NonNull FreeFormSqlQueryDAO freeFormSqlQueryDAO,
-            @NonNull FreeFormSqlEntityNameEnricher entityNameEnricher) {
+            @NonNull FreeFormSqlEntityNameEnricher entityNameEnricher,
+            @NonNull FreeFormSqlQueryLogReader queryLogReader,
+            @NonNull @Config("databaseAnalytics") DatabaseAnalyticsFactory databaseAnalytics,
+            @NonNull @Config("databaseAnalyticsReadOnlyFreeFormSql") DatabaseAnalyticsReadOnlyFreeFormSqlConfig standard,
+            @NonNull @Config("databaseAnalyticsReadOnlyFreeFormExtendedSql") DatabaseAnalyticsReadOnlyFreeFormSqlConfig extended) {
         this.freeFormSqlQueryDAO = freeFormSqlQueryDAO;
         this.entityNameEnricher = entityNameEnricher;
+        this.queryLogReader = queryLogReader;
+        this.database = databaseAnalytics.getDatabaseName();
+        this.users = Map.of(FreeFormSqlAccount.STANDARD, standard.getUsername(),
+                FreeFormSqlAccount.EXTENDED, extended.getUsername());
 
         var meter = GlobalOpenTelemetry.get().getMeter(METRIC_NAMESPACE);
         this.duration = meter
@@ -132,7 +164,34 @@ public class FreeFormSqlQueryService {
 
         return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> runQuery(account, workspaceId, projectScope, query, startMillis));
+                .thenCompose(nodeLabels -> freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope,
+                        query))
+                .handle((queryTree, error) -> rejectScalarReads(queryTree, error, startMillis))
+                .thenCompose(scalarReads -> runQuery(account, workspaceId, projectScope, query, scalarReads,
+                        startMillis));
+    }
+
+    /**
+     * A scalar subquery reading a table cannot be shown to have run under its row policy (see
+     * {@link FreeFormSqlPolicyCheck}), so it is rejected before running, with the rewrite the caller can apply.
+     */
+    private Set<String> rejectScalarReads(List<String> queryTree, Throwable error, long startMillis) {
+        if (error != null) {
+            throw findCause(error, WebApplicationException.class) != null
+                    ? findCause(error, WebApplicationException.class)
+                    : mapExecutionError(error, startMillis);
+        }
+        var scalarReads = FreeFormSqlSubqueries.scalarReads(queryTree, database);
+        if (!scalarReads.none()) {
+            var reads = scalarReads.tables().stream().map(table -> table.substring(database.length() + 1)).sorted()
+                    .collect(Collectors.toCollection(ArrayList::new));
+            if (scalarReads.opaque()) {
+                reads.add("a subquery whose result is too large to inspect");
+            }
+            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, startMillis,
+                    SCALAR_SUBQUERY_MESSAGE.formatted(String.join(", ", reads)), null);
+        }
+        return scalarReads.tables();
     }
 
     /**
@@ -155,16 +214,50 @@ public class FreeFormSqlQueryService {
     }
 
     private CompletableFuture<AnalyticsQueryResponse> runQuery(FreeFormSqlAccount account, String workspaceId,
-            String projectScope, String query, long startMillis) {
-        return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query)
+            String projectScope, String query, Set<String> scalarReads, long startMillis) {
+        String queryId = UUID.randomUUID().toString();
+        return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query, queryId)
                 .handle((result, error) -> {
                     if (error != null) {
                         throw mapExecutionError(error, startMillis);
                     }
-                    recordSuccess(result, startMillis);
                     return result;
                 })
-                .thenCompose(result -> resolveEntityNames(account, result, workspaceId));
+                .thenCompose(result -> verifyPolicies(account, workspaceId, projectScope, query, queryId, scalarReads,
+                        startMillis).thenApply(verified -> result))
+                .thenCompose(result -> {
+                    recordSuccess(result, startMillis);
+                    return resolveEntityNames(account, result, workspaceId);
+                });
+    }
+
+    /** The post-run check: fails closed on a violation and on any failure to establish there is none. */
+    private CompletableFuture<Void> verifyPolicies(FreeFormSqlAccount account, String workspaceId, String projectScope,
+            String query, String queryId, Set<String> scalarReads, long startMillis) {
+        // The plan first: whether the query read remotely decides if its log entries need a flush to be complete.
+        return freeFormSqlQueryDAO.explainPlan(account, workspaceId, projectScope, query)
+                .thenCompose(plan -> queryLogReader.entries(queryId, users.get(account),
+                        FreeFormSqlPolicyCheck.readsRemotely(plan))
+                        .thenApply(entries -> new Evidence(plan, entries)))
+                .handle((evidence, error) -> {
+                    if (error != null) {
+                        log.error("Free-form SQL post-run policy check could not run for query '{}'", queryId, error);
+                        throw fail(Outcome.POLICY_CHECK_FAILED, startMillis, Response.Status.SERVICE_UNAVAILABLE,
+                                "Query result withheld: its scope could not be verified");
+                    }
+                    FreeFormSqlPolicyCheck.violation(database, users.get(account), evidence.entries(), evidence.plan(),
+                            scalarReads).ifPresent(violation -> {
+                                String table = violation.table().substring(violation.table().lastIndexOf('.') + 1);
+                                // Not the query's fault: a row policy did not apply where it should. Loud on purpose.
+                                log.error(
+                                        "Free-form SQL post-run policy check FAILED for account '{}', query '{}': {} ({})",
+                                        account, queryId, violation.table(), violation.reason());
+                                throw fail(Outcome.POLICY_UNVERIFIED, startMillis,
+                                        Response.Status.INTERNAL_SERVER_ERROR,
+                                        "Query result withheld: its scope could not be verified; this has been reported");
+                            });
+                    return null;
+                });
     }
 
     /**
@@ -192,6 +285,9 @@ public class FreeFormSqlQueryService {
             log.warn("Name enrichment failed for workspace '{}'; returning unresolved ids", workspaceId, e);
             return result.rows();
         }
+    }
+
+    private record Evidence(String plan, List<FreeFormSqlQueryLogEntry> entries) {
     }
 
     private static AnalyticsQueryResponse toResponse(List<JsonNode> rows) {

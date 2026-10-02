@@ -15,6 +15,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.StreamSupport;
 
@@ -44,10 +45,38 @@ public interface FreeFormSqlQueryDAO {
 
     /**
      * Executes {@code query} bounded to the given workspace and project, reading the single {@code result}
-     * column. {@code projectId} is a single project's id, or {@link #PROJECT_ID_ALL}.
+     * column. {@code projectId} is a single project's id, or {@link #PROJECT_ID_ALL}. {@code queryId} identifies the
+     * execution in {@code system.query_log} for the post-run check.
      */
     CompletableFuture<FreeFormSqlResult> execute(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
+            @NonNull String projectId, @NonNull String query, @NonNull String queryId);
+
+    /**
+     * Returns the resolved {@code EXPLAIN QUERY TREE} of {@code query}, one line per row, under the settings
+     * {@link #execute} sends. Resolving it evaluates the query's scalar subqueries, as the read-only account.
+     */
+    CompletableFuture<List<String>> explainQueryTree(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
             @NonNull String projectId, @NonNull String query);
+
+    /**
+     * Returns {@code EXPLAIN json = 1, actions = 1} of {@code query} under exactly the settings {@link #execute} sends,
+     * so the reads it shows are the ones that ran. Note that EXPLAIN evaluates scalar and IN/EXISTS subqueries.
+     */
+    CompletableFuture<String> explainPlan(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
+            @NonNull String projectId, @NonNull String query);
+
+    /**
+     * Reads the finished {@code system.query_log} entries of {@code queryId}, initial and shard-side, from every
+     * replica, with the tables covered by the applied row policies that apply to {@code user}, the account the query
+     * ran as. One read; it never flushes. Runs on the main analytics account: the read-only ones cannot read the log.
+     */
+    CompletableFuture<List<FreeFormSqlQueryLogEntry>> fetchQueryLog(@NonNull String queryId, @NonNull String user);
+
+    /**
+     * Runs {@code SYSTEM FLUSH LOGS ON CLUSTER ... query_log} once, on every node. When and how often is decided by
+     * {@link FreeFormSqlQueryLogReader}; nothing else calls this.
+     */
+    CompletableFuture<Void> flushQueryLog();
 }
 
 @Singleton
@@ -57,20 +86,45 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     private static final String EXPLAIN_AST_COLUMN = "explain";
     private static final String RESULT_COLUMN = "result";
     private static final String EXPLAIN_AST_PREFIX = "EXPLAIN AST ";
+    private static final String EXPLAIN_PLAN_PREFIX = "EXPLAIN json = 1, actions = 1 ";
+    private static final String EXPLAIN_QUERY_TREE_PREFIX = "EXPLAIN QUERY TREE ";
 
     /** Custom server settings the row policies read via getSetting(...). Sent as URL params; the SQL is left untouched. */
     private static final String SETTING_WORKSPACE_ID = "SQL_workspace_id";
     private static final String SETTING_PROJECT_ID = "SQL_project_id";
 
+    /** Flushes only query_log, on every node; a node that does not answer in time fails the check, not the server. */
+    static final String FLUSH_QUERY_LOG = "SYSTEM FLUSH LOGS ON CLUSTER '{cluster}' query_log";
+    /**
+     * Each applied policy resolved to the table it covers through system.row_policies, among the policies that apply
+     * to the account the query ran as; any other, or an unknown one, covers nothing.
+     */
+    static final String QUERY_LOG_ENTRIES = """
+            SELECT is_initial_query, user, tables,
+                arrayFilter(t -> t != '', arrayMap(p -> transform(p,
+                    (SELECT groupArray(name) FROM system.row_policies
+                        WHERE apply_to_all OR has(apply_to_list, {user:String})),
+                    (SELECT groupArray(concat(database, '.', table)) FROM system.row_policies
+                        WHERE apply_to_all OR has(apply_to_list, {user:String})), ''),
+                    used_row_policies)) AS policed_tables
+            FROM clusterAllReplicas('{cluster}', system.query_log)
+            WHERE event_date >= yesterday() AND event_time >= now() - INTERVAL 1 HOUR
+                AND initial_query_id = {query_id:String} AND type = 'QueryFinish'
+            """;
+    private static final String FLUSH_TIMEOUT_SECONDS = "10";
+
     private final Client readOnlyClient;
     private final Client extendedReadOnlyClient;
+    private final Client analyticsClient;
 
     @Inject
     FreeFormSqlQueryDAOImpl(
             @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client readOnlyClient,
-            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT) @NonNull Client extendedReadOnlyClient) {
+            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT) @NonNull Client extendedReadOnlyClient,
+            @NonNull Client analyticsClient) {
         this.readOnlyClient = readOnlyClient;
         this.extendedReadOnlyClient = extendedReadOnlyClient;
+        this.analyticsClient = analyticsClient;
     }
 
     private Client clientFor(FreeFormSqlAccount account) {
@@ -87,15 +141,75 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     @Override
     @WithSpan
     public CompletableFuture<FreeFormSqlResult> execute(@NonNull FreeFormSqlAccount account,
-            @NonNull String workspaceId, @NonNull String projectId, @NonNull String query) {
+            @NonNull String workspaceId, @NonNull String projectId, @NonNull String query, @NonNull String queryId) {
         // Only the SQL_ custom settings are sent: readonly=1 rejects any other per-query setting.
         // Execution/memory/row caps are pinned on the read-only user's server-side profile.
         var settings = new QuerySettings()
+                .setQueryId(queryId)
                 .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
                 .serverSetting(SETTING_PROJECT_ID, projectId);
 
         return clientFor(account).queryRecords(query, settings)
                 .thenApply(FreeFormSqlQueryDAOImpl::readResult);
+    }
+
+    @Override
+    @WithSpan
+    public CompletableFuture<List<String>> explainQueryTree(@NonNull FreeFormSqlAccount account,
+            @NonNull String workspaceId, @NonNull String projectId, @NonNull String query) {
+        var settings = new QuerySettings()
+                .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
+                .serverSetting(SETTING_PROJECT_ID, projectId);
+        return clientFor(account).queryRecords(EXPLAIN_QUERY_TREE_PREFIX + query, settings)
+                .thenApply(FreeFormSqlQueryDAOImpl::readNodeLabels);
+    }
+
+    @Override
+    @WithSpan
+    public CompletableFuture<String> explainPlan(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
+            @NonNull String projectId, @NonNull String query) {
+        var settings = new QuerySettings()
+                .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
+                .serverSetting(SETTING_PROJECT_ID, projectId);
+        return clientFor(account).queryRecords(EXPLAIN_PLAN_PREFIX + query, settings)
+                .thenApply(records -> String.join("\n", readNodeLabels(records)));
+    }
+
+    @Override
+    @WithSpan
+    public CompletableFuture<List<FreeFormSqlQueryLogEntry>> fetchQueryLog(@NonNull String queryId,
+            @NonNull String user) {
+        return analyticsClient
+                .queryRecords(QUERY_LOG_ENTRIES, Map.<String, Object>of("query_id", queryId, "user", user))
+                .thenApply(FreeFormSqlQueryDAOImpl::readLogEntries);
+    }
+
+    @Override
+    @WithSpan
+    public CompletableFuture<Void> flushQueryLog() {
+        var settings = new QuerySettings().serverSetting("distributed_ddl_task_timeout", FLUSH_TIMEOUT_SECONDS);
+        return analyticsClient.query(FLUSH_QUERY_LOG, settings).thenAccept(response -> {
+            try (response) {
+                // Only the completion matters: the flush has run on every node.
+            } catch (Exception e) {
+                throw e instanceof RuntimeException re ? re : new RuntimeException(e);
+            }
+        });
+    }
+
+    private static List<FreeFormSqlQueryLogEntry> readLogEntries(Records records) {
+        try (records) {
+            return StreamSupport.stream(records.spliterator(), false)
+                    .map(row -> FreeFormSqlQueryLogEntry.builder()
+                            .initial(row.getInteger("is_initial_query") == 1)
+                            .user(row.getString("user"))
+                            .tables(row.<String>getList("tables"))
+                            .policedTables(row.<String>getList("policed_tables"))
+                            .build())
+                    .toList();
+        } catch (Exception e) {
+            throw e instanceof RuntimeException re ? re : new RuntimeException(e);
+        }
     }
 
     /**
