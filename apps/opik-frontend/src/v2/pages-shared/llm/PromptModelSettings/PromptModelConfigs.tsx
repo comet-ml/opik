@@ -145,7 +145,13 @@ const PromptModelConfigs = ({
   // provider yet keeps the disabled button, so it still hints at settings once a model is picked.
   if (
     composedProviderType &&
-    !hasVisibleControls(provider, model ?? "", configs, unsupportedParams)
+    !hasVisibleControls(
+      provider,
+      model ?? "",
+      configs,
+      unsupportedParams,
+      openAiPipelineMode,
+    )
   ) {
     return null;
   }

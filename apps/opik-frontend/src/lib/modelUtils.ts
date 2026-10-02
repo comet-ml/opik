@@ -530,7 +530,11 @@ export const updateProviderConfig = <
 
     // reasoningEffort: drop it for models without an effort option list,
     // coerce stale values to "high" otherwise. Mirrors the Anthropic
-    // thinkingEffort handling below.
+    // thinkingEffort handling below. Unlike resolveEffort, which only masks a
+    // max the key cannot take, this writes the coerced value back on purpose:
+    // a model change settles on a level the new model and mode offer, so a key
+    // later moved back to the Responses API restores max only on prompts whose
+    // model never changed.
     // An unknown mode (keys still loading) is checked against the Responses
     // API list, a superset of the Chat Completions one, so a stored max is
     // kept: assuming Chat Completions here would rewrite it to high for good.

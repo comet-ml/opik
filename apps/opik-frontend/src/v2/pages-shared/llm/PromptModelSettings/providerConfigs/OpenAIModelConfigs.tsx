@@ -55,6 +55,7 @@ const OpenAIModelConfigs = ({
     model,
     configs,
     supports: createSupports(unsupportedParams),
+    openAiPipelineMode,
   });
 
   if (!isAnyControlVisible(visible)) return null;
