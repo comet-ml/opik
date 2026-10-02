@@ -218,6 +218,23 @@ describe("useLogsType", () => {
     expect(mockGet.mock.calls[1][1].params.project_id).toBe("project-2");
   });
 
+  it("should probe another project on the window as it stands, not the one pinned for the previous project", async () => {
+    const { result, rerender } = await renderAnsweredLogsType();
+    vi.setSystemTime(now.add(30, "seconds").toDate());
+    act(() => {
+      result.current.intervalWindow.reanchorToNow();
+    });
+    await flushRequests();
+
+    rerender({ projectId: "project-2" });
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    expect(mockGet.mock.calls[1][1].params).toMatchObject({
+      project_id: "project-2",
+      to_time: now.add(30, "seconds").utc().format(),
+    });
+  });
+
   it("should not probe when a logs type is already stored", () => {
     timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
     storage["project-logsType-project-1"] = LOGS_TYPE.traces;
