@@ -122,6 +122,7 @@ class ExperimentsResourceExecuteTest {
         execute(workspace, OpenaiModelName.GPT_5.toString(), "low");
 
         assertThat(awaitUpstreamRequestBodies(upstreamPath))
+                .hasSize(1)
                 .allSatisfy(body -> assertThat(body.path("reasoning_effort").asText()).isEqualTo("low"));
     }
 
@@ -140,6 +141,7 @@ class ExperimentsResourceExecuteTest {
         execute(workspace, CUSTOM_MODEL, "low");
 
         assertThat(awaitUpstreamRequestBodies(upstreamPath))
+                .hasSize(1)
                 .allSatisfy(body -> assertThat(body.has("reasoning_effort")).isFalse());
     }
 
