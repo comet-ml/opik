@@ -897,7 +897,7 @@ def sync_vertexai(
     source_models: list[tuple[str, bool]],
     java_content: str,
     label_overrides: dict[str, str] | None = None,
-) -> tuple[str, list[ModelEntry], list[str], list[str]]:
+) -> tuple[str, list[ModelEntry], list[str], list[str], list[tuple[str, str]]]:
     """Add-only sync for VertexAI. Never removes, reports stale for manual review."""
     current = parse_java_enum_3arg(java_content)
     current_qualified = {q for q, _, _ in current.values()}
@@ -916,10 +916,21 @@ def sync_vertexai(
 
     entries = []
     model_entries = []
+    collisions: list[tuple[str, str]] = []
+    # Reserved up front, not claimed while iterating: hand-crafted names drop suffixes
+    # (GEMINI_2_0_FLASH is "gemini-2.0-flash-001"), and a new "gemini-2.0-flash" sorts
+    # before it, so it would otherwise take the name and push the existing model out.
+    used_enum_names = set(qualified_to_existing_name.values())
 
     for qualified in sorted(all_qualified):
         value = qualified.removeprefix("vertex_ai/")
-        enum_name = qualified_to_existing_name.get(qualified) or model_to_enum_name(qualified, "vertexai")
+        enum_name = qualified_to_existing_name.get(qualified)
+        if enum_name is None:
+            enum_name = model_to_enum_name(qualified, "vertexai")
+            if enum_name in used_enum_names:
+                collisions.append((qualified, enum_name))
+                continue
+            used_enum_names.add(enum_name)
 
         if qualified in current_so_by_qualified:
             so = current_so_by_qualified[qualified]
@@ -936,10 +947,10 @@ def sync_vertexai(
             label=label,
         ))
 
-    added = sorted(source_set - current_qualified)
+    added = sorted(source_set - current_qualified - {q for q, _ in collisions})
 
     new_java = regenerate_java_3arg(java_content, entries)
-    return new_java, model_entries, added, stale
+    return new_java, model_entries, added, stale, collisions
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1289,11 +1300,11 @@ def main():
     )
     all_changes["gemini"] = {"entries": ge_entries, "added": ge_added, "stale": ge_stale, "collisions": ge_collisions}
 
-    new_va_java, va_entries, va_added, va_stale = sync_vertexai(
+    new_va_java, va_entries, va_added, va_stale, va_collisions = sync_vertexai(
         vertexai_models, va_java,
         label_overrides=gemini_labels,
     )
-    all_changes["vertexai"] = {"entries": va_entries, "added": va_added, "stale": va_stale}
+    all_changes["vertexai"] = {"entries": va_entries, "added": va_added, "stale": va_stale, "collisions": va_collisions}
 
     # 4. Regenerate TypeScript files
     # TS enum (providers.ts) gets ALL models — same as Java enums
