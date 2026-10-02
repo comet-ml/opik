@@ -291,6 +291,19 @@ areas:
       filter-traces:          { covered: true,  tier: t2-cuj }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
+      # New for 2.2.86, from the release pass's own exploration of opik#8411.
+      #
+      # The Python SDK's MULTI-PAGE read of search_traces / search_spans —
+      # `read_and_parse_full_stream`'s cursor arithmetic, which opik#8411
+      # rewrote so the cursor is the last id the BACKEND sent rather than the
+      # last one that parsed. Its own key rather than part of list-traces: that
+      # key names the Logs TABLE (see the note above), and every estate call
+      # through this function is single-page, so the paging itself has never
+      # run. The failure mode is a short read — ids silently missing from a
+      # result set that still looks like an ordinary list — which is why it is
+      # asserted as set equality against a direct REST enumeration rather than
+      # as a count.
+      sdk-multipage-stream-reads: { covered: false }
       add-trace-to-dataset:   { covered: true,  tier: t2-cuj, note: "AddToDatasetDialog, and the create-dataset-items-from-{traces,spans} endpoints behind it: field_mappings resolving a path, taking precedence over enrichment_options on a collision, being dropped when the path resolves to nothing, and being ignored for a TEST_SUITE dataset; plus the four validation rejections (blank name, blank path, uncompilable path, over the 100-entry cap) and that none of them writes. Driven through the dialog's Advanced mapping section for one trace — defaults, Preview, re-pointing a row through the JSON tree — and read back through the API" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details. Not covered from the traces side; the playground-written shape is covered under playground.trace-messages-tab, which does not generalise to SDK-logged traces." }
@@ -311,6 +324,17 @@ areas:
       # that says nothing about the parent leaves the root parentless" is a
       # distinct statement from anything update-trace-api asserts. Not part of
       # span-tree-expand either: that key is the panel's tree widget.
+      #
+      # PARTIAL as of 2.2.86. What span-by-id-aged-render.spec.ts pins is the
+      # MERGE — the span counterpart of update-trace-api's clause — over a
+      # tags-only PATCH at four id ages (epoch-week, present, ~2201, past the
+      # DateTime64 ceiling), asserting name/type/trace_id/project_id/input/
+      # output/metadata all survive, because a week bound that misses sends the
+      # update down the partial-insert path that answers 204 and drops every
+      # field the request did not carry. Both halves of the note above are STILL
+      # uncovered: the 409 parent_span_id conflict guard, and the post-cutover
+      # sentinel that keeps a root span parentless across an update that says
+      # nothing about the parent.
       update-span-api:        { covered: false }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
@@ -616,6 +640,17 @@ areas:
       version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache; also API-level, the single version a multi-batch insert cuts whatever its num_threads or its compression arm, and the v1/v2 pair either side of a rejected insert; plus the counters a single non-JSON-native item cuts (one version, itemsAdded 1, itemsModified 0) and the absence of any second version once the repeat insert deduplicates" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
+      # New for 2.2.86, from the release pass's own exploration of opik#8607.
+      #
+      # A dataset's last-experiment bookkeeping (most_recent_experiment_at,
+      # experiment_count) as RECOMPUTED after experiments are deleted. Its own
+      # key rather than part of list-datasets: that key asserts the summary a
+      # freshly-seeded set of datasets reports, and deletes nothing, while
+      # experiment-delete.spec.ts deletes and never reads the summary back. The
+      # gap between them is the whole of opik#8607 — onExperimentsDeleted threw
+      # after the delete had already committed, so the column was left stale
+      # forever with no error anywhere a user could see.
+      experiment-recency-after-delete: { covered: false }
 
     visual:
       datasets-page:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 04" }
@@ -717,6 +752,22 @@ areas:
       compare-sort-search:     { covered: true,  tier: t2-cuj }
       compare-feedback-tab:    { covered: true,  tier: t2-cuj }
       compare-row-detail:      { covered: true,  tier: t2-cuj, note: "the row-detail panel off the compare grid; also inline images in an item's output, where what is asserted is the MAPPING rather than the render — each [image_N] placeholder in the rendered text resolved to the exact data URL it names, on a mixed png/gif seed whose document order and placeholder order deliberately disagree, plus the panel showing those thumbnails and no others, and a repeated image numbered twice but deduplicated to one tile" }
+      # From opik#8469, applied by the release job for 2.2.86.
+      #
+      # The evaluation-suite item sidebar on the compare route's Items tab
+      # (TestSuiteExperimentPanel), as opposed to compare-row-detail, which is
+      # the CompareExperimentsPanel shown for a dataset-method experiment. Its
+      # own key because the Items tab mounts one or the other on
+      # evaluation_method and they are wired differently: this one takes the
+      # project it looks attachments up under from the experiments LIST
+      # (experimentProjectIdMap), while the compare panel takes it from
+      # useExperimentById — so one can break while the other works. Covers the
+      # multi-run axis MultiRunTabs adds, which the compare panel has no
+      # equivalent of: one dataset item run twice, each run's own output text
+      # paired with its own picture, asserted per run so that a tab rendering
+      # the other run's media is caught rather than read as a normal-looking
+      # panel.
+      suite-item-sidebar:      { covered: false }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
       # Whether a scoring metric in an evaluate() run computes with the LOCALE
@@ -878,18 +929,20 @@ areas:
       # kept one sibling's failure, or one that never terminated the message,
       # is invisible to a spec whose provider answers.
       rule-scope-thread-span:  { covered: true,  tier: t2-cuj, note: "span/thread scope flags, both halves covered: span scope by online-evaluation-oversized-payload.spec.ts (t3), thread scope by online-evaluation-thread-scope-batch-close.spec.ts (t2) — six threads closed in ONE PUT /threads/close, each carrying exactly one score, with a mid-batch thread whose metric raises scoring nothing while its siblings do. Scoped: since #8162 the close fans out to one stream entry PER thread id, so what the spec pins is the grouped publish reaching every sampled id, not a scorer walking a multi-id message. A duplicate score WRITE is not observable — thread feedback scores upsert by name, so 'exactly once' is asserted as exactly one stored row per thread, held across a quiet period, not as insert multiplicity. Thread scope is also covered for the trace_thread_llm_as_judge shape by online-evaluation-thread-judge-provider-failure.spec.ts (t2), over an unreachable provider: two threads closed in one call, each reporting its OWN provider failure exactly once and neither carrying a thread score. Rule filters on either scope are a different key (rule-filters) and are still uncovered" }
-      # Deliberately still false, and the note says what IS covered so the work
-      # is not invisible. The one spec here proves a filter SURVIVES an edit,
-      # never that a filter SELECTS: no trace is scored, so a regression that
-      # stored filters faithfully and then ignored them when picking traces
-      # would not fail anything. Flipping this to true on persistence alone is
-      # exactly the permanent false green TESTING-TAGS.md warns about — same
-      # shape as prompts.compare-versions above, which stays false for the same
-      # reason. A human's call to flip it, and the thing that would earn it is a
-      # spec at PRODUCTION scope (where the dialog does render the filters) that
-      # logs one matching and one non-matching trace and asserts only the
-      # matching one is scored.
-      rule-filters:            { covered: true,  tier: t2-cuj, note: "PARTIAL, persistence only — not flipped. Covered: a trace-scope rule seeded over REST at trigger_scope=experiment with a non-default sampling_rate and one name/contains filter, saved unchanged through the edit dialog (online-evaluation-experiment-scope-hidden-filters.spec.ts, t2). RuleFilteringSection early-returns null at that scope, so both fields are persisted state the user cannot see while editing — the shape a form silently drops or re-defaults — and the spec asserts the outbound PATCH body as well as the read-back, since 'dropped then re-defaulted' and 'preserved' are indistinguishable after the fact. NOT covered, which is why this stays false: whether a filter actually SELECTS the traces a rule scores. Nothing asserts that at either scope" }
+      # The selection half is now covered, and this note previously said it was
+      # not. What it asked for was "a spec that logs one matching and one
+      # non-matching trace and asserts only the matching one is scored"; that is
+      # online-evaluation-duration-filter-selects.spec.ts, added for 2.2.86. It
+      # runs at trace scope rather than the PRODUCTION scope this note once
+      # named — that stipulation was about reaching a scope where the dialog
+      # RENDERS the filters, which matters for driving a filter through the UI
+      # and not for asserting which traces a stored filter selects.
+      #
+      # So the key is no longer resting on persistence alone, which is what
+      # would have made it the permanent false green TESTING-TAGS.md warns
+      # about. Both halves are named in the note below, separately, because they
+      # fail independently.
+      rule-filters:            { covered: true,  tier: t2-cuj, note: "Two halves, both covered. PERSISTENCE: a trace-scope rule seeded over REST at trigger_scope=experiment with a non-default sampling_rate and one name/contains filter, saved unchanged through the edit dialog (online-evaluation-experiment-scope-hidden-filters.spec.ts, t2). RuleFilteringSection early-returns null at that scope, so both fields are persisted state the user cannot see while editing — the shape a form silently drops or re-defaults — and the spec asserts the outbound PATCH body as well as the read-back, since 'dropped then re-defaulted' and 'preserved' are indistinguishable after the fact; the seconds/milliseconds conversion on a duration filter is pinned the same way, outbound body and repeated unedited saves, by online-evaluation-duration-filter-units.spec.ts (t2). SELECTION: a duration-filtered rule scores the slow trace and leaves the fast one alone, against an unfiltered control rule that scores both, with the fast trace's whole score set compared by exhaustion after it settles (online-evaluation-duration-filter-selects.spec.ts, t2) — that control is what turns the absence into evidence rather than a dead evaluator. Still uncovered: selection on any field other than duration, and filters at thread scope" }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
       # Scoped, and the three parts are not equally scoped:
