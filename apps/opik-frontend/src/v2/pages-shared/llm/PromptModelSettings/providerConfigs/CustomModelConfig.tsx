@@ -65,7 +65,7 @@ const CustomModelConfig = ({
         />
       ) : (
         <>
-          {!isUndefined(configs.temperature) && (
+          {supports("temperature") && !isUndefined(configs.temperature) && (
             <SliderInputControl
               value={configs.temperature}
               onChange={(v) => onChange({ temperature: v })}
@@ -83,21 +83,22 @@ const CustomModelConfig = ({
         </>
       )}
 
-      {!isUndefined(configs.maxCompletionTokens) && (
-        <SliderInputControl
-          value={configs.maxCompletionTokens}
-          onChange={(v) => onChange({ maxCompletionTokens: v })}
-          id="maxCompletionTokens"
-          min={0}
-          max={10000}
-          step={1}
-          defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS}
-          label="Max output tokens"
-          tooltip={
-            <PromptModelSettingsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
-          }
-        />
-      )}
+      {supports("maxCompletionTokens") &&
+        !isUndefined(configs.maxCompletionTokens) && (
+          <SliderInputControl
+            value={configs.maxCompletionTokens}
+            onChange={(v) => onChange({ maxCompletionTokens: v })}
+            id="maxCompletionTokens"
+            min={0}
+            max={10000}
+            step={1}
+            defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS}
+            label="Max output tokens"
+            tooltip={
+              <PromptModelSettingsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            }
+          />
+        )}
 
       {sampling === "independent" &&
         supports("topP") &&
