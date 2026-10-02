@@ -17,9 +17,18 @@ import java.util.function.Supplier;
  */
 class FreeFormSqlQueryLogFlusher {
 
+    /** Runs {@code task} after {@code delayMillis}; injected so tests control time. */
+    interface Scheduler {
+        void schedule(long delayMillis, Runnable task);
+
+        Scheduler DELAYED = (delayMillis, task) -> CompletableFuture
+                .delayedExecutor(delayMillis, TimeUnit.MILLISECONDS).execute(task);
+    }
+
     private final Supplier<CompletableFuture<Void>> flush;
     private final long minIntervalMillis;
     private final LongSupplier clock;
+    private final Scheduler scheduler;
 
     private long lastStartMillis = Long.MIN_VALUE / 2;
     /** The flush the next waiters will get; registered until it starts, so later requests share it. */
@@ -28,10 +37,11 @@ class FreeFormSqlQueryLogFlusher {
     private CompletableFuture<Void> inFlight = CompletableFuture.completedFuture(null);
 
     FreeFormSqlQueryLogFlusher(@NonNull Supplier<CompletableFuture<Void>> flush, long minIntervalMillis,
-            @NonNull LongSupplier clock) {
+            @NonNull LongSupplier clock, @NonNull Scheduler scheduler) {
         this.flush = flush;
         this.minIntervalMillis = minIntervalMillis;
         this.clock = clock;
+        this.scheduler = scheduler;
     }
 
     /** Flags a waiting request. @return completes once a flush that started after this call has finished */
@@ -42,7 +52,7 @@ class FreeFormSqlQueryLogFlusher {
         var done = new CompletableFuture<Void>();
         pending = done;
         long delay = Math.max(0, lastStartMillis + minIntervalMillis - clock.getAsLong());
-        CompletableFuture.delayedExecutor(delay, TimeUnit.MILLISECONDS).execute(() -> start(done));
+        scheduler.schedule(delay, () -> start(done));
         return done;
     }
 

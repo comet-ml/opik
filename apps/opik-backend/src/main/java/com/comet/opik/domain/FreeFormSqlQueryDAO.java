@@ -123,7 +123,7 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
         this.extendedReadOnlyClient = extendedReadOnlyClient;
         this.analyticsClient = analyticsClient;
         this.flusher = new FreeFormSqlQueryLogFlusher(this::flushQueryLog, MIN_FLUSH_INTERVAL_MILLIS,
-                System::currentTimeMillis);
+                System::currentTimeMillis, FreeFormSqlQueryLogFlusher.Scheduler.DELAYED);
     }
 
     private Client clientFor(FreeFormSqlAccount account) {
