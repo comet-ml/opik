@@ -35,7 +35,7 @@ jobs:
           python-version: 3.12
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.1.0
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Install Python dependencies
         run: |
@@ -80,7 +80,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.1.0
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Install Python dependencies
         run: |
@@ -137,7 +137,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.1.0
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Install Python dependencies
         run: |
@@ -194,7 +194,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.1.0
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Install Python dependencies
         run: |
@@ -252,7 +252,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.1.0
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Install Python dependencies
         run: |

@@ -49,7 +49,7 @@ public class AgentInsightsReportPublisher {
     public Mono<String> enqueue(@NonNull UUID projectId, @NonNull String workspaceId,
             @NonNull Instant periodStart, @NonNull Instant periodEnd, @NonNull String triggerSource) {
 
-        if (!serviceToggles.isOllieEnabled()) {
+        if (!serviceToggles.isAgentInsightsActive()) {
             log.debug("Agent Insights is disabled, ignoring trigger for project '{}'", projectId);
             return Mono.empty();
         }

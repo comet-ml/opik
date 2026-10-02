@@ -40,8 +40,13 @@ export interface AnnotationQueueAutomation {
   conditions?: {
     groups: AnnotationQueueConditionGroup[];
   };
-  /** Automation stops adding once the queue holds this many items; null or absent means no ceiling. */
+  /**
+   * Automation stops adding once the queue holds this many items. Absent means "leave the stored
+   * ceiling alone", as absent does for every field here; send clear_max_items_in_queue to remove one.
+   */
   max_items_in_queue?: number | null;
+  /** Write-only: removes the stored ceiling. Cannot be sent together with max_items_in_queue. */
+  clear_max_items_in_queue?: boolean;
 }
 
 export interface AnnotationQueue {

@@ -53,6 +53,45 @@ def test_from_pandas__all_columns_from_dataframe_represent_all_dataset_item_fiel
     assert actual_items == EXPECTED_ITEMS
 
 
+def test_from_pandas__int_column_next_to_float_column__int_values_are_kept():
+    dataframe = pd.DataFrame({"input": [1, 2], "score": [0.5, 0.7]})
+
+    actual_items = converters.from_pandas(
+        dataframe=dataframe, keys_mapping={}, ignore_keys=[]
+    )
+
+    contents = [item.get_content() for item in actual_items]
+    assert contents == [{"input": 1, "score": 0.5}, {"input": 2, "score": 0.7}]
+    assert all(type(content["input"]) is int for content in contents)
+
+
+def test_from_pandas__int_column_with_missing_value__missing_cell_is_skipped():
+    # One missing cell makes pandas store the whole column as float64 with NaN.
+    dataframe = pd.DataFrame({"input": [1, None], "score": [0.5, 0.7]})
+
+    actual_items = converters.from_pandas(
+        dataframe=dataframe, keys_mapping={}, ignore_keys=[]
+    )
+
+    contents = [item.get_content() for item in actual_items]
+    assert contents == [{"input": 1.0, "score": 0.5}, {"score": 0.7}]
+    json.dumps(contents, allow_nan=False)
+
+
+def test_from_pandas__nullable_int_column_with_missing_value__ints_are_kept():
+    dataframe = pd.DataFrame(
+        {"input": pd.array([1, None], dtype="Int64"), "score": [0.5, 0.7]}
+    )
+
+    actual_items = converters.from_pandas(
+        dataframe=dataframe, keys_mapping={}, ignore_keys=[]
+    )
+
+    contents = [item.get_content() for item in actual_items]
+    assert contents == [{"input": 1, "score": 0.5}, {"score": 0.7}]
+    assert type(contents[0]["input"]) is int
+
+
 def test_from_pandas__only_input_presented_in_dataframe__items_are_constructed_with_default_values_for_missing_fields():
     data_for_dataframe = {
         "input": [{"input-key-1": "input-1"}, {"input-key-2": "input-2"}],
