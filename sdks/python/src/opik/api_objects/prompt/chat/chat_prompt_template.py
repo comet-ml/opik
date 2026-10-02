@@ -180,6 +180,12 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
                         placeholders.update(
                             _extract_placeholders_from_string(url, template_type)
                         )
+                    # Extract from audio_url parts
+                    if "audio_url" in part and isinstance(part["audio_url"], dict):
+                        url = str(part["audio_url"].get("url", ""))
+                        placeholders.update(
+                            _extract_placeholders_from_string(url, template_type)
+                        )
         return placeholders
 
     @override
@@ -327,6 +333,35 @@ def render_video_url_part(
     return {"type": "video_url", "video_url": rendered_video}
 
 
+def render_audio_url_part(
+    part: prompt_types.ContentPart,
+    variables: Dict[str, Any],
+    template_type: prompt_types.PromptType,
+) -> Optional[prompt_types.ContentPart]:
+    """
+    Render an ``audio_url`` part and preserve optional metadata.
+
+    Mirrors the video renderer: the ``url`` is templated, and ``detail``,
+    ``mime_type``, ``duration`` and ``format`` are carried through when the
+    caller supplied them.
+    """
+    audio_dict = part.get("audio_url", {})
+    if not isinstance(audio_dict, dict):
+        return None
+
+    url_template = audio_dict.get("url", "")
+    rendered_url = _render_template_string(url_template, variables, template_type)
+    if not rendered_url:
+        return None
+
+    rendered_audio: Dict[str, Any] = {"url": rendered_url}
+    for key in ("detail", "mime_type", "duration", "format"):
+        if key in audio_dict:
+            rendered_audio[key] = audio_dict[key]
+
+    return {"type": "audio_url", "audio_url": rendered_audio}
+
+
 def _extract_placeholders_from_string(
     text: str, template_type: prompt_types.PromptType
 ) -> Set[str]:
@@ -351,4 +386,10 @@ content_renderer_registry.register_default_chat_part_renderer(
     render_video_url_part,
     modality="video",
     placeholder=("<<<video>>>", "<<</video>>>"),
+)
+content_renderer_registry.register_default_chat_part_renderer(
+    "audio_url",
+    render_audio_url_part,
+    modality="audio",
+    placeholder=("<<<audio>>>", "<<</audio>>>"),
 )

@@ -1,4 +1,4 @@
-import { test as baseTest, expect } from './readability-locale-experiment.fixture';
+import { test as baseTest, expect } from './paged-stream-population.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7 } from '../core/backend';
 

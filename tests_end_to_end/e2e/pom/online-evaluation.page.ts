@@ -304,6 +304,233 @@ export class OnlineEvaluationPage {
     });
   }
 
+  // --- Rule filters (the Filtering & Sampling accordion's filter table) ---
+
+  /**
+   * One row of the rule's filter table, by position.
+   *
+   * Identified by the presence of a column selector rather than by `nth` over
+   * every `tr` in the dialog: `FilterRow` renders a SECOND `tr` beneath a row
+   * that has a validation error, so a positional index over raw rows silently
+   * shifts the moment a filter is invalid — which is exactly when a spec is
+   * most likely to be looking at one.
+   */
+  filterRow(index: number): Locator {
+    return this.dialog
+      .locator('tr')
+      .filter({ has: this.page.locator('[data-testid="filter-column"]') })
+      .nth(index);
+  }
+
+  /** How many filter rows the dialog is currently showing. */
+  get filterRows(): Locator {
+    return this.dialog
+      .locator('tr')
+      .filter({ has: this.page.locator('[data-testid="filter-column"]') });
+  }
+
+  /** Append an empty filter row. */
+  async addFilterRow(): Promise<void> {
+    return test.step('add a filter row', async () => {
+      await this.expandFilteringAndSampling();
+      const before = await this.filterRows.count();
+      await this.dialog.getByRole('button', { name: 'Add filter' }).click();
+      await expect(this.filterRows, 'filter rows after Add filter').toHaveCount(before + 1);
+    });
+  }
+
+  /**
+   * Choose a filter row's column by the label the dialog shows — "Duration (s)",
+   * "Name", … — which is the user-facing name and the one that carries the
+   * UNIT. That matters here: the column is labelled in seconds while the
+   * backend stores milliseconds, and the label is the only place the dialog
+   * promises which of the two a typed number means.
+   *
+   * Selecting a column resets the row's operator and value (`createFilter()`),
+   * so always set the column first.
+   */
+  async setFilterColumn(index: number, label: string): Promise<void> {
+    return test.step(`set filter ${index + 1}'s column to "${label}"`, async () => {
+      await this.filterRow(index)
+        .locator('button[role="combobox"]:has([data-testid="filter-column"])')
+        .click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+    });
+  }
+
+  /** Choose a filter row's operator by its label (">", "contains", …). */
+  async setFilterOperator(index: number, label: string): Promise<void> {
+    return test.step(`set filter ${index + 1}'s operator to "${label}"`, async () => {
+      await this.filterRow(index)
+        .locator('button[role="combobox"]:has([data-testid="filter-operator"])')
+        .click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+    });
+  }
+
+  /**
+   * Type a filter row's value.
+   *
+   * `DebounceInput` commits on a timer, so the blur is explicit rather than
+   * left to whatever the next interaction happens to be — the same reasoning as
+   * `setSamplingRatePercent`. A real user's click on Create blurs the field
+   * first, so this is the genuine gesture, not a workaround.
+   */
+  async setFilterValue(index: number, value: string): Promise<void> {
+    return test.step(`set filter ${index + 1}'s value to "${value}"`, async () => {
+      const input = this.filterValueInput(index);
+      await input.fill(value);
+      await input.blur();
+      await expect(input, `filter ${index + 1}'s value box`).toHaveValue(value);
+    });
+  }
+
+  /**
+   * The value the dialog is SHOWING for a filter row.
+   *
+   * The assertion target for hydration: a rule stored at 5000ms must come back
+   * on screen as 5, because the column is labelled "Duration (s)". Reading the
+   * input's value rather than any internal state is the point — what the user
+   * sees is the whole claim.
+   */
+  async readFilterValue(index: number): Promise<string> {
+    return test.step(`read filter ${index + 1}'s displayed value`, async () => {
+      const input = this.filterValueInput(index);
+      await expect(input, `filter ${index + 1}'s value box`).toBeVisible();
+      return (await input.inputValue()).trim();
+    });
+  }
+
+  /**
+   * A filter row's value box, whichever type the row is.
+   *
+   * `NumberRow` and `StringRow` stamp different test ids on the same slot;
+   * matching either keeps the caller from having to know the column's type to
+   * read what is in it, and the `toHaveCount(1)` guards against a row that
+   * somehow rendered both.
+   */
+  private filterValueInput(index: number): Locator {
+    return this.filterRow(index).locator(
+      '[data-testid="filter-number-input"], [data-testid="filter-string-input"]',
+    );
+  }
+
+  // --- LLM judge: scope and model picker ---
+
+  /**
+   * Choose the rule's Scope (Trace / Thread / Span).
+   *
+   * Disabled in edit mode by design, so this is only callable while creating.
+   * Addressed through the "Scope" label because the trigger carries no test id
+   * and its accessible name is whatever is currently selected.
+   */
+  async setScope(label: 'Trace' | 'Thread' | 'Span'): Promise<void> {
+    return test.step(`set the rule scope to ${label}`, async () => {
+      const trigger = this.scopeControl;
+      await expect(trigger, 'exactly one Scope control').toHaveCount(1);
+      await trigger.click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+      await expect(trigger, 'the Scope control').toHaveText(label);
+    });
+  }
+
+  /**
+   * The Scope select's trigger.
+   *
+   * Identified by the VALUE it displays rather than by its label: the label is
+   * a bare `<Label>` with no `htmlFor`, so there is nothing tying it to the
+   * control, and walking up to the shared FormItem wrapper matches a stack of
+   * anonymous divs whose innermost is not reliably the right one — an earlier
+   * attempt at that resolved to the model picker, which is disabled until a
+   * type is chosen. Scope is the only combobox in this dialog whose text is one
+   * of the three scope names, which makes the value the stable handle.
+   */
+  private get scopeControl(): Locator {
+    return this.dialog
+      .locator('button[role="combobox"]')
+      .filter({ hasText: /^(Trace|Thread|Span)$/ });
+  }
+
+  /** What the Scope control currently reads. */
+  async readScope(): Promise<string> {
+    return ((await this.scopeControl.textContent()) ?? '').trim();
+  }
+
+  /** The LLM-model picker trigger in the judge form. */
+  get modelPicker(): Locator {
+    return this.dialog.locator('button[role="combobox"]:has([data-testid="select-a-llm-model"])');
+  }
+
+  /**
+   * Open the model picker and leave it open.
+   *
+   * Retried as a unit: the option list remounts when the model and
+   * provider-key queries resolve, so a click that lands during that window
+   * opens nothing. Same reasoning as `fillAndSubmitCreateRuleDialogLLMJudge`.
+   */
+  async openModelPicker(): Promise<Locator> {
+    return test.step('open the LLM model picker', async () => {
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await this.modelPicker.click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+      return listbox;
+    });
+  }
+
+  /**
+   * Type into the OPEN picker's search box and return the options it matched.
+   *
+   * Returns the locator rather than a count so the caller can assert on
+   * emptiness and on membership with the same handle — "no results" is a
+   * meaningful answer here, not a missing selector, which is why this does not
+   * wait for an option to appear.
+   */
+  async searchModels(term: string): Promise<Locator> {
+    return test.step(`search the model picker for "${term}"`, async () => {
+      const listbox = this.page.getByRole('listbox');
+      await listbox.getByPlaceholder('Search model').fill(term);
+      return listbox.getByRole('option');
+    });
+  }
+
+  /** Pick a model by its exact label from the OPEN picker. */
+  async chooseModel(label: string): Promise<void> {
+    return test.step(`choose the model "${label}"`, async () => {
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await listbox.getByPlaceholder('Search model').fill(label);
+        const option = listbox.getByRole('option', { name: label, exact: true });
+        await expect(option.first()).toBeVisible({ timeout: 2_000 });
+        await option.first().click({ timeout: 2_000 });
+        await expect(this.modelPicker).toContainText(label, { timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
+    });
+  }
+
+  /** What the model picker currently reads. */
+  async readModelPickerText(): Promise<string> {
+    return ((await this.modelPicker.textContent()) ?? '').trim();
+  }
+
+  /**
+   * The model-parameters gear.
+   *
+   * Addressed by its tooltip-backed accessible name; `PromptModelConfigs`
+   * renders an icon-only `DropdownMenuTrigger` whose only label is the
+   * "Model parameters" tooltip. Absent entirely for a decisions model, which
+   * is what a caller here is usually checking.
+   */
+  get modelSettingsButton(): Locator {
+    return this.dialog.getByRole('button', { name: 'Model parameters' });
+  }
+
+  /** The "Max cost per evaluation (USD)" field's label — absent for a decisions model. */
+  get maxCostLabel(): Locator {
+    return this.dialog.getByText('Max cost per evaluation (USD)', { exact: true });
+  }
+
   /** The "Enable rule" switch inside the add/edit dialog. */
   get enableRuleSwitch(): Locator {
     return this.dialog.getByRole('switch', { name: 'Enable rule' });
