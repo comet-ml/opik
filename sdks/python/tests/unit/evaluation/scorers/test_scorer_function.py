@@ -256,3 +256,22 @@ def test_wrap_scorer_functions__scorer_with_var_kwargs__receives_all_arguments()
         "task_outputs": {"b": 2},
         "task_span": span,
     }
+
+
+def test_wrap_scorer_functions__required_task_span_and_no_span__called_with_none():
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    def spans_are_present(
+        task_span: Optional[models.SpanModel],
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name="spans_are_present", value=1.0 if task_span else 0.0
+        )
+
+    [metric] = wrap_scorer_functions([spans_are_present], project_name=None)
+
+    result = metric.score(
+        dataset_item={"input": "hi"}, task_outputs={"output": "hello"}
+    )
+
+    assert result.value == 0.0
