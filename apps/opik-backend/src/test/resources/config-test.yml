@@ -209,7 +209,6 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 # Description: timing of the free-form SQL post-run check's query_log reads and flushes. Plain values (no env var).
 freeFormSqlPostRunCheck:
   minFlushInterval: 1s
-  flushPermitRetry: 200ms
   logRetryDelay: 500ms
   maxFlushAttempts: 3
 

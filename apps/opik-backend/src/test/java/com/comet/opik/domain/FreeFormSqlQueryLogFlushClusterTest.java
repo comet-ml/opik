@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.infrastructure.RateLimitConfig;
+import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfigTest;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.AfterAll;
@@ -22,7 +22,7 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The flush limit across backend instances, on a real Redis: two flushers, standing for two instances, share the
+ * The flush limit across backend instances, on a real Redis: two readers, standing for two instances, share the
  * cluster-wide permit, so their flushes together stay at one per interval.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -50,20 +50,21 @@ class FreeFormSqlQueryLogFlushClusterTest {
     void flushesStayAtOnePerSecondAcrossInstances() {
         var rateLimit = new RedisModule().rateLimitService(redisson.reactive());
         // A bucket of its own, so a reused Redis cannot hand this run another run's permit.
-        var permits = new RateLimitConfig.LimitConfig("unused", "flush-" + UUID.randomUUID(), 1, 1, "");
+        var permit = FreeFormSqlQueryLogReader.permit(rateLimit, "flush-" + UUID.randomUUID(),
+                FreeFormSqlPostRunCheckConfigTest.config());
         var starts = new CopyOnWriteArrayList<Long>();
-        var instances = IntStream.range(0, 2).mapToObj(i -> new FreeFormSqlQueryLogFlusher(() -> {
-            starts.add(System.currentTimeMillis());
-            return CompletableFuture.<Void>completedFuture(null);
-        }, 0, 50, System::currentTimeMillis, FreeFormSqlQueryLogFlusher.Scheduler.DELAYED,
-                () -> rateLimit.isLimitExceeded(1, permits.userFacingBucketName(), permits).map(exceeded -> !exceeded)
-                        .toFuture()))
+        var instances = IntStream.range(0, 2).mapToObj(i -> new FreeFormSqlQueryLogReader(
+                (queryId, user) -> CompletableFuture.completedFuture(List.<FreeFormSqlQueryLogEntry>of()),
+                () -> {
+                    starts.add(System.currentTimeMillis());
+                    return CompletableFuture.<Void>completedFuture(null);
+                }, permit, 3, 50, FreeFormSqlQueryLogReader.Scheduler.DELAYED))
                 .toList();
 
-        // Every instance asks for a flush continuously for about three seconds.
+        // The entry never appears, so every instance asks for flushes continuously for about three seconds.
         long end = System.currentTimeMillis() + 3_000;
         while (System.currentTimeMillis() < end) {
-            CompletableFuture.allOf(instances.stream().map(FreeFormSqlQueryLogFlusher::awaitFlush)
+            CompletableFuture.allOf(instances.stream().map(reader -> reader.entries("q", "u", true))
                     .toArray(CompletableFuture[]::new)).join();
         }
 

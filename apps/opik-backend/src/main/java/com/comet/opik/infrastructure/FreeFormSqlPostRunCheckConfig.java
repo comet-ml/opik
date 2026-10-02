@@ -15,21 +15,17 @@ import java.util.concurrent.TimeUnit;
 public class FreeFormSqlPostRunCheckConfig {
 
     /**
-     * At most one flush per interval, per instance and across the cluster. Whole seconds: the cluster-wide permit is
+     * At most one flush per interval across the cluster. Whole seconds: the cluster-wide permit is
      * a Redis rate limiter counted in seconds.
      */
     @JsonProperty
     private @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) Duration minFlushInterval;
 
-    /** How soon a flush denied the cluster-wide permit asks for it again. */
-    @JsonProperty
-    private @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS) Duration flushPermitRetry;
-
-    /** The wait between a log read that misses the query's entry and the next attempt. */
+    /** The wait between a log read that misses the query's entry, or a denied flush permit, and the next attempt. */
     @JsonProperty
     private @NotNull @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS) Duration logRetryDelay;
 
-    /** Flushes tried before the check fails closed and withholds the result. */
+    /** Flush permit requests before the check fails closed and withholds the result. */
     @JsonProperty
     private @Min(1) @Max(10) int maxFlushAttempts;
 }

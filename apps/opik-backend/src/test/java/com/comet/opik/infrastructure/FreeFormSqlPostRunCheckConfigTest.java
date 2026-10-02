@@ -17,7 +17,6 @@ public class FreeFormSqlPostRunCheckConfigTest {
     public static FreeFormSqlPostRunCheckConfig config() {
         var config = new FreeFormSqlPostRunCheckConfig();
         config.setMinFlushInterval(Duration.seconds(1));
-        config.setFlushPermitRetry(Duration.milliseconds(200));
         config.setLogRetryDelay(Duration.milliseconds(500));
         config.setMaxFlushAttempts(3);
         return config;
@@ -28,7 +27,7 @@ public class FreeFormSqlPostRunCheckConfigTest {
     void absentSettingsAreRejected() {
         assertThat(validator.validate(new FreeFormSqlPostRunCheckConfig()))
                 .extracting(violation -> violation.getPropertyPath().toString())
-                .containsExactlyInAnyOrder("minFlushInterval", "flushPermitRetry", "logRetryDelay", "maxFlushAttempts");
+                .containsExactlyInAnyOrder("minFlushInterval", "logRetryDelay", "maxFlushAttempts");
     }
 
     @Test
