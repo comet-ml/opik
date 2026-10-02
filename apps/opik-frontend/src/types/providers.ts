@@ -926,9 +926,7 @@ export enum PROVIDER_MODEL_TYPE {
   TEXT_EMBEDDING = "text-embedding-004",
 
   //   <------ vertex ai
-  VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash",
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
-  VERTEX_AI_GEMINI_2_0_FLASH_LITE = "vertex_ai/gemini-2.0-flash-lite",
   VERTEX_AI_GEMINI_2_0_FLASH_LITE = "vertex_ai/gemini-2.0-flash-lite-001",
   VERTEX_AI_GEMINI_2_5_FLASH = "vertex_ai/gemini-2.5-flash",
   VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "vertex_ai/gemini-2.5-flash-lite-preview-06-17",
