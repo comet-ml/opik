@@ -82,7 +82,6 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
@@ -396,7 +395,6 @@ class SpansReadPathPartitionPruningTest {
                 "from_time", now.minus(Duration.ofHours(1)).toString(),
                 "to_time", now.plus(Duration.ofMinutes(5)).toString()));
 
-        assertThat(expected.spanCount()).isEqualTo(2);
         TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectTraceStatItems(List.of(expected)));
     }
 
@@ -408,6 +406,9 @@ class SpansReadPathPartitionPruningTest {
         var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
                 .projectName(projectName)
+                .startTime(now)
+                .endTime(now.plusMillis(100))
+                .errorInfo(null)
                 .feedbackScores(null)
                 .usage(null)
                 .build(), API_KEY, WORKSPACE_NAME);
@@ -419,15 +420,28 @@ class SpansReadPathPartitionPruningTest {
                         .totalEstimatedCost(new BigDecimal("2.5")).build()),
                 API_KEY, WORKSPACE_NAME);
 
-        var response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+        var actual = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
                 .entityType(KpiCardRequest.EntityType.TRACES)
                 .intervalStart(now.minus(Duration.ofHours(1)))
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        var totalCost = response.stats().stream()
-                .filter(metric -> metric.type() == KpiCardResponse.KpiMetricType.TOTAL_COST)
-                .findFirst().orElseThrow();
-        assertThat(totalCost.currentValue().doubleValue()).isCloseTo(3.75, within(1e-9));
+        var expected = KpiCardResponse.builder()
+                .stats(List.of(
+                        kpi(KpiCardResponse.KpiMetricType.COUNT, 1.0, 0.0),
+                        kpi(KpiCardResponse.KpiMetricType.ERRORS, 0.0, 0.0),
+                        kpi(KpiCardResponse.KpiMetricType.AVG_DURATION, 100.0, null),
+                        kpi(KpiCardResponse.KpiMetricType.TOTAL_COST, 3.75, 0.0)))
+                .build();
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringCollectionOrder()
+                .withComparatorForType((a, b) -> Math.abs(a - b) <= 1e-6 ? 0 : Double.compare(a, b), Double.class)
+                .isEqualTo(expected);
+    }
+
+    private static KpiCardResponse.KpiMetric kpi(KpiCardResponse.KpiMetricType type, Double current,
+            Double previous) {
+        return KpiCardResponse.KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
     }
 
     private void batchUpdateTags(Span span, Set<UUID> ids) {

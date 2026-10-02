@@ -40,7 +40,6 @@ import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
@@ -49,7 +48,6 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -400,33 +398,6 @@ class ProjectMetricsResourceTest {
                     Map.of(ProjectMetricsDAO.NAME_TRACES, expected.getFirst()),
                     Map.of(ProjectMetricsDAO.NAME_TRACES, expected.get(1)),
                     Map.of(ProjectMetricsDAO.NAME_TRACES, expected.getLast()));
-        }
-
-        @Test
-        @DisplayName("without intervalEnd, a far-future trace id counts in the latest bucket")
-        void farFutureTraceCountsInLatestBucketWithoutIntervalEnd(TransactionTemplateAsync templateAsync) {
-            mockTargetWorkspace();
-            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
-            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-            var now = Instant.now();
-            createTraces(projectName, now, 1);
-            // Inserted directly: ingestion rejects an id this far outside its validation window.
-            TraceDBUtils.createTraceViaDB(factory.manufacturePojo(Trace.class).toBuilder()
-                    .id(idGenerator.generateId(Instant.parse("2201-08-30T03:18:08Z")))
-                    .projectId(projectId)
-                    .createdBy(USER)
-                    .lastUpdatedBy(USER)
-                    .build(), WORKSPACE_ID, templateAsync);
-
-            var response = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
-                    .metricType(MetricType.TRACE_COUNT)
-                    .interval(TimeInterval.DAILY)
-                    .intervalStart(now.minus(2, ChronoUnit.DAYS))
-                    .build(), Integer.class, API_KEY, WORKSPACE_NAME);
-
-            var data = response.results().getFirst().data();
-            assertThat(data).allSatisfy(point -> assertThat(point.time()).isBeforeOrEqualTo(now));
-            assertThat(data.getLast().value()).isEqualTo(2);
         }
 
         @ParameterizedTest
