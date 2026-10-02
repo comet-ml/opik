@@ -82,6 +82,7 @@ public enum AnthropicModelName implements StructuredOutputSupported {
 
     // A map of the constants rather than a constructor argument, for the sync reason given on
     // SAMPLING_CAPABLE_MODEL_IDS. Levels per https://platform.claude.com/docs/en/build-with-claude/effort.
+    // thinkingEffortOptions in the frontend's ANTHROPIC_MODEL_CAPABILITIES must offer a subset of these.
     private static final Map<String, List<String>> EFFORT_LEVELS_BY_MODEL_ID = Map.ofEntries(
             Map.entry(CLAUDE_OPUS_5_5.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_OPUS_5.value, ALL_EFFORT_LEVELS),
@@ -91,6 +92,8 @@ public enum AnthropicModelName implements StructuredOutputSupported {
             Map.entry(CLAUDE_SONNET_5.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_FABLE_5.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_FABLE_5_1.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_MYTHOS_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_MYTHOS_5_1.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_OPUS_4_6.value, EFFORT_LEVELS_WITHOUT_XHIGH),
             Map.entry(CLAUDE_OPUS_4_6_20260205.value, EFFORT_LEVELS_WITHOUT_XHIGH),
             Map.entry(CLAUDE_MYTHOS_PREVIEW.value, EFFORT_LEVELS_WITHOUT_XHIGH),

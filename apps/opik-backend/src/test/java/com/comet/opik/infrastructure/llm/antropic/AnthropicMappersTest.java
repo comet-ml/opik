@@ -260,6 +260,7 @@ public class AnthropicMappersTest {
                 "claude-sonnet-5, xhigh",
                 "claude-opus-5-5, medium",
                 "claude-opus-4-5-20251101, high",
+                "claude-mythos-5, xhigh",
                 "claude-mythos-5-1, xhigh",
                 "claude-opus-4-6-20260205, max",
                 "claude-opus-4-7-20260416, xhigh",
@@ -312,6 +313,16 @@ public class AnthropicMappersTest {
                     Arguments.of("claude-sonnet-4-6", 1,
                             "custom_parameters.output_config.effort must be a string, "
                                     + "model 'claude-sonnet-4-6', effort '1'"));
+        }
+
+        @Test
+        void checksAModelWithoutARowOnlyForAKnownLevelName() {
+            assertThatCode(() -> provider.validateRequest(requestWithEffort("claude-opus-9", "xhigh")))
+                    .doesNotThrowAnyException();
+            assertThatThrownBy(() -> provider.validateRequest(requestWithEffort("claude-opus-9", "adaptive")))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessage("Unsupported custom_parameters.output_config.effort for the model, "
+                            + "model 'claude-opus-9', effort 'adaptive', supported '[low, medium, high, xhigh, max]'");
         }
 
         @Test
