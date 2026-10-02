@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.86](https://img.shields.io/badge/Version-2.2.86-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.86](https://img.shields.io/badge/AppVersion-2.2.86-informational?style=flat-square)
+![Version: 2.2.88](https://img.shields.io/badge/Version-2.2.88-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.88](https://img.shields.io/badge/AppVersion-2.2.88-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -141,7 +141,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.env.LOG_LEVEL | string | `"info"` |  |
 | clickhouse.backupServer.extraVolumeMounts | list | `[]` | Additional volume mounts for the `clickhouse-backup` container. The mount name can reference a CHI `volumeClaimTemplate` defined in `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume defined in `extraVolumes` above. |
 | clickhouse.backupServer.extraVolumes | list | `[]` | Additional volumes to add to the ClickHouse pod when the backup server is enabled. Use this for non-PVC volume types (emptyDir, configMap, secret, hostPath, etc.). For persistent storage, prefer using `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and reference its name directly in `extraVolumeMounts` below (the clickhouse operator matches volumeMount names to volumeClaimTemplate names automatically). Note that `clickhouse-backup` writes local backups to `/var/lib/clickhouse/backup/` by default (on the same filesystem as ClickHouse data to preserve hard links). Mounting a separate volume at that path will cause backups to use full copies instead of hard links. |
-| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.39"` |  |
+| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.7.4"` |  |
 | clickhouse.backupServer.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.backupServer.monitoring.annotations | object | `{}` |  |
 | clickhouse.backupServer.monitoring.enabled | bool | `false` |  |
@@ -161,6 +161,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.relabelings | list | `[]` |  |
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
+| clickhouse.backupServer.securityContext | object | `{"allowPrivilegeEscalation":false}` | securityContext of the clickhouse-backup sidecar; it inherits the pod's uid 101, so it needs the same explicit allowPrivilegeEscalation as `clickhouse.securityContext`. |
 | clickhouse.backupServer.service.name | string | `""` |  |
 | clickhouse.backupServer.service.port | string | `""` |  |
 | clickhouse.configuration.files."conf.d/memory.xml" | string | `"<yandex>\n  <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>\n</yandex>\n"` |  |
@@ -212,6 +213,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.readinessProbe.periodSeconds | int | `10` |  |
 | clickhouse.readinessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.replicasCount | int | `1` |  |
+| clickhouse.securityContext | object | `{"allowPrivilegeEscalation":false}` | securityContext of the clickhouse container. The pod runs as uid 101, and policies against privilege escalation (e.g. Azure AKS Deployment Safeguards) refuse a non-root container unless allowPrivilegeEscalation is set false explicitly. |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.serviceAccount.create | bool | `false` |  |

@@ -45,6 +45,7 @@ import {
   AuthConfigFormValues,
   EMPTY_AUTH_FORM_VALUES,
   authConfigToFormValues,
+  builtInProviderHeadersForAPI,
   configStringToQueryParamsArray,
   convertHeadersForAPI,
   formValuesToAuthConfig,
@@ -334,7 +335,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
     const isEditingCustomProvider =
       isCustomLike && !!(providerKey || calculatedProviderKey);
-    const headers = convertHeadersForAPI(headersArray, isEditingCustomProvider);
+    const headers = isCustomLike
+      ? convertHeadersForAPI(headersArray, isEditingCustomProvider)
+      : builtInProviderHeadersForAPI(
+          provider,
+          headersArray,
+          !!(providerKey || calculatedProviderKey),
+        );
 
     const storedProvider = providerKey ?? calculatedProviderKey;
     const authConfig = isCustomLike
@@ -359,7 +366,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           apiKey: effectiveApiKey,
           base_url: isCustomLike ? url : undefined,
           ...(configuration && { configuration }),
-          ...(isCustomLike && headers !== undefined && { headers }),
+          ...(headers !== undefined && { headers }),
           ...(authConfig !== undefined && { auth_config: authConfig }),
         },
       });
@@ -375,7 +382,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           base_url: isCustomLike ? url : undefined,
           provider_name: isCustomLike ? providerName : undefined,
           ...(configuration && { configuration }),
-          ...(isCustomLike && headers !== undefined && { headers }),
+          ...(headers !== undefined && { headers }),
           ...(authConfig !== undefined && { auth_config: authConfig }),
         },
       });
