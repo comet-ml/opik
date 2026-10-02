@@ -27,6 +27,7 @@ export class Span {
     categoryName?: string;
     value: number;
     reason?: string;
+    metadata?: Record<string, unknown>;
   }) => {
     if (!isTracingActive()) {
       return;

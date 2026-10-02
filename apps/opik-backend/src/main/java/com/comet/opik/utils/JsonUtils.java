@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.common.annotations.VisibleForTesting;
 import dev.langchain4j.model.openai.internal.chat.Message;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,8 @@ import java.io.Writer;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
 
@@ -348,6 +351,44 @@ public class JsonUtils {
         var counter = new CountingOutputStream();
         writeValue(counter, node);
         return counter.getCount();
+    }
+
+    /**
+     * Whether {@code value} serializes to more than {@code maxSizeInBytes} UTF-8 bytes, without materializing
+     * its JSON. The value is streamed through a counting output stream that aborts as soon as the budget is
+     * exceeded, so an oversized payload costs O(1) transient heap and stops at the limit instead of being
+     * serialized in full and then copied into a byte array. A {@code null} value never exceeds the limit.
+     */
+    public boolean exceedsSerializedLengthInBytes(@Nullable Object value, long maxSizeInBytes) {
+        if (value == null) {
+            return false;
+        }
+        try {
+            writeValue(new BudgetedOutputStream(maxSizeInBytes), value);
+            return false;
+        } catch (RuntimeException exception) {
+            // The abort signal does not always surface as-is: for container values Jackson catches it and
+            // rethrows it wrapped (MapSerializer.wrapAndThrow -> JsonMappingException -> UncheckedIOException),
+            // so the cause chain has to be inspected rather than the thrown type alone.
+            if (hasCause(exception, BudgetedOutputStream.BudgetExceededException.class)) {
+                return true;
+            }
+            throw exception;
+        }
+    }
+
+    private static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
+        // Cause chains are not guaranteed acyclic. A self-reference (A -> A) or a longer cycle
+        // (A -> B -> A) would otherwise spin here and hang the request thread after serialization
+        // has already aborted. Tracking visited throwables by identity terminates on both, since
+        // revisiting an instance can only mean a cycle.
+        var visited = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+        for (var current = throwable; current != null && visited.add(current); current = current.getCause()) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public <T> T readJsonFile(@NonNull String fileName, @NonNull TypeReference<T> valueTypeRef) throws IOException {

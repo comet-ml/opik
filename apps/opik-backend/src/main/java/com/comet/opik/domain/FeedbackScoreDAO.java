@@ -89,6 +89,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 value,
                 reason,
                 source,
+                metadata,
                 <if(author)>author,<endif>
                 <if(author)>source_queue_id,<endif>
                 created_by,
@@ -107,14 +108,15 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                          :value<item.index>,
                          :reason<item.index>,
                          :source<item.index>,
+                         :metadata<item.index>,
                          <if(author)>:author<item.index>,<endif>
                          <if(author)>:source_queue_id<item.index>,<endif>
                          :user_name,
                          :user_name
-                     )
-                     <if(item.hasNext)>
-                        ,
-                     <endif>
+                      )
+                      <if(item.hasNext)>
+                         ,
+                      <endif>
                 }>
             ;
             """;
@@ -400,7 +402,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     /**
      * The {@link #BULK_INSERT_FEEDBACK_SCORE} rows streamed as JSONEachRow through the v2 client rather
-     * than bound as 8 named parameters per row — 10 for the authored table.
+     * than bound as 9 named parameters per row — 11 for the authored table.
      *
      * <p>Batch size here is not capped the way the other bulk paths are: a feedback score batch is 1000
      * items at most on its own endpoints, but {@code ExperimentItemBulkIngestionService} accumulates up
@@ -449,6 +451,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("name" + i, feedbackScoreBatchItem.name())
                     .bind("value" + i, feedbackScoreBatchItem.value().toString())
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
+                    .bind("metadata" + i,
+                            FeedbackScoreJsonRowMapper.serializeMetadata(feedbackScoreBatchItem.metadata()))
                     .bind("reason" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.reason()))
                     .bind("category_name" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.categoryName()));
 

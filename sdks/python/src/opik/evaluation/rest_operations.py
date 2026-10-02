@@ -114,6 +114,7 @@ def log_test_result_feedback_scores(
             value=score_result_.value,
             reason=score_result_.reason,
             category_name=score_result_.category_name,
+            metadata=score_result_.metadata,
         )
         all_trace_scores.append(trace_score)
 
