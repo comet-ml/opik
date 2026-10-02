@@ -1,3 +1,4 @@
+import isPlainObject from "lodash/isPlainObject";
 import {
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
@@ -7,7 +8,6 @@ import {
   ReasoningEffort,
 } from "@/types/providers";
 import {
-  ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND,
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
@@ -449,9 +449,46 @@ export const supportsSamplingParams = (
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean =>
-  ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND &&
   !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.thinkingEffortOptions;
+
+export const getDefaultThinkingEffort = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): AnthropicThinkingEffort =>
+  ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.defaultThinkingEffort ?? "high";
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  isPlainObject(value) ? (value as Record<string, unknown>) : {};
+
+/**
+ * The effort a config holds under custom_parameters.output_config, which is where the request
+ * carries it. Surfaces that store the request shape and load it back (a saved optimization run, an
+ * evaluator rule) have only this copy.
+ */
+export const getNestedThinkingEffort = (
+  customParameters: unknown,
+): AnthropicThinkingEffort | undefined => {
+  const effort = asRecord(asRecord(customParameters).output_config).effort;
+  return typeof effort === "string"
+    ? (effort as AnthropicThinkingEffort)
+    : undefined;
+};
+
+// Keeps every other key, inside output_config too, so fields no form control shows survive a save.
+export const withThinkingEffort = (
+  customParameters: unknown,
+  effort: AnthropicThinkingEffort | undefined,
+): Record<string, unknown> | undefined => {
+  const params = asRecord(customParameters);
+  const outputConfig = omit(asRecord(params.output_config), "effort");
+  const nextOutputConfig = effort ? { ...outputConfig, effort } : outputConfig;
+  const next =
+    Object.keys(nextOutputConfig).length > 0
+      ? { ...omit(params, "output_config"), output_config: nextOutputConfig }
+      : omit(params, "output_config");
+  return Object.keys(next).length > 0 ? next : undefined;
+};
 
 export const getAnthropicThinkingEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
@@ -548,7 +585,7 @@ export const updateProviderConfig = <
       next.thinkingEffort !== undefined &&
       !effortOptions.some((o) => o.value === next.thinkingEffort)
     ) {
-      next.thinkingEffort = "high";
+      next.thinkingEffort = getDefaultThinkingEffort(params.model);
       changed = true;
     }
 
@@ -677,6 +714,7 @@ export const supportsPenaltyParams = (
 export type EffortParams = {
   reasoningEffort?: ReasoningEffort;
   thinkingEffort?: AnthropicThinkingEffort;
+  custom_parameters?: unknown;
 };
 
 /**
@@ -684,12 +722,15 @@ export type EffortParams = {
  * {@link resolveSamplingParams} for the effort dropdowns.
  *
  * Unlike the sampling pair this does substitute a default, because the dropdown has no empty state:
- * it renders "High" for a config holding nothing, which is also what a fresh config is seeded with.
- * Resolving to that same value is what stops the control claiming an effort the request never
- * carries — a model change into a reasoning model leaves the config's effort unset, and the
- * provider would then apply its own default rather than the high the panel showed.
+ * it renders the model's default for a config holding nothing, which is also what a fresh config is
+ * seeded with. Resolving to that same value is what stops the control claiming an effort the request
+ * never carries — a model change into a reasoning model leaves the config's effort unset, and the
+ * provider would then apply its own default rather than the one the panel showed.
  *
- * "high" is offered by every model in both capability maps, so it is always a valid substitute.
+ * The OpenAI default is "high", which every reasoning row offers. The Anthropic one is the model's
+ * own (medium on Opus 5.5). An Anthropic effort under custom_parameters counts as stored too: the
+ * flat one wins when the model offers it, else the nested one does, so a reloaded request shape
+ * shows the level it will send and a stale flat value cannot override a valid nested one.
  */
 export const resolveEffort = (
   model: PROVIDER_MODEL_TYPE | "",
@@ -718,11 +759,11 @@ export const resolveEffort = (
     if (options.length === 0) {
       return {};
     }
-    return {
-      thinkingEffort: options.some((o) => o.value === configs.thinkingEffort)
-        ? configs.thinkingEffort
-        : "high",
-    };
+    const stored = [
+      configs.thinkingEffort,
+      getNestedThinkingEffort(configs.custom_parameters),
+    ].find((effort) => options.some((o) => o.value === effort));
+    return { thinkingEffort: stored ?? getDefaultThinkingEffort(model) };
   }
 
   return { ...configs };
@@ -779,11 +820,24 @@ export const sanitizeConfigForRequest = (
     provider === PROVIDER_TYPE.OPEN_AI
   ) {
     const effort = resolveEffort(model, configs as EffortParams);
-    for (const key of ["reasoningEffort", "thinkingEffort"] as const) {
-      if (effort[key] === undefined) {
-        delete sanitized[key];
+    if (effort.reasoningEffort === undefined) {
+      delete sanitized.reasoningEffort;
+    } else {
+      sanitized.reasoningEffort = effort.reasoningEffort;
+    }
+
+    // Anthropic reads output_config.effort, and a flat thinking_effort is one more unknown top-level
+    // field the backend's ChatCompletionRequest drops, so the effort travels in custom_parameters.
+    delete sanitized.thinkingEffort;
+    if (provider === PROVIDER_TYPE.ANTHROPIC) {
+      const customParameters = withThinkingEffort(
+        sanitized.custom_parameters,
+        effort.thinkingEffort,
+      );
+      if (customParameters) {
+        sanitized.custom_parameters = customParameters;
       } else {
-        sanitized[key] = effort[key];
+        delete sanitized.custom_parameters;
       }
     }
   }

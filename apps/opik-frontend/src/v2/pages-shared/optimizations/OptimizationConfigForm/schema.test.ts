@@ -272,3 +272,57 @@ describe("convertFormDataToStudioConfig — controls the optimizer does not offe
     expect(parameters.maxConcurrentRequests).toBeUndefined();
   });
 });
+
+describe("convertFormDataToStudioConfig — Anthropic effort", () => {
+  const formData = (modelConfig: Record<string, unknown>) =>
+    ({
+      name: "run",
+      datasetId: "d",
+      optimizerType: OPTIMIZER_TYPE.GEPA,
+      optimizerParams: {},
+      metricType: METRIC_TYPE.EQUALS,
+      metricParams: {},
+      messages: [{ id: "1", role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      modelName: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      modelConfig,
+    }) as unknown as OptimizationConfigFormType;
+
+  it("nests the selected effort under custom_parameters.output_config", () => {
+    const parameters = convertFormDataToStudioConfig(
+      formData({ temperature: 0.5, thinkingEffort: "low" }),
+      "my-dataset",
+    ).llm_model.parameters as Record<string, unknown>;
+
+    expect(parameters.custom_parameters).toEqual({
+      output_config: { effort: "low" },
+    });
+    expect(parameters.thinkingEffort).toBeUndefined();
+  });
+
+  it("keeps a saved run's effort when the run is reloaded and resubmitted", () => {
+    const saved = {
+      studio_config: {
+        prompt: { messages: [{ role: "user", content: "hi" }] },
+        llm_model: {
+          model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+          parameters: {
+            temperature: 0.5,
+            custom_parameters: { output_config: { effort: "low" } },
+          },
+        },
+        optimizer: { type: OPTIMIZER_TYPE.GEPA },
+        evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+      },
+    } as never;
+
+    const reloaded = convertOptimizationStudioToFormData(saved, [
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    ]);
+    const parameters = convertFormDataToStudioConfig(reloaded, "my-dataset")
+      .llm_model.parameters as Record<string, unknown>;
+
+    expect(parameters.custom_parameters).toEqual({
+      output_config: { effort: "low" },
+    });
+  });
+});
