@@ -36,6 +36,7 @@ class AnthropicEffort {
 
     static final String OUTPUT_CONFIG = "output_config";
     static final String EFFORT = "effort";
+    static final String FORMAT = "format";
 
     private static final List<String> ALL_LEVELS = List.of("low", "medium", "high", "xhigh", "max");
     private static final List<String> LEVELS_WITHOUT_XHIGH = List.of("low", "medium", "high", "max");
@@ -69,14 +70,22 @@ class AnthropicEffort {
             Map.entry(CLAUDE_SONNET_4_5.getValue(), List.of()),
             Map.entry(CLAUDE_SONNET_4_5_20250929.getValue(), List.of()));
 
-    Optional<Map<String, Object>> toCustomParameters(String model, JsonNode customParameters) {
+    Optional<Map<?, ?>> toOutputConfig(String model, JsonNode customParameters) {
         if (customParameters == null || !customParameters.isObject()) {
             return Optional.empty();
         }
-        return toCustomParameters(model, JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE));
+        return toOutputConfig(model, JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE));
     }
 
     Optional<Map<String, Object>> toCustomParameters(String model, Map<String, Object> customParameters) {
+        return toOutputConfig(model, customParameters).map(outputConfig -> Map.of(OUTPUT_CONFIG, outputConfig));
+    }
+
+    void validateOutputConfigEffort(String model, Map<String, Object> customParameters) {
+        toOutputConfig(model, customParameters);
+    }
+
+    private Optional<Map<?, ?>> toOutputConfig(String model, Map<String, Object> customParameters) {
         if (customParameters == null || customParameters.get(OUTPUT_CONFIG) == null) {
             return Optional.empty();
         }
@@ -85,11 +94,7 @@ class AnthropicEffort {
                     "custom_parameters.output_config must be an object, model '%s'".formatted(model));
         }
         validateEffort(model, outputConfig.get(EFFORT));
-        return outputConfig.isEmpty() ? Optional.empty() : Optional.of(Map.of(OUTPUT_CONFIG, outputConfig));
-    }
-
-    void validateOutputConfigEffort(String model, Map<String, Object> customParameters) {
-        toCustomParameters(model, customParameters);
+        return outputConfig.isEmpty() ? Optional.empty() : Optional.of(outputConfig);
     }
 
     private void validateEffort(String model, Object effort) {

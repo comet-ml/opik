@@ -51,6 +51,18 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     private ChatModel newChatLanguageModel(LlmProviderClientApiConfig config,
             LlmAsJudgeModelParameters modelParameters) {
+        var outputConfig = AnthropicEffort.toOutputConfig(modelParameters.name(), modelParameters.customParameters());
+        if (outputConfig.isEmpty()) {
+            return newChatModelBuilder(config, modelParameters).build();
+        }
+        return new AnthropicOutputConfigChatModel(outputConfig.get(),
+                customParameters -> newChatModelBuilder(config, modelParameters)
+                        .customParameters(customParameters)
+                        .build());
+    }
+
+    private AnthropicChatModel.AnthropicChatModelBuilder newChatModelBuilder(LlmProviderClientApiConfig config,
+            LlmAsJudgeModelParameters modelParameters) {
         var builder = AnthropicChatModel.builder()
                 .apiKey(config.apiKey())
                 .modelName(modelParameters.name())
@@ -80,9 +92,9 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
 
-        applyCustomParameters(builder, modelParameters.name(), customParameters, thinking);
+        applyCustomParameters(builder, customParameters, thinking);
 
-        return builder.build();
+        return builder;
     }
 
     /**
@@ -116,16 +128,13 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     }
 
     /**
-     * Forwards the rule's {@code custom_parameters} (thinking, max_tokens, output_config) onto the
-     * judge-path builder and guarantees a {@code max_tokens} is always sent. Anthropic requires max_tokens, and
-     * without an explicit cap adaptive thinking can consume the whole budget, yielding an empty response
-     * (finishReason=LENGTH).
+     * Forwards the rule's {@code custom_parameters} (thinking, max_tokens) onto the judge-path builder and
+     * guarantees a {@code max_tokens} is always sent. Anthropic requires max_tokens, and without an explicit
+     * cap adaptive thinking can consume the whole budget, yielding an empty response (finishReason=LENGTH).
      */
-    private void applyCustomParameters(AnthropicChatModel.AnthropicChatModelBuilder builder, String modelName,
+    private void applyCustomParameters(AnthropicChatModel.AnthropicChatModelBuilder builder,
             JsonNode customParameters, ThinkingParams thinking) {
         Optional.ofNullable(thinking.type()).ifPresent(builder::thinkingType);
-
-        AnthropicEffort.toCustomParameters(modelName, customParameters).ifPresent(builder::customParameters);
 
         // budget_tokens is only valid alongside enabled thinking; forwarding it with an absent or "disabled"
         // type produces a partial config that Anthropic rejects with a 400.
