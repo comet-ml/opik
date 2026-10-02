@@ -243,7 +243,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 -- Not the row id range: membership follows the window's traces (OPIK-8335). Narrowed to their threads, unlike the chart,
-                -- because the join, the feedback-score lookups and the annotation-queue lookup each read this CTE, and unnarrowed each
+                -- because the join and the feedback-score, comment and annotation-queue lookups each read this CTE, and unnarrowed each
                 -- would dedupe every thread row of the project.
                 <if(traces_final_ids)>
                     AND thread_id IN (SELECT thread_id FROM traces_final_ids)
@@ -591,7 +591,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 -- Not the row id range: membership follows the window's traces (OPIK-8335). Narrowed to their threads, unlike the chart,
-                -- because the join, the feedback-score lookups and the annotation-queue lookup each read this CTE, and unnarrowed each
+                -- because the join and the feedback-score, comment and annotation-queue lookups each read this CTE, and unnarrowed each
                 -- would dedupe every thread row of the project.
                 <if(traces_final_ids)>
                     AND thread_id IN (SELECT thread_id FROM traces_final_ids)
@@ -1217,7 +1217,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     -- Not the row id range: membership follows the window's traces (OPIK-8335). Narrowed to their threads, unlike the chart,
-                    -- because the join, the feedback-score lookups and the annotation-queue lookup each read this CTE, and unnarrowed each
+                    -- because the join and the feedback-score, comment and annotation-queue lookups each read this CTE, and unnarrowed each
                     -- would dedupe every thread row of the project.
                     <if(traces_final_ids)>
                         AND thread_id IN (SELECT thread_id FROM traces_final_ids)
