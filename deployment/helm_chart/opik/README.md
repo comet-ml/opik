@@ -161,6 +161,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.relabelings | list | `[]` |  |
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
+| clickhouse.backupServer.securityContext | object | `{"allowPrivilegeEscalation":false}` | securityContext of the clickhouse-backup sidecar; it inherits the pod's uid 101, so it needs the same explicit allowPrivilegeEscalation as `clickhouse.securityContext`. |
 | clickhouse.backupServer.service.name | string | `""` |  |
 | clickhouse.backupServer.service.port | string | `""` |  |
 | clickhouse.configuration.files."conf.d/memory.xml" | string | `"<yandex>\n  <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>\n</yandex>\n"` |  |
@@ -212,6 +213,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.readinessProbe.periodSeconds | int | `10` |  |
 | clickhouse.readinessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.replicasCount | int | `1` |  |
+| clickhouse.securityContext | object | `{"allowPrivilegeEscalation":false}` | securityContext of the clickhouse container. The pod runs as uid 101, and policies against privilege escalation (e.g. Azure AKS Deployment Safeguards) refuse a non-root container unless allowPrivilegeEscalation is set false explicitly. |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.serviceAccount.create | bool | `false` |  |
