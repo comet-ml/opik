@@ -253,6 +253,25 @@ repos:
         require_serial: true
 
   # ---------------------------------------------------------------------------
+  # Backend (Java) — PMD, gating inline fully-qualified names for any external
+  # package (OPIK-7832). Changed files only, like spotless above — which is every
+  # automatic path: commits lint staged files, CI lints the PR/push diff. The
+  # gate is going-forward-only, so the on-demand full-repo audits
+  # (`make precommit-all`, workflow_dispatch) report the ~500 pre-existing sites
+  # until they are cleaned up separately. Rule + rationale live in
+  # apps/opik-backend/pmd-ruleset.xml; legitimate FQNs (simple-name collisions)
+  # are suppressed inline with `// NOPMD - <reason>`.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: pmd-inline-fqn
+        name: ☕ pmd — java inline FQNs
+        entry: scripts/precommit-pmd.sh
+        language: system
+        files: ^apps/opik-backend/.*\.java$
+        require_serial: true
+
+  # ---------------------------------------------------------------------------
   # Self-check: smoke-test the pre-commit wrapper scripts when any of them change,
   # so a broken wrapper (regex/routing/flags) is caught before it ships.
   # ---------------------------------------------------------------------------
