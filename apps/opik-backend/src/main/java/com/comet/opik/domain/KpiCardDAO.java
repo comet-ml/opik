@@ -378,8 +378,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
             WITH traces_final AS (
                 SELECT
                     *,
-                    -- The period is set per trace, not per thread, so each card aggregates only its own range's traces and
-                    -- thread rows, exactly as the chart for that range does.
+                    -- The period is set per trace, not per thread, so a thread active in both periods counts in each, measured over that
+                    -- period's traces only, exactly as the chart and the thread list for that range do.
                     id >= :id_current_start AS is_current_period
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
@@ -404,15 +404,14 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     created_by,
                     last_updated_by,
                     created_at,
-                    last_updated_at,
-                    id >= :id_current_start AS is_current_period
+                    last_updated_at
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                -- The id range keeps the membership rule of the thread list in ThreadDAO.
-                -- A thread_id semi-join here was measured and dropped: building the set cost more than the granules it skipped (OPIK-8335).
-                AND id >= :uuid_from_time
-                AND id \\<= :uuid_to_time
+                -- Membership follows the thread's traces, not this row's id: the row id is when the row was written, which a backfill
+                -- or the now() fallback in TraceThreadIdService puts outside the traces' window. The sort key starts with thread_id,
+                -- so the set also skips granules and keeps every lookup of this CTE window-sized (OPIK-8335).
+                AND thread_id IN (SELECT thread_id FROM traces_final)
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -476,8 +475,6 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     WHERE aq.scope = 'thread'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      AND aqi.item_id >= :uuid_from_time
-                      AND aqi.item_id \\<= :uuid_to_time
                  ) AS annotation_queue_ids_with_thread_id
                  GROUP BY thread_id
             ),
@@ -500,10 +497,6 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     t.project_id as project_id,
                     t.id as id,
                     t.is_current_period as is_current_period,
-                    -- minIf returns the epoch default when every trace carries the sentinel start time.
-                    -- Without this fallback the thread lands in neither KPI period and disappears.
-                    -- Not aliased start_time: a start_time filter must read the raw minIf value, as the chart and the thread list do.
-                    if(equals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), UUIDv7ToDateTime(toUUID(tt.thread_model_id), 'UTC'), t.start_time) as thread_start_time,
                     if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
                     if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
                     if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
@@ -538,7 +531,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id, t.is_current_period
                 ) AS t
-                JOIN trace_threads_final AS tt ON t.id = tt.thread_id AND t.is_current_period = tt.is_current_period
+                JOIN trace_threads_final AS tt ON t.id = tt.thread_id
                 <if(annotation_queue_filters)>
                 LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
                 <endif>
@@ -587,25 +580,14 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 JOIN traces_final tr ON s.trace_id = tr.id
                 GROUP BY tr.thread_id, tr.is_current_period
             )
-            , thread_periods AS (
-                SELECT
-                    tf.*,
-                    tf.is_current_period
-                        AND tf.thread_start_time >= UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC')
-                        AND tf.thread_start_time \\<= UUIDv7ToDateTime(toUUID(:id_end), 'UTC') AS is_current,
-                    NOT tf.is_current_period
-                        AND tf.thread_start_time >= UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')
-                        AND tf.thread_start_time \\< UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC') AS is_previous
-                FROM threads_filtered tf
-            )
             SELECT
-                COUNTIf(tf.is_current) AS current_count,
-                COUNTIf(tf.is_previous) AS previous_count,
-                AVGIf(tf.duration, tf.is_current) AS current_avg_duration,
-                AVGIf(tf.duration, tf.is_previous) AS previous_avg_duration,
-                SUMIf(tc.cost, tf.is_current) AS current_total_cost,
-                SUMIf(tc.cost, tf.is_previous) AS previous_total_cost
-            FROM thread_periods tf
+                COUNTIf(tf.is_current_period) AS current_count,
+                COUNTIf(NOT tf.is_current_period) AS previous_count,
+                AVGIf(tf.duration, tf.is_current_period) AS current_avg_duration,
+                AVGIf(tf.duration, NOT tf.is_current_period) AS previous_avg_duration,
+                SUMIf(tc.cost, tf.is_current_period) AS current_total_cost,
+                SUMIf(tc.cost, NOT tf.is_current_period) AS previous_total_cost
+            FROM threads_filtered tf
             LEFT JOIN thread_costs tc ON tf.id = tc.thread_id AND tf.is_current_period = tc.is_current_period
             SETTINGS log_comment = '<log_comment>';
             """;
@@ -617,7 +599,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
             addTraceFilters(st, criteria.filters());
 
-            var statement = buildStatement(connection, st, criteria, workspaceId);
+            var statement = bindPeriodBounds(buildStatement(connection, st, criteria, workspaceId), criteria);
             bindTraceFilters(statement, criteria.filters());
 
             InstrumentAsyncUtils.Segment segment = startSegment("traceKpiCards", "Clickhouse", "kpi");
@@ -635,7 +617,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
             addSpanFilters(st, criteria.filters());
 
-            var statement = buildStatement(connection, st, criteria, workspaceId);
+            var statement = bindPeriodBounds(buildStatement(connection, st, criteria, workspaceId), criteria);
             bindSpanFilters(statement, criteria.filters());
 
             InstrumentAsyncUtils.Segment segment = startSegment("spanKpiCards", "Clickhouse", "kpi");
@@ -690,11 +672,20 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 .bind("project_id", criteria.projectId())
                 .bind("workspace_id", workspaceId)
                 .bind("uuid_from_time", instantToUUIDMapper.toLowerBound(priorStart).toString())
-                .bind("id_current_start", instantToUUIDMapper.toLowerBound(criteria.intervalStart()).toString())
-                .bind("id_prior_start", instantToUUIDMapper.toLowerBound(priorStart).toString());
+                .bind("id_current_start", instantToUUIDMapper.toLowerBound(criteria.intervalStart()).toString());
         if (criteria.intervalEnd() != null) {
-            var idEnd = instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString();
-            statement.bind("uuid_to_time", idEnd).bind("id_end", idEnd);
+            statement.bind("uuid_to_time", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString());
+        }
+        return statement;
+    }
+
+    private Statement bindPeriodBounds(Statement statement, KpiCardCriteria criteria) {
+        Instant priorStart = getPriorStart(criteria.intervalStart(),
+                Optional.ofNullable(criteria.intervalEnd()).orElseGet(Instant::now));
+
+        statement.bind("id_prior_start", instantToUUIDMapper.toLowerBound(priorStart).toString());
+        if (criteria.intervalEnd() != null) {
+            statement.bind("id_end", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString());
         }
         return statement;
     }

@@ -57,6 +57,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -915,8 +916,8 @@ class KpiCardsResourceTest {
     }
 
     @Test
-    @DisplayName("a thread whose traces were minted in the current period but started before it counts in neither period, like the chart")
-    void threadMintedInCurrentPeriodButStartedBeforeItCountsInNeitherPeriod() {
+    @DisplayName("a thread whose traces were minted in the current period but started before it counts in the current period, like the chart and the thread list")
+    void threadMintedInCurrentPeriodButStartedBeforeItCountsInCurrentPeriod() {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
@@ -940,12 +941,12 @@ class KpiCardsResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(response, EntityType.THREADS, 0, 0, 0, 0);
+        assertFilteredMetrics(response, EntityType.THREADS, threadCount, 0, 0, 0);
     }
 
     @Test
-    @DisplayName("a thread whose row was written after the window end is not counted, matching the thread list")
-    void threadRowWrittenAfterWindowEndIsNotCounted() {
+    @DisplayName("a thread whose row was written after the window end is still counted from its traces, like the thread list")
+    void threadRowWrittenAfterWindowEndIsStillCounted() {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
@@ -968,7 +969,7 @@ class KpiCardsResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(response, EntityType.THREADS, 0, 0, 0, 0);
+        assertFilteredMetrics(response, EntityType.THREADS, 3, 0, 0, 0);
     }
 
     @Test
@@ -1010,15 +1011,15 @@ class KpiCardsResourceTest {
     }
 
     @Test
-    @DisplayName("a thread whose traces all carry the epoch sentinel counts in its row's period, with no duration")
-    void threadWithOnlyEpochSentinelTracesCountsInItsRowPeriod() {
+    @DisplayName("a thread whose traces all carry the epoch sentinel counts in its traces' period, not its row's, with no duration")
+    void threadWithOnlyEpochSentinelTracesCountsInItsTracesPeriod() {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
         Instant intervalStart = Instant.now().minus(1, ChronoUnit.SECONDS);
-        Instant ranAt = Instant.now();
-        String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+        Instant ranAt = intervalStart.minus(30, ChronoUnit.SECONDS);
+        String threadId = mintThreadRowIdsNow(projectId, 1).getFirst();
 
         createThreadWithCostOnFirstTrace(projectName, threadId, List.of(
                 factory.manufacturePojo(Trace.class).toBuilder()
@@ -1046,9 +1047,9 @@ class KpiCardsResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertMetric(response, KpiMetricType.COUNT, 1.0, 0.0);
+        assertMetric(response, KpiMetricType.COUNT, 0.0, 1.0);
         assertMetric(response, KpiMetricType.AVG_DURATION, null, null);
-        assertMetric(response, KpiMetricType.TOTAL_COST, FILTER_COST, 0.0);
+        assertMetric(response, KpiMetricType.TOTAL_COST, 0.0, FILTER_COST);
     }
 
     @Test
@@ -1314,19 +1315,26 @@ class KpiCardsResourceTest {
                 .block();
     }
 
-    @Test
-    @DisplayName("a thread straddling the start with its row in the current period counts in current, from its current traces only")
-    void threadStraddlingStartWithRowInCurrentPeriodUsesOnlyCurrentTraces() {
+    @ParameterizedTest(name = "row opened before its traces: {0}")
+    @ValueSource(booleans = {true, false})
+    @DisplayName("a thread active on both sides of the start counts in each period from that period's traces only, wherever its row was written")
+    void threadStraddlingStartCountsInEachPeriodFromItsOwnTraces(boolean rowOpenedBeforeTraces) {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
         Instant intervalStart = Instant.now();
-        String threadId = mintThreadRowIdsNow(projectId, 1).getFirst();
+        String threadId = rowOpenedBeforeTraces
+                ? mintThreadRowIdsNow(projectId, 1).getFirst()
+                : RandomStringUtils.secure().nextAlphabetic(10);
         createThreadStraddlingStart(projectName, threadId, intervalStart);
         Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
 
-        assertThat(getThreadRowMintedAt(threadId, projectId)).isBetween(intervalStart, intervalEnd);
+        if (rowOpenedBeforeTraces) {
+            assertThat(getThreadRowMintedAt(threadId, projectId)).isBetween(intervalStart, intervalEnd);
+        } else {
+            assertThat(getThreadRowMintedAt(threadId, projectId)).isBefore(intervalStart);
+        }
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
                 .entityType(EntityType.THREADS)
@@ -1334,34 +1342,9 @@ class KpiCardsResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertMetric(response, KpiMetricType.COUNT, 1.0, 0.0);
-        assertMetric(response, KpiMetricType.AVG_DURATION, (double) DURATION_2, null);
-        assertMetric(response, KpiMetricType.TOTAL_COST, COST_2, 0.0);
-    }
-
-    @Test
-    @DisplayName("a thread straddling the start with its row in the previous period counts in previous, from its previous traces only")
-    void threadStraddlingStartWithRowInPreviousPeriodUsesOnlyPreviousTraces() {
-        mockTargetWorkspace();
-        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-
-        Instant intervalStart = Instant.now();
-        String threadId = RandomStringUtils.secure().nextAlphabetic(10);
-        createThreadStraddlingStart(projectName, threadId, intervalStart);
-        Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
-
-        assertThat(getThreadRowMintedAt(threadId, projectId)).isBefore(intervalStart);
-
-        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
-                .entityType(EntityType.THREADS)
-                .intervalStart(intervalStart)
-                .intervalEnd(intervalEnd)
-                .build(), API_KEY, WORKSPACE_NAME);
-
-        assertMetric(response, KpiMetricType.COUNT, 0.0, 1.0);
-        assertMetric(response, KpiMetricType.AVG_DURATION, null, (double) DURATION_1);
-        assertMetric(response, KpiMetricType.TOTAL_COST, 0.0, COST_1);
+        assertMetric(response, KpiMetricType.COUNT, 1.0, 1.0);
+        assertMetric(response, KpiMetricType.AVG_DURATION, (double) DURATION_2, (double) DURATION_1);
+        assertMetric(response, KpiMetricType.TOTAL_COST, COST_2, COST_1);
     }
 
     @Test

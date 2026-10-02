@@ -342,10 +342,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                -- The id range keeps the membership rule of the thread list in ThreadDAO.
-                -- A thread_id semi-join here was measured and dropped: building the set cost more than the granules it skipped (OPIK-8335).
-                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                -- Membership follows the thread's traces, not this row's id: the row id is when the row was written, which a backfill
+                -- or the now() fallback in TraceThreadIdService puts outside the traces' window. The sort key starts with thread_id,
+                -- so the set also skips granules and keeps every lookup of this CTE window-sized (OPIK-8335).
+                <if(uuid_from_time || uuid_to_time)> AND thread_id IN (SELECT thread_id FROM traces_final)<endif>
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -409,8 +409,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     WHERE aq.scope = 'thread'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_thread_id
                  GROUP BY thread_id
             ),
@@ -432,9 +430,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
-                    -- minIf returns the epoch default when every trace carries the sentinel start time.
-                    -- Without this fallback the thread fails the window bound below and disappears.
-                    if(equals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), UUIDv7ToDateTime(toUUID(tt.thread_model_id), 'UTC'), t.start_time) as thread_start_time,
+                    -- Placed by its first in-window trace id, not start_time: membership is decided on trace ids, so a start_time
+                    -- before the window (ids minted at ingest by a backfill) would drop a thread the thread list shows.
+                    UUIDv7ToDateTime(toUUID(t.first_trace_id), 'UTC') as thread_time,
                     t.end_time as end_time,
                     t.duration as duration,
                     t.first_message as first_message,
@@ -452,6 +450,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
+                        min(t.id) as first_trace_id,
                         minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
                         maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as end_time,
                         if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
@@ -477,8 +476,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
                 <endif>
                 WHERE workspace_id = :workspace_id
-                <if(uuid_from_time)> AND thread_start_time >= UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')<endif>
-                <if(uuid_to_time)> AND thread_start_time \\<= UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')<endif>
                 <if(thread_feedback_scores_filters)>
                 AND thread_model_id IN (
                     SELECT
@@ -968,14 +965,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_THREAD_FEEDBACK_SCORES = """
             %s, thread_feedback_scores AS (
-                SELECT t.thread_start_time,
+                SELECT t.thread_time,
                         fs.name,
                         fs.value
                 FROM feedback_scores_final fs
                 JOIN (
                     SELECT
                         thread_model_id,
-                        thread_start_time
+                        thread_time
                     FROM threads_filtered
                 ) t ON t.thread_model_id = fs.entity_id
             )
@@ -994,7 +991,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_THREAD_FEEDBACK_SCORES_WITH_BREAKDOWN = """
             %s, thread_feedback_scores AS (
-                SELECT t.thread_start_time,
+                SELECT t.thread_time,
                         <group_expression> AS group_name,
                         fs.name,
                         fs.value
@@ -1002,7 +999,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 JOIN (
                     SELECT
                         thread_model_id,
-                        thread_start_time,
+                        thread_time,
                         tags,
                         project_id
                     FROM threads_filtered
@@ -1247,7 +1244,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_THREAD_COST = """
             %s, thread_costs AS (
                 SELECT tf.id AS thread_id,
-                       tf.thread_start_time AS thread_start_time,
+                       tf.thread_time AS thread_time,
                        s.total_estimated_cost AS value
                 FROM threads_filtered tf
                 JOIN traces_final tr ON tr.thread_id = tf.id
@@ -1894,7 +1891,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private String getTimeField(MetricType metricType) {
         if (THREAD_METRICS.contains(metricType)) {
-            return "thread_start_time";
+            return "thread_time";
         }
         return SPAN_TIME_METRICS.contains(metricType) ? "span_time" : "trace_time";
     }

@@ -41,6 +41,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -2206,6 +2207,75 @@ class FindTraceThreadsResourceTest {
                     assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 }
             }
+        }
+
+        private Stream<Arguments> whenThreadRowWrittenOutsideWindow__thenListedFromItsInWindowTraces() {
+            return Stream.of(true, false)
+                    .flatMap(stream -> Stream.of(Arguments.of(stream, true), Arguments.of(stream, false)));
+        }
+
+        @ParameterizedTest(name = "stream: {0}, row written after the window: {1}")
+        @MethodSource
+        @DisplayName("a thread active in the window is listed from its in-window traces, wherever its row was written")
+        void whenThreadRowWrittenOutsideWindow__thenListedFromItsInWindowTraces(boolean stream,
+                boolean rowWrittenAfterWindow) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            var threadId = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Instant now = Instant.now();
+            Instant fromTime = now.minus(60, ChronoUnit.SECONDS);
+            Instant toTime = now.minus(1, ChronoUnit.SECONDS);
+            Instant ranInsideWindow = now.minus(30, ChronoUnit.SECONDS);
+            Instant ranBeforeWindow = now.minus(90, ChronoUnit.SECONDS);
+
+            if (rowWrittenAfterWindow) {
+                traceResourceClient.openTraceThread(threadId, projectId, null, API_KEY, TEST_WORKSPACE);
+            }
+
+            var insideTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranInsideWindow))
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .startTime(ranInsideWindow)
+                    .endTime(ranInsideWindow.plusMillis(500))
+                    .build();
+            var traces = rowWrittenAfterWindow
+                    ? List.of(insideTrace)
+                    : List.of(createTrace().toBuilder()
+                            .id(idGenerator.generateId(ranBeforeWindow))
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .startTime(ranBeforeWindow)
+                            .endTime(ranBeforeWindow.plusMillis(500))
+                            .build(), insideTrace);
+            createAndCloseThreads(traces, projectName, API_KEY, TEST_WORKSPACE);
+
+            Instant rowWrittenAt = RetentionUtils.extractInstant(
+                    traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId());
+            if (rowWrittenAfterWindow) {
+                assertThat(rowWrittenAt).isAfter(toTime);
+            } else {
+                assertThat(rowWrittenAt).isBefore(fromTime);
+            }
+
+            List<TraceThread> listed;
+            if (stream) {
+                listed = traceResourceClient.searchTraceThreadsStream(TraceThreadSearchStreamRequest.builder()
+                        .projectName(projectName)
+                        .fromTime(fromTime)
+                        .toTime(toTime)
+                        .build(), API_KEY, TEST_WORKSPACE);
+            } else {
+                var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, List.of(),
+                        List.of(), Map.of("from_time", fromTime.toString(), "to_time", toTime.toString()));
+                assertThat(page.total()).isEqualTo(1);
+                listed = page.content();
+            }
+
+            assertThat(listed).extracting(TraceThread::id).containsExactly(threadId);
+            assertThat(listed.getFirst().startTime()).isEqualTo(insideTrace.startTime());
+            assertThat(listed.getFirst().numberOfMessages()).isEqualTo(2L);
         }
 
         private Stream<Arguments> provideBoundaryScenarios() {
