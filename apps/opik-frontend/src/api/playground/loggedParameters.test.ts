@@ -43,4 +43,24 @@ describe("getLoggedParameters", () => {
     expect(parameters.temperature).toBe(0.3);
     expect(parameters.topP).toBe(0.85);
   });
+
+  it("records the OpenRouter sampling params where the request carried them", () => {
+    const parameters = getLoggedParameters({
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      configs: configs({
+        topK: 40,
+        minP: 0.1,
+        topA: 0.2,
+        repetitionPenalty: 1.1,
+      }),
+    });
+
+    expect(parameters.topK).toBeUndefined();
+    expect(parameters.custom_parameters).toEqual({
+      top_k: 40,
+      min_p: 0.1,
+      top_a: 0.2,
+      repetition_penalty: 1.1,
+    });
+  });
 });
