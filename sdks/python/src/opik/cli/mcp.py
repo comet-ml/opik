@@ -313,6 +313,10 @@ def run_configure(
             params = cast(McpSetupParams, configure_cli.ask_for_connection(deployment))
             # A gap before the client picker, which the questions do not leave.
             click.echo()
+        if ignore_opik_config:
+            # A saved "don't check certificates" was made for the saved Opik; this
+            # run connects to another one, and sends it the API key to verify.
+            params["check_tls_certificate"] = True
 
     # Installed unless refused: the pack is what teaches the client to use the
     # server just registered.

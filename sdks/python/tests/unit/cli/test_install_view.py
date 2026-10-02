@@ -556,6 +556,22 @@ class TestTheConfigureEnding:
         assert "checkout-bot" in out
         assert opik_configure.PROJECT_NAME_DOCS_URL in out
 
+    def test_brackets_in_the_path_or_workspace__shown_as_they_are(self, terminal):
+        rich_view, recorder = terminal
+
+        with recorder.capture() as capture:
+            rich_view.render_configured(
+                self._configured(
+                    config_file="/tmp/[test]/[/]/opik.config", workspace="team[1]"
+                ),
+                project_url="https://www.comet.com/opik/acme-ai/projects/",
+                project_exists=False,
+            )
+
+        out = capture.get()
+        assert "/tmp/[test]/[/]/opik.config" in out
+        assert "team[1]" in out
+
     def test_nothing_rewritten__says_it_was_already_configured(self, terminal):
         rich_view, recorder = terminal
 
@@ -727,6 +743,15 @@ class TestTheSavedConnection:
             "    To connect to a different Opik: opik mcp configure --ignore-opik-config",
             "",
         ]
+
+    def test_brackets_in_a_path_or_workspace__shown_as_they_are(self):
+        """Read as markup, `[test]` vanished from the path and `[/]` crashed."""
+        lines = self._render(
+            "https://www.comet.com/", "team[1]", "/tmp/[test]/[/]/opik.config"
+        )
+
+        assert "    Workspace  team[1]" in lines
+        assert "    From       /tmp/[test]/[/]/opik.config" in lines
 
     def test_without_a_workspace__no_workspace_row(self):
         lines = self._render("http://localhost:5173/", None, "OPIK_URL_OVERRIDE")

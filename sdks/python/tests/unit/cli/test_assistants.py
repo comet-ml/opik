@@ -233,6 +233,16 @@ class TestPackTargets:
 
         assert skills_spy.call_args.args[0] == ["cursor"]
 
+    def test_no_client_named_at_all__an_explicit_pack_does_not_go_to_every_client(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """An empty list names no client; it is not "none given"."""
+        mcp_spy.return_value = mcp_install.NOTHING_INSTALLED
+
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED, host_keys=[])
+
+        assert skills_spy.call_args.args[0] == []
+
     def test_server_skipped_at_the_picker__an_explicit_pack_request_still_installs(
         self, mcp_spy, skills_spy, rich_view
     ):

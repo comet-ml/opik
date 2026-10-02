@@ -145,7 +145,7 @@ def setup(
         skills_targets = configured_hosts
     elif install.manual:
         skills_targets = []
-    elif host_keys:
+    elif host_keys is not None:
         skills_targets = host_keys
     else:
         skills_targets = skills_installer.detected_host_keys()

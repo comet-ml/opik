@@ -1369,12 +1369,14 @@ class TestAskForConnection:
                 return_value=True,
             ),
             mock.patch.object(configure_cli.install_view, "render_configure_hint"),
+            mock.patch("opik.config.update_session_config") as session_update,
         ):
             connection = configure_cli.ask_for_connection(
                 configure_cli.interactive_helpers.DeploymentType.LOCAL
             )
 
         assert config_file.read_text() == before
+        session_update.assert_not_called()
         assert connection["use_local"] is True
         assert connection["base_url"] == "http://localhost:5173/"
         assert connection["api_key"] is None, "the saved key is not this Opik's"
@@ -1452,12 +1454,14 @@ class TestAskForConnection:
                 "opik.configurator.configure.ask_user_for_approval",
                 side_effect=approve,
             ),
+            mock.patch("opik.config.update_session_config") as session_update,
         ):
             connection = configure_cli.ask_for_connection(
                 configure_cli.interactive_helpers.DeploymentType.SELF_HOSTED
             )
 
         assert config_file.read_text() == before
+        session_update.assert_not_called()
         assert connection["api_key"] == "answer-key"
         assert connection["workspace"] == "team-ws"
         assert connection["self_hosted_comet"] is True

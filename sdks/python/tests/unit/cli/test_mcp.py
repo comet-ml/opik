@@ -438,6 +438,26 @@ class TestTheSavedOpikConfiguration:
         # Not repeated back: the user has just typed it.
         run.named.assert_not_called()
 
+    def test_the_flag__checks_certificates_even_if_the_saved_opik_did_not(self):
+        """The saved setting was for the saved Opik, not the one chosen now."""
+        connection = mcp_cli._resolve_setup_params(
+            _config(
+                api_key="answer-key",
+                url_override="https://opik.acme.com/opik/api/",
+                check_tls_certificate=False,
+            )
+        )
+
+        run = self._run(
+            saved=_config(api_key="saved-key", check_tls_certificate=False),
+            args=("--ignore-opik-config",),
+            deployment=mcp_cli.interactive_helpers.DeploymentType.SELF_HOSTED,
+            connection=connection,
+        )
+
+        assert run.result.exit_code == 0, run.result.output
+        assert run.setup.call_args.args[0]["check_tls_certificate"] is True
+
     def test_the_flag__the_account_reported_is_the_one_connected_to(self):
         """Not the saved one: the run sets that aside."""
         connection = mcp_cli._resolve_setup_params(

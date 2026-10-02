@@ -106,10 +106,12 @@ def render_configured(
     grid = table.Table.grid(padding=(0, 2))
     grid.add_column(style=_KEY_STYLE, no_wrap=True)
     grid.add_column(overflow="fold")
-    grid.add_row("Config file", _collapse_home(configured.config_file))
+    # Text, not str: a table cell reads `[...]` as markup, and a path or a
+    # workspace name is the user's own text.
+    grid.add_row("Config file", text.Text(_collapse_home(configured.config_file)))
     if configured.url is not None:
         grid.add_row("Opik", _emphasize(_without_credentials(configured.url)))
-    grid.add_row("Workspace", configured.workspace)
+    grid.add_row("Workspace", text.Text(configured.workspace))
     grid.add_row("Project", text.Text(configured.project_name, style="bold"))
     # Shown in full rather than behind the project name: not every terminal
     # makes a hyperlink clickable, and a visible URL can still be copied.
@@ -275,9 +277,10 @@ def render_connection(opik_url: str, workspace: Optional[str], source: str) -> N
     grid.add_column(style=_KEY_STYLE, no_wrap=True)
     grid.add_column(overflow="fold")
     grid.add_row("Opik", _emphasize(_without_credentials(opik_url.rstrip("/"))))
+    # Text, not str: a table cell reads `[...]` as markup.
     if workspace:
-        grid.add_row("Workspace", workspace)
-    grid.add_row("From", _collapse_home(source))
+        grid.add_row("Workspace", text.Text(workspace))
+    grid.add_row("From", text.Text(_collapse_home(source)))
     console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
     console.print(
         padding.Padding(
