@@ -172,7 +172,7 @@ The ClickHouse Backup Tool provides more advanced backup features including comp
 clickhouse:
   backupServer:
     enabled: true
-    image: "altinity/clickhouse-backup:2.6.23"
+    image: "altinity/clickhouse-backup:2.7.4"
     port: 7171
     env:
       LOG_LEVEL: "info"
@@ -270,7 +270,7 @@ spec:
         spec:
           containers:
             - name: backup-tool
-              image: altinity/clickhouse-backup:2.6.23
+              image: altinity/clickhouse-backup:2.7.4
               command:
                 - /bin/bash
                 - -c

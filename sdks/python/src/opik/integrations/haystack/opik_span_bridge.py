@@ -195,11 +195,14 @@ class OpikSpanBridge(tracing.Span):
         Returns:
             The provider name (e.g., "openai", "anthropic", "azure")
         """
-        # Map component types to provider names
-        if "OpenAI" in component_type:
-            return "openai"
-        elif "Azure" in component_type:
+        # Map component types to provider names. "Azure" has to be tested first:
+        # both Azure OpenAI component names embed "OpenAI"
+        # (AzureOpenAIGenerator, AzureOpenAIChatGenerator), so testing it second
+        # made the branch unreachable and recorded Azure OpenAI spans as OpenAI.
+        if "Azure" in component_type:
             return "azure"
+        elif "OpenAI" in component_type:
+            return "openai"
         elif "Anthropic" in component_type:
             return "anthropic"
         elif "HuggingFace" in component_type:

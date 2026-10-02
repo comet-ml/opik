@@ -22,6 +22,20 @@ export type SpanSeedUsage = {
  * before `Dataset.insert` sees it. `value` is the JSON form the object is built
  * FROM — never what it has to store as, which is the caller's assertion.
  */
+/**
+ * One `search_traces` / `search_spans` read's paging arguments.
+ *
+ * `maxBatchSize` omitted means the SDK's own default (`MAX_ENDPOINT_BATCH_SIZE`,
+ * 2000) — itself a shape worth asserting, since a single-page read has to agree
+ * with the many-page ones over the same population.
+ */
+export type StreamReadShape = {
+  /** Echoed back, so a result can be matched to its shape without relying on order. */
+  key: string;
+  max_results: number;
+  max_batch_size?: number;
+};
+
 export type TypedValueSpec = {
   kind: 'float' | 'uuid' | 'enum' | 'datetime' | 'set' | 'tuple';
   value: unknown;
@@ -310,6 +324,27 @@ export interface PythonSdkClient {
    * the caller wrote onto each dataset item, echoed back so a read can be
    * checked for order, gaps and duplicates without transferring whole rows.
    */
+  /**
+   * Several multi-page `search_traces` / `search_spans` reads of one project,
+   * each with its own `max_batch_size`, reduced to the ids they returned.
+   *
+   * `max_batch_size` is why this exists: it is the only cheap way to make
+   * `read_and_parse_full_stream` actually page. Every other estate call through
+   * that function asks for fewer rows than one page holds, so the cursor
+   * arithmetic opik#8411 rewrote has never run.
+   *
+   * Ids come back in the order the SDK assembled them and duplicates are NOT
+   * collapsed — a re-served page is a duplicate, which is a finding.
+   */
+  streamReads(args: {
+    project_name: string;
+    trace_shapes?: StreamReadShape[];
+    span_shapes?: StreamReadShape[];
+    workspace?: string;
+  }): Promise<{
+    traces: Array<{ key: string; ids: string[] }>;
+    spans: Array<{ key: string; ids: string[] }>;
+  }>;
   readExperimentItems(args: {
     experiment_id: string;
     max_results?: number;
@@ -673,6 +708,17 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         error_type: string | null;
         error_message: string | null;
       }>('POST', '/metrics/readability-score', args);
+    },
+    async streamReads(args) {
+      // Several whole multi-page reads of one project on a single request, and
+      // against a cloud backend each of them is a burst of paged reads under a
+      // per-workspace rate limit. The SDK backs off internally, which is slow
+      // rather than a failure — aborting at the default 30s would turn a
+      // throttled read into a red test.
+      return request<{
+        traces: Array<{ key: string; ids: string[] }>;
+        spans: Array<{ key: string; ids: string[] }>;
+      }>('POST', '/traces/stream-reads', args, { timeoutMs: 300_000 });
     },
     async readExperimentItems(args) {
       return request<{
