@@ -219,7 +219,7 @@ export const useExperimentsTableConfig = <
     [groups],
   );
 
-  const columns = useMemo(() => {
+  const { columns, fillColumnId } = useMemo(() => {
     const groupColumns = groups.map((group) => {
       const label =
         group.field === COLUMN_DATASET_ID
@@ -345,6 +345,14 @@ export const useExperimentsTableConfig = <
       sortableColumns: sortableBy,
     });
 
+    // The first unpinned data column absorbs spare width; a pinned one can't,
+    // since sticky offsets are computed from declared column sizes.
+    const fillColumn = [...regularColumns, ...scoresColumns][0];
+    const fillColumnId =
+      fillColumn && "accessorKey" in fillColumn
+        ? String(fillColumn.accessorKey)
+        : undefined;
+
     const baseColumns = [
       ...firstColumns,
       ...groupColumns,
@@ -360,7 +368,7 @@ export const useExperimentsTableConfig = <
       );
     }
 
-    return baseColumns;
+    return { columns: baseColumns, fillColumnId };
   }, [
     groups,
     sortableBy,
@@ -433,6 +441,7 @@ export const useExperimentsTableConfig = <
 
     // Computed values
     columns,
+    fillColumnId,
     selectedRows,
     scoresColumnsData,
     checkboxClickHandler,
