@@ -372,6 +372,108 @@ wait_for_container_completion() {
   return 1
 }
 
+# MinIO's hardened image runs as a non-root user, so a minio-data volume written by an older
+# root-running image is unreadable to it. MinIO reports this as "drive may be faulty", which sends
+# people looking for disk problems, and its built-in `chown -R minio.` hint names a container-side
+# path that is useless from the host. Repair it here instead: re-own the volume and bring MinIO back.
+# The mismatch is confirmed against the uid the image itself declares, and MinIO has already exited
+# by this point, so nothing else holds the volume. Silent unless the ownership actually mismatches,
+# so unrelated MinIO crashes keep their own message.
+# Returns 0 only when it repaired the volume and MinIO came back healthy; 1 otherwise, so the caller
+# can tell a recovered container from one that really failed.
+repair_minio_volume_ownership() {
+  local container="$1"
+  [[ "$container" == "${COMPOSE_PROJECT_NAME}-minio-1" ]] || return 1
+
+  local image expected_user expected_uid volume
+  image=$(docker inspect -f '{{.Config.Image}}' "$container" 2>/dev/null) || return 1
+  [[ -n "$image" ]] || return 1
+
+  # the uid the image declares it runs as; without it there is nothing to compare against
+  expected_user=$(docker image inspect "$image" --format '{{.Config.User}}' 2>/dev/null)
+  expected_uid="${expected_user%%:*}"
+  [[ "$expected_uid" =~ ^[0-9]+$ ]] || return 1
+
+  volume=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "$container" 2>/dev/null)
+  [[ -n "$volume" ]] || return 1
+
+  local expected_owner="${expected_user}"
+  [[ "$expected_owner" == *:* ]] || expected_owner="${expected_uid}:${expected_uid}"
+
+  # Checking only the mount root misses the case that actually breaks MinIO: a correctly-owned
+  # /data whose .minio.sys contents are still root-owned. Look for anything not owned by the
+  # expected uid, at any depth, so a partially-repaired volume is still detected.
+  # BusyBox find has no -uid; -user accepts a numeric uid and is what the alpine image supports.
+  # No pipe here on purpose: -print -quit already stops at the first match, and piping would make
+  # $? report the pipe's last command instead of whether the probe itself ran.
+  local foreign probe_rc
+  foreign=$(docker run --rm -v "$volume":/data alpine \
+    find /data -not -user "$expected_uid" -print -quit 2>/dev/null)
+  probe_rc=$?
+
+  # An empty result means either "ownership is fine" or "the probe itself could not run". Only the
+  # first is a clean no-op; if the probe failed we cannot rule out the mismatch, so say so and
+  # hand over the command rather than leaving the user with MinIO's misleading error alone.
+  # docker reserves 125 for its own failures and passes the command's status through otherwise, so
+  # the two causes are worth naming separately: they send the reader to different places.
+  if [[ "$probe_rc" -ne 0 ]]; then
+    local probe_failure="the ownership check exited with status ${probe_rc}"
+    [[ "$probe_rc" -eq 125 ]] && probe_failure="the helper container could not be started"
+    echo ""
+    echo "⚠️  Could not check ${volume}'s ownership (${probe_failure}), so a file-ownership"
+    echo "   mismatch cannot be ruled out. MinIO reports this as a faulty drive, but"
+    echo "   it usually means the volume was created by an older MinIO image that ran as root."
+    echo ""
+    echo "   If Docker can run a container again, this repairs the volume without losing data:"
+    echo ""
+    echo "     docker run --rm -v ${volume}:/data alpine chown -R ${expected_owner} /data"
+    echo ""
+    echo "   Otherwise re-own ${volume} to ${expected_owner} by any means available, then start Opik again."
+    echo ""
+    return 1
+  fi
+
+  [[ -n "$foreign" ]] || return 1
+
+  echo ""
+  echo "🔎 MinIO could not write to its data volume: it holds files not owned by uid $expected_uid, which"
+  echo "   is the user the MinIO image runs as. This is a file-ownership mismatch, not a faulty drive —"
+  echo "   MinIO's own error text ('drive may be faulty') is misleading here. It usually means the"
+  echo "   volume was created by an older MinIO image that ran as root."
+  echo ""
+
+  echo "🔧 Re-owning ${volume} to ${expected_owner} (contents are preserved)..."
+  if ! docker run --rm -v "$volume":/data alpine chown -R "$expected_owner" /data; then
+    echo "❌ Could not re-own the volume. Run this manually, then start Opik again:"
+    echo ""
+    echo "     docker run --rm -v ${volume}:/data alpine chown -R ${expected_owner} /data"
+    echo ""
+    return 1
+  fi
+
+  echo "🔄 Restarting MinIO..."
+  local cmd
+  cmd=$(get_docker_compose_cmd)
+  $cmd up -d minio
+
+  # The caller's wait loop has already moved past this container, so confirm the repair here.
+  local retries=0
+  while [[ $retries -lt 30 ]]; do
+    if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)" == "healthy" ]]; then
+      echo "✅ MinIO is running and healthy; its stored data was preserved."
+      return 0
+    fi
+    sleep 1
+    retries=$((retries + 1))
+  done
+
+  echo "⚠️  MinIO still is not healthy after the repair. Check its logs:"
+  echo ""
+  echo "     docker logs $container"
+  echo ""
+  return 1
+}
+
 start_missing_containers() {
   check_docker_status
 
@@ -442,6 +544,11 @@ start_missing_containers() {
 
       if [[ "$status" != "running" ]]; then
         echo "❌ $container failed to start (status: $status)"
+        # A repaired MinIO is running again, so the container has not failed after all.
+        if repair_minio_volume_ownership "$container"; then
+          record_timing "$container" "$((SECONDS - wait_started_at))s"
+          break
+        fi
         all_running=false
         record_timing "$container" "failed to start" true
         break

@@ -13,6 +13,16 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
   If you are upgrading from Opik 1.x to Opik 2.x, follow the [Opik 2.0 migration guide](/self-host/v1-to-v2-migration).
 </Tip>
 
+## Release 2.2.81, 2026-09-24
+
+### Critical Changes
+
+**Docker Compose only.** MinIO now runs from a hardened image as a non-root user (`1001:1001`). A `minio-data` volume created by an earlier release, whose MinIO ran as root, is not writable by it, and MinIO aborts at startup reporting `file access denied, drive may be faulty` — the drive is fine, and no data is lost.
+
+`opik.sh` and `opik.ps1` detect this and re-own the volume automatically, so an ordinary upgrade recovers without intervention. If the repair cannot run, they print the command to run by hand. Do not delete the volume to clear the error: it holds your attachments, and re-owning it preserves them. See "MinIO Fails to Start After Upgrading: Root-Owned Data Volume" in the [troubleshooting guide](/self-host/troubleshooting) for the manual procedure.
+
+Helm and Kubernetes deployments use a different MinIO image and a PVC rather than a Docker volume, and are not affected.
+
 ## Release 2.0.3 (Opik 2.0), 2026-04-20
 
 ### Backward Incompatible Change
