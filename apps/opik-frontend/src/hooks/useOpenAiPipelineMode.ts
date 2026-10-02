@@ -1,6 +1,6 @@
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { OpenAiPipelineMode, PROVIDER_TYPE } from "@/types/providers";
-import { normalizeOpenAiPipelineMode } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
+import { normalizeOpenAiPipelineMode } from "@/lib/provider";
 
 const useOpenAiPipelineMode = (workspaceName: string): OpenAiPipelineMode => {
   const { data } = useProviderKeys({ workspaceName });

@@ -59,7 +59,7 @@ import {
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
-import useOpenAiPipelineMode from "@/v2/pages-shared/llm/PromptModelSettings/useOpenAiPipelineMode";
+import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 
 interface PlaygroundPromptProps {
   workspaceName: string;

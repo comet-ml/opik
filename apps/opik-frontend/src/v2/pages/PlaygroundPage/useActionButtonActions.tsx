@@ -53,7 +53,7 @@ import usePromptDatasetItemCombination, {
   DatasetItemPromptCombination,
 } from "@/v2/pages/PlaygroundPage/usePromptDatasetItemCombination";
 import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
-import useOpenAiPipelineMode from "@/v2/pages-shared/llm/PromptModelSettings/useOpenAiPipelineMode";
+import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
 const MAX_POLL_DURATION_MS = 5 * 60 * 1000; // 5 minutes
