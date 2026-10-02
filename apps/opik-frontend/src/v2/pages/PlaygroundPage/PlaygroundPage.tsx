@@ -120,11 +120,19 @@ const PlaygroundPage = () => {
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel } =
-    useLLMProviderModelsData();
+  const {
+    calculateModelProvider,
+    calculateDefaultModel,
+    isPending: isPendingModels,
+  } = useLLMProviderModelsData();
+
+  // The model registry loads alongside the provider keys, and resolving a model's provider needs it:
+  // prompts created or validated before it lands get an empty provider. PlaygroundPrompts creates
+  // the default prompt once both have settled.
+  const isPendingPlaygroundSetup = isPendingProviderKeys || isPendingModels;
 
   const resetPrompts = useCallback(() => {
-    if (isPendingProviderKeys) {
+    if (isPendingPlaygroundSetup) {
       setPromptMap([], {});
       return;
     }
@@ -137,7 +145,7 @@ const PlaygroundPage = () => {
     });
     setPromptMap([prompt.id], { [prompt.id]: prompt });
   }, [
-    isPendingProviderKeys,
+    isPendingPlaygroundSetup,
     providerKeys,
     lastPickedModel,
     calculateModelProvider,
@@ -275,7 +283,7 @@ const PlaygroundPage = () => {
     return () => stopAll();
   }, [stopAll]);
 
-  const headerMaxWidth = isPendingProviderKeys
+  const headerMaxWidth = isPendingPlaygroundSetup
     ? undefined
     : `calc(${promptCount} * var(--max-prompt-width) + var(--add-variant-width))`;
 
@@ -307,7 +315,7 @@ const PlaygroundPage = () => {
 
         <Separator />
 
-        {isPendingProviderKeys ? (
+        {isPendingPlaygroundSetup ? (
           renderPlaygroundLoadingSkeleton()
         ) : isExperimentMode ? (
           <>
