@@ -1947,13 +1947,13 @@ class ProjectMetricsResourceTest {
             createThreadsWithTraceIdsMintedAt(projectName, subtract(marker, TIME_BUCKET_3, interval), marker, 3);
 
             // SUT
-            getAndAssertZeroFilledUntilMinus1(projectId, interval, marker);
+            getAndAssertUntilMinus1(projectId, interval, marker, Map.of());
         }
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("a thread whose row was written after the window end is not counted, matching the thread list's id window")
-        void whenThreadRowMintedAfterWindowEnd_thenThreadNotCounted(TimeInterval interval) {
+        @DisplayName("a thread whose row was written after the window end is still counted where its traces are, as the thread list lists it")
+        void whenThreadRowMintedAfterWindowEnd_thenThreadCountedAtItsTraces(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
             var projectName = RandomStringUtils.secure().nextAlphabetic(10);
@@ -1974,13 +1974,13 @@ class ProjectMetricsResourceTest {
                     .allSatisfy(rowMintedAt -> assertThat(rowMintedAt).isAfter(windowEnd));
 
             // SUT
-            getAndAssertZeroFilledUntilMinus1(projectId, interval, marker);
+            getAndAssertUntilMinus1(projectId, interval, marker, Map.of(TIME_BUCKET_3, 3L));
         }
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("a thread whose traces all carry the epoch sentinel is counted in the bucket its row was minted in")
-        void whenAllTracesCarryTheEpochSentinel_thenCountedWhereItsRowWasMinted(TimeInterval interval) {
+        @DisplayName("a thread whose traces all carry the epoch sentinel is counted where its trace ids were minted, not its row")
+        void whenAllTracesCarryTheEpochSentinel_thenCountedWhereItsTraceIdsWereMinted(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
             var projectName = RandomStringUtils.secure().nextAlphabetic(10);
@@ -1995,7 +1995,7 @@ class ProjectMetricsResourceTest {
             assertThat(getThreadRowMintedAt(threadId, projectId)).isAfterOrEqualTo(marker);
 
             // SUT
-            Map<String, Long> current = Map.of(ProjectMetricsDAO.NAME_THREADS, 1L);
+            Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, 1L);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
@@ -2003,7 +2003,7 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
-                    null, null, current);
+                    minus3, null, null);
         }
 
         @ParameterizedTest
@@ -2126,8 +2126,8 @@ class ProjectMetricsResourceTest {
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("buckets by the first trace's start time, not by when its trace ids were minted")
-        void whenTraceIdsMintedAfterTheirStartTime_thenBucketsByTraceStartTime(TimeInterval interval) {
+        @DisplayName("buckets by when the first trace id was minted, as trace metrics do, not by its start time")
+        void whenTraceIdsMintedAfterTheirStartTime_thenBucketsByTraceIdTime(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
             var projectName = RandomStringUtils.secure().nextAlphabetic(10);
@@ -2141,7 +2141,7 @@ class ProjectMetricsResourceTest {
                     subtract(marker, TIME_BUCKET_1, interval), threadCount);
 
             // SUT
-            Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) threadCount);
+            Map<String, Long> minus1 = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) threadCount);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
@@ -2149,13 +2149,13 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
-                    minus3, null, null);
+                    null, minus1, null);
         }
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("a thread whose traces started before the window is excluded, even though their ids are inside it")
-        void whenTraceStartTimesPredateWindow_thenThreadExcluded(TimeInterval interval) {
+        @DisplayName("a thread whose traces started before the window but whose ids are inside it is counted, as the thread list lists it")
+        void whenTraceStartTimesPredateWindow_thenThreadCountedAtItsTraceIds(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
             var projectName = RandomStringUtils.secure().nextAlphabetic(10);
@@ -2171,7 +2171,13 @@ class ProjectMetricsResourceTest {
                     subtract(marker, TIME_BUCKET_1, interval), 3);
 
             // SUT
-            getAndAssertEmpty(projectId, interval, marker);
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    null, Map.of(ProjectMetricsDAO.NAME_THREADS, 3L), null);
         }
 
         private List<String> createThreadsWithTraceIdsMintedAt(String projectName, Instant startedAt,
@@ -2209,7 +2215,8 @@ class ProjectMetricsResourceTest {
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
         }
 
-        private void getAndAssertZeroFilledUntilMinus1(UUID projectId, TimeInterval interval, Instant marker) {
+        private void getAndAssertUntilMinus1(UUID projectId, TimeInterval interval, Instant marker,
+                Map<Integer, Long> countsByBucketsBack) {
             var request = ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
                     .interval(interval)
@@ -2221,7 +2228,7 @@ class ProjectMetricsResourceTest {
                     .iterate(TIME_BUCKET_4, bucketsBack -> bucketsBack > TIME_BUCKET_1, bucketsBack -> bucketsBack - 1)
                     .mapToObj(bucketsBack -> DataPoint.<Long>builder()
                             .time(subtract(marker, bucketsBack, interval))
-                            .value(0L)
+                            .value(countsByBucketsBack.getOrDefault(bucketsBack, 0L))
                             .build())
                     .toList();
 
@@ -4622,10 +4629,17 @@ class ProjectMetricsResourceTest {
                     empty, empty, empty);
         }
 
-        @ParameterizedTest
-        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("a thread straddling the window start, with its row inside the window, is placed at its first in-window trace and measured over in-window traces only, as in the thread list")
-        void whenThreadStraddlesWindowStart_thenOnlyInWindowTracesPlaceAndMeasureIt(TimeInterval interval) {
+        Stream<Arguments> whenThreadStraddlesWindowStart_thenOnlyInWindowTracesPlaceAndMeasureIt() {
+            return Arrays.stream(TimeInterval.values())
+                    .filter(interval -> interval != TimeInterval.TOTAL)
+                    .flatMap(interval -> Stream.of(Arguments.of(interval, true), Arguments.of(interval, false)));
+        }
+
+        @ParameterizedTest(name = "{0}, row opened before its traces: {1}")
+        @MethodSource
+        @DisplayName("a thread straddling the window start is placed at its first in-window trace and measured over in-window traces only, wherever its row was written, as in the thread list")
+        void whenThreadStraddlesWindowStart_thenOnlyInWindowTracesPlaceAndMeasureIt(TimeInterval interval,
+                boolean rowOpenedBeforeTraces) {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
@@ -4636,7 +4650,9 @@ class ProjectMetricsResourceTest {
             Instant ranBeforeWindow = subtract(marker, TIME_BUCKET_4 + TIME_BUCKET_3, interval);
             Instant ranInsideWindow = subtract(marker, TIME_BUCKET_3, interval);
             long durationMs = 500;
-            String threadId = mintThreadRowIdsNow(projectId, 1).getFirst();
+            String threadId = rowOpenedBeforeTraces
+                    ? mintThreadRowIdsNow(projectId, 1).getFirst()
+                    : RandomStringUtils.secure().nextAlphabetic(10);
 
             List<Trace> traces = List.of(
                     factory.manufacturePojo(Trace.class).toBuilder()
@@ -4658,7 +4674,11 @@ class ProjectMetricsResourceTest {
             Mono.delay(Duration.ofMillis(100)).block();
             traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
 
-            assertThat(getThreadRowMintedAt(threadId, projectId)).isAfterOrEqualTo(windowStart);
+            if (rowOpenedBeforeTraces) {
+                assertThat(getThreadRowMintedAt(threadId, projectId)).isAfterOrEqualTo(windowStart);
+            } else {
+                assertThat(getThreadRowMintedAt(threadId, projectId)).isBefore(windowStart);
+            }
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
@@ -4981,8 +5001,8 @@ class ProjectMetricsResourceTest {
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("cost lands in the bucket the traces ran in, not the one their ids were minted in")
-        void whenTraceIdsMintedAfterTheirStartTime_thenCostBucketsByTraceStartTime(TimeInterval interval) {
+        @DisplayName("cost lands in the bucket the trace ids were minted in, as the thread count does, not the one they ran in")
+        void whenTraceIdsMintedAfterTheirStartTime_thenCostBucketsByTraceIdTime(TimeInterval interval) {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
@@ -4992,7 +5012,7 @@ class ProjectMetricsResourceTest {
             BigDecimal cost = createThreadsWithTraceIdsMintedAtAndGetTotalCost(projectName,
                     subtract(marker, TIME_BUCKET_3, interval), subtract(marker, TIME_BUCKET_1, interval));
 
-            var costMinus3 = Map.of(ProjectMetricsDAO.NAME_THREAD_COST, cost);
+            var costMinus1 = Map.of(ProjectMetricsDAO.NAME_THREAD_COST, cost);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COST)
@@ -5000,7 +5020,7 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST), BigDecimal.class,
-                    costMinus3, null, null);
+                    null, costMinus1, null);
         }
 
         @Test
