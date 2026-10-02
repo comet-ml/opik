@@ -2250,6 +2250,70 @@ class ProjectMetricsResourceTest {
     }
 
     @Nested
+    @DisplayName("Thread metric placement")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadMetricPlacementTest {
+
+        Stream<Arguments> everyThreadMetricBucketsByTraceIdTime() {
+            return Arrays.stream(TimeInterval.values())
+                    .filter(interval -> interval != TimeInterval.TOTAL)
+                    .flatMap(interval -> Stream.of(MetricType.THREAD_COUNT, MetricType.THREAD_DURATION,
+                            MetricType.THREAD_AVERAGE_DURATION, MetricType.THREAD_COST,
+                            MetricType.THREAD_FEEDBACK_SCORES)
+                            .map(metricType -> Arguments.of(interval, metricType)));
+        }
+
+        @ParameterizedTest(name = "{0}, {1}")
+        @MethodSource
+        @DisplayName("every thread metric puts a thread in the bucket its trace id was minted in, not the one it started in")
+        void everyThreadMetricBucketsByTraceIdTime(TimeInterval interval, MetricType metricType) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant startedAt = subtract(marker, TIME_BUCKET_3, interval);
+            Instant mintedAt = subtract(marker, TIME_BUCKET_1, interval);
+            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(idGenerator.generateId(mintedAt))
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .startTime(startedAt)
+                    .endTime(startedAt.plusMillis(500))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+            spanResourceClient.batchCreateSpans(List.of(factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .startTime(startedAt)
+                    .totalEstimatedCost(BigDecimal.ONE)
+                    .build()), API_KEY, WORKSPACE_NAME);
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
+            traceResourceClient.threadFeedbackScores(List.of(factory.manufacturePojo(FeedbackScoreBatchItemThread.class)
+                    .toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .value(BigDecimal.ONE)
+                    .build()), API_KEY, WORKSPACE_NAME);
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
+                    .metricType(metricType)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), BigDecimal.class, API_KEY, WORKSPACE_NAME);
+
+            assertThat(response.results()).isNotEmpty().allSatisfy(series -> assertThat(series.data())
+                    .filteredOn(point -> point.value() != null && point.value().signum() != 0)
+                    .extracting(DataPoint::time)
+                    .containsExactly(mintedAt));
+        }
+    }
+
+    @Nested
     @DisplayName("Thread duration")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ThreadDurationTest {
