@@ -1069,8 +1069,7 @@ export type ReasoningEffort =
   | "low"
   | "medium"
   | "high"
-  | "xhigh"
-  | "max";
+  | "xhigh";
 
 export interface LLMOpenAIConfigsType {
   temperature: number;
@@ -1085,7 +1084,6 @@ export interface LLMOpenAIConfigsType {
 }
 
 export type AnthropicThinkingEffort =
-  | "adaptive"
   | "low"
   | "medium"
   | "high"

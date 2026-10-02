@@ -260,30 +260,28 @@ class TestNeverFeltByTheUser:
         )
 
         with mock.patch.object(account_identity.httpx, "Client") as client:
-            assert account_identity.event_properties() == {}
+            assert account_identity.event_properties(_config()) == {}
 
         client.assert_not_called()
 
-    def test_config_unreadable__still_returns_countable_properties(self, monkeypatch):
+    def test_lookup_failing__still_returns_countable_properties(self, monkeypatch):
         monkeypatch.setattr(
-            account_identity.opik_config,
-            "OpikConfig",
-            mock.Mock(side_effect=Exception("no config")),
+            account_identity, "_resolve", mock.Mock(side_effect=Exception("boom"))
         )
 
-        assert account_identity.event_properties() == {
+        assert account_identity.event_properties(_config()) == {
             "identity_lookup": "miss",
             "workspace_kind": "unknown",
         }
 
 
 class TestThePublicEntryPoint:
-    """`event_properties()` is what the CLI calls, so the gate and the config
-    loading it does have to be exercised through it rather than around it.
+    """`event_properties()` is what the CLI calls, so the gate it applies has to
+    be exercised through it rather than around it.
 
-    The tests above call `_properties` with a config they built, which says
-    nothing about whether the real entry point reads the configuration, honours
-    the analytics switch, or assembles the same payload.
+    The tests above call `_properties` directly, which says nothing about whether
+    the real entry point honours the analytics switch or assembles the same
+    payload.
     """
 
     def test_configured_cloud_account__properties_assembled_end_to_end(
@@ -292,12 +290,6 @@ class TestThePublicEntryPoint:
         monkeypatch.setattr(
             account_identity.analytics, "reporting_allowed", lambda: True
         )
-        monkeypatch.setattr(
-            account_identity.opik_config,
-            "OpikConfig",
-            lambda: _config(api_key="secret-key", workspace="their-ws"),
-        )
-
         with mock.patch.object(
             account_identity.httpx,
             "Client",
@@ -305,7 +297,9 @@ class TestThePublicEntryPoint:
                 body={"userName": "someone", "defaultWorkspaceName": "their-ws"}
             ),
         ):
-            properties = account_identity.event_properties()
+            properties = account_identity.event_properties(
+                _config(api_key="secret-key", workspace="their-ws")
+            )
 
         assert properties == {
             "identity_lookup": "resolved",
@@ -328,14 +322,12 @@ class TestThePublicEntryPoint:
             "reporting_allowed",
             analytics_api.reporting_allowed,
         )
-        monkeypatch.setattr(
-            account_identity.opik_config,
-            "OpikConfig",
-            lambda: _config(analytics_url="", analytics_enable=True),
-        )
+        config_ = _config(analytics_url="", analytics_enable=True)
+        # The gate reads the analytics settings from the configuration itself.
+        monkeypatch.setattr(account_identity.opik_config, "OpikConfig", lambda: config_)
         monkeypatch.setattr(analytics_rules.environment, "in_pytest", lambda: False)
 
         with mock.patch.object(account_identity.httpx, "Client") as client:
-            assert account_identity.event_properties() == {}
+            assert account_identity.event_properties(config_) == {}
 
         client.assert_not_called()
