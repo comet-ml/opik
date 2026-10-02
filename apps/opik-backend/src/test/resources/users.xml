@@ -67,6 +67,12 @@
             <enable_analyzer>1</enable_analyzer>
             <apply_row_policy_after_final>1</apply_row_policy_after_final>
             <allow_introspection_functions>0</allow_introspection_functions>
+            <!-- Off so a count leaves a policy-filtered read in the plan for the post-run check, instead of being
+                 answered from metadata or the primary-key index. -->
+            <optimize_trivial_count_query>0</optimize_trivial_count_query>
+            <optimize_use_implicit_projections>0</optimize_use_implicit_projections>
+            <!-- On so a single-shard Distributed read runs on the initiator, where the plan shows every read. -->
+            <prefer_localhost_replica>1</prefer_localhost_replica>
             <!--
                 Production sets SQL_workspace_id = '' / SQL_project_id = '' as defaults, but
                 ClickHouse's XML profile loader rejects an empty Field for custom settings. The
@@ -88,6 +94,9 @@
                 <enable_analyzer><const/></enable_analyzer>
                 <apply_row_policy_after_final><const/></apply_row_policy_after_final>
                 <allow_introspection_functions><const/></allow_introspection_functions>
+                <optimize_trivial_count_query><const/></optimize_trivial_count_query>
+                <optimize_use_implicit_projections><const/></optimize_use_implicit_projections>
+                <prefer_localhost_replica><const/></prefer_localhost_replica>
                 <SQL_workspace_id>
                     <changeable_in_readonly/>
                 </SQL_workspace_id>

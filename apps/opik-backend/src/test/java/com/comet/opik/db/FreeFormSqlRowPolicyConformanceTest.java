@@ -60,7 +60,8 @@ class FreeFormSqlRowPolicyConformanceTest {
             Map.entry("max_parallel_replicas", "1"), Map.entry("use_query_cache", "0"),
             Map.entry("query_cache_share_between_users", "0"), Map.entry("use_query_condition_cache", "0"),
             Map.entry("enable_analyzer", "1"), Map.entry("apply_row_policy_after_final", "1"),
-            Map.entry("allow_introspection_functions", "0"));
+            Map.entry("allow_introspection_functions", "0"), Map.entry("optimize_trivial_count_query", "0"),
+            Map.entry("optimize_use_implicit_projections", "0"), Map.entry("prefer_localhost_replica", "1"));
 
     // Not reused: each run starts from a freshly migrated, empty database, so the rows are exactly the ones below.
     private final Network network = Network.newNetwork();
