@@ -744,3 +744,175 @@ def test_evaluation_result_on_dict_items__aggregate_evaluation_scores__single_it
     assert f1_stats.min == 0.85
     assert f1_stats.values == [0.85]
     assert f1_stats.std is None  # std is None for single value
+
+
+@pytest.mark.parametrize("bad_score", [None, "string_score", 123, object()])
+def test_normalize_experiment_score__non_score_result(bad_score):
+    res = evaluation_result.normalize_experiment_score(
+        bad_score, default_name="fallback"
+    )
+    assert res.name == "fallback"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+    assert res.metadata == {"_fabricated": True}
+
+
+@pytest.mark.parametrize("bad_name", ["", "   ", None, 123])
+def test_normalize_experiment_score__invalid_name(bad_name):
+    score = score_result.ScoreResult(name=bad_name, value=0.5)  # type: ignore
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res.name == "fallback"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+    assert res.metadata == {"_fabricated": True}
+
+
+@pytest.mark.parametrize("bad_val", ["nan", float("nan"), float("inf"), True, None])
+def test_normalize_experiment_score__invalid_value(bad_val):
+    score = score_result.ScoreResult(name="accuracy", value=bad_val)  # type: ignore
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res.name == "accuracy"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+
+
+def test_normalize_experiment_score__valid_score():
+    score = score_result.ScoreResult(name="accuracy", value=0.95)
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res == score
+
+
+@pytest.mark.parametrize("bad_metadata", ["invalid_str", [1, 2], 123, ("a", "b")])
+def test_normalize_experiment_score__invalid_metadata_type(bad_metadata):
+    score = score_result.ScoreResult(
+        name="",
+        value=0.5,
+        metadata=bad_metadata,  # type: ignore
+    )
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res.name == "fallback"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+    assert res.metadata == {"_fabricated": True}
+
+
+@pytest.mark.parametrize("bad_metadata", ["invalid_str", [1, 2], 123, ("a", "b")])
+def test_normalize_experiment_score__valid_score_with_invalid_metadata(bad_metadata):
+    score = score_result.ScoreResult(
+        name="accuracy",
+        value=0.5,
+        metadata=bad_metadata,  # type: ignore
+    )
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res.name == "accuracy"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+    assert "_fabricated" not in res.metadata
+    assert res.metadata["error_info"]["exception_type"] == "EvaluationError"
+    assert "metadata" in res.metadata["error_info"]["message"]
+    assert res.metadata["error_info"]["traceback"]
+    assert not evaluation_result._is_fabricated_score(res)
+    assert "metadata must be a mapping" in res.reason
+
+
+def test_normalize_experiment_score__user_fabricated_marker_is_metadata():
+    score = score_result.ScoreResult(
+        name="accuracy", value=0.5, metadata={"_fabricated": True}
+    )
+
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+
+    assert res.metadata == {"_fabricated": True}
+    assert not evaluation_result._is_fabricated_score(res)
+
+
+@pytest.mark.parametrize("bad_flag", ["false", "true", 0, 1, None, []])
+def test_normalize_experiment_score__invalid_scoring_failed_flag(bad_flag):
+    score = score_result.ScoreResult(
+        name="accuracy",
+        value=0.8,
+        scoring_failed=bad_flag,  # type: ignore
+    )
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res.name == "accuracy"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+    assert "scoring_failed must be a bool" in res.reason
+
+
+def test_compute_experiment_scores__list_isolation_and_error_sanitization():
+    valid1 = score_result.ScoreResult(name="valid1", value=0.9)
+    valid2 = score_result.ScoreResult(name="valid2", value=0.8)
+
+    class RaisingScore(score_result.ScoreResult):
+        def __getattribute__(self, item):
+            if item == "name":
+                raise RuntimeError("Access error: " + "X" * 300)
+            return super().__getattribute__(item)
+
+    bad_score = object.__new__(RaisingScore)
+
+    def scoring_fn(_):
+        return [valid1, bad_score, valid2]
+
+    scores = evaluation_result.compute_experiment_scores(
+        experiment_scoring_functions=[scoring_fn],
+        test_results=[
+            test_result.TestResult(
+                test_case=test_case.TestCase(
+                    trace_id="t1",
+                    dataset_item_id="d1",
+                    mapped_scoring_inputs={"input": "test"},
+                    task_output={"output": "out"},
+                ),
+                score_results=[],
+                trial_id=1,
+            )
+        ],
+    )
+    assert len(scores) == 3
+    assert scores[0] == valid1
+    assert scores[1].scoring_failed is True
+    assert scores[1].metadata == {"_fabricated": True}
+    assert "failed with RuntimeError" in scores[1].reason
+    assert len(scores[1].reason) <= 300
+    assert scores[2] == valid2
+
+
+def test_compute_experiment_scores__unstringifiable_exception():
+    class UnstringifiableError(Exception):
+        def __str__(self):
+            raise ValueError("Cannot convert exception to string")
+
+    def broken_scorer(_):
+        raise UnstringifiableError("hidden")
+
+    scores = evaluation_result.compute_experiment_scores(
+        experiment_scoring_functions=[broken_scorer],
+        test_results=[
+            test_result.TestResult(
+                test_case=test_case.TestCase(
+                    trace_id="t1",
+                    dataset_item_id="d1",
+                    mapped_scoring_inputs={"input": "test"},
+                    task_output={"output": "out"},
+                ),
+                score_results=[],
+                trial_id=1,
+            )
+        ],
+    )
+    assert len(scores) == 1
+    assert scores[0].name == "broken_scorer"
+    assert scores[0].scoring_failed is True
+    assert scores[0].metadata == {"_fabricated": True}
+    assert (
+        scores[0].reason
+        == "Experiment scoring function 'broken_scorer' failed with UnstringifiableError."
+    )
+
+
+def test_safe_str__truncates_long_messages():
+    message = "x" * 300
+
+    assert evaluation_result._safe_str(RuntimeError(message)) == "x" * 200
