@@ -248,13 +248,11 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)>
-                    AND id >= :uuid_from_time
-                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
-                <else>
-                    <if(traces_final_ids)>
-                        AND thread_id IN (SELECT thread_id FROM traces_final_ids)
-                    <endif>
+                -- Not the row id range: membership follows the traces, as in ProjectMetricsDAO THREAD_FILTERED_PREFIX (OPIK-8335).
+                <if(traces_final_ids)>
+                    AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                <elseif(uuid_from_time || uuid_to_time)>
+                    AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 <if(page_pushdown)> AND thread_id IN (SELECT thread_id FROM traces_final) <endif>
@@ -403,8 +401,6 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND project_id = :project_id
                           AND queue_id IN (SELECT id FROM thread_scope_queues)
                           AND item_id IN (SELECT thread_model_id FROM trace_threads_final)
-                          <if(uuid_from_time)> AND item_id >= :uuid_from_time <endif>
-                          <if(uuid_to_time)> AND item_id \\<= :uuid_to_time <endif>
                     ) AS aqi
                     JOIN thread_scope_queues AS aq ON aq.id = aqi.queue_id
                  ) AS annotation_queue_ids_with_thread_id
@@ -598,13 +594,11 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)>
-                    AND id >= :uuid_from_time
-                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
-                <else>
-                    <if(traces_final_ids)>
-                        AND thread_id IN (SELECT thread_id FROM traces_final_ids)
-                    <endif>
+                -- Not the row id range: membership follows the traces, as in ProjectMetricsDAO THREAD_FILTERED_PREFIX (OPIK-8335).
+                <if(traces_final_ids)>
+                    AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                <elseif(uuid_from_time || uuid_to_time)>
+                    AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
@@ -700,8 +694,6 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE aq.scope = 'thread'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_thread_id
                  GROUP BY thread_id
             )
@@ -1226,13 +1218,11 @@ class ThreadDAOImpl implements ThreadDAO {
                     FROM trace_threads
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    <if(uuid_from_time)>
-                        AND id >= :uuid_from_time
-                        <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
-                    <else>
-                        <if(traces_final_ids)>
-                            AND thread_id IN (SELECT thread_id FROM traces_final_ids)
-                        <endif>
+                    -- Not the row id range: membership follows the traces, as in ProjectMetricsDAO THREAD_FILTERED_PREFIX (OPIK-8335).
+                    <if(traces_final_ids)>
+                        AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                    <elseif(uuid_from_time || uuid_to_time)>
+                        AND thread_id IN (SELECT thread_id FROM traces_final)
                     <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                     ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
@@ -1332,8 +1322,6 @@ class ThreadDAOImpl implements ThreadDAO {
                         WHERE aq.scope = 'thread'
                           AND workspace_id = :workspace_id
                           AND project_id = :project_id
-                          <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                          <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                      ) AS annotation_queue_ids_with_thread_id
                      GROUP BY thread_id
                 )
