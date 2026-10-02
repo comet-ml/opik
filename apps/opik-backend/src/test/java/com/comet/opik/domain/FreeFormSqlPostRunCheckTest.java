@@ -149,8 +149,9 @@ class FreeFormSqlPostRunCheckTest {
         standardConfig.setUsername(standardUser);
         var extendedConfig = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
         extendedConfig.setUsername(EXTENDED_USER);
-        return new FreeFormSqlQueryService(new FreeFormSqlQueryDAOImpl(standardClient, extended, admin, ALWAYS_GRANTS),
-                mock(FreeFormSqlEntityNameEnricher.class), analytics, standardConfig, extendedConfig);
+        var dao = new FreeFormSqlQueryDAOImpl(standardClient, extended, admin);
+        return new FreeFormSqlQueryService(dao, mock(FreeFormSqlEntityNameEnricher.class),
+                new FreeFormSqlQueryLogReader(dao, ALWAYS_GRANTS), analytics, standardConfig, extendedConfig);
     }
 
     private static String count(String from) {
@@ -245,7 +246,7 @@ class FreeFormSqlPostRunCheckTest {
     @DisplayName("a scalar subquery stored by reference hides its reads, so it is rejected too")
     void storedScalarIsOpaque() {
         String query = "SELECT count() FROM traces WHERE has((SELECT groupArray(id) FROM spans), id)";
-        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin, ALWAYS_GRANTS)
+        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin)
                 .explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A.toString(), query).join();
         assertThat(FreeFormSqlSubqueries.scalarReads(tree, DATABASE_NAME).opaque()).isTrue();
         assertRejected("SELECT toJSONString(map('n', toString(count()))) AS result FROM traces "
@@ -257,7 +258,7 @@ class FreeFormSqlPostRunCheckTest {
     @MethodSource
     @DisplayName("the scalar gate classifies subqueries from ClickHouse's real resolved query tree")
     void scalarReads(String name, String query, Set<String> expected) {
-        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin, ALWAYS_GRANTS)
+        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin)
                 .explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A.toString(), query).join();
         assertThat(FreeFormSqlSubqueries.scalarReads(tree, DATABASE_NAME).tables()).isEqualTo(expected);
     }

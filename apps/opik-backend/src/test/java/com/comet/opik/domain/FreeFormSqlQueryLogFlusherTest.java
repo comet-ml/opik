@@ -20,6 +20,8 @@ class FreeFormSqlQueryLogFlusherTest {
 
     /** Whether the cluster-wide permit is granted: false while another instance has just flushed. */
     private boolean gateOpen = true;
+    /** Set when the permit cannot be checked at all, e.g. Redis down. */
+    private RuntimeException gateError;
 
     private long now;
     private final List<Task> scheduled = new ArrayList<>();
@@ -37,7 +39,9 @@ class FreeFormSqlQueryLogFlusherTest {
         return flush;
     }, INTERVAL_MILLIS, GATE_RETRY_MILLIS, () -> now,
             (delayMillis, task) -> scheduled.add(new Task(now + delayMillis, task)),
-            () -> CompletableFuture.completedFuture(gateOpen));
+            () -> gateError != null
+                    ? CompletableFuture.failedFuture(gateError)
+                    : CompletableFuture.completedFuture(gateOpen));
 
     /** Moves the clock to {@code millis}, running every task due by then, in due order. */
     private void advanceTo(long millis) {
@@ -131,5 +135,23 @@ class FreeFormSqlQueryLogFlusherTest {
         assertThat(flushStarts).containsExactly(6 * GATE_RETRY_MILLIS);
         flushes.getFirst().complete(null);
         assertThat(waiter).isDone();
+    }
+
+    @Test
+    @DisplayName("a permit that cannot be checked fails the waiters instead of flushing past the cluster-wide limit")
+    void uncheckablePermitFailsTheWaiters() {
+        gateError = new IllegalStateException("Redis unavailable");
+        var waiter = flusher.awaitFlush();
+        advanceTo(0);
+        assertThat(flushStarts).isEmpty();
+        assertThatThrownBy(waiter::join).hasCauseInstanceOf(IllegalStateException.class);
+
+        gateError = null;
+        var next = flusher.awaitFlush();
+        assertThat(next).as("a new request after the failure gets a new flush").isNotSameAs(waiter);
+        advanceTo(0);
+        assertThat(flushStarts).containsExactly(0L);
+        flushes.getFirst().complete(null);
+        assertThat(next).isDone();
     }
 }

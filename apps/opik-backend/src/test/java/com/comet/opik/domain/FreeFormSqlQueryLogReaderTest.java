@@ -22,6 +22,8 @@ class FreeFormSqlQueryLogReaderTest {
     private final AtomicInteger flushes = new AtomicInteger();
     private final Deque<List<FreeFormSqlQueryLogEntry>> answers = new ArrayDeque<>();
     private final AtomicInteger fetches = new AtomicInteger();
+    /** The waits the reader asked for, in order; each runs at once, so the tests need no real time. */
+    private final List<Long> waits = new java.util.ArrayList<>();
 
     private static FreeFormSqlQueryLogEntry entry(String user) {
         return FreeFormSqlQueryLogEntry.builder().initial(true).user(user).tables(List.of())
@@ -41,7 +43,10 @@ class FreeFormSqlQueryLogReaderTest {
         }, () -> {
             flushes.incrementAndGet();
             return CompletableFuture.completedFuture(null);
-        }, 3);
+        }, 3, 500, (delayMillis, task) -> {
+            waits.add(delayMillis);
+            task.run();
+        });
     }
 
     @Test
@@ -50,6 +55,7 @@ class FreeFormSqlQueryLogReaderTest {
         assertThat(reader(List.of(WRITTEN)).entries(QUERY_ID, USER, false).join()).isEqualTo(WRITTEN);
         assertThat(flushes).hasValue(0);
         assertThat(fetches).hasValue(1);
+        assertThat(waits).isEmpty();
     }
 
     @Test
@@ -58,6 +64,7 @@ class FreeFormSqlQueryLogReaderTest {
         assertThat(reader(List.of(NOT_YET, WRITTEN)).entries(QUERY_ID, USER, false).join()).isEqualTo(WRITTEN);
         assertThat(flushes).hasValue(1);
         assertThat(fetches).hasValue(2);
+        assertThat(waits).as("500 ms before the attempt after the miss").containsExactly(500L);
     }
 
     @Test
@@ -73,6 +80,7 @@ class FreeFormSqlQueryLogReaderTest {
         assertThat(reader(List.of(WRITTEN)).entries(QUERY_ID, USER, true).join()).isEqualTo(WRITTEN);
         assertThat(flushes).hasValue(1);
         assertThat(fetches).as("no read before the flush").hasValue(1);
+        assertThat(waits).isEmpty();
     }
 
     @Test
@@ -81,5 +89,6 @@ class FreeFormSqlQueryLogReaderTest {
         assertThat(reader(List.of(NOT_YET)).entries(QUERY_ID, USER, false).join()).isEqualTo(NOT_YET);
         assertThat(flushes).hasValue(3);
         assertThat(fetches).hasValue(4);
+        assertThat(waits).as("500 ms between every attempt").containsExactly(500L, 500L, 500L);
     }
 }

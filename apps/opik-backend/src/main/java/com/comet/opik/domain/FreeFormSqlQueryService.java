@@ -110,6 +110,7 @@ public class FreeFormSqlQueryService {
 
     private final FreeFormSqlQueryDAO freeFormSqlQueryDAO;
     private final FreeFormSqlEntityNameEnricher entityNameEnricher;
+    private final FreeFormSqlQueryLogReader queryLogReader;
     private final String database;
     private final Map<FreeFormSqlAccount, String> users;
 
@@ -120,11 +121,13 @@ public class FreeFormSqlQueryService {
     @Inject
     public FreeFormSqlQueryService(@NonNull FreeFormSqlQueryDAO freeFormSqlQueryDAO,
             @NonNull FreeFormSqlEntityNameEnricher entityNameEnricher,
+            @NonNull FreeFormSqlQueryLogReader queryLogReader,
             @NonNull @Config("databaseAnalytics") DatabaseAnalyticsFactory databaseAnalytics,
             @NonNull @Config("databaseAnalyticsReadOnlyFreeFormSql") DatabaseAnalyticsReadOnlyFreeFormSqlConfig standard,
             @NonNull @Config("databaseAnalyticsReadOnlyFreeFormExtendedSql") DatabaseAnalyticsReadOnlyFreeFormSqlConfig extended) {
         this.freeFormSqlQueryDAO = freeFormSqlQueryDAO;
         this.entityNameEnricher = entityNameEnricher;
+        this.queryLogReader = queryLogReader;
         this.database = databaseAnalytics.getDatabaseName();
         this.users = Map.of(FreeFormSqlAccount.STANDARD, standard.getUsername(),
                 FreeFormSqlAccount.EXTENDED, extended.getUsername());
@@ -233,7 +236,7 @@ public class FreeFormSqlQueryService {
             String query, String queryId, Set<String> scalarReads, long startMillis) {
         // The plan first: whether the query read remotely decides if its log entries need a flush to be complete.
         return freeFormSqlQueryDAO.explainPlan(account, workspaceId, projectScope, query)
-                .thenCompose(plan -> freeFormSqlQueryDAO.queryLogEntries(queryId, users.get(account),
+                .thenCompose(plan -> queryLogReader.entries(queryId, users.get(account),
                         FreeFormSqlPolicyCheck.readsRemotely(plan))
                         .thenApply(entries -> new Evidence(plan, entries)))
                 .handle((evidence, error) -> {

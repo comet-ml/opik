@@ -17,8 +17,9 @@ import java.util.function.Supplier;
  * interval plus the flushes ahead of it.
  *
  * <p>The limit is cluster-wide: before each flush the flusher takes a permit from a {@link ClusterGate}, one per
- * interval across every backend instance. Without one, another instance flushed less than an interval ago, so it
- * tries again shortly; its waiters stay pending meanwhile.
+ * interval across every backend instance. A request whose flush is denied the permit, because another instance
+ * flushed less than an interval ago, asks for it again after {@code gateRetryMillis}; its waiters stay pending
+ * meanwhile. If the permit cannot be checked at all, the waiters fail rather than flush past the cluster-wide limit.
  */
 class FreeFormSqlQueryLogFlusher {
 
@@ -80,10 +81,16 @@ class FreeFormSqlQueryLogFlusher {
             }
         }
         gate.tryAcquire().whenComplete((granted, error) -> {
-            if (error != null || !Boolean.TRUE.equals(granted)) {
-                scheduler.schedule(gateRetryMillis, () -> start(done));
-            } else {
+            if (error != null) {
+                // Unknown permit state: failing keeps the cluster-wide limit; the post-run check fails closed.
+                synchronized (this) {
+                    pending = null;
+                }
+                done.completeExceptionally(error);
+            } else if (Boolean.TRUE.equals(granted)) {
                 run(done);
+            } else {
+                scheduler.schedule(gateRetryMillis, () -> start(done));
             }
         });
     }

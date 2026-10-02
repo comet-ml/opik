@@ -93,4 +93,22 @@ class FreeFormSqlPolicyCheckTest {
         assertThat(FreeFormSqlPolicyCheck.violation("opik", USER, entries, plan, scalarReads)).hasValueSatisfying(
                 violation -> assertThat(violation.table() + " " + violation.reason()).contains(named));
     }
+
+    static Stream<Arguments> readsRemotely() {
+        return Stream.of(
+                arguments(plan("ReadFromRemote|Read from remote replica"), true),
+                arguments(plan("ReadFromRemoteParallelReplicas|Read from remote replicas"), true),
+                arguments(
+                        plan("ReadFromMergeTree|opik.traces_local|filtered", "ReadFromRemote|Read from remote replica"),
+                        true),
+                arguments(plan("ReadFromMergeTree|opik.traces_local|filtered"), false),
+                arguments(plan("ReadFromSystemOne|system.one"), false));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("a plan reads remotely when any read is from a remote shard or replica")
+    void readsRemotely(String plan, boolean expected) {
+        assertThat(FreeFormSqlPolicyCheck.readsRemotely(plan)).isEqualTo(expected);
+    }
 }
