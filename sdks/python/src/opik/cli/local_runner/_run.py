@@ -130,6 +130,10 @@ def run_cli_session(
         if not client.config.config_file_exists:
             try:
                 client.config.save_to_file()
+                LOGGER.info(
+                    "Configuration saved to file: %s",
+                    client.config.config_file_fullpath,
+                )
             except OSError:
                 LOGGER.warning("Failed to save config file", exc_info=True)
 

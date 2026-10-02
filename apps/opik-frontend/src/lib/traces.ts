@@ -150,6 +150,27 @@ const prettifyOpenAIMessageLogic = (
     ) {
       return lastChoice.message.content;
     }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "messages" in message &&
+    isArray(message.messages)
+  ) {
+    // A conversation logged as output (e.g. by the Open WebUI Opik filter):
+    // show the last assistant reply, mirroring the input branch above
+    const lastAssistantMessage = findLast(
+      message.messages,
+      (m) => isObject(m) && "role" in m && m.role === "assistant",
+    );
+    if (
+      lastAssistantMessage &&
+      isObject(lastAssistantMessage) &&
+      "content" in lastAssistantMessage &&
+      isString(lastAssistantMessage.content) &&
+      lastAssistantMessage.content.length > 0
+    ) {
+      return lastAssistantMessage.content;
+    }
   }
 };
 

@@ -1,7 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { chalkStderr as chalk } from "chalk";
 
-import { createReporter, LAUNCHER, LAUNCHER_ENV_VAR } from "./analytics";
+import {
+  createReporter,
+  LAUNCHER,
+  LAUNCHER_ENV_VAR,
+  SESSION_ID_ENV_VAR,
+} from "./analytics";
 import { findUv } from "./uv";
 
 /**
@@ -61,7 +66,12 @@ async function main(): Promise<number> {
   // `uvx`, because that is what detection can tell us about.
   const result = spawnSync(uv.path, ["tool", "run", "opik", ...args], {
     stdio: "inherit",
-    env: { ...process.env, [LAUNCHER_ENV_VAR]: LAUNCHER },
+    // So the Python CLI's events share this run's `session_id`.
+    env: {
+      ...process.env,
+      [LAUNCHER_ENV_VAR]: LAUNCHER,
+      [SESSION_ID_ENV_VAR]: reporter.sessionId,
+    },
   });
 
   if (result.error !== undefined) {

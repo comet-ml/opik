@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { Opik } from 'opik';
 import { loadEnvConfig } from '../../config/env.config';
@@ -181,7 +182,25 @@ export interface DatasetSummaryRef {
    * version where there is one, a `count(DISTINCT id)` scan where there is not.
    */
   latestVersionName: string | null;
+  /**
+   * `max(experiment_items.last_updated_at)` over every experiment recorded
+   * against the dataset — computed LIVE on each read, and with no experiment-type
+   * filter, so a trial's items move it exactly as a regular run's do.
+   */
   mostRecentExperimentAt: string | null;
+  /**
+   * The `datasets.last_created_experiment_at` column, which is a different fact
+   * from `mostRecentExperimentAt` above and is allowed to disagree with it.
+   *
+   * Stored rather than computed, and REGULAR-only: `DatasetEventListener`
+   * writes it when a regular experiment is created and recomputes it when
+   * regular experiments are deleted, skipping trials and mini-batches entirely.
+   * That makes it the one field a broken post-delete listener can leave
+   * permanently wrong — the live figures above would re-derive themselves on the
+   * next read no matter what the listener did, so a spec about the bookkeeping
+   * (opik#8607) has to be able to read this one.
+   */
+  lastCreatedExperimentAt: string | null;
   mostRecentOptimizationAt: string | null;
 }
 
@@ -297,6 +316,30 @@ export interface SpanRef {
   parentSpanId: string | null;
 }
 
+/**
+ * One span of an OTLP export, in the vocabulary the caller thinks in: a name and
+ * a flat attribute map.
+ *
+ * `attributes` is deliberately typed as a flat map of scalars rather than the
+ * OTLP `KeyValue[]`/`AnyValue` shape. The protobuf envelope is protocol detail
+ * that `postOtelSpans` owns; a fixture that had to spell `{ key, value: {
+ * stringValue } }` per attribute would be describing the wire format instead of
+ * the span under test, and the int-vs-string distinction that actually matters
+ * here (usage counts must arrive as `intValue`, or `extractUsageField` skips
+ * them) would be one more thing every call site could get wrong.
+ */
+export interface OtelSpanSeed {
+  name: string;
+  /**
+   * Numbers are sent as OTLP `intValue`, strings as `stringValue`.
+   *
+   * There is no float case, and that is not an omission: every numeric
+   * attribute Opik reads off an OTel span is a token count, and
+   * `extractUsageField` only reads `hasIntValue()`.
+   */
+  attributes: Record<string, string | number>;
+}
+
 /** One span of a `POST /v1/private/spans/batch` write. */
 export interface SpanBatchSeed {
   /** Caller-minted so the seed knows the exact id set it wrote. Must be a UUIDv7. */
@@ -379,6 +422,16 @@ export interface TraceBatchSeed {
   output?: TraceJsonSection;
   startTime?: Date;
   endTime?: Date;
+  /**
+   * The trace's `metadata` payload.
+   *
+   * Sent only when supplied, and deliberately not defaulted to `{}`: a trace
+   * with NO metadata key and one with an empty object are different inputs to
+   * a rule's field mapping — the first fails to resolve and the second
+   * resolves to an empty value — which is exactly the distinction a spec about
+   * an absent mapped field is drawing.
+   */
+  metadata?: Record<string, unknown>;
   /**
    * Groups this trace into a conversation, as `createTraceWithSource` does.
    *
@@ -496,6 +549,28 @@ export interface SpanDetail {
   traceId: string;
   feedbackScores: FeedbackScoreRef[];
   output: unknown;
+}
+
+/**
+ * A span's whole stored payload — the fields a partial update can silently
+ * drop.
+ *
+ * Deliberately not `SpanDetail`: that shape exists for feedback-score reads and
+ * flattens away `input`, `metadata`, `tags`, `type` and `project_id`, which are
+ * exactly what an update whose row lookup missed leaves behind. `null`
+ * throughout means the server sent nothing, kept distinct from an empty value
+ * so a caller can tell "never set" from "wiped".
+ */
+export interface SpanPayload {
+  id: string;
+  name: string;
+  type: string | null;
+  traceId: string | null;
+  projectId: string | null;
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  tags: string[] | null;
 }
 
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
@@ -978,6 +1053,7 @@ function toDatasetSummary(row: unknown): DatasetSummaryRef {
     experiment_count?: number;
     optimization_count?: number;
     most_recent_experiment_at?: string | null;
+    last_created_experiment_at?: string | null;
     most_recent_optimization_at?: string | null;
     latest_version?: { version_hash?: string; version_name?: string } | null;
   };
@@ -1001,6 +1077,7 @@ function toDatasetSummary(row: unknown): DatasetSummaryRef {
     latestVersionHash: d.latest_version?.version_hash ?? null,
     latestVersionName: d.latest_version?.version_name ?? null,
     mostRecentExperimentAt: d.most_recent_experiment_at ?? null,
+    lastCreatedExperimentAt: d.last_created_experiment_at ?? null,
     mostRecentOptimizationAt: d.most_recent_optimization_at ?? null,
   };
 }
@@ -1118,6 +1195,23 @@ function toMetricSeries(json: unknown): MetricSeries[] {
   }));
 }
 
+/**
+ * A random OTLP id as lowercase hex — 16 bytes for a trace id, 8 for a span id.
+ *
+ * Hex rather than raw bytes because that is the form the OTLP/JSON spec and
+ * every collector log speaks, so a failure message names an id a reader can
+ * search for. `postOtelSpans` converts to base64 on the wire; see its comment
+ * for why the two differ.
+ */
+function randomOtelId(bytes: 8 | 16): string {
+  return randomBytes(bytes).toString('hex');
+}
+
+/** The protobuf `bytes` encoding of a hex OTLP id. See `postOtelSpans`. */
+function hexToBase64(hex: string): string {
+  return Buffer.from(hex, 'hex').toString('base64');
+}
+
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
   const env = loadEnvConfig();
   const opik = new Opik({
@@ -1211,6 +1305,60 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (typeof m === 'string') message = m;
     } catch {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
+    }
+    return { status: res.status, message, json, location: res.headers.get('location') };
+  };
+
+  /**
+   * `rawFetch` plus request headers the endpoint reads as arguments.
+   *
+   * Only the OTLP endpoint needs this so far: it takes the project from a
+   * `projectName` HEADER rather than from the body, so a body-only helper cannot
+   * express the call at all — and a seed that silently landed in the workspace's
+   * default project would be outside the run prefix the teardown sweeps.
+   *
+   * A separate function rather than an optional argument on `rawFetch` so the
+   * ~60 existing call sites keep one obvious signature, and so the reserved
+   * headers below are enforced in one place.
+   */
+  const rawFetchWithHeaders = async (
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+    path: string,
+    extraHeaders: Record<string, string>,
+    body?: unknown,
+  ): Promise<RawApiResult & { json: unknown }> => {
+    const reserved = ['authorization', 'comet-workspace', 'content-type', 'accept'];
+    for (const name of Object.keys(extraHeaders)) {
+      if (reserved.includes(name.toLowerCase())) {
+        throw new Error(
+          `rawFetchWithHeaders: '${name}' is owned by the client — overriding it would ` +
+            'silently retarget the workspace or the auth identity',
+        );
+      }
+    }
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Comet-Workspace': env.workspace,
+      ...extraHeaders,
+    };
+    const key = apiKey ?? env.apiKey;
+    if (key) headers['Authorization'] = key;
+
+    const res = await fetch(`${env.apiBaseUrl}${path}`, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const text = await res.text();
+    let json: unknown = null;
+    let message = text;
+    try {
+      json = JSON.parse(text);
+      const m = (json as { message?: unknown } | null)?.message;
+      if (typeof m === 'string') message = m;
+    } catch {
+      // Not JSON (the OTLP endpoint's empty 200 body, or an HTML error page).
     }
     return { status: res.status, message, json, location: res.headers.get('location') };
   };
@@ -2358,6 +2506,93 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The compare read projected to each row's TRACE-SOURCED fields.
+     *
+     * `compareItemsPage` keeps the dataset item's `data` and
+     * `compareItemsPairedPage` keeps the row → trace pairing; neither carries
+     * `input`, `output`, `duration` or `total_estimated_cost`, which come from
+     * the trace rather than from the dataset item and are precisely what the
+     * read's project pruning can silently blank.
+     *
+     * That pruning is the reason this projection exists. The compare query
+     * narrows `traces` / `spans` / `comments` to a set of target projects, and
+     * a project missing from that set does not error — it drops the trace's
+     * data and leaves an otherwise well-formed row with empty cells. Only a
+     * read that can see these fields can tell that apart from a healthy
+     * response.
+     *
+     * `truncate: false`, unlike the two readers above: truncation shortens
+     * string values, and a caller here is comparing an output against what it
+     * seeded.
+     */
+    async compareItemsTraceData(args: {
+      datasetId: string;
+      experimentIds: string[];
+      page?: number;
+      size?: number;
+    }): Promise<{
+      total: number;
+      rows: Array<{
+        id: string;
+        experimentItems: Array<{
+          experimentId: string;
+          traceId: string;
+          input: unknown;
+          output: unknown;
+          duration: number | null;
+          totalEstimatedCost: number | null;
+        }>;
+      }>;
+    }> {
+      const query = new URLSearchParams({
+        experiment_ids: JSON.stringify(args.experimentIds),
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+        truncate: 'false',
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/items/experiments/items`,
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `GET compare items (dataset ${args.datasetId}) -> ${status}: ${message}`,
+        );
+      }
+      const body = (json ?? {}) as {
+        total?: unknown;
+        content?: Array<Record<string, unknown>>;
+      };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `compareItemsTraceData: dataset ${args.datasetId} answered without a total — ` +
+            'cannot tell a fully ingested comparison from a partial one.',
+        );
+      }
+      return {
+        total: body.total,
+        rows: (body.content ?? []).map((item) => ({
+          id: String(item.id ?? ''),
+          experimentItems: ((item.experiment_items ?? []) as Array<Record<string, unknown>>).map(
+            (ei) => ({
+              experimentId: String(ei.experiment_id ?? ''),
+              traceId: String(ei.trace_id ?? ''),
+              // Left as the server sent them, `null` for absent: "the field
+              // came back empty" is the answer under test, and any default
+              // here would hide it.
+              input: ei.input ?? null,
+              output: ei.output ?? null,
+              duration: typeof ei.duration === 'number' ? ei.duration : null,
+              totalEstimatedCost:
+                typeof ei.total_estimated_cost === 'number' ? ei.total_estimated_cost : null,
+            }),
+          ),
+        })),
+      };
+    },
+
+    /**
      * The same page again, projected to the row → trace pairing instead of to
      * `data`.
      *
@@ -2861,6 +3096,36 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The two fields of an experiment that decide how the compare route renders
+     * it, read off the raw response.
+     *
+     * Neither is on `ExperimentRefDetail`, and neither is incidental:
+     * `evaluation_method` selects the Items tab's sidebar
+     * (`isTestSuiteExperiment`), and `project_id` is what both sidebars hand to
+     * `useExperimentItemMedia` as the project to look attachments up under. A
+     * fixture that seeds for either needs to prove they actually landed —
+     * missing, both fail silently, as a panel that renders with no media rather
+     * than as an error.
+     *
+     * `null` for absent rather than a default: "the server did not send one" is
+     * exactly the state a caller here is checking for.
+     */
+    async getExperimentRenderFields(
+      id: string,
+    ): Promise<{ evaluationMethod: string | null; projectId: string | null }> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/experiments/${id}`);
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/experiments/${id} -> ${status}: ${message}`);
+      }
+      const body = (json ?? {}) as { evaluation_method?: unknown; project_id?: unknown };
+      return {
+        evaluationMethod:
+          typeof body.evaluation_method === 'string' ? body.evaluation_method : null,
+        projectId: typeof body.project_id === 'string' ? body.project_id : null,
+      };
+    },
+
+    /**
      * `POST /v1/private/experiments/execute` — the write path a test-suite run
      * takes, and the one that carries a per-variant `experiment_name`
      * (OPIK-3268). The pinned SDK has no binding for it, so this goes through
@@ -3063,6 +3328,30 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * A trace's server-computed `duration`, in milliseconds.
+     *
+     * Read-only and derived from `start_time`/`end_time`, which is exactly why
+     * a spec about a duration FILTER has to read it rather than assume it: the
+     * filter matches on this number, so "the seed really is a 10-second trace"
+     * is a precondition, not a restatement of what was written. A trace still
+     * open, or one whose times did not survive ingest, has no duration at all
+     * — `null` here, kept distinct from `0` so an unclosed trace cannot pass for
+     * an instantaneous one.
+     *
+     * The pinned SDK's trace type has no `duration`, so this goes through
+     * `rawFetch` like the other contract-level reads.
+     */
+    async getTraceDuration(traceId: string): Promise<number | null> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/traces/${traceId}`);
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/traces/${traceId} -> ${status}: ${message}`);
+      }
+      const duration = (json as { duration?: unknown } | null)?.duration;
+      return typeof duration === 'number' ? duration : null;
+    },
+
+    /**
      * Every span on a trace, reduced to the fields a price resolution decides.
      *
      * Scoped by `projectId` as well as `traceId` because the spans listing is
@@ -3207,6 +3496,18 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       traceId: string;
       parentSpanId?: string;
       output?: TraceJsonSection;
+      /**
+       * Tags, and nothing else — the smallest possible update, which is what
+       * makes it the sharpest probe of the read path underneath.
+       *
+       * `SpanService.update` resolves the existing row before merging, and when
+       * that lookup misses, the update falls through to a partial INSERT that
+       * answers 204 and quietly drops every field the request did not carry. A
+       * tags-only PATCH therefore has the largest blast radius of any update
+       * available: everything else the span holds is absent from the body, so
+       * everything else is what a missed lookup destroys.
+       */
+      tags?: string[];
     }): Promise<RawApiResult> {
       const { status, message } = await rawFetch('PATCH', `/v1/private/spans/${args.spanId}`, {
         body: {
@@ -3214,9 +3515,68 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           trace_id: args.traceId,
           ...(args.parentSpanId === undefined ? {} : { parent_span_id: args.parentSpanId }),
           ...(args.output === undefined ? {} : { output: args.output }),
+          ...(args.tags === undefined ? {} : { tags: args.tags }),
         },
       });
       return { status, message };
+    },
+
+    /**
+     * The comment texts on one span, newest-first as the API returns them.
+     *
+     * A span comment is written against the span's PROJECT, which the backend
+     * has to resolve from the span id (`getProjectIdFromSpan`) — a read that
+     * opik#8537 put a week bound on. A bound that misses makes the project
+     * unresolvable, so the write either fails or attaches nowhere; reading the
+     * comments back off the span is what tells those apart from "it worked".
+     *
+     * Throws on a missing span rather than returning `[]`: an absent span and a
+     * span with no comments are exactly what a caller here is distinguishing.
+     */
+    async listSpanComments(spanId: string): Promise<string[]> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/spans/${spanId}`);
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/spans/${spanId} -> ${status}: ${message}`);
+      }
+      const comments = (json as { comments?: unknown } | null)?.comments;
+      if (!Array.isArray(comments)) return [];
+      return comments.map((c) => String((c as { text?: unknown }).text ?? ''));
+    },
+
+    /**
+     * A span's whole stored payload, as `GET /v1/private/spans/{id}` answers it.
+     *
+     * The span counterpart of `getTracePayload`, and it exists for the same
+     * reason: `SpanDetail` is shaped for feedback-score reads and flattens away
+     * `input`, `metadata`, `tags`, `type` and `project_id` — which are exactly
+     * the fields an update that failed to resolve its target row silently
+     * drops. A spec asserting that a tags-only PATCH preserved the span cannot
+     * use a shape that never carried the fields at risk.
+     *
+     * Every field is kept as the server sent it, `null` for absent, so the spec
+     * compares answers rather than defaults.
+     */
+    async getSpanPayload(spanId: string): Promise<SpanPayload | null> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/spans/${spanId}`);
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/spans/${spanId} -> ${status}: ${message}`);
+      }
+      const s = (json ?? {}) as Record<string, unknown>;
+      return {
+        id: String(s.id ?? ''),
+        name: typeof s.name === 'string' ? s.name : '',
+        type: typeof s.type === 'string' ? s.type : null,
+        traceId: typeof s.trace_id === 'string' ? s.trace_id : null,
+        projectId: typeof s.project_id === 'string' ? s.project_id : null,
+        input: (s.input ?? null) as Record<string, unknown> | null,
+        output: (s.output ?? null) as Record<string, unknown> | null,
+        metadata: (s.metadata ?? null) as Record<string, unknown> | null,
+        // Absent and empty are different answers: a span that never had tags
+        // and one whose tags an update wiped are precisely what a caller here
+        // is telling apart.
+        tags: Array.isArray(s.tags) ? s.tags.map(String) : null,
+      };
     },
 
     /**
@@ -3946,6 +4306,46 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * but a present value that is not an object throws rather than being cast,
      * because the backend types it as a bare `JsonNode`.
      */
+    /**
+     * The `type` of every score an `llm_as_judge` rule declares, in order.
+     *
+     * A sibling of `getLlmJudgeModel` and `getLlmJudgeMessages` rather than a
+     * field on `AutomationRuleDetail`, for the same reason those exist: the
+     * judge shape is specific to one rule type, and widening the shared detail
+     * type with fields only one type carries would make every other caller
+     * handle a `null` it can never see.
+     *
+     * The types are returned rather than the whole schema because what a caller
+     * asks of them is a set membership — a decisions model answers yes/no, so
+     * every entry must be BOOLEAN, and a widened schema is the regression.
+     * Throws rather than returning `[]` when the schema is missing: a rule with
+     * no scores at all is a different failure and must not read as "no
+     * non-BOOLEAN types found".
+     */
+    async getLlmJudgeScoreTypes(ruleId: string): Promise<string[]> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeScoreTypes: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as { type?: string; code?: { schema?: unknown } };
+      if (rule.type !== 'llm_as_judge') {
+        throw new Error(
+          `getLlmJudgeScoreTypes: ${ruleId} is type '${rule.type}', not 'llm_as_judge'`,
+        );
+      }
+      const schema = rule.code?.schema;
+      if (!Array.isArray(schema) || schema.length === 0) {
+        throw new Error(
+          `getLlmJudgeScoreTypes: ${ruleId} returned no code.schema entries: ` +
+            JSON.stringify(rule.code).slice(0, 300),
+        );
+      }
+      return schema.map((entry) => String((entry as { type?: unknown }).type ?? ''));
+    },
+
     async getLlmJudgeModel(ruleId: string): Promise<LlmJudgeModelRef> {
       const { status, message, json } = await rawFetch(
         'GET',
@@ -4385,6 +4785,141 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `POST /v1/private/otel/v1/traces` — the OTLP ingestion endpoint, as an
+     * OTLP/JSON export.
+     *
+     * The estate reaches this endpoint nowhere else. Every other span seed
+     * writes `POST /v1/private/spans` with `provider` as a literal field, which
+     * bypasses `ProviderResolvers` entirely — so the whole OTel attribute
+     * mapping (provider aliasing, `gen_ai.usage.*` key translation, model
+     * resolution) has never run in e2e. It is the class of gap that reads as
+     * coverage forever, because the failure is a $0.00 cost rather than an error.
+     *
+     * Three protocol details the caller must not have to know:
+     *
+     *  - **`traceId`/`spanId` are protobuf `bytes`, so they go on the wire as
+     *    BASE64, not hex.** OTLP/JSON's own spec says hex, but the endpoint
+     *    parses with `JsonFormat.parser()` (see `OtelJsonMessageBodyReader`),
+     *    which implements plain proto3 JSON — and proto3 JSON encodes `bytes`
+     *    as base64. A hex id is accepted as a *different*, wrong id or rejected
+     *    outright, so this converts.
+     *  - **The project comes from the `projectName` header** (`RequestContext.
+     *    PROJECT_NAME`), not from the body, and defaults to the workspace's
+     *    default project when absent — which would scatter a seed outside the
+     *    run prefix. Always sent.
+     *  - **`opik.trace_id` attaches the spans to a trace that already exists**
+     *    rather than letting the service mint one from the OTLP trace id
+     *    (`OpenTelemetryMapper.extractOpikTraceId`). That is what lets a caller
+     *    read its spans back with `listSpanCosts({ traceId })` and open them in
+     *    the panel by id, exactly as an SDK-seeded trace's spans are read —
+     *    without having to re-derive the UUID the service would have minted.
+     *
+     * The endpoint answers 200 with an empty body, not 201: it is an OTLP
+     * collector endpoint, and `ExportTraceServiceResponse` is the shape a real
+     * exporter expects. Asserted rather than defaulted, because an export the
+     * backend refused stores nothing and would otherwise surface as an empty
+     * read further down the fixture.
+     */
+    async postOtelSpans(args: {
+      projectName: string;
+      /**
+       * The Opik trace these spans attach to, sent as `opik.trace_id` on each.
+       * Must be a UUIDv7 — `extractOpikTraceId` runs it through `parseUUIDv7`
+       * and silently ignores anything else, which would put the spans on a
+       * freshly minted trace instead and leave every read below looking at an
+       * empty one.
+       */
+      opikTraceId: string;
+      spans: OtelSpanSeed[];
+      /**
+       * The instrumentation scope name. Left unset by default: the service maps
+       * it to `metadata.integration` only for names it recognises, and a seed
+       * claiming an integration it is not changes which attribute rules apply.
+       */
+      scopeName?: string;
+    }): Promise<void> {
+      if (args.spans.length === 0) {
+        throw new Error('postOtelSpans: an export with no spans is a no-op the backend answers 200 for');
+      }
+      // One OTLP trace id for the batch and one span id each. These are the
+      // ids the PROTOCOL needs; what the spans are actually stored under is
+      // decided by `opik.trace_id` above and by `convertOtelIdToUUIDv7`.
+      const otelTraceId = randomOtelId(16);
+      const startNanos = BigInt(Date.now()) * 1_000_000n;
+
+      const toAnyValue = (value: string | number) =>
+        typeof value === 'number'
+          ? // `String`, not the number itself: proto3 JSON represents int64 as a
+            // string, and a bare JSON number overflows silently for large counts.
+            { intValue: String(Math.trunc(value)) }
+          : { stringValue: value };
+
+      const { status, message } = await rawFetchWithHeaders(
+        'POST',
+        '/v1/private/otel/v1/traces',
+        { projectName: args.projectName },
+        {
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  ...(args.scopeName === undefined
+                    ? {}
+                    : { scope: { name: args.scopeName } }),
+                  spans: args.spans.map((span, index) => ({
+                    traceId: hexToBase64(otelTraceId),
+                    spanId: hexToBase64(randomOtelId(8)),
+                    name: span.name,
+                    // SPAN_KIND_CLIENT — what an instrumented LLM call is.
+                    kind: 3,
+                    startTimeUnixNano: String(startNanos + BigInt(index)),
+                    endTimeUnixNano: String(startNanos + BigInt(index) + 1_000_000n),
+                    attributes: [
+                      {
+                        key: 'opik.trace_id',
+                        value: { stringValue: args.opikTraceId },
+                      },
+                      ...Object.entries(span.attributes).map(([key, value]) => ({
+                        key,
+                        value: toAnyValue(value),
+                      })),
+                    ],
+                  })),
+                },
+              ],
+            },
+          ],
+        },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `postOtelSpans: expected 200 for ${args.spans.length} span(s) into ` +
+            `'${args.projectName}', got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * `POST /v1/private/experiments/delete` for SEVERAL ids at once, reporting
+     * the status instead of throwing on it.
+     *
+     * `deleteExperiment` above takes one id and swallows a 404, which is what a
+     * teardown wants. This is the caller's-contract version: the batch delete's
+     * own answer (204) is part of what opik#8607 is about — the event listener
+     * threw AFTER the delete had committed, so "the delete reported success"
+     * and "the bookkeeping is right" are two separate claims and a spec has to
+     * be able to make them separately.
+     */
+    async deleteExperimentsBatch(ids: string[]): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/experiments/delete',
+        { body: { ids } },
+      );
+      return { status, message, location };
+    },
+
+    /**
      * Create a trace with an explicit id and `source`. The SDK bridge always
      * emits `source=sdk`; the optimization-trial overlay filters on
      * `source=optimization`, so a trial-log fixture cannot be built through the
@@ -4503,6 +5038,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             ...(trace.threadId ? { thread_id: trace.threadId } : {}),
             ...(trace.input === undefined ? {} : { input: trace.input }),
             ...(trace.output === undefined ? {} : { output: trace.output }),
+            ...(trace.metadata === undefined ? {} : { metadata: trace.metadata }),
           })),
         },
         204,
@@ -4649,7 +5185,54 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * the run used, and a prompt id here silently links nothing.
        */
       promptVersionIds?: string[];
+      /**
+       * `evaluation_method`, which decides which SIDEBAR the compare route's
+       * Items tab mounts: `isTestSuiteExperiment` reads it off the first
+       * experiment, and `evaluation_suite` selects `TestSuiteExperimentPanel`
+       * over `CompareExperimentsPanel`.
+       *
+       * Sent through a raw POST rather than the typed SDK call below, which has
+       * no field for it and would silently drop it — leaving the experiment on
+       * the default `dataset` method and the route rendering the other panel
+       * entirely. Reaching the suite panel any other way means running a real
+       * test suite, which judges its assertions with an LLM and so is neither
+       * deterministic nor free.
+       */
+      evaluationMethod?: 'dataset' | 'evaluation_suite';
+      /**
+       * The experiment's lifecycle status.
+       *
+       * `ExperimentStatus.fromString` defaults an unrecognised or absent value
+       * to `completed`, so "running" is only reachable by sending it — and it
+       * is what a seed wants when the experiment must look like one still being
+       * written to. Like `evaluationMethod`, the pinned SDK has no field for
+       * it, so setting either takes the raw write.
+       */
+      status?: 'running' | 'completed' | 'cancelled';
     }): Promise<string> {
+      if (args.evaluationMethod !== undefined || args.status !== undefined) {
+        await postSeedWrite(
+          '/v1/private/experiments',
+          `create experiment ${args.name}`,
+          {
+            id: args.id,
+            name: args.name,
+            dataset_name: args.datasetName,
+            project_name: args.projectName,
+            ...(args.evaluationMethod === undefined
+              ? {}
+              : { evaluation_method: args.evaluationMethod }),
+            ...(args.status === undefined ? {} : { status: args.status }),
+            ...(args.type ? { type: args.type } : {}),
+            ...(args.optimizationId ? { optimization_id: args.optimizationId } : {}),
+            ...(args.metadata ? { metadata: args.metadata } : {}),
+            ...(args.promptVersionIds?.length
+              ? { prompt_versions: args.promptVersionIds.map((id) => ({ id })) }
+              : {}),
+          },
+        );
+        return args.id;
+      }
       await opik.api.experiments.createExperiment({
         id: args.id,
         name: args.name,
@@ -4670,8 +5253,44 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * experiment's scope, and therefore what the entity-scoped Logs views read.
      */
     async createExperimentItems(
-      items: Array<{ experimentId: string; datasetItemId: string; traceId: string }>,
+      items: Array<{
+        experimentId: string;
+        datasetItemId: string;
+        traceId: string;
+        /**
+         * The project the ITEM names, which is not necessarily where its trace
+         * was logged.
+         *
+         * `ExperimentItemService` fills `experiment_items.project_id` from the
+         * trace only when the item named no project of its own, so the two can
+         * legitimately disagree — and the compare read derives the projects it
+         * prunes traces, spans and comments by from the TRACES table rather
+         * than from that denormalized column. Setting this is the only way to
+         * seed the disagreement and show which of the two the read uses.
+         */
+        projectName?: string;
+      }>,
     ): Promise<void> {
+      // The typed SDK call has no `projectName`, so an item that needs one
+      // goes through the raw write — sending it via the typed call would
+      // silently drop it, and the seed would be the very thing it is not
+      // supposed to be: an item whose named project agrees with its trace's.
+      if (items.some((item) => item.projectName !== undefined)) {
+        await postSeedWrite(
+          '/v1/private/experiments/items',
+          `createExperimentItems of ${items.length}`,
+          {
+            experiment_items: items.map((item) => ({
+              experiment_id: item.experimentId,
+              dataset_item_id: item.datasetItemId,
+              trace_id: item.traceId,
+              ...(item.projectName === undefined ? {} : { project_name: item.projectName }),
+            })),
+          },
+          204,
+        );
+        return;
+      }
       await opik.api.experiments.createExperimentItems({ experimentItems: items });
     },
 

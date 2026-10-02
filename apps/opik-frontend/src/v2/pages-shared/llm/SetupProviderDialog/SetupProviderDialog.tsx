@@ -22,6 +22,7 @@ import {
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import {
   AuthConfigFormValues,
+  builtInProviderHeadersForAPI,
   formValuesToAuthConfig,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/customProviderConfig";
 import { ProviderAuthConfig } from "@/types/providers";
@@ -168,6 +169,16 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         providerKeyData.configuration = {
           location: data.location,
         };
+      }
+
+      // Static headers for built-in providers that apply them (OpenAI, OpenRouter)
+      const builtInHeaders = builtInProviderHeadersForAPI(
+        data.provider,
+        "headers" in data ? data.headers : undefined,
+        false,
+      );
+      if (builtInHeaders) {
+        providerKeyData.headers = builtInHeaders;
       }
 
       createProviderKey(
