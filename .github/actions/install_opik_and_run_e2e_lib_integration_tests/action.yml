@@ -24,6 +24,11 @@ runs:
         LIB: ${{ inputs.library_name }}
         PY_VERSION: ${{ inputs.python_version }}
       run: |
+        # Inputs become paths and CLI args; reject anything outside a safe charset.
+        for v in "$LIB" "$PY_VERSION"; do
+          [[ "$v" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error title=Invalid input::'$v' must match ^[A-Za-z0-9._-]+\$"; exit 1; }
+        done
+
         # create virtual environment
         uv venv "$LIB-env" --python "$PY_VERSION"
         source "$LIB-env/bin/activate"
