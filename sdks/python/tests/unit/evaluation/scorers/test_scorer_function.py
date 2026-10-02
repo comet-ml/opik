@@ -203,3 +203,56 @@ def test_wrap_scorer_functions__non_string_name_attribute__falls_back_to_class_n
     [metric] = wrap_scorer_functions([OddlyNamed()], project_name=None)
 
     assert metric.name == "OddlyNamed"
+
+
+def _task_span() -> models.SpanModel:
+    import datetime
+
+    return models.SpanModel(
+        id="span-id", start_time=datetime.datetime.now(), source="sdk"
+    )
+
+
+@pytest.mark.parametrize("task_span", [None, _task_span()], ids=["no-span", "span"])
+def test_wrap_scorer_functions__task_span_only_scorer__called_without_unknown_kwargs(
+    task_span,
+):
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    def spans_are_present(
+        task_span: Optional[models.SpanModel] = None,
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name="spans_are_present", value=1.0 if task_span else 0.0
+        )
+
+    [metric] = wrap_scorer_functions([spans_are_present], project_name=None)
+
+    result = metric.score(
+        dataset_item={"input": "hi"},
+        task_outputs={"output": "hello"},
+        task_span=task_span,
+    )
+
+    assert result.value == (1.0 if task_span else 0.0)
+
+
+def test_wrap_scorer_functions__scorer_with_var_kwargs__receives_all_arguments():
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    received: Dict[str, Any] = {}
+
+    def scorer(task_span=None, **kwargs) -> score_result.ScoreResult:
+        received.update(kwargs, task_span=task_span)
+        return score_result.ScoreResult(name="scorer", value=1.0)
+
+    [metric] = wrap_scorer_functions([scorer], project_name=None)
+    span = _task_span()
+
+    metric.score(dataset_item={"a": 1}, task_outputs={"b": 2}, task_span=span)
+
+    assert received == {
+        "dataset_item": {"a": 1},
+        "task_outputs": {"b": 2},
+        "task_span": span,
+    }
