@@ -57,6 +57,36 @@ export async function findProviderKeyByName(providerName: string): Promise<Provi
 }
 
 /**
+ * Find a key for a BUILT-IN provider (`openrouter`, `openai`, …), which is
+ * addressed by its provider type rather than by a name.
+ *
+ * `findProviderKeyByName` cannot see these at all: a built-in provider has no
+ * `provider_name`, because there is only ever one key per provider per
+ * workspace. That also makes it un-namespaceable — a spec cannot give itself a
+ * private one — so a caller that needs a built-in key must REUSE whatever the
+ * workspace already has and delete only a key it seeded itself. Clobbering a
+ * real key on a shared workspace is not recoverable from a test run.
+ */
+export async function findProviderKeyByProvider(provider: string): Promise<ProviderKeyRef | null> {
+  const response = await fetch(endpoint(), { headers: restHeaders() });
+  if (!response.ok) throw new Error(`list provider keys returned ${response.status}`);
+  const body = (await response.json()) as { content: ProviderKeyRef[] };
+  return body.content.find((key) => key.provider === provider) ?? null;
+}
+
+/** Delete one provider key by id — for built-ins, which have no name to look up. */
+export async function deleteProviderKeyById(id: string): Promise<void> {
+  const response = await fetch(endpoint('/delete'), {
+    method: 'POST',
+    headers: restHeaders(),
+    body: JSON.stringify({ ids: [id] }),
+  });
+  if (!response.ok) {
+    throw new Error(`delete provider key returned ${response.status}`);
+  }
+}
+
+/**
  * How the OPIK BACKEND addresses its own HTTP connector — not how this process
  * addresses the deployment.
  *
@@ -88,8 +118,14 @@ export const notFoundProviderBaseUrl = `${backendSelfUrl}/qa-no-such-llm-endpoin
 
 export async function createProviderKey(payload: {
   provider: string;
-  provider_name: string;
-  base_url: string;
+  /**
+   * Only for `custom-llm`, which is keyed by name. A BUILT-IN provider has one
+   * key per workspace and no name, and the endpoint rejects a blank one — so
+   * this is omitted rather than sent empty.
+   */
+  provider_name?: string;
+  /** Likewise: a built-in provider's endpoint is the vendor's, not the caller's. */
+  base_url?: string;
   /**
    * Static bearer, for providers that are not in OAuth2 token-auth mode. The
    * endpoint requires one whenever `auth_config` is absent, so a static-auth

@@ -500,8 +500,8 @@ public class CostService {
         // when at least one of its rates is non-zero; that keeps the tier list empty for the
         // ~99% of models with no tier fields configured. Sorted DESCENDING so the effective
         // helpers on ModelPrice pick the highest applicable tier without extra bookkeeping.
-        // Reachable models today: Gemini 1.5 Flash at 128K, Gemini 2.5 Pro / Claude Sonnet 4.5
-        // at 200K, GPT-5.4 and GPT-5.5 (openai and azure) at 272K.
+        // Reachable models today: OpenRouter's Qwen3 and ByteDance Seed rows at 128K, Gemini 2.5 Pro /
+        // Claude Sonnet 4.5 at 200K, GPT-5.4 and GPT-5.5 (openai and azure) at 272K.
         List<ModelPrice.PromptTier> promptTiers = new ArrayList<>();
         addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_272K,
                 modelCost.inputCostPerTokenAbove272kTokens(), modelCost.outputCostPerTokenAbove272kTokens(),

@@ -1,11 +1,13 @@
 """`opik mcp` commands for managing the Opik MCP server integration."""
 
 import logging
-from typing import List, Optional, Tuple, TypedDict
+import os
+from typing import Dict, List, NamedTuple, Optional, Tuple, TypedDict, cast
 
 import click
 
 import opik.config as opik_config
+import opik.environment_details as environment_details
 import opik.url_helpers as url_helpers
 from opik import analytics
 from opik.cli import account_identity
@@ -15,6 +17,7 @@ from opik.cli import install_view
 from opik.cli import status_view
 from opik.configurator import consent
 from opik.configurator import interactive_helpers
+from opik.configurator.mcp import handoff as mcp_handoff
 from opik.configurator.mcp import status as mcp_status
 from opik.configurator.mcp import targets as mcp_targets
 
@@ -67,6 +70,57 @@ def _resolve_setup_params(config: opik_config.OpikConfig) -> McpSetupParams:
         "self_hosted_comet": self_hosted_comet,
         "check_tls_certificate": config.check_tls_certificate,
     }
+
+
+#: The deployment question as `opik mcp configure` asks it: here the answer is
+#: what the AI client connects to, not where traces go.
+MCP_DEPLOYMENT_QUESTION = "Which Opik should your AI client connect to?"
+
+
+def _opik_cloud_params() -> McpSetupParams:
+    """Opik Cloud with no API key: the hosted server signs in with OAuth instead."""
+    return {
+        "api_key": None,
+        "workspace": opik_config.OPIK_WORKSPACE_DEFAULT_NAME,
+        "base_url": url_helpers.get_base_url(opik_config.OPIK_URL_CLOUD),
+        "api_url": opik_config.OPIK_URL_CLOUD,
+        "use_local": False,
+        "self_hosted_comet": False,
+        "check_tls_certificate": opik_config.OpikConfig().check_tls_certificate,
+    }
+
+
+#: The variables that take precedence over ~/.opik.config for which Opik to use.
+_CONNECTION_ENV_VARS = ("OPIK_URL_OVERRIDE", "OPIK_API_KEY", "OPIK_WORKSPACE")
+
+
+def _saved_source(config: opik_config.OpikConfig) -> str:
+    """Where the saved settings came from, named the way the user would look.
+
+    A variable left set by a dev setup wins over the file, and saying "from
+    ~/.opik.config" then would send the user to edit a file that changes nothing.
+    """
+    sources = [name for name in _CONNECTION_ENV_VARS if os.environ.get(name)]
+    if config.config_file_exists:
+        sources.insert(0, str(config.config_file_fullpath))
+    if not sources:
+        # Set some other way, a lower-case variable say.
+        return "your Opik configuration"
+    if len(sources) == 1:
+        return sources[0]
+    return f"{', '.join(sources[:-1])} and {sources[-1]}"
+
+
+def _identity(params: McpSetupParams) -> Dict[str, analytics.PropertyValue]:
+    """The account to report: the Opik this run connects to, which since this
+    command writes no config file need not be the saved one."""
+    return account_identity.event_properties(
+        opik_config.OpikConfig(
+            api_key=params["api_key"],
+            url_override=params["api_url"],
+            workspace=params["workspace"],
+        )
+    )
 
 
 @click.group(name="mcp")
@@ -122,27 +176,72 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     "--skills/--no-skills",
     "skills_flag",
     default=None,
-    help="Also install the Opik skill pack for the same clients. Default: yes. "
-    "When omitted you are asked, with both pre-selected.",
+    help="Also install the Opik skill pack for the same clients. On by default; "
+    "pass --no-skills to register the server without it.",
+)
+@click.option(
+    "--ignore-opik-config",
+    is_flag=True,
+    default=False,
+    help="Ask which Opik and workspace to connect to instead of using the ones "
+    "saved in ~/.opik.config, which is left unchanged.",
 )
 def configure(
-    local_server: bool, hosts: Tuple[str, ...], skills_flag: Optional[bool]
+    local_server: bool,
+    hosts: Tuple[str, ...],
+    skills_flag: Optional[bool],
+    ignore_opik_config: bool,
 ) -> None:
     """Register the Opik MCP server with your AI client(s).
 
-    Runs without the SDK installed: `uvx opik mcp configure`. Reuses your
-    existing Opik configuration (~/.opik.config) and offers to create one if
-    none exists.
+    Runs without the SDK installed: `uvx opik mcp configure`. Uses your Opik
+    configuration (~/.opik.config) when there is one and asks which Opik to
+    connect to when there is none; it never changes that file. To be asked
+    anyway, and connect to a different Opik or workspace than the saved one:
+
+        opik mcp configure --ignore-opik-config
 
     Without a terminal — a coding agent, a script — name the client, which is what
     makes the request explicit:
 
-        opik mcp configure --ai-client cursor --skills
+        opik mcp configure --ai-client cursor
 
     By default this uses the Comet-hosted MCP server when your deployment offers
     one, falling back to a local server otherwise. Pass `--local-server` to force
     the local server.
     """
+    run_configure(
+        local_server=local_server,
+        hosts=hosts,
+        skills_flag=skills_flag,
+        ignore_opik_config=ignore_opik_config,
+        invoked_via="direct",
+    )
+
+
+@analytics.entry_point
+def run_configure(
+    local_server: bool,
+    hosts: Tuple[str, ...],
+    skills_flag: Optional[bool],
+    ignore_opik_config: bool,
+    invoked_via: str,
+) -> None:
+    """The `opik mcp configure` flow, also entered from `opik configure`.
+
+    `@entry_point` keeps its events reported on that redirect, where analytics
+    would otherwise drop them as a nested SDK call.
+    """
+    # Before the first event, so every event of this run carries how it was
+    # entered: a redirect from `opik configure` converts differently from a cold
+    # run, and the funnel has to tell them apart.
+    environment_details.set_run_context(invoked_via=invoked_via)
+
+    saved = None if ignore_opik_config else opik_config.OpikConfig()
+    # With the flag the run starts where a machine with no config does: Cloud, no
+    # key — which is also what its entry event reports.
+    params = _opik_cloud_params() if saved is None else _resolve_setup_params(saved)
+
     # Same reason as `opik configure`: the click frame is what makes this visible.
     analytics.track_event(
         "configuration",
@@ -155,80 +254,112 @@ def configure(
         # must not carry a string on one event and a bool on another.
         skills_requested=str(skills_flag),
         local_server=local_server,
+        ignore_opik_config=ignore_opik_config,
         # This command reuses an existing Opik configuration, so the account is
         # normally known from the start — this is the MCP funnel's entry point.
-        **account_identity.event_properties(),
+        **_identity(params),
     )
 
-    host_keys = _resolve_host_keys(hosts)
-    # Without a terminal we cannot ask which client to write to, so one has to be
-    # named. That is also what separates a coding agent running this for the user
-    # from a CI job that was never asked to: the agent can pass the flag.
-    if host_keys is None and not interactive_helpers.is_interactive():
-        raise click.ClickException(
-            "`opik mcp configure` needs either a terminal or an explicit client, "
-            "because it writes into that client's own configuration. Name one to "
-            "run unattended:\n\n"
-            f"    opik mcp configure --ai-client {mcp_targets.HOST_KEYS[0]}\n\n"
-            f"Valid values: {', '.join(mcp_targets.HOST_KEYS)}, all."
+    # Where the run is, for the failure event below. Ctrl-C at a question or a
+    # crash would otherwise end the run with no event at all, and a drop between
+    # the entry event and the result would have no place.
+    stage = "start"
+    try:
+        host_keys = _resolve_host_keys(hosts)
+        # Without a terminal we cannot ask which client to write to, so one has to be
+        # named. That is also what separates a coding agent running this for the user
+        # from a CI job that was never asked to: the agent can pass the flag.
+        if host_keys is None and not interactive_helpers.is_interactive():
+            raise click.ClickException(
+                "`opik mcp configure` needs either a terminal or an explicit client, "
+                "because it writes into that client's own configuration. Name one to "
+                "run unattended:\n\n"
+                f"    opik mcp configure --ai-client {mcp_targets.HOST_KEYS[0]}\n\n"
+                f"Valid values: {', '.join(mcp_targets.HOST_KEYS)}, all."
+            )
+
+        detected = mcp_targets.detected_targets()
+        detected_clients = len(detected)
+
+        # A scripted run (`--ai-client`) gets no banner, and a redirect already
+        # showed the logo.
+        if not host_keys and invoked_via == "direct":
+            install_view.render_mcp_banner()
+
+        if saved is not None and not _needs_opik_configuration(params):
+            # A redirect from `opik configure` has just shown these settings.
+            if invoked_via == "direct":
+                install_view.render_connection(
+                    opik_url=params["base_url"],
+                    # A local deployment has the one workspace, `default`.
+                    workspace=None if params["use_local"] else params["workspace"],
+                    source=_saved_source(saved),
+                )
+        else:
+            if not interactive_helpers.is_interactive():
+                raise click.ClickException(
+                    "`--ignore-opik-config` asks which Opik to connect to, which needs "
+                    "an interactive terminal."
+                    if ignore_opik_config
+                    else "Opik is not configured yet, and configuring it needs an "
+                    "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
+                    "`opik configure`, then re-run this command."
+                )
+            # No usable config (none, one without an API key, or one the flag set
+            # aside). The deployment picker comes first; the client picker follows,
+            # inside `setup` below, which is the order the onboarding funnel counts
+            # them in. Nothing is written to ~/.opik.config either way: the answers
+            # go to the AI client's config. Cloud needs no API key at all (the
+            # hosted server signs in with OAuth).
+            stage = "deployment"
+            deployment = configure_cli.ask_for_deployment_type(MCP_DEPLOYMENT_QUESTION)
+            if deployment is interactive_helpers.DeploymentType.CLOUD:
+                params = _opik_cloud_params()
+            else:
+                stage = "credentials"
+                params = cast(
+                    McpSetupParams, configure_cli.ask_for_connection(deployment)
+                )
+                # A gap before the client picker, which the questions do not leave.
+                click.echo()
+            if ignore_opik_config:
+                # A saved "don't check certificates" was made for the saved Opik; this
+                # run connects to another one, and sends it the API key to verify.
+                params["check_tls_certificate"] = True
+
+        # Installed unless refused: the pack is what teaches the client to use the
+        # server just registered.
+        skills_verdict = consent.resolve_installed_by_default(skills_flag)
+
+        stage = "assistants"
+
+        outcome = assistants.setup(
+            params,
+            install_mcp=True,
+            skills=skills_verdict,
+            force_local_server=local_server,
+            host_keys=host_keys,
         )
 
-    params = _resolve_setup_params(opik_config.OpikConfig())
-
-    if _needs_opik_configuration(params):
-        if not interactive_helpers.is_interactive():
-            raise click.ClickException(
-                "Opik is not configured yet, and configuring it needs an "
-                "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
-                "`opik configure`, then re-run this command."
-            )
-        if not click.confirm(
-            "Opik is not configured yet. Configure it now?", default=True
-        ):
-            raise click.ClickException(
-                "Run `opik configure` first, then `opik mcp configure`."
-            )
-        # Skip configure's own MCP prompt — we install right after.
-        configure_cli.run_interactive_configure(install_mcp=False)
-        params = _resolve_setup_params(opik_config.OpikConfig())
-
-        if _needs_opik_configuration(params):
-            raise click.ClickException(
-                "Opik configuration is still incomplete; aborting MCP install."
-            )
-
-    # Running this command *is* the consent for the server — that is what the
-    # command does — so only the skill pack is still a question here.
-    detected = mcp_targets.detected_targets()
-    detected_clients = len(detected)
-
-    # The same block `opik configure` shows, from the same renderer. Both commands
-    # write into the same files and only one of them used to say what it was about
-    # to do; a client named with `--ai-client` is the one case that needs no
-    # introduction, because the user already named it.
-    if not host_keys:
-        install_view.render_mcp_intro()
-    skills_verdict = consent.resolve(
-        skills_flag,
-        # No `-y` on this command, and nothing to detect-or-not: a named client
-        # counts as something to install into even when it was not auto-detected.
-        assume_yes=False,
-        interactive=interactive_helpers.is_interactive(),
-        anything_detected=bool(host_keys) or detected_clients > 0,
-    )
-    if skills_verdict.reason is consent.Reason.NO_TERMINAL:
-        install_view.render_note(
-            "Skipping the Opik skill pack: no terminal to ask in. Pass --skills "
-            "to install it without being asked."
+        # Before the result event: the launch branch replaces this process.
+        stage = "handoff"
+        handoff = _resolve_handoff(params, outcome)
+    except BaseException as exception:
+        # `opik configure`'s failure event, in the same shape so one query reads
+        # both. From this frame, beside the entry event: one raised further down
+        # would be dropped as nested. Only the exception's type is reported: its
+        # message can carry a URL, a workspace or a key.
+        analytics.track_event(
+            "configuration",
+            "mcp_configure",
+            "failed",
+            stage=stage,
+            error_type=type(exception).__name__,
+            interactive=interactive_helpers.is_interactive(),
+            ignore_opik_config=ignore_opik_config,
+            **_identity(params),
         )
-
-    outcome = assistants.setup(
-        params,
-        install_mcp=True,
-        skills=skills_verdict,
-        force_local_server=local_server,
-        host_keys=host_keys,
-    )
+        raise
 
     # A sibling of the entry event, not a nested one: reporting is suppressed
     # inside an already-reporting stack, but two calls from this same frame both
@@ -259,11 +390,145 @@ def configure(
         # nothing because the user chose no client in the picker.
         picker_skipped=outcome.mcp_declined,
         interactive=interactive_helpers.is_interactive(),
-        # Resolved again, not reused: this command can run `opik configure` on the
-        # way through, which is what turns an unconfigured run into an attributed
-        # one.
-        **account_identity.event_properties(),
+        # Which server was registered picks the join to the MCP server's own
+        # events: the Comet login for hosted, the API key digest for local.
+        transport=outcome.transport or "",
+        # `verification_succeeded` cannot see this: the hosted probe passes
+        # without a sign-in, but the server serves no tools until there is one.
+        sign_in=outcome.sign_in,
+        # Ctrl-C at the picker: "stop", not "no client".
+        cancelled=outcome.cancelled,
+        # A stale uv tool install pins an old opik-mcp that cannot be attributed.
+        stale_tool=outcome.stale_tool,
+        handoff=handoff.outcome,
+        # `diagnose`, `instrument`, or `check_first` when there was no key to look
+        # with; empty when nothing was offered.
+        closing_prompt=handoff.prompt_kind or "",
+        ignore_opik_config=ignore_opik_config,
+        # Resolved again, not reused: the answers on the way through are what turn
+        # an unconfigured run into an attributed one.
+        **_identity(params),
     )
+
+    _perform_handoff(handoff)
+
+
+class _Handoff(NamedTuple):
+    """How the run ends, decided before the result event so it can be reported."""
+
+    #: `launch`, `declined`, `prompt_shown`, `no_terminal`, `not_single_client`,
+    #: `sign_in_failed`, `cancelled` (at the picker, nothing written) or
+    #: `interrupted` (after writing, before the offer). `launch` + `declined` are
+    #: the runs that were offered the first question.
+    outcome: str
+    #: Whether an AI client's config was written, i.e. whether a restart is due.
+    wrote_config: bool = False
+    #: Which first prompt: `diagnose`, `instrument` or `check_first`.
+    prompt_kind: Optional[str] = None
+    display_name: Optional[str] = None
+    prompt: Optional[str] = None
+    #: How to start the client with the prompt; None for one that cannot be.
+    command: Optional[List[str]] = None
+    #: Declined with Ctrl-C rather than `n`, so the ending replaces the prompt line.
+    quit_at_offer: bool = False
+
+
+def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Handoff:
+    """Decide how to end, asking if needed, without doing it yet.
+
+    Only a single registered client in a terminal is offered the handoff:
+    `--ai-client` in a script asks to configure, not to be replaced by an agent.
+    """
+    # First: a cancel registers nothing, and the count check below would
+    # otherwise file it as `not_single_client`.
+    if outcome.cancelled:
+        return _Handoff(outcome="cancelled")
+
+    wrote_config = bool(outcome.registered_clients)
+    if not interactive_helpers.is_interactive():
+        return _Handoff(outcome="no_terminal", wrote_config=wrote_config)
+    if len(outcome.registered_clients) != 1:
+        return _Handoff(outcome="not_single_client", wrote_config=wrote_config)
+    if outcome.sign_in == "failed":
+        # Without a sign-in the server has no tools, so the agent could not
+        # answer; the installer has already said how to finish signing in.
+        return _Handoff(outcome="sign_in_failed", wrote_config=True)
+
+    host_key = outcome.registered_clients[0]
+    target = mcp_targets.find_target(host_key)
+    display_name = target.display_name if target is not None else host_key
+
+    if params["api_key"] or params["use_local"]:
+        try:
+            project = mcp_handoff.traced_project(
+                api_key=params["api_key"],
+                workspace=params["workspace"],
+                api_url=params["api_url"],
+            )
+        except KeyboardInterrupt:
+            # This runs silently after the rows, where Ctrl-C is likely; the run
+            # is still reported, since the config was written.
+            return _Handoff(outcome="interrupted", wrote_config=True)
+        prompt_kind = "diagnose" if project is not None else "instrument"
+        prompt = mcp_handoff.closing_prompt(project)
+    else:
+        # No key to look with (Cloud signed in over OAuth): the agent can.
+        prompt_kind = "check_first"
+        prompt = mcp_handoff.CHECK_FIRST_PROMPT
+
+    command = mcp_handoff.launch_command(host_key)
+    if command is None:
+        return _Handoff(
+            outcome="prompt_shown",
+            wrote_config=True,
+            prompt_kind=prompt_kind,
+            display_name=display_name,
+            prompt=prompt,
+        )
+
+    # Asked, because starting the agent replaces this process.
+    install_view.render_handoff_offer(prompt)
+    quit_at_offer = False
+    try:
+        accepted = install_view.confirm_default_yes(f"Run in {display_name}")
+    except click.Abort:
+        # Ctrl-C here means "not now", the same as `n`.
+        accepted, quit_at_offer = False, True
+
+    return _Handoff(
+        outcome="launch" if accepted else "declined",
+        quit_at_offer=quit_at_offer,
+        wrote_config=True,
+        prompt_kind=prompt_kind,
+        display_name=display_name,
+        prompt=prompt,
+        command=command,
+    )
+
+
+def _perform_handoff(handoff: _Handoff) -> None:
+    """End inside the agent, or leave the prompt where the user can reach it."""
+    if handoff.display_name is None or handoff.prompt is None:
+        # No one client to hand over to: tell a run that wrote config to restart
+        # its client, unless the sign-in ending already said what is left.
+        if handoff.wrote_config and handoff.outcome != "sign_in_failed":
+            install_view.render_restart_note(mcp_installed=True)
+        return
+
+    if handoff.command is None:
+        install_view.render_prompt_to_paste(handoff.display_name, handoff.prompt)
+        return
+
+    if handoff.outcome == "declined":
+        install_view.render_handoff_declined(
+            handoff.display_name, replace_offer=handoff.quit_at_offer
+        )
+        return
+
+    install_view.render_handoff(handoff.display_name)
+    # `launch` replaces this process, so `atexit` never runs.
+    analytics.flush()
+    mcp_handoff.launch(handoff.command, handoff.prompt)
 
 
 @mcp.command(name="status")
