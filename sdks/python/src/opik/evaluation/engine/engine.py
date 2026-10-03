@@ -650,9 +650,15 @@ class EvaluationEngine:
             scoring_key_mapping if scoring_key_mapping is not None else {}
         )
 
-        regular_metrics, _ = metrics_evaluator.split_into_regular_and_task_span_metrics(
-            scoring_metrics
+        regular_metrics, task_span_metrics = (
+            metrics_evaluator.split_into_regular_and_task_span_metrics(scoring_metrics)
         )
+        for metric in task_span_metrics:
+            LOGGER.warning(
+                "Skipping task span metric '%s' during re-scoring: no task span is "
+                "available; use evaluate() to score this metric.",
+                metric.name,
+            )
 
         evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
