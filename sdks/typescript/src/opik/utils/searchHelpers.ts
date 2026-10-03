@@ -13,7 +13,7 @@ export async function searchTracesWithFilters(
   filters: OpikApi.TraceFilterPublic[] | null,
   maxResults: number,
   truncate: boolean,
-  exclude?: OpikApi.TraceSearchStreamRequestPublicExcludeItem[],
+  exclude?: OpikApi.TraceSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.TracePublic[]> {
   const streamResponse = await apiClient.traces.searchTraces({
     projectName,
@@ -26,7 +26,7 @@ export async function searchTracesWithFilters(
   const traces = await parseNdjsonStreamToArray<OpikApi.TracePublic>(
     streamResponse,
     serialization.TracePublic,
-    maxResults,
+    maxResults
   );
 
   return traces;
@@ -39,8 +39,9 @@ export async function searchAndWaitForDone<T>(
   searchFn: () => Promise<T[]>,
   waitForAtLeast: number,
   waitForTimeout: number,
-  sleepTime: number,
+  sleepTime: number
 ): Promise<T[]> {
+  const timeout = Number.isNaN(waitForTimeout) ? 0 : waitForTimeout;
   const startTime = Date.now();
   let result: T[] = [];
 
@@ -55,14 +56,14 @@ export async function searchAndWaitForDone<T>(
 
     // Check if timeout exceeded
     const elapsedTime = Date.now() - startTime;
-    if (elapsedTime >= waitForTimeout) {
+    if (elapsedTime >= timeout) {
       // Return best attempt results
       return result;
     }
 
     // Sleep only for the time remaining in the caller's timeout budget.
     await new Promise((resolve) =>
-      setTimeout(resolve, Math.min(sleepTime, waitForTimeout - elapsedTime)),
+      setTimeout(resolve, Math.min(sleepTime, timeout - elapsedTime))
     );
   }
 }
@@ -75,7 +76,7 @@ export async function searchThreadsWithFilters(
   projectName: string,
   filters: OpikApi.TraceThreadFilter[] | null,
   maxResults: number,
-  truncate: boolean,
+  truncate: boolean
 ): Promise<OpikApi.TraceThread[]> {
   const streamResponse = await apiClient.traces.searchTraceThreads({
     projectName,
@@ -87,7 +88,7 @@ export async function searchThreadsWithFilters(
   const threads = await parseNdjsonStreamToArray<OpikApi.TraceThread>(
     streamResponse,
     serialization.TraceThread,
-    maxResults,
+    maxResults
   );
 
   return threads;
@@ -99,7 +100,7 @@ export async function searchThreadsWithFilters(
 function parseFilterStringGeneric<TFilter, TOperator>(
   filterString: string | undefined,
   operatorCast: (op: string) => TOperator,
-  oqlFactory: (filterString: string) => OpikQueryLanguage,
+  oqlFactory: (filterString: string) => OpikQueryLanguage
 ): TFilter[] | null {
   if (!filterString) {
     return null;
@@ -136,7 +137,7 @@ function parseFilterStringGeneric<TFilter, TOperator>(
  * Parses a filter string using OpikQueryLanguage and converts to TraceFilterPublic format
  */
 export function parseFilterString(
-  filterString?: string,
+  filterString?: string
 ): OpikApi.TraceFilterPublic[] | null {
   return parseFilterStringGeneric<
     OpikApi.TraceFilterPublic,
@@ -144,7 +145,7 @@ export function parseFilterString(
   >(
     filterString,
     (op) => op as OpikApi.TraceFilterPublicOperator,
-    OpikQueryLanguage.forTraces,
+    OpikQueryLanguage.forTraces
   );
 }
 
@@ -152,7 +153,7 @@ export function parseFilterString(
  * Parses a filter string using OpikQueryLanguage and converts to TraceThreadFilter format
  */
 export function parseThreadFilterString(
-  filterString?: string,
+  filterString?: string
 ): OpikApi.TraceThreadFilter[] | null {
   return parseFilterStringGeneric<
     OpikApi.TraceThreadFilter,
@@ -160,7 +161,7 @@ export function parseThreadFilterString(
   >(
     filterString,
     (op) => op as OpikApi.TraceThreadFilterOperator,
-    OpikQueryLanguage.forThreads,
+    OpikQueryLanguage.forThreads
   );
 }
 
@@ -173,7 +174,7 @@ export async function searchSpansWithFilters(
   filters: OpikApi.SpanFilterPublic[] | null,
   maxResults: number,
   truncate: boolean,
-  exclude?: OpikApi.SpanSearchStreamRequestPublicExcludeItem[],
+  exclude?: OpikApi.SpanSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.SpanPublic[]> {
   const streamResponse = await apiClient.spans.searchSpans({
     projectName,
@@ -186,7 +187,7 @@ export async function searchSpansWithFilters(
   const spans = await parseNdjsonStreamToArray<OpikApi.SpanPublic>(
     streamResponse,
     serialization.SpanPublic,
-    maxResults,
+    maxResults
   );
 
   return spans;
@@ -196,7 +197,7 @@ export async function searchSpansWithFilters(
  * Parses a filter string using OpikQueryLanguage and converts to SpanFilterPublic format
  */
 export function parseSpanFilterString(
-  filterString?: string,
+  filterString?: string
 ): OpikApi.SpanFilterPublic[] | null {
   return parseFilterStringGeneric<
     OpikApi.SpanFilterPublic,
@@ -204,6 +205,6 @@ export function parseSpanFilterString(
   >(
     filterString,
     (op) => op as OpikApi.SpanFilterPublicOperator,
-    OpikQueryLanguage.forSpans,
+    OpikQueryLanguage.forSpans
   );
 }
