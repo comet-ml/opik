@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 
 import opik
 from opik import synchronization
@@ -318,3 +318,36 @@ def test_evaluate__scoring_functions_mixed_with_task_span_scoring_functions__hap
     assert_equal(
         expected=EXPECTED_EXPERIMENT_ITEMS_CONTENT, actual=experiment_items_contents
     )
+
+
+def test_evaluate__task_span_only_scoring_function__scored(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    # A scorer that declares only task_span (no **kwargs) passes validation,
+    # so it must be called with just that argument and actually score.
+    def spans_are_present(
+        task_span: Optional[models.SpanModel] = None,
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name="spans_are_present",
+            value=1.0 if task_span else 0.0,
+            reason="task span received" if task_span else "no task span",
+        )
+
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
+    dataset.insert(DATASET_ITEMS)
+
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=llm_task,
+        scoring_functions=[spans_are_present],
+        experiment_name=experiment_name,
+        project_name=PROJECT_NAME,
+    )
+
+    assert len(evaluation_result.test_results) == 1
+    [score] = evaluation_result.test_results[0].score_results
+    assert score.name == "spans_are_present"
+    assert score.scoring_failed is False, score.reason
+    assert score.value == 1.0
+    assert score.reason == "task span received"

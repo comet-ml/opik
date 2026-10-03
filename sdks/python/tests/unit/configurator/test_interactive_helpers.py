@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 from opik.configurator.interactive_helpers import (
     ask_user_for_approval,
-    ask_user_for_approval_default_no,
     is_interactive,
 )
 
@@ -96,45 +95,33 @@ class TestAskUserForApproval:
         assert result is False
 
     @patch("builtins.input", side_effect=["INVALID", "Y"])
-    @patch("opik.configurator.interactive_helpers.LOGGER.error")
-    def test_user_enters_invalid_choice_then_approves(
-        self, mock_logger_error, mock_input
-    ):
+    def test_user_enters_invalid_choice_then_approves(self, mock_input, capsys):
         """
-        Test that invalid input triggers error logging and prompts again until valid input is entered.
+        Invalid input is answered in the terminal, like the prompt, and asked again.
         """
         result = ask_user_for_approval("Do you approve?")
         assert result is True
-        mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")
+        assert capsys.readouterr().out == "  Please answer y or n.\n"
 
     @patch("builtins.input", side_effect=["INVALID", "NO"])
-    @patch("opik.configurator.interactive_helpers.LOGGER.error")
-    def test_user_enters_invalid_choice_then_disapproves(
-        self, mock_logger_error, mock_input
-    ):
+    def test_user_enters_invalid_choice_then_disapproves(self, mock_input, capsys):
         """
-        Test that invalid input triggers error logging and prompts again until valid input is entered.
+        Invalid input is answered in the terminal, like the prompt, and asked again.
         """
         result = ask_user_for_approval("Do you disapprove?")
         assert result is False
-        mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")
+        assert capsys.readouterr().out == "  Please answer y or n.\n"
 
 
-class TestAskUserForApprovalDefaultNo:
-    @patch("builtins.input", return_value="")
-    def test_empty_input__returns_false(self, mock_input):
-        assert ask_user_for_approval_default_no("Proceed?") is False
+class TestTheQuestionIsWordedHere:
+    """The caller passes the question; the `[Y/n]` and the indent are added here.
 
-    @patch("builtins.input", return_value="n")
-    def test_no__returns_false(self, mock_input):
-        assert ask_user_for_approval_default_no("Proceed?") is False
+    Every call site used to spell its own suffix, which is how `(Y/n)` with the
+    cursor against the bracket ended up next to the CLI's `[Y/n]: `.
+    """
 
     @patch("builtins.input", return_value="y")
-    def test_yes__returns_true(self, mock_input):
-        assert ask_user_for_approval_default_no("Proceed?") is True
+    def test_the_prompt_matches_the_cli_shape(self, mock_input):
+        ask_user_for_approval("Use it?")
 
-    @patch("builtins.input", side_effect=["maybe", "y"])
-    @patch("opik.configurator.interactive_helpers.LOGGER.error")
-    def test_invalid_then_yes__returns_true(self, mock_logger_error, mock_input):
-        assert ask_user_for_approval_default_no("Proceed?") is True
-        mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")
+        assert mock_input.call_args.args[0] == "  Use it? [Y/n]: "

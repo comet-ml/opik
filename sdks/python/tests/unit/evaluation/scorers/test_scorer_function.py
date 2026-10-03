@@ -2,10 +2,7 @@ import pytest
 from typing import Any, Dict, Optional
 
 from opik.evaluation.metrics import score_result
-from opik.evaluation.scorers.scorer_function import (
-    requires_task_span_argument,
-    validate_scorer_function,
-)
+from opik.evaluation.scorers.scorer_function import validate_scorer_function
 from opik.message_processing.emulation import models
 
 
@@ -208,22 +205,73 @@ def test_wrap_scorer_functions__non_string_name_attribute__falls_back_to_class_n
     assert metric.name == "OddlyNamed"
 
 
-def test_requires_task_span_argument_variadic_names_are_not_required():
-    """Test that '*task_span' and '**task_span' do not make the span required
+def _task_span() -> models.SpanModel:
+    import datetime
 
-    A variadic parameter binds no argument named 'task_span', so re-scoring
-    without a span must not be reported as missing one.
-    """
+    return models.SpanModel(
+        id="span-id", start_time=datetime.datetime.now(), source="sdk"
+    )
 
-    def star_task_span(*task_span: Any): ...
 
-    def catch_all_task_span(**task_span: Any): ...
+@pytest.mark.parametrize("task_span", [None, _task_span()], ids=["no-span", "span"])
+def test_wrap_scorer_functions__task_span_only_scorer__called_without_unknown_kwargs(
+    task_span,
+):
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
 
-    def required_task_span(task_span: Any): ...
+    def spans_are_present(
+        task_span: Optional[models.SpanModel] = None,
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name="spans_are_present", value=1.0 if task_span else 0.0
+        )
 
-    def optional_task_span(task_span: Optional[models.SpanModel] = None): ...
+    [metric] = wrap_scorer_functions([spans_are_present], project_name=None)
 
-    assert requires_task_span_argument(star_task_span) is False
-    assert requires_task_span_argument(catch_all_task_span) is False
-    assert requires_task_span_argument(required_task_span) is True
-    assert requires_task_span_argument(optional_task_span) is False
+    result = metric.score(
+        dataset_item={"input": "hi"},
+        task_outputs={"output": "hello"},
+        task_span=task_span,
+    )
+
+    assert result.value == (1.0 if task_span else 0.0)
+
+
+def test_wrap_scorer_functions__scorer_with_var_kwargs__receives_all_arguments():
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    received: Dict[str, Any] = {}
+
+    def scorer(task_span=None, **kwargs) -> score_result.ScoreResult:
+        received.update(kwargs, task_span=task_span)
+        return score_result.ScoreResult(name="scorer", value=1.0)
+
+    [metric] = wrap_scorer_functions([scorer], project_name=None)
+    span = _task_span()
+
+    metric.score(dataset_item={"a": 1}, task_outputs={"b": 2}, task_span=span)
+
+    assert received == {
+        "dataset_item": {"a": 1},
+        "task_outputs": {"b": 2},
+        "task_span": span,
+    }
+
+
+def test_wrap_scorer_functions__required_task_span_and_no_span__called_with_none():
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    def spans_are_present(
+        task_span: Optional[models.SpanModel],
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name="spans_are_present", value=1.0 if task_span else 0.0
+        )
+
+    [metric] = wrap_scorer_functions([spans_are_present], project_name=None)
+
+    result = metric.score(
+        dataset_item={"input": "hi"}, task_outputs={"output": "hello"}
+    )
+
+    assert result.value == 0.0

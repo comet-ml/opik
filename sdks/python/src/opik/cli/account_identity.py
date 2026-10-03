@@ -96,8 +96,11 @@ class _Account:
 _RESOLVED: Dict[Tuple[str, str], Optional[_Account]] = {}
 
 
-def event_properties() -> Dict[str, analytics.PropertyValue]:
-    """The identity properties to report with a `configuration` event.
+def event_properties(
+    config_: opik_config.OpikConfig,
+) -> Dict[str, analytics.PropertyValue]:
+    """The identity properties to report with a `configuration` event, for the
+    Opik ``config_`` connects to.
 
     `identity_lookup` and `workspace_kind` are always present: they say where the
     other two values came from, which is what makes a missing one countable instead
@@ -109,7 +112,7 @@ def event_properties() -> Dict[str, analytics.PropertyValue]:
         if not analytics.reporting_allowed():
             return {}
 
-        return _properties(opik_config.OpikConfig())
+        return _properties(config_)
     except Exception:
         LOGGER.debug("Failed to resolve the account to report", exc_info=True)
         return {"identity_lookup": "miss", "workspace_kind": "unknown"}

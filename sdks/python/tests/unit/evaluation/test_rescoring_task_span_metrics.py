@@ -1,34 +1,24 @@
-"""Re-scoring must not drop the metrics the user configured (same class as OPIK-6925).
-
-``test_silently_skipped_scores.py`` and ``test_error_tolerance.py`` state the rule
-for ``evaluate()``: an evaluation the user asked for must never vanish without a
-trace, and at the default tolerance a missing required score argument aborts the
-run. ``score_test_cases`` — the engine entry point behind the public
-``evaluate_experiment()`` re-scoring API — splits task-span metrics off and
-discards that half of the split, so those metrics vanish there.
-"""
+"""Re-scoring reports task-span metrics that cannot run without a task."""
 
 import contextlib
-from typing import Any, Dict, List
+import logging
+from typing import Any, List, Optional
 from unittest import mock
 
-import pytest
-
 import opik
-from opik import exceptions, evaluation, url_helpers
+import pytest
+from opik import evaluation, url_helpers
 from opik.api_objects import opik_client
 from opik.evaluation import rest_operations, test_case
 from opik.evaluation.engine import engine
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.types import ErrorTolerance
+from opik.message_processing.emulation import models
 
 
 class RequiresTaskSpan(base_metric.BaseMetric):
-    """Scores the span collected while the LLM task ran — an input the public
-    docstring of ``evaluate_experiment`` advertises as supported."""
-
-    def __init__(self) -> None:
-        super().__init__(name="requires_task_span", track=False)
+    def __init__(self, name: str) -> None:
+        super().__init__(name=name, track=False)
 
     def score(self, task_span: Any, **ignored: Any) -> score_result.ScoreResult:
         return score_result.ScoreResult(name=self.name, value=1.0)
@@ -42,41 +32,18 @@ class AlwaysPasses(base_metric.BaseMetric):
         return score_result.ScoreResult(name=self.name, value=1.0)
 
 
-def _test_cases(count: int = 1) -> List[test_case.TestCase]:
+def _test_cases() -> List[test_case.TestCase]:
     return [
         test_case.TestCase(
-            trace_id=f"trace-{index}",
-            dataset_item_id=f"item-{index}",
+            trace_id="trace-0",
+            dataset_item_id="item-0",
             task_output={"output": "hello"},
             dataset_item_content={"input": "hi", "reference": "hello"},
         )
-        for index in range(count)
     ]
 
 
-def _score_test_cases(
-    metrics: List[base_metric.BaseMetric],
-    error_tolerance: ErrorTolerance,
-) -> Dict[str, score_result.ScoreResult]:
-    client = opik.Opik(project_name="test-project")
-    evaluation_engine = engine.EvaluationEngine(
-        client=client,
-        project_name="test-project",
-        workers=1,
-        verbose=0,
-        source="experiment",
-        error_tolerance=error_tolerance,
-    )
-    test_results = evaluation_engine.score_test_cases(
-        test_cases=_test_cases(),
-        scoring_metrics=metrics,
-        scoring_key_mapping=None,
-    )
-    return {result.name: result for result in test_results[0].score_results}
-
-
 def _rescoring_lookup_patches():
-    """Mock only the backend reads evaluate_experiment performs before scoring."""
     mock_experiment = mock.Mock(id="exp-id", name="exp-name", dataset_name="ds-name")
     return [
         mock.patch.object(
@@ -101,129 +68,81 @@ def _rescoring_lookup_patches():
     ]
 
 
-def test_score_test_cases__task_span_metric__default_tolerance__run_is_aborted(
-    fake_backend,
-):
-    # METRIC_ERRORS is what `evaluate_experiment` runs with, and it is the level
-    # at which a missing required score argument aborts (see types.py).
-    with pytest.raises(exceptions.ScoreMethodMissingArguments) as exc_info:
-        _score_test_cases(
-            [AlwaysPasses(), RequiresTaskSpan()],
-            error_tolerance=ErrorTolerance.METRIC_ERRORS,
-        )
-
-    assert exc_info.value.score_name == "requires_task_span"
-    assert "task_span" in exc_info.value.missing_required_arguments
-
-
-def test_score_test_cases__task_span_metric__tolerance_all__accumulated_as_failed_score(
-    fake_backend,
-):
-    scores = _score_test_cases(
-        [AlwaysPasses(), RequiresTaskSpan()],
-        error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
-    )
-
-    assert scores["always_passes"].scoring_failed is False
-    unsatisfied = scores["requires_task_span"]
-    assert unsatisfied.scoring_failed is True
-    assert "task_span" in unsatisfied.reason
-    assert unsatisfied.metadata["error_info"]["exception_type"] == (
-        "ScoreMethodMissingArguments"
-    )
-
-
-class ScoresOutputWithOptionalSpan(base_metric.BaseMetric):
-    """Takes the span when there is one, but can score without it. The docstring
-    calls `task_span` optional for exactly this reason."""
-
-    def __init__(self) -> None:
-        super().__init__(name="optional_span_metric", track=False)
-
-    def score(
-        self,
-        output: str,
-        task_span: Any = None,
-        **ignored: Any,
-    ) -> score_result.ScoreResult:
-        return score_result.ScoreResult(
-            name=self.name, value=1.0 if task_span is None else 0.0
-        )
-
-
-def test_score_test_cases__optional_task_span_metric__still_scores(
-    fake_backend,
-):
-    # Only metrics that *require* the span are unresolvable when re-scoring. A
-    # metric that can do without one used to be dropped with the rest of them.
-    scores = _score_test_cases(
-        [ScoresOutputWithOptionalSpan()],
+def _score_test_cases(metrics: List[base_metric.BaseMetric]):
+    client = opik.Opik(project_name="test-project")
+    evaluation_engine = engine.EvaluationEngine(
+        client=client,
+        project_name="test-project",
+        workers=1,
+        verbose=0,
+        source="experiment",
         error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
-
-    assert scores["optional_span_metric"].value == 1.0
-    assert scores["optional_span_metric"].scoring_failed is False
-
-
-def test_evaluate_experiment__task_span_metric__default_tolerance__run_is_aborted(
-    fake_backend,
-):
-    # The same contract seen through the public entry point users call.
-    with contextlib.ExitStack() as stack:
-        for patch in _rescoring_lookup_patches():
-            stack.enter_context(patch)
-
-        with pytest.raises(exceptions.ScoreMethodMissingArguments):
-            evaluation.evaluate_experiment(
-                experiment_name="exp-name",
-                scoring_metrics=[RequiresTaskSpan()],
-                verbose=0,
-            )
-
-
-def spans_were_named(
-    dataset_item: Any, task_outputs: Any, task_span: Any
-) -> score_result.ScoreResult:
-    return score_result.ScoreResult(
-        name="spans_were_named", value=float(task_span.name == "the-task")
+    return evaluation_engine.score_test_cases(
+        test_cases=_test_cases(),
+        scoring_metrics=metrics,
+        scoring_key_mapping=None,
     )
 
 
-def test_evaluate_experiment__span_scoring_function__default_tolerance__run_is_aborted(
-    fake_backend,
+def test_score_test_cases__skips_task_span_metrics_with_warning_and_scores_regular_metrics(
+    fake_backend, caplog
 ):
-    # `scoring_functions` is the other documented way to ask for the span. The
-    # wrapper defaults `task_span=None`, so without a report the scorer would be
-    # called with the argument missing and raise from user code.
-    with contextlib.ExitStack() as stack:
-        for patch in _rescoring_lookup_patches():
-            stack.enter_context(patch)
+    caplog.set_level(logging.WARNING, logger="opik.evaluation.engine.engine")
+    with mock.patch.object(
+        rest_operations,
+        "log_test_result_feedback_scores",
+        wraps=rest_operations.log_test_result_feedback_scores,
+    ) as log_spy:
+        results = _score_test_cases(
+            [
+                AlwaysPasses(),
+                RequiresTaskSpan("first_span_metric"),
+                RequiresTaskSpan("second_span_metric"),
+            ]
+        )
 
-        with pytest.raises(exceptions.ScoreMethodMissingArguments) as exc_info:
-            evaluation.evaluate_experiment(
-                experiment_name="exp-name",
-                scoring_metrics=[],
-                scoring_functions=[spans_were_named],
-                verbose=0,
+    assert [score.name for score in results[0].score_results] == ["always_passes"]
+    assert results[0].score_results[0].value == 1.0
+    assert results[0].score_results[0].scoring_failed is False
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "opik.evaluation.engine.engine"
+    ]
+    assert len(warnings) == 2
+    assert "first_span_metric" in warnings[0]
+    assert "second_span_metric" in warnings[1]
+    assert all("no task span" in message for message in warnings)
+    assert all("evaluate()" in message for message in warnings)
+    logged = [
+        score.name
+        for call in log_spy.call_args_list
+        for score in call.kwargs["score_results"]
+    ]
+    assert logged == ["always_passes"]
+
+
+@pytest.mark.parametrize("requires_span", [True, False])
+def test_evaluate_experiment__task_span_scorer_is_skipped_with_warning(
+    fake_backend, caplog, requires_span
+):
+    if requires_span:
+
+        def task_span_scorer(task_span: models.SpanModel) -> score_result.ScoreResult:
+            return score_result.ScoreResult(name="task_span_scorer", value=1.0)
+
+    else:
+
+        def task_span_scorer(
+            task_span: Optional[models.SpanModel] = None,
+        ) -> score_result.ScoreResult:
+            return score_result.ScoreResult(
+                name="task_span_scorer",
+                value=1.0 if task_span is not None else 0.0,
             )
 
-    assert exc_info.value.score_name == "spans_were_named"
-    assert "task_span" in exc_info.value.missing_required_arguments
-
-
-def span_is_optional(
-    dataset_item: Any, task_outputs: Any, task_span: Any = None
-) -> score_result.ScoreResult:
-    return score_result.ScoreResult(
-        name="span_is_optional", value=1.0 if task_span is None else 0.0
-    )
-
-
-def test_evaluate_experiment__optional_span_scoring_function__still_scores(
-    fake_backend,
-):
-    # The docstring calls `task_span` optional, so a scorer that can do without it
-    # must keep scoring here rather than be reported or dropped.
+    caplog.set_level(logging.WARNING, logger="opik.evaluation.engine.engine")
     with contextlib.ExitStack() as stack:
         for patch in _rescoring_lookup_patches():
             stack.enter_context(patch)
@@ -237,59 +156,25 @@ def test_evaluate_experiment__optional_span_scoring_function__still_scores(
         )
         result = evaluation.evaluate_experiment(
             experiment_name="exp-name",
-            scoring_metrics=[],
-            scoring_functions=[span_is_optional],
+            scoring_metrics=[AlwaysPasses()],
+            scoring_functions=[task_span_scorer],
             verbose=0,
         )
 
-    scored = {
-        score.name: score for tr in result.test_results for score in tr.score_results
-    }
-    # The name alone would also match a failed score or a wrong branch value.
-    assert set(scored) == {"span_is_optional"}
-    assert scored["span_is_optional"].value == 1.0
-    assert scored["span_is_optional"].scoring_failed is False
-    # Returning a result is not enough: re-scoring has to persist it.
-    logged = [call.kwargs["score_results"][0].name for call in log_spy.call_args_list]
-    assert logged == ["span_is_optional"]
-
-
-def test_score_test_cases__regular_metrics_only__scores_and_logs(fake_backend):
-    # Guard the untouched path: re-scoring without span metrics still reports and
-    # persists what it computed.
-    with mock.patch.object(
-        rest_operations,
-        "log_test_result_feedback_scores",
-        wraps=rest_operations.log_test_result_feedback_scores,
-    ) as log_spy:
-        scores = _score_test_cases(
-            [AlwaysPasses()], error_tolerance=ErrorTolerance.METRIC_ERRORS
-        )
-
-    assert scores["always_passes"].scoring_failed is False
-    logged = [call.kwargs["score_results"][0].name for call in log_spy.call_args_list]
+    assert [score.name for score in result.test_results[0].score_results] == [
+        "always_passes"
+    ]
+    assert result.test_results[0].score_results[0].scoring_failed is False
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "opik.evaluation.engine.engine"
+    ]
+    assert len(warnings) == 1
+    assert "task_span_scorer" in warnings[0]
+    logged = [
+        score.name
+        for call in log_spy.call_args_list
+        for score in call.kwargs["score_results"]
+    ]
     assert logged == ["always_passes"]
-
-
-def catch_all_span(**task_span: Any) -> score_result.ScoreResult:
-    return score_result.ScoreResult(name="catch_all_span", value=1.0)
-
-
-def test_evaluate_experiment__catch_all_span_name__still_scores(fake_backend):
-    with contextlib.ExitStack() as stack:
-        for patch in _rescoring_lookup_patches():
-            stack.enter_context(patch)
-
-        result = evaluation.evaluate_experiment(
-            experiment_name="exp-name",
-            scoring_metrics=[],
-            scoring_functions=[catch_all_span],
-            verbose=0,
-        )
-
-    scored = {
-        score.name: score for tr in result.test_results for score in tr.score_results
-    }
-    assert set(scored) == {"catch_all_span"}
-    assert scored["catch_all_span"].value == 1.0
-    assert scored["catch_all_span"].scoring_failed is False
