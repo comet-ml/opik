@@ -315,6 +315,55 @@ export class TracePanelPage {
     return this.root.getByTestId(`annotate-score-row-${definitionName}`);
   }
 
+  // --- Annotate panel: comments ---
+
+  /**
+   * The "Add a comment..." composer in the Annotate panel's Comments section.
+   *
+   * Addressed by its placeholder: `CommentsSection` renders the textarea
+   * through `UserCommentForm.TextareaField` with no test id and no label, and
+   * the placeholder is the only stable handle it exposes.
+   */
+  get commentComposer(): Locator {
+    return this.root.getByPlaceholder('Add a comment...');
+  }
+
+  /**
+   * Write a comment and submit it, resolving once it is on screen.
+   *
+   * The submit control carries the accessible name "Approve edit comment" in
+   * both the add and edit modes — `UserCommentForm.SubmitButton` uses the one
+   * sr-only string for each — so the name is matched rather than the icon, and
+   * it is scoped to the composer's own form so an existing comment's edit
+   * button cannot be clicked instead.
+   *
+   * Waits for the posted comment to render rather than for the click: the
+   * write is a mutation whose result arrives asynchronously, and a caller that
+   * read straight after would race it.
+   */
+  async addComment(text: string): Promise<void> {
+    return test.step(`Add the comment "${text}"`, async () => {
+      const composer = this.commentComposer;
+      await composer.waitFor({ state: 'visible' });
+      await composer.fill(text);
+      // The submit is disabled until the form is valid AND dirty, so a failure
+      // to reach an enabled button means the text never registered — worth
+      // failing on here rather than on the absent comment later.
+      const submit = this.root
+        .locator('form')
+        .filter({ has: this.page.getByPlaceholder('Add a comment...') })
+        .getByRole('button', { name: 'Approve edit comment' });
+      await expect(submit, 'the comment submit button is enabled once text is typed').toBeEnabled();
+      await submit.click();
+      await expect(this.commentText(text), `the posted comment "${text}"`).toBeVisible();
+    });
+  }
+
+  /** A posted comment in the Annotate panel, by its exact text. */
+  commentText(text: string): Locator {
+    return this.root.getByText(text, { exact: true });
+  }
+
   /** Set (or change) the numeric value in a named annotate score row. */
   async setAnnotateScore(definitionName: string, value: number): Promise<void> {
     return test.step(`Set ${definitionName} score to ${value}`, async () => {

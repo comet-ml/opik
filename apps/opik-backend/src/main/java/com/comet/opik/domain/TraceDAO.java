@@ -821,6 +821,33 @@ class TraceDAOImpl implements TraceDAO {
                 ORDER BY trace_id, experiment_id DESC
                 LIMIT 1 BY trace_id
             )
+            <if(include_annotation_queues)>
+            , trace_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                AND scope = 'trace'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), trace_annotation_queues AS (
+                SELECT trace_id,
+                       groupArray(tuple(id, name)) AS annotation_queues
+                FROM (
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as trace_id
+                    FROM (
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                        <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                        AND queue_id IN (SELECT id FROM trace_scope_queues)
+                        AND item_id IN :ids
+                    ) AS aqi
+                    JOIN trace_scope_queues AS aq ON aq.id = aqi.queue_id
+                ) AS queues_with_trace_id
+                GROUP BY trace_id
+            )
+            <endif>
             SELECT
                 t.*,
                 t.id as id,
@@ -839,6 +866,7 @@ class TraceDAOImpl implements TraceDAO {
                 eaag.experiment_name as experiment_name,
                 eaag.experiment_dataset_id as experiment_dataset_id,
                 eaag.experiment_dataset_item_id as experiment_dataset_item_id
+                <if(include_annotation_queues)>, taq.annotation_queues as annotation_queues<endif>
             FROM (
                 SELECT
                     *,
@@ -853,6 +881,7 @@ class TraceDAOImpl implements TraceDAO {
             ) AS t
             LEFT JOIN spans_agg s ON t.id = s.trace_id
             LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
+            <if(include_annotation_queues)>LEFT JOIN trace_annotation_queues taq ON taq.trace_id = t.id<endif>
             LEFT JOIN (
                 SELECT
                     entity_id,
@@ -1017,6 +1046,11 @@ class TraceDAOImpl implements TraceDAO {
      * forward CTE resolution, scalar-subquery caching (one evaluation reused across all reference sites — if the
      * cache stops applying, results stay correct but every aggregate silently regresses to a whole-project scan),
      * and primary-key pruning of the materialized IN-set.
+     * <p>
+     * {@code annotation_queue_items} is keyed {@code (workspace_id, project_id, queue_id, item_id)}, so the
+     * annotation-queue CTE binds {@code queue_id} to the project's trace-scope queues before looking up
+     * {@code item_id}. That is what lets the lookup use the full primary key instead of a generic scan of the
+     * project's items (OPIK-5592).
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
@@ -1385,22 +1419,34 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY id
                 )
                 GROUP BY workspace_id, project_id, entity_id
+            ), trace_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND scope = 'trace'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), trace_annotation_queue_ids AS (
                  SELECT trace_id,
-                        groupArray(id) AS annotation_queue_ids
+                        groupArray(id) AS annotation_queue_ids,
+                        groupArray(tuple(id, name)) AS annotation_queues
                  FROM (
-                    SELECT DISTINCT aq.id as id, aqi.item_id as trace_id
-                    FROM annotation_queue_items aqi
-                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
-                    WHERE aq.scope = 'trace'
-                      AND workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      <if(page_keyed_aggregates)> AND aqi.item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
-                      <elseif(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
-                      <else>
-                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
-                      <endif>
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as trace_id
+                    FROM (
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND queue_id IN (SELECT id FROM trace_scope_queues)
+                          <if(annotation_queues_page_keyed)> AND item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                          <elseif(trace_id_prefilter)> AND item_id IN (SELECT id FROM trace_id_prefilter)
+                          <else>
+                          <if(uuid_from_time)> AND item_id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND item_id \\<= :uuid_to_time <endif>
+                          <endif>
+                    ) AS aqi
+                    JOIN trace_scope_queues AS aq ON aq.id = aqi.queue_id
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
             )
@@ -1602,6 +1648,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
                   <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id, eaag.experiment_dataset_item_id<endif>
+                  <if(!exclude_annotation_queues)>, taqi.annotation_queues AS annotation_queues<endif>
              FROM page_wide t
              <if(!exclude_feedback_scores)>
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
@@ -1611,6 +1658,7 @@ class TraceDAOImpl implements TraceDAO {
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
              <if(sort_has_experiment || !exclude_experiment)>LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id<endif>
+             <if(!exclude_annotation_queues)>LEFT JOIN trace_annotation_queue_ids taqi ON taqi.trace_id = t.id<endif>
              ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, id) DESC, last_updated_at DESC
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -3930,7 +3978,7 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
-        return findByIds(List.of(id), connection)
+        return findByIds(List.of(id), connection, true)
                 .collectList()
                 .flatMap(traces -> Mono.deferContextual(ctx -> Mono.justOrEmpty(
                         firstOrLogFanOut(traces, id, ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown")))));
@@ -3955,6 +4003,16 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Flux<Trace> findByIds(@NonNull List<UUID> ids, @NonNull Connection connection) {
+        return findByIds(ids, connection, false);
+    }
+
+    /**
+     * Annotation-queue membership is read only by the single-trace lookup behind the details panel.
+     * The batch callers of {@link #findByIds(List, Connection)} never read it, and one of them
+     * ({@code OnlineScoringSampler.onTracesUpdated}) runs on every trace update that sets an end
+     * time, so the two extra subqueries stay off that path (OPIK-5592 review).
+     */
+    private Flux<Trace> findByIds(List<UUID> ids, Connection connection, boolean includeAnnotationQueues) {
         Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
         log.info("Finding traces by IDs in batch, count '{}'", ids.size());
 
@@ -3967,6 +4025,10 @@ class TraceDAOImpl implements TraceDAO {
 
                     if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                         template.add("has_target_projects", true);
+                    }
+
+                    if (includeAnnotationQueues) {
+                        template.add("include_annotation_queues", true);
                     }
 
                     var idWeeks = idWeeks(ids);
@@ -4130,6 +4192,12 @@ class TraceDAOImpl implements TraceDAO {
                         .orElse(null))
                 .environment(getValue(exclude, Trace.TraceField.ENVIRONMENT, row, "environment", String.class))
                 .experiment(mapExperiment(exclude, row))
+                .annotationQueues(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.ANNOTATION_QUEUES, row, "annotation_queues",
+                                List[].class))
+                        .map(AnnotationQueueReferenceMapper::map)
+                        .filter(not(List::isEmpty))
+                        .orElse(null))
                 .build();
     }
 
@@ -4370,6 +4438,16 @@ class TraceDAOImpl implements TraceDAO {
         } else if (shouldUseTraceIdPrefilter(criteria, template) && !sortHasFeedbackScores) {
             template.add("trace_id_prefilter", true);
         }
+
+        // Without a queue filter the annotation-queue CTE is display-only: it is joined at the final
+        // SELECT over page_wide and never feeds page selection, so it can be keyed to page_ids even
+        // when the other aggregates cannot be (e.g. sorting by feedback score or experiment). With a
+        // queue filter it drives traces_deduped, so keying it to page_ids would be circular
+        // (OPIK-5592 review).
+        if (template.getAttribute("annotation_queue_filters") == null
+                && template.getAttribute("annotation_queue_id") == null) {
+            template.add("annotation_queues_page_keyed", true);
+        }
     }
 
     private boolean shouldPageKeyAggregates(ST template, boolean sortHasFeedbackScores,
@@ -4509,6 +4587,8 @@ class TraceDAOImpl implements TraceDAO {
                                 fields.contains(Trace.TraceField.HAS_TOOL_SPANS.getValue()));
                         template.add("exclude_experiment",
                                 fields.contains(Trace.TraceField.EXPERIMENT.getValue()));
+                        template.add("exclude_annotation_queues",
+                                fields.contains(Trace.TraceField.ANNOTATION_QUEUES.getValue()));
                     }
                 });
     }

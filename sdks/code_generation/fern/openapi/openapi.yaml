@@ -11217,6 +11217,10 @@ components:
         max_items_in_queue:
           type: integer
           format: int32
+        clear_max_items_in_queue:
+          type: boolean
+          description: "When true, removes the item ceiling so automation adds without\
+            \ bound"
     AnnotationQueueReviewer:
       type: object
       properties:
@@ -11289,6 +11293,10 @@ components:
         max_items_in_queue:
           type: integer
           format: int32
+        clear_max_items_in_queue:
+          type: boolean
+          description: "When true, removes the item ceiling so automation adds without\
+            \ bound"
     AnnotationQueue_Write:
       required:
       - name
@@ -21658,6 +21666,7 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agentInsightsEnabled
       - alertsEnabled
       - annotationQueueAutomationEnabled
       - anthropicProviderEnabled
@@ -21728,6 +21737,8 @@ components:
         ollamaProviderEnabled:
           type: boolean
         ollieEnabled:
+          type: boolean
+        agentInsightsEnabled:
           type: boolean
         projectHomepageEnabled:
           type: boolean

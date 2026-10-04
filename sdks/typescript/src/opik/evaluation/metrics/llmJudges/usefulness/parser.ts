@@ -21,7 +21,14 @@ export function parseModelOutput(
       unknown
     >;
 
-    const score = Number(dictContent["score"]);
+    const rawScore = dictContent["score"];
+
+    // Check for null, undefined, or missing score before converting to number
+    if (rawScore === null || rawScore === undefined) {
+      throw new Error(`Usefulness score is required but got ${rawScore}`);
+    }
+
+    const score = Number(rawScore);
 
     if (isNaN(score) || score < 0.0 || score > 1.0) {
       throw new Error(

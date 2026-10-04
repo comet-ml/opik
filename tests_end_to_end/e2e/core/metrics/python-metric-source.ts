@@ -239,3 +239,99 @@ class UnparseableMetric(base_metric.BaseMetric):
         print("this line is not a score result", flush=True)
         os._exit(0)`;
 }
+
+/**
+ * A metric whose `score()` declares a parameter with NO DEFAULT.
+ *
+ * Every other builder here renders each parameter as `: Any = None`, which is
+ * deliberate — an unresolvable sub-path is dropped from the argument map by
+ * `OnlineScoringEngine.toReplacements`, so a defaulted parameter keeps the call
+ * working. That is also why the estate structurally cannot express the shape
+ * OPIK-8292 is about: a REQUIRED parameter whose mapped field is missing from
+ * the trace. Before the fix the argument was simply dropped and the call died
+ * on a TypeError, so the trace carried no score at all; after it, the parameter
+ * is bound to `None`.
+ *
+ * The metric reports WHICH of the two happened, in the score itself: `absentValue`
+ * when the parameter arrived as `None` and `presentValue` otherwise, with the
+ * repr of what it received as the reason. A spec can then tell "filled with
+ * None" from "filled with the real value" from "never scored" — three outcomes
+ * a bare "a score exists" check collapses into one.
+ *
+ * `output` is required too, and intentionally: a signature mixing a defaulted
+ * and an undefaulted parameter would leave it ambiguous which one the engine's
+ * behaviour was being read from.
+ */
+export function buildRequiredParamMetric(
+  scoreName: string,
+  requiredParam: string,
+  absentValue: number,
+  presentValue: number,
+): string {
+  return `from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+
+class RequiredParamScore(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(self, output, ${requiredParam}, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        value = ${JSON.stringify(absentValue)} if ${requiredParam} is None else ${JSON.stringify(presentValue)}
+        return score_result.ScoreResult(
+            value=value,
+            name=self.name,
+            reason="${requiredParam}=" + repr(${requiredParam}),
+        )`;
+}
+
+/**
+ * A metric that raises inside `score()`.
+ *
+ * The straightforward half of what an ERROR row has to say: a real user frame
+ * exists, so the traceback has something to name. The spec pins both the
+ * exception type and its message, and the presence of the `File "<string>"`
+ * frame the metric source compiles to.
+ */
+export function buildRaisingMetric(scoreName: string, message: string): string {
+  return `from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+
+class RaisingMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(self, output: Any = None, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        raise ValueError(${JSON.stringify(message)})`;
+}
+
+/**
+ * A metric whose `score()` accepts NO `**kwargs`, so an unexpected mapped
+ * argument fails while BINDING the call.
+ *
+ * The valuable half, and the one the old fixed-slice traceback formatter
+ * returned an empty string for: a bind failure happens before any user code
+ * runs, so the traceback has no user frame at all — the shortest traceback
+ * there is. An ERROR row that says only "can't be evaluated: " tells a user
+ * nothing, and is indistinguishable at a glance from a row that named its
+ * cause.
+ *
+ * Omitting `**ignored_kwargs` is the whole mechanism; every other builder here
+ * accepts it precisely so that extra arguments are tolerated.
+ */
+export function buildBindFailureMetric(scoreName: string): string {
+  return `from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+
+class BinderScore(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(self, output: Any = None) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=1.0, name=self.name)`;
+}

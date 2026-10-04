@@ -1,31 +1,27 @@
-"""The ``rich`` rendering of the MCP install, used by ``opik mcp configure``.
+"""The ``rich`` rendering of the onboarding flows, used by both configure commands.
 
-Kept in the CLI layer on purpose: ``configurator.mcp.install`` is reachable from
-``opik.configure()``, which is a library call and must not take over someone's
-stdout. See ``configurator.mcp.view`` for the injection point and the
-logger-based default.
+Kept in the CLI layer: ``configurator`` is reachable from ``opik.configure()``,
+a library call that must not take over someone's stdout.
 """
 
 import contextlib
 import pathlib
 import re
-import textwrap
+import urllib.parse
 from typing import Iterator, List, Optional, Tuple
 
+import click
 import rich.console
-from rich import padding, table, text
+from rich import control, padding, table, text
 
 from opik.cli import selector
-from opik.configurator import consent
+from opik.cli import terminal_session
+from opik.configurator import configure as opik_configure
 from opik.configurator.mcp import view as mcp_view
 from opik.configurator.skills import install as skills_install
 from opik.configurator.skills import roots as skills_roots
 
 console = rich.console.Console()
-
-#: Key of the synthetic "All" row in the host picker. Not a host key, and cannot
-#: collide with one: `mcp_targets.HOST_KEYS` are plain names like `claude-code`.
-_ALL = "__all__"
 
 
 def _collapse_home(message: str) -> str:
@@ -46,18 +42,30 @@ _URL = re.compile(r"https?://[^\s)\]}>,;\"']+")
 _SENTENCE_END = ".,;:!?"
 
 
-def _linkify(message: str, base: str = "") -> text.Text:
-    """Colour the URLs in a message and make them clickable.
+#: A command or name in backticks, the way messages here quote what to type.
+_CODE_SPAN = re.compile(r"`[^`\n]+`")
 
-    One call covers every terminal. ``rich`` emits the OSC 8 hyperlink only where
-    the terminal advertises support, keeps the colour where it does not, and
-    drops every escape when stdout is not a terminal at all — so a pipe or a CI
-    log still gets the bare URL, unchanged and still copy-pasteable.
+#: A line indented by four spaces, which messages here use for a command or a
+#: config snippet to copy.
+_CODE_LINE = re.compile(r"^ {4}\S.*$", re.MULTILINE)
 
-    The style is applied over a range rather than by splitting the string, so the
-    surrounding text keeps ``base`` and the message stays one paragraph.
+#: What a command looks like against the text around it: full weight, in the
+#: terminal's own colour, so it stands out from both the dim and the yellow.
+_CODE_STYLE = "bold not dim default"
+
+
+def _emphasize(message: str, base: str = "") -> text.Text:
+    """Style a message so the links to open and the commands to type stand out.
+
+    URLs become clickable; commands in backticks or on a four-space-indented line
+    are set in full weight; the rest keeps ``base``. ``rich`` drops every escape
+    when stdout is not a terminal, so piped output keeps the plain text.
     """
     rendered = text.Text(message, style=base)
+    for pattern in (_CODE_LINE, _CODE_SPAN):
+        for match in pattern.finditer(message):
+            start = match.start() + len(match.group()) - len(match.group().lstrip())
+            rendered.stylize(_CODE_STYLE, start, match.end())
     for match in _URL.finditer(message):
         # Trailing sentence punctuation is not part of the address. It cannot be
         # excluded by the pattern, because a URL is full of dots — so the match
@@ -66,7 +74,9 @@ def _linkify(message: str, base: str = "") -> text.Text:
         while end > match.start() and message[end - 1] in _SENTENCE_END:
             end -= 1
         rendered.stylize(
-            f"bold cyan underline link {message[match.start() : end]}",
+            # `not dim`: a link inside a grey hint is the part to click, and
+            # without it the link inherits the grey along with the rest.
+            f"bold not dim cyan underline link {message[match.start() : end]}",
             match.start(),
             end,
         )
@@ -75,14 +85,68 @@ def _linkify(message: str, base: str = "") -> text.Text:
 
 def render_hint(message: str) -> None:
     """A line pointing somewhere — typically where to get something."""
-    console.print(_linkify(message, base="dim"))
+    console.print(_emphasize(message, base="dim"))
 
 
-def _join(names: List[str]) -> str:
-    """ "a", "a and b", "a, b and c" — a list a person would read aloud."""
-    if len(names) <= 1:
-        return "".join(names)
-    return f"{', '.join(names[:-1])} and {names[-1]}"
+def render_configure_hint(message: str) -> None:
+    """A configurator hint, indented with the questions it sits among."""
+    console.print(padding.Padding(_emphasize(message, base="dim"), (0, 0, 0, 2)))
+
+
+def render_configured(
+    configured: opik_configure.Configured, project_url: str, project_exists: bool
+) -> None:
+    """How `opik configure` closes: what was set up, and where to open it."""
+    console.print()
+    headline = (
+        "Opik is configured" if configured.saved else "Opik is already configured"
+    )
+    console.print(text.Text.assemble(("✓ ", "green bold"), (headline, "bold")))
+
+    grid = table.Table.grid(padding=(0, 2))
+    grid.add_column(style=_KEY_STYLE, no_wrap=True)
+    grid.add_column(overflow="fold")
+    # Text, not str: a table cell reads `[...]` as markup, and a path or a
+    # workspace name is the user's own text.
+    grid.add_row("Config file", text.Text(_collapse_home(configured.config_file)))
+    if configured.url is not None:
+        grid.add_row("Opik", _emphasize(_without_credentials(configured.url)))
+    grid.add_row("Workspace", text.Text(configured.workspace))
+    grid.add_row("Project", text.Text(configured.project_name, style="bold"))
+    # Shown in full rather than behind the project name: not every terminal
+    # makes a hyperlink clickable, and a visible URL can still be copied.
+    open_row = _emphasize(_without_credentials(project_url))
+    if not project_exists:
+        open_row.append(
+            "\nThe project appears here after its first trace.", style="dim"
+        )
+    grid.add_row("Open", open_row)
+    console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
+    console.print(
+        padding.Padding(
+            _emphasize(
+                f"To log to another project: {opik_configure.PROJECT_NAME_DOCS_URL}",
+                base="dim",
+            ),
+            _FIELDS_INDENT,
+        )
+    )
+
+
+def _without_credentials(url: str) -> str:
+    """``url`` without any ``user:password@``, so a password is never shown or linked."""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.username is None and parsed.password is None:
+        return url
+    host = parsed.hostname or ""
+    if parsed.port is not None:
+        host = f"{host}:{parsed.port}"
+    return urllib.parse.urlunsplit(parsed._replace(netloc=host))
+
+
+def confirm_default_yes(question: str) -> bool:
+    """A yes/no question that Enter answers yes, indented like every other prompt."""
+    return click.confirm(f"  {question}", default=True)
 
 
 _KEY_STYLE = "cyan"
@@ -155,89 +219,223 @@ def choose_one_numbered(
     )
 
 
+#: The logo's own orange (the first stop of `opik-logo.svg`), as hex so it does not
+#: depend on the terminal theme.
+OPIK_ORANGE = "#FB9341"
+
+
+_BANNER = r"""
+   ___        _ _
+  / _ \ _ __ (_) | __
+ | | | | '_ \| | |/ /
+ | |_| | |_) | |   <
+  \___/| .__/|_|_|\_\
+       |_|
+"""
+
+
+def _render_banner(headline: str, detail: str) -> None:
+    """The logo, then what the command is for — shared by both configure commands."""
+    console.print(text.Text(_BANNER, style=f"bold {OPIK_ORANGE}"))
+    console.print(
+        padding.Padding(
+            text.Text.assemble((f"{headline}\n", "bold"), (detail, "dim")),
+            (0, 0, 1, 2),
+        )
+    )
+
+
+def render_configure_banner() -> None:
+    """How `opik configure` opens."""
+    _render_banner(
+        "Set up Opik on this machine.",
+        "A few questions, then your code and your AI client can both\n"
+        "reach your workspace.",
+    )
+
+
+def render_mcp_banner() -> None:
+    """How `opik mcp configure` opens. States the purpose rather than asking:
+    running the command was the answer."""
+    _render_banner(
+        "Connect your AI client to Opik.",
+        "It can then read your traces, find the failing ones, score them,\n"
+        "and instrument your code — from chat.",
+    )
+
+
+def render_connection(opik_url: str, workspace: Optional[str], source: str) -> None:
+    """Which saved Opik the AI client is being connected to, from where, and how
+    to choose another.
+
+    Said up front because nothing later names it, and a wrong Opik is otherwise
+    only found out once the AI client cannot reach it. Laid out like the block
+    `opik configure` closes on, which says the same things about the same file.
+    """
+    console.print(text.Text("Connecting to", style="bold"))
+    grid = table.Table.grid(padding=(0, 2))
+    grid.add_column(style=_KEY_STYLE, no_wrap=True)
+    grid.add_column(overflow="fold")
+    grid.add_row("Opik", _emphasize(_without_credentials(opik_url.rstrip("/"))))
+    # Text, not str: a table cell reads `[...]` as markup.
+    if workspace:
+        grid.add_row("Workspace", text.Text(workspace))
+    grid.add_row("From", text.Text(_collapse_home(source)))
+    console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
+    console.print(
+        padding.Padding(
+            text.Text.assemble(
+                ("To change the MCP connection config: ", "dim"),
+                ("opik mcp configure --ignore-opik-config", _CODE_STYLE),
+            ),
+            _FIELDS_INDENT,
+        )
+    )
+    console.print()
+
+
 def render_mcp_intro() -> None:
-    """What the MCP step is, before either command asks about it.
-
-    Shared by ``opik configure`` and ``opik mcp configure`` so the two explain
-    themselves identically: they write into the same files, and only one of them
-    used to say so. Rendering here rather than in either command is what keeps
-    them from drifting apart again.
-
-    Does not list the detected clients: the picker directly below is that list,
-    and naming them twice pushed the question off the screen.
-    """
+    """What MCP is, above `opik configure`'s question about it. The picker below
+    lists the clients, so this does not."""
     console.print()
     console.print(
         text.Text.assemble(
-            ("Set up Opik MCP for your AI client? ", "bold"),
+            ("Opik MCP ", "bold"),
             ("(Recommended)", "green bold"),
         )
     )
+    # Indented with the question under it, so the pitch and the prompt read as
+    # one block under the heading rather than as two unrelated lines.
     console.print(
-        text.Text(
-            "Enables your AI assistant to inspect traces, scan your projects\n"
-            "for issues, debug experiments, and run Opik commands directly\n"
-            "from chat.",
-            style="dim",
+        padding.Padding(
+            text.Text(
+                "Lets your AI client inspect traces, scan your projects for\n"
+                "issues, debug experiments, and run Opik commands directly from\n"
+                "chat.",
+                style="dim",
+            ),
+            (0, 0, 0, 2),
         )
     )
 
 
-def render_skill_pack_intro() -> None:
-    """The skill pack's case, laid out exactly like :func:`render_mcp_intro`.
+def render_handoff_offer(prompt: str) -> None:
+    """The prompt that saying yes will send, above the question that asks."""
+    _render_suggested_prompt(prompt)
 
-    The two are halves of one step. They were written separately and looked it —
-    one was three ``rich`` lines and the other was the whole thing crammed into a
-    ``click`` label — so the second half read as a different program.
-    """
+
+def _render_suggested_prompt(prompt: str) -> None:
+    """The closing prompt, in full weight rather than grey so it is read. No box:
+    the paste path copies it straight out of the terminal."""
+    console.print()
+    console.print(text.Text("Suggested first prompt", style=f"bold {OPIK_ORANGE}"))
+    console.print(padding.Padding(text.Text(prompt, style="bold"), (0, 0, 1, 2)))
+
+
+def render_handoff(client_display_name: str) -> None:
+    """The last thing shown before the agent takes the terminal."""
     console.print()
     console.print(
         text.Text.assemble(
-            ("Download the Opik skill pack for your AI client? ", "bold"),
-            ("(Recommended)", "green bold"),
+            ("Starting ", "bold"),
+            (client_display_name, "bold cyan"),
+            ("…", "bold"),
         )
     )
+
+
+def render_handoff_declined(client_display_name: str, replace_offer: bool) -> None:
+    """The ending for a run that turned the offer down.
+
+    ``replace_offer`` after a Ctrl-C at the offer, which leaves its line ending in
+    an echoed ``^C``: the ending is written over that line instead of under it.
+    """
+    if replace_offer and console.is_terminal:
+        console.control(
+            control.Control(
+                control.ControlType.CARRIAGE_RETURN,
+                (control.ControlType.ERASE_IN_LINE, 2),
+            )
+        )
+    else:
+        console.print()
     console.print(
-        text.Text(
-            textwrap.fill(consent.SKILL_PACK_PITCH, width=66),
-            style="dim",
+        text.Text.assemble(
+            ("Restart ", "bold"),
+            (client_display_name, "bold cyan"),
+            (", then paste the prompt above.", ""),
+        )
+    )
+
+
+def render_prompt_to_paste(client_display_name: str, prompt: str) -> None:
+    """The ending for a client that cannot be started from here."""
+    _render_suggested_prompt(prompt)
+    console.print(
+        text.Text.assemble(
+            ("Restart ", "bold"),
+            (client_display_name, "bold cyan"),
+            (", then paste the prompt above into a new chat.", ""),
+        )
+    )
+
+
+def render_restart_note(mcp_installed: bool) -> None:
+    """The ending for a run with no one client to name.
+
+    ``mcp_installed`` is False for `--install-skills --no-install-mcp`, which
+    must not be told to ask about a server it never registered.
+    """
+    console.print()
+    if not mcp_installed:
+        console.print(
+            text.Text.assemble(
+                ("Restart your AI client", "bold"),
+                (" to pick up the Opik skill pack.", ""),
+            )
+        )
+        return
+
+    console.print(
+        text.Text.assemble(
+            ("Restart your AI client", "bold"),
+            (", then ask it to ", ""),
+            ('"list my Opik projects via Opik MCP"', "green"),
+            (".", ""),
         )
     )
 
 
 def render_note(message: str, hint: Optional[str] = None) -> None:
     """A line the user should notice but does not have to act on, plus its fix."""
-    console.print(text.Text(message, style="yellow"))
+    console.print(_emphasize(message, base="yellow"))
     if hint is not None:
-        console.print(text.Text(hint, style="dim"))
+        console.print(_emphasize(hint, base="dim"))
+
+
+#: Wide enough for every status label, so rows printed apart still line up.
+_STATUS_LABEL_WIDTH = 9
+
+
+def _status_row(mark: str, mark_style: str, label: str, detail: text.Text) -> None:
+    grid = table.Table.grid(padding=(0, 2))
+    grid.add_column(no_wrap=True)
+    grid.add_column(style=_KEY_STYLE, no_wrap=True, min_width=_STATUS_LABEL_WIDTH)
+    grid.add_column(overflow="fold")
+    grid.add_row(text.Text(mark, style=mark_style), label, detail)
+    console.print(padding.Padding(grid, (0, 0, 0, 2), expand=False))
 
 
 class RichInstallView(mcp_view.InstallView):
-    def plan(
-        self,
-        deployment: str,
-        transport: str,
-        targets: List[mcp_view.PlannedTarget],
-        needs_sign_in: bool = False,
-    ) -> None:
-        # `targets` is deliberately not rendered. It used to head a "Will update"
-        # table of each client and the file it would touch, which by then was the
-        # third time the same clients were listed — after the consent prompt's
-        # "Found:" list and the picker. The results table below reports what was
-        # actually written, per client, which is the version worth reading.
-        # `LoggingInstallView` still logs the paths for the library path, which
-        # has no results table.
-        self._needs_sign_in = needs_sign_in
-        console.print()
-        console.print(text.Text("Opik MCP server setup", style="bold"))
+    #: Clients the server was added to, named in the row that says it works.
+    _added: Tuple[str, ...] = ()
+    #: Whether the blank line above the status rows is already on screen.
+    _rows_started: bool = False
 
-        grid = table.Table.grid(padding=(0, 2))
-        grid.add_column(style=_KEY_STYLE, no_wrap=True)
-        grid.add_column(overflow="fold")
-        grid.add_row("Deployment", deployment)
-        grid.add_row("Connection", transport)
-        console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
-        console.print()
+    def plan(self, deployment: str, transport: str, needs_sign_in: bool) -> None:
+        # Nothing shown: the command already says it is setting up MCP, and the
+        # sign-in walks the user through itself.
+        self._needs_sign_in = needs_sign_in
 
     @contextlib.contextmanager
     def step(self, description: str) -> Iterator[None]:
@@ -246,70 +444,114 @@ class RichInstallView(mcp_view.InstallView):
         with console.status(f"[dim]{description}...[/dim]", spinner="dots"):
             yield
 
-    def results(self, results: List[mcp_view.TargetResult]) -> None:
-        # One grid for every row, so the host column lines up. A row per grid
-        # aligns each row against itself and nothing else.
-        grid = table.Table.grid(padding=(0, 2))
-        grid.add_column(no_wrap=True)
-        grid.add_column(style=_KEY_STYLE, no_wrap=True)
-        grid.add_column(overflow="fold")
-        for result in results:
-            if result.succeeded:
-                # The plan block already showed the path; repeating it here just
-                # wraps and pushes the outcome off the line.
-                grid.add_row(
-                    text.Text("✓", style="green"),
-                    result.display_name,
-                    text.Text(result.short, style="dim"),
-                )
-            else:
-                grid.add_row(
-                    text.Text("✗", style="red"),
-                    result.display_name,
-                    text.Text(_collapse_home(result.detail), style="yellow"),
-                )
-        console.print(padding.Padding(grid, (0, 0, 0, 2), expand=False))
-
-    def verification(self, succeeded: bool, detail: str) -> None:
-        # Its own block: it reports on the connection, not on a host, and sharing
-        # the grid above would align two things that are not the same kind.
+    def sign_in(self, client_display_name: str, command: List[str]) -> Optional[int]:
         console.print()
-        row = table.Table.grid(padding=(0, 2))
-        row.add_column(no_wrap=True)
-        row.add_column(style=_KEY_STYLE, no_wrap=True)
-        row.add_column(overflow="fold")
-        if succeeded:
-            row.add_row(text.Text("✓", style="green"), "Verified", text.Text(detail))
-        else:
-            row.add_row(
-                text.Text("✗", style="red"),
-                "Not working",
-                text.Text(detail, style="yellow"),
-            )
-        console.print(padding.Padding(row, (0, 0, 0, 2), expand=False))
-
-    def done(self, components: List[str], assistants: List[str]) -> None:
-        console.print()
-        console.print(
-            text.Text.assemble(("✓ ", "green bold"), ("Done", "bold")),
-        )
-        grid = table.Table.grid(padding=(0, 2))
-        grid.add_column(style=_KEY_STYLE, no_wrap=True)
-        grid.add_column(overflow="fold")
-        grid.add_row("Set up", _join(components) or "nothing")
-        grid.add_row("For", _join(assistants) or "your AI client")
-        grid.add_row(
-            "Next",
-            text.Text.assemble(
-                ("Restart ", ""),
-                ("them" if len(assistants) > 1 else "it", "bold"),
-                (", then ask ", ""),
-                ('"list my Opik projects via Opik MCP"', "green"),
+        returncode = terminal_session.run(
+            command,
+            header=f"Starting authentication for Opik MCP in {client_display_name}…",
+            hide_first_line="Starting authentication for",
+            # A new account's sign-up does not come back to this authorization,
+            # but the client is still waiting on it.
+            hint_after=(
+                "Waiting for authorization",
+                "New to Opik? Once your account is created, open the link above "
+                "again to finish.",
             ),
         )
-        console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
-        # Last, because it is the one thing here the user may still have to act
-        # on, and it should not sit between them and the prompt to try.
+        # A sign-in that worked is erased, leaving the blank line above it for
+        # the rows that follow.
+        self._rows_started = returncode == 0
+        return returncode
+
+    def _start_rows(self) -> None:
+        if not self._rows_started:
+            console.print()
+            self._rows_started = True
+
+    def results(self, results: List[mcp_view.TargetResult]) -> None:
+        # Successes are reported once the server is verified, as one row; only
+        # failures are worth a row of their own here.
+        self._added = tuple(r.display_name for r in results if r.succeeded)
+        for result in results:
+            if not result.succeeded:
+                self._start_rows()
+                _status_row(
+                    "✗",
+                    "red",
+                    result.display_name,
+                    _emphasize(_collapse_home(result.detail), base="yellow"),
+                )
+
+    def verification(self, succeeded: bool, detail: str) -> None:
+        self._start_rows()
+        if not succeeded:
+            _status_row(
+                "✗",
+                "red",
+                "Opik MCP",
+                _emphasize(
+                    f"added to {', '.join(self._added)}, but not working: {detail}",
+                    base="yellow",
+                ),
+            )
+            return
+        working = [name for name in self._added if name not in self._sign_in_failed]
+        if working:
+            _status_row(
+                "✓",
+                "green",
+                "Opik MCP",
+                text.Text(f"available in {', '.join(working)}"),
+            )
+        for name in self._sign_in_failed:
+            _status_row(
+                "!",
+                "yellow",
+                "Opik MCP",
+                text.Text(f"added to {name}, not signed in yet", style="yellow"),
+            )
+
+    def skill_pack(self, result: skills_install.InstallResult) -> bool:
+        """Report a skill-pack install. Returns whether it succeeded."""
+        if not result.succeeded:
+            self.problem(f"Could not install the Opik skill pack: {result.error}.")
+            return False
+
+        self._start_rows()
+        clients = skills_roots.display_names(list(result.linked))
+        where = (
+            f"available in {', '.join(clients)}"
+            if clients
+            else f"installed in {_collapse_home(str(result.shared_dir))}"
+        )
+        _status_row("✓", "green", "Skills", text.Text(where))
+        for host_key, message in result.link_errors.items():
+            label = ", ".join(skills_roots.display_names([host_key]))
+            self.problem(f"{label}: {message}")
+        return True
+
+    def done(self) -> None:
+        """Close the run with anything the user still has to do, if there is any.
+
+        No "Done": the run goes on to the suggested first prompt.
+        """
+        if self._sign_in_failed:
+            console.print()
+            console.print(
+                text.Text.assemble(
+                    ("! ", "yellow bold"), ("Set up, but not signed in yet", "bold")
+                )
+            )
+            for name in self._sign_in_failed:
+                console.print(
+                    padding.Padding(
+                        _emphasize(
+                            mcp_view.sign_in_failed_message(name), base="yellow"
+                        ),
+                        (0, 0, 0, 2),
+                    )
+                )
+            return
         if self._needs_sign_in:
             console.print()
             console.print(
@@ -318,113 +560,50 @@ class RichInstallView(mcp_view.InstallView):
                         ("Signing in: ", "bold"),
                         (mcp_view.SIGN_IN_HINT, "dim"),
                     ),
-                    _FIELDS_INDENT,
+                    (0, 0, 0, 2),
                 )
             )
-        console.print()
 
     def skipped(self, message: str) -> None:
         console.print()
-        console.print(text.Text(message, style="dim"))
+        console.print(_emphasize(message, base="dim"))
         console.print()
 
     def problem(self, message: str) -> None:
         console.print()
-        console.print(_linkify(_collapse_home(message), base="yellow"))
+        console.print(_emphasize(_collapse_home(message), base="yellow"))
         console.print()
 
     def choose_hosts(
         self,
         title: str,
         candidates: List[mcp_view.HostChoice],
-        preselected: List[str],
     ) -> Optional[List[str]]:
         # A terminal that cannot host a picker still gets the inherited numbered
         # menu rather than an error.
         if not selector.is_supported():
             return mcp_view.numbered_menu(title, candidates)
 
-        # The clients first, then the two catch-all rows: `All`, then the manual
-        # one. That is the order the numbered-menu fallback below has always
-        # used, and it keeps the rows the user is actually choosing between at
-        # the top rather than behind a summary row.
-        #
-        # Nothing is pre-ticked — this writes into other tools' config files, so
-        # the list stays opt-in — and with an empty selection `multiselect` takes
-        # the highlighted row, so a bare Enter registers the first client rather
-        # than all of them. That is the conservative half of the trade: the
-        # clients are listed in priority order, so the row Enter lands on is the
-        # most likely one, and picking every client stays a deliberate act.
-        #
-        # One candidate skips the `All` row, having nothing to stand in for, but
-        # still gets the picker. A one-item list was not thought worth arrow keys
-        # until the manual row moved in here: skipping the picker skipped that
-        # too, so the user whose one detected client is not theirs could say no
-        # and get "Skipped" where the manual config belonged.
-        all_row = (
-            [selector.Choice(key=_ALL, label="All", synthetic=True)]
-            if len(candidates) > 1
-            else []
-        )
-        chosen = selector.multiselect(
+        # One client: the flow ends by starting it. The manual row goes last, and
+        # is kept for a single client too, as the way out when detection missed.
+        chosen = selector.choose_one(
             title=title,
             choices=[
                 selector.Choice(key=c.key, label=c.label, hint=c.hint)
                 for c in candidates
             ]
-            + all_row
             + [
                 selector.Choice(
                     key=mcp_view.MANUAL_SETUP,
                     label=mcp_view.MANUAL_SETUP_LABEL,
                     hint="show manual setup",
-                    synthetic=True,
                 )
             ],
-            preselected=preselected,
         )
-        # Escape still declines silently. This row is the other kind of no — the
-        # detection missed their client — and it is worth its place because the
-        # answer to it is a link rather than nothing.
+        # There is no "skip" row, so Escape is a cancel rather than a decline.
         if chosen is None:
             return None
-        # `All` wins: the two are mutually exclusive by construction — select-all
-        # skips synthetic rows — but a list holding both can only have meant all.
-        if _ALL in chosen:
-            return [c.key for c in candidates]
-        if mcp_view.MANUAL_SETUP in chosen:
-            return [mcp_view.MANUAL_SETUP]
-        return [key for key in chosen if key != _ALL]
+        return [chosen]
 
     def note(self, message: str) -> None:
-        console.print(padding.Padding(text.Text(message, style="dim"), (0, 0, 0, 2)))
-
-
-def render_skill_pack(
-    result: skills_install.InstallResult, view: mcp_view.InstallView
-) -> bool:
-    """Report a skill-pack install. Returns whether it succeeded."""
-    if not result.succeeded:
-        view.problem(f"Could not install the Opik skill pack: {result.error}.")
-        return False
-
-    view.results(
-        [
-            mcp_view.TargetResult(
-                display_name="Skill pack",
-                detail=f"{', '.join(result.skills)} in {result.shared_dir}",
-                succeeded=True,
-                summary=", ".join(result.skills),
-            )
-        ]
-    )
-    for host_key, message in result.link_errors.items():
-        label = ", ".join(skills_roots.display_names([host_key]))
-        view.problem(f"{label}: {message}")
-    if result.plugin_overlap:
-        view.note(
-            "The Opik Claude Code plugin also ships an `opik` skill, so Claude "
-            "Code now has both. Remove the plugin's copy with "
-            "`/plugin uninstall opik` if you prefer the pack alone."
-        )
-    return True
+        console.print(padding.Padding(_emphasize(message, base="dim"), (0, 0, 0, 2)))

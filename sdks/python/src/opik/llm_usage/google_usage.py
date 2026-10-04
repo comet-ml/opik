@@ -19,6 +19,9 @@ class GoogleGeminiUsage(base_original_provider_usage.BaseOriginalProviderUsage):
     cached_content_token_count: Optional[int] = None
     """Output only. Number of tokens in the cached part in the input (the cached content)."""
 
+    tool_use_prompt_token_count: Optional[int] = None
+    """Output only. Number of tokens in the results from tool executions, which are provided back to the model as input. Part of the input side of the request, and counted in `total_token_count`."""
+
     thoughts_token_count: Optional[int] = None
     """Number of tokens spent for reasoning. Only available for Gemini models with reasoning enabled. (Gemini-2.5 and above)"""
 
