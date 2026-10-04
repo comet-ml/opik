@@ -87,7 +87,7 @@ describe("useExperimentsTableConfig fillColumnId", () => {
     expect(result.current.fillColumnId).toBe(COLUMN_CREATED_AT_ID);
   });
 
-  it("uses the TanStack-normalized score column id when only scores are visible", () => {
+  it("uses the normalized score id when it is the only unpinned data column", () => {
     const { result } = renderConfig(
       [COLUMN_NAME_ID, SCORE_COLUMN_ID],
       DATASET_GROUP,
@@ -96,7 +96,7 @@ describe("useExperimentsTableConfig fillColumnId", () => {
     expect(result.current.fillColumnId).toBe("feedback_scores_accuracy");
   });
 
-  it("falls back to the actions column when no data column is visible", () => {
+  it("falls back to the actions column when no unpinned data column is visible", () => {
     const { result } = renderConfig([COLUMN_NAME_ID], DATASET_GROUP, {
       withActions: true,
     });
