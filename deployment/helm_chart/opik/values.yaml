@@ -919,6 +919,11 @@ clickhouse:
   # while the pod leaves the service; the grace period must cover that plus
   # shutdown_wait_unfinished. E.g. lifecycle: {preStop: {sleep: {seconds: 15}}} with 60.
   lifecycle: {}
+  # -- (object) securityContext of the clickhouse container. The pod runs as uid 101, and
+  # policies against privilege escalation (e.g. Azure AKS Deployment Safeguards) refuse a
+  # non-root container unless allowPrivilegeEscalation is set false explicitly.
+  securityContext:
+    allowPrivilegeEscalation: false
   # -- (int) Pod termination grace period in seconds. Unset keeps the Kubernetes default (30).
   terminationGracePeriodSeconds: null
   configuration:
@@ -1151,8 +1156,12 @@ clickhouse:
       tolerations: []  # Defaults to .Values.clickhouse.tolerations if not specified
   backupServer:
     enabled: false
-    image: altinity/clickhouse-backup:2.6.39
+    image: altinity/clickhouse-backup:2.7.4
     port: 7171
+    # -- (object) securityContext of the clickhouse-backup sidecar; it inherits the pod's uid 101,
+    # so it needs the same explicit allowPrivilegeEscalation as `clickhouse.securityContext`.
+    securityContext:
+      allowPrivilegeEscalation: false
     # Service the restore job uses to reach the clickhouse-backup REST API.
     # The backup port is exposed on the operator's per-replica service, so this
     # defaults (in the restore job template) to chi-<opik.name>-clickhouse-cluster-0-0

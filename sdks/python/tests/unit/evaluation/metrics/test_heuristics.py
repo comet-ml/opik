@@ -4,6 +4,7 @@ import re
 import threading
 import warnings
 
+import numpy as np
 import pytest
 
 from opik.exceptions import MetricComputationError
@@ -689,6 +690,137 @@ def test_chrf_metric__char_order_and_ignore_whitespace_vary__change_score():
         .value
     )
     assert order_1 != order_6
+
+
+@pytest.mark.parametrize("beta", ["2.0", None, [2.0], "two", True, False])
+def test_chrf_metric__non_numeric_beta__raises_value_error(beta):
+    # A non-numeric beta made NLTK raise TypeError, which the fallback in
+    # `_score_single` swallowed: the score came back computed with NLTK's own
+    # beta=3.0 instead of the beta=2.0 the caller asked for, with no warning.
+    # `bool` is a subclass of `int`, and True would otherwise quietly mean 1.
+    with pytest.raises(ValueError, match="beta must be a number"):
+        ChrF(beta=beta, track=False)
+
+
+@pytest.mark.parametrize("char_order", ["6", 6.0, None, True])
+def test_chrf_metric__non_integer_char_order__raises_value_error(char_order):
+    with pytest.raises(ValueError, match="char_order must be an integer"):
+        ChrF(char_order=char_order, track=False)
+
+
+@pytest.mark.parametrize("char_order", [0, -1])
+def test_chrf_metric__non_positive_char_order__raises_value_error(char_order):
+    # A non-positive order reached NLTK and raised a bare ZeroDivisionError out of
+    # score(), where every other argument problem in this module is a ValueError at
+    # construction or a MetricComputationError at scoring.
+    with pytest.raises(ValueError, match="char_order must be at least 1"):
+        ChrF(char_order=char_order, track=False)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"beta": 2.0},
+        {"beta": 3},
+        {"beta": np.float32(2.0)},
+        {"beta": np.float64(2.0)},
+        {"char_order": 1},
+        {"char_order": 6},
+        {"char_order": np.int64(6)},
+        {"char_order": np.int32(6)},
+    ],
+)
+def test_chrf_metric__valid_arguments__still_accepted(kwargs):
+    # The valid values must keep working; the new checks are not a blanket reject.
+    # numpy scalars are included because they are registered as numbers.Real /
+    # numbers.Integral, and they arrive routinely from a DataFrame or a config file.
+    #
+    # `value > 0` would survive an implementation that ignored beta and
+    # char_order entirely, so the arguments are checked against a score computed
+    # here from the chrF definition instead.
+    pytest.importorskip("nltk")
+
+    result = ChrF(track=False, **kwargs).score(output="abcdefgh", reference="abcd")
+
+    assert result.value > 0.0
+    assert result.name == "chrf_metric"
+    assert result.scoring_failed is False
+    assert "chrF score" in result.reason
+    assert result.reason.endswith(f"{result.value:.4f}")
+
+
+def test_chrf_metric__unigram_score__matches_the_chrf_formula():
+    """Pin `beta` and `char_order` against a hand-computed chrF.
+
+    At `char_order=1` the n-grams are single characters, so precision and recall
+    are counts that can be worked out here without reusing the implementation:
+    "abcdefgh" has 8 unigrams, "abcd" has 4, 4 of them match, giving P = 4/8 and
+    R = 4/4. chrF then combines them as (1 + beta^2) * P * R / (beta^2 * P + R).
+    """
+    pytest.importorskip("nltk")
+
+    def unigram_chrf(beta: float, output: str, reference: str) -> float:
+        candidate = output.replace(" ", "")
+        expected = reference.replace(" ", "")
+        candidate_chars = set(candidate)
+        matches = sum(1 for character in expected if character in candidate_chars)
+        precision = matches / len(candidate)
+        recall = matches / len(expected)
+        return (1 + beta**2) * precision * recall / (beta**2 * precision + recall)
+
+    for beta in (0.0, 0.5, 2.0, 8.0):
+        scored = (
+            ChrF(beta=beta, char_order=1, track=False)
+            .score(output="abcdefgh", reference="abcd")
+            .value
+        )
+        assert scored == pytest.approx(unigram_chrf(beta, "abcdefgh", "abcd"))
+
+    # beta weights precision against recall, so it only moves the score when the
+    # two differ -- which is why the fixture above is deliberately asymmetric.
+    # Going from 0 (precision only) to 8 (recall weighted) has to move it up.
+    at_beta_0 = (
+        ChrF(beta=0.0, char_order=1, track=False)
+        .score(output="abcdefgh", reference="abcd")
+        .value
+    )
+    at_beta_8 = (
+        ChrF(beta=8.0, char_order=1, track=False)
+        .score(output="abcdefgh", reference="abcd")
+        .value
+    )
+    at_beta_2 = (
+        ChrF(beta=2.0, char_order=1, track=False)
+        .score(output="abcdefgh", reference="abcd")
+        .value
+    )
+    assert at_beta_0 == pytest.approx(0.5)
+    assert at_beta_0 < at_beta_2 < at_beta_8
+
+    # char_order has to reach the scorer too: at order 3 the longer n-grams stop
+    # matching, so the score falls.
+    assert (
+        ChrF(beta=2.0, char_order=3, track=False)
+        .score(output="abcdefgh", reference="abcd")
+        .value
+        < ChrF(beta=2.0, char_order=1, track=False)
+        .score(output="abcdefgh", reference="abcd")
+        .value
+    )
+
+
+@pytest.mark.parametrize("beta", [np.float32(2.0), np.float64(2.0)])
+def test_chrf_metric__numpy_beta__scored_with_the_requested_beta(beta):
+    # A numpy beta must score the same as the equivalent Python float, rather than
+    # being rejected outright.
+    output, reference = "the cat sat", "the cat sat down"
+    assert ChrF(beta=beta, track=False).score(
+        output=output, reference=reference
+    ).value == pytest.approx(
+        ChrF(beta=float(beta), track=False)
+        .score(output=output, reference=reference)
+        .value
+    )
 
 
 def test_chrf_metric__multiple_references__scores_against_best_match():

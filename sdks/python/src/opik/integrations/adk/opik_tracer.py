@@ -347,8 +347,13 @@ class OpikTracer:
             if (
                 current_span is None
                 and stack_top is not None
-                and llm_span_helpers.is_externally_created_llm_span_that_just_started(
-                    stack_top
+                and (
+                    llm_span_helpers.is_externally_created_llm_span_that_just_started(
+                        stack_top
+                    )
+                    or llm_span_helpers.is_externally_created_llm_span_awaiting_after_model_callback(
+                        stack_top
+                    )
                 )
             ):
                 current_span = stack_top

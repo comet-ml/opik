@@ -23,6 +23,10 @@ class InstallResult:
     # "Updated"). Falls back to `detail`, which spells the path out in full and is
     # what a log line or a failure needs.
     summary: Optional[str] = None
+    # Added, but the client's sign-in failed: no tools until the user signs in.
+    sign_in_failed: bool = False
+    # Separates "signed in" from "nothing to sign in to".
+    sign_in_attempted: bool = False
 
 
 @dataclasses.dataclass
@@ -242,7 +246,6 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             target_display_name="Claude Code", succeeded=False, detail=str(error)
         )
     if result.returncode == 0:
-        _sign_in_claude_code(claude_executable, server_spec)
         return InstallResult(
             target_display_name="Claude Code",
             succeeded=True,
@@ -292,47 +295,27 @@ def _claude_supports_mcp_login(claude_executable: str) -> bool:
     )
 
 
-def _sign_in_claude_code(
-    claude_executable: str, server_spec: mcp_spec.McpServerSpec
-) -> None:
-    """Start the browser sign-in for a freshly registered hosted server.
+def sign_in_command(
+    target_key: str, server_spec: mcp_spec.McpServerSpec
+) -> Optional[List[str]]:
+    """The client's own browser sign-in, when this run should start one.
 
-    The hosted server carries no credentials; the client signs in over OAuth. For
-    Codex that is already handled: `codex mcp add --url` performs the login as
-    part of the add, which is why configuring Codex ends in the browser. Claude
-    Code's `mcp add` only records the server, so it sits unauthorized afterwards
-    — and an unauthorized server contributes no tools at all rather than an
-    error, so nothing tells the user to go and finish the job.
-
-    One more call to the client's own CLI, in the same place and with the same
-    guards as the `add` above, closes that gap.
-
-    Best effort throughout: the server is registered by the time this runs, and
-    an old client, a failed login or a user who walks away all leave a working
-    registration plus the sign-in hint the closing block already prints.
+    Only Claude Code: Codex signs in inside `codex mcp add`, and the GUI clients
+    prompt on first use. Only for the hosted server — a local one carries the API
+    key — and only with a terminal, since a coding agent or CI has no browser.
+    Run separately from the install so the caller can show progress for the
+    install and hand the terminal over for the sign-in.
     """
+    if target_key != "claude-code":
+        return None
     if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
-        # A local uvx server authenticates with the API key already written into
-        # the config. There is nothing to sign in to.
-        return
-
+        return None
     if not interactive_helpers.is_interactive():
-        # A run with no terminal is a coding agent or CI, and a browser there is
-        # at best ignored. Unlike the Codex path — where the login is inside
-        # `codex mcp add` and cannot be separated from it — this one is ours to
-        # not start. The closing block's sign-in hint still covers these runs.
-        return
-
-    if not _claude_supports_mcp_login(claude_executable):
-        return
-
-    try:
-        _run_client_cli(
-            [claude_executable, "mcp", "login", SERVER_NAME],
-            label="claude mcp login",
-        )
-    except _CliUnavailable:
-        return
+        return None
+    claude_executable = shutil.which("claude")
+    if claude_executable is None or not _claude_supports_mcp_login(claude_executable):
+        return None
+    return [claude_executable, "mcp", "login", SERVER_NAME]
 
 
 def _install_cursor(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
@@ -410,6 +393,8 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         return InstallResult(
             target_display_name="Codex",
             succeeded=True,
+            # The sign-in is part of `codex mcp add`, for the hosted server only.
+            sign_in_attempted=isinstance(server_spec, mcp_spec.RemoteServerSpec),
             detail=(
                 f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "
                 f"`codex mcp add`"
