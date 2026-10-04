@@ -33,15 +33,20 @@ vi.mock("use-query-params", () => ({
   useQueryParam: () => [fromParam, vi.fn()],
 }));
 
-vi.mock("@/api/datasets/useExperimenstByIds", () => ({
-  default: ({ experimentsIds }: { experimentsIds: string[] }) =>
+const experimentsByIdsMock = vi.fn(
+  ({ experimentsIds }: { experimentsIds: string[] }) =>
     experimentsIds.map((id) => ({
       data: experimentNames[id] ? { name: experimentNames[id] } : undefined,
     })),
+);
+
+vi.mock("@/api/datasets/useExperimenstByIds", () => ({
+  default: (params: { experimentsIds: string[] }) =>
+    experimentsByIdsMock(params),
 }));
 
 const COMPARE_PATH = "/ws/projects/p1/experiments/d1/compare";
-const buildFrom = (experiments: string[], row = "item-1") =>
+const buildFrom = (experiments: unknown[], row = "item-1") =>
   `${COMPARE_PATH}?experiments=${encodeURIComponent(
     JSON.stringify(experiments),
   )}&row=${row}&search=foo`;
@@ -89,6 +94,26 @@ describe("ViewInExperimentButton", () => {
     });
 
     expect(screen.queryByText("Experiment")).toBeNull();
+    expect(experimentsByIdsMock).not.toHaveBeenCalledWith({
+      experimentsIds: ["exp-1"],
+    });
+  });
+
+  it.each([
+    ["a non-string id", ["exp-1", 42]],
+    ["an empty id", ["exp-1", ""]],
+    ["a null id", [null]],
+  ])("renders nothing and fetches nothing for %s", (_, experiments) => {
+    fromParam = buildFrom(experiments);
+    renderButton();
+
+    expect(screen.queryByText("Experiment")).toBeNull();
+    expect(experimentsByIdsMock).toHaveBeenCalledWith({ experimentsIds: [] });
+    expect(experimentsByIdsMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        experimentsIds: expect.arrayContaining([expect.anything()]),
+      }),
+    );
   });
 
   it("opens the originating experiment view on the current item", () => {

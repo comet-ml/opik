@@ -30,9 +30,16 @@ const ViewInExperimentButton: React.FC<ViewInExperimentButtonProps> = ({
   const returnSearch: Record<string, unknown> = experimentReturn
     ? router.options.parseSearch(experimentReturn.searchStr)
     : {};
-  const experimentsIds = Array.isArray(returnSearch.experiments)
-    ? (returnSearch.experiments as string[])
-    : [];
+  const rawExperiments = returnSearch.experiments;
+  // `from` is user-controlled, so anything but a list of non-empty strings is
+  // dropped rather than sent to /experiments/<id>; without permission the
+  // names are never fetched.
+  const experimentsIds =
+    canViewExperiments &&
+    Array.isArray(rawExperiments) &&
+    rawExperiments.every((id) => typeof id === "string" && id.length > 0)
+      ? (rawExperiments as string[])
+      : [];
 
   const experimentNames = useExperimentsByIds({ experimentsIds })
     .map((response) => response.data?.name)
