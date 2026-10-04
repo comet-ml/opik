@@ -345,28 +345,33 @@ export const useExperimentsTableConfig = <
       sortableColumns: sortableBy,
     });
 
-    // The first unpinned data column absorbs spare width; a pinned one can't,
+    const actionsColumns = actionsCell
+      ? [generateActionsColumDef<T>({ cell: actionsCell })]
+      : [];
+
+    // The first unpinned column absorbs spare width; a pinned one can't,
     // since sticky offsets are computed from declared column sizes.
-    const fillColumn = [...regularColumns, ...scoresColumns][0];
+    const fillColumn = [
+      ...regularColumns,
+      ...scoresColumns,
+      ...actionsColumns,
+    ][0];
+    // Mirror TanStack's column id derivation so the id matches the rendered
+    // column (score ids like "feedback_scores.x" become "feedback_scores_x").
     const fillColumnId =
-      fillColumn && "accessorKey" in fillColumn
-        ? String(fillColumn.accessorKey)
-        : undefined;
+      fillColumn &&
+      (fillColumn.id ??
+        ("accessorKey" in fillColumn
+          ? String(fillColumn.accessorKey).replace(".", "_")
+          : undefined));
 
     const baseColumns = [
       ...firstColumns,
       ...groupColumns,
       ...regularColumns,
       ...scoresColumns,
+      ...actionsColumns,
     ];
-
-    if (actionsCell) {
-      baseColumns.push(
-        generateActionsColumDef({
-          cell: actionsCell,
-        }),
-      );
-    }
 
     return { columns: baseColumns, fillColumnId };
   }, [

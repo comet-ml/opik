@@ -2,13 +2,17 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 
 import {
+  COLUMN_ACTIONS_ID,
   COLUMN_CREATED_AT_ID,
   COLUMN_DATASET_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
+  DynamicColumn,
 } from "@/types/shared";
 import { Groups } from "@/types/groups";
+import { buildGroupFieldName } from "@/lib/groups";
+import { buildScoreColumnId } from "@/lib/feedback-scores";
 import { SORT_DIRECTION } from "@/types/sorting";
 import { useExperimentsTableConfig } from "./useExperimentsTableConfig";
 
@@ -29,7 +33,17 @@ const DATASET_GROUP: Groups = [
   },
 ];
 
-const renderConfig = (selectedColumns: string[], groups: Groups = []) =>
+const SCORE_COLUMN_ID = buildScoreColumnId("accuracy");
+
+const SCORE_COLUMNS: DynamicColumn[] = [
+  { id: SCORE_COLUMN_ID, label: "accuracy", columnType: COLUMN_TYPE.number },
+];
+
+const renderConfig = (
+  selectedColumns: string[],
+  groups: Groups = [],
+  { withActions = false } = {},
+) =>
   renderHook(() =>
     useExperimentsTableConfig<Row>({
       storageKeyPrefix: "test",
@@ -38,11 +52,12 @@ const renderConfig = (selectedColumns: string[], groups: Groups = []) =>
       defaultColumnsOrder: COLUMNS.map((c) => c.id),
       groups,
       sortableBy: [],
-      dynamicScoresColumns: [],
+      dynamicScoresColumns: SCORE_COLUMNS,
       experiments: [],
       rowSelection: {},
       sortedColumns: [],
       setSortedColumns: () => {},
+      ...(withActions && { actionsCell: () => null }),
     }),
   );
 
@@ -63,11 +78,33 @@ describe("useExperimentsTableConfig fillColumnId", () => {
       DATASET_GROUP,
     );
 
-    expect(result.current.columnPinningConfig.left).toContain(COLUMN_NAME_ID);
+    expect(result.current.columnPinningConfig.left).toEqual(
+      expect.arrayContaining([
+        COLUMN_NAME_ID,
+        buildGroupFieldName(DATASET_GROUP[0]),
+      ]),
+    );
     expect(result.current.fillColumnId).toBe(COLUMN_CREATED_AT_ID);
   });
 
-  it("has no fill column when no unpinned data column is visible", () => {
+  it("uses the TanStack-normalized score column id when only scores are visible", () => {
+    const { result } = renderConfig(
+      [COLUMN_NAME_ID, SCORE_COLUMN_ID],
+      DATASET_GROUP,
+    );
+
+    expect(result.current.fillColumnId).toBe("feedback_scores_accuracy");
+  });
+
+  it("falls back to the actions column when no data column is visible", () => {
+    const { result } = renderConfig([COLUMN_NAME_ID], DATASET_GROUP, {
+      withActions: true,
+    });
+
+    expect(result.current.fillColumnId).toBe(COLUMN_ACTIONS_ID);
+  });
+
+  it("has no fill column when no unpinned column is visible", () => {
     const { result } = renderConfig([COLUMN_NAME_ID], DATASET_GROUP);
 
     expect(result.current.fillColumnId).toBeUndefined();
