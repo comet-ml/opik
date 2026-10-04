@@ -134,6 +134,9 @@ class OpikADKOtelTracer:
 
         trace_to_close_in_finally_block = None
         span_to_close_in_finally_block = None
+        exited_normally = False
+
+        self._finalize_llm_spans_skipped_by_after_model_callback()
 
         current_trace_data = opik.context_storage.get_trace_data()
         current_span_data = opik.context_storage.top_span_data()
@@ -148,11 +151,15 @@ class OpikADKOtelTracer:
             # ADK will create tool spans inside the llm spans (which we consider wrong practice),
             # so we manually finalize it here to avoid incorrect span nesting.
             opik.context_storage.pop_span_data(ensure_id=current_span_data.id)
-            current_span_data.init_end_time()
-            if opik.is_tracing_active():
-                self.opik_client.__internal_api__span__(
-                    **current_span_data.as_parameters
-                )
+            # A span with an end time was already sent by after_model_callback,
+            # which couldn't pop it (detached context); sending it again would
+            # only duplicate it.
+            if current_span_data.end_time is None:
+                current_span_data.init_end_time()
+                if opik.is_tracing_active():
+                    self.opik_client.__internal_api__span__(
+                        **current_span_data.as_parameters
+                    )
             current_span_data = opik.context_storage.top_span_data()
 
         try:
@@ -177,6 +184,7 @@ class OpikADKOtelTracer:
                 end_on_exit=end_on_exit,
             ) as inner_span:
                 yield inner_span
+            exited_normally = True
         except Exception as exception:
             # The expected exception here is the exception that happened during the agent
             # execution and was re-raised from the `opentelemetry.util._decorator._agnosticcontextmanagergenerator`s
@@ -191,11 +199,35 @@ class OpikADKOtelTracer:
                 span_to_close_in_finally_block.update(error_info=error_info)
             raise
         finally:
+            self._finalize_llm_spans_skipped_by_after_model_callback()
+
             if trace_to_close_in_finally_block is not None:
                 self._ensure_trace_is_finalized(trace_to_close_in_finally_block.id)
 
             if span_to_close_in_finally_block is not None:
-                self._ensure_span_is_finalized(span_to_close_in_finally_block.id)
+                # ADK ends its inference span (`generate_content {model}`) as soon
+                # as it records the final response, before running
+                # after_model_callback (google.adk.telemetry._instrumentation.
+                # record_llm_response, seen in google-adk 2.9.2). Finalizing the LLM
+                # span on that normal exit would send it without output and usage,
+                # and that copy races after_model_callback's complete one
+                # downstream. So on a normal exit the span is left on the stack
+                # for after_model_callback. If that callback never runs, the next
+                # span boundary finalizes the span. On any non-normal exit
+                # (exception or cancellation) there may be no after_model_callback,
+                # so the span is finalized here as before.
+                if exited_normally and (
+                    llm_span_helpers.is_externally_created_llm_span_that_just_started(
+                        span_to_close_in_finally_block
+                    )
+                ):
+                    span_to_close_in_finally_block.update(
+                        metadata={
+                            llm_span_helpers.SPAN_STATUS: llm_span_helpers.LLMSpanStatus.AWAITING_AFTER_MODEL_CALLBACK
+                        }
+                    )
+                else:
+                    self._ensure_span_is_finalized(span_to_close_in_finally_block.id)
 
             if (
                 trace_to_close_in_finally_block is None
@@ -204,6 +236,21 @@ class OpikADKOtelTracer:
                 LOGGER.warning(
                     "No span or trace to finalize in ADK tracer. This is unexpected."
                 )
+
+    def _finalize_llm_spans_skipped_by_after_model_callback(self) -> None:
+        # ADK skips the agent's after_model_callbacks when a plugin (or an earlier
+        # callback) returns a response, so a deferred LLM span can still be waiting
+        # at the next span boundary. Finalize it as-is rather than lose it.
+        while (
+            (span_data := opik.context_storage.top_span_data()) is not None
+            and llm_span_helpers.is_externally_created_llm_span_awaiting_after_model_callback(
+                span_data
+            )
+        ):
+            opik.context_storage.pop_span_data(ensure_id=span_data.id)
+            span_data.init_end_time()
+            if opik.is_tracing_active():
+                self.opik_client.__internal_api__span__(**span_data.as_parameters)
 
     def _ensure_trace_is_finalized(self, trace_id: str) -> None:
         trace_data = opik.context_storage.pop_trace_data(ensure_id=trace_id)

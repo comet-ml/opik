@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
 from opik import id_helpers
 from opik.api_objects.dataset import dataset_item, validators, helpers
+from opik.api_objects.dataset import converters as dataset_converters
 from opik.api_objects.dataset.test_suite import types as suite_types
 from opik.rest_api.types import (
     evaluator_item_public as rest_evaluator_item_public,
@@ -196,18 +197,12 @@ def from_pandas(
     """Convert pandas DataFrame rows into a list of TestSuiteItem dicts."""
     helpers.raise_if_pandas_is_unavailable()
 
-    items: List[suite_types.TestSuiteItem] = []
-    for record in dataframe.to_dict(orient="records"):
-        mapped: Dict[str, Any] = {}
-        for key, value in record.items():
-            if key in ignore_keys:
-                continue
-            # pandas stores missing optional fields as float NaN
-            if isinstance(value, float) and value != value:
-                continue
-            mapped[keys_mapping.get(key, key)] = value
-        items.append(mapped)  # type: ignore[arg-type]
-    return items
+    return [
+        row  # type: ignore[misc]
+        for row in dataset_converters.iter_pandas_rows(
+            dataframe, keys_mapping, ignore_keys
+        )
+    ]
 
 
 def from_jsonl_file(

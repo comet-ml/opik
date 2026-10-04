@@ -247,7 +247,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     private void setAgentInsightsJobs() {
         var serviceToggles = injector.get().getInstance(OpikConfiguration.class).getServiceToggles();
 
-        if (!serviceToggles.isOllieEnabled()) {
+        if (!serviceToggles.isAgentInsightsActive()) {
             log.info("Agent Insights is disabled, skipping report and auto-first-run job setup");
             return;
         }

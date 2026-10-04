@@ -38,6 +38,8 @@ print(score.value, score.reason)
 
 `ConversationDegenerationMetric` detects repetitive phrases, lack of variance, or low-entropy responses across a conversation. It is a lightweight guard against models that fall into loops or short-circuit the dialogue.
 
+Each assistant turn gets a score between `0.0` and `1.0` from four equally weighted signals: repeated n-grams, overlap with the previous reply, known fallback phrases, and low lexical diversity. The metric value is the highest turn score, and the per-turn breakdown is in `metadata["per_turn"]`. A reply with no words, such as `"..."` or only whitespace, is scored like a one-word reply and marked with `is_wordless: 1.0`. It is skipped when comparing the next reply with the previous one, so a loop interrupted by filler is still detected.
+
 ```python
 from opik.evaluation.metrics import ConversationDegenerationMetric
 

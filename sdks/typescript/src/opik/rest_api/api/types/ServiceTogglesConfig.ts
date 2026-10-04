@@ -23,6 +23,7 @@ export interface ServiceTogglesConfig {
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
     ollieEnabled: boolean;
+    agentInsightsEnabled: boolean;
     projectHomepageEnabled: boolean;
     onlineScoringTracingEnabled: boolean;
     annotationQueueAutomationEnabled: boolean;

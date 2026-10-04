@@ -52,7 +52,9 @@ public enum GeminiModelName implements StructuredOutputSupported {
     LYRIA_3_PRO_PREVIEW("lyria-3-pro-preview", false),
     LYRIA_3_5("lyria-3.5", false),
     NANO_BANANA_PRO_PREVIEW("nano-banana-pro-preview", false),
-    TEXT_EMBEDDING("text-embedding-004", false);
+    TEXT_EMBEDDING("text-embedding-004", false),
+    GEMINI_3_8_FLASH_LITE_TTS("gemini-3.8-flash-lite-tts", false),
+    GEMINI_3_8_FLASH_TTS("gemini-3.8-flash-tts", false);
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find GeminiModelName with value '{}'";
 
