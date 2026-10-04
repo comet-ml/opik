@@ -257,6 +257,112 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.000442");
     }
 
+    /**
+     * The cache calculator follows the raw {@code original_usage.*} cache keys on the span rather than the provider
+     * (issue #7773). Payloads with no cache tokens, more than one shape, bare keys only, a missing input count or an
+     * unpriced cache bucket keep the provider calculator, so their cost is unchanged.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideCacheUsageShapeCases")
+    void calculateCostPicksCacheCalculatorFromUsageShape_issue7773(String description, String model,
+            String provider, Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideCacheUsageShapeCases() {
+        // claude-haiku-4-5 (anthropic): input 1e-6, output 5e-6, cache_read 1e-7, cache_creation 1.25e-6
+        // gpt-4o (openai): input 2.5e-6, output 1e-5, cache_read 1.25e-6, no cache_creation rate
+        // deepinfra/anthropic/claude-3-7-sonnet-latest: input 3.3e-6, output 1.65e-5, cache_read 3.3e-7,
+        // no cache_creation rate
+        return Stream.of(
+                // OpenAI shape (cached_tokens inside prompt_tokens): 800*1e-6 + 100*5e-6 + 200*1e-7.
+                // Before: Anthropic calculator billed all 1000 prompt tokens at the input rate (0.0015).
+                Arguments.of("OpenAI shape on anthropic provider", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200),
+                        "0.00132"),
+                // A zero-valued key from another shape does not block detection.
+                Arguments.of("OpenAI shape with zero Anthropic cache key", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.cache_read_input_tokens", 0),
+                        "0.00132"),
+                // OpenAI responses shape: input_tokens includes input_tokens_details.cached_tokens.
+                Arguments.of("OpenAI responses shape on anthropic provider", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.input_tokens_details.cached_tokens", 200),
+                        "0.00132"),
+                // Anthropic shape (input_tokens excludes cache) on an OpenAI-calculator provider:
+                // 1000*3.3e-6 + 100*1.65e-5 + 200*3.3e-7. Before: OpenAI calculator billed 1200 at input (0.00561).
+                Arguments.of("Anthropic shape on deepinfra provider",
+                        "deepinfra/anthropic/claude-3-7-sonnet-latest", "deepinfra",
+                        Map.of("prompt_tokens", 1200, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200),
+                        "0.005016"),
+                // Same, but with cache-creation tokens the model has no rate for: provider calculator,
+                // 1250*3.3e-6 + 100*1.65e-5.
+                Arguments.of("Anthropic shape with unpriced cache creation falls back",
+                        "deepinfra/anthropic/claude-3-7-sonnet-latest", "deepinfra",
+                        Map.of("prompt_tokens", 1250, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200,
+                                "original_usage.cache_creation_input_tokens", 50),
+                        "0.005775"),
+                // Bedrock shape on anthropic provider: 800*1e-6 + 100*5e-6 + 200*1e-7.
+                Arguments.of("Bedrock shape on anthropic provider", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.inputTokens", 800,
+                                "original_usage.outputTokens", 100,
+                                "original_usage.cacheReadInputTokens", 200),
+                        "0.00132"),
+                // Gemini shape on openai provider: 800*2.5e-6 + 100*1e-5 + 200*1.25e-6.
+                Arguments.of("Gemini shape on openai provider", "gpt-4o", "openai",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_token_count", 1000,
+                                "original_usage.candidates_token_count", 100,
+                                "original_usage.cached_content_token_count", 200),
+                        "0.00325"),
+                // No cache tokens: provider calculator, 1000*1e-6 + 100*5e-6.
+                Arguments.of("OpenAI shape without cache tokens unchanged", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 0),
+                        "0.0015"),
+                // Bare keys have no fixed meaning, so they stay on the provider calculator
+                // (Anthropic: cache on top of prompt_tokens): 1000*1e-6 + 100*5e-6 + 200*1e-7.
+                Arguments.of("bare cache key unchanged", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "cache_read_input_tokens", 200),
+                        "0.00152"),
+                // Anthropic cache key without original_usage.input_tokens (e.g. Vercel OTel spans, where
+                // prompt_tokens may already include the cache) stays on the provider calculator:
+                // 1000*2.5e-6 + 100*1e-5.
+                Arguments.of("Anthropic cache key without its input count unchanged", "gpt-4o", "openai",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200),
+                        "0.0035"),
+                // Two shapes with cache tokens (LiteLLM-style payload) stay on the provider calculator:
+                // 1200*1e-6 + 100*5e-6 + 200*1e-7.
+                Arguments.of("mixed shapes unchanged", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1200, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.cache_read_input_tokens", 200),
+                        "0.00172"));
+    }
+
     @ParameterizedTest
     @MethodSource("provideAudioSpeechModels")
     void calculateCostForAudioSpeech(String model, int inputCharacters, String expectedCost) {
