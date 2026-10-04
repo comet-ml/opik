@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { DEFAULT_PERMISSIONS } from "@/types/permissions";
@@ -18,6 +18,15 @@ vi.mock("@/contexts/feature-toggles-provider", () => ({
   useIsFeatureEnabled: () => true,
 }));
 
+const loadSpan = vi.fn();
+vi.mock("@/v2/pages-shared/playground/useLoadSpanIntoPlayground", () => ({
+  default: () => ({
+    loadSpan,
+    isPlaygroundEmpty: true,
+    isPendingProviderKeys: false,
+  }),
+}));
+
 const TRACE_ID = "019ce65c-e695-7f93-b75b-68a4a9141f09";
 const SPAN_ID = "019ce65c-ec62-7753-acf0-4935ce3333da";
 
@@ -29,10 +38,14 @@ const span = {
   trace_id: TRACE_ID,
   parent_span_id: "",
 } as unknown as Span;
+const llmSpanWithMessages = {
+  ...span,
+  input: { messages: [{ role: "user", content: "Hi" }] },
+} as Span;
 
-const renderToolbar = (props = {}) =>
+const renderToolbar = (props = {}, permissions = DEFAULT_PERMISSIONS) =>
   render(
-    <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+    <PermissionsProvider value={permissions}>
       <TooltipProvider delayDuration={0}>
         <TraceDataToolbar
           dataToView={span}
@@ -113,5 +126,54 @@ describe("TraceDataToolbar header", () => {
 
     expect(screen.queryByLabelText(/^Copy /)).toBeNull();
     expect(screen.queryByText("chat_completion_create")).toBeNull();
+  });
+});
+
+describe("TraceDataToolbar open in Playground", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("loads an LLM span with input messages into the Playground", () => {
+    renderToolbar({ dataToView: llmSpanWithMessages });
+
+    fireEvent.click(screen.getByLabelText("Open in Playground"));
+
+    expect(loadSpan).toHaveBeenCalledWith(llmSpanWithMessages);
+  });
+
+  it("is hidden for a trace", () => {
+    renderToolbar({
+      dataToView: { ...trace, input: llmSpanWithMessages.input },
+    });
+
+    expect(screen.queryByLabelText("Open in Playground")).toBeNull();
+  });
+
+  it("is hidden for a span that isn't an LLM call", () => {
+    renderToolbar({ dataToView: { ...llmSpanWithMessages, type: "general" } });
+
+    expect(screen.queryByLabelText("Open in Playground")).toBeNull();
+  });
+
+  it("is hidden when the span input isn't messages", () => {
+    renderToolbar({ dataToView: { ...span, input: { query: "Hi" } } });
+
+    expect(screen.queryByLabelText("Open in Playground")).toBeNull();
+  });
+
+  it("is hidden without Playground access", () => {
+    renderToolbar(
+      { dataToView: llmSpanWithMessages },
+      {
+        ...DEFAULT_PERMISSIONS,
+        permissions: {
+          ...DEFAULT_PERMISSIONS.permissions,
+          canUsePlayground: false,
+        },
+      },
+    );
+
+    expect(screen.queryByLabelText("Open in Playground")).toBeNull();
   });
 });

@@ -25,6 +25,7 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { MessageContent } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
 interface NamedPromptContent {
@@ -42,6 +43,9 @@ interface LoadPlaygroundOptions {
   datasetType?: DATASET_TYPE | null;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   namedPrompts?: NamedPromptContent[];
+  // Used instead of the last picked model when a configured provider serves it,
+  // e.g. the model a logged LLM span ran on.
+  preferredModel?: PROVIDER_MODEL_TYPE;
 }
 
 function useLoadPlayground() {
@@ -95,6 +99,7 @@ function useLoadPlayground() {
         autoImprove?: boolean;
         templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
         initPrompt?: Partial<ReturnType<typeof generateDefaultPrompt>>;
+        preferredModel?: PROVIDER_MODEL_TYPE;
       } = {},
     ) => {
       const {
@@ -103,12 +108,20 @@ function useLoadPlayground() {
         autoImprove = false,
         templateStructure,
         initPrompt,
+        preferredModel,
       } = options;
+
+      const preferredModelProvider = calculateModelProvider(preferredModel);
+      const canUsePreferredModel =
+        Boolean(preferredModelProvider) &&
+        providerKeys.includes(preferredModelProvider);
 
       const newPrompt = generateDefaultPrompt({
         initPrompt,
         setupProviders: providerKeys,
-        lastPickedModel,
+        lastPickedModel: canUsePreferredModel
+          ? preferredModel
+          : lastPickedModel,
         providerResolver: calculateModelProvider,
         modelResolver: calculateDefaultModel,
       });
@@ -185,6 +198,7 @@ function useLoadPlayground() {
         datasetType,
         templateStructure,
         namedPrompts,
+        preferredModel,
       } = options;
 
       let promptIds: string[];
@@ -205,6 +219,7 @@ function useLoadPlayground() {
           promptVersionId,
           autoImprove,
           templateStructure,
+          preferredModel,
         });
         promptIds = [newPrompt.id];
         promptMap = { [newPrompt.id]: newPrompt };
