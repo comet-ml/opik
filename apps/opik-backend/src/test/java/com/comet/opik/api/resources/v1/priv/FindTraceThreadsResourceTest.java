@@ -2209,6 +2209,90 @@ class FindTraceThreadsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("with a time window, the default-sort page pushdown pages through exactly the full query's ordered list")
+        void whenWindowedDefaultSort__thenPagePushdownMatchesFullQuery() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            Instant fromTime = now.minus(60, ChronoUnit.SECONDS);
+            Instant toTime = now.minus(1, ChronoUnit.SECONDS);
+            Instant beforeWindow = now.minus(90, ChronoUnit.SECONDS);
+
+            List<Trace> traces = new ArrayList<>();
+            List<String> expectedThreadIds = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                String threadId = RandomStringUtils.secure().nextAlphanumeric(10);
+                traces.add(threadTrace(projectName, threadId, now.minus(10L + i, ChronoUnit.SECONDS)));
+                expectedThreadIds.add(threadId);
+            }
+            Instant tiedStart = now.minus(20, ChronoUnit.SECONDS);
+            for (int i = 0; i < 2; i++) {
+                String threadId = RandomStringUtils.secure().nextAlphanumeric(10);
+                traces.add(threadTrace(projectName, threadId, tiedStart).toBuilder()
+                        .id(idGenerator.generateId(tiedStart.plusMillis(i)))
+                        .build());
+                expectedThreadIds.add(threadId);
+            }
+            String straddlingThreadId = RandomStringUtils.secure().nextAlphanumeric(10);
+            traces.add(threadTrace(projectName, straddlingThreadId, beforeWindow));
+            traces.add(threadTrace(projectName, straddlingThreadId, now.minus(30, ChronoUnit.SECONDS)));
+            expectedThreadIds.add(straddlingThreadId);
+            String rowAfterWindowThreadId = RandomStringUtils.secure().nextAlphanumeric(10);
+            traceResourceClient.openTraceThread(rowAfterWindowThreadId, projectId, null, API_KEY, TEST_WORKSPACE);
+            traces.add(threadTrace(projectName, rowAfterWindowThreadId, now.minus(40, ChronoUnit.SECONDS)));
+            expectedThreadIds.add(rowAfterWindowThreadId);
+            String beforeWindowThreadId = RandomStringUtils.secure().nextAlphanumeric(10);
+            traces.add(threadTrace(projectName, beforeWindowThreadId, beforeWindow.plusMillis(5)));
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            Mono.delay(Duration.ofMillis(500)).block();
+            traceResourceClient.closeTraceThreads(
+                    traces.stream().map(Trace::threadId).collect(Collectors.toSet()), null, projectName, API_KEY,
+                    TEST_WORKSPACE);
+
+            var window = Map.of("from_time", fromTime.toString(), "to_time", toTime.toString());
+            var alwaysTrueThreadFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.NUMBER_OF_MESSAGES)
+                    .operator(Operator.GREATER_THAN)
+                    .value("0")
+                    .build();
+            var fullQueryPage = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                    List.of(alwaysTrueThreadFilter), List.of(), withPage(window, 1, 50));
+
+            assertThat(fullQueryPage.content()).extracting(TraceThread::id)
+                    .containsExactlyInAnyOrderElementsOf(expectedThreadIds);
+
+            int size = 3;
+            List<TraceThread> pushedDownContent = new ArrayList<>();
+            for (int page = 1; page <= (expectedThreadIds.size() + size - 1) / size; page++) {
+                var pushedDownPage = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                        List.of(), List.of(), withPage(window, page, size));
+                assertThat(pushedDownPage.total()).isEqualTo(expectedThreadIds.size());
+                pushedDownContent.addAll(pushedDownPage.content());
+            }
+
+            TraceAssertions.assertThreads(fullQueryPage.content(), pushedDownContent);
+        }
+
+        private Trace threadTrace(String projectName, String threadId, Instant startTime) {
+            return createTrace().toBuilder()
+                    .id(idGenerator.generateId(startTime))
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .startTime(startTime)
+                    .endTime(startTime.plusMillis(500))
+                    .build();
+        }
+
+        private Map<String, String> withPage(Map<String, String> params, int page, int size) {
+            var withPage = new HashMap<>(params);
+            withPage.put("page", String.valueOf(page));
+            withPage.put("size", String.valueOf(size));
+            return withPage;
+        }
+
         private Stream<Arguments> whenThreadRowWrittenOutsideWindow__thenListedFromItsInWindowTraces() {
             return Stream.of(true, false)
                     .flatMap(stream -> Stream.of(Arguments.of(stream, true), Arguments.of(stream, false)));
