@@ -27,12 +27,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class CostService {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
+    private static final Set<String> pricedProviders;
     // Usage priced although it contradicts its provider's format: shapes no format reads yet, or numbers that disagree.
     private static final LongCounter USAGE_WARNINGS = GlobalOpenTelemetry.get().getMeter("opik.cost")
             .counterBuilder("opik.cost.usage.warnings")
@@ -62,6 +65,9 @@ public class CostService {
 
     static {
         modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
+        pricedProviders = modelProviderPrices.keySet().stream()
+                .map(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1))
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     private static final ModelPrice DEFAULT_COST = ModelPrice.empty();
@@ -295,6 +301,10 @@ public class CostService {
      */
     private static String stripVersionSuffix(String modelName) {
         return modelName.toLowerCase(Locale.ROOT).replaceFirst(VERSION_SUFFIX_PATTERN, "");
+    }
+
+    public static boolean isKnownProvider(@Nullable String provider) {
+        return StringUtils.isNotBlank(provider) && pricedProviders.contains(ProviderRegistry.toLiteLlmName(provider));
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {

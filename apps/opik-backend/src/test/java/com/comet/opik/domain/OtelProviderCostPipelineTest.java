@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -26,9 +27,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * asserting for each case that:
  * <ol>
  *   <li>the provider resolves to the canonical Opik name — either by a 1:1 alias
- *   ({@link com.comet.opik.domain.mapping.otel.GenAiProviderAliasResolver}) or, for the
+ *   ({@link com.comet.opik.domain.mapping.otel.GenAiProviderAliasResolver}), for the
  *   deliberately ambiguous values, by {@code server.address}
- *   ({@link com.comet.opik.domain.mapping.otel.GoogleProviderResolver}), and</li>
+ *   ({@link com.comet.opik.domain.mapping.otel.GoogleProviderResolver}), or, for a provider
+ *   reported as its API host, by that host
+ *   ({@link com.comet.opik.domain.mapping.otel.ProviderHostResolver}), and</li>
  *   <li>the resulting span's cost is non-zero, i.e. a pricing row exists for the resolved key.</li>
  * </ol>
  *
@@ -104,12 +107,54 @@ class OtelProviderCostPipelineTest {
                 Arguments.of("gen_ai.provider.name gcp.gen_ai + vertex host", "gen_ai.provider.name", "gcp.gen_ai",
                         "gemini-2.5-flash", "us-central1-aiplatform.googleapis.com", "google_vertexai"),
 
+                // --- #7772: OpenAI-compatible SDKs pointed at a base URL report the provider's host ---
+                Arguments.of("api.cerebras.ai", "gen_ai.system", "api.cerebras.ai", "llama-3.3-70b", null,
+                        "cerebras"),
+                Arguments.of("api.deepseek.com", "gen_ai.system", "api.deepseek.com", "deepseek-chat", null,
+                        "deepseek"),
+                Arguments.of("api.x.ai", "gen_ai.system", "api.x.ai", "grok-4.3", null, "xai"),
+
                 // --- Canonical values already in the price vocabulary must survive untouched ---
                 Arguments.of("openai passes through", "gen_ai.system", "openai", "gpt-4o", null, "openai"),
                 Arguments.of("anthropic passes through", "gen_ai.system", "anthropic", "claude-sonnet-4-5",
                         null, "anthropic"),
                 Arguments.of("bedrock passes through", "gen_ai.system", "bedrock",
                         "anthropic.claude-3-5-sonnet-20241022-v2:0", null, "bedrock"));
+    }
+
+    @ParameterizedTest(name = "[{index}] {0} -> {1}")
+    @MethodSource("provideHostCases")
+    void providerHostResolvesToCanonicalProvider(String system, String expectedProvider) {
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, List.of(stringAttr("gen_ai.system", system)),
+                null, null);
+
+        assertThat(spanBuilder.build().provider()).isEqualTo(expectedProvider);
+    }
+
+    private static Stream<Arguments> provideHostCases() {
+        return Stream.of(
+                Arguments.of("api.fireworks.ai", "fireworks_ai"),
+                Arguments.of("API.Cerebras.AI", "cerebras"),
+                Arguments.of("cerebras.ai", "cerebras"),
+                Arguments.of("openrouter.ai", "openrouter"),
+                Arguments.of("api.cerebras.ai.", "cerebras"),
+                // Hosts that name no priced provider, or that are not shaped like a provider's API
+                // host, are left as reported rather than guessed at.
+                Arguments.of("api.example.com", "api.example.com"),
+                Arguments.of("inference.cerebras.ai", "inference.cerebras.ai"),
+                Arguments.of("api.eu.cerebras.ai", "api.eu.cerebras.ai"),
+                Arguments.of("openai.internal", "openai.internal"),
+                Arguments.of("api.deepseek.local", "api.deepseek.local"),
+                Arguments.of("deepseek.vercel.app", "deepseek.vercel.app"),
+                Arguments.of("api.cerebras.ai:443", "api.cerebras.ai:443"),
+                Arguments.of("gcp.gen_ai", "google_ai"),
+                Arguments.of("azure.ai.inference", "azure.ai.inference"));
     }
 
     private static KeyValue stringAttr(String key, String value) {
