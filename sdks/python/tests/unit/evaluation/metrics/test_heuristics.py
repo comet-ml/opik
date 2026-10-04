@@ -1553,6 +1553,22 @@ def test_readability__unsupported_language__raises_named_metric_error():
     assert not result.scoring_failed
 
 
+def test_readability__restores_previous_textstat_language():
+    textstat = pytest.importorskip("textstat")
+    textstat.set_lang("fr_FR")
+    try:
+        Readability(language="de_DE", track=False).score(
+            "Das ist ein einfacher Satz. Hier ist noch einer."
+        )
+        assert textstat.textstat._textstatistics__lang == "fr_FR"
+
+        with pytest.raises(MetricComputationError):
+            Readability(language="xx", track=False).score("This is a sentence.")
+        assert textstat.textstat._textstatistics__lang == "fr_FR"
+    finally:
+        textstat.set_lang("en_US")
+
+
 def test_readability__unrelated_key_error_with_known_language__propagates():
     pytest.importorskip("pyphen")
 
