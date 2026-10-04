@@ -34,6 +34,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.ThreadCommentResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
@@ -155,6 +156,7 @@ class FindTraceThreadsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private ThreadCommentResourceClient threadCommentResourceClient;
     private IdGenerator idGenerator;
 
     @BeforeAll
@@ -170,6 +172,7 @@ class FindTraceThreadsResourceTest {
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
+        this.threadCommentResourceClient = new ThreadCommentResourceClient(client, baseURI);
         this.idGenerator = idGenerator;
     }
 
@@ -295,6 +298,8 @@ class FindTraceThreadsResourceTest {
                                                         : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
+                                // COMMENTS only supports no-value operators, so there's no invalid value to send
+                                case COMMENTS -> Stream.of();
                                 case LIST, ENUM -> {
                                     // For LIST, ENUM fields, skip invalid value tests for NO_VALUE_OPERATORS
                                     // because these operators don't care about the value
@@ -932,6 +937,74 @@ class FindTraceThreadsResourceTest {
             assertThreadPage(null, projectId, expectedThreads, List.of(statusFilter), Map.of(), apiKey,
                     workspaceName);
             assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
+        }
+
+        @Test
+        @DisplayName("When filtering by comments, should return only threads with or without comments")
+        void whenFilterByComments__thenReturnThreadsWithOrWithoutComments() {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+            var commentedThreadId = UUID.randomUUID().toString();
+            var otherThreadId = UUID.randomUUID().toString();
+
+            var traces = Stream.of(commentedThreadId, otherThreadId)
+                    .map(threadId -> createTrace().toBuilder()
+                            .projectName(project.name())
+                            .usage(null)
+                            .threadId(threadId)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Thread rows are created asynchronously from the trace batch
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> Stream.of(commentedThreadId, otherThreadId)
+                            .forEach(threadId -> assertThat(traceResourceClient
+                                    .getTraceThread(threadId, projectId, apiKey, workspaceName)
+                                    .threadModelId()).isNotNull()));
+
+            var commentedThreadModelId = traceResourceClient
+                    .getTraceThread(commentedThreadId, projectId, apiKey, workspaceName)
+                    .threadModelId();
+            threadCommentResourceClient.generateAndCreateComment(commentedThreadModelId, apiKey, workspaceName,
+                    HttpStatus.SC_CREATED);
+
+            var commentedThread = traceResourceClient.getTraceThread(commentedThreadId, projectId, apiKey,
+                    workspaceName);
+            var otherThread = traceResourceClient.getTraceThread(otherThreadId, projectId, apiKey, workspaceName);
+            assertThat(commentedThread.comments()).hasSize(1);
+            assertThat(otherThread.comments()).isNullOrEmpty();
+
+            var isNotEmptyFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.COMMENTS)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build();
+
+            assertThreadPage(null, projectId, List.of(commentedThread), List.of(isNotEmptyFilter), Map.of(), apiKey,
+                    workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, List.of(commentedThread),
+                    List.of(isNotEmptyFilter));
+
+            var isEmptyFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.COMMENTS)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            assertThreadPage(null, projectId, List.of(otherThread), List.of(isEmptyFilter), Map.of(), apiKey,
+                    workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, List.of(otherThread), List.of(isEmptyFilter));
         }
 
         private Stream<Arguments> getSourceFilterTestArguments() {

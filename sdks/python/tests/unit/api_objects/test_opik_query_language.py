@@ -326,6 +326,15 @@ from opik.api_objects.opik_query_language import OpikQueryLanguage
             "error_info is_not_empty",
             [{"field": "error_info", "operator": "is_not_empty", "value": ""}],
         ),
+        # comments operators
+        (
+            "comments is_empty",
+            [{"field": "comments", "operator": "is_empty", "value": ""}],
+        ),
+        (
+            "comments is_not_empty",
+            [{"field": "comments", "operator": "is_not_empty", "value": ""}],
+        ),
         # tags with list operators
         (
             "tags is_empty",
@@ -765,6 +774,10 @@ def test_span_oql__empty_filter(filter_string):
                 {"field": "number_of_messages", "operator": ">", "value": "3"},
                 {"field": "duration", "operator": ">", "value": "500"},
             ],
+        ),
+        (
+            "comments is_not_empty",
+            [{"field": "comments", "operator": "is_not_empty", "value": ""}],
         ),
         (
             'status = "active" AND tags contains "vip" AND feedback_scores.quality is_not_empty',

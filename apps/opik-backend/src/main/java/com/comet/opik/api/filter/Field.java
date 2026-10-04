@@ -57,6 +57,7 @@ public interface Field {
     String TRACE_ID_QUERY_PARAM = "trace_id";
     String SPAN_ID_QUERY_PARAM = "span_id";
     String ANNOTATION_QUEUE_IDS_QUERY_PARAM = "annotation_queue_ids";
+    String COMMENTS_QUERY_PARAM = "comments";
     String EXPERIMENT_ID_QUERY_PARAM = "experiment_id";
     String EXPERIMENT_IDS_QUERY_PARAM = "experiment_ids";
     String WEBHOOK_URL_QUERY_PARAM = "webhook_url";

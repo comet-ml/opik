@@ -187,6 +187,22 @@ describe("OpikQueryLanguage", () => {
       });
     });
 
+    it.each([
+      ["traces", OpikQueryLanguage.forTraces],
+      ["threads", OpikQueryLanguage.forThreads],
+    ])("should parse comments emptiness operators for %s", (_name, factory) => {
+      for (const operator of ["is_empty", "is_not_empty"]) {
+        const parsed = factory(`comments ${operator}`).getFilterExpressions();
+
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0]).toMatchObject({
+          field: "comments",
+          operator,
+          value: null,
+        });
+      }
+    });
+
     it("should parse valueless operators in complex query", () => {
       const oql = OpikQueryLanguage.forTraces(
         'tags is_not_empty and duration > 100'
