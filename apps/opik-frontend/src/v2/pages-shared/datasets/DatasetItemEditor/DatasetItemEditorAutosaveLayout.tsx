@@ -12,6 +12,7 @@ import ImagesListWrapper from "@/shared/attachments/ImagesListWrapper/ImagesList
 import { useDatasetItemEditorAutosaveContext } from "./DatasetItemEditorAutosaveContext";
 import DatasetItemEditorForm from "./DatasetItemEditorForm";
 import DatasetItemActionsDropdown from "@/v2/pages-shared/datasets/DatasetItemActionsDropdown/DatasetItemActionsDropdown";
+import ViewInExperimentButton from "@/v2/pages-shared/datasets/ViewInExperimentButton/ViewInExperimentButton";
 
 interface DatasetItemEditorAutosaveLayoutProps {
   datasetItemId: string;
@@ -100,6 +101,7 @@ const DatasetItemEditorAutosaveLayout: React.FC<
           <ResizableSidePanelArrowNavigation
             horizontalNavigation={horizontalNavigation}
           />
+          <ViewInExperimentButton datasetItemId={datasetItemId} />
         </ResizableSidePanelTopBar>
       }
       onClose={handleClose}
