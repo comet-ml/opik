@@ -27,8 +27,11 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -110,12 +113,19 @@ public class CsvDatasetItemProcessor {
                 throw new BadRequestException("CSV file must contain headers");
             }
 
+            // Case-insensitive because the parser ignores header case, so it cannot tell such columns apart
+            Set<String> seenHeaders = new HashSet<>();
             for (int i = 0; i < headers.size(); i++) {
                 String header = headers.get(i);
                 if (StringUtils.isBlank(header)) {
                     throw new BadRequestException(
                             String.format("CSV header at position %d is empty or blank. All headers must have a name.",
                                     i + 1));
+                }
+                if (!seenHeaders.add(header.toLowerCase(Locale.ROOT))) {
+                    throw new BadRequestException(
+                            "CSV contains duplicate column header '%s'. All column headers must be unique."
+                                    .formatted(header));
                 }
             }
 
