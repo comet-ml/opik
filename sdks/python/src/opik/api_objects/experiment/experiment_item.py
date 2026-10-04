@@ -136,7 +136,7 @@ class ExperimentItemContent:
             _require_leaf_type(
                 score.get("value"), (int, float), "a `feedback_scores` entry's `value`"
             )
-            for key in ("category_name", "reason"):
+            for key in ("category_name", "reason", "evaluator_revision"):
                 _require_leaf_type(
                     score.get(key), str, f"a `feedback_scores` entry's `{key}`"
                 )
@@ -151,14 +151,15 @@ class ExperimentItemContent:
                     "`feedback_scores` entry's `name` is missing or blank, and a "
                     "score name is required."
                 )
-            feedback_scores.append(
-                {
-                    "category_name": score.get("category_name"),
-                    "name": score.get("name"),
-                    "reason": score.get("reason"),
-                    "value": score.get("value"),
-                }
-            )
+            feedback_score: FeedbackScoreDict = {
+                "category_name": score.get("category_name"),
+                "name": name,
+                "reason": score.get("reason"),
+                "value": score.get("value"),
+            }
+            if score.get("evaluator_revision") is not None:
+                feedback_score["evaluator_revision"] = score["evaluator_revision"]
+            feedback_scores.append(feedback_score)
 
         assertion_results: List[AssertionResultDict] = []
         for result in optional_json_list(
@@ -198,18 +199,19 @@ class ExperimentItemContent:
         value: experiment_item_compare.ExperimentItemCompare,
         dataset_item_data: Optional[Dict[str, Any]] = None,
     ) -> "ExperimentItemContent":
-        if value.feedback_scores is None:
-            feedback_scores: List[FeedbackScoreDict] = []
-        else:
-            feedback_scores = [
-                {
-                    "category_name": rest_feedback_score.category_name,
-                    "name": rest_feedback_score.name,
-                    "reason": rest_feedback_score.reason,
-                    "value": rest_feedback_score.value,
-                }
-                for rest_feedback_score in value.feedback_scores
-            ]
+        feedback_scores: List[FeedbackScoreDict] = []
+        for rest_feedback_score in value.feedback_scores or []:
+            feedback_score: FeedbackScoreDict = {
+                "category_name": rest_feedback_score.category_name,
+                "name": rest_feedback_score.name,
+                "reason": rest_feedback_score.reason,
+                "value": rest_feedback_score.value,
+            }
+            if rest_feedback_score.evaluator_revision is not None:
+                feedback_score["evaluator_revision"] = (
+                    rest_feedback_score.evaluator_revision
+                )
+            feedback_scores.append(feedback_score)
 
         if value.assertion_results is None:
             assertion_results: List[AssertionResultDict] = []
