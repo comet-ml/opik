@@ -2247,10 +2247,20 @@ class FindTraceThreadsResourceTest {
             traces.add(threadTrace(projectName, beforeWindowThreadId, beforeWindow.plusMillis(5)));
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            Mono.delay(Duration.ofMillis(500)).block();
-            traceResourceClient.closeTraceThreads(
-                    traces.stream().map(Trace::threadId).collect(Collectors.toSet()), null, projectName, API_KEY,
-                    TEST_WORKSPACE);
+            Set<String> threadIds = traces.stream().map(Trace::threadId).collect(Collectors.toSet());
+            // Thread rows are created asynchronously from the trace batch, and the closing stamp is what ties them
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> threadIds.forEach(threadId -> traceResourceClient.getTraceThread(threadId,
+                            projectId, API_KEY, TEST_WORKSPACE)));
+            traceResourceClient.closeTraceThreads(threadIds, null, projectName, API_KEY, TEST_WORKSPACE);
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(traceResourceClient
+                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).status())
+                            .isEqualTo(TraceThreadStatus.INACTIVE)));
 
             var window = Map.of("from_time", fromTime.toString(), "to_time", toTime.toString());
             var alwaysTrueThreadFilter = TraceThreadFilter.builder()
