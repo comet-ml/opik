@@ -11,6 +11,10 @@ class AnnotationQueueAutomation(UniversalBaseModel):
     enabled: typing.Optional[bool] = None
     conditions: typing.Optional[Conditions] = None
     max_items_in_queue: typing.Optional[int] = None
+    clear_max_items_in_queue: typing.Optional[bool] = pydantic.Field(default=None)
+    """
+    When true, removes the item ceiling so automation adds without bound
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

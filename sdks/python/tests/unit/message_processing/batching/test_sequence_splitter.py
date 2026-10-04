@@ -46,13 +46,76 @@ def test_split_list_into_batches__by_memory_and_by_size():
         items, max_length=2, max_payload_size_MB=3.5
     )
 
-    # Object C comes before object A because if item is bigger than the max payload size
-    # it is immediately added to the result batches list before batch which is currently accumulating
     assert batches == [
-        [FOUR_MEGABYTE_OBJECT_C],
         [ONE_MEGABYTE_OBJECT_A, ONE_MEGABYTE_OBJECT_A],
+        [FOUR_MEGABYTE_OBJECT_C],
         [ONE_MEGABYTE_OBJECT_B, ONE_MEGABYTE_OBJECT_B],
     ]
+
+
+def test_split_list_into_batches__oversized_item__flushes_what_is_already_accumulating_first():
+    FOUR_MEGABYTE_OBJECT_C = [ONE_MEGABYTE_OBJECT_C] * 4
+    items = [ONE_MEGABYTE_OBJECT_A, FOUR_MEGABYTE_OBJECT_C, ONE_MEGABYTE_OBJECT_B]
+    batches = sequence_splitter.split_into_batches(items, max_payload_size_MB=3.5)
+
+    assert batches == [
+        [ONE_MEGABYTE_OBJECT_A],
+        [FOUR_MEGABYTE_OBJECT_C],
+        [ONE_MEGABYTE_OBJECT_B],
+    ]
+
+
+def test_split_list_into_batches__oversized_item_after_an_earlier_batch__still_keeps_order():
+    FOUR_MEGABYTE_OBJECT_C = [ONE_MEGABYTE_OBJECT_C] * 4
+    items = [ONE_MEGABYTE_OBJECT_A, ONE_MEGABYTE_OBJECT_B, FOUR_MEGABYTE_OBJECT_C]
+    batches = sequence_splitter.split_into_batches(
+        items, max_length=1, max_payload_size_MB=3.5
+    )
+
+    assert batches == [
+        [ONE_MEGABYTE_OBJECT_A],
+        [ONE_MEGABYTE_OBJECT_B],
+        [FOUR_MEGABYTE_OBJECT_C],
+    ]
+
+
+@pytest.mark.parametrize("max_length", [1, 2, 3, 1000])
+def test_split_list_into_batches__oversized_items_anywhere__batches_flatten_back_to_the_input(
+    max_length,
+):
+    FOUR_MEGABYTE_OBJECT_C = [ONE_MEGABYTE_OBJECT_C] * 4
+    items = [
+        ONE_MEGABYTE_OBJECT_A,
+        FOUR_MEGABYTE_OBJECT_C,
+        ONE_MEGABYTE_OBJECT_B,
+        ONE_MEGABYTE_OBJECT_A,
+        FOUR_MEGABYTE_OBJECT_C,
+        FOUR_MEGABYTE_OBJECT_C,
+        ONE_MEGABYTE_OBJECT_B,
+    ]
+    batches = sequence_splitter.split_into_batches(
+        items, max_length=max_length, max_payload_size_MB=3.5
+    )
+
+    assert [item for batch in batches for item in batch] == items
+
+
+def test_split_list_into_batches__batch_after_an_oversized_item__still_pays_for_its_brackets():
+    # A 20-byte budget holds three quoted "ab" plus the brackets and commas around
+    # them, and a fourth only if the brackets go uncharged. The batch opened after an
+    # oversized item owes them just like the batch the run starts with. The leading
+    # "ab" is what puts a partial batch in front of the oversized item.
+    TWENTY_BYTES_MB = 20 / fake_message_factory.ONE_MEGABYTE
+    items = ["ab", "b" * 20] + ["ab"] * 6
+
+    batches = sequence_splitter.split_into_batches(
+        items, max_payload_size_MB=TWENTY_BYTES_MB
+    )
+
+    assert [len(batch) for batch in batches] == [1, 1, 3, 3]
+    for batch in batches[2:]:
+        serialized = json.dumps(batch, separators=(",", ":")).encode("utf-8")
+        assert len(serialized) <= 20
 
 
 def test_split_list_into_batches__empty_list():
@@ -132,3 +195,17 @@ def test_get_json_size_complex_nested():
         )
     )
     assert sequence_splitter._get_json_size(test_input) == expected
+
+
+def test_split_list_into_batches__items_packed_to_the_limit__serialized_batch_stays_under_it():
+    # A kilobyte per item once quoted, so 1024 of them pack to exactly the 1MB
+    # budget and the commas between them are all that pushes the request over.
+    ONE_MEGABYTE = fake_message_factory.ONE_MEGABYTE
+    items = ["a" * 1022] * 1024
+
+    batches = sequence_splitter.split_into_batches(items, max_payload_size_MB=1.0)
+
+    assert [len(batch) for batch in batches] == [1023, 1]
+    for batch in batches:
+        serialized = json.dumps(batch, separators=(",", ":")).encode("utf-8")
+        assert len(serialized) <= ONE_MEGABYTE

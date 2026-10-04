@@ -9,7 +9,9 @@ import SelectBox from "@/shared/SelectBox/SelectBox";
 import {
   AIProviderFormType,
   OpenAiPipelineMode,
+  supportsProviderHeaders,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
+import CustomHeadersField from "@/v2/pages-shared/llm/ManageAIProviderDialog/CustomHeadersField";
 import { DropdownOption } from "@/types/shared";
 import get from "lodash/get";
 import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
@@ -104,6 +106,18 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
             </FormItem>
           )}
         />
+      )}
+      {supportsProviderHeaders(provider) && (
+        <div className="mt-2">
+          <CustomHeadersField
+            form={form}
+            description={
+              provider === PROVIDER_TYPE.OPEN_ROUTER
+                ? "Added to every request sent to OpenRouter, e.g. HTTP-Referer and X-OpenRouter-Title for app attribution."
+                : `Added to every request sent to ${providerName.trim()} as key-value pairs.`
+            }
+          />
+        </div>
       )}
     </div>
   );

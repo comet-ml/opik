@@ -50,6 +50,9 @@ interface UseFilterChipsResult {
   setOpenChipId: (id: string | null) => void;
 }
 
+export const getPinnedChipsStorageKey = (tableId: string) =>
+  `chips:pinnedConfig:${tableId}`;
+
 const EMPTY_VALUES: ChipValueMap = {};
 const EMPTY_FILTERS: Filter[] = [];
 
@@ -62,7 +65,7 @@ const useFilterChips = ({
 }: UseFilterChipsArgs): UseFilterChipsResult => {
   const [pinnedIds = defaultPinned, setPinnedIds] = useLocalStorageState<
     string[]
-  >(`chips:pinnedConfig:${tableId}`, { defaultValue: defaultPinned });
+  >(getPinnedChipsStorageKey(tableId), { defaultValue: defaultPinned });
 
   const [rawFilters, setRawFilters] = useQueryParam<Filter[] | undefined>(
     urlKey,

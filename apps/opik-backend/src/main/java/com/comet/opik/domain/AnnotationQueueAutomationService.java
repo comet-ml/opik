@@ -178,11 +178,13 @@ public class AnnotationQueueAutomationService {
             throw new BadRequestException("An enabled annotation queue automation requires at least one condition");
         }
 
-        // Same "null means leave it alone" rule as conditions, so a toggle-only request cannot drop
-        // the ceiling as a side effect.
-        Integer maxItemsInQueue = automation.maxItemsInQueue() != null
-                ? automation.maxItemsInQueue()
-                : existing.map(AutomationRuleAnnotationQueueRouterModel::maxItemsInQueue).orElse(null);
+        // Null keeps the stored ceiling, as null does for every field on this resource, so removing one has
+        // to be said outright rather than implied by leaving the field out.
+        Integer maxItemsInQueue = Boolean.TRUE.equals(automation.clearMaxItemsInQueue())
+                ? null
+                : automation.maxItemsInQueue() != null
+                        ? automation.maxItemsInQueue()
+                        : existing.map(AutomationRuleAnnotationQueueRouterModel::maxItemsInQueue).orElse(null);
 
         return Pair.of(conditions, maxItemsInQueue);
     }

@@ -489,6 +489,90 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * One UPLOADED-attachment thumbnail in the row-detail panel, addressed by the
+   * file name it is labelled with.
+   *
+   * A separate locator from `panelMediaThumbnail` because the two sources label
+   * their tiles differently, and deliberately so: `useExperimentItemMedia` names
+   * an inline image for the placeholder it was lifted out of ("Base64: [image_0]")
+   * and an attachment for its `file_name`. Matching the file name exactly is what
+   * keeps this from also selecting an inline tile.
+   */
+  panelAttachmentThumbnail(fileName: string): Locator {
+    return this.rowPanel.locator(`img[alt="${fileName}"]`);
+  }
+
+  /**
+   * Assert one uploaded attachment is on screen as a picture that actually
+   * decoded.
+   *
+   * `toHaveCount(1)` before anything else, so an ambiguous match fails loudly
+   * rather than silently asserting against whichever tile came first; and
+   * `naturalWidth` after, because a tile whose `src` 404s is still an `<img>`
+   * that `toBeVisible()` accepts. The thumbnails are `loading="lazy"`, so one
+   * that has never entered the viewport reports 0 whatever its source.
+   */
+  async expectAttachmentThumbnailDecodes(fileName: string): Promise<void> {
+    await test.step(`the attachment ${fileName} renders as a decoded picture`, async () => {
+      const thumbnail = this.panelAttachmentThumbnail(fileName);
+      await expect(thumbnail, `exactly one thumbnail labelled ${fileName}`).toHaveCount(1);
+      await expect(thumbnail, `${fileName} is visible`).toBeVisible();
+      await thumbnail.scrollIntoViewIfNeeded();
+      await expect
+        .poll(
+          async () => thumbnail.evaluate((img) => (img as HTMLImageElement).naturalWidth),
+          { message: `naturalWidth of the ${fileName} thumbnail` },
+        )
+        .toBeGreaterThan(0);
+    });
+  }
+
+  /**
+   * The row-detail panel's "Attachments" collapsible section header.
+   *
+   * `AttachmentsList` renders `null` when it resolved no media at all, so this
+   * is absent — not merely empty — for an item with nothing to show. Addressed
+   * the same way `TracePanelPage` addresses its own copy of this section.
+   */
+  get panelAttachmentsSection(): Locator {
+    return this.rowPanel.getByRole('button', { name: 'Attachments' });
+  }
+
+  /** Every media tile in the row-detail panel, whatever its source. */
+  get panelAllThumbnails(): Locator {
+    return this.rowPanel.locator('img[alt]');
+  }
+
+  /**
+   * The output text in the row-detail panel for an item carrying NO
+   * `[image_N]` placeholders.
+   *
+   * A separate reader from `readPanelOutputText`, which filters on `[image_N]`
+   * — precisely what a media-free output does not have, so it would match
+   * nothing here.
+   *
+   * `.comet-markdown` rather than `p`, because `MarkdownHighlighter` picks its
+   * element from the content: `isStringMarkdown` text goes through
+   * `ReactMarkdown` and comes out as a `<p>`, while anything else lands in a
+   * plain `<div class="comet-markdown whitespace-pre-wrap">`. Prose that happens
+   * to contain no markdown takes the second branch, so matching on `p` alone
+   * finds nothing. Both branches carry `comet-markdown`, which makes it the one
+   * handle that spans them; `.cm-line` covers the raw-JSON view behind the
+   * Pretty toggle. A class selector is the last resort in the house order, but
+   * this widget exposes neither a test id nor a role, and the sibling reader
+   * above already addresses it the same way.
+   */
+  async readPanelOutputTextContaining(needle: string): Promise<string> {
+    return test.step(`read the output line containing ${JSON.stringify(needle)}`, async () => {
+      const output = this.rowPanel.locator('.comet-markdown, .cm-line').filter({ hasText: needle });
+      await expect(output, `the rendered output line carrying ${JSON.stringify(needle)}`)
+        .toHaveCount(1);
+      await output.scrollIntoViewIfNeeded();
+      return ((await output.textContent()) ?? '').trim();
+    });
+  }
+
   /** The compare row-detail slide-over. */
   private get rowPanel(): Locator {
     return this.page.getByTestId('compare-experiments');
@@ -971,6 +1055,27 @@ export class CompareExperimentsPage {
         );
       }
       return value;
+    });
+  }
+
+  /**
+   * The rendered text of one trace-sourced column's cell, in SINGLE-experiment
+   * mode.
+   *
+   * Not `readItemOutput`, which addresses a `data-virtual-row-id` band inside
+   * the cell: the grid splits a cell into one band per compared experiment only
+   * when there is more than one, so with a single experiment that band does not
+   * exist and the value is rendered directly in the `td`. Calling the band
+   * reader here fails on a missing element against a perfectly healthy grid.
+   *
+   * `columnId` is the table's own column id — `output_output`, `duration`,
+   * `total_estimated_cost` — as stamped into `data-cell-id`.
+   */
+  async readSingleExperimentCellText(datasetItemId: string, columnId: string): Promise<string> {
+    return test.step(`read the "${columnId}" cell for item ${datasetItemId}`, async () => {
+      const cell = this.page.locator(`td[data-cell-id="${datasetItemId}_${columnId}"]`);
+      await expect(cell, `"${columnId}" cell for item ${datasetItemId}`).toHaveCount(1);
+      return ((await cell.textContent()) ?? '').trim();
     });
   }
 
