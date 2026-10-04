@@ -14773,6 +14773,11 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ValueEntry"
           readOnly: true
+        evaluator_revision:
+          maxLength: 256
+          minLength: 0
+          type: string
+          description: Revision of the evaluator that produced the score. On read, set only when every entry in value_by_author has the same revision
     JsonListString:
       type: object
       anyOf:
@@ -14806,6 +14811,8 @@ components:
         source_queue_id:
           type: string
         author:
+          type: string
+        evaluator_revision:
           type: string
       readOnly: true
     DatasetItemBatch_Write:
@@ -15528,6 +15535,11 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ValueEntry_Compare"
           readOnly: true
+        evaluator_revision:
+          maxLength: 256
+          minLength: 0
+          type: string
+          description: Revision of the evaluator that produced the score. On read, set only when every entry in value_by_author has the same revision
       readOnly: true
     JsonListString_Compare:
       type: object
@@ -15565,6 +15577,8 @@ components:
         source_queue_id:
           type: string
         author:
+          type: string
+        evaluator_revision:
           type: string
       readOnly: true
     DatasetPage_Public:
@@ -17303,6 +17317,11 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ValueEntry_ExperimentItemBulkWriteView"
           readOnly: true
+        evaluator_revision:
+          maxLength: 256
+          minLength: 0
+          type: string
+          description: Revision of the evaluator that produced the score. On read, set only when every entry in value_by_author has the same revision
     JsonListString_ExperimentItemBulkWriteView:
       type: object
       anyOf:
@@ -17465,6 +17484,8 @@ components:
         source_queue_id:
           type: string
         author:
+          type: string
+        evaluator_revision:
           type: string
       readOnly: true
     AssertionScoreAverage_Public:
@@ -22038,6 +22059,11 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ValueEntry_Public"
           readOnly: true
+        evaluator_revision:
+          maxLength: 256
+          minLength: 0
+          type: string
+          description: Revision of the evaluator that produced the score. On read, set only when every entry in value_by_author has the same revision
       description: "Aggregated feedback scores from all spans in this trace, averaged\
         \ by score name"
       readOnly: true
@@ -22177,6 +22203,8 @@ components:
           type: string
         author:
           type: string
+        evaluator_revision:
+          type: string
       readOnly: true
     SpanPage_Public:
       type: object
@@ -22248,6 +22276,11 @@ components:
         source_queue_id:
           type: string
           format: uuid
+        evaluator_revision:
+          maxLength: 256
+          minLength: 0
+          type: string
+          description: Optional caller-supplied revision of the evaluator that produced the score
         id:
           type: string
           format: uuid
@@ -22989,6 +23022,11 @@ components:
         source_queue_id:
           type: string
           format: uuid
+        evaluator_revision:
+          maxLength: 256
+          minLength: 0
+          type: string
+          description: Optional caller-supplied revision of the evaluator that produced the score
         thread_id:
           minLength: 1
           type: string
