@@ -365,7 +365,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
     private static final String GET_THREAD_KPI_CARDS = """
             WITH traces_final AS (
                 SELECT
-                    *
+                    *,
+                    -- The period is set per trace, not per thread, so a thread active in both periods counts in each, measured over that
+                    -- period's traces only, exactly as the chart and the thread list for that range do.
+                    id >= :id_current_start AS is_current_period
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -375,6 +378,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                   AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                       \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
                   AND thread_id \\<> ''
+                  -- Source/environment chips filter each trace, not the thread row, so a thread with mixed traces aggregates only its matching ones,
+                  -- as the thread list does (ThreadDAO traces_final_ids). A thread-row filter would count such threads whole and drift from the list.
+                  <if(trace_filters)> AND <trace_filters> <endif>
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -390,8 +396,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id >= :uuid_from_time
-                AND id \\<= :uuid_to_time
+                -- Deliberately not narrowed by the window. Membership comes from the traces joined below, not from this row's id: the
+                -- row id is when the row was written, which a backfill or the now() fallback in TraceThreadIdService puts outside the
+                -- traces' window. The sort key starts with thread_id, so a row id range skips no granules, and a thread_id set built
+                -- from the window's traces was measured as a net cost: an extra traces scan for no memory saved (OPIK-8335).
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -444,6 +452,21 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
+            <if(annotation_queue_filters)>
+            thread_annotation_queue_ids AS (
+                 SELECT thread_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'thread'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                 ) AS annotation_queue_ids_with_thread_id
+                 GROUP BY thread_id
+            ),
+            <endif>
             <if(thread_feedback_scores_empty_filters)>
                fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -461,31 +484,45 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
+                    t.is_current_period as is_current_period,
+                    if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
+                    if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
+                    if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
+                    if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
+                    if(tt.status = 'unknown', 'active', tt.status) as status,
                     t.duration as duration,
-                    if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id
+                    if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                    tt.tags as tags
                 FROM (
                     SELECT
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
-                        min(t.start_time) as start_time,
-                        max(t.end_time) as end_time,
-                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
-                               AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
+                        t.is_current_period as is_current_period,
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
+                        maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as end_time,
+                        if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                               AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                            NULL) AS duration,
                         count(DISTINCT t.id) * 2 as number_of_messages,
-                        <if(trace_thread_first_message_filter)>argMin(t.input, t.start_time) as first_message,<endif>
-                        <if(trace_thread_last_message_filter)>argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,<endif>
+                        -- Update-before-create placeholders carry the sentinel start time, so they are skipped while the thread has a real trace.
+                        -- A thread made only of placeholders falls back to them and still shows what the updates carried.
+                        <if(trace_thread_first_message_filter || trace_thread_last_message_filter)>countIf(notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) > 0 as has_non_sentinel_trace,<endif>
+                        <if(trace_thread_first_message_filter)>if(has_non_sentinel_trace, argMinIf(t.input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMin(t.input, t.start_time)) as first_message,<endif>
+                        <if(trace_thread_last_message_filter)>if(has_non_sentinel_trace, argMaxIf(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) as last_message,<endif>
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
                         argMin(t.created_by, t.created_at) as created_by,
                         min(t.created_at) as created_at
                     FROM traces_final AS t
                     GROUP BY
-                        t.workspace_id, t.project_id, t.thread_id
+                        t.workspace_id, t.project_id, t.thread_id, t.is_current_period
                 ) AS t
                 JOIN trace_threads_final AS tt ON t.id = tt.thread_id
+                <if(annotation_queue_filters)>
+                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(thread_feedback_scores_filters)>
                 AND thread_model_id IN (
@@ -509,30 +546,29 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 )
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             ), thread_costs AS (
-                SELECT tr.thread_id AS thread_id, sum(s.total_estimated_cost) AS cost
+                SELECT tr.thread_id AS thread_id, tr.is_current_period AS is_current_period, sum(s.total_estimated_cost) AS cost
                 FROM (
                     SELECT trace_id, total_estimated_cost
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
-                      AND id >= :uuid_from_time AND id \\<= :uuid_to_time
-                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                          >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
-                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                          \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
+                      -- Bounded by trace_id, as in the thread list (ThreadDAO spans_deduped): a thread's cost is its traces' whole span set,
+                      -- including spans minted outside the range, and the trace_id range still prunes through the spans sort key.
+                      AND trace_id >= :uuid_from_time AND trace_id \\<= :uuid_to_time
                 ) s
                 JOIN traces_final tr ON s.trace_id = tr.id
-                GROUP BY tr.thread_id
+                GROUP BY tr.thread_id, tr.is_current_period
             )
             SELECT
-                COUNTIf(tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_count,
-                COUNTIf(tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_count,
-                AVGIf(tf.duration, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_avg_duration,
-                AVGIf(tf.duration, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_avg_duration,
-                SUMIf(tc.cost, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_total_cost,
-                SUMIf(tc.cost, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_total_cost
+                COUNTIf(tf.is_current_period) AS current_count,
+                COUNTIf(NOT tf.is_current_period) AS previous_count,
+                AVGIf(tf.duration, tf.is_current_period) AS current_avg_duration,
+                AVGIf(tf.duration, NOT tf.is_current_period) AS previous_avg_duration,
+                SUMIf(tc.cost, tf.is_current_period) AS current_total_cost,
+                SUMIf(tc.cost, NOT tf.is_current_period) AS previous_total_cost
             FROM threads_filtered tf
-            LEFT JOIN thread_costs tc ON tf.id = tc.thread_id
+            LEFT JOIN thread_costs tc ON tf.id = tc.thread_id AND tf.is_current_period = tc.is_current_period
             SETTINGS log_comment = '<log_comment>';
             """;
 
@@ -543,7 +579,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
             addTraceFilters(st, criteria.filters());
 
-            var statement = buildStatement(connection, st, criteria, workspaceId);
+            var statement = bindPeriodBounds(buildStatement(connection, st, criteria, workspaceId), criteria);
             bindTraceFilters(statement, criteria.filters());
 
             InstrumentAsyncUtils.Segment segment = startSegment("traceKpiCards", "Clickhouse", "kpi");
@@ -561,7 +597,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
             addSpanFilters(st, criteria.filters());
 
-            var statement = buildStatement(connection, st, criteria, workspaceId);
+            var statement = bindPeriodBounds(buildStatement(connection, st, criteria, workspaceId), criteria);
             bindSpanFilters(statement, criteria.filters());
 
             InstrumentAsyncUtils.Segment segment = startSegment("spanKpiCards", "Clickhouse", "kpi");
@@ -604,7 +640,13 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 .bind("workspace_id", workspaceId)
                 .bind("uuid_from_time", instantToUUIDMapper.toLowerBound(priorStart).toString())
                 .bind("uuid_to_time", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString())
-                .bind("id_current_start", instantToUUIDMapper.toLowerBound(criteria.intervalStart()).toString())
+                .bind("id_current_start", instantToUUIDMapper.toLowerBound(criteria.intervalStart()).toString());
+    }
+
+    private Statement bindPeriodBounds(Statement statement, KpiCardCriteria criteria) {
+        Instant priorStart = getPriorStart(criteria.intervalStart(), criteria.intervalEnd());
+
+        return statement
                 .bind("id_prior_start", instantToUUIDMapper.toLowerBound(priorStart).toString())
                 .bind("id_end", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString());
     }
@@ -659,8 +701,13 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private void addThreadFilters(ST template, List<? extends Filter> filters) {
         Optional.ofNullable(filters).ifPresent(f -> {
+            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.TRACE, traceColumnsNonNullable())
+                    .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
             FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.TRACE_THREAD, traceColumnsNonNullable())
                     .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.ANNOTATION_AGGREGATION)
+                    .ifPresent(annotationQueueFilters -> template.add("annotation_queue_filters",
+                            annotationQueueFilters));
             // first_message/last_message aggregate the full input/output payloads, so only project
             // them in threads_filtered when a filter actually references them (otherwise the thread
             // KPI query would needlessly materialize large columns). number_of_messages is cheap and
@@ -678,7 +725,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private void bindThreadFilters(Statement statement, List<? extends Filter> filters) {
         Optional.ofNullable(filters).ifPresent(f -> {
+            FilterQueryBuilder.bind(statement, f, FilterStrategy.TRACE);
             FilterQueryBuilder.bind(statement, f, FilterStrategy.TRACE_THREAD);
+            FilterQueryBuilder.bind(statement, f, FilterStrategy.ANNOTATION_AGGREGATION);
             FilterQueryBuilder.bind(statement, f, FilterStrategy.FEEDBACK_SCORES);
             FilterQueryBuilder.bind(statement, f, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
         });

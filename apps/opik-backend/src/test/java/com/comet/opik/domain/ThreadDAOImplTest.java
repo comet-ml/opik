@@ -161,6 +161,8 @@ class ThreadDAOImplTest {
 
         private static final String THREAD_ID_PUSHDOWN = "AND thread_id = :thread_id_pushdown";
         private static final String TRACES_FINAL_IDS_IN = "thread_id IN (SELECT thread_id FROM traces_final_ids)";
+        private static final String TRACES_FINAL_IN = "thread_id IN (SELECT thread_id FROM traces_final)";
+        private static final String ROW_ID_RANGE = "AND id >= :uuid_from_time";
         private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
 
         static Stream<Arguments> templatesSharingThePushdown() {
@@ -171,16 +173,15 @@ class ThreadDAOImplTest {
         }
 
         /**
-         * OPIK-7919: on the uuid_from_time branch trace_threads_final skips the traces_final_ids IN, so the
-         * thread_id equality is the only predicate left that prunes — and trace_threads is
-         * ORDER BY (workspace_id, project_id, thread_id, id), so it prunes on the primary key while
-         * {@code id >= :uuid_from_time} cannot. The count template was missing this line while the list and
-         * stats templates had it, which left countThreadTotal scanning every trace_threads row of the
-         * project. This pins all three templates to emit it identically.
+         * OPIK-7919: trace_threads is ORDER BY (workspace_id, project_id, thread_id, id), so a thread_id
+         * predicate prunes on the primary key while a row id range cannot. The count template was once missing
+         * the pushdown while the list and stats templates had it, which left countThreadTotal scanning every
+         * trace_threads row of the project. OPIK-8335: membership follows the window's traces, so a window
+         * emits the in-window thread set and never the row id range. This pins all three templates identically.
          */
         @ParameterizedTest(name = "{0} template")
         @MethodSource("templatesSharingThePushdown")
-        @DisplayName("trace_threads_final emits the thread_id pushdown on the uuid_from_time branch")
+        @DisplayName("on a window with the thread_id pushdown, trace_threads_final emits the pushdown and the prefilter's thread set, not the row id range")
         void traceThreadsFinalEmitsThreadIdPushdownOnUuidBranch(String name, String query) {
             var criteria = TraceSearchCriteria.builder()
                     .projectId(UUID.randomUUID())
@@ -192,16 +193,35 @@ class ThreadDAOImplTest {
                             .build()))
                     .build();
 
+            var traceThreadsFinal = traceThreadsFinalCte(renderWithGate(query, criteria));
+
+            assertThat(traceThreadsFinal).doesNotContain(ROW_ID_RANGE);
+            assertThat(traceThreadsFinal).contains(TRACES_FINAL_IDS_IN);
+            assertThat(traceThreadsFinal).contains(THREAD_ID_PUSHDOWN);
+        }
+
+        @ParameterizedTest(name = "{0} template")
+        @MethodSource("templatesSharingThePushdown")
+        @DisplayName("on a window without the prefilter, trace_threads_final takes its threads from the window's traces, not the row id range")
+        void traceThreadsFinalTakesWindowThreadsWithoutPrefilter(String name, String query) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(UUID.randomUUID())
+                    .build();
+
+            var traceThreadsFinal = traceThreadsFinalCte(renderWithGate(query, criteria));
+
+            assertThat(traceThreadsFinal).doesNotContain(ROW_ID_RANGE);
+            assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IDS_IN);
+            assertThat(traceThreadsFinal).contains(TRACES_FINAL_IN);
+        }
+
+        private static String renderWithGate(String query, TraceSearchCriteria criteria) {
             var template = FilterUtils.newTraceThreadFindTemplate(query, criteria, SEARCH_CLAUSE, true);
             if (ThreadDAOImpl.shouldUseTracesFinalIdsPrefilter(criteria, template)) {
                 template.add("traces_final_ids", true);
             }
-
-            var traceThreadsFinal = traceThreadsFinalCte(template.render());
-
-            assertThat(traceThreadsFinal).contains("AND id >= :uuid_from_time");
-            assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IDS_IN);
-            assertThat(traceThreadsFinal).contains(THREAD_ID_PUSHDOWN);
+            return template.render();
         }
 
         /** The trace_threads_final CTE body, up to its ORDER BY — so the assertions cannot match another CTE. */
