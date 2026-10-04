@@ -219,7 +219,7 @@ export const useExperimentsTableConfig = <
     [groups],
   );
 
-  const columns = useMemo(() => {
+  const { columns, fillColumnId } = useMemo(() => {
     const groupColumns = groups.map((group) => {
       const label =
         group.field === COLUMN_DATASET_ID
@@ -345,22 +345,35 @@ export const useExperimentsTableConfig = <
       sortableColumns: sortableBy,
     });
 
+    const actionsColumns = actionsCell
+      ? [generateActionsColumDef<T>({ cell: actionsCell })]
+      : [];
+
+    // The first unpinned column absorbs spare width; a pinned one can't,
+    // since sticky offsets are computed from declared column sizes.
+    const fillColumn = [
+      ...regularColumns,
+      ...scoresColumns,
+      ...actionsColumns,
+    ][0];
+    // Mirror TanStack's column id derivation so the id matches the rendered
+    // column (score ids like "feedback_scores.x" become "feedback_scores_x").
+    const fillColumnId =
+      fillColumn &&
+      (fillColumn.id ??
+        ("accessorKey" in fillColumn
+          ? String(fillColumn.accessorKey).replace(".", "_")
+          : undefined));
+
     const baseColumns = [
       ...firstColumns,
       ...groupColumns,
       ...regularColumns,
       ...scoresColumns,
+      ...actionsColumns,
     ];
 
-    if (actionsCell) {
-      baseColumns.push(
-        generateActionsColumDef({
-          cell: actionsCell,
-        }),
-      );
-    }
-
-    return baseColumns;
+    return { columns: baseColumns, fillColumnId };
   }, [
     groups,
     sortableBy,
@@ -433,6 +446,7 @@ export const useExperimentsTableConfig = <
 
     // Computed values
     columns,
+    fillColumnId,
     selectedRows,
     scoresColumnsData,
     checkboxClickHandler,

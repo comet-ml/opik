@@ -418,6 +418,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const {
     columns,
+    fillColumnId,
     selectedRows,
     sortConfig,
     resizeConfig,
@@ -522,6 +523,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       <DataTable
         key={hasGroups ? "grouped" : "ungrouped"}
         columns={columns}
+        fillColumnId={fillColumnId}
         aggregationMap={aggregationMap}
         data={experiments}
         onRowClick={handleRowClick}

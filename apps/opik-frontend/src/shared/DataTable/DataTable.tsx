@@ -152,6 +152,9 @@ interface DataTableProps<TData, TValue> {
   columnPinningState?: ColumnPinningState;
   noData?: ReactNode;
   autoWidth?: boolean;
+  // Column that absorbs the table's spare width. Without it the browser spreads
+  // the spare width across every column, stretching fixed ones like row select.
+  fillColumnId?: string;
   stickyHeader?: boolean;
   TableWrapper?: React.FC<DataTableWrapperProps>;
   TableBody?: React.FC<DataTableBodyProps<TData>>;
@@ -188,6 +191,7 @@ const DataTable = <TData, TValue>({
   columnPinningState,
   noData,
   autoWidth = false,
+  fillColumnId,
   TableWrapper = DataTableWrapper,
   TableBody = DataTableBody,
   columnVirtualization,
@@ -457,7 +461,12 @@ const DataTable = <TData, TValue>({
           >
             <colgroup>
               {sliceColumnWindow(cols, columnWindow).map((i) => (
-                <col key={i.id} style={{ width: `${i.size}px` }} />
+                <col
+                  key={i.id}
+                  style={{
+                    ...(i.id !== fillColumnId && { width: `${i.size}px` }),
+                  }}
+                />
               ))}
             </colgroup>
             <TableHeader

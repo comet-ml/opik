@@ -446,6 +446,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
 
   const {
     columns,
+    fillColumnId,
     selectedRows,
     sortConfig,
     resizeConfig,
@@ -746,6 +747,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       <DataTable
         key={hasGroups ? "grouped" : "ungrouped"}
         columns={columns}
+        fillColumnId={fillColumnId}
         aggregationMap={aggregationMap}
         data={experiments}
         onRowClick={handleRowClick}
