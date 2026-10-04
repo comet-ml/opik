@@ -2513,6 +2513,31 @@ async def test_track__async_generator_cleanup_raises_when_dropped__error_recorde
     assert trace.spans[0].error_info["exception_type"] == "ValueError"
 
 
+def test_track__async_generator_dropped_at_loop_shutdown__span_ended(fake_backend):
+    # asyncio.run() cancels the scheduled aclose() when it shuts the loop down.
+    cleaned_up = []
+
+    @tracker.track
+    async def f(x):
+        try:
+            yield "yielded-1"
+            yield " yielded-2"
+        finally:
+            cleaned_up.append(True)
+
+    async def main():
+        async for _ in f("generator-input"):
+            break
+
+    asyncio.run(main())
+    gc.collect()
+    tracker.flush_tracker()
+
+    assert cleaned_up == [True]
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(_expected_generator_trace("yielded-1"), fake_backend.trace_trees[0])
+
+
 def test_track__generator_cleanup_interrupted_on_close__error_recorded_on_span(
     fake_backend,
 ):
