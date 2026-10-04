@@ -249,6 +249,7 @@ class FeedbackScoreMessage(BaseMessage):
     source: str
     reason: Optional[str] = None
     category_name: Optional[str] = None
+    evaluator_revision: Optional[str] = None
 
     message_type = "FeedbackScoreMessage"
 
