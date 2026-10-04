@@ -10,7 +10,7 @@ class PydanticWrapper(pydantic.BaseModel):
     feedback_score: BatchFeedbackScoreDict
 
 
-EXPECTED_TYPES = "{'id': str, 'name': str, 'value': float, 'reason': NotRequired[str], 'category_name': NotRequired[str], 'project_name': NotRequired[str]}"
+EXPECTED_TYPES = "{'id': str, 'name': str, 'value': float, 'reason': NotRequired[str], 'category_name': NotRequired[str], 'project_name': NotRequired[str], 'evaluator_revision': NotRequired[str (max 256 chars)]}"
 
 
 class FeedbackScoreValidator(validator.Validator):

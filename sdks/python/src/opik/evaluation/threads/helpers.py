@@ -20,6 +20,7 @@ def log_feedback_scores(
                 name=score.name,
                 value=score.value,
                 reason=score.reason,
+                evaluator_revision=score.evaluator_revision,
             )
             for score in result.scores
             if not score.scoring_failed
