@@ -94,6 +94,9 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
 
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
   const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
+  const agentInsightsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENT_INSIGHTS_ENABLED,
+  );
 
   // Running / enabling / configuring diagnostics are write actions gated on
   // workspace-settings permission; viewing issues stays open to all.
@@ -287,7 +290,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   const showJobControls =
     isActive || hasData || Boolean(job?.last_scan_at) || Boolean(failedReason);
 
-  if (!AssistantSidebar || !ollieEnabled) {
+  if (!AssistantSidebar || !ollieEnabled || !agentInsightsEnabled) {
     return (
       <Navigate
         to="/$workspaceName/projects/$projectId/home"

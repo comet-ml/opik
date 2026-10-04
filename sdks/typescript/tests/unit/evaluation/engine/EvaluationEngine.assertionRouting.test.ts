@@ -45,6 +45,8 @@ vi.mock("@/evaluation/suite_evaluators/LLMJudge", async () => {
 
 import { evaluate } from "@/evaluation/evaluate";
 import { evaluateTestSuite } from "@/evaluation/suite/evaluateTestSuite";
+import { buildSuiteResult } from "@/evaluation/suite/suiteResultConstructor";
+import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
 import { BaseMetric } from "@/evaluation/metrics/BaseMetric";
@@ -209,6 +211,41 @@ describe("EvaluationEngine routes scores to the right batch queue", () => {
     });
     expect(batchPayload.assertionResults[0].entityId).toBeTruthy();
 
+    expect(getScoreBatchOfTracesSpy()).not.toHaveBeenCalled();
+  });
+
+  test("evaluateTestSuite: an evaluator that throws fails the item and uploads no assertion result", async () => {
+    // LLMJudge is the MockLLMJudge above; build one directly because
+    // restoreAllMocks clears the fromConfig implementation between tests.
+    const failingJudge = new (LLMJudge as unknown as new () => LLMJudge)();
+    failingJudge.score = vi
+      .fn()
+      .mockRejectedValue(new Error("judge unavailable"));
+    vi.mocked(LLMJudge.fromConfig).mockReturnValueOnce(failingJudge);
+
+    const result = await evaluateTestSuite({
+      dataset: testDataset,
+      task: mockTask,
+      experimentName: "suite-experiment",
+      client: opikClient,
+    });
+
+    await opikClient.flush({ silent: true });
+
+    expect(result.testResults[0].scoreResults).toEqual([
+      {
+        name: "llm_judge",
+        value: 0,
+        reason: "judge unavailable",
+        scoringFailed: true,
+      },
+    ]);
+    // With no score at all the run had no assertions and counted as passed.
+    const suiteResult = buildSuiteResult(result);
+    expect(suiteResult.itemResults.get("item-1")?.passed).toBe(false);
+    expect(suiteResult.allItemsPassed).toBe(false);
+
+    expect(getStoreAssertionsBatchSpy()).not.toHaveBeenCalled();
     expect(getScoreBatchOfTracesSpy()).not.toHaveBeenCalled();
   });
 

@@ -33,6 +33,7 @@ import {
   useResetDatasetFilters,
   useSetDatasetVariables,
   useSetExperimentName,
+  useSetDatasetType,
   useDatasetFilters,
   useDatasetPage,
   useDatasetSize,
@@ -105,6 +106,7 @@ const PlaygroundPage = () => {
   const resetDatasetFilters = useResetDatasetFilters();
   const setDatasetVariables = useSetDatasetVariables();
   const setExperimentName = useSetExperimentName();
+  const setDatasetType = useSetDatasetType();
   const lastActiveProjectId = useLastActiveProjectId();
   const setLastActiveProjectId = useSetLastActiveProjectId();
 
@@ -152,6 +154,7 @@ const PlaygroundPage = () => {
     resetDatasetFilters();
     setDatasetVariables([]);
     setExperimentName(null);
+    setDatasetType(null);
   }, [
     resetPrompts,
     setDatasetId,
@@ -161,6 +164,7 @@ const PlaygroundPage = () => {
     resetDatasetFilters,
     setDatasetVariables,
     setExperimentName,
+    setDatasetType,
   ]);
 
   useEffect(() => {

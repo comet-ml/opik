@@ -1752,6 +1752,11 @@ serviceToggles:
   #   freeform SQL path: the read-only ClickHouse client and the clickhouse-readonly-freeform-sql health check.
   #   When off, the read-only client is never queried.
   ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
+  # Default: true
+  # Description: Kill switch for Agent Insights (Diagnostics), effective only while ollieEnabled is on. When false,
+  #   the report and auto-first-run crons are not scheduled, triggers are dropped, enrolment is refused and the UI
+  #   hides Diagnostics. Ollie chat and its freeform SQL path are unaffected.
+  agentInsightsEnabled: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"true"}
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
   projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
@@ -1764,7 +1769,7 @@ serviceToggles:
   # Description: Whether or not automatic annotation queue population is enabled. When false the score
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
   #   automation controls on annotation queues.
-  annotationQueueAutomationEnabled: ${TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED:-"false"}
+  annotationQueueAutomationEnabled: ${TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED:-"true"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.

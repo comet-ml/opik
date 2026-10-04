@@ -1,4 +1,4 @@
-export { test, expect } from './feedback-score-reasons.fixture';
+export { test, expect } from './paged-stream-population.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -230,4 +230,65 @@ export {
   COLLAPSED_JUDGE_REASON,
   EMPTY_LIST_JUDGE_REASON,
 } from './feedback-score-reasons.fixture';
+export type {
+  DeepPagedItemSeed,
+  DeepPagedExperimentRef,
+  DeepPagedExperimentFixtures,
+} from './deep-paged-experiment.fixture';
+export type {
+  TraceSourceRef,
+  TraceSourcesRef,
+  TraceSourceFixtures,
+} from './trace-source.fixture';
+export type {
+  ReadabilityLocaleScore,
+  ReadabilityLocaleExperimentRef,
+  ReadabilityLocaleExperimentFixtures,
+} from './readability-locale-experiment.fixture';
+export { READABILITY_LANGUAGES } from './readability-locale-experiment.fixture';
+export type {
+  OutputAttachmentItemRef,
+  ExperimentOutputAttachmentRef,
+  ExperimentOutputAttachmentFixtures,
+} from './experiment-output-attachment.fixture';
+export type {
+  SuiteRunSeed,
+  SuiteExperimentRunMediaRef,
+  SuiteExperimentRunMediaFixtures,
+} from './suite-experiment-run-media.fixture';
+export type {
+  IdAgedSpanRef,
+  IdAgedSpansRef,
+  IdAgedSpansFixtures,
+} from './id-aged-spans.fixture';
+export type {
+  MismatchedItemRef,
+  CompareProjectMismatchRef,
+  CompareProjectMismatchFixtures,
+} from './compare-project-mismatch.fixture';
+export type {
+  RawBranchExperimentRef,
+  RawBranchExperimentFixtures,
+} from './raw-branch-experiment.fixture';
+export { RAW_ITEM_COUNT } from './raw-branch-experiment.fixture';
+export type {
+  CompareButtonExperimentRef,
+  CompareButtonExperimentsRef,
+  CompareButtonExperimentsFixtures,
+} from './compare-button-experiments.fixture';
+export type {
+  OtelAliasSpanSeed,
+  OtelProviderAliasSpansRef,
+  OtelProviderAliasSpansFixtures,
+} from './otel-provider-alias-spans.fixture';
+export type {
+  TypedExperimentRef,
+  ExperimentTypeDatasetRef,
+  ExperimentTypeDatasetsRef,
+  ExperimentTypeDatasetsFixtures,
+} from './experiment-type-datasets.fixture';
+export type {
+  PagedStreamPopulationRef,
+  PagedStreamPopulationFixtures,
+} from './paged-stream-population.fixture';
 export type { ProjectRef } from '../core/backend';

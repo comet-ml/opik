@@ -73,6 +73,14 @@ interface UseActionButtonActionsArguments {
   projectName?: string;
 }
 
+// datasetType is persisted and can outlive the dataset it was set for (for
+// example after switching projects). The backend run path silently returns
+// without a dataset, so a stale type alone must not route runs there.
+export const isTestSuiteRun = (
+  datasetId: string | undefined,
+  datasetType: DATASET_TYPE | null,
+) => !!datasetId && datasetType === DATASET_TYPE.TEST_SUITE;
+
 const useActionButtonActions = ({
   datasetItems,
   workspaceName,
@@ -110,7 +118,7 @@ const useActionButtonActions = ({
   const announcePendingRef = useRef(false);
   const scopedAnnounceRef = useRef(new Set<string>());
 
-  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
+  const isTestSuite = isTestSuiteRun(datasetId, datasetType);
 
   // Get the minimum maxConcurrentRequests from all prompts
   const maxConcurrentRequests = useMemo(() => {
