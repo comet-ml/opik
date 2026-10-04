@@ -11,6 +11,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -22,6 +23,7 @@ import java.beans.ConstructorProperties;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import static com.comet.opik.utils.ValidationUtils.MAX_EVALUATOR_REVISION_LENGTH;
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
 import static com.comet.opik.utils.ValidationUtils.MIN_FEEDBACK_SCORE_VALUE;
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
@@ -53,6 +55,9 @@ public abstract sealed class FeedbackScoreItem {
 
     private final UUID sourceQueueId;
 
+    @Size(max = MAX_EVALUATOR_REVISION_LENGTH) @Schema(description = "Optional caller-supplied revision of the evaluator that produced the score")
+    private final String evaluatorRevision;
+
     public abstract UUID id();
 
     public abstract String threadId();
@@ -77,10 +82,12 @@ public abstract sealed class FeedbackScoreItem {
         @NotNull private UUID id;
 
         @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason", "source",
-                "author", "sourceQueueId", "id"})
+                "author", "sourceQueueId", "evaluatorRevision", "id"})
         public FeedbackScoreBatchItem(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, String author, UUID sourceQueueId, UUID id) {
-            super(projectName, projectId, name, value, categoryName, reason, source, author, sourceQueueId);
+                BigDecimal value, String reason, ScoreSource source, String author, UUID sourceQueueId,
+                String evaluatorRevision, UUID id) {
+            super(projectName, projectId, name, value, categoryName, reason, source, author, sourceQueueId,
+                    evaluatorRevision);
             this.id = id;
         }
 
@@ -106,11 +113,12 @@ public abstract sealed class FeedbackScoreItem {
         private UUID id;
 
         @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason",
-                "source", "author", "sourceQueueId", "threadId"})
+                "source", "author", "sourceQueueId", "evaluatorRevision", "threadId"})
         public FeedbackScoreBatchItemThread(String projectName, UUID projectId, String name, String categoryName,
                 BigDecimal value, String reason, ScoreSource source, String author, UUID sourceQueueId,
-                String threadId) {
-            super(projectName, projectId, name, value, categoryName, reason, source, author, sourceQueueId);
+                String evaluatorRevision, String threadId) {
+            super(projectName, projectId, name, value, categoryName, reason, source, author, sourceQueueId,
+                    evaluatorRevision);
             this.threadId = threadId;
         }
 

@@ -12,5 +12,6 @@ import java.time.Instant;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ValueEntry(BigDecimal value, String reason, String categoryName, ScoreSource source,
-        Instant lastUpdatedAt, String spanType, String spanId, String sourceQueueId, String author) {
+        Instant lastUpdatedAt, String spanType, String spanId, String sourceQueueId, String author,
+        String evaluatorRevision) {
 }

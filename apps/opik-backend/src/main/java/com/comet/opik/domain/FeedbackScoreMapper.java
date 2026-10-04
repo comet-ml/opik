@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -36,6 +37,7 @@ public interface FeedbackScoreMapper {
     @Mapping(target = "value", expression = "java(item.value())")
     @Mapping(target = "reason", expression = "java(item.reason())")
     @Mapping(target = "source", expression = "java(item.source())")
+    @Mapping(target = "evaluatorRevision", expression = "java(item.evaluatorRevision())")
     FeedbackScore toFeedbackScore(FeedbackScoreItem item);
 
     List<FeedbackScore> toFeedbackScores(List<? extends FeedbackScoreItem> feedbackScoreBatchItems);
@@ -72,18 +74,22 @@ public interface FeedbackScoreMapper {
         return Optional.ofNullable(feedbackScores)
                 .orElse(List.of())
                 .stream()
-                .map(feedbackScore -> FeedbackScore.builder()
-                        .name((String) feedbackScore.get(0))
-                        .categoryName(getIfNotEmpty(feedbackScore.get(1)))
-                        .value((BigDecimal) feedbackScore.get(2))
-                        .reason(getIfNotEmpty(feedbackScore.get(3)))
-                        .source(ScoreSource.fromString((String) feedbackScore.get(4)))
-                        .valueByAuthor(parseValueByAuthor(feedbackScore.get(5)))
-                        .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
-                        .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
-                        .createdBy((String) feedbackScore.get(8))
-                        .lastUpdatedBy((String) feedbackScore.get(9))
-                        .build())
+                .map(feedbackScore -> {
+                    var valueByAuthor = parseValueByAuthor(feedbackScore.get(5));
+                    return FeedbackScore.builder()
+                            .name((String) feedbackScore.get(0))
+                            .categoryName(getIfNotEmpty(feedbackScore.get(1)))
+                            .value((BigDecimal) feedbackScore.get(2))
+                            .reason(getIfNotEmpty(feedbackScore.get(3)))
+                            .source(ScoreSource.fromString((String) feedbackScore.get(4)))
+                            .valueByAuthor(valueByAuthor)
+                            .evaluatorRevision(agreedEvaluatorRevision(valueByAuthor))
+                            .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
+                            .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
+                            .createdBy((String) feedbackScore.get(8))
+                            .lastUpdatedBy((String) feedbackScore.get(9))
+                            .build();
+                })
                 .toList();
     }
 
@@ -153,6 +159,10 @@ public interface FeedbackScoreMapper {
             if (tuple.size() > 8 && tuple.get(8) != null) {
                 builder.author(getIfNotEmpty(tuple.get(8)));
             }
+            // evaluator_revision is the 10th element (index 9)
+            if (tuple.size() > 9 && tuple.get(9) != null) {
+                builder.evaluatorRevision(getIfNotEmpty(tuple.get(9)));
+            }
 
             ValueEntry valueEntry = builder.build();
 
@@ -191,6 +201,7 @@ public interface FeedbackScoreMapper {
     }
 
     private static FeedbackScore parseFeedbackScoreFromJsonNode(JsonNode node) {
+        var valueByAuthor = parseValueByAuthorFromJson(node.get("value_by_author"));
         return FeedbackScore.builder()
                 .name(node.get("name").asText())
                 .categoryName(getJsonTextOrNull(node.get("category_name")))
@@ -201,7 +212,8 @@ public interface FeedbackScoreMapper {
                 .lastUpdatedAt(parseInstant(node.get("last_updated_at").asText()))
                 .createdBy(node.get("created_by").asText())
                 .lastUpdatedBy(node.get("last_updated_by").asText())
-                .valueByAuthor(parseValueByAuthorFromJson(node.get("value_by_author")))
+                .valueByAuthor(valueByAuthor)
+                .evaluatorRevision(agreedEvaluatorRevision(valueByAuthor))
                 .build();
     }
 
@@ -248,6 +260,9 @@ public interface FeedbackScoreMapper {
                 if (tuple.size() > 8 && tuple.get(8) != null && !tuple.get(8).isNull()) {
                     builder.author(tuple.get(8).asText());
                 }
+                if (tuple.size() > 9) {
+                    builder.evaluatorRevision(getJsonTextOrNull(tuple.get(9)));
+                }
 
                 result.put(author, builder.build());
             } else if (tuple.isObject() && !tuple.isEmpty()) {
@@ -275,6 +290,7 @@ public interface FeedbackScoreMapper {
                 if (tuple.has("author") && !tuple.get("author").isNull()) {
                     builder.author(tuple.get("author").asText());
                 }
+                builder.evaluatorRevision(getJsonTextOrNull(tuple.get("evaluator_revision")));
 
                 result.put(author, builder.build());
             }
@@ -287,22 +303,46 @@ public interface FeedbackScoreMapper {
         var feedbackScores = Arrays.stream(feedbackScoresArray)
                 .filter(feedbackScore -> CollectionUtils.isNotEmpty(feedbackScore) &&
                         !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(feedbackScore.getFirst().toString()))
-                .map(feedbackScore -> FeedbackScore.builder()
-                        .name(feedbackScore.get(1).toString())
-                        .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString)
-                                .filter(StringUtils::isNotEmpty).orElse(null))
-                        .value(new BigDecimal(feedbackScore.get(3).toString()))
-                        .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
-                                .filter(StringUtils::isNotEmpty).orElse(null))
-                        .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
-                        .createdAt(parseInstant(feedbackScore.get(6).toString()))
-                        .lastUpdatedAt(parseInstant(feedbackScore.get(7).toString()))
-                        .createdBy(feedbackScore.get(8).toString())
-                        .lastUpdatedBy(feedbackScore.get(9).toString())
-                        .valueByAuthor(parseValueByAuthor(feedbackScore.get(10)))
-                        .build())
+                .map(feedbackScore -> toFeedbackScoreFromArray(feedbackScore))
                 .toList();
         return feedbackScores.isEmpty() ? null : feedbackScores;
+    }
+
+    private static FeedbackScore toFeedbackScoreFromArray(List<?> feedbackScore) {
+        var valueByAuthor = parseValueByAuthor(feedbackScore.get(10));
+        return FeedbackScore.builder()
+                .name(feedbackScore.get(1).toString())
+                .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString)
+                        .filter(StringUtils::isNotEmpty).orElse(null))
+                .value(new BigDecimal(feedbackScore.get(3).toString()))
+                .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
+                        .filter(StringUtils::isNotEmpty).orElse(null))
+                .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
+                .createdAt(parseInstant(feedbackScore.get(6).toString()))
+                .lastUpdatedAt(parseInstant(feedbackScore.get(7).toString()))
+                .createdBy(feedbackScore.get(8).toString())
+                .lastUpdatedBy(feedbackScore.get(9).toString())
+                .valueByAuthor(valueByAuthor)
+                .evaluatorRevision(agreedEvaluatorRevision(valueByAuthor))
+                .build();
+    }
+
+    /**
+     * The score-level evaluator revision. A score can aggregate several entries (one per author, or one per span
+     * for span scores rolled up to a trace), so it is only reported when every entry carries the same non-empty
+     * revision. Any entry without one, or two different revisions, gives null rather than picking one.
+     */
+    static String agreedEvaluatorRevision(Map<String, ValueEntry> valueByAuthor) {
+        if (valueByAuthor == null || valueByAuthor.isEmpty()) {
+            return null;
+        }
+        var revisions = valueByAuthor.values().stream()
+                .map(ValueEntry::evaluatorRevision)
+                .collect(Collectors.toSet());
+        if (revisions.size() != 1) {
+            return null;
+        }
+        return revisions.iterator().next();
     }
 
     private static Instant parseInstant(String date) {
