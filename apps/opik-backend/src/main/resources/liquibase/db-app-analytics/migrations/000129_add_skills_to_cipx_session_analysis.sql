@@ -2,10 +2,9 @@
 --changeset petrot:000129_add_skills_to_cipx_session_analysis
 --comment: Per-skill turn ranges and skill-pass version for the cost API session analysis (OPIK-8522)
 
--- `skills` is a nested group, one row per turn range a skill drove (slug, origin, trigger, ordinal, turns, trace ids, judge_status, description, summary).
--- `skills_version` is the task version whose skill pass completed for the row (0 = not run).
--- `skills.tokens` / `skills.cost_usd` hold developer-turn tokens and cost per range for leaderboards; the two timestamps give them a time dimension.
--- Rows written before these columns existed read empty arrays / 0, i.e. "skills not analysed".
+-- `skills` is a nested group, one row per attributed range (slug, origin, trigger, ordinal, turns, trace ids, judge_status, description, summary, tokens, cost_usd); `skills_version` is the task version whose skill pass completed (0 = not run).
+-- Per-range tokens and cost plus `session_first_turn_at` / `session_last_turn_at` feed leaderboards and give them a time dimension.
+-- Rows written before these columns existed read empty arrays / 0, which the cost API treats as "skills not analysed".
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS `skills.slug`            Array(String),
     ADD COLUMN IF NOT EXISTS `skills.origin`          Array(LowCardinality(String)),
