@@ -1,6 +1,7 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
 import get from "lodash/get";
+import { Info } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Label } from "@/ui/label";
@@ -9,6 +10,7 @@ import { Input } from "@/ui/input";
 import { Button } from "@/ui/button";
 import EyeInput from "@/shared/EyeInput/EyeInput";
 import { Description } from "@/ui/description";
+import { Alert, AlertDescription } from "@/ui/alert";
 import {
   Accordion,
   AccordionContent,
@@ -16,6 +18,8 @@ import {
   AccordionTrigger,
 } from "@/ui/accordion";
 import { ALERT_TYPE } from "@/types/alerts";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import DestinationSelector from "./DestinationSelector";
 import WebhookHeaders from "./WebhookHeaders";
 import { AlertFormType } from "./schema";
@@ -33,6 +37,10 @@ const WebhookSettings: React.FC<WebhookSettingsProps> = ({
   isTestPending,
   isPending,
 }) => {
+  const isEventBridgeEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.EVENT_BRIDGE_ALERTS_ENABLED,
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
@@ -41,6 +49,16 @@ const WebhookSettings: React.FC<WebhookSettingsProps> = ({
           Configure how the platform sends notifications to your system.
         </Description>
       </div>
+
+      {isEventBridgeEnabled && (
+        <Alert size="sm" data-testid="alert-eventbridge-note">
+          <Info />
+          <AlertDescription>
+            Triggered alerts are also published to the deployment&apos;s AWS
+            EventBridge bus.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <FormField
         control={form.control}
