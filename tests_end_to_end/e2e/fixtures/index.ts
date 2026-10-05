@@ -1,4 +1,4 @@
-export { test, expect } from './open-ended-window-rows.fixture';
+export { test, expect } from './moved-trace-threads.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -335,4 +335,11 @@ export type {
   OpenEndedWindowRowsRef,
   OpenEndedWindowRowsFixtures,
 } from './open-ended-window-rows.fixture';
+export type {
+  MovedTraceKey,
+  MovedTraceRef,
+  ThreadAggregateExpectation,
+  MovedTraceThreadsRef,
+  MovedTraceThreadsFixtures,
+} from './moved-trace-threads.fixture';
 export type { ProjectRef } from '../core/backend';

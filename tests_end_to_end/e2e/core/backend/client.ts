@@ -578,6 +578,25 @@ export interface ThreadDetail {
   id: string;
   projectId: string;
   feedbackScores: FeedbackScoreRef[];
+  /**
+   * The aggregate `find_thread_by_id` computes over the thread's OWN traces —
+   * the half opik#8735 rewrote, and the half `feedbackScores` says nothing
+   * about (those come from a join, not from the aggregate).
+   *
+   * Every field is `| null` rather than optional: an absent aggregate and a
+   * zero one are different answers from this endpoint, and a caller that needs
+   * one has to assert it is there instead of reading a missing number as 0.
+   */
+  numberOfMessages: number | null;
+  totalEstimatedCost: number | null;
+  usage: Record<string, number> | null;
+  duration: number | null;
+  /** ISO strings, not Dates — compared for byte-identity across reads. */
+  startTime: string | null;
+  endTime: string | null;
+  /** The first/last turn the aggregate selected, as the endpoint serialises them. */
+  firstMessage: unknown | null;
+  lastMessage: unknown | null;
 }
 
 export interface AutomationRuleRef {
@@ -4760,17 +4779,33 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
-     * One thread by id, with the feedback scores attached to the THREAD itself.
+     * One thread by id — `POST /v1/private/traces/threads/retrieve`.
      *
-     * Not derivable from `listThreads`: the row shape that view renders carries
-     * the aggregates, not the scores. Thread-level metrics (`evaluate_threads`)
-     * write here and nowhere else — a score on a thread is not a score on any
-     * of its traces — so this is the only API read that can confirm one landed.
+     * Two things live here that nothing else can reach:
+     *
+     *  - the feedback scores attached to the THREAD itself. Not derivable from
+     *    `listThreads`: the row shape that view renders carries the aggregates,
+     *    not the scores. Thread-level metrics (`evaluate_threads`) write here
+     *    and nowhere else — a score on a thread is not a score on any of its
+     *    traces — so this is the only API read that can confirm one landed.
+     *  - the aggregate `find_thread_by_id` computes, which opik#8735 rewrote to
+     *    be restricted to the requested `thread_id`. `listThreads` answers the
+     *    same numbers from an INDEPENDENTLY written query, which is what makes
+     *    comparing the two worth doing rather than circular.
+     *
+     * `truncate` is the endpoint's own flag and a separate code path in that
+     * rewrite, not a display option — a spec about the aggregate has to drive
+     * both or it has only covered half of what changed.
      */
-    async getThread(args: { projectId: string; threadId: string }): Promise<ThreadDetail> {
+    async getThread(args: {
+      projectId: string;
+      threadId: string;
+      truncate?: boolean;
+    }): Promise<ThreadDetail> {
       const thread = await opik.api.traces.getTraceThread({
         projectId: args.projectId,
         threadId: args.threadId,
+        ...(args.truncate === undefined ? {} : { truncate: args.truncate }),
       });
       return {
         id: String(thread.id ?? ''),
@@ -4781,6 +4816,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           reason: fs.reason ?? null,
           source: String(fs.source),
         })),
+        numberOfMessages: thread.numberOfMessages ?? null,
+        totalEstimatedCost: thread.totalEstimatedCost ?? null,
+        usage: thread.usage ?? null,
+        duration: thread.duration ?? null,
+        startTime: thread.startTime ? new Date(thread.startTime).toISOString() : null,
+        endTime: thread.endTime ? new Date(thread.endTime).toISOString() : null,
+        firstMessage: thread.firstMessage ?? null,
+        lastMessage: thread.lastMessage ?? null,
       };
     },
 
