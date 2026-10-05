@@ -72,9 +72,9 @@ statements=(
 )
 
 # policy_statements USER SUFFIX PREDICATE TABLE...: one RESTRICTIVE policy per table, then its grant, plus the same
-# pair on the local table behind traces and spans. Each pair is also recorded for the checks below.
+# pair on the local table behind traces and spans. Each (user, table) pair is recorded for the checks below.
 local_tables="traces spans"
-expected=()
+expected_user_table_pairs=()
 policy_statements() {
     local user=$1 suffix=$2 predicate=$3 table
     shift 3
@@ -88,7 +88,7 @@ policy_statements() {
                 "CREATE ROW POLICY IF NOT EXISTS ${name}_${suffix} ON ${ch_db}.${name} FOR SELECT USING ${predicate} AS RESTRICTIVE TO ${user}"
                 "GRANT SELECT ON ${ch_db}.${name} TO ${user}"
             )
-            expected+=("${user}"$'\t'"${name}")
+            expected_user_table_pairs+=("${user}"$'\t'"${name}")
         done
     done
 }
@@ -145,7 +145,7 @@ query() {
 
 # Check 1: every table each account can SELECT has a RESTRICTIVE policy for it, and every expected policy exists.
 # A granted table without one is readable in full, so this is checked from the grants side as well.
-for pair in "${expected[@]}"; do
+for pair in "${expected_user_table_pairs[@]}"; do
     user="${pair%%$'\t'*}" table="${pair#*$'\t'}"
     found=$(query "$ch_url" "SELECT count() FROM system.row_policies WHERE database = '${ch_db}' AND table = '${table}' AND is_restrictive AND has(apply_to_list, '${user}')")
     if [ "$found" != "1" ]; then
@@ -165,7 +165,7 @@ done
 # a policy that exists but does not take effect fails here. Reads through the Distributed tables take the account's
 # own read path. An empty table passes trivially: it has nothing to expose.
 probe_scope="SQL_workspace_id = 'opik-scope-probe-no-workspace', SQL_project_id = 'opik-scope-probe-no-project'"
-for pair in "${expected[@]}"; do
+for pair in "${expected_user_table_pairs[@]}"; do
     user="${pair%%$'\t'*}" table="${pair#*$'\t'}"
     [ "$(query "$ch_url" "EXISTS TABLE ${ch_db}.${table}")" = "1" ] || continue
     pass="${ro_pass}"
