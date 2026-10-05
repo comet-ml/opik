@@ -29,6 +29,8 @@ public class DatabaseAnalyticsFactory {
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS = "async_insert_busy_timeout_min_ms";
     private static final String ASYNC_INSERT_MAX_DATA_SIZE = "async_insert_max_data_size";
     private static final String HTTP_HEADERS_PROGRESS_INTERVAL_MS = "http_headers_progress_interval_ms";
+    // Shared by the @Min bound and the range check in r2dbcOnlyServerSettings(), so the two cannot disagree.
+    private static final int MIN_PROGRESS_HEADER_CADENCE_MS = 1;
     private static final String KEY_VALUE_FORMAT = "%s=%s";
 
     // Split each `&`/`,`-chunk on the FIRST `=` only — values may themselves contain `=`,
@@ -95,7 +97,7 @@ public class DatabaseAnalyticsFactory {
      * read and change it, and {@link Min} then makes a configuration that supplies nothing fail at startup — an absent
      * key leaves 0, which is out of range — rather than silently reinstating the ClickHouse default.
      */
-    private @Min(1) @Max(10_000) int httpHeadersProgressIntervalMs;
+    private @Min(MIN_PROGRESS_HEADER_CADENCE_MS) @Max(10_000) int httpHeadersProgressIntervalMs;
 
     private Duration healthCheckTimeout = Duration.seconds(1);
 
@@ -221,12 +223,16 @@ public class DatabaseAnalyticsFactory {
      * {@code readonly=1} whose profile allows exactly two settings to change per query, so sending it there fails
      * every read that user makes.
      *
-     * <p>Unconditional: the field is a primitive, so there is no unset state to screen for. A factory built in code
-     * rather than bound from config carries 0, which ClickHouse accepts and treats exactly as the server default this
-     * path would otherwise inherit.
+     * <p>Omitted when out of range. A factory built in code rather than bound from config never goes through
+     * validation, so it carries the primitive's 0 — and sending a value {@link Min} would have rejected means
+     * overriding the server's own cadence with "no throttle" instead of inheriting it. ClickHouse accepts 0 and the
+     * two are indistinguishable on a default server, but they stop being so the moment a deployment sets this in a
+     * settings profile, and an unconfigured factory has no business speaking for one.
      */
     private Map<String, String> r2dbcOnlyServerSettings() {
-        return Map.of(HTTP_HEADERS_PROGRESS_INTERVAL_MS, String.valueOf(httpHeadersProgressIntervalMs));
+        return httpHeadersProgressIntervalMs < MIN_PROGRESS_HEADER_CADENCE_MS
+                ? Map.of()
+                : Map.of(HTTP_HEADERS_PROGRESS_INTERVAL_MS, String.valueOf(httpHeadersProgressIntervalMs));
     }
 
     private String serialize(Map<String, String> driverOptions, Map<String, String> serverSettings) {
