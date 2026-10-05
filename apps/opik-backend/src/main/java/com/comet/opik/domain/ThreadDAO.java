@@ -196,7 +196,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         truncated_output,
                         input_length,
                         output_length
-                    FROM traces
+                    FROM traces FINAL
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND thread_id \\<> ''
@@ -221,8 +221,6 @@ class ThreadDAOImpl implements ThreadDAO {
                               <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                           <endif>
                       <endif>
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
                 )
                 <if(page_pushdown)>
                 WHERE 1 = 1
@@ -610,7 +608,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_at
                 FROM (
                     SELECT *
-                    FROM traces
+                    FROM traces FINAL
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND thread_id \\<> ''
@@ -627,8 +625,6 @@ class ThreadDAOImpl implements ThreadDAO {
                               \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                           <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                       <endif>
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
                 )
             ), trace_threads_final AS (
                 SELECT
@@ -910,12 +906,10 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_by,
                     created_at,
                     environment
-                FROM traces
+                FROM traces FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT id FROM traces_ids)
-                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ), spans_deduped AS (
                 SELECT
                     trace_id,
@@ -982,12 +976,10 @@ class ThreadDAOImpl implements ThreadDAO {
                     SELECT
                         id,
                         <if(truncate)>truncated_input, truncated_output, input_length, output_length, truncation_threshold<else>input, output<endif>
-                    FROM traces
+                    FROM traces FINAL
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND has(arrayConcat(arrayMap(a -> a.7, thread_aggs), arrayMap(a -> a.8, thread_aggs)), id)
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
                 )
             ), trace_threads_ids AS (
                 SELECT
@@ -1278,7 +1270,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         created_at
                     FROM (
                         SELECT *
-                        FROM traces
+                        FROM traces FINAL
                         WHERE workspace_id = :workspace_id
                           AND project_id = :project_id
                           AND thread_id \\<> ''
@@ -1295,8 +1287,6 @@ class ThreadDAOImpl implements ThreadDAO {
                                   \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                               <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                           <endif>
-                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
                     )
                 ), spans_deduped AS (
                     SELECT
