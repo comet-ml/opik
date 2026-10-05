@@ -20,6 +20,7 @@ import org.mockito.quality.Strictness;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -256,7 +257,7 @@ class FreeFormSqlQueryServiceTest {
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
         // A null line makes the parser throw on a tree ClickHouse did return.
         when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
-                .thenReturn(CompletableFuture.completedFuture(java.util.Arrays.asList("QUERY id: 0", null)));
+                .thenReturn(CompletableFuture.completedFuture(Stream.of("QUERY id: 0", (String) null).toList()));
 
         var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
 
