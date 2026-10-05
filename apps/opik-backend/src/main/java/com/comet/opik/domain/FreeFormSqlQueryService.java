@@ -213,20 +213,18 @@ public class FreeFormSqlQueryService {
     private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> subqueryReads(FreeFormSqlAccount account,
             String workspaceId,
             String projectScope, String query, long startMillis) {
-        if (mode == FreeFormSqlPostRunCheckConfig.Mode.OFF) {
+        if (mode != FreeFormSqlPostRunCheckConfig.Mode.ENFORCE) {
+            // Off: nothing to check. Audit: the tree is explained after the response, with the rest of the check.
             return CompletableFuture.completedFuture(FreeFormSqlSubqueries.SubqueryReads.UNKNOWN);
         }
-        var queryTree = freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query);
-        if (mode == FreeFormSqlPostRunCheckConfig.Mode.ENFORCE) {
-            return queryTree.handle((tree, error) -> rejectScalarReads(account, tree, error, startMillis));
-        }
-        return queryTree.handle((tree, error) -> {
-            if (error != null) {
-                // Audit never affects the request: the query runs, and reports its own error if it has one.
-                log.warn("Free-form SQL scalar subquery check could not run for account '{}'", account, error);
-                count(CheckOutcome.CHECK_FAILED, account);
-                return FreeFormSqlSubqueries.SubqueryReads.UNKNOWN;
-            }
+        return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
+                .handle((tree, error) -> rejectScalarReads(account, tree, error, startMillis));
+    }
+
+    /** Audit: the query's subquery reads, reporting a scalar one instead of rejecting it. */
+    private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> auditSubqueryReads(FreeFormSqlAccount account,
+            String workspaceId, String projectScope, String query) {
+        return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query).thenApply(tree -> {
             var reads = FreeFormSqlSubqueries.subqueryReads(tree, database);
             if (reads.hasScalar()) {
                 log.warn("Free-form SQL query reads {} in a scalar subquery (audit, not rejected), account '{}'",
@@ -301,7 +299,7 @@ public class FreeFormSqlQueryService {
                     case OFF -> CompletableFuture.completedFuture(result);
                     case AUDIT -> {
                         // After the response, off its path: nothing the check finds or fails on reaches the caller.
-                        audit(account, workspaceId, projectScope, query, queryId, subqueryReads);
+                        audit(account, workspaceId, projectScope, query, queryId);
                         yield CompletableFuture.completedFuture(result);
                     }
                     case ENFORCE -> verifyPolicies(account, workspaceId, projectScope, query, queryId, subqueryReads,
@@ -333,16 +331,19 @@ public class FreeFormSqlQueryService {
 
     /** Audit: runs the check and reports it; never throws, and never touches the request. */
     private void audit(FreeFormSqlAccount account, String workspaceId, String projectScope, String query,
-            String queryId, FreeFormSqlSubqueries.SubqueryReads subqueryReads) {
+            String queryId) {
         try {
-            check(account, workspaceId, projectScope, query, queryId, subqueryReads).whenComplete((outcome, error) -> {
-                if (error != null) {
-                    log.warn("Free-form SQL post-run policy check could not run for query '{}'", queryId, error);
-                    count(CheckOutcome.CHECK_FAILED, account);
-                } else {
-                    count(outcome, account);
-                }
-            });
+            auditSubqueryReads(account, workspaceId, projectScope, query)
+                    .thenCompose(reads -> check(account, workspaceId, projectScope, query, queryId, reads))
+                    .whenComplete((outcome, error) -> {
+                        if (error != null) {
+                            log.warn("Free-form SQL post-run policy check could not run for query '{}'", queryId,
+                                    error);
+                            count(CheckOutcome.CHECK_FAILED, account);
+                        } else {
+                            count(outcome, account);
+                        }
+                    });
         } catch (RuntimeException e) {
             log.warn("Free-form SQL post-run policy check could not start for query '{}'", queryId, e);
             count(CheckOutcome.CHECK_FAILED, account);

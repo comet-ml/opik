@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -234,7 +235,7 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
-    @DisplayName("audit: a scalar subquery reading a table is reported, and the query runs")
+    @DisplayName("audit: a scalar subquery reading a table is reported, and the query runs; its tree is explained after")
     void auditRunsScalarReads() {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
@@ -243,7 +244,9 @@ class FreeFormSqlQueryServiceTest {
         var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
 
         assertThat(response.results()).isEqualTo(chRows);
-        verify(dao).execute(any(), anyString(), anyString(), anyString(), anyString());
+        var order = inOrder(dao);
+        order.verify(dao).execute(any(), anyString(), anyString(), anyString(), anyString());
+        order.verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
     }
 
     @Test

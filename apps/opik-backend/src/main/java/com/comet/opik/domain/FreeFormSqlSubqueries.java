@@ -65,7 +65,12 @@ class FreeFormSqlSubqueries {
      * @param filter those read under {@code IN} or {@code EXISTS} and in no scalar subquery
      * @param opaque whether a scalar subquery was replaced by its stored result, so its reads are unknown
      */
-    record SubqueryReads(Set<String> scalar, Set<String> filter, boolean opaque) {
+    record SubqueryReads(@NonNull Set<String> scalar, @NonNull Set<String> filter, boolean opaque) {
+
+        SubqueryReads {
+            scalar = Set.copyOf(scalar);
+            filter = Set.copyOf(filter);
+        }
 
         /** Nothing known about the query's subqueries: a read missing from the plan is then not accepted. */
         static final SubqueryReads UNKNOWN = new SubqueryReads(Set.of(), Set.of(), false);
@@ -86,7 +91,7 @@ class FreeFormSqlSubqueries {
         var filter = new HashSet<String>();
         boolean[] opaque = {false};
         collect(parse(queryTreeLines), database + ".", scalar, filter, opaque);
-        return new SubqueryReads(Set.copyOf(scalar), Set.copyOf(filter), opaque[0]);
+        return new SubqueryReads(scalar, filter, opaque[0]);
     }
 
     private static void collect(Node node, String prefix, Set<String> scalar, Set<String> filter,

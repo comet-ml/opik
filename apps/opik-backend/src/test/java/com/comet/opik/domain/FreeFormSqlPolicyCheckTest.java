@@ -77,50 +77,53 @@ class FreeFormSqlPolicyCheckTest {
         var traces = List.of(entry(true, USER, List.of("opik.traces"), List.of("opik.traces")));
         return Stream.of(
                 arguments("a planned read without its row filter", traces, plan("ReadFromMergeTree|opik.traces"),
-                        NONE, "opik.traces"),
+                        NONE, "opik.traces", "read without a row policy in the plan"),
                 arguments("a count answered from metadata", List.of(entry(true, USER, List.of(), List.of())),
-                        plan("ReadFromPreparedSource|Optimized trivial count"), NONE, "ReadFromPreparedSource"),
+                        plan("ReadFromPreparedSource|Optimized trivial count"), NONE, "Optimized trivial count",
+                        "unverifiable ReadFromPreparedSource read"),
                 arguments("a scalar subquery read, in neither source", List.of(entry(true, USER,
                         List.of("opik.traces", "opik.feedback_scores"), List.of("opik.traces"))),
                         plan("ReadFromMergeTree|opik.traces|filtered"), scalar("opik.feedback_scores"),
-                        "feedback_scores"),
+                        "opik.feedback_scores", "read without a row policy"),
                 arguments("a read missing from the plan that the query tree does not show under IN or EXISTS",
                         List.of(entry(true, USER, List.of("opik.traces", "opik.feedback_scores"),
                                 List.of("opik.traces"))),
-                        plan("ReadFromMergeTree|opik.traces|filtered"), NONE, "feedback_scores"),
+                        plan("ReadFromMergeTree|opik.traces|filtered"), NONE, "opik.feedback_scores",
+                        "read without a row policy"),
                 arguments("a read under both IN and a scalar subquery", List.of(entry(true, USER,
                         List.of("opik.traces", "opik.feedback_scores"), List.of("opik.traces"))),
                         plan("ReadFromMergeTree|opik.traces|filtered"),
                         new FreeFormSqlSubqueries.SubqueryReads(Set.of("opik.feedback_scores"),
                                 Set.of("opik.feedback_scores"), false),
-                        "feedback_scores"),
+                        "opik.feedback_scores", "read without a row policy"),
                 arguments("a wrapper read on a shard is not covered by another shard's local read", List.of(
                         entry(true, USER, List.of("opik.traces"), List.of()),
                         entry(false, "default", List.of("opik.traces_local"), List.of("opik.traces_local")),
                         entry(false, "default", List.of("opik.traces"), List.of())),
-                        plan("ReadFromRemote|Read from remote replica"), NONE,
-                        "opik.traces read without a row policy on a shard"),
+                        plan("ReadFromRemote|Read from remote replica"), NONE, "opik.traces",
+                        "read without a row policy on a shard"),
                 arguments("one shard skipped the policy another applied", List.of(
                         entry(true, USER, List.of("opik.traces"), List.of()),
                         entry(false, "default", List.of("opik.traces_local"), List.of("opik.traces_local")),
                         entry(false, "default", List.of("opik.traces_local"), List.of())),
-                        plan("ReadFromRemote|Read from remote replica"), NONE, "opik.traces_local"),
+                        plan("ReadFromRemote|Read from remote replica"), NONE, "opik.traces_local",
+                        "read without a row policy on a shard"),
                 arguments("a read the shard query nests, in neither source", List.of(
                         entry(true, USER, List.of("opik.traces"), List.of()),
                         entry(false, "default", List.of("opik.traces_local", "opik.feedback_scores"),
                                 List.of("opik.traces_local"))),
-                        plan("ReadFromRemote|Read from remote replica"), NONE, "opik.feedback_scores"),
+                        plan("ReadFromRemote|Read from remote replica"), NONE, "opik.feedback_scores",
+                        "read without a row policy on a shard"),
                 arguments("no log entry as the account", List.of(entry(true, "default", List.of(), List.of())),
-                        plan(), NONE, USER));
+                        plan(), NONE, "", "no query log entry for the query as " + USER));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource
-    @DisplayName("anything else is a violation, naming what was not covered")
+    @DisplayName("anything else is a violation, naming what was not covered and why")
     void fails(String name, List<FreeFormSqlQueryLogEntry> entries, String plan,
-            FreeFormSqlSubqueries.SubqueryReads subqueryReads,
-            String named) {
-        assertThat(FreeFormSqlPolicyCheck.violation("opik", USER, entries, plan, subqueryReads)).hasValueSatisfying(
-                violation -> assertThat(violation.table() + " " + violation.reason()).contains(named));
+            FreeFormSqlSubqueries.SubqueryReads subqueryReads, String table, String reason) {
+        assertThat(FreeFormSqlPolicyCheck.violation("opik", USER, entries, plan, subqueryReads))
+                .contains(new FreeFormSqlPolicyCheck.Violation(table, reason));
     }
 }
