@@ -34,6 +34,27 @@ describe("getLoggedParameters", () => {
     expect(parameters.temperature).toBeUndefined();
   });
 
+  it("records the reasoning effort the key's pipeline mode let through", () => {
+    const stored = configs({
+      maxCompletionTokens: 4000,
+      reasoningEffort: "max",
+    });
+
+    expect(
+      getLoggedParameters({
+        model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+        configs: stored,
+        openAiPipelineMode: "responses_api",
+      }).reasoningEffort,
+    ).toBe("max");
+    expect(
+      getLoggedParameters({
+        model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+        configs: stored,
+      }).reasoningEffort,
+    ).toBe("high");
+  });
+
   it("records what a model that accepts them was sent", () => {
     const parameters = getLoggedParameters({
       model: PROVIDER_MODEL_TYPE.GPT_4O,

@@ -85,7 +85,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND entity_id >= :uuid_from_time
-                      AND entity_id \\<= :uuid_to_time
+                      <if(uuid_to_time)>AND entity_id \\<= :uuid_to_time<endif>
                     UNION ALL
                     SELECT workspace_id,
                            project_id,
@@ -100,7 +100,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND entity_id >= :uuid_from_time
-                      AND entity_id \\<= :uuid_to_time
+                      <if(uuid_to_time)>AND entity_id \\<= :uuid_to_time<endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -169,11 +169,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND id >= :uuid_from_time
-                    AND id \\<= :uuid_to_time
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
+                    <if(uuid_to_time)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(trace_filters)> AND <trace_filters> <endif>
                     <if(trace_feedback_scores_filters)>
                     AND id in (
@@ -195,33 +195,39 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 ) AS t
             ), trace_costs AS (
                 SELECT
-                    SUMIf(cost, trace_id >= :id_current_start AND trace_id \\<= :id_end) AS current_total_cost,
+                    SUMIf(cost, trace_id >= :id_current_start<if(uuid_to_time)> AND trace_id \\<= :id_end<endif>) AS current_total_cost,
                     SUMIf(cost, trace_id >= :id_prior_start AND trace_id \\< :id_current_start) AS previous_total_cost
                 FROM (
                     SELECT trace_id, sum(total_estimated_cost) AS cost
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
-                      AND id >= :uuid_from_time AND id \\<= :uuid_to_time
+                      AND id >= :uuid_from_time <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                       AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                           >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
-                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                          \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
+                      <if(uuid_to_time)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                       AND trace_id IN (SELECT id FROM traces_filtered)
+                      <if(spans_partitioned)>
+                      AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT id FROM traces_filtered)
+                          AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                      <endif>
                     GROUP BY trace_id
                 )
             )
             SELECT
-                COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_count,
+                COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) AS current_count,
                 COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_count,
-                if(COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end) = 0,
+                if(COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) = 0,
                     0,
-                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_current_start AND tf.id \\<= :id_end) * 100.0
-                    / COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end)) AS current_error_rate,
+                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) * 100.0
+                    / COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>)) AS current_error_rate,
                 if(COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) = 0,
                     0,
                     COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) * 100.0
                     / COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start)) AS previous_error_rate,
-                AVGIf(tf.duration, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_avg_duration,
+                AVGIf(tf.duration, tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) AS current_avg_duration,
                 AVGIf(tf.duration, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_duration,
                 any(tc.current_total_cost) AS current_total_cost,
                 any(tc.previous_total_cost) AS previous_total_cost
@@ -254,7 +260,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND entity_id >= :uuid_from_time
-                      AND entity_id \\<= :uuid_to_time
+                      <if(uuid_to_time)>AND entity_id \\<= :uuid_to_time<endif>
                     UNION ALL
                     SELECT workspace_id,
                            project_id,
@@ -269,7 +275,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND entity_id >= :uuid_from_time
-                      AND entity_id \\<= :uuid_to_time
+                      <if(uuid_to_time)>AND entity_id \\<= :uuid_to_time<endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -318,11 +324,17 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND id >= :uuid_from_time
-                    AND id \\<= :uuid_to_time
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
+                    <if(uuid_to_time)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(spans_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id
+                        AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                    <endif>
                     <if(span_filters)> AND <span_filters> <endif>
                     <if(span_feedback_scores_filters)>
                     AND id in (
@@ -344,19 +356,19 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 ) AS t
             )
             SELECT
-                COUNTIf(id >= :id_current_start AND id \\<= :id_end) AS current_count,
+                COUNTIf(id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>) AS current_count,
                 COUNTIf(id >= :id_prior_start AND id \\< :id_current_start) AS previous_count,
-                if(COUNTIf(id >= :id_current_start AND id \\<= :id_end) = 0,
+                if(COUNTIf(id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>) = 0,
                     0,
-                    COUNTIf(length(error_info) > 0 AND id >= :id_current_start AND id \\<= :id_end) * 100.0
-                    / COUNTIf(id >= :id_current_start AND id \\<= :id_end)) AS current_error_rate,
+                    COUNTIf(length(error_info) > 0 AND id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>) * 100.0
+                    / COUNTIf(id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>)) AS current_error_rate,
                 if(COUNTIf(id >= :id_prior_start AND id \\< :id_current_start) = 0,
                     0,
                     COUNTIf(length(error_info) > 0 AND id >= :id_prior_start AND id \\< :id_current_start) * 100.0
                     / COUNTIf(id >= :id_prior_start AND id \\< :id_current_start)) AS previous_error_rate,
-                AVGIf(duration, id >= :id_current_start AND id \\<= :id_end) AS current_avg_duration,
+                AVGIf(duration, id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>) AS current_avg_duration,
                 AVGIf(duration, id >= :id_prior_start AND id \\< :id_current_start) AS previous_avg_duration,
-                SUMIf(total_estimated_cost, id >= :id_current_start AND id \\<= :id_end) AS current_total_cost,
+                SUMIf(total_estimated_cost, id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>) AS current_total_cost,
                 SUMIf(total_estimated_cost, id >= :id_prior_start AND id \\< :id_current_start) AS previous_total_cost
             FROM spans_filtered
             SETTINGS log_comment = '<log_comment>';
@@ -372,11 +384,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND id >= :uuid_from_time AND id \\<= :uuid_to_time
+                  AND id >= :uuid_from_time <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                   AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                       >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
-                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                      \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
+                  <if(uuid_to_time)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                   AND thread_id \\<> ''
                   -- Source/environment chips filter each trace, not the thread row, so a thread with mixed traces aggregates only its matching ones,
                   -- as the thread list does (ThreadDAO traces_final_ids). A thread-row filter would count such threads whole and drift from the list.
@@ -555,7 +567,15 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
                       -- Bounded by trace_id, as in the thread list (ThreadDAO spans_deduped): a thread's cost is its traces' whole span set,
                       -- including spans minted outside the range, and the trace_id range still prunes through the spans sort key.
-                      AND trace_id >= :uuid_from_time AND trace_id \\<= :uuid_to_time
+                      AND trace_id >= :uuid_from_time <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                      <if(spans_partitioned)>
+                      -- The weeks of the spans this read returns, found by their trace's id range like the read itself, so a span
+                      -- minted before its trace stays in, as the trace_id range above keeps it.
+                      AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id
+                            AND trace_id >= :uuid_from_time <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>)
+                      <endif>
                 ) s
                 JOIN traces_final tr ON s.trace_id = tr.id
                 GROUP BY tr.thread_id, tr.is_current_period
@@ -628,27 +648,46 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private ST buildTemplate(String query, KpiCardCriteria criteria, String workspaceId,
             String queryName) {
-        return getSTWithLogComment(query, "KpiCards_" + queryName, workspaceId, "", criteria.projectId().toString());
+        var template = getSTWithLogComment(query, "KpiCards_" + queryName, workspaceId, "",
+                criteria.projectId().toString());
+        // The span reads' upper bound is open without a requested end, so on the weekly-partitioned spans they carry
+        // the weeks their own matching span ids resolve to; on the legacy table there is nothing to prune.
+        if (spanColumnsNonNullable()) {
+            template.add("spans_partitioned", true);
+        }
+        // Without a requested end the upper bounds are omitted, so far-future ids count, as they do in the list.
+        if (criteria.intervalEnd() != null) {
+            template.add("uuid_to_time", true);
+        }
+        return template;
     }
 
     private Statement buildStatement(Connection connection, ST template,
             KpiCardCriteria criteria, String workspaceId) {
-        Instant priorStart = getPriorStart(criteria.intervalStart(), criteria.intervalEnd());
+        // Without a requested end, now only sizes the prior period; the current one is open-ended.
+        Instant priorStart = getPriorStart(criteria.intervalStart(),
+                Optional.ofNullable(criteria.intervalEnd()).orElseGet(Instant::now));
 
-        return connection.createStatement(template.render())
+        var statement = connection.createStatement(template.render())
                 .bind("project_id", criteria.projectId())
                 .bind("workspace_id", workspaceId)
                 .bind("uuid_from_time", instantToUUIDMapper.toLowerBound(priorStart).toString())
-                .bind("uuid_to_time", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString())
                 .bind("id_current_start", instantToUUIDMapper.toLowerBound(criteria.intervalStart()).toString());
+        if (criteria.intervalEnd() != null) {
+            statement.bind("uuid_to_time", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString());
+        }
+        return statement;
     }
 
     private Statement bindPeriodBounds(Statement statement, KpiCardCriteria criteria) {
-        Instant priorStart = getPriorStart(criteria.intervalStart(), criteria.intervalEnd());
+        Instant priorStart = getPriorStart(criteria.intervalStart(),
+                Optional.ofNullable(criteria.intervalEnd()).orElseGet(Instant::now));
 
-        return statement
-                .bind("id_prior_start", instantToUUIDMapper.toLowerBound(priorStart).toString())
-                .bind("id_end", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString());
+        statement.bind("id_prior_start", instantToUUIDMapper.toLowerBound(priorStart).toString());
+        if (criteria.intervalEnd() != null) {
+            statement.bind("id_end", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString());
+        }
+        return statement;
     }
 
     private void addTraceFilters(ST template, List<? extends Filter> filters) {
