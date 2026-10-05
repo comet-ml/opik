@@ -28,6 +28,8 @@ import {
   LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
   LLMOpenRouterConfigsType,
+  OpenAiPipelineMode,
+  OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
   ReasoningEffort,
@@ -1798,6 +1800,167 @@ describe("OpenAI request contract", () => {
       expect(isReasoningModel(PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST)).toBe(
         false,
       );
+    });
+  });
+});
+
+describe("max on the OpenAI Responses API only", () => {
+  const NONE_TO_XHIGH: ReasoningEffort[] = [
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+  ];
+  const LOW_TO_XHIGH: ReasoningEffort[] = ["low", "medium", "high", "xhigh"];
+  const MODES: Array<OpenAiPipelineMode | undefined> = [
+    undefined,
+    "chat_completions_api",
+    "responses_api",
+  ];
+
+  const storedMax = (model: PROVIDER_MODEL_TYPE, mode?: OpenAiPipelineMode) =>
+    sanitizeConfigForRequest(
+      model,
+      { maxCompletionTokens: 4000, reasoningEffort: "max" },
+      mode,
+    ).reasoningEffort;
+
+  const STORED_MAX: LLMOpenAIConfigsType = {
+    temperature: 0,
+    maxCompletionTokens: 4000,
+    topP: 1,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    reasoningEffort: "max",
+  };
+
+  const switchTo = (model: PROVIDER_MODEL_TYPE, mode?: OpenAiPipelineMode) =>
+    updateProviderConfig(STORED_MAX, {
+      model,
+      provider: OPEN_AI,
+      openAiPipelineMode: mode,
+    })?.reasoningEffort;
+
+  describe.each<{
+    model: PROVIDER_MODEL_TYPE;
+    chatCompletions: ReasoningEffort[];
+    responsesApi: OpenAIReasoningEffort[];
+  }>([
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_6_LUNA,
+      chatCompletions: NONE_TO_XHIGH,
+      responsesApi: [...NONE_TO_XHIGH, "max"],
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_6_SOL,
+      chatCompletions: NONE_TO_XHIGH,
+      responsesApi: [...NONE_TO_XHIGH, "max"],
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_6_TERRA,
+      chatCompletions: NONE_TO_XHIGH,
+      responsesApi: [...NONE_TO_XHIGH, "max"],
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
+      chatCompletions: LOW_TO_XHIGH,
+      responsesApi: [...LOW_TO_XHIGH, "max"],
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      chatCompletions: NONE_TO_XHIGH,
+      responsesApi: [...NONE_TO_XHIGH, "max"],
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+      chatCompletions: NONE_TO_XHIGH,
+      responsesApi: [...NONE_TO_XHIGH, "max"],
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
+      chatCompletions: LOW_TO_XHIGH,
+      responsesApi: LOW_TO_XHIGH,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      chatCompletions: NONE_TO_XHIGH,
+      responsesApi: NONE_TO_XHIGH,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_O3,
+      chatCompletions: ["low", "medium", "high"],
+      responsesApi: ["low", "medium", "high"],
+    },
+  ])("$model", ({ model, chatCompletions, responsesApi }) => {
+    const offersMax = responsesApi.includes("max");
+
+    it.each([undefined, "chat_completions_api" as const])(
+      "offers only the Chat Completions levels when the mode is %s",
+      (mode) => {
+        expect(
+          getOpenAIReasoningEffortOptions(model, mode).map((o) => o.value),
+        ).toEqual(chatCompletions);
+      },
+    );
+
+    it("offers the Responses API levels on a Responses API key", () => {
+      expect(
+        getOpenAIReasoningEffortOptions(model, "responses_api").map(
+          (o) => o.value,
+        ),
+      ).toEqual(responsesApi);
+    });
+
+    it("sends a stored max as high unless the key is on the Responses API", () => {
+      expect(storedMax(model)).toBe("high");
+      expect(storedMax(model, "chat_completions_api")).toBe("high");
+      expect(storedMax(model, "responses_api")).toBe(
+        offersMax ? "max" : "high",
+      );
+    });
+
+    it.each(MODES)(
+      "shows the same effort the request sends when the mode is %s",
+      (mode) => {
+        expect(
+          resolveEffort(model, { reasoningEffort: "max" }, mode)
+            .reasoningEffort,
+        ).toBe(storedMax(model, mode));
+      },
+    );
+
+    it.each(["chat_completions_api", "responses_api"] as const)(
+      "keeps a switched-in max only where it is sent, when the mode is %s",
+      (mode) => {
+        expect(switchTo(model, mode)).toBe(storedMax(model, mode));
+      },
+    );
+
+    it("keeps a switched-in max while the mode is unknown, if a Responses API key could send it", () => {
+      expect(switchTo(model, undefined)).toBe(offersMax ? "max" : "high");
+    });
+  });
+
+  describe("a model switch made while the provider keys are loading", () => {
+    it("keeps the stored max, then coerces it once the key turns out to be on Chat Completions", () => {
+      const whileLoading = updateProviderConfig(STORED_MAX, {
+        model: PROVIDER_MODEL_TYPE.GPT_5_6_SOL,
+        provider: OPEN_AI,
+        openAiPipelineMode: undefined,
+      });
+      expect(whileLoading?.reasoningEffort).toBe("max");
+
+      const onceKnown = updateProviderConfig(whileLoading, {
+        model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+        provider: OPEN_AI,
+        openAiPipelineMode: "chat_completions_api",
+      });
+      expect(onceKnown?.reasoningEffort).toBe("high");
+    });
+
+    it("still drops the effort for a model that takes none", () => {
+      expect(switchTo(PROVIDER_MODEL_TYPE.GPT_4O, undefined)).toBeUndefined();
     });
   });
 });

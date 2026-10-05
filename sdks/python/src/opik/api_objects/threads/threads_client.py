@@ -99,6 +99,13 @@ class ThreadsClient:
             >>>     project_name="Demo Project",
             >>>     filter_string=f'id = "{thread_id}"',
             >>>     max_results=10)
+
+        Note:
+            AI coding assistants connected to the Opik MCP server can run this search
+            without writing code: ``list("thread", project_name=..., filters=...)``
+            takes the same OQL as ``filter_string``, and
+            ``read("thread", id, project_name=...)`` returns one thread's messages.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         filters = helpers.parse_filter_expressions(
             filter_string,

@@ -715,6 +715,13 @@ class Experiment:
                 ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``, or if
                 ``num_threads`` is not a positive integer or exceeds
                 ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
+
+        Note:
+            To look at an experiment's results without writing code, AI coding
+            assistants connected to the Opik MCP server can call
+            ``list("dataset_item", experiment_ids=[...])``, which shows each case's
+            scores and compares several experiments case by case.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         validation_helpers.validate_bounded_positive_int(
             page_size, "page_size", constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE
