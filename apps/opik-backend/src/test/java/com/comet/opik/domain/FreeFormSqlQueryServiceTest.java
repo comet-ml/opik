@@ -99,7 +99,7 @@ class FreeFormSqlQueryServiceTest {
         when(queryLogReader.entries(anyString(), eq(user)))
                 .thenReturn(CompletableFuture.completedFuture(List.of(
                         FreeFormSqlQueryLogEntry.builder().initial(true).user(user).tables(tables)
-                                .policedTables(policies).build())));
+                                .policyCoveredTables(policies).build())));
     }
 
     private static DatabaseAnalyticsReadOnlyFreeFormSqlConfig account(String user) {

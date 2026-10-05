@@ -12,10 +12,10 @@ import java.util.List;
  */
 @Builder(toBuilder = true)
 public record FreeFormSqlQueryLogEntry(boolean initial, @NonNull String user, @NonNull List<String> tables,
-        @NonNull List<String> policedTables) {
+        @NonNull List<String> policyCoveredTables) {
 
     public FreeFormSqlQueryLogEntry {
         tables = List.copyOf(tables);
-        policedTables = List.copyOf(policedTables);
+        policyCoveredTables = List.copyOf(policyCoveredTables);
     }
 }

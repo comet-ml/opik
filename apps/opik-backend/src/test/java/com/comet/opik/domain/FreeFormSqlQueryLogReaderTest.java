@@ -34,7 +34,7 @@ class FreeFormSqlQueryLogReaderTest {
 
     private static FreeFormSqlQueryLogEntry entry(String user) {
         return FreeFormSqlQueryLogEntry.builder().initial(true).user(user).tables(List.of())
-                .policedTables(List.of()).build();
+                .policyCoveredTables(List.of()).build();
     }
 
     /** The log answers {@code answers} in order, the last one repeating. */

@@ -26,7 +26,10 @@ import java.util.regex.Pattern;
  *
  * <p>A scalar subquery with a large result is not in the tree at all: analysis stores the result and leaves
  * {@code FUNCTION ... function_name: __getScalar} in its place, so its reads cannot be seen. Its presence is reported
- * as {@link ScalarReads#opaque()}, which rejects the query the same way.
+ * as {@link SubqueryReads#opaque()}, which rejects the query the same way.
+ *
+ * <p>The tables read under {@code IN} or {@code EXISTS} and in no scalar subquery are returned too, so the check
+ * accepts a read missing from the plan only when the query tree shows it is one of those.
  */
 @UtilityClass
 class FreeFormSqlSubqueries {
@@ -58,43 +61,65 @@ class FreeFormSqlSubqueries {
     }
 
     /**
-     * @param tables the {@code <database>.<table>} names read inside scalar subqueries
+     * @param scalar the {@code <database>.<table>} names read inside scalar subqueries
+     * @param filter those read under {@code IN} or {@code EXISTS} and in no scalar subquery
      * @param opaque whether a scalar subquery was replaced by its stored result, so its reads are unknown
      */
-    record ScalarReads(Set<String> tables, boolean opaque) {
+    record SubqueryReads(Set<String> scalar, Set<String> filter, boolean opaque) {
 
-        boolean none() {
-            return tables.isEmpty() && !opaque;
+        /** Nothing known about the query's subqueries: a read missing from the plan is then not accepted. */
+        static final SubqueryReads UNKNOWN = new SubqueryReads(Set.of(), Set.of(), false);
+
+        boolean hasScalar() {
+            return !scalar.isEmpty() || opaque;
         }
     }
 
-    static ScalarReads scalarReads(@NonNull List<String> queryTreeLines, @NonNull String database) {
-        var tables = new HashSet<String>();
-        boolean[] opaque = {false};
-        collect(parse(queryTreeLines), database + ".", tables, opaque);
-        return new ScalarReads(Set.copyOf(tables), opaque[0]);
+    private enum Role {
+        SOURCE,
+        FILTER,
+        SCALAR
     }
 
-    private static void collect(Node node, String prefix, Set<String> tables, boolean[] opaque) {
+    static SubqueryReads subqueryReads(@NonNull List<String> queryTreeLines, @NonNull String database) {
+        var scalar = new HashSet<String>();
+        var filter = new HashSet<String>();
+        boolean[] opaque = {false};
+        collect(parse(queryTreeLines), database + ".", scalar, filter, opaque);
+        return new SubqueryReads(Set.copyOf(scalar), Set.copyOf(filter), opaque[0]);
+    }
+
+    private static void collect(Node node, String prefix, Set<String> scalar, Set<String> filter,
+            boolean[] opaque) {
         if (node.is("TABLE")) {
-            node.attribute(TABLE_NAME)
-                    .filter(table -> table.startsWith(prefix) && inScalar(node))
-                    .ifPresent(tables::add);
+            node.attribute(TABLE_NAME).filter(table -> table.startsWith(prefix)).ifPresent(table -> {
+                switch (role(node)) {
+                    case SCALAR -> scalar.add(table);
+                    case FILTER -> filter.add(table);
+                    case SOURCE -> {
+                    }
+                }
+            });
         }
         if (node.is("FUNCTION") && node.attribute(FUNCTION_NAME).filter(STORED_SCALAR::equals).isPresent()) {
             opaque[0] = true;
         }
-        node.children().forEach(child -> collect(child, prefix, tables, opaque));
+        node.children().forEach(child -> collect(child, prefix, scalar, filter, opaque));
     }
 
-    /** Whether any subquery enclosing {@code node} is used as a value. */
-    private static boolean inScalar(Node node) {
+    /** Scalar if any subquery enclosing {@code node} is used as a value; else filter if any is under IN/EXISTS. */
+    private static Role role(Node node) {
+        var role = Role.SOURCE;
         for (var ancestor = node.parent(); ancestor != null; ancestor = ancestor.parent()) {
-            if (ancestor.isSubquery() && !isSource(ancestor) && !isFilter(ancestor)) {
-                return true;
+            if (!ancestor.isSubquery() || isSource(ancestor)) {
+                continue;
             }
+            if (!isFilter(ancestor)) {
+                return Role.SCALAR;
+            }
+            role = Role.FILTER;
         }
-        return false;
+        return role;
     }
 
     private static boolean isSource(Node subquery) {

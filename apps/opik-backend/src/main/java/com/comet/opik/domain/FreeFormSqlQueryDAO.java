@@ -99,7 +99,7 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
                         WHERE apply_to_all OR has(apply_to_list, {user:String})),
                     (SELECT groupArray(concat(database, '.', table)) FROM system.row_policies
                         WHERE apply_to_all OR has(apply_to_list, {user:String})), ''),
-                    used_row_policies)) AS policed_tables
+                    used_row_policies)) AS policy_covered_tables
             FROM clusterAllReplicas('{cluster}', system.query_log)
             WHERE event_date >= yesterday() AND event_time >= now() - INTERVAL 15 MINUTE
                 AND initial_query_id = {query_id:String} AND type = 'QueryFinish'
@@ -183,7 +183,7 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
                             .initial(row.getInteger("is_initial_query") == 1)
                             .user(row.getString("user"))
                             .tables(row.<String>getList("tables"))
-                            .policedTables(row.<String>getList("policed_tables"))
+                            .policyCoveredTables(row.<String>getList("policy_covered_tables"))
                             .build())
                     .toList();
         } catch (Exception e) {

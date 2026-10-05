@@ -179,17 +179,27 @@ class FreeFormSqlPostRunCheckTest {
         assertThat(run(query)).isEqualTo(String.valueOf(expected));
     }
 
-    @Test
+    static Stream<Arguments> scalarSubqueryReadingATableIsRejected() {
+        return Stream.of(
+                arguments("a table", "SELECT toJSONString(map('n', toString((SELECT count() FROM "
+                        + "authored_feedback_scores)))) AS result"),
+                arguments("a Distributed table",
+                        "SELECT toJSONString(map('n', toString((SELECT count() FROM traces)))) "
+                                + "AS result"),
+                arguments("a CTE over a table", "WITH c AS (SELECT id FROM spans) SELECT toJSONString(map('n', "
+                        + "toString((SELECT count() FROM c)))) AS result"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
     @DisplayName("a scalar subquery reading a table is rejected before running, with the rewrite to apply")
-    void scalarSubqueryReadingATableIsRejected() {
-        for (String query : List.of(
-                "SELECT toJSONString(map('n', toString((SELECT count() FROM authored_feedback_scores)))) AS result",
-                "SELECT toJSONString(map('n', toString((SELECT count() FROM traces)))) AS result",
-                "WITH c AS (SELECT id FROM spans) SELECT toJSONString(map('n', toString((SELECT count() FROM c)))) "
-                        + "AS result")) {
-            assertRejected(query, BadRequestException.class, "cannot read a table", "WITH s AS");
-        }
-        // A scalar subquery reading no table stays allowed.
+    void scalarSubqueryReadingATableIsRejected(String name, String query) {
+        assertRejected(query, BadRequestException.class, "cannot read a table", "WITH s AS");
+    }
+
+    @Test
+    @DisplayName("a scalar subquery reading no table stays allowed")
+    void scalarSubqueryReadingNoTableIsAllowed() {
         assertThat(run("SELECT toJSONString(map('n', toString((SELECT 1)))) AS result")).isEqualTo("1");
     }
 
@@ -242,7 +252,7 @@ class FreeFormSqlPostRunCheckTest {
         String query = "SELECT count() FROM traces WHERE has((SELECT groupArray(id) FROM spans), id)";
         var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin)
                 .explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A.toString(), query).join();
-        assertThat(FreeFormSqlSubqueries.scalarReads(tree, DATABASE_NAME).opaque()).isTrue();
+        assertThat(FreeFormSqlSubqueries.subqueryReads(tree, DATABASE_NAME).opaque()).isTrue();
         assertRejected("SELECT toJSONString(map('n', toString(count()))) AS result FROM traces "
                 + "WHERE has((SELECT groupArray(id) FROM spans), id)", BadRequestException.class, "cannot read a table",
                 "too large to inspect");
@@ -254,6 +264,20 @@ class FreeFormSqlPostRunCheckTest {
     void scalarReads(String name, String query, Set<String> expected) {
         var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin)
                 .explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A.toString(), query).join();
-        assertThat(FreeFormSqlSubqueries.scalarReads(tree, DATABASE_NAME).tables()).isEqualTo(expected);
+        assertThat(FreeFormSqlSubqueries.subqueryReads(tree, DATABASE_NAME).scalar()).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("reads under IN and EXISTS are named as filter reads, and a scalar nested inside one as scalar")
+    void filterReads() {
+        String query = "SELECT count() FROM traces WHERE id IN (SELECT id FROM spans) AND EXISTS (SELECT 1 FROM "
+                + "authored_feedback_scores) AND id IN (SELECT id FROM traces WHERE id != (SELECT max(id) FROM "
+                + "spans))";
+        var tree = new FreeFormSqlQueryDAOImpl(standard, extended, admin)
+                .explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE_A, PROJECT_A.toString(), query).join();
+        var reads = FreeFormSqlSubqueries.subqueryReads(tree, DATABASE_NAME);
+        assertThat(reads.filter()).containsExactlyInAnyOrder(DATABASE_NAME + ".spans",
+                DATABASE_NAME + ".authored_feedback_scores", DATABASE_NAME + ".traces");
+        assertThat(reads.scalar()).containsExactly(DATABASE_NAME + ".spans");
     }
 }

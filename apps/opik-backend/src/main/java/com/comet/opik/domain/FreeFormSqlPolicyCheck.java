@@ -15,9 +15,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * The post-run check on a free-form SQL query (OPIK-8566): its results are returned only if every table of the
- * database that it read can be shown to have been read under a row policy. No single ClickHouse source shows every
- * read, so three are combined:
+ * The post-run check's rule (OPIK-8566): whether every table of the database that a free-form SQL query read can be
+ * shown to have been read under a row policy. It only decides; what follows from a violation depends on the mode
+ * ({@link FreeFormSqlQueryService}): reported in audit, results withheld in enforce. No single ClickHouse source
+ * shows every read, so three are combined:
  * <ul>
  * <li>{@code system.query_log}, one entry for the initiator and one per shard-side read. It records the policies
  * applied to the tables read at each entry's top level, which covers every shard-side read of a local table behind
@@ -26,8 +27,8 @@ import java.util.stream.Collectors;
  * included, carries a {@code Row level filter} where a policy applied. A visible read without one fails.</li>
  * <li>Reads evaluated while the query is analysed: {@code IN}, {@code EXISTS} and scalar subqueries. They are in
  * the log's tables but neither source shows their policy. {@code IN} and {@code EXISTS} only filter the outer rows,
- * so such a read is accepted unless it is in a scalar subquery ({@link FreeFormSqlSubqueries}), whose value reaches
- * the result. Scalar subqueries reading a table are rejected before running.</li>
+ * so such a read is accepted when the resolved query tree shows it under one of them and in no scalar subquery
+ * ({@link FreeFormSqlSubqueries}), whose value would reach the result. Any other read missing from the plan fails.</li>
  * </ul>
  * Every planned read must be a {@code ReadFromMergeTree} with its row filter: the read-only profile pins off the
  * count shortcuts ({@code optimize_trivial_count_query}, {@code optimize_use_implicit_projections}) that answer from
@@ -35,8 +36,8 @@ import java.util.stream.Collectors;
  * It also pins {@code prefer_localhost_replica = 1}, so a single-shard Distributed read runs on the initiator and
  * every read of it, nested ones included, is in the plan. Shard entries exist only for remote shards, and there a
  * read the shard query nests is in neither source, so it fails closed.
- * A Distributed wrapper ({@code traces}) counts as covered when its local table's policy was applied: it reads
- * nothing itself. Tables outside the database ({@code system.one}, {@code numbers}) carry no policy by design.
+ * A Distributed wrapper ({@code traces}) on the initiator's entry counts as covered when its local table's policy was
+ * applied: it reads nothing itself, and every entry reading the local table is checked on its own. Tables outside the database ({@code system.one}, {@code numbers}) carry no policy by design.
  */
 @UtilityClass
 class FreeFormSqlPolicyCheck {
@@ -61,7 +62,7 @@ class FreeFormSqlPolicyCheck {
     /** @return the first read that cannot be shown to have run under its row policy; empty when there is none. */
     static Optional<Violation> violation(@NonNull String database, @NonNull String user,
             @NonNull List<FreeFormSqlQueryLogEntry> entries,
-            @NonNull String planJson, @NonNull Set<String> scalarReads) {
+            @NonNull String planJson, @NonNull FreeFormSqlSubqueries.SubqueryReads subqueryReads) {
         if (entries.stream().noneMatch(entry -> entry.initial() && entry.user().equals(user))) {
             return Optional.of(new Violation("", "no query log entry for the query as " + user));
         }
@@ -88,20 +89,24 @@ class FreeFormSqlPolicyCheck {
             }
             filteredReads.add(description);
         }
-        Set<String> policedAnywhere = entries.stream()
-                .flatMap(entry -> entry.policedTables().stream())
+        Set<String> policyCoveredAnywhere = entries.stream()
+                .flatMap(entry -> entry.policyCoveredTables().stream())
                 .collect(Collectors.toSet());
         for (var entry : entries) {
-            Set<String> policed = Set.copyOf(entry.policedTables());
+            Set<String> policed = Set.copyOf(entry.policyCoveredTables());
             for (String table : entry.tables()) {
-                if (!table.startsWith(prefix) || policed.contains(table)
-                        || policedAnywhere.contains(table + "_local")) {
+                // A Distributed wrapper on the initiator reads nothing itself: its local table's read carries it,
+                // covered by a logged policy or by a row filter in the plan, and each local read is checked on its own.
+                String local = table + "_local";
+                if (!table.startsWith(prefix) || policed.contains(table) || (entry.initial()
+                        && (policyCoveredAnywhere.contains(local) || filteredReads.contains(local)))) {
                     continue;
                 }
                 // The initiator's entry has no policies for its nested reads: a planned one shows its filter in the
-                // plan, and one absent from the plan was evaluated during analysis, accepted unless scalar.
+                // plan, and one absent from the plan must be shown by the query tree to sit under IN or EXISTS.
                 boolean shownElsewhere = entry.initial() && (filteredReads.contains(table)
-                        || (!plannedReads.contains(table) && !scalarReads.contains(table)));
+                        || (!plannedReads.contains(table) && subqueryReads.filter().contains(table)
+                                && !subqueryReads.scalar().contains(table)));
                 if (!shownElsewhere) {
                     return Optional.of(new Violation(table,
                             entry.initial() ? "read without a row policy" : "read without a row policy on a shard"));
