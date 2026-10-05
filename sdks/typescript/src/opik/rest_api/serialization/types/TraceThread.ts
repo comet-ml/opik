@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { AnnotationQueueReference } from "./AnnotationQueueReference.js";
 import { Comment } from "./Comment.js";
 import { FeedbackScore } from "./FeedbackScore.js";
 import { JsonListString } from "./JsonListString.js";
@@ -28,6 +29,10 @@ export const TraceThread: core.serialization.ObjectSchema<serializers.TraceThrea
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
         comments: core.serialization.list(Comment).optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
+        annotationQueues: core.serialization.property(
+            "annotation_queues",
+            core.serialization.list(AnnotationQueueReference).optional(),
+        ),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -52,6 +57,7 @@ export declare namespace TraceThread {
         usage?: Record<string, number> | null;
         comments?: Comment.Raw[] | null;
         tags?: string[] | null;
+        annotation_queues?: AnnotationQueueReference.Raw[] | null;
         last_updated_at?: string | null;
         last_updated_by?: string | null;
         created_by?: string | null;
