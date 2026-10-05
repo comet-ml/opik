@@ -822,7 +822,8 @@ class ThreadDAOImpl implements ThreadDAO {
      ***/
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
-    private static final String SELECT_TRACES_THREAD_BY_ID = """
+    @VisibleForTesting
+    static final String SELECT_TRACES_THREAD_BY_ID = """
             WITH traces_ids AS (
                 SELECT
                     id

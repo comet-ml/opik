@@ -68,6 +68,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EnvironmentService;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.ThreadDAOTestQueries;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -78,6 +79,7 @@ import com.comet.opik.podam.InRangeStrategy;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentPayloadUtilsTest;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
@@ -6494,47 +6496,58 @@ class TracesResourceTest {
             assertThat(actualThread.lastMessage()).isEqualTo(own.output());
         }
 
-        @Test
-        @DisplayName("when a trace's newer version moves it to another thread, then the requested thread excludes it")
-        void getTraceThread__whenTraceMovedToAnotherThread__thenRequestedThreadExcludesIt(
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when a trace's newer version moves it to another thread, then find_thread_by_id returns only the requested thread")
+        void findThreadById__whenTraceMovedToAnotherThread__thenOnlyRequestedThreadIsReturned(boolean truncate,
                 TransactionTemplateAsync templateAsync) {
-            var projectName = UUID.randomUUID().toString();
-            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
-            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectId = generator.generate();
+            var threadId = UUID.randomUUID().toString();
+            var movedTo = UUID.randomUUID().toString();
+            var moved = generator.generate();
+            var kept = generator.generate();
 
-            // Both versions of a moved trace must coexist for traces_ids to match it, so merges are held off.
-            // The extra group's row order is arbitrary, so several threads make a leak all but certain to show.
-            runClickHouse(templateAsync, "SYSTEM STOP MERGES traces");
+            // A plain MergeTree copy of traces never collapses versions, so the moved trace's stale version stays
+            // visible to traces_ids on every run, without depending on merge timing in the shared traces table
+            var fixtureTable = "traces_moved_" + RandomStringUtils.secure().nextAlphanumeric(10).toLowerCase();
+            runClickHouse(templateAsync,
+                    "CREATE TABLE %s AS traces ENGINE = MergeTree ORDER BY (workspace_id, project_id, id)"
+                            .formatted(fixtureTable));
             try {
-                var threads = IntStream.range(0, 6).mapToObj(i -> {
-                    var threadId = UUID.randomUUID().toString();
-                    // The moved trace starts first and ends last, so it would take over both messages if counted
-                    var moved = threadTrace(threadId, projectName, environment, now.minusSeconds(100),
-                            now.minusSeconds(1));
-                    var kept = threadTrace(threadId, projectName, environment, now.minusSeconds(50),
-                            now.minusSeconds(40));
-                    traceResourceClient.batchCreateTraces(List.of(moved, kept), API_KEY, TEST_WORKSPACE);
-                    traceResourceClient.updateTrace(moved.id(), TraceUpdate.builder()
-                            .projectName(projectName)
-                            .threadId(UUID.randomUUID().toString())
-                            .build(), API_KEY, TEST_WORKSPACE);
-                    return Map.entry(threadId, kept);
-                }).toList();
+                runClickHouse(templateAsync,
+                        """
+                                INSERT INTO %s (id, workspace_id, project_id, thread_id, start_time, end_time, input, output,
+                                    last_updated_at) VALUES
+                                ('%s', '%s', '%s', '%s', now64(9) - 100, now64(9) - 1, '{"v":"stale"}', '{"v":"stale"}', now64(6) - 10),
+                                ('%s', '%s', '%s', '%s', now64(9) - 100, now64(9) - 1, '{"v":"moved"}', '{"v":"moved"}', now64(6)),
+                                ('%s', '%s', '%s', '%s', now64(9) - 50, now64(9) - 40, '{"v":"kept"}', '{"v":"kept"}', now64(6))
+                                """
+                                .formatted(fixtureTable, moved, workspaceId, projectId, threadId, moved, workspaceId,
+                                        projectId, movedTo, kept, workspaceId, projectId, threadId));
 
-                var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
-                for (var thread : threads) {
-                    var kept = thread.getValue();
-                    var actualThread = traceResourceClient.getTraceThread(thread.getKey(), projectId, API_KEY,
-                            TEST_WORKSPACE);
+                var sql = TemplateUtils.newST(ThreadDAOTestQueries.selectTraceThreadById())
+                        .add("truncate", truncate)
+                        .add("log_comment", "find_thread_by_id_moved_trace_test")
+                        .render()
+                        .replaceAll("FROM traces\\b", "FROM " + fixtureTable);
+                var rows = templateAsync.stream(connection -> Flux.from(connection.createStatement(sql)
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId)
+                        .bind("thread_id", threadId)
+                        .execute())
+                        .flatMap(result -> result.map((row, metadata) -> List.of(
+                                row.get("id", String.class),
+                                String.valueOf(row.get("number_of_messages", Long.class)),
+                                row.get("first_message", String.class),
+                                row.get("last_message", String.class)))))
+                        .collectList()
+                        .block();
 
-                    var expectedThread = getExpectedThreads(List.of(kept), projectId, thread.getKey(), List.of(),
-                            TraceThreadStatus.ACTIVE).getFirst();
-                    TraceAssertions.assertThreads(List.of(expectedThread), List.of(actualThread));
-                    assertThat(actualThread.firstMessage()).isEqualTo(kept.input());
-                    assertThat(actualThread.lastMessage()).isEqualTo(kept.output());
-                }
+                // Without the thread filter the moved trace forms a second row, in arbitrary order
+                assertThat(rows).containsExactly(List.of(threadId, "2", "{\"v\":\"kept\"}", "{\"v\":\"kept\"}"));
             } finally {
-                runClickHouse(templateAsync, "SYSTEM START MERGES traces");
+                runClickHouse(templateAsync, "DROP TABLE IF EXISTS " + fixtureTable);
             }
         }
 
