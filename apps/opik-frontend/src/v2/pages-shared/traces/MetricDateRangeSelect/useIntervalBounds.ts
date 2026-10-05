@@ -51,14 +51,11 @@ const closeAtEndOfDay = (anchored: AnchoredBounds): AnchoredBounds => ({
 const hasEnded = (anchored: AnchoredBounds) =>
   anchored.live && !isLiveDateRange(anchored.dateRange);
 
-const isFetchingWindow = (
-  queryClient: QueryClient,
-  { intervalStart }: IntervalBounds,
-) =>
+// Scoped by the selection that windowQueryOptions tags each of the window's queries with, so an unrelated query that
+// happens to share the start does not hold the window back.
+const isFetchingWindow = (queryClient: QueryClient, selectionKey: string) =>
   queryClient.isFetching({
-    predicate: ({ queryKey }) =>
-      isObject(queryKey[1]) &&
-      Object.values(queryKey[1]).includes(intervalStart),
+    predicate: ({ meta }) => meta?.windowSelection === selectionKey,
   }) > 0;
 
 // Open-ended requests only see the start, so the window moves for them only when the start does.
@@ -96,7 +93,7 @@ export const useIntervalBounds = (
       if (
         !focusManager.isFocused() ||
         !onlineManager.isOnline() ||
-        isFetchingWindow(queryClient, anchored.bounds)
+        isFetchingWindow(queryClient, anchored.selectionKey)
       ) {
         return;
       }
