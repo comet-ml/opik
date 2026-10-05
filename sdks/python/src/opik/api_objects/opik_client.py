@@ -2484,9 +2484,12 @@ class Opik:
             str: URL
 
         Note:
-            AI coding assistants connected to the Opik MCP server get the same URL
-            from ``read("project", name)``, along with a summary of the project's
-            last 7 days. See https://www.comet.com/docs/opik/mcp-server
+            AI coding assistants connected to the Opik MCP server can call
+            ``read("project", name)``, which returns a project's URL along with a
+            summary of its last 7 days. Unlike this method, it looks the name up: it
+            fails for a project that does not exist, and a partial name returns the
+            existing project it matches.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_project_url")
 
