@@ -16,11 +16,13 @@ let datasetType: DATASET_TYPE | null = null;
 let playgroundDataset: { datasetId: string | null; itemsTotal?: number } = {
   datasetId: null,
 };
+let datasetItemsTotal: number | null = null;
 
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
   useIsPromptRunning: () => false,
   useDatasetType: () => datasetType,
+  useDatasetItemsTotal: () => datasetItemsTotal,
 }));
 
 vi.mock("@/hooks/usePlaygroundDataset", () => ({
@@ -74,6 +76,7 @@ beforeEach(() => {
   onRun.mockClear();
   datasetType = null;
   playgroundDataset = { datasetId: null };
+  datasetItemsTotal = null;
 });
 
 describe("PlaygroundRunButton", () => {
