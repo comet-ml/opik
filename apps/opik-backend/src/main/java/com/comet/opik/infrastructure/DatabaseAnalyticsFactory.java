@@ -224,9 +224,9 @@ public class DatabaseAnalyticsFactory {
      * every read that user makes.
      *
      * <p>Omitted when out of range. A factory built in code rather than bound from config never goes through
-     * validation, so it carries the primitive's 0 — and sending a value {@link Min} would have rejected means
-     * overriding the server's own cadence with "no throttle" instead of inheriting it. ClickHouse accepts 0 and the
-     * two are indistinguishable on a default server, but they stop being so the moment a deployment sets this in a
+     * validation, so it carries the primitive's 0. Sending a value that {@link Min} would reject overrides the
+     * server's own cadence with "no throttle"; omitting it leaves that cadence in place. ClickHouse accepts 0, so the
+     * two are indistinguishable on a default server — but they stop being so the moment a deployment sets this in a
      * settings profile, and an unconfigured factory has no business speaking for one.
      */
     private Map<String, String> r2dbcOnlyServerSettings() {

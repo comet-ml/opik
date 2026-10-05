@@ -218,9 +218,9 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     @DisplayName("a factory built in code, which skips validation, omits the cadence rather than sending 0")
     void factoryBuiltInCodeOmitsTheCadence() {
         // Programmatic construction bypasses Bean Validation, so the primitive keeps its 0 — DatabaseAnalyticsModule
-        // #buildReadOnlyClient and the suites that call build() directly. Sending a value @Min would have rejected
-        // would override the server's own cadence with "no throttle"; omitting it inherits the server default, which
-        // is what an unconfigured factory should do. Deliberately not factoryWith(), which sets a cadence.
+        // #buildReadOnlyClient and the suites that call build() directly. Sending a value that @Min would reject
+        // overrides the server's own cadence with "no throttle"; omitting it inherits the server default, which is
+        // what an unconfigured factory should do. Deliberately not factoryWith(), which sets a cadence.
         var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, "default");
 
         var actualSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
