@@ -185,6 +185,19 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND project_id = :project_id
                       AND thread_id \\<> ''
                       <if(page_pushdown)>
+                          -- FINAL merges versions before it filters on thread_id, which is not in the sort key, so it
+                          -- would read every window trace's payload. The page's ids are found narrowly first and are
+                          -- on the sort key, so FINAL then reads only their granules.
+                          AND id IN (
+                              SELECT id FROM traces
+                              WHERE workspace_id = :workspace_id
+                                AND project_id = :project_id
+                                AND thread_id IN :page_thread_ids
+                                <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                      >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                                <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                      \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                          )
                           AND thread_id IN :page_thread_ids
                           <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                               >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
