@@ -88,6 +88,11 @@ const isProviderError = (
   return "code" in response && isValidJsonObject(response.message);
 };
 
+const toHttpErrorStatus = (code: unknown): number | null => {
+  const status = Number(code);
+  return Number.isInteger(status) && status >= 400 ? status : null;
+};
+
 const getCompletionProxyStream = async ({
   model,
   messages,
@@ -138,6 +143,7 @@ export interface RunStreamingReturn {
   providerError: null | string;
   opikError: null | string;
   pythonProxyError: null | string;
+  errorStatus: null | number;
   // Resolved model and provider from headers (for span tracking)
   actualModel: string | null;
   actualProvider: string | null;
@@ -169,6 +175,7 @@ const useCompletionProxyStreaming = ({
       let pythonProxyError = null;
       let opikError = null;
       let providerError = null;
+      let errorStatus: number | null = null;
 
       // Resolved model/provider from headers
       let actualModel: string | null = null;
@@ -187,6 +194,10 @@ const useCompletionProxyStreaming = ({
         // Extract resolved model and provider from headers
         actualModel = response.headers.get("X-Opik-Actual-Model");
         actualProvider = response.headers.get("X-Opik-Provider");
+
+        if (!response.ok) {
+          errorStatus = response.status;
+        }
 
         const reader = response?.body?.getReader();
         const decoder = new TextDecoder("utf-8");
@@ -213,6 +224,7 @@ const useCompletionProxyStreaming = ({
           const message = safelyParseJSON(parsedMessage?.message);
 
           providerError = message?.error?.message;
+          errorStatus = toHttpErrorStatus(parsedMessage.code) ?? errorStatus;
         };
 
         const handleOpikErrorMessage = (
@@ -220,6 +232,7 @@ const useCompletionProxyStreaming = ({
         ) => {
           if ("code" in parsedMessage && "message" in parsedMessage) {
             opikError = parsedMessage.message;
+            errorStatus = toHttpErrorStatus(parsedMessage.code) ?? errorStatus;
             return;
           }
 
@@ -279,6 +292,7 @@ const useCompletionProxyStreaming = ({
           providerError,
           opikError,
           pythonProxyError,
+          errorStatus,
           usage,
           choices,
           actualModel,
@@ -299,6 +313,7 @@ const useCompletionProxyStreaming = ({
           providerError,
           opikError: opikError || defaultErrorMessage,
           pythonProxyError,
+          errorStatus,
           usage: null,
           choices,
           actualModel,

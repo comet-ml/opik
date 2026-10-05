@@ -276,6 +276,39 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
   );
 };
 
+const HTTP_PAYMENT_REQUIRED = 402;
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+const getRunFailureHint = (
+  errorStatus: number | null,
+  canTuneRequestRate: boolean,
+): string | null => {
+  if (errorStatus === HTTP_TOO_MANY_REQUESTS) {
+    return canTuneRequestRate
+      ? "Rate limit reached. Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters."
+      : "Rate limit reached. Wait a moment and run again.";
+  }
+  // The backend reports OpenAI's insufficient_quota as 402, and OpenRouter sends 402 when credits run out.
+  if (errorStatus === HTTP_PAYMENT_REQUIRED) {
+    return "Out of credits. Add credits or raise your quota with the provider, then run again.";
+  }
+  return null;
+};
+
+export const describeRunFailure = (
+  run: RunStreamingReturn,
+  canTuneRequestRate: boolean,
+): string => {
+  const hint = getRunFailureHint(run.errorStatus, canTuneRequestRate);
+  if (!hint) return parseCompletionOutput(run);
+
+  const providerMessage =
+    run.opikError || run.providerError || run.pythonProxyError;
+  return providerMessage
+    ? `${hint} Provider message: ${providerMessage}`
+    : hint;
+};
+
 export const parseCompletionError = (run: RunStreamingReturn) => {
   if (run.opikError) {
     return { exceptionType: "OpikError", message: run.opikError };
