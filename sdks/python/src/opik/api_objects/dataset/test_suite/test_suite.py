@@ -398,6 +398,12 @@ class TestSuite:
 
         Returns:
             A list of item dictionaries.
+
+        Note:
+            To look at a test suite's items without writing code, AI coding assistants
+            connected to the Opik MCP server can call
+            ``list("dataset_item", dataset_id=...)``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         return [
             converters.dataset_item_to_suite_item_dict(item)
