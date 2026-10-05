@@ -162,15 +162,20 @@ export class TracePanelPage {
    * "Metadata", "Token usage" — addressed through its own header button.
    *
    * The block renders no `data-testid`, and its header button is the only
-   * labelled thing in it, so the block is reached as that button's grandparent
-   * (button → header row → block). Scoped to the data viewer rather than the
-   * page because the Logs chip bar also carries a button called "Metadata",
-   * and an unscoped lookup would filter lines inside a chip popover.
+   * labelled thing in it, so the block is reached by walking up from that
+   * button to the nearest ancestor that holds CodeMirror's rendered lines.
+   * Addressed by that predicate rather than by depth (`ancestor::div[2]`, the
+   * button's grandparent today) so a wrapper added or removed between the
+   * header row and the block does not silently retarget every attribute
+   * lookup below — the same shape `compare-experiments.page.ts` uses to reach
+   * a cell's enclosing table. Scoped to the data viewer rather than the page
+   * because the Logs chip bar also carries a button called "Metadata", and an
+   * unscoped lookup would filter lines inside a chip popover.
    */
   private codeBlock(title: string): Locator {
     return this.dataViewer
       .getByRole('button', { name: title, exact: true })
-      .locator('xpath=ancestor::div[2]');
+      .locator('xpath=ancestor::div[.//*[contains(@class, "cm-line")]][1]');
   }
 
   /**

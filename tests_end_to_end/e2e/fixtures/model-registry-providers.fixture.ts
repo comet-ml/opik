@@ -146,22 +146,27 @@ export const test = baseTest.extend<ModelRegistryProvidersFixtures>({
     for (const model of Object.values(REGISTRY_MODEL)) registerUnbilledModel(model);
 
     const added: string[] = [];
+    // Tracked per provider rather than inferred from "the runner holds some
+    // key": the env vars are independent, so a run with OPENAI_API_KEY set and
+    // ANTHROPIC_API_KEY absent still writes a placeholder for Anthropic — and a
+    // workspace-wide check would suppress the warning about exactly that.
+    const placeholders: string[] = [];
     for (const { provider, envVar } of REGISTRY_PROVIDERS) {
-      const result = await ensureBuiltInProviderKey(
-        provider,
-        process.env[envVar] || PLACEHOLDER_KEY,
-      );
-      if (result.added) added.push(provider);
+      const realKey = process.env[envVar];
+      const result = await ensureBuiltInProviderKey(provider, realKey || PLACEHOLDER_KEY);
+      if (!result.added) continue;
+      added.push(provider);
+      if (!realKey) placeholders.push(provider);
     }
 
-    if (added.length && !REGISTRY_PROVIDERS.some((p) => process.env[p.envVar])) {
+    if (placeholders.length) {
       // Said out loud rather than only returned: this is the one case that
       // leaves state behind, and the run log is where someone debugging a
       // later @provider-sanity auth failure will look.
       console.warn(
-        `[modelRegistryProviders fixture] added a PLACEHOLDER key for ${added.join(', ')} — ` +
-          'the workspace had none and the runner holds no real key. It is not removed; ' +
-          'see this fixture’s header.',
+        `[modelRegistryProviders fixture] added a PLACEHOLDER key for ${placeholders.join(', ')} — ` +
+          'the workspace had none and the runner holds no real key for them. It is not ' +
+          'removed; see this fixture’s header.',
       );
     }
 

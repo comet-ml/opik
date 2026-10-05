@@ -65,15 +65,27 @@ export interface QuickFilterLogsFixtures {
  * Teardown deletes the two traces; their spans cascade with them. Nothing is
  * left for the run-prefix sweep, which only reaches traces six hours later and
  * would let two runs' alpha/beta pairs coexist in one project.
+ *
+ * Every write sits inside the `try`, so the `finally` covers them all — they
+ * happen BEFORE `use()`, and the three discrimination `expect`s below throw on
+ * a seed that failed to differentiate. Cleanup placed after `use()` is skipped
+ * by exactly that, which leaves a half-seeded pair behind for six hours and
+ * poisons the very next run's single-row assertions. Each id is collected as
+ * its write succeeds.
  */
 export const test = baseTest.extend<QuickFilterLogsFixtures>({
   quickFilterLogs: async ({ backendClient, project, testNamespace }, use, testInfo) => {
+    // Client-generated and collected before the write returns, so a POST that
+    // commits server-side but loses its response still has something to delete.
+    const traceIds: string[] = [];
+
     const seedPair = async (
       which: 'alpha' | 'beta',
     ): Promise<QuickFilterPairRef> => {
       const values = QUICK_FILTER_SEED[which];
       const traceId = uuid7();
       const traceName = `${testNamespace}-trace-${which}`;
+      traceIds.push(traceId);
       await backendClient.createTraceWithSource({
         id: traceId,
         projectName: project.name,
@@ -115,87 +127,89 @@ export const test = baseTest.extend<QuickFilterLogsFixtures>({
       return { traceId, traceName, spanId, spanName };
     };
 
-    const alpha = await seedPair('alpha');
-    const beta = await seedPair('beta');
+    try {
+      const alpha = await seedPair('alpha');
+      const beta = await seedPair('beta');
 
-    // Ingestion is eventually consistent: both pairs have to be readable before
-    // anything below can mean anything.
-    await expect
-      .poll(
-        async () =>
-          (await backendClient.listTraceIds({ projectId: project.id })).length,
-        { message: 'seeded traces visible to the API', timeout: 30_000 },
-      )
-      .toBe(2);
-    await expect
-      .poll(
-        async () => (await backendClient.listSpanIds({ projectId: project.id })).length,
-        { message: 'seeded spans visible to the API', timeout: 30_000 },
-      )
-      .toBe(2);
+      // Ingestion is eventually consistent: both pairs have to be readable before
+      // anything below can mean anything.
+      await expect
+        .poll(
+          async () =>
+            (await backendClient.listTraceIds({ projectId: project.id })).length,
+          { message: 'seeded traces visible to the API', timeout: 30_000 },
+        )
+        .toBe(2);
+      await expect
+        .poll(
+          async () => (await backendClient.listSpanIds({ projectId: project.id })).length,
+          { message: 'seeded spans visible to the API', timeout: 30_000 },
+        )
+        .toBe(2);
 
-    // Each filter shape the specs drive, asserted server-side first. These are
-    // the same field/type/operator/key tuples `resolveQuickFilterTarget`
-    // produces, so a UI assertion that the table narrowed is comparing against
-    // an answer the backend already agreed to.
-    const spanMetadataFilter: BackendFilter[] = [
-      {
-        field: 'metadata',
-        type: 'dictionary',
-        key: 'component',
-        operator: 'contains',
-        value: QUICK_FILTER_SEED.alpha.component,
-      },
-    ];
-    const spanProviderFilter: BackendFilter[] = [
-      {
-        field: 'provider',
-        type: 'string',
-        operator: 'contains',
-        value: QUICK_FILTER_SEED.alpha.provider,
-      },
-    ];
-    const traceMetadataFilter: BackendFilter[] = [
-      {
-        field: 'metadata',
-        type: 'dictionary',
-        key: 'tenant',
-        operator: 'contains',
-        value: QUICK_FILTER_SEED.alpha.tenant,
-      },
-    ];
+      // Each filter shape the specs drive, asserted server-side first. These are
+      // the same field/type/operator/key tuples `resolveQuickFilterTarget`
+      // produces, so a UI assertion that the table narrowed is comparing against
+      // an answer the backend already agreed to.
+      const spanMetadataFilter: BackendFilter[] = [
+        {
+          field: 'metadata',
+          type: 'dictionary',
+          key: 'component',
+          operator: 'contains',
+          value: QUICK_FILTER_SEED.alpha.component,
+        },
+      ];
+      const spanProviderFilter: BackendFilter[] = [
+        {
+          field: 'provider',
+          type: 'string',
+          operator: 'contains',
+          value: QUICK_FILTER_SEED.alpha.provider,
+        },
+      ];
+      const traceMetadataFilter: BackendFilter[] = [
+        {
+          field: 'metadata',
+          type: 'dictionary',
+          key: 'tenant',
+          operator: 'contains',
+          value: QUICK_FILTER_SEED.alpha.tenant,
+        },
+      ];
 
-    expect(
-      await backendClient.listSpanIds({ projectId: project.id, filters: spanMetadataFilter }),
-      'spans matching metadata.component contains the alpha value',
-    ).toEqual([alpha.spanId]);
-    expect(
-      await backendClient.listSpanIds({ projectId: project.id, filters: spanProviderFilter }),
-      'spans matching provider contains the alpha value',
-    ).toEqual([alpha.spanId]);
-    expect(
-      await backendClient.listTraceIds({ projectId: project.id, filters: traceMetadataFilter }),
-      'traces matching metadata.tenant contains the alpha value',
-    ).toEqual([alpha.traceId]);
+      expect(
+        await backendClient.listSpanIds({ projectId: project.id, filters: spanMetadataFilter }),
+        'spans matching metadata.component contains the alpha value',
+      ).toEqual([alpha.spanId]);
+      expect(
+        await backendClient.listSpanIds({ projectId: project.id, filters: spanProviderFilter }),
+        'spans matching provider contains the alpha value',
+      ).toEqual([alpha.spanId]);
+      expect(
+        await backendClient.listTraceIds({ projectId: project.id, filters: traceMetadataFilter }),
+        'traces matching metadata.tenant contains the alpha value',
+      ).toEqual([alpha.traceId]);
 
-    const ref: QuickFilterLogsRef = {
-      projectId: project.id,
-      projectName: project.name,
-      alpha,
-      beta,
-    };
-    await testInfo.attach('opik.quickFilterLogs', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
+      const ref: QuickFilterLogsRef = {
+        projectId: project.id,
+        projectName: project.name,
+        alpha,
+        beta,
+      };
+      await testInfo.attach('opik.quickFilterLogs', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
+      });
 
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteTraces([alpha.traceId, beta.traceId]);
-      } catch (err) {
-        console.warn('[quickFilterLogs fixture] delete warning for the seeded traces:', err);
+      await use(ref);
+    } finally {
+      if (!shouldLeaveArtifacts(testInfo) && traceIds.length) {
+        try {
+          await backendClient.deleteTraces(traceIds);
+        } catch (err) {
+          console.warn('[quickFilterLogs fixture] delete warning for the seeded traces:', err);
+        }
       }
     }
   },

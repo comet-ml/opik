@@ -145,7 +145,12 @@ test.describe('Logs quick filter — routing', { tag: ['@t2-cuj', '@area:traces'
     });
   });
 
-  test("a span's provider attribute filters through the provider column and pins its chip", { tag: ['@cap:traces.toggle-spans-view'] }, async ({
+  // Both keys, because this test asserts both things: the filter the quick
+  // filter builds (`filter-traces`, as its two siblings above do) AND the Spans
+  // view it flips to, whose chip bar gains a pinned Provider column
+  // (`toggle-spans-view`). Tagged with the toggle alone, the routing assertion
+  // that is the point of the test would be coverage the map cannot see.
+  test("a span's provider attribute filters through the provider column and pins its chip", { tag: ['@cap:traces.filter-traces', '@cap:traces.toggle-spans-view'] }, async ({
     quickFilterLogs,
     page,
   }) => {
