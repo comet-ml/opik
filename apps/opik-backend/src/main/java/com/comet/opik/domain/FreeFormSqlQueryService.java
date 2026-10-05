@@ -178,6 +178,7 @@ public class FreeFormSqlQueryService {
         VIOLATION("violation"),
         LOG_MISSING("log_missing"),
         CHECK_FAILED("check_failed"),
+        QUERY_TREE_FAILED("query_tree_failed"),
         SCALAR_READ("scalar_read");
 
         private final String tag;
@@ -221,7 +222,11 @@ public class FreeFormSqlQueryService {
                 .handle((tree, error) -> rejectScalarReads(account, tree, error, startMillis));
     }
 
-    /** Audit: the query's subquery reads, reporting a scalar one instead of rejecting it. */
+    /**
+     * Audit: the query's subquery reads, reporting a scalar one instead of rejecting it. When the tree cannot be
+     * explained, that is counted on its own and the check still runs on the log and the plan, with the subquery reads
+     * unknown: a read only an IN or EXISTS subquery shows is then reported rather than accepted.
+     */
     private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> auditSubqueryReads(FreeFormSqlAccount account,
             String workspaceId, String projectScope, String query) {
         return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query).thenApply(tree -> {
@@ -232,6 +237,10 @@ public class FreeFormSqlQueryService {
                 count(CheckOutcome.SCALAR_READ, account);
             }
             return reads;
+        }).exceptionally(error -> {
+            log.warn("Free-form SQL query tree could not be explained for the audit, account '{}'", account, error);
+            count(CheckOutcome.QUERY_TREE_FAILED, account);
+            return FreeFormSqlSubqueries.SubqueryReads.UNKNOWN;
         });
     }
 

@@ -235,6 +235,21 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
+    @DisplayName("audit: a query tree that cannot be explained still leaves the log and plan checked")
+    void auditChecksDespiteTreeFailure() {
+        givenClickHouseReturnsOneRow();
+        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("query tree unavailable")));
+
+        var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
+
+        assertThat(response.results()).isEqualTo(chRows);
+        verify(dao).explainPlan(any(), anyString(), anyString(), anyString());
+        verify(queryLogReader).entries(anyString(), eq(STANDARD_USER));
+    }
+
+    @Test
     @DisplayName("audit: a scalar subquery reading a table is reported, and the query runs; its tree is explained after")
     void auditRunsScalarReads() {
         givenClickHouseReturnsOneRow();
