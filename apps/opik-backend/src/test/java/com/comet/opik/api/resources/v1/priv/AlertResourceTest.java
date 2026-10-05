@@ -679,6 +679,123 @@ class AlertResourceTest {
                     .containsEntry(WINDOW_CONFIG_KEY, "900");
         }
 
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("operatorValidationByEventType")
+        @DisplayName("update applies the same operator gating as create")
+        void updateAlert__operatorValidationIsScopedToTheEventTypesThatUseIt(
+                String name, AlertEventType eventType, String operator, int expectedCreateStatus,
+                int expectedUpdateStatus) {
+            // validateThresholdConfigs runs on both paths, so the gating has to hold on both; an update is a
+            // full replacement and could regress independently of create.
+            var valid = generateAlert().toBuilder()
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(thresholdConfig("0.5", "3600")))
+                            .build()))
+                    .build();
+            var alertId = alertResourceClient.createAlert(valid, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var replacement = valid.toBuilder()
+                    .id(alertId)
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(eventType)
+                            .triggerConfigs(List.of(operatorConfig(eventType, operator)))
+                            .build()))
+                    .build();
+
+            alertResourceClient.updateAlert(alertId, replacement, mock.getLeft(), mock.getRight(),
+                    expectedUpdateStatus);
+        }
+
+        private AlertTriggerConfig operatorConfig(AlertEventType eventType, String operator) {
+            var configValue = new HashMap<String, String>();
+            configValue.put(THRESHOLD_CONFIG_KEY, "0.5");
+            configValue.put(WINDOW_CONFIG_KEY, "900");
+            configValue.put(OPERATOR_CONFIG_KEY, operator);
+            if (eventType == AlertEventType.TRACE_FEEDBACK_SCORE
+                    || eventType == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
+                configValue.put(NAME_CONFIG_KEY, "quality");
+            }
+            return AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.thresholdTypeFor(eventType).orElseThrow())
+                    .configValue(configValue)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("when a config is sent with the enum-name operator, then it is stored as the symbol")
+        void createAlert__whenOperatorIsTheEnumName__thenStoredNormalized() {
+            // The mirror of the legacy-window case above, and the reason this PR exists: the alerts editor
+            // reads anything that is not exactly "<" as ">", so a stored "less_than" showed the opposite
+            // comparison and was written back as ">" on the next save.
+            var config = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            THRESHOLD_CONFIG_KEY, "0.5",
+                            WINDOW_CONFIG_KEY, "900",
+                            OPERATOR_CONFIG_KEY, "less_than"))
+                    .build();
+            var alert = generateAlert().toBuilder()
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(config))
+                            .build()))
+                    .build();
+
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var stored = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            assertThat(stored.triggers().getFirst().triggerConfigs().getFirst().configValue())
+                    .containsEntry(OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue());
+        }
+
+        static Stream<Arguments> operatorValidationByEventType() {
+            return Stream.of(
+                    // MetricsAlertJob reads the operator only for the feedback-score event types, so an
+                    // unrecognised value there is the silent never-fires this validation exists to prevent.
+                    // Create and update are separate columns rather than one derived from the other: they are
+                    // two endpoint contracts, and their success statuses differ (201 vs 204).
+                    Arguments.arguments("unknown operator on trace feedback score",
+                            AlertEventType.TRACE_FEEDBACK_SCORE, "sideways",
+                            HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_BAD_REQUEST),
+                    Arguments.arguments("blank operator on trace feedback score",
+                            AlertEventType.TRACE_FEEDBACK_SCORE, "   ",
+                            HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_BAD_REQUEST),
+                    Arguments.arguments("unknown operator on trace thread feedback score",
+                            AlertEventType.TRACE_THREAD_FEEDBACK_SCORE, "sideways",
+                            HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_BAD_REQUEST),
+                    // Everywhere else the job hardcodes GREATER_THAN and never reads the stored value, so
+                    // rejecting it would 400 released clients over a field that has never had any effect.
+                    Arguments.arguments("inert operator on cost", AlertEventType.TRACE_COST, "sideways",
+                            HttpStatus.SC_CREATED, HttpStatus.SC_NO_CONTENT),
+                    Arguments.arguments("inert operator on latency", AlertEventType.TRACE_LATENCY, "sideways",
+                            HttpStatus.SC_CREATED, HttpStatus.SC_NO_CONTENT),
+                    Arguments.arguments("inert operator on errors", AlertEventType.TRACE_ERRORS, "sideways",
+                            HttpStatus.SC_CREATED, HttpStatus.SC_NO_CONTENT));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("operatorValidationByEventType")
+        @DisplayName("operator validation applies only where the job reads the operator")
+        void createAlert__operatorValidationIsScopedToTheEventTypesThatUseIt(
+                String name, AlertEventType eventType, String operator, int expectedCreateStatus,
+                int expectedUpdateStatus) {
+            // Each of the two tests reads its own status column; the other is unused here by design.
+            var alert = generateAlert().toBuilder()
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(eventType)
+                            .triggerConfigs(List.of(operatorConfig(eventType, operator)))
+                            .build()))
+                    .build();
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), expectedCreateStatus);
+        }
+
         private AlertTriggerConfig thresholdConfig(String threshold, String window) {
             return AlertTriggerConfig.builder()
                     .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)

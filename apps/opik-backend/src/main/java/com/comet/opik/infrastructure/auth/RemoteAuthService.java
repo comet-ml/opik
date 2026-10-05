@@ -43,6 +43,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
@@ -61,6 +62,11 @@ class RemoteAuthService implements AuthService {
     // GenericType instances are thread-safe and expensive to build, so reuse a single instance.
     private static final GenericType<List<WorkspaceIdNameResponse>> WORKSPACE_LIST_TYPE = new GenericType<>() {
     };
+
+    // Cost Intelligence workspaces are named __ai_spend_{orgId}__ / __cc_{orgId}__. A user may technically belong to
+    // one, but it must never be targetable from an agent. Mirrors AI_SPEND_WORKSPACE_PATTERN in the frontend's
+    // plugins/comet/lib/aiSpend.ts, which hides the same workspaces from the workspace selector.
+    private static final Pattern INTERNAL_WORKSPACE_NAME = Pattern.compile("^__(?:ai_spend|cc)_.+__$");
 
     private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = new HashMap<>() {
         {
@@ -261,7 +267,7 @@ class RemoteAuthService implements AuthService {
                 throw toSessionAuthException(response);
             }
             return response.readEntity(WORKSPACE_LIST_TYPE).stream()
-                    .filter(workspace -> !isDefaultWorkspace(workspace.workspaceName()))
+                    .filter(workspace -> isEligibleWorkspace(workspace.workspaceName()))
                     .map(workspace -> WorkspaceInfo.builder()
                             .id(workspace.workspaceId())
                             .name(workspace.workspaceName())
@@ -288,9 +294,12 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public UserWorkspace authorizeWorkspace(Cookie sessionToken, @NonNull String workspaceName) {
+    public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
         requireSession(sessionToken);
-        if (isDefaultWorkspace(workspaceName)) {
+        // Mirrors the filtering applied when listing: hiding a workspace from the consent screen is cosmetic unless a
+        // hand-crafted consent submission naming it is rejected too. The name comes straight from the consent form and
+        // may be absent, so it is not @NonNull: a missing name is just another ineligible one and must yield the same 403.
+        if (!isEligibleWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
         return authPost("auth-session",
@@ -622,6 +631,16 @@ class RemoteAuthService implements AuthService {
 
     private boolean isDefaultWorkspace(String workspaceName) {
         return ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName);
+    }
+
+    /**
+     * Reports whether a workspace may be offered to, and consented for, an OAuth client. Blank names are rejected
+     * because the react service is the source of the list and a name is what identifies the workspace downstream.
+     */
+    private boolean isEligibleWorkspace(String workspaceName) {
+        return StringUtils.isNotBlank(workspaceName)
+                && !isDefaultWorkspace(workspaceName)
+                && !INTERNAL_WORKSPACE_NAME.matcher(workspaceName).matches();
     }
 
     /**

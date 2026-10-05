@@ -199,6 +199,13 @@ databaseAnalyticsReadOnlyFreeFormSql:
   # Plain value (no env var).
   socketTimeout: 200s
 
+# Description: credentials for the extended free-form SQL read-only user. The block is required even when
+# the feature is off: an absent block fails config validation at boot.
+databaseAnalyticsReadOnlyFreeFormExtendedSql:
+  username: comet_readonly_freeform_extended_sql_user
+  password: opik
+  socketTimeout: 200s
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
@@ -237,6 +244,11 @@ health:
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: clickhouse-readonly-freeform-sql
+      critical: false
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
       initialState: false
@@ -665,6 +677,7 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: https://openrouter.ai/api/v1
+  openRouterDecisionsUrl: https://openrouter.ai/api/alpha/decisions
   # Configuration for Vertex AI client
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
@@ -910,13 +923,20 @@ serviceToggles:
   #   the read-only ClickHouse client.
   ollieEnabled: "false"
   # Default: true
+  # Description: Kill switch for Agent Insights, effective only while ollieEnabled is on.
+  agentInsightsEnabled: "true"
+  # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"
-  # Default: false
+  # Default: true, matched here so the test application boots the feature the way a deployment does:
+  #   the score listener registered, the Redis buffer flush job scheduled and the routing consumer
+  #   started. Unlike the other scheduled jobs this configuration switches off, this one cannot be
+  #   separated from its feature — annotationQueueRouting.enabled and jobEnabled were removed in review
+  #   as a configuration smell, leaving a single switch for both.
   # Description: Whether or not automatic annotation queue population is enabled. When false the score
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
   #   automation controls on annotation queues.
-  annotationQueueAutomationEnabled: "false"
+  annotationQueueAutomationEnabled: "true"
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.

@@ -9,7 +9,6 @@ import {
   DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
 import {
-  getDefaultTemperatureForModel,
   getDefaultThinkingLevel,
   isClaudeModel,
   supportsAnthropicThinkingEffort,
@@ -30,7 +29,15 @@ import {
   PROVIDER_TYPE,
   COMPOSED_PROVIDER_TYPE,
 } from "@/types/providers";
-import { generateDefaultLLMPromptMessage } from "@/lib/llm";
+import {
+  generateDefaultLLMPromptMessage,
+  hasImagesInContent,
+  hasVideosInContent,
+} from "@/lib/llm";
+import {
+  supportsImageInput,
+  supportsVideoInput,
+} from "@/lib/modelCapabilities";
 import {
   ModelResolver,
   ProviderResolver,
@@ -112,7 +119,7 @@ export const getDefaultConfigByProvider = (
 
   if (providerType === PROVIDER_TYPE.OPEN_AI) {
     const config: LLMOpenAIConfigsType = {
-      temperature: getDefaultTemperatureForModel(model),
+      temperature: DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
       frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
@@ -239,6 +246,24 @@ export const generateDefaultPrompt = ({
     ...initPrompt,
     id: generateRandomString(),
   };
+};
+
+export const hasUnsupportedMedia = (
+  prompt: Pick<PlaygroundPromptType, "model" | "messages">,
+): boolean => {
+  if (!prompt.model) return false;
+
+  const hasImages = prompt.messages.some((message) =>
+    hasImagesInContent(message.content),
+  );
+  const hasVideos = prompt.messages.some((message) =>
+    hasVideosInContent(message.content),
+  );
+
+  return (
+    (hasImages && !supportsImageInput(prompt.model)) ||
+    (hasVideos && !supportsVideoInput(prompt.model))
+  );
 };
 
 export const parseCompletionOutput = (run: RunStreamingReturn) => {

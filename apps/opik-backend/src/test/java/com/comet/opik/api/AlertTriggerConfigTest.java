@@ -2,9 +2,13 @@ package com.comet.opik.api;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.AlertTriggerConfig.LEGACY_WINDOW_SECONDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
@@ -13,6 +17,7 @@ import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("Alert Trigger Config Test")
 class AlertTriggerConfigTest {
@@ -81,5 +86,78 @@ class AlertTriggerConfigTest {
     @DisplayName("a null config value map is passed through")
     void toleratesANullMap() {
         assertThat(AlertTriggerConfig.withNormalizedWindow(null)).isNull();
+    }
+
+    static Stream<Arguments> operatorInputs() {
+        return Stream.of(
+                arguments("<", "<"),
+                arguments(">", ">"),
+                // The enum-name spelling found in stored rows. Nothing canonicalised the value on the way in,
+                // so both reached persistence, and the alerts editor reads anything that is not exactly "<"
+                // as ">" — displaying, and on the next save storing, the opposite comparison (OPIK-8555).
+                arguments("less_than", "<"),
+                arguments("greater_than", ">"),
+                arguments("LESS_THAN", "<"),
+                arguments("GREATER_THAN", ">"),
+                arguments("  less_than  ", "<"),
+                // Not operators; left for the validation to reject rather than guessed at here.
+                arguments("not_an_operator", null),
+                arguments("", null),
+                // Blank is unrecognised rather than absent: it reaches Operator.fromString on a
+                // feedback-score alert and throws there, so the write-side validation has to reject it.
+                arguments("   ", null),
+                arguments(null, null));
+    }
+
+    @ParameterizedTest
+    @MethodSource("operatorInputs")
+    @DisplayName("recognised operator inputs canonicalise to a symbol, the rest report unrecognised")
+    void normalizesRecognisedOperatorInputsAndLeavesOthersUnrecognised(String stored, String expected) {
+        assertThat(AlertTriggerConfig.normalizedOperator(stored)).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("the config value carries the canonical operator, leaving the rest untouched")
+    void withNormalizedOperatorRewritesOnlyTheOperator() {
+        var configValue = Map.of(
+                OPERATOR_CONFIG_KEY, "less_than",
+                THRESHOLD_CONFIG_KEY, "0.5",
+                WINDOW_CONFIG_KEY, "900");
+
+        assertThat(AlertTriggerConfig.withNormalizedOperator(configValue))
+                .containsExactlyInAnyOrderEntriesOf(Map.of(
+                        OPERATOR_CONFIG_KEY, "<",
+                        THRESHOLD_CONFIG_KEY, "0.5",
+                        WINDOW_CONFIG_KEY, "900"));
+    }
+
+    @Test
+    @DisplayName("an unrecognised operator is left alone for the validation to reject")
+    void withNormalizedOperatorLeavesAnUnknownValue() {
+        var configValue = Map.of(OPERATOR_CONFIG_KEY, "not_an_operator");
+
+        assertThat(AlertTriggerConfig.withNormalizedOperator(configValue))
+                .containsExactlyInAnyOrderEntriesOf(configValue);
+    }
+
+    @Test
+    @DisplayName("the combined helper applies both normalisations in one pass")
+    void withNormalizedConfigValueAppliesBoth() {
+        // Asserted as a whole map, for the same reason as promotesTheLegacyWindowKey above: entry-wise
+        // checks would pass an implementation that normalised both keys and dropped everything else, which
+        // is the failure that would actually hurt on a config read out of persistence.
+        var configValue = Map.of(
+                LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900",
+                OPERATOR_CONFIG_KEY, "less_than",
+                THRESHOLD_CONFIG_KEY, "0.5",
+                NAME_CONFIG_KEY, "helpfulness");
+
+        assertThat(AlertTriggerConfig.withNormalizedConfigValue(configValue))
+                .containsExactlyInAnyOrderEntriesOf(Map.of(
+                        LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900",
+                        WINDOW_CONFIG_KEY, "900",
+                        OPERATOR_CONFIG_KEY, "<",
+                        THRESHOLD_CONFIG_KEY, "0.5",
+                        NAME_CONFIG_KEY, "helpfulness"));
     }
 }

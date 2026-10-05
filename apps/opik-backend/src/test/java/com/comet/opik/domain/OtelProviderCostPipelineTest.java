@@ -94,7 +94,7 @@ class OtelProviderCostPipelineTest {
                 Arguments.of("az.ai.openai (pre-rename spelling)", "gen_ai.system", "az.ai.openai", "gpt-4o",
                         null, "azure"),
                 Arguments.of("mistral_ai", "gen_ai.system", "mistral_ai", "mistral-large-latest", null, "mistral"),
-                Arguments.of("x_ai", "gen_ai.system", "x_ai", "grok-3", null, "xai"),
+                Arguments.of("x_ai", "gen_ai.system", "x_ai", "grok-4.3", null, "xai"),
 
                 // --- Same resolution via the current attribute that replaced gen_ai.system ---
                 Arguments.of("gen_ai.provider.name gcp.vertex_ai", "gen_ai.provider.name", "gcp.vertex_ai",

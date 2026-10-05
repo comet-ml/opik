@@ -29,6 +29,7 @@ import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -730,6 +731,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                        FROM experiment_items_trace_scope
+                    )
+                )
+                <endif>
             ),
             feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -849,6 +859,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                            WHERE workspace_id = :workspace_id
                            <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                            AND id IN (SELECT trace_id FROM experiment_items_scope)
+                           <if(traces_partitioned)>
+                           AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                               SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                               FROM (
+                                   SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                                   FROM experiment_items_scope
+                               )
+                           )
+                           <endif>
                            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                            LIMIT 1 BY id
                        )
@@ -964,6 +983,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     WHERE workspace_id = :workspace_id
                     <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND id IN (SELECT trace_id FROM experiment_items_final)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_final
+                        )
+                    )
+                    <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS tfs ON ei.trace_id = tfs.id
@@ -971,10 +999,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
                 <endif>
             )
+            SETTINGS log_comment = '<log_comment>'
             <endif>
             """;
 
-    // Query to extract columns from trace output for experiment items view
+    /**
+     * Query to extract columns from trace output for experiment items view.
+     * <p>
+     * {@code traces FINAL} stays, for the reason its unversioned twin
+     * {@code DatasetItemDAO#SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID} gives: a superseded version would
+     * contribute {@code output_keys} the trace no longer has (OPIK-8343).
+     */
     private static final String SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS = """
             WITH experiments_resolved AS (
                 SELECT DISTINCT
@@ -1006,10 +1041,20 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     FROM traces FINAL
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_scope)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_scope
+                        )
+                    )
+                    <endif>
                 ) AS traces_with_keys
                 ARRAY JOIN output_keys AS key_type
                 GROUP BY key
             )
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     /**
@@ -1043,6 +1088,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+            <if(traces_partitioned)>
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                FROM (
+                    SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                    FROM experiment_items_trace_scope
+                )
+            )
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1237,6 +1291,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                        FROM experiment_items_trace_scope
+                    )
+                )
+                <endif>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ),
@@ -1403,6 +1466,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                       WHERE workspace_id = :workspace_id
                       <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                       AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                      <if(traces_partitioned)>
+                      AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                          FROM (
+                              SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                              FROM experiment_items_trace_scope
+                          )
+                      )
+                      <endif>
                       ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                       LIMIT 1 BY id
                   ) t
@@ -1962,7 +2034,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <endif>
             LIMIT :limit
             <if(!push_top_limit && !push_top_limit_raw)>OFFSET :offset<endif>
-            SETTINGS output_format_json_named_tuples_as_objects = 1
+            SETTINGS log_comment = '<log_comment>', output_format_json_named_tuples_as_objects = 1
             ;
             """;
 
@@ -2432,6 +2504,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                        FROM experiment_items_trace_scope
+                    )
+                )
+                <endif>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), trace_ids AS (
@@ -2441,6 +2522,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                        FROM experiment_items_trace_scope
+                    )
+                )
+                <endif>
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -2540,6 +2630,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                         AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                        <if(traces_partitioned)>
+                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                            SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                            FROM (
+                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                                FROM experiment_items_trace_scope
+                            )
+                        )
+                        <endif>
                         ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     )
@@ -2764,6 +2863,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 LEFT JOIN feedback_scores_raw_agg fr ON fr.entity_id = eif.trace_id
                 <endif>
             ) ei
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -3077,8 +3177,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                         return asyncTemplate.nonTransaction(connection -> {
                             // Build the query using StringTemplate
-                            ST template = TemplateUtils
-                                    .newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS);
+                            ST template = getSTWithLogComment(
+                                    SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS,
+                                    "get_dataset_item_versions_with_experiment_items", workspaceId, "",
+                                    "dataset_id=%s, version_id=%s, experiment_ids=%s, page=%s, size=%s".formatted(
+                                            criteria.datasetId(), versionId,
+                                            CollectionUtils.size(criteria.experimentIds()), page, size));
+                            addTracesPartitionedFlag(template);
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
                             template.add("truncationSize",
@@ -3230,10 +3335,21 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Get target project IDs from traces for the given experiment items.
      * This is executed as a separate query to reduce traces table scans in the main query.
      */
+    /**
+     * Enables the week bound on this DAO's {@code traces} reads - see
+     * {@code ExperimentDAO#addTracesPartitionedFlag} for what it is and why it is gated.
+     */
+    private void addTracesPartitionedFlag(ST template) {
+        if (config.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
+    }
+
     private Mono<List<UUID>> getTargetProjectIds(String workspaceId, UUID datasetId, Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
             ST template = getSTWithLogComment(SELECT_TARGET_PROJECTS, "get_target_project_ids", workspaceId, "",
                     datasetId);
+            addTracesPartitionedFlag(template);
 
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 template.add("experiment_ids", true);
@@ -3268,7 +3384,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             return asyncTemplate.nonTransaction(connection -> {
-                ST template = TemplateUtils.newST(SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS);
+                ST template = getSTWithLogComment(SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS,
+                        "get_experiment_items_output_columns", workspaceId, "",
+                        "dataset_id=%s, experiment_ids=%s".formatted(datasetId,
+                                CollectionUtils.size(experimentIds)));
+                addTracesPartitionedFlag(template);
 
                 if (CollectionUtils.isNotEmpty(experimentIds)) {
                     template.add("experiment_ids", true);
@@ -3310,11 +3430,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return asyncTemplate.nonTransaction(connection -> {
-                ST template = slimCount
-                        ? getSTWithLogComment(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT,
-                                "count_dataset_item_versions_with_experiment_items_slim",
-                                workspaceId, userName, criteria.datasetId().toString())
-                        : TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
+                ST template = getSTWithLogComment(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT,
+                        slimCount
+                                ? "count_dataset_item_versions_with_experiment_items_slim"
+                                : "count_dataset_item_versions_with_experiment_items",
+                        workspaceId, userName,
+                        "dataset_id=%s, experiment_ids=%s".formatted(criteria.datasetId(),
+                                CollectionUtils.size(criteria.experimentIds())));
+                addTracesPartitionedFlag(template);
 
                 if (slimCount) {
                     template.add("slim_count", true);
@@ -3482,16 +3605,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             "copy_version_items:%s:%s:%s".formatted(workspaceId, targetDatasetId, targetVersionId));
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_version_items");
-            return Mono.fromFuture(() -> clickHouseClient.query(sql, params, settings))
-                    .flatMap(response -> Mono.fromCallable(() -> {
-                        try (response) {
-                            long written = response.getWrittenRows();
-                            log.info(
-                                    "Copied '{}' items from (dataset '{}', version '{}') to (dataset '{}', version '{}')",
-                                    written, sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId);
-                            return written;
-                        }
-                    }).subscribeOn(Schedulers.boundedElastic()))
+            return AsyncUtils.usingClickHouseFuture(
+                    () -> clickHouseClient.query(sql, params, settings),
+                    response -> {
+                        long written = response.getWrittenRows();
+                        log.info(
+                                "Copied '{}' items from (dataset '{}', version '{}') to (dataset '{}', version '{}')",
+                                written, sourceDatasetId, sourceVersionId, targetDatasetId, targetVersionId);
+                        return written;
+                    },
+                    Schedulers.boundedElastic())
                     .doFinally(signalType -> endSegment(segment));
         });
     }
@@ -3661,12 +3784,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .serverSetting("log_comment",
                         "edit_item_via_select_insert:%s:%s:%s".formatted(workspaceId, targetDatasetId, newVersionId));
 
-        return Mono.fromFuture(() -> clickHouseClient.query(sql, params, settings))
-                .flatMap(response -> Mono.fromCallable(() -> {
-                    try (response) {
-                        return response.getWrittenRows();
-                    }
-                }).subscribeOn(Schedulers.boundedElastic()));
+        return AsyncUtils.usingClickHouseFuture(
+                () -> clickHouseClient.query(sql, params, settings),
+                response -> response.getWrittenRows(),
+                Schedulers.boundedElastic());
     }
 
     /**
@@ -4451,7 +4572,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         boolean hasAggregated = counts.hasAggregated();
                         boolean hasRaw = counts.hasRaw();
 
-                        var template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS);
+                        var template = getSTWithLogComment(
+                                SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS,
+                                "get_dataset_item_versions_with_experiment_items_stats", workspaceId, "",
+                                "dataset_id=%s, version_id=%s, experiment_ids=%s, filters=%s".formatted(datasetId,
+                                        versionId, experimentIds.size(), CollectionUtils.size(filters)));
+                        addTracesPartitionedFlag(template);
 
                         if (CollectionUtils.isNotEmpty(experimentIds)) {
                             template.add("experiment_ids", true);
