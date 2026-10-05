@@ -26,13 +26,30 @@ type AnchoredBounds = {
   selectionKey: string;
   dateRange: DateRangeValue;
   bounds: IntervalBounds;
+  live: boolean;
 };
 
 const anchorToNow = (dateRange: DateRangeValue): AnchoredBounds => ({
   selectionKey: serializeDateRange(dateRange),
   dateRange,
   bounds: calculateIntervalBounds(dateRange),
+  live: isLiveDateRange(dateRange),
 });
+
+// The range ended at local midnight: close it at the end of its last local day rather than at the last tick, which a
+// hidden tab or a sleeping laptop leaves hours early. Not recomputed from the range, whose past-window form lands a
+// UTC day early for users east of UTC.
+const closeAtEndOfDay = (anchored: AnchoredBounds): AnchoredBounds => ({
+  ...anchored,
+  live: false,
+  bounds: {
+    ...anchored.bounds,
+    intervalEnd: dayjs(anchored.dateRange.to).endOf("day").utc().format(),
+  },
+});
+
+const hasEnded = (anchored: AnchoredBounds) =>
+  anchored.live && !isLiveDateRange(anchored.dateRange);
 
 const isFetchingWindow = (
   queryClient: QueryClient,
@@ -63,10 +80,13 @@ export const useIntervalBounds = (
 
   const isNewSelection =
     anchored.selectionKey !== serializeDateRange(dateRange);
-  const current = isNewSelection ? anchorToNow(dateRange) : anchored;
-  if (isNewSelection) setAnchored(current);
+  const selected = isNewSelection ? anchorToNow(dateRange) : anchored;
+  // Liveness is the stored window's, not the clock's: a render after midnight closes the window here, where reading
+  // the clock alone would stop the timer before it could close it.
+  const current = hasEnded(selected) ? closeAtEndOfDay(selected) : selected;
+  if (current !== anchored) setAnchored(current);
 
-  const isLive = isLiveDateRange(dateRange);
+  const isLive = current.live;
   const isOpenEnded = isOpenEndedDateRange(dateRange);
 
   useEffect(() => {
@@ -80,20 +100,8 @@ export const useIntervalBounds = (
       ) {
         return;
       }
-      if (!isLiveDateRange(anchored.dateRange)) {
-        // The range ended at local midnight: close it at the end of its last local day rather than at the last tick,
-        // which a hidden tab or a sleeping laptop leaves hours early. Not recomputed from the range, whose past-window
-        // form lands a UTC day early for users east of UTC.
-        setAnchored({
-          ...anchored,
-          bounds: {
-            ...anchored.bounds,
-            intervalEnd: dayjs(anchored.dateRange.to)
-              .endOf("day")
-              .utc()
-              .format(),
-          },
-        });
+      if (hasEnded(anchored)) {
+        setAnchored(closeAtEndOfDay(anchored));
         return;
       }
 
@@ -118,7 +126,11 @@ export const useIntervalBounds = (
   }, [anchored, isLive, isAutoReanchorEnabled, queryClient]);
 
   const reanchorToNow = useCallback(() => {
-    if (!isLiveDateRange(current.dateRange)) return false;
+    if (!current.live) return false;
+    if (hasEnded(current)) {
+      setAnchored(closeAtEndOfDay(current));
+      return true;
+    }
 
     const next = reanchorIntervalBounds(current.dateRange, current.bounds);
     if (!hasMoved(current.dateRange, current.bounds, next)) return false;

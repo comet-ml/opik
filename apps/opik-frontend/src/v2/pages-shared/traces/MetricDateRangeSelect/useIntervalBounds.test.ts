@@ -457,6 +457,56 @@ describe("useIntervalBounds", () => {
 
       expect(result.current.intervalEnd).toBe(endOfLastDay);
     });
+
+    it("should close a custom range ending today at the end of its day when the page re-renders after midnight, before the next tick", () => {
+      const { result, rerender } = renderIntervalBounds(endingToday);
+      vi.setSystemTime(midnight.add(5, "seconds").toDate());
+
+      rerender({ range: endingToday });
+
+      expect(result.current.intervalEnd).toBe(endOfLastDay);
+      expect(result.current.refetchInterval).toBe(REANCHOR_INTERVAL);
+      expect(result.current.movesByItself).toBe(false);
+      tick();
+      expect(result.current.intervalEnd).toBe(endOfLastDay);
+    });
+
+    it("should close a custom range ending today at the end of its day when a hidden page re-renders after midnight, then comes back", () => {
+      vi.setSystemTime(now.toDate());
+      const { result, rerender } = renderIntervalBounds(endingToday);
+      focusManager.setFocused(false);
+      vi.setSystemTime(midnight.add(5, "hours").toDate());
+
+      rerender({ range: endingToday });
+      act(() => {
+        focusManager.setFocused(true);
+      });
+
+      expect(result.current.intervalEnd).toBe(endOfLastDay);
+      expect(result.current.refetchInterval).toBe(REANCHOR_INTERVAL);
+    });
+
+    it("should request a custom range ending today with its closed end after midnight, and keep polling it", async () => {
+      const fetchWindow = vi.fn<FetchWindow>().mockResolvedValue({});
+      const { result } = renderWindowQuery(fetchWindow, endingToday);
+      await settle();
+
+      tick();
+      await settle();
+      expect(dayjs().isAfter(midnight)).toBe(true);
+      tick();
+      await settle();
+      tick();
+      await settle();
+
+      expect(result.current.intervalEnd).toBe(endOfLastDay);
+      expect(fetchedWindowEnds(fetchWindow)).toEqual([
+        beforeMidnight.utc().format(),
+        endOfLastDay,
+        endOfLastDay,
+        endOfLastDay,
+      ]);
+    });
   });
 
   describe("with the window's queries", () => {
