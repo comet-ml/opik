@@ -459,3 +459,105 @@ describe("@track with non-Error thrown values", () => {
     expect(await loggedError(thrown)).toBe(thrown);
   });
 });
+
+describe("@track output set through getTrackContext()", () => {
+  let trackOpikClient: ReturnType<typeof getTrackOpikClient>;
+  let createTracesSpy: MockInstance<
+    typeof trackOpikClient.api.traces.createTraces
+  >;
+  let createSpansSpy: MockInstance<
+    typeof trackOpikClient.api.spans.createSpans
+  >;
+  let updateTracesSpy: MockInstance;
+  let updateSpansSpy: MockInstance;
+
+  const sentSpans = () =>
+    createSpansSpy.mock.calls.flatMap((call) => call?.[0]?.spans ?? []);
+  const sentTraces = () =>
+    createTracesSpy.mock.calls.flatMap((call) => call?.[0]?.traces ?? []);
+
+  beforeEach(() => {
+    trackOpikClient = getTrackOpikClient();
+    createTracesSpy = vi
+      .spyOn(trackOpikClient.api.traces, "createTraces")
+      .mockImplementation(mockAPIFunction);
+    updateTracesSpy = vi
+      .spyOn(trackOpikClient.api.traces, "updateTrace")
+      .mockImplementation(mockAPIFunction);
+    createSpansSpy = vi
+      .spyOn(trackOpikClient.api.spans, "createSpans")
+      .mockImplementation(mockAPIFunction);
+    updateSpansSpy = vi
+      .spyOn(trackOpikClient.api.spans, "updateSpan")
+      .mockImplementation(mockAPIFunction);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    createTracesSpy.mockRestore();
+    updateTracesSpy.mockRestore();
+    createSpansSpy.mockRestore();
+    updateSpansSpy.mockRestore();
+  });
+
+  it("keeps the span output set during the call when it collides with the return value", async () => {
+    const inner = track({ name: "inner" }, () => {
+      getTrackContext()?.span.update({ output: { result: "explicit-result" } });
+      return "returned-result";
+    });
+    const outer = track({ name: "outer" }, () => inner());
+
+    outer();
+    await trackOpikClient.flush();
+
+    const spans = sentSpans();
+    expect(spans.find((span) => span.name === "inner")?.output).toEqual({
+      result: "explicit-result",
+    });
+    expect(spans.find((span) => span.name === "outer")?.output).toEqual({
+      result: "returned-result",
+    });
+  });
+
+  it("keeps the trace output set during the call and adds the returned keys", async () => {
+    const root = track({ name: "root" }, () => {
+      getTrackContext()?.trace.update({
+        output: { answer: "explicit-answer" },
+      });
+      return { answer: "returned-answer", sources: ["doc-1"] };
+    });
+
+    root();
+    await trackOpikClient.flush();
+
+    expect(sentTraces()[0]?.output).toEqual({
+      answer: "explicit-answer",
+      sources: ["doc-1"],
+    });
+    expect(sentSpans()[0]?.output).toEqual({
+      answer: "returned-answer",
+      sources: ["doc-1"],
+    });
+  });
+
+  it("merges nested returned keys under the nested output set during an async call", async () => {
+    const tracked = track({ name: "nested" }, async () => {
+      getTrackContext()?.span.update({
+        output: { details: { source: "explicit-source" } },
+      });
+      return {
+        details: { source: "returned-source", score: 0.9 },
+        answer: "returned-answer",
+      };
+    });
+
+    await tracked();
+    await trackOpikClient.flush();
+
+    expect(sentSpans()[0]?.output).toEqual({
+      details: { source: "explicit-source", score: 0.9 },
+      answer: "returned-answer",
+    });
+  });
+});

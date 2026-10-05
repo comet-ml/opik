@@ -145,11 +145,59 @@ function logSuccess({
     Object.assign(spanUpdate, enrichedData);
   }
 
+  // Output already on the span/trace was set by the user through getTrackContext()
+  // during the call, so it wins over the captured return value (as in the Python SDK).
+  spanUpdate.output = mergeExplicitOutputOverCaptured(
+    spanUpdate.output,
+    span.data.output,
+    0
+  );
   span.update(spanUpdate);
 
   if (trace) {
-    trace.update({ endTime, output });
+    trace.update({
+      endTime,
+      output: mergeExplicitOutputOverCaptured(output, trace.data.output, 0),
+    });
   }
+}
+
+const MAX_OUTPUT_MERGE_DEPTH = 10;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/**
+ * Mirrors the Python SDK's deep merge: plain objects are merged key by key, the explicit value
+ * wins wherever both sides have something that isn't a plain object, and the depth is capped so
+ * a self-referencing value can't throw from inside the decorator.
+ */
+function mergeExplicitOutputOverCaptured(
+  captured: any,
+  explicit: any,
+  depth: number
+): any {
+  if (explicit === undefined) {
+    return captured;
+  }
+  if (
+    depth >= MAX_OUTPUT_MERGE_DEPTH ||
+    !isPlainObject(captured) ||
+    !isPlainObject(explicit)
+  ) {
+    return explicit;
+  }
+
+  const merged: Record<string, unknown> = { ...captured };
+  for (const [key, value] of Object.entries(explicit)) {
+    merged[key] = mergeExplicitOutputOverCaptured(merged[key], value, depth + 1);
+  }
+  return merged;
 }
 
 /**
