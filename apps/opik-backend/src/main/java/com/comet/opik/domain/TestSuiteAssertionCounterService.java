@@ -25,15 +25,18 @@ public class TestSuiteAssertionCounterService {
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
     private final ExperimentService experimentService;
+    private final ExperimentCancellationService cancellationService;
 
     @Inject
     public TestSuiteAssertionCounterService(
             @NonNull RedissonReactiveClient redisClient,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
-            @NonNull ExperimentService experimentService) {
+            @NonNull ExperimentService experimentService,
+            @NonNull ExperimentCancellationService cancellationService) {
         this.redisClient = redisClient;
         this.config = config;
         this.experimentService = experimentService;
+        this.cancellationService = cancellationService;
     }
 
     public Mono<Void> setCounters(@NonNull String workspaceId, Map<UUID, Long> itemsByExperiment) {
@@ -80,7 +83,7 @@ public class TestSuiteAssertionCounterService {
                                 if (remaining <= 0) {
                                     log.info("Assertion counter reached zero for experiment '{}', finishing",
                                             experimentId);
-                                    return finishExperiment(experimentId);
+                                    return finishExperiment(workspaceId, experimentId);
                                 }
                                 return Mono.<Void>empty();
                             })
@@ -90,15 +93,20 @@ public class TestSuiteAssertionCounterService {
 
     // TODO: deduplicate with ExperimentItemProcessingSubscriber.finishExperiments — extract into
     //  a shared ExperimentFinishListener triggered by an ExperimentProcessed event
-    private Mono<Void> finishExperiment(UUID experimentId) {
+    private Mono<Void> finishExperiment(String workspaceId, UUID experimentId) {
+        // No finish stamp: the items stopped when the batch drained, which is where it was recorded.
         var statusUpdate = ExperimentUpdate.builder()
                 .status(ExperimentStatus.COMPLETED)
                 .build();
 
-        return experimentService.update(experimentId, statusUpdate)
-                .then(experimentService.finishExperiments(Set.of(experimentId)))
-                .doOnSuccess(unused -> log.info("Finished experiment '{}' after all assertions completed",
-                        experimentId));
+        // A cancelled experiment stays cancelled: its assertions draining is not it completing.
+        return cancellationService.isCancelled(workspaceId, experimentId)
+                .flatMap(cancelled -> cancelled
+                        ? Mono.<Void>empty()
+                        : experimentService.update(experimentId, statusUpdate)
+                                .then(experimentService.finishExperiments(Set.of(experimentId)))
+                                .doOnSuccess(unused -> log.info(
+                                        "Finished experiment '{}' after all assertions completed", experimentId)));
     }
 
     private static String counterKey(String workspaceId, UUID experimentId) {

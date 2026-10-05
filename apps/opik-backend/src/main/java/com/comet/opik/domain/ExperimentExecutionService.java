@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +52,7 @@ public class ExperimentExecutionService {
     private static final int STREAM_PAGE_SIZE = 2000;
 
     private final ExperimentService experimentService;
+    private final ExperimentCancellationService cancellationService;
     private final DatasetService datasetService;
     private final DatasetItemService datasetItemService;
     private final DatasetVersionService datasetVersionService;
@@ -63,6 +65,7 @@ public class ExperimentExecutionService {
     @Inject
     public ExperimentExecutionService(
             @NonNull ExperimentService experimentService,
+            @NonNull ExperimentCancellationService cancellationService,
             @NonNull DatasetService datasetService,
             @NonNull DatasetItemService datasetItemService,
             @NonNull DatasetVersionService datasetVersionService,
@@ -72,6 +75,7 @@ public class ExperimentExecutionService {
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig,
             @NonNull PromptService promptService) {
         this.experimentService = experimentService;
+        this.cancellationService = cancellationService;
         this.datasetService = datasetService;
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
@@ -135,6 +139,11 @@ public class ExperimentExecutionService {
                                                                             .build());
                                                         }
 
+                                                        if (messages.size() > experimentExecutionConfig
+                                                                .getStreamMaxLen()) {
+                                                            return Mono.error(tooLargeToRun(messages.size()));
+                                                        }
+
                                                         return itemPublisher.publish(batchId, messages, testSuite)
                                                                 .then(Mono.fromCallable(() -> {
                                                                     log.info(
@@ -151,6 +160,35 @@ public class ExperimentExecutionService {
                                                     });
                                         }));
                     });
+        });
+    }
+
+    /**
+     * Stops a run: the experiments are marked cancelled for the consumer to skip what it has not
+     * reached, and their status is set now rather than when the stream drains, so the caller sees
+     * the run stop instead of watching it wind down.
+     *
+     * Items already handed to a provider finish — stopping prevents work starting, not work in
+     * flight.
+     */
+    public Mono<Void> cancel(@NonNull Set<UUID> experimentIds) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            var statusUpdate = ExperimentUpdate.builder()
+                    .status(ExperimentStatus.CANCELLED)
+                    .build();
+
+            // Marked first: the mark is what stops an item a consumer already holds, and purging before
+            // marking would leave that window unguarded
+            return cancellationService.cancel(workspaceId, experimentIds)
+                    .thenMany(Flux.fromIterable(experimentIds)
+                            .concatMap(experimentId -> experimentService.update(experimentId, statusUpdate)
+                                    .then(cancellationService.purgeQueued(workspaceId, experimentId))
+                                    .flatMap(drained -> recordFinishedIfDrained(experimentId, drained))))
+                    .then()
+                    .doOnSuccess(unused -> log.info("Cancelled '{}' experiments, workspaceId '{}'",
+                            experimentIds.size(), workspaceId));
         });
     }
 
@@ -270,9 +308,37 @@ public class ExperimentExecutionService {
         }
     }
 
+    /**
+     * A run whose remaining items were all purged has stopped producing with nothing left to notice
+     * it: no message will reach a consumer to count the last one down. Anything above zero is still
+     * with a consumer, which will record it on the way out.
+     */
+    private Mono<Void> recordFinishedIfDrained(UUID experimentId, boolean drained) {
+        if (!drained) {
+            return Mono.empty();
+        }
+
+        return experimentService.update(experimentId, ExperimentUpdate.builder().finished(true).build());
+    }
+
+    /**
+     * Refused rather than published: the queue trims by length without sparing what no consumer has
+     * taken, so a run this size would delete its own items. They would never execute and the run
+     * would never finish, with nothing to say why.
+     */
+    private BadRequestException tooLargeToRun(int messageCount) {
+        log.warn("Refusing a run of '{}' items against a queue bounded at '{}'",
+                messageCount, experimentExecutionConfig.getStreamMaxLen());
+
+        return new BadRequestException(
+                "This run would queue %,d items, more than the %,d the processing queue holds. Narrow the dataset with filters, or run fewer prompts at once."
+                        .formatted(messageCount, experimentExecutionConfig.getStreamMaxLen()));
+    }
+
     private Mono<Void> markExperimentsCompleted(List<UUID> experimentIds) {
         var statusUpdate = ExperimentUpdate.builder()
                 .status(ExperimentStatus.COMPLETED)
+                .finished(true)
                 .build();
         return Flux.fromIterable(experimentIds)
                 .concatMap(id -> experimentService.update(id, statusUpdate))
