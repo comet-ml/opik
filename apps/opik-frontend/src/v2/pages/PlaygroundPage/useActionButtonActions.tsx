@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import { getExperimentById } from "@/api/datasets/useExperimentById";
 
 import { COMPARE_EXPERIMENTS_KEY, PROJECTS_KEY } from "@/api/api";
@@ -20,6 +21,7 @@ import { processFilters, transformDataColumnFilters } from "@/lib/filters";
 import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
+import useCancelExperimentExecution from "@/api/playground/useCancelExperimentExecution";
 import usePlaygroundStore, {
   getExperimentNameForPrompt,
   getExperimentNamesForPrompts,
@@ -61,6 +63,14 @@ const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
 
 const MAX_POLL_DURATION_MS = 5 * 60 * 1000;
 const MAX_POLL_DURATION_LABEL = "5 minutes";
+
+/**
+ * What this tab stops doing after {@link MAX_POLL_DURATION_LABEL}, which is watching — the run
+ * itself is on the server and finishes whether or not anyone is looking.
+ */
+const STILL_RUNNING_DESCRIPTION =
+  `This run is taking longer than ${MAX_POLL_DURATION_LABEL}, so it is no longer being followed here. ` +
+  "It continues on the server — reopen the playground later to see the results.";
 
 interface PollScope {
   scopedPromptIds?: string[];
@@ -121,6 +131,10 @@ const useActionButtonActions = ({
   );
   const runExperimentExecution = useRunExperimentExecution();
   const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
+
+  // Only `mutate` is stable; useMutation's object is new every render. stopAll ends up in an
+  // unmount cleanup, which an unstable identity re-runs every render, stopping the run it began.
+  const { mutate: cancelExperimentRun } = useCancelExperimentExecution();
   const announceRunComplete = useRunCompletionToast(datasetId);
   const announcePendingRef = useRef(false);
   const scopedAnnounceRef = useRef(new Set<string>());
@@ -191,6 +205,25 @@ const useActionButtonActions = ({
     resetProgress();
   }, [resetOutputMap, clearCreatedExperiments, clearRunningMap, resetProgress]);
 
+  const cancelBackendRun = useCallback(
+    (promptIds?: string[]) => {
+      if (!isBackendRun) return;
+
+      const experimentByPromptId =
+        usePlaygroundStore.getState().experimentByPromptId ?? {};
+      const experimentIds = (promptIds ?? Object.keys(experimentByPromptId))
+        .map((promptId) => experimentByPromptId[promptId])
+        .filter(Boolean);
+
+      if (experimentIds.length === 0) return;
+
+      setIsRunInFlight(false);
+      cancelExperimentRun({ experimentIds });
+      queryClient.invalidateQueries({ queryKey: ["experiments"] });
+    },
+    [isBackendRun, cancelExperimentRun, setIsRunInFlight, queryClient],
+  );
+
   const stopAll = useCallback(() => {
     announcePendingRef.current = false;
     scopedAnnounceRef.current.clear();
@@ -198,7 +231,8 @@ const useActionButtonActions = ({
     isToStopRef.current = true;
     abortControllersRef.current.forEach(({ controller }) => controller.abort());
     abortControllersRef.current.clear();
-  }, [clearRunningMap]);
+    cancelBackendRun();
+  }, [clearRunningMap, cancelBackendRun]);
 
   const stopSingle = useCallback(
     (promptId: string) => {
@@ -210,8 +244,9 @@ const useActionButtonActions = ({
           abortControllersRef.current.delete(key);
         }
       }
+      cancelBackendRun([promptId]);
     },
-    [setPromptRunning],
+    [setPromptRunning, cancelBackendRun],
   );
 
   const storeExperiments = useCallback(
@@ -272,7 +307,7 @@ const useActionButtonActions = ({
       resetProgress();
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
       queryClient.invalidateQueries({ queryKey: [COMPARE_EXPERIMENTS_KEY] });
-      toast({ title: "Timeout", description, variant: "destructive" });
+      toast({ title: "Still running", description });
     },
     [clearRunningMap, resetProgress, queryClient, toast, setIsRunInFlight],
   );
@@ -302,7 +337,9 @@ const useActionButtonActions = ({
       if (!isScoped) {
         onUnscopedCleanup?.();
       }
-      if ((error as Error)?.name !== "AbortError") {
+      // Stopping a run aborts the poll's own request, which is not a failure to report. These are
+      // all axios calls, so a stop surfaces as CanceledError rather than AbortError.
+      if (!axios.isCancel(error)) {
         toast({
           title: "Error",
           description,
@@ -331,14 +368,11 @@ const useActionButtonActions = ({
           if (isScoped) {
             finishPollScope(scope);
             toast({
-              title: "Timeout",
-              description: `Assertion evaluation polling timed out after ${MAX_POLL_DURATION_LABEL}`,
-              variant: "destructive",
+              title: "Still running",
+              description: STILL_RUNNING_DESCRIPTION,
             });
           } else {
-            handlePollTimeout(
-              `Assertion evaluation polling timed out after ${MAX_POLL_DURATION_LABEL}`,
-            );
+            handlePollTimeout(STILL_RUNNING_DESCRIPTION);
           }
           return;
         }
@@ -459,14 +493,11 @@ const useActionButtonActions = ({
           if (isScoped) {
             finishPollScope(scope);
             toast({
-              title: "Timeout",
-              description: `Experiment completion polling timed out after ${MAX_POLL_DURATION_LABEL}`,
-              variant: "destructive",
+              title: "Still running",
+              description: STILL_RUNNING_DESCRIPTION,
             });
           } else {
-            handlePollTimeout(
-              `Experiment completion polling timed out after ${MAX_POLL_DURATION_LABEL}`,
-            );
+            handlePollTimeout(STILL_RUNNING_DESCRIPTION);
           }
           return;
         }

@@ -11,6 +11,7 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.events.ExperimentItemToProcess;
@@ -23,6 +24,7 @@ import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +45,7 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
@@ -61,6 +64,9 @@ class ExperimentExecutionServiceTest {
 
     @Mock
     private ExperimentService experimentService;
+
+    @Mock
+    private ExperimentCancellationService cancellationService;
 
     @Mock
     private DatasetService datasetService;
@@ -87,7 +93,8 @@ class ExperimentExecutionServiceTest {
         var testSuiteConfig = new TestSuiteConfig();
         var evaluatorMapper = new TestSuiteEvaluatorMapper(testSuiteConfig);
         service = new ExperimentExecutionService(
-                experimentService, datasetService, datasetItemService, datasetVersionService,
+                experimentService, cancellationService, datasetService, datasetItemService,
+                datasetVersionService,
                 itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService);
 
         lenient().when(itemPublisher.publish(any(), any(), anyBoolean())).thenReturn(Mono.empty());
@@ -598,6 +605,135 @@ class ExperimentExecutionServiceTest {
 
             var metadata = captor.getValue().metadata();
             assertThat(metadata.has("model_config")).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Queue bound")
+    class QueueBound {
+
+        // The queue trims by length without sparing entries no consumer has taken, so a run bigger
+        // than it deletes its own items: they never execute, the run never drains, and nothing says
+        // why. Refusing it up front is the difference between a clear error and silent loss.
+        @Test
+        void refuseARunThatWouldNotFitTheQueue() {
+            var config = new ExperimentExecutionConfig();
+            config.setStreamMaxLen(1000);
+            service = new ExperimentExecutionService(
+                    experimentService, cancellationService, datasetService, datasetItemService,
+                    datasetVersionService, itemPublisher, idGenerator,
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService);
+
+            stubDatasetItems(IntStream.range(0, 1001)
+                    .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
+                    .toList());
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+
+            assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build()))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("1,001")
+                    .hasMessageContaining("1,000");
+
+            verify(itemPublisher, never()).publish(any(), any(), anyBoolean());
+        }
+
+        @Test
+        void publishARunThatFits() {
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build());
+
+            verify(itemPublisher).publish(any(), any(), anyBoolean());
+        }
+    }
+
+    @Nested
+    @DisplayName("Cancellation")
+    class Cancellation {
+
+        @Test
+        void cancelMarksTheExperimentsAndStopsThem() {
+            var experimentIds = Set.of(UUID.randomUUID(), UUID.randomUUID());
+
+            when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(false));
+            when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+            service.cancel(experimentIds)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER_NAME)
+                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                    .block();
+
+            verify(cancellationService).cancel(eq(WORKSPACE_ID), eq(experimentIds));
+
+            // Marking alone leaves the consumer to walk what is queued, which is what makes the next
+            // run wait behind a cancelled one
+            experimentIds.forEach(
+                    experimentId -> verify(cancellationService).purgeQueued(WORKSPACE_ID, experimentId));
+
+            // Status is set now rather than when the stream drains, so the caller sees the run stop
+            // instead of watching it wind down.
+            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+            verify(experimentService, times(2)).update(any(UUID.class), captor.capture());
+            assertThat(captor.getAllValues())
+                    .allSatisfy(update -> assertThat(update.status()).isEqualTo(ExperimentStatus.CANCELLED));
+        }
+
+        // Purging the last of an experiment's queued items leaves no message to reach a consumer, so
+        // nothing downstream would ever record that it had stopped producing.
+        @Test
+        void cancelRecordsTheFinishWhenThePurgeDrainsTheExperiment() {
+            var experimentId = UUID.randomUUID();
+
+            when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(true));
+            when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+            service.cancel(Set.of(experimentId))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER_NAME)
+                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                    .block();
+
+            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+            verify(experimentService, times(2)).update(eq(experimentId), captor.capture());
+            assertThat(captor.getAllValues())
+                    .anySatisfy(update -> assertThat(update.finished()).isTrue());
+        }
+
+        @Test
+        void cancelLeavesTheFinishToTheConsumerWhileItemsAreStillOut() {
+            var experimentId = UUID.randomUUID();
+
+            when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(false));
+            when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+            service.cancel(Set.of(experimentId))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER_NAME)
+                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                    .block();
+
+            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+            verify(experimentService).update(eq(experimentId), captor.capture());
+            assertThat(captor.getValue().finished()).isFalse();
         }
     }
 
