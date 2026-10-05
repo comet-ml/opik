@@ -2233,6 +2233,39 @@ describe("Anthropic request contract", () => {
     });
   });
 
+  it.each([
+    ["a string", "json"],
+    ["an array", ["x"]],
+    ["a number", 3],
+  ])(
+    "leaves %s output_config untouched for the backend to reject",
+    (_, outputConfig) => {
+      expect(
+        sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+          maxCompletionTokens: 4000,
+          thinkingEffort: "low",
+          custom_parameters: {
+            thinking: { type: "adaptive" },
+            output_config: outputConfig,
+          },
+        }).custom_parameters,
+      ).toEqual({
+        thinking: { type: "adaptive" },
+        output_config: outputConfig,
+      });
+    },
+  );
+
+  it("treats a null output_config as absent", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        maxCompletionTokens: 4000,
+        thinkingEffort: "low",
+        custom_parameters: { output_config: null },
+      }).custom_parameters,
+    ).toEqual({ output_config: { effort: "low" } });
+  });
+
   it("removes an effort from a model that takes none", () => {
     // A reloaded optimization run can carry the nested copy onto a model switched to Haiku.
     expect(

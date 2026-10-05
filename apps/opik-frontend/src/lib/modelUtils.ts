@@ -484,6 +484,11 @@ export const withThinkingEffort = (
   effort: AnthropicThinkingEffort | undefined,
 ): Record<string, unknown> | undefined => {
   const params = asRecord(customParameters);
+  // Rebuilding a non-object output_config would turn it into a valid effort-only one and hide the
+  // backend's 400, so a malformed value is sent as it is.
+  if (params.output_config != null && !isPlainObject(params.output_config)) {
+    return Object.keys(params).length > 0 ? params : undefined;
+  }
   const outputConfig = omit(asRecord(params.output_config), "effort");
   const nextOutputConfig = effort ? { ...outputConfig, effort } : outputConfig;
   const next =
