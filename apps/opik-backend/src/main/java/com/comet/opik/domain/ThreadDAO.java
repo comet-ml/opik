@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -93,46 +95,73 @@ class ThreadDAOImpl implements ThreadDAO {
     // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
     // The truncated copies are aliased *_preview so the thread filters read the full messages, as the count does.
     /**
-     * OPIK-7035: resolves one page of thread ids for the default sort from a narrow scan of the window's traces, so
+     * OPIK-7035: resolves one page of thread ids from a narrow scan of the window's traces and the thread rows, so
      * {@link #SELECT_TRACES_THREADS_BY_PROJECT_IDS} enriches only those threads. It runs as its own query and its ids
      * are bound into the list query: as a CTE it was re-evaluated at every reference of traces_final and
      * trace_threads_final, about seven times per page (OPIK-8335).
+     * <p>
+     * The columns the thread filters and sorts read are defined exactly as in the list query's outer select, so that
+     * query's {@code <trace_thread_filters>} and {@code <sort_fields>} apply here unchanged and both paths pick the
+     * same page. Filters and sorts on cost, usage, feedback scores and messages are not computable from this scan;
+     * {@link #isPagePushdownEligible} sends them to the full query.
      */
     @VisibleForTesting
     static final String SELECT_PAGE_THREAD_IDS = """
-            SELECT pt.thread_id AS thread_id
+            SELECT id AS thread_id
             FROM (
                 SELECT
-                    thread_id,
-                    minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) AS start_time,
-                    maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) AS end_time,
-                    max(last_updated_at) AS trace_last_updated_at
+                    pt.thread_id AS id,
+                    pt.start_time AS start_time,
+                    pt.end_time AS end_time,
+                    pt.duration AS duration,
+                    pt.number_of_messages AS number_of_messages,
+                    if(ptt.created_by = '', pt.created_by, ptt.created_by) AS created_by,
+                    if(ptt.last_updated_at == toDateTime64(0, 6, 'UTC'), pt.last_updated_at, ptt.last_updated_at) AS last_updated_at,
+                    if(ptt.created_at = toDateTime64(0, 9, 'UTC'), pt.created_at, ptt.created_at) AS created_at,
+                    if(ptt.status = 'unknown', 'active', ptt.status) AS status,
+                    if(LENGTH(CAST(ptt.thread_model_id AS Nullable(String))) > 0, ptt.thread_model_id, NULL) AS thread_model_id,
+                    ptt.tags AS tags,
+                    if(ptt.environment = '', pt.environment, ptt.environment) AS environment
                 FROM (
-                    SELECT id, thread_id, start_time, end_time, last_updated_at
-                    FROM traces FINAL
+                    SELECT
+                        t.thread_id AS thread_id,
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) AS start_time,
+                        maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) AS end_time,
+                        if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                               AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
+                           NULL) AS duration,
+                        countIf(notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) > 0 AS has_non_sentinel_trace,
+                        count(DISTINCT t.id) * 2 AS number_of_messages,
+                        max(t.last_updated_at) AS last_updated_at,
+                        argMin(t.created_by, t.created_at) AS created_by,
+                        min(t.created_at) AS created_at,
+                        if(has_non_sentinel_trace, argMinIf(t.environment, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMin(t.environment, t.start_time)) AS environment
+                    FROM (
+                        SELECT id, thread_id, start_time, end_time, last_updated_at, created_by, created_at, environment
+                        FROM traces FINAL
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND thread_id \\<> ''
+                          <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                          <if(filters)> AND <filters> <endif>
+                          <if(search_text)> AND <search_text> <endif>
+                    ) AS t
+                    GROUP BY t.thread_id
+                ) AS pt
+                <if(uuid_from_time || uuid_to_time)>INNER<else>LEFT<endif> JOIN (
+                    SELECT thread_id, id AS thread_model_id, last_updated_at, created_by, created_at, status, tags, environment
+                    FROM trace_threads FINAL
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
-                      AND thread_id \\<> ''
-                      <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                          >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                      <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                          \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                      <if(filters)> AND <filters> <endif>
-                      <if(search_text)> AND <search_text> <endif>
-                ) AS t
-                GROUP BY thread_id
-            ) AS pt
-            <if(uuid_from_time || uuid_to_time)>INNER<else>LEFT<endif> JOIN (
-                SELECT thread_id, id, last_updated_at
-                FROM trace_threads FINAL
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-            ) AS ptt ON pt.thread_id = ptt.thread_id
-            ORDER BY if(ptt.last_updated_at = toDateTime64(0, 6, 'UTC'), pt.trace_last_updated_at, ptt.last_updated_at) DESC,
-                pt.start_time ASC,
-                nullIf(pt.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC,
-                ptt.id DESC,
-                pt.thread_id
+                ) AS ptt ON pt.thread_id = ptt.thread_id
+            )
+            WHERE 1 = 1
+            <if(trace_thread_filters)> AND <trace_thread_filters> <endif>
+            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC, thread_model_id DESC, id <else> ORDER BY last_updated_at DESC, start_time ASC, nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC, thread_model_id DESC, id <endif>
             LIMIT :limit <if(offset)>OFFSET :offset<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1549,28 +1578,43 @@ class ThreadDAOImpl implements ThreadDAO {
      * enriches only that page so the wide {@code input}/{@code output} columns and spans are read for
      * ~page-size threads instead of the whole project. It is only output-equivalent when page membership
      * and ordering are fully determined by that narrow {@code traces}+{@code trace_threads} scan. Any of
-     * these attributes means the page can only be resolved by the full enrichment query (filters/sorts
-     * that need the spans/feedback/annotation joins), so we fall back. A time window is not one of them: the
+     * these attributes means the page can only be resolved by the full enrichment query (filters
+     * that need the spans/feedback/annotation joins), so we fall back. Thread filters and sorts are checked
+     * field by field in {@link #isPagePushdownEligible}. A time window is not one of them: the
      * resolver then reads only the window's traces and requires the thread row, as the full query's INNER JOIN
      * does on any window, and breaks ties by the thread row id and then the thread id like the outer ORDER BY, so
      * both paths pick the same page.
      */
     private static final List<String> PAGE_PUSHDOWN_DISQUALIFIERS = List.of(
-            "sort_fields", "traces_pushdown_filter",
+            "traces_pushdown_filter",
             "feedback_scores_filters", "feedback_scores_empty_filters",
             "span_feedback_scores_filters", "span_feedback_scores_empty_filters",
-            "trace_aggregation_filters", "trace_thread_filters", "annotation_queue_filters",
+            "trace_aggregation_filters", "annotation_queue_filters",
             "annotation_queue_id", "experiment_filters", "guardrails_filters", "last_received_id",
             "stream");
 
+    // The sorts SELECT_PAGE_THREAD_IDS computes; cost, usage and feedback scores need the spans and feedback joins.
+    private static final Set<String> PAGE_PUSHDOWN_SORT_FIELDS = Set.of(
+            SortableFields.ID, SortableFields.START_TIME, SortableFields.END_TIME, SortableFields.DURATION,
+            SortableFields.NUMBER_OF_MESSAGES, SortableFields.LAST_UPDATED_AT, SortableFields.CREATED_BY,
+            SortableFields.CREATED_AT, SortableFields.STATUS, SortableFields.TAGS, SortableFields.ENVIRONMENT);
+
+    // Every other thread filter reads a column SELECT_PAGE_THREAD_IDS computes; the messages need the payloads.
+    private static final Set<TraceThreadField> PAGE_PUSHDOWN_EXCLUDED_THREAD_FILTERS = Set.of(
+            TraceThreadField.FIRST_MESSAGE, TraceThreadField.LAST_MESSAGE);
+
     /**
-     * The page-pushdown is eligible only for the common listing case: default sort over {@code trace_threads}
-     * recency, with no filter/sort that needs the wide-column / spans / feedback / annotation joins to
-     * determine which threads land on the page. Otherwise the full scan query runs unchanged.
+     * The page-pushdown is eligible unless a filter or sort needs the wide-column / spans / feedback / annotation
+     * joins to determine which threads land on the page: then the full scan query runs unchanged.
      */
     @VisibleForTesting
-    static boolean isPagePushdownEligible(ST template) {
-        return PAGE_PUSHDOWN_DISQUALIFIERS.stream().noneMatch(attr -> template.getAttribute(attr) != null);
+    static boolean isPagePushdownEligible(ST template, TraceSearchCriteria criteria) {
+        return PAGE_PUSHDOWN_DISQUALIFIERS.stream().noneMatch(attr -> template.getAttribute(attr) != null)
+                && Optional.ofNullable(criteria.sortingFields()).orElse(List.of()).stream()
+                        .allMatch(field -> !field.isDynamic() && PAGE_PUSHDOWN_SORT_FIELDS.contains(field.field()))
+                && Optional.ofNullable(criteria.filters()).orElse(List.of()).stream()
+                        .map(Filter::field)
+                        .noneMatch(PAGE_PUSHDOWN_EXCLUDED_THREAD_FILTERS::contains);
     }
 
     @Override
@@ -1596,10 +1640,11 @@ class ThreadDAOImpl implements ThreadDAO {
                                             "page:" + page + ":size:" + size));
 
                             var finalTemplate = template;
-                            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(
+                            var sortFields = sortingQueryBuilder.toOrderBySql(
                                     criteria.sortingFields(),
-                                    traceColumnsNonNullable() ? SORT_FIELD_MAPPING_END_TIME_SENTINEL : null))
-                                    .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
+                                    traceColumnsNonNullable() ? SORT_FIELD_MAPPING_END_TIME_SENTINEL : null);
+                            Optional.ofNullable(sortFields)
+                                    .ifPresent(fields -> finalTemplate.add("sort_fields", fields));
 
                             var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(criteria.sortingFields());
 
@@ -1610,9 +1655,10 @@ class ThreadDAOImpl implements ThreadDAO {
                             // traces_final_ids prefilter. It runs as a separate query and its ids are bound into
                             // the list query, because a CTE is re-evaluated at every reference. Falls back to the
                             // full query for any filter/sort that needs the joined sources to determine the page.
-                            if (isPagePushdownEligible(finalTemplate)) {
+                            if (isPagePushdownEligible(finalTemplate, criteria)) {
                                 finalTemplate.add("page_pushdown", true);
-                                return findPageThreadIds(criteria, size, offset, connection, workspaceId, userName)
+                                return findPageThreadIds(criteria, sortFields, size, offset, connection,
+                                        workspaceId)
                                         .flatMap(pageThreadIds -> pageThreadIds.isEmpty()
                                                 ? Mono.just(new TraceThread.TraceThreadPage(page, 0, count, List.of(),
                                                         traceThreadSortingFactory.getSortableFields()))
@@ -1629,13 +1675,14 @@ class ThreadDAOImpl implements ThreadDAO {
                         })));
     }
 
-    private Mono<List<String>> findPageThreadIds(TraceSearchCriteria criteria, int size, int offset,
-            Connection connection, String workspaceId, String userName) {
+    private Mono<List<String>> findPageThreadIds(TraceSearchCriteria criteria, String sortFields, int size,
+            int offset, Connection connection, String workspaceId) {
         var template = newTraceThreadFindTemplate(SELECT_PAGE_THREAD_IDS, criteria, THREAD_SEARCH_CLAUSE,
                 traceColumnsNonNullable())
                 .add("offset", offset)
                 .add("log_comment", getLogComment("find_thread_page_ids", workspaceId, null,
                         "offset:" + offset + ":size:" + size));
+        Optional.ofNullable(sortFields).ifPresent(fields -> template.add("sort_fields", fields));
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", criteria.projectId())
