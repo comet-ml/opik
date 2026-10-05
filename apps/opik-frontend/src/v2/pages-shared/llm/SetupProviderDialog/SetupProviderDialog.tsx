@@ -26,7 +26,10 @@ import {
   formValuesToAuthConfig,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/customProviderConfig";
 import { ProviderAuthConfig } from "@/types/providers";
-import { convertCustomProviderModels } from "@/lib/provider";
+import {
+  convertCustomProviderModels,
+  DEFAULT_OPENAI_PIPELINE_MODE,
+} from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
@@ -70,6 +73,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       models: "",
       providerName: "",
       headers: [],
+      openaiPipelineMode: DEFAULT_OPENAI_PIPELINE_MODE,
     } as AIProviderFormType,
   });
 
@@ -168,6 +172,16 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       if (isVertex && "location" in data) {
         providerKeyData.configuration = {
           location: data.location,
+        };
+      }
+
+      if (
+        data.provider === PROVIDER_TYPE.OPEN_AI &&
+        "openaiPipelineMode" in data
+      ) {
+        providerKeyData.configuration = {
+          openai_pipeline_mode:
+            data.openaiPipelineMode ?? DEFAULT_OPENAI_PIPELINE_MODE,
         };
       }
 
