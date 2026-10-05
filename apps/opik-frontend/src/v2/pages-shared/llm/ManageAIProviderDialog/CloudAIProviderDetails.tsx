@@ -1,21 +1,13 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
-import { ChevronRight } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  CustomAccordionTrigger,
-} from "@/ui/accordion";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDER_OPTION_TYPE, PROVIDERS } from "@/constants/providers";
 import EyeInput from "@/shared/EyeInput/EyeInput";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import {
   AIProviderFormType,
-  DEFAULT_OPENAI_PIPELINE_MODE,
   OpenAiPipelineMode,
   supportsProviderHeaders,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
@@ -38,8 +30,6 @@ const PIPELINE_MODE_OPTIONS: DropdownOption<OpenAiPipelineMode>[] = [
   { value: "responses_api", label: "Responses API" },
 ];
 
-const ADVANCED_SETTINGS = "advanced";
-
 const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
   provider,
   form,
@@ -47,8 +37,6 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
   const providerName = (provider && PROVIDERS[provider]?.label + " ") || "";
   const apiKeyLabel = `${providerName}API Key`;
   const isOpenAi = provider === PROVIDER_TYPE.OPEN_AI;
-  const hasNonDefaultPipelineMode =
-    form.getValues("openaiPipelineMode") !== DEFAULT_OPENAI_PIPELINE_MODE;
 
   return (
     <div className="flex flex-col gap-2 pb-4">
@@ -92,6 +80,36 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
           .
         </span>
       )}
+      {isOpenAi && (
+        <FormField
+          control={form.control}
+          name="openaiPipelineMode"
+          render={({ field }) => (
+            <FormItem className="mt-2">
+              <Label htmlFor="openaiPipelineMode">OpenAI API</Label>
+              <FormControl>
+                <SelectBox
+                  id="openaiPipelineMode"
+                  // Both ManageAIProviderDialog and SetupProviderDialog seed this field for
+                  // OpenAI, so it is non-null here.
+                  value={field.value!}
+                  onChange={(value: OpenAiPipelineMode) =>
+                    field.onChange(value)
+                  }
+                  options={PIPELINE_MODE_OPTIONS}
+                  placeholder="Select an API"
+                />
+              </FormControl>
+              <span className="comet-body-s mt-1 text-light-slate">
+                Use Chat Completions unless you need Max reasoning effort, which
+                only the Responses API offers. The Responses API sends text only
+                (no images or audio) and ignores frequency and presence penalty.
+              </span>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
       {supportsProviderHeaders(provider) && (
         <div className="mt-2">
           <CustomHeadersField
@@ -103,52 +121,6 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
             }
           />
         </div>
-      )}
-      {isOpenAi && (
-        <Accordion
-          type="single"
-          collapsible
-          className="mt-2"
-          defaultValue={hasNonDefaultPipelineMode ? ADVANCED_SETTINGS : ""}
-        >
-          <AccordionItem value={ADVANCED_SETTINGS} className="border-b-0">
-            <CustomAccordionTrigger className="flex items-center gap-1 transition-all [&[data-state=open]>svg]:rotate-90">
-              <span className="comet-body-xs">Advanced settings</span>
-              <ChevronRight className="size-3.5 shrink-0 transition-transform duration-200" />
-            </CustomAccordionTrigger>
-            <AccordionContent className="pb-0 pt-2">
-              <FormField
-                control={form.control}
-                name="openaiPipelineMode"
-                render={({ field }) => (
-                  <FormItem>
-                    <Label htmlFor="openaiPipelineMode">OpenAI API</Label>
-                    <FormControl>
-                      <SelectBox
-                        id="openaiPipelineMode"
-                        // Field is always seeded for the OpenAI branch by ManageAIProviderDialog
-                        // (defaultValues, resetSelectionState, handleProviderSelect), so non-null here.
-                        value={field.value!}
-                        onChange={(value: OpenAiPipelineMode) =>
-                          field.onChange(value)
-                        }
-                        options={PIPELINE_MODE_OPTIONS}
-                        placeholder="Select an API"
-                      />
-                    </FormControl>
-                    <span className="comet-body-s mt-1 text-light-slate">
-                      Use Chat Completions unless you need Max reasoning effort,
-                      which only the Responses API offers. The Responses API
-                      sends text only (no images or audio) and ignores frequency
-                      and presence penalty.
-                    </span>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
       )}
     </div>
   );

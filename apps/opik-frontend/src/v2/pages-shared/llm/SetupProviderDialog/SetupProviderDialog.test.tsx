@@ -47,10 +47,12 @@ describe("adding an OpenAI key from the playground setup dialog", () => {
     createProviderKey.mockReset();
   });
 
-  it("saves Chat Completions when the advanced settings are left alone", async () => {
+  it("shows and saves Chat Completions by default", async () => {
     startOpenAiSetup();
 
-    expect(screen.queryByText("OpenAI API")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toHaveTextContent(
+      "Chat Completions API (recommended)",
+    );
     expect(await savedConfiguration()).toEqual({
       openai_pipeline_mode: "chat_completions_api",
     });
@@ -58,7 +60,6 @@ describe("adding an OpenAI key from the playground setup dialog", () => {
 
   it("saves the Responses API when the user picks it", async () => {
     startOpenAiSetup();
-    fireEvent.click(screen.getByText("Advanced settings"));
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
     fireEvent.keyDown(screen.getByRole("option", { name: "Responses API" }), {
       key: "Enter",
