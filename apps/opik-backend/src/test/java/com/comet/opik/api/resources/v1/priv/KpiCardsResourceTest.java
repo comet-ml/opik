@@ -1589,7 +1589,13 @@ class KpiCardsResourceTest {
         traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
-        Mono.delay(Duration.ofMillis(100)).block();
+        // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
+        UUID projectId = projectResourceClient.getByName(projectName, API_KEY, WORKSPACE_NAME).id();
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(traceResourceClient
+                        .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId()).isNotNull());
         traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
     }
 
@@ -1699,7 +1705,8 @@ class KpiCardsResourceTest {
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.CREATED_AT)
                                 .operator(Operator.GREATER_THAN)
-                                .value(thread.createdAt().minusSeconds(1).toString())
+                                // Wide enough for the previous period's threads, created seconds earlier on a loaded runner.
+                                .value(thread.createdAt().minus(1, ChronoUnit.MINUTES).toString())
                                 .build(),
                         3, 3),
                 Arguments.of(
