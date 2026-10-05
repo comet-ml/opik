@@ -1119,9 +1119,9 @@ class KpiCardsResourceTest {
 
     @ParameterizedTest
     @MethodSource("threadRowTimestampFilterArguments")
-    @DisplayName("a created_at / last_updated_at chip reads the thread row's value over its traces', like the thread list")
+    @DisplayName("a created_at / last_updated_at chip reads the thread row's value rather than its traces' value, like the thread list")
     void threadRowTimestampFilterPrefersThreadRowOverTraces(TraceThreadField field,
-            Function<TraceThread, Instant> rowValue, Function<Trace, Instant> tracesValue, Operator operator,
+            Function<TraceThread, Instant> rowValueOf, Function<Trace, Instant> traceValueOf, Operator operator,
             boolean rowValueMatches) {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
@@ -1154,9 +1154,9 @@ class KpiCardsResourceTest {
         assertThat(thread.createdAt()).isBefore(storedTrace.createdAt());
         assertThat(thread.lastUpdatedAt()).isAfter(storedTrace.lastUpdatedAt());
 
-        Instant threadRowValue = rowValue.apply(thread);
+        Instant threadRowValue = rowValueOf.apply(thread);
         Instant betweenRowAndTraces = threadRowValue
-                .plus(Duration.between(threadRowValue, tracesValue.apply(storedTrace)).dividedBy(2));
+                .plus(Duration.between(threadRowValue, traceValueOf.apply(storedTrace)).dividedBy(2));
         var filter = TraceThreadFilter.builder()
                 .field(field)
                 .operator(operator)
@@ -1348,8 +1348,8 @@ class KpiCardsResourceTest {
     }
 
     @Test
-    @DisplayName("a thread's cost includes a span of its trace minted after the window end, like the thread list")
-    void threadCostIncludesSpanMintedAfterWindowEnd() {
+    @DisplayName("a thread's cost includes the spans of its trace minted before the window start or after its end, like the thread list")
+    void threadCostIncludesSpansMintedOutsideTheWindow() {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
@@ -1364,7 +1364,11 @@ class KpiCardsResourceTest {
         Span spanMintedAfterEnd = buildCostedSpan(projectName, trace, COST_2).toBuilder()
                 .id(idGenerator.generateId(intervalEnd.plus(2, ChronoUnit.HOURS)))
                 .build();
-        createThread(projectName, threadId, List.of(trace), List.of(spanMintedInside, spanMintedAfterEnd));
+        Span spanMintedBeforeStart = buildCostedSpan(projectName, trace, COST_3).toBuilder()
+                .id(idGenerator.generateId(intervalStart.minus(2, ChronoUnit.HOURS)))
+                .build();
+        createThread(projectName, threadId, List.of(trace),
+                List.of(spanMintedInside, spanMintedAfterEnd, spanMintedBeforeStart));
 
         assertThat(getThreadRowMintedAt(threadId, projectId)).isBetween(intervalStart, intervalEnd);
 
@@ -1375,14 +1379,14 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         assertMetric(response, KpiMetricType.COUNT, 1.0, 0.0);
-        assertMetric(response, KpiMetricType.TOTAL_COST, COST_1 + COST_2, 0.0);
+        assertMetric(response, KpiMetricType.TOTAL_COST, COST_1 + COST_2 + COST_3, 0.0);
 
         var threadList = traceResourceClient.getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME, null, null,
                 Map.of("from_time", intervalStart.toString(), "to_time", intervalEnd.toString()));
 
         assertThat(threadList.content()).extracting(TraceThread::id).containsExactly(threadId);
         assertThat(threadList.content().getFirst().totalEstimatedCost())
-                .isEqualByComparingTo(BigDecimal.valueOf(COST_1 + COST_2));
+                .isEqualByComparingTo(BigDecimal.valueOf(COST_1 + COST_2 + COST_3));
     }
 
     @ParameterizedTest

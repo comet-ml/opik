@@ -2261,13 +2261,14 @@ class ProjectMetricsResourceTest {
                     .flatMap(interval -> Stream.of(MetricType.THREAD_COUNT, MetricType.THREAD_DURATION,
                             MetricType.THREAD_AVERAGE_DURATION, MetricType.THREAD_COST,
                             MetricType.THREAD_FEEDBACK_SCORES)
-                            .map(metricType -> Arguments.of(interval, metricType)));
+                            .flatMap(metricType -> Stream.of(false, true)
+                                    .map(openEnded -> Arguments.of(interval, metricType, openEnded))));
         }
 
-        @ParameterizedTest(name = "{0}, {1}")
+        @ParameterizedTest(name = "{0}, {1}, open-ended: {2}")
         @MethodSource
-        @DisplayName("every thread metric puts a thread in the bucket its trace id was minted in, not the one it started in")
-        void everyThreadMetricBucketsByTraceIdTime(TimeInterval interval, MetricType metricType) {
+        @DisplayName("every thread metric puts a thread in the bucket its trace id was minted in, not the one it started in, with or without an end")
+        void everyThreadMetricBucketsByTraceIdTime(TimeInterval interval, MetricType metricType, boolean openEnded) {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
@@ -2304,7 +2305,7 @@ class ProjectMetricsResourceTest {
                     .metricType(metricType)
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
-                    .intervalEnd(Instant.now())
+                    .intervalEnd(openEnded ? null : Instant.now())
                     .build(), BigDecimal.class, API_KEY, WORKSPACE_NAME);
 
             assertThat(response.results()).isNotEmpty().allSatisfy(series -> assertThat(series.data())
@@ -3044,7 +3045,15 @@ class ProjectMetricsResourceTest {
                 WORKSPACE_NAME);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
-        Mono.delay(Duration.ofMillis(100)).block();
+        // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
+        UUID projectId = projectResourceClient.getByName(projectName, API_KEY, WORKSPACE_NAME).id();
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(List.of(sdkThreadId, otherSourceThreadId, mixedThreadId))
+                        .allSatisfy(threadId -> assertThat(traceResourceClient
+                                .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId())
+                                .isNotNull()));
 
         traceResourceClient.closeTraceThreads(Set.of(sdkThreadId, otherSourceThreadId, mixedThreadId), null,
                 projectName, API_KEY, WORKSPACE_NAME);
@@ -5152,8 +5161,8 @@ class ProjectMetricsResourceTest {
         }
 
         @Test
-        @DisplayName("a thread's cost includes a span of its trace minted after the range end, like the thread list")
-        void whenTraceSpanMintedAfterRangeEnd_thenThreadCostIncludesIt() {
+        @DisplayName("a thread's cost includes the spans of its trace minted before the range start or after its end, like the thread list")
+        void whenTraceSpansMintedOutsideRange_thenThreadCostIncludesThem() {
             mockTargetWorkspace();
             TimeInterval interval = TimeInterval.HOURLY;
             Instant marker = getIntervalStart(interval);
@@ -5178,13 +5187,18 @@ class ProjectMetricsResourceTest {
 
             BigDecimal costOfSpanMintedInside = BigDecimal.valueOf(3);
             BigDecimal costOfSpanMintedAfterEnd = BigDecimal.valueOf(5);
+            BigDecimal costOfSpanMintedBeforeStart = BigDecimal.valueOf(7);
             spanResourceClient.batchCreateSpans(List.of(
                     buildCostedSpan(projectName, trace, idGenerator.generateId(ranAt.plusMillis(1)),
                             costOfSpanMintedInside),
                     buildCostedSpan(projectName, trace, idGenerator.generateId(intervalEnd.plus(2, ChronoUnit.HOURS)),
-                            costOfSpanMintedAfterEnd)),
+                            costOfSpanMintedAfterEnd),
+                    buildCostedSpan(projectName, trace,
+                            idGenerator.generateId(intervalStart.minus(2, ChronoUnit.HOURS)),
+                            costOfSpanMintedBeforeStart)),
                     API_KEY, WORKSPACE_NAME);
-            BigDecimal threadCost = costOfSpanMintedInside.add(costOfSpanMintedAfterEnd);
+            BigDecimal threadCost = costOfSpanMintedInside.add(costOfSpanMintedAfterEnd)
+                    .add(costOfSpanMintedBeforeStart);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COST)
