@@ -122,8 +122,13 @@ export class Experiment {
   /**
    * Retrieves experiment items with options to limit results and truncate data
    *
+   * To look at an experiment's results without writing code, AI coding assistants connected to
+   * the Opik MCP server can call `list("dataset_item", experiment_ids=[...])`, which shows each
+   * case's scores and compares several experiments case by case.
+   *
    * @param options Options for retrieving items
    * @returns Promise resolving to a list of experiment items
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public async getItems(options?: {
     maxResults?: number;
