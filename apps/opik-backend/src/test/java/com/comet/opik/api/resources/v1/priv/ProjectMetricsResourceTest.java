@@ -65,6 +65,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -2310,6 +2311,64 @@ class ProjectMetricsResourceTest {
                     .filteredOn(point -> point.value() != null && point.value().signum() != 0)
                     .extracting(DataPoint::time)
                     .containsExactly(mintedAt));
+        }
+
+        Stream<Arguments> threadActiveInTwoBucketsIsPlacedOnceAtItsFirstTrace() {
+            return Arrays.stream(TimeInterval.values())
+                    .filter(interval -> interval != TimeInterval.TOTAL)
+                    .flatMap(interval -> Stream.of(
+                            Arguments.of(interval, MetricType.THREAD_COUNT, BigDecimal.ONE),
+                            Arguments.of(interval, MetricType.THREAD_COST, BigDecimal.TWO)));
+        }
+
+        @ParameterizedTest(name = "{0}, {1}")
+        @MethodSource
+        @DisplayName("a thread with traces in two buckets is placed once, in the bucket of its first trace, with all its traces")
+        void threadActiveInTwoBucketsIsPlacedOnceAtItsFirstTrace(TimeInterval interval, MetricType metricType,
+                BigDecimal expected) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant firstTraceAt = subtract(marker, TIME_BUCKET_3, interval);
+            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+            List<Trace> traces = Stream.of(firstTraceAt, subtract(marker, TIME_BUCKET_1, interval))
+                    .map(at -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .id(idGenerator.generateId(at))
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .startTime(at)
+                            .endTime(at.plusMillis(500))
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+            spanResourceClient.batchCreateSpans(traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .startTime(trace.startTime())
+                            .totalEstimatedCost(BigDecimal.ONE)
+                            .build())
+                    .toList(), API_KEY, WORKSPACE_NAME);
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
+                    .metricType(metricType)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), BigDecimal.class, API_KEY, WORKSPACE_NAME);
+
+            assertThat(response.results()).isNotEmpty().allSatisfy(series -> {
+                var placed = series.data().stream()
+                        .filter(point -> point.value() != null && point.value().signum() != 0)
+                        .toList();
+                assertThat(placed).extracting(DataPoint::time).containsExactly(firstTraceAt);
+                assertThat(placed.getFirst().value()).isEqualByComparingTo(expected);
+            });
         }
     }
 
@@ -4735,7 +4794,12 @@ class ProjectMetricsResourceTest {
                             .build());
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
-            Mono.delay(Duration.ofMillis(100)).block();
+            // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(10))
+                    .pollInterval(Duration.ofMillis(100))
+                    .untilAsserted(() -> assertThat(traceResourceClient
+                            .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId()).isNotNull());
             traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
 
             if (rowOpenedBeforeTraces) {
