@@ -216,7 +216,7 @@ public class OpikConfiguration extends JobConfiguration {
     private RedactionConfig redaction = new RedactionConfig();
 
     @JsonIgnore
-    @AssertTrue(message = "alertsEventBridge.eventBus (OPIK_ALERTS_EVENTBRIDGE_EVENT_BUS) must be set when serviceToggles.eventBridgeAlertsEnabled (OPIK_ALERTS_EVENTBRIDGE_ENABLED) is true")
+    @AssertTrue(message = "alertsEventBridge.eventBus (ALERTS_EVENTBRIDGE_EVENT_BUS) must be set when serviceToggles.eventBridgeAlertsEnabled (ALERTS_EVENTBRIDGE_ENABLED) is true")
     public boolean isAlertsEventBridgeBusConfigured() {
         return !serviceToggles.isEventBridgeAlertsEnabled() || StringUtils.isNotBlank(alertsEventBridge.getEventBus());
     }

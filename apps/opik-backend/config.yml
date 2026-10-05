@@ -1610,11 +1610,11 @@ alertsEventBridge:
   # Default: empty
   # Description: Name or ARN of the EventBridge bus that receives triggered alerts. Required when
   #   serviceToggles.eventBridgeAlertsEnabled is true
-  eventBus: ${OPIK_ALERTS_EVENTBRIDGE_EVENT_BUS:-}
+  eventBus: ${ALERTS_EVENTBRIDGE_EVENT_BUS:-}
   # Default: empty
   # Description: AWS region of the bus. When empty, the region in an ARN bus is used, then the default
   #   AWS region provider chain
-  region: ${OPIK_ALERTS_EVENTBRIDGE_REGION:-}
+  region: ${ALERTS_EVENTBRIDGE_REGION:-}
 
 # Configuration AWS S3
 s3Config:
@@ -1799,7 +1799,7 @@ serviceToggles:
   # Default: false
   # Description: Whether every triggered alert is also published to the deployment's AWS EventBridge bus
   #   (see alertsEventBridge). Publishing is best-effort and never affects webhook delivery.
-  eventBridgeAlertsEnabled: ${OPIK_ALERTS_EVENTBRIDGE_ENABLED:-"false"}
+  eventBridgeAlertsEnabled: ${ALERTS_EVENTBRIDGE_ENABLED:-"false"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
