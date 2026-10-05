@@ -149,15 +149,14 @@ function logSuccess({
   // during the call, so it wins over the captured return value (as in the Python SDK).
   spanUpdate.output = mergeExplicitOutputOverCaptured(
     spanUpdate.output,
-    span.data.output,
-    0
+    span.data.output
   );
   span.update(spanUpdate);
 
   if (trace) {
     trace.update({
       endTime,
-      output: mergeExplicitOutputOverCaptured(output, trace.data.output, 0),
+      output: mergeExplicitOutputOverCaptured(output, trace.data.output),
     });
   }
 }
@@ -173,15 +172,28 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Mirrors the Python SDK's deep merge: plain objects are merged key by key, the explicit value
- * wins wherever both sides have something that isn't a plain object, and the depth is capped so
- * a self-referencing value can't throw from inside the decorator.
+ * Nothing in here may propagate: this runs inside `logSuccess`, so an exception (a throwing
+ * getter on either output, say) would turn the caller's successful call into a failure. When the
+ * outputs can't be merged, the explicit one is kept.
  */
-function mergeExplicitOutputOverCaptured(
-  captured: any,
-  explicit: any,
-  depth: number
-): any {
+function mergeExplicitOutputOverCaptured(captured: any, explicit: any): any {
+  try {
+    return deepMergeOutputs(captured, explicit, 0);
+  } catch (error) {
+    logger.debug(
+      "Could not merge the return value into the output set during the call:",
+      error
+    );
+    return explicit;
+  }
+}
+
+/**
+ * Mirrors the Python SDK's deep merge: plain objects are merged key by key, the explicit value
+ * wins wherever either side isn't a plain object, and the depth is capped so a self-referencing
+ * value can't recurse forever.
+ */
+function deepMergeOutputs(captured: any, explicit: any, depth: number): any {
   if (explicit === undefined) {
     return captured;
   }
@@ -193,11 +205,21 @@ function mergeExplicitOutputOverCaptured(
     return explicit;
   }
 
-  const merged: Record<string, unknown> = { ...captured };
-  for (const [key, value] of Object.entries(explicit)) {
-    merged[key] = mergeExplicitOutputOverCaptured(merged[key], value, depth + 1);
-  }
-  return merged;
+  // Object.fromEntries defines own properties, so a "__proto__" key stays a key instead of
+  // going through the prototype setter.
+  return Object.fromEntries([
+    ...Object.entries(captured),
+    ...Object.entries(explicit).map(([key, value]) => [
+      key,
+      deepMergeOutputs(
+        Object.prototype.hasOwnProperty.call(captured, key)
+          ? captured[key]
+          : undefined,
+        value,
+        depth + 1
+      ),
+    ]),
+  ]);
 }
 
 /**

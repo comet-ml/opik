@@ -560,4 +560,118 @@ describe("@track output set through getTrackContext()", () => {
       answer: "returned-answer",
     });
   });
+
+  class ReturnedResult {
+    constructor(public text: string) {}
+  }
+
+  it.each([
+    ["an array", () => ["returned-1", "returned-2"]],
+    ["null", () => null],
+    ["a class instance", () => new ReturnedResult("returned-text")],
+  ])(
+    "keeps only the output set during the call when the return value is %s",
+    async (_, makeResult) => {
+      const tracked = track({ name: "non-plain" }, () => {
+        getTrackContext()?.span.update({
+          output: { answer: "explicit-answer" },
+        });
+        return makeResult();
+      });
+
+      tracked();
+      await trackOpikClient.flush();
+
+      expect(sentSpans()[0]?.output).toEqual({ answer: "explicit-answer" });
+    }
+  );
+
+  it("keeps the span output set during the call over the output enrichSpan returns", async () => {
+    const tracked = track(
+      {
+        name: "enriched",
+        enrichSpan: () => ({
+          output: { answer: "enriched-answer", tokens: 3 },
+        }),
+      },
+      () => {
+        getTrackContext()?.span.update({
+          output: { answer: "explicit-answer" },
+        });
+        return "returned-result";
+      }
+    );
+
+    tracked();
+    await trackOpikClient.flush();
+
+    expect(sentSpans()[0]?.output).toEqual({
+      answer: "explicit-answer",
+      tokens: 3,
+    });
+  });
+
+  it("still returns the result and keeps the explicit output when the return value can't be read", async () => {
+    const unreadable = {
+      get broken(): never {
+        throw new Error("getter exploded");
+      },
+    };
+    const inner = track({ name: "unreadable" }, () => {
+      getTrackContext()?.span.update({
+        output: { answer: "explicit-answer" },
+      });
+      return unreadable;
+    });
+    const outer = track({ name: "outer" }, () => {
+      inner();
+      return "outer-result";
+    });
+
+    expect(outer()).toBe("outer-result");
+    await trackOpikClient.flush();
+
+    const innerSpan = sentSpans().find((span) => span.name === "unreadable");
+    expect(innerSpan?.output).toEqual({ answer: "explicit-answer" });
+    expect(innerSpan?.endTime).toBeDefined();
+  });
+
+  it("keeps a __proto__ key from the output set during the call", async () => {
+    const tracked = track({ name: "proto-key" }, () => {
+      getTrackContext()?.span.update({
+        output: JSON.parse(
+          '{"__proto__": {"nested": true}, "answer": "explicit-answer"}'
+        ),
+      });
+      return { sources: ["doc-1"] };
+    });
+
+    tracked();
+    await trackOpikClient.flush();
+
+    expect(JSON.stringify(sentSpans()[0]?.output)).toBe(
+      '{"sources":["doc-1"],"__proto__":{"nested":true},"answer":"explicit-answer"}'
+    );
+  });
+
+  it("doesn't throw when both outputs reference themselves", async () => {
+    const explicitOutput: Record<string, unknown> = {
+      answer: "explicit-answer",
+    };
+    explicitOutput.self = explicitOutput;
+    const returned: Record<string, unknown> = { sources: ["doc-1"] };
+    returned.self = returned;
+
+    const tracked = track({ name: "cyclic" }, () => {
+      getTrackContext()?.span.update({ output: explicitOutput });
+      return returned;
+    });
+
+    expect(tracked()).toBe(returned);
+    await trackOpikClient.flush();
+
+    // A self-referencing output can't be serialized, so its payload is replaced before
+    // sending; what matters here is that the merge neither throws nor drops the span.
+    expect(sentSpans()[0]?.endTime).toBeDefined();
+  });
 });
