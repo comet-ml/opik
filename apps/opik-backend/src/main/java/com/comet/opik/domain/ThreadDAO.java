@@ -1508,7 +1508,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * recency, with no filter/sort that needs the wide-column / spans / feedback / annotation joins to
      * determine which threads land on the page. Otherwise the full scan query runs unchanged.
      */
-    private static boolean isPagePushdownEligible(ST template) {
+    @VisibleForTesting
+    static boolean isPagePushdownEligible(ST template) {
         return PAGE_PUSHDOWN_DISQUALIFIERS.stream().noneMatch(attr -> template.getAttribute(attr) != null);
     }
 
