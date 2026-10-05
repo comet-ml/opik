@@ -5,7 +5,6 @@ import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.infrastructure.FilterUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -164,7 +163,6 @@ class ThreadDAOImplTest {
         private static final String TRACES_FINAL_IDS_IN = "thread_id IN (SELECT thread_id FROM traces_final_ids)";
         private static final String TRACES_FINAL_IN = "thread_id IN (SELECT thread_id FROM traces_final)";
         private static final String ROW_ID_RANGE = "AND id >= :uuid_from_time";
-        private static final String WINDOW_THREAD_SCAN = "SELECT thread_id FROM traces\n";
         private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
 
         static Stream<Arguments> templatesSharingThePushdown() {
@@ -179,12 +177,11 @@ class ThreadDAOImplTest {
          * predicate prunes on the primary key while a row id range cannot. The count template was once missing
          * the pushdown while the list and stats templates had it, which left countThreadTotal scanning every
          * trace_threads row of the project. OPIK-8335: membership follows the window's traces, so a window
-         * emits the thread ids of a raw scan of its traces and never the row id range. This pins all three
-         * templates identically.
+         * emits the in-window thread set and never the row id range. This pins all three templates identically.
          */
         @ParameterizedTest(name = "{0} template")
         @MethodSource("templatesSharingThePushdown")
-        @DisplayName("on a window with the thread_id pushdown, trace_threads_final emits the pushdown and the window's raw thread scan, not the row id range")
+        @DisplayName("on a window with the thread_id pushdown, trace_threads_final emits the pushdown and the prefilter's thread set, not the row id range")
         void traceThreadsFinalEmitsThreadIdPushdownOnUuidBranch(String name, String query) {
             var criteria = TraceSearchCriteria.builder()
                     .projectId(UUID.randomUUID())
@@ -198,14 +195,14 @@ class ThreadDAOImplTest {
 
             var traceThreadsFinal = traceThreadsFinalCte(renderWithGate(query, criteria));
 
-            assertWindowBoundOnlyInThreadScan(traceThreadsFinal);
-            assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IDS_IN);
+            assertThat(traceThreadsFinal).doesNotContain(ROW_ID_RANGE);
+            assertThat(traceThreadsFinal).contains(TRACES_FINAL_IDS_IN);
             assertThat(traceThreadsFinal).contains(THREAD_ID_PUSHDOWN);
         }
 
         @ParameterizedTest(name = "{0} template")
         @MethodSource("templatesSharingThePushdown")
-        @DisplayName("on a window without the prefilter, trace_threads_final takes its threads from a raw scan of the window's traces, not the row id range")
+        @DisplayName("on a window without the prefilter, trace_threads_final takes its threads from the window's traces, not the row id range")
         void traceThreadsFinalTakesWindowThreadsWithoutPrefilter(String name, String query) {
             var criteria = TraceSearchCriteria.builder()
                     .projectId(UUID.randomUUID())
@@ -214,35 +211,9 @@ class ThreadDAOImplTest {
 
             var traceThreadsFinal = traceThreadsFinalCte(renderWithGate(query, criteria));
 
-            assertWindowBoundOnlyInThreadScan(traceThreadsFinal);
+            assertThat(traceThreadsFinal).doesNotContain(ROW_ID_RANGE);
             assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IDS_IN);
-            assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IN);
-        }
-
-        @ParameterizedTest(name = "{0} template")
-        @MethodSource("templatesSharingThePushdown")
-        @DisplayName("without a window, the prefilter's thread set narrows trace_threads_final, as on main")
-        void traceThreadsFinalTakesPrefilterThreadsWithoutWindow(String name, String query) {
-            var criteria = TraceSearchCriteria.builder()
-                    .projectId(UUID.randomUUID())
-                    .filters(List.of(TraceThreadFilter.builder()
-                            .field(TraceThreadField.ID)
-                            .operator(Operator.EQUAL)
-                            .value("thread-1")
-                            .build()))
-                    .build();
-
-            var traceThreadsFinal = traceThreadsFinalCte(renderWithGate(query, criteria));
-
-            assertThat(traceThreadsFinal).contains(TRACES_FINAL_IDS_IN);
-            assertThat(traceThreadsFinal).doesNotContain(WINDOW_THREAD_SCAN);
-        }
-
-        private static void assertWindowBoundOnlyInThreadScan(String traceThreadsFinal) {
-            int scan = traceThreadsFinal.indexOf(WINDOW_THREAD_SCAN);
-            assertThat(scan).isNotNegative();
-            assertThat(StringUtils.countMatches(traceThreadsFinal, ROW_ID_RANGE)).isEqualTo(1);
-            assertThat(traceThreadsFinal.indexOf(ROW_ID_RANGE)).isGreaterThan(scan);
+            assertThat(traceThreadsFinal).contains(TRACES_FINAL_IN);
         }
 
         private static String renderWithGate(String query, TraceSearchCriteria criteria) {
