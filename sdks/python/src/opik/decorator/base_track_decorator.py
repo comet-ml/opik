@@ -14,10 +14,8 @@ from typing import (
     NamedTuple,
 )
 
-import pydantic
-
 from .. import context_storage, logging_messages, tracing_runtime_config
-from ..api_objects import data_helpers, opik_client, span, trace
+from ..api_objects import opik_client, span, trace
 from ..runner import registry
 from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType, TraceSource
 from . import (
@@ -565,25 +563,26 @@ class BaseTrackDecorator(abc.ABC):
 
         client = opik_client.get_global_client()
 
+        # Output already on the span/trace was set by the user via opik_context
+        # during the call. Re-applying it after the captured return value keeps
+        # every explicit value while still logging whatever the return value adds.
         if should_process_span_data and span_data_to_end is not None:
             # save span data only if appropriate
+            explicit_span_output = span_data_to_end.output
+            span_data_to_end.output = None
             span_data_to_end.init_end_time().update(
-                **_merge_captured_output_under_explicit_output(
-                    end_kwargs=end_arguments.to_kwargs(),
-                    explicit_output=span_data_to_end.output,
-                ),
+                **end_arguments.to_kwargs(),
             )
+            span_data_to_end.update(output=explicit_span_output)
             client.__internal_api__span__(**span_data_to_end.as_parameters)
 
         if trace_data_to_end is not None:
+            explicit_trace_output = trace_data_to_end.output
+            trace_data_to_end.output = None
             trace_data_to_end.init_end_time().update(
-                **_merge_captured_output_under_explicit_output(
-                    end_kwargs=end_arguments.to_kwargs(
-                        ignore_keys=["usage", "model", "provider"]
-                    ),
-                    explicit_output=trace_data_to_end.output,
-                ),
+                **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
             )
+            trace_data_to_end.update(output=explicit_trace_output)
 
             client.__internal_api__trace__(**trace_data_to_end.as_parameters)
 
@@ -659,29 +658,6 @@ def _apply_entrypoint(
     from ..runner.activate import activate_runner
 
     activate_runner()
-
-
-def _merge_captured_output_under_explicit_output(
-    end_kwargs: Dict[str, Any], explicit_output: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
-    # Output already on the span/trace when the function ends was set by the user
-    # via opik_context during the call. Merging the captured return value under it,
-    # as if it had been logged first, keeps every explicit value and still logs
-    # whatever the return value adds, nested keys included.
-    captured_output = end_kwargs.get("output")
-    if captured_output is None or not explicit_output:
-        return end_kwargs
-
-    # Some integration decorators capture a pydantic model rather than a dict.
-    if isinstance(captured_output, pydantic.BaseModel):
-        captured_output = captured_output.model_dump()
-
-    return {
-        **end_kwargs,
-        "output": data_helpers.merge_outputs(
-            captured_output, new_outputs=explicit_output
-        ),
-    }
 
 
 def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
