@@ -64,17 +64,26 @@ A queue can also collect items on its own, so low-quality output reaches reviewe
 watching the traces list. Turn on **Automation** when creating or editing a queue, then describe what
 is worth reviewing as conditions on feedback scores:
 
-- In the UI, all conditions must hold for an item to be added — they are combined with **AND**. The REST
-  API also accepts several groups of conditions, which are OR-ed: any group matching is enough, and within
-  a group all conditions must hold
+- All conditions must hold for an item to be added — they are combined with **AND**, and you can set up
+  to five
 - An item with no value for a score in the condition never matches it
+- Where several people have scored the same name, the conditions are matched against the average of
+  their values, so a condition that holds for one reviewer's score can stop holding once another
+  disagrees
 - Tick **Cap automatically added items at** to bound how large automation lets the queue grow; once the
   queue holds that many items, however they got there, automation stops adding until some are removed.
-  Adding by hand is never refused. Leave it unticked for no limit
+  Adding by hand is never refused. Leave it unticked for no limit. Treat the number as approximate: a
+  burst of scores arriving at once can carry the queue a little past it before it settles
 
-Conditions are evaluated whenever a score is written, so an item is added as soon as it qualifies —
+Conditions are evaluated whenever a score is written, so an item is collected once it qualifies —
 whether that is seconds after the trace, when an online evaluation rule scores it, or days later when
-someone scores it by hand. The source of the score does not matter.
+someone scores it by hand. The source of the score does not matter. Collection is not instant: an item
+appears a few seconds after its last score, which leaves room for a run of scores to settle so a queue
+is not filled on a value that is about to change.
+
+Automation looks forward, not back. Switching it on collects nothing that has already been scored, only
+what is scored from then on, so seed a queue with the work you already have by adding those items by
+hand.
 
 <Note>
   Automation never adds an item a queue has already held. If a reviewer removes an item, a later score
@@ -90,8 +99,8 @@ to your reviewers. Those can still be added by hand.
 Automation works the same way for thread queues, matching on thread scores instead of trace scores.
 
 <Note>
-  Automation is configured in the UI. The SDK helpers below create queues without it — a queue created
-  programmatically can be given conditions afterwards from its configuration screen.
+  Automation is configured in the UI. The SDK helpers below create queues without it — open the queue
+  and choose **Edit** to give one conditions afterwards.
 </Note>
 
 ### Sharing with Subject Matter Experts
