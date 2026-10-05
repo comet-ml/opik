@@ -46,6 +46,13 @@ public enum FreeFormSqlTopology {
                 run(admin, """
                         RENAME TABLE %1$s.%2$s TO %1$s.%2$s_local, %1$s.%2$s_dist TO %1$s.%2$s ON CLUSTER '{cluster}'
                         """, table);
+                String engine = admin.queryAll("""
+                        SELECT engine_full FROM system.tables WHERE database = '%s' AND name = '%s'
+                        """.formatted(DATABASE_NAME, table)).getFirst().getString(1);
+                if (!engine.startsWith("Distributed(") || !engine.contains("'%s_local'".formatted(table))) {
+                    throw new IllegalStateException("%s is not Distributed over %s_local: %s".formatted(table, table,
+                            engine));
+                }
             }
         }
     };

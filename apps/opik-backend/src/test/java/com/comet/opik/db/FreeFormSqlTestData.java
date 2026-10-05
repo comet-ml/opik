@@ -35,8 +35,8 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
  * Two workspaces seeded through the public API, as an Opik user would write them: workspace A with projects A1 and
  * A2, workspace B with B1. Each project gets a small sample of every table the free-form SQL accounts read: traces
  * in their own threads, a span per trace, a feedback score per trace, a dataset with items and an experiment over
- * them. Ids are UUIDv7, the projects' assigned by the API. The two tables no API call writes in this configuration
- * are seeded directly: see {@link Seeder#project}.
+ * them. Ids are UUIDv7, and the projects' ids are assigned by the API. The two tables that no API call writes in this
+ * configuration are seeded directly: see {@link Seeder#project}.
  */
 @Builder(toBuilder = true)
 public record FreeFormSqlTestData(Workspace a, Workspace b, Project a1, Project a2, Project b1) {

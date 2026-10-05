@@ -157,7 +157,8 @@ class FreeFormSqlPostRunCheckTest {
                 var s = standard;
                 var e = extended;
                 var p = partial) {
-            // Resources close in reverse order: the clients, then ClickHouse, ZooKeeper and the network.
+            // WireMock is this suite's own; Redis and MySQL are the shared reusable containers, left for the rest.
+            wireMock.server().stop();
         }
     }
 
@@ -177,7 +178,9 @@ class FreeFormSqlPostRunCheckTest {
         var extendedConfig = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
         extendedConfig.setUsername(EXTENDED.getUsername());
         var dao = new FreeFormSqlQueryDAOImpl(standardClient, extended, admin);
-        return new FreeFormSqlQueryService(dao, mock(FreeFormSqlEntityNameEnricher.class),
+        // Names are presentation, out of scope here: the enricher hands the extended account's rows back as they are.
+        return new FreeFormSqlQueryService(dao, mock(FreeFormSqlEntityNameEnricher.class,
+                invocation -> invocation.getArgument(0)),
                 logReader(dao),
                 FreeFormSqlPostRunCheckConfigTest.config(FreeFormSqlPostRunCheckConfig.Mode.ENFORCE), analytics,
                 standardConfig, extendedConfig);
@@ -199,8 +202,13 @@ class FreeFormSqlPostRunCheckTest {
     }
 
     private String run(String query) {
+        return run(FreeFormSqlAccount.STANDARD, query);
+    }
+
+    /** Runs {@code query} as {@code account} in workspace A and project A1, through the check in enforce mode. */
+    private String run(FreeFormSqlAccount account, String query) {
         return service(standard, STANDARD.getUsername())
-                .executeQuery(FreeFormSqlAccount.STANDARD, workspaceA, projectA, query)
+                .executeQuery(account, workspaceA, projectA, query)
                 .join().results().getFirst().get("n").asText();
     }
 
@@ -219,11 +227,17 @@ class FreeFormSqlPostRunCheckTest {
                 arguments("EXISTS", count("traces WHERE EXISTS (SELECT 1 FROM authored_feedback_scores)"), ROWS));
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource
-    @DisplayName("results of every verifiable shape are returned, and scoped")
-    void verifiedShapes(String name, String query, int expected) {
-        assertThat(run(query)).isEqualTo(String.valueOf(expected));
+    /** Every shape as each account: the extended one runs on its own client and is checked as its own user. */
+    static Stream<Arguments> verifiedShapesAsEachAccount() {
+        return verifiedShapes().flatMap(shape -> Stream.of(FreeFormSqlAccount.values())
+                .map(account -> arguments(shape.get()[0], account, shape.get()[1], shape.get()[2])));
+    }
+
+    @ParameterizedTest(name = "{0} as {1}")
+    @MethodSource("verifiedShapesAsEachAccount")
+    @DisplayName("results of every verifiable shape are returned, and scoped, as each account")
+    void verifiedShapes(String name, FreeFormSqlAccount account, String query, int expected) {
+        assertThat(run(account, query)).isEqualTo(String.valueOf(expected));
     }
 
     static Stream<Arguments> scalarSubqueryReadingATableIsRejected() {

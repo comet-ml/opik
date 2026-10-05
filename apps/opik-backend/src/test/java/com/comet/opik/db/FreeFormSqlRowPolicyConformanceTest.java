@@ -77,10 +77,14 @@ class FreeFormSqlRowPolicyConformanceTest {
             Map.entry("allow_introspection_functions", "0"), Map.entry("optimize_trivial_count_query", "0"),
             Map.entry("optimize_use_implicit_projections", "0"), Map.entry("prefer_localhost_replica", "1"));
 
-    /** The extended account's other tables, and whether each binds the project, as the provisioning declares. */
-    private static final Map<String, Boolean> EXTENDED_ONLY_TABLES = Map.of(
-            "authored_feedback_scores", true, "feedback_scores", true, "trace_threads", true, "experiments", false,
-            "experiment_items", false, "dataset_items", false, "dataset_item_versions", false);
+    /** The extended account's other tables that bind the project, as the provisioning declares. */
+    private static final List<String> EXTENDED_PROJECT_BOUND_TABLES = List.of("authored_feedback_scores",
+            "feedback_scores", "trace_threads");
+    /** The extended account's tables bound to the workspace only: an experiment or a dataset can span projects. */
+    private static final List<String> EXTENDED_WORKSPACE_ONLY_TABLES = List.of("experiments", "experiment_items",
+            "dataset_items", "dataset_item_versions");
+    /** Rows FreeFormSqlTestData seeds per project: one experiment, PER_PROJECT of everything else. */
+    private static final Map<String, Integer> SEEDED_PER_PROJECT = Map.of("experiments", 1);
 
     // ClickHouse not reused: the run starts from a freshly migrated, empty database, and the Distributed wrap cannot be
     // undone, so it must not reach a container another suite shares.
@@ -124,6 +128,14 @@ class FreeFormSqlRowPolicyConformanceTest {
     @BeforeParameterizedClassInvocation
     void applyTopology() {
         topology.apply(admin);
+        // Every project's rows made it through the topology, so a cross-workspace exclusion is never vacuous.
+        for (var project : List.of(data.a1(), data.a2(), data.b1())) {
+            readTables().forEach(table -> assertThat(single(admin, """
+                    SELECT count() FROM %s.%s WHERE workspace_id = '%s' AND project_id = '%s'
+                    """.formatted(DATABASE_NAME, table, project.workspace().id(), project.id())))
+                    .as("%s rows of %s after %s", table, project.name(), topology)
+                    .isEqualTo(expected(table, false)));
+        }
     }
 
     @BeforeAll
@@ -136,8 +148,9 @@ class FreeFormSqlRowPolicyConformanceTest {
     @AfterAll
     void tearDownAll() throws Exception {
         // Each release runs even if an earlier one throws, so a failed close never leaks the containers.
+        // WireMock is this suite's own; Redis and MySQL are the shared reusable containers, left running for the rest.
         try (network; var zk = zookeeper; var ch = clickHouse; var client = admin) {
-            // Resources close in reverse order: the client, then ClickHouse, ZooKeeper and the network.
+            wireMock.server().stop();
         }
     }
 
@@ -147,14 +160,13 @@ class FreeFormSqlRowPolicyConformanceTest {
                 .filter(table -> "1".equals(single(admin, "EXISTS TABLE %s.%s".formatted(DATABASE_NAME, table))));
     }
 
-    /** What an unrestricted read of {@code table} in that workspace, and project unless null, returns. */
-    private String expected(String table, FreeFormSqlTestData.Project project, boolean wholeWorkspace) {
-        String count = single(admin, """
-                SELECT count() FROM %s.%s WHERE workspace_id = '%s'%s
-                """.formatted(DATABASE_NAME, table, project.workspace().id(),
-                wholeWorkspace ? "" : " AND project_id = '%s'".formatted(project.id())));
-        assertThat(Long.parseLong(count)).as("seeded rows of %s", table).isPositive();
-        return count;
+    /**
+     * The rows of {@code table} seeded in one project, or across a workspace's two projects: fixed by the seeding, not
+     * read back from the tables under test, so a row lost on the way in fails rather than lowering the expectation.
+     */
+    private static String expected(String table, boolean wholeWorkspace) {
+        int perProject = SEEDED_PER_PROJECT.getOrDefault(table.replace("_local", ""), FreeFormSqlTestData.PER_PROJECT);
+        return String.valueOf(wholeWorkspace ? 2 * perProject : perProject);
     }
 
     /** {@code {t}} is the table; {@code {other}} another workspace's id, {@code {project}} the scope's project. */
@@ -182,7 +194,7 @@ class FreeFormSqlRowPolicyConformanceTest {
                 String sql = template.replace("{t}", "%s.%s".formatted(DATABASE_NAME, table))
                         .replace("{other}", data.b().id()).replace("{project}", project.id().toString());
                 assertThat(single(standard, sql, project.workspace().id(), project.id().toString()))
-                        .as("%s on %s", name, table).isEqualTo(seesScope ? expected(table, project, false) : "0");
+                        .as("%s on %s", name, table).isEqualTo(seesScope ? expected(table, false) : "0");
             });
         }
     }
@@ -201,25 +213,50 @@ class FreeFormSqlRowPolicyConformanceTest {
     @DisplayName("the extended account reads its project, or the whole workspace under '*', and never another")
     void extendedOptionalProject() {
         try (var extended = client(EXTENDED)) {
-            readTables().forEach(table -> assertExtendedScope(extended, table, true));
+            readTables().forEach(table -> assertExtendedScope(extended, table));
         }
     }
 
-    @Test
-    @DisplayName("the extended account's other tables: its workspace only, and its project where the key binds it")
-    void extendedOnlyTablesAreScoped() {
+    @ParameterizedTest
+    @MethodSource("extendedProjectBoundTables")
+    @DisplayName("the extended account's other project-bound tables: its project, or its workspace under '*'")
+    void extendedProjectBoundTablesAreScoped(String table) {
         try (var extended = client(EXTENDED)) {
-            EXTENDED_ONLY_TABLES.forEach((table, projectBound) -> assertExtendedScope(extended, table, projectBound));
+            assertExtendedScope(extended, table);
         }
     }
 
-    private void assertExtendedScope(Client extended, String table, boolean projectBound) {
+    @ParameterizedTest
+    @MethodSource("extendedWorkspaceOnlyTables")
+    @DisplayName("the extended account's workspace-only tables: its whole workspace, whatever the project")
+    void extendedWorkspaceOnlyTablesAreScoped(String table) {
+        var project = data.a1();
+        String count = "SELECT count() FROM %s.%s".formatted(DATABASE_NAME, table);
+        try (var extended = client(EXTENDED)) {
+            assertThat(single(extended, count, project.workspace().id(), project.id().toString()))
+                    .isEqualTo(expected(table, true));
+            assertThat(single(extended, count, project.workspace().id(), "*")).isEqualTo(expected(table, true));
+            assertThat(single(extended, "%s WHERE workspace_id = '%s'".formatted(count, data.b().id()),
+                    project.workspace().id(), "*")).isEqualTo("0");
+        }
+    }
+
+    static List<String> extendedProjectBoundTables() {
+        return EXTENDED_PROJECT_BOUND_TABLES;
+    }
+
+    static List<String> extendedWorkspaceOnlyTables() {
+        return EXTENDED_WORKSPACE_ONLY_TABLES;
+    }
+
+    /** A project-bound table as the extended account: its project, its workspace under '*', never another. */
+    private void assertExtendedScope(Client extended, String table) {
         var project = data.a1();
         String count = "SELECT count() FROM %s.%s".formatted(DATABASE_NAME, table);
         assertThat(single(extended, count, project.workspace().id(), project.id().toString())).as(table)
-                .isEqualTo(expected(table, project, !projectBound));
+                .isEqualTo(expected(table, false));
         assertThat(single(extended, count, project.workspace().id(), "*")).as(table)
-                .isEqualTo(expected(table, project, true));
+                .isEqualTo(expected(table, true));
         assertThat(single(extended, "%s WHERE workspace_id = '%s'".formatted(count, data.b().id()),
                 project.workspace().id(), "*")).as(table).isEqualTo("0");
     }
@@ -235,8 +272,12 @@ class FreeFormSqlRowPolicyConformanceTest {
                     """.formatted(DATABASE_NAME, table, scope(project.workspace().id(), project.id().toString())))
                     .stream().map(row -> row.getString(1)).toList());
             assertThat(plan).as(plan).contains("PrimaryKey");
+            // The primary key section alone: its keys, and a condition that actually bounds them.
             String primaryKey = plan.substring(plan.indexOf("PrimaryKey"));
-            assertThat(primaryKey).as(plan).contains("workspace_id", "project_id");
+            int next = primaryKey.indexOf("\n      ", primaryKey.indexOf("Condition:"));
+            primaryKey = next < 0 ? primaryKey : primaryKey.substring(0, next);
+            assertThat(primaryKey).as(plan).contains("Keys:", "workspace_id", "project_id", "Condition:")
+                    .doesNotContain("Condition: true");
         }
     }
 
