@@ -1474,6 +1474,143 @@ def test_track__span_and_trace_input_output_updated_via_opik_context(fake_backen
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+def test_track__trace_output_key_set_via_opik_context_collides_with_return_value__explicit_value_kept(
+    fake_backend,
+):
+    @dataclasses.dataclass
+    class Result:
+        text: str
+        extra: int
+
+    @tracker.track
+    def f(x):
+        opik_context.update_current_trace(output={"output": "explicit-output"})
+        return Result(text="returned-text", extra=1)
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input"},
+        output={"output": "explicit-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input"},
+                output={"output": {"text": "returned-text", "extra": 1}},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__span_output_key_set_via_opik_context_collides_with_return_value__explicit_value_kept(
+    fake_backend,
+):
+    @tracker.track
+    def f_inner(x):
+        opik_context.update_current_span(output={"output": "explicit-output"})
+        return "returned-output"
+
+    @tracker.track
+    def f_outer(x):
+        return f_inner(x)
+
+    f_outer("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f_outer",
+        input={"x": "f-input"},
+        output={"output": "returned-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f_outer",
+                input={"x": "f-input"},
+                output={"output": "returned-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="f_inner",
+                        input={"x": "f-input"},
+                        output={"output": "explicit-output"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[],
+                        source="sdk",
+                    )
+                ],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__dict_returned_with_key_set_via_opik_context__explicit_value_kept_other_keys_merged(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(output={"answer": "explicit-answer"})
+        return {"answer": "returned-answer", "sources": ["doc-1"]}
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input"},
+        output={"answer": "returned-answer", "sources": ["doc-1"]},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input"},
+                output={"answer": "explicit-answer", "sources": ["doc-1"]},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
 def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__feedback_scores_are_also_logged(
     fake_backend,
 ):

@@ -86,7 +86,9 @@ class BaseTrackDecorator(abc.ABC):
             metadata: Metadata to associate with the span.
             capture_input: Whether to capture the input arguments.
             ignore_arguments: The list of the arguments NOT to include into span/trace inputs.
-            capture_output: Whether to capture the output result.
+            capture_output: Whether to capture the output result. Output keys set
+                explicitly via `opik_context.update_current_span`/`update_current_trace`
+                during the call are kept; the return value fills in the rest.
             generations_aggregator: Function to aggregate generation results.
             flush: Whether to flush the client after logging.
             project_name: The name of the project to log data.
@@ -564,13 +566,21 @@ class BaseTrackDecorator(abc.ABC):
         if should_process_span_data and span_data_to_end is not None:
             # save span data only if appropriate
             span_data_to_end.init_end_time().update(
-                **end_arguments.to_kwargs(),
+                **_without_explicitly_set_output_keys(
+                    end_kwargs=end_arguments.to_kwargs(),
+                    explicit_output=span_data_to_end.output,
+                ),
             )
             client.__internal_api__span__(**span_data_to_end.as_parameters)
 
         if trace_data_to_end is not None:
             trace_data_to_end.init_end_time().update(
-                **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
+                **_without_explicitly_set_output_keys(
+                    end_kwargs=end_arguments.to_kwargs(
+                        ignore_keys=["usage", "model", "provider"]
+                    ),
+                    explicit_output=trace_data_to_end.output,
+                ),
             )
 
             client.__internal_api__trace__(**trace_data_to_end.as_parameters)
@@ -647,6 +657,26 @@ def _apply_entrypoint(
     from ..runner.activate import activate_runner
 
     activate_runner()
+
+
+def _without_explicitly_set_output_keys(
+    end_kwargs: Dict[str, Any], explicit_output: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    # Output already on the span/trace when the function ends was set by the user
+    # via opik_context during the call, so the captured return value must not
+    # replace it — it only fills in the keys the user left unset.
+    captured_output = end_kwargs.get("output")
+    if captured_output is None or not explicit_output:
+        return end_kwargs
+
+    return {
+        **end_kwargs,
+        "output": {
+            key: value
+            for key, value in captured_output.items()
+            if key not in explicit_output
+        },
+    }
 
 
 def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
