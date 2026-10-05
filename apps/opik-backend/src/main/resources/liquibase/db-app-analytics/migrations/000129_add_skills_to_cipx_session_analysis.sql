@@ -19,7 +19,7 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{clu
     ADD COLUMN IF NOT EXISTS `skills.description`     Array(String),
     ADD COLUMN IF NOT EXISTS `skills.summary`         Array(String),
     ADD COLUMN IF NOT EXISTS `skills.tokens`          Array(UInt64),
-    ADD COLUMN IF NOT EXISTS `skills.cost_usd`        Array(Float64),
+    ADD COLUMN IF NOT EXISTS `skills.cost_usd`        Array(Decimal(38, 12)),
     ADD COLUMN IF NOT EXISTS skills_version           UInt16 DEFAULT 0,
     ADD COLUMN IF NOT EXISTS session_first_turn_at    DateTime64(6, 'UTC') DEFAULT toDateTime64(0, 6),
     ADD COLUMN IF NOT EXISTS session_last_turn_at     DateTime64(6, 'UTC') DEFAULT toDateTime64(0, 6);
