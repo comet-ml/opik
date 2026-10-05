@@ -102,7 +102,7 @@ class FarFutureIdsMetricsResourceTest {
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(redisContainer.getRedisURI())
                         .runtimeInfo(wireMock.runtimeInfo())
-                        // Lets far-future ids through ingestion, as production accepts them.
+                        // Accepts far-future ids at ingestion, as production does.
                         .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false")))
                         .build());
     }
