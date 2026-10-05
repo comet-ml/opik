@@ -9,6 +9,8 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -140,6 +142,25 @@ class LlmModelRegistryServiceTest {
         assertThat(registry).containsKeys("openai", "anthropic", "gemini", "vertex-ai", "openrouter");
         assertThat(registry.get("openai")).isNotEmpty();
         assertThat(registry.get("openrouter")).isNotEmpty();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "gpt-5-mini, true",
+            "gpt-5.4, true",
+            "gpt-5-codex, true",
+            "o3, true",
+            "gpt-5-chat-latest, false",
+            "gpt-4o, false"
+    })
+    void defaultResourceFlagsOpenAiReasoningModels(String model, boolean reasoning) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(model);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_AI);
+        assertThat(result.get().model().reasoning()).isEqualTo(reasoning);
     }
 
     @Test

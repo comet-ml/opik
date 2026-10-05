@@ -1029,4 +1029,96 @@ class ChatCompletionsResourceTest {
         }
     }
 
+    /// OpenAI reasoning models take temperature only at its default and reject
+    /// top_p and both penalties. The frontend leaves them out, but anything else
+    /// that calls the endpoint relied on that. These assert on what actually leaves
+    /// Opik, classified by the real model registry.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("OpenAI reasoning models — sampling params and penalties")
+    class OpenAiReasoningSamplingParams {
+
+        private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
+        private static final String OK_BODY = """
+                {"id":"chatcmpl-x","object":"chat.completion","created":1,"model":"gpt-5-mini",\
+                "choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}""";
+        private static final List<String> STRIPPED_FIELDS = List.of(
+                "temperature", "top_p", "frequency_penalty", "presence_penalty");
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"gpt-5-mini", "o3"})
+        @DisplayName("A reasoning model on the OpenAI provider reaches it without sampling params or penalties")
+        void dropsSamplingParamsAndPenalties(String model) {
+            var body = upstreamBodyFor(LlmProvider.OPEN_AI, model);
+
+            STRIPPED_FIELDS.forEach(field -> assertThat(body.has(field)).as(field).isFalse());
+            assertThat(body.path("max_completion_tokens").asInt()).isEqualTo(100);
+        }
+
+        static Stream<Arguments> modelsThatKeepTheirParams() {
+            return Stream.of(
+                    arguments(LlmProvider.OPEN_AI, "gpt-4o"),
+                    arguments(LlmProvider.OPEN_AI, "gpt-5-chat-latest"),
+                    arguments(LlmProvider.OPEN_ROUTER, "openai/gpt-5-mini"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("modelsThatKeepTheirParams")
+        @DisplayName("Any other model keeps every param")
+        void keepsParamsForOtherModels(LlmProvider provider, String model) {
+            var body = upstreamBodyFor(provider, model);
+
+            assertThat(body.path("temperature").asDouble()).isEqualTo(0.7);
+            assertThat(body.path("top_p").asDouble()).isEqualTo(0.9);
+            assertThat(body.path("frequency_penalty").asDouble()).isEqualTo(0.5);
+            assertThat(body.path("presence_penalty").asDouble()).isEqualTo(0.4);
+        }
+
+        private JsonNode upstreamBodyFor(LlmProvider provider, String model) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(provider)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl())
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(OK_BODY)));
+
+            var request = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(model)
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .frequencyPenalty(0.5)
+                    .presencePenalty(0.4)
+                    .maxCompletionTokens(100)
+                    .addUserMessage("ping")
+                    .build();
+
+            try (var response = clientSupport
+                    .target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            var upstream = WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX)));
+            assertThat(upstream).as("Opik should have forwarded the request upstream").isNotEmpty();
+            return JsonUtils.getJsonNodeFromString(upstream.getFirst().getBodyAsString());
+        }
+    }
 }

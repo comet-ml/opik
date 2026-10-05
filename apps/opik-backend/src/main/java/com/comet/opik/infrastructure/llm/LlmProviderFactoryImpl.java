@@ -131,6 +131,14 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return StructuredOutputStrategy.getStrategy(provider, model);
     }
 
+    @Override
+    public boolean isOpenAiReasoningModel(@NonNull String model) {
+        return registryService.findModel(model)
+                .filter(result -> result.provider() == LlmProvider.OPEN_AI)
+                .map(result -> result.model().reasoning())
+                .orElse(false);
+    }
+
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {
         var freeModelConfig = configuration.getFreeModel();
         if (freeModelConfig.isEnabled() && model.equals(freeModelConfig.getModel())) {
