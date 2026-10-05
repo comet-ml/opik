@@ -279,35 +279,60 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
+export type RunFailureHint = {
+  title: string;
+  action: string;
+};
+
+export type RunFailure = {
+  message: string;
+  hint?: RunFailureHint;
+};
+
 const getRunFailureHint = (
   errorStatus: number | null,
   canTuneRequestRate: boolean,
-): string | null => {
+): RunFailureHint | undefined => {
   if (errorStatus === HTTP_TOO_MANY_REQUESTS) {
-    return canTuneRequestRate
-      ? "Rate limit reached. Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters."
-      : "Rate limit reached. Wait a moment and run again.";
+    return {
+      title: "Rate limit reached",
+      action: canTuneRequestRate
+        ? "Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters."
+        : "Wait a moment and run again.",
+    };
   }
   // The backend reports OpenAI's insufficient_quota as 402, and OpenRouter sends 402 when credits run out.
   if (errorStatus === HTTP_PAYMENT_REQUIRED) {
-    return "Out of credits. Add credits or raise your quota with the provider, then run again.";
+    return {
+      title: "Out of credits",
+      action:
+        "Add credits or raise your quota with the provider, then run again.",
+    };
   }
-  return null;
+  return undefined;
 };
 
 export const describeRunFailure = (
   run: RunStreamingReturn,
   canTuneRequestRate: boolean,
-): string => {
+): RunFailure => {
   const hint = getRunFailureHint(run.errorStatus, canTuneRequestRate);
-  if (!hint) return parseCompletionOutput(run);
+  if (!hint) return { message: parseCompletionOutput(run) };
 
   const providerMessage =
     run.opikError || run.providerError || run.pythonProxyError;
-  return providerMessage
-    ? `${hint} Provider message: ${providerMessage}`
-    : hint;
+  return { message: providerMessage || hint.title, hint };
 };
+
+export class RunFailedError extends Error {
+  failure: RunFailure;
+
+  constructor(failure: RunFailure) {
+    super(failure.message);
+    this.name = "RunFailedError";
+    this.failure = failure;
+  }
+}
 
 export const parseCompletionError = (run: RunStreamingReturn) => {
   if (run.opikError) {

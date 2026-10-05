@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import dayjs from "dayjs";
 import get from "lodash/get";
+import isNumber from "lodash/isNumber";
 import isString from "lodash/isString";
 
 import { UsageType } from "@/types/shared";
@@ -89,8 +90,13 @@ const isProviderError = (
 };
 
 const toHttpErrorStatus = (code: unknown): number | null => {
-  const status = Number(code);
-  return Number.isInteger(status) && status >= 400 ? status : null;
+  const status = isString(code) && /^\d{3}$/.test(code) ? Number(code) : code;
+  return isNumber(status) &&
+    Number.isInteger(status) &&
+    status >= 400 &&
+    status <= 599
+    ? status
+    : null;
 };
 
 const getCompletionProxyStream = async ({

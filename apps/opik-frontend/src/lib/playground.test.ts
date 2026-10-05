@@ -404,24 +404,25 @@ describe("describeRunFailure", () => {
     ...overrides,
   });
 
-  it("gives a rate-limited run a next step and keeps the provider's message", () => {
+  it("names a rate-limited run and gives the next step on its own", () => {
     const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
 
-    expect(describeRunFailure(run, true)).toBe(
-      "Rate limit reached. Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters. " +
-        `Provider message: ${OPENAI_RATE_LIMIT}`,
-    );
+    expect(describeRunFailure(run, true)).toEqual({
+      message: OPENAI_RATE_LIMIT,
+      hint: {
+        title: "Rate limit reached",
+        action:
+          "Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters.",
+      },
+    });
   });
 
   it("does not point at settings the model has no panel for", () => {
     const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
 
-    const message = describeRunFailure(run, false);
-
-    expect(message).toBe(
-      `Rate limit reached. Wait a moment and run again. Provider message: ${OPENAI_RATE_LIMIT}`,
+    expect(describeRunFailure(run, false).hint?.action).toBe(
+      "Wait a moment and run again.",
     );
-    expect(message).not.toContain("Model parameters");
   });
 
   it("tells an out-of-credits run to add credits, not to slow down", () => {
@@ -430,18 +431,20 @@ describe("describeRunFailure", () => {
       opikError: "You exceeded your current quota.",
     });
 
-    expect(describeRunFailure(run, true)).toBe(
-      "Out of credits. Add credits or raise your quota with the provider, then run again. " +
-        "Provider message: You exceeded your current quota.",
-    );
+    expect(describeRunFailure(run, true)).toEqual({
+      message: "You exceeded your current quota.",
+      hint: {
+        title: "Out of credits",
+        action:
+          "Add credits or raise your quota with the provider, then run again.",
+      },
+    });
   });
 
-  it("explains a 429 that came with no readable message", () => {
+  it("falls back to the title when a 429 came with no readable message", () => {
     const run = failedRun({ errorStatus: 429 });
 
-    expect(describeRunFailure(run, false)).toBe(
-      "Rate limit reached. Wait a moment and run again.",
-    );
+    expect(describeRunFailure(run, false).message).toBe("Rate limit reached");
   });
 
   it.each<[string, Partial<RunStreamingReturn>, string]>([
@@ -456,6 +459,8 @@ describe("describeRunFailure", () => {
       "Unexpected error",
     ],
   ])("leaves %s as the provider wrote it", (_label, overrides, expected) => {
-    expect(describeRunFailure(failedRun(overrides), true)).toBe(expected);
+    expect(describeRunFailure(failedRun(overrides), true)).toEqual({
+      message: expected,
+    });
   });
 });

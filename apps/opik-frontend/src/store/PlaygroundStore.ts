@@ -4,7 +4,7 @@ import pick from "lodash/pick";
 import mapValues from "lodash/mapValues";
 
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
-import { restoreMissingConfigKeys } from "@/lib/playground";
+import { restoreMissingConfigKeys, RunFailureHint } from "@/lib/playground";
 import { buildExperimentName } from "@/lib/experiments";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
@@ -17,6 +17,7 @@ interface PlaygroundOutput {
   isLoading: boolean;
   value: string | null;
   error?: string;
+  errorHint?: RunFailureHint;
   stale: boolean;
   traceId?: string;
   selectedRuleIds?: string[] | null;

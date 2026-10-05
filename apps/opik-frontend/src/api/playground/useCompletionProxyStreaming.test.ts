@@ -423,6 +423,31 @@ describe("the error status a failed run reports", () => {
     expect(run.errorStatus).toBe(429);
   });
 
+  it("reads a status sent as a string of digits", async () => {
+    const run = await runAgainst(streamOf({ code: "429", message: "slow" }));
+
+    expect(run.errorStatus).toBe(429);
+  });
+
+  it.each([
+    ["a boolean", true],
+    ["an array", [429]],
+    ["a status below the error range", 399],
+    ["a status past the HTTP range", 5000],
+    ["a string that is not a status", "429abc"],
+  ])(
+    "keeps the HTTP status when the event's code is %s",
+    async (_label, code) => {
+      const run = await runAgainst(
+        new Response(`data: ${JSON.stringify({ code, message: "x" })}\n`, {
+          status: 503,
+        }),
+      );
+
+      expect(run.errorStatus).toBe(503);
+    },
+  );
+
   it("reports no status for a run that succeeds", async () => {
     const run = await runAgainst(
       streamOf({ choices: [{ delta: { content: "hello" } }] }),
