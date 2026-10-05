@@ -1707,6 +1707,86 @@ def test_track__guardrail_returns_pydantic_model_with_key_set_via_opik_context__
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+def test_track__async_function_output_key_set_via_opik_context_collides_with_return_value__explicit_value_kept(
+    fake_backend,
+):
+    @tracker.track
+    async def async_f(x):
+        opik_context.update_current_span(output={"output": "explicit-output"})
+        return "returned-output"
+
+    asyncio.run(async_f("f-input"))
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="async_f",
+        input={"x": "f-input"},
+        output={"output": "returned-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="async_f",
+                input={"x": "f-input"},
+                output={"output": "explicit-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__generator_output_key_set_via_opik_context_collides_with_yielded_values__explicit_value_kept(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(output={"output": "explicit-output"})
+        for value in ["yielded-1", " yielded-2"]:
+            yield value
+
+    for _ in f("generator-input"):
+        pass
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "generator-input"},
+        output={"output": "yielded-1 yielded-2"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "generator-input"},
+                output={"output": "explicit-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
 def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__feedback_scores_are_also_logged(
     fake_backend,
 ):
