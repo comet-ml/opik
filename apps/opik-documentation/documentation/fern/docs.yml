@@ -1034,6 +1034,9 @@ navigation:
       - page: Roll out cost policies
         path: ./docs-v2/cost_intelligence/roll-out-cost-policies.mdx
         slug: roll-out-cost-policies
+      - page: Query spend with MCP
+        path: ./docs-v2/cost_intelligence/mcp-server.mdx
+        slug: mcp-server
       - section: Installation
         slug: install
         contents:

@@ -14,10 +14,8 @@ user carry a workaround for a condition they cannot have, and would leave the
 stale environment on disk regardless. Removing the install fixes the machine
 instead, and leaves ``uvx opik-mcp`` meaning what it plainly says.
 
-Removal is offered, never assumed. The original bug was an unannounced write into
-someone's environment; deleting from it without asking would be the same mistake
-pointed the other way. A user who says no keeps what they have — which is also
-the right answer for the rare person who installed a version on purpose.
+Removal is done rather than offered, and said out loud, with the command to put
+the version back for anyone who installed it on purpose.
 """
 
 import logging
@@ -58,9 +56,7 @@ def installed_version() -> Optional[str]:
 def uninstall() -> Tuple[bool, str]:
     """Remove the ``opik-mcp`` tool install, reporting ``(succeeded, detail)``.
 
-    Only ever called after the user agrees. ``detail`` carries uv's own words on
-    failure, because the useful next step ("run it yourself and see") depends on
-    what it said.
+    ``detail`` carries uv's own words on failure.
     """
     result = _run_uv("uninstall")
     if result is None:

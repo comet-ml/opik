@@ -438,6 +438,39 @@ class WorkspacesResourceTest {
                     .isEqualTo(expectedCostsSummary);
         }
 
+        @Test
+        void costsSummary_rangeIsIdBased() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            Instant startTime = Instant.now().minus(Duration.ofMinutes(10));
+            Instant endTime = Instant.now();
+            Instant inWindow = startTime.plus(Duration.ofMinutes(5));
+            Instant outOfWindow = startTime.minus(Duration.ofHours(12));
+
+            // id in window, start_time far outside: counted
+            var idInWindow = createSpans(projectName, apiKey, workspaceName, inWindow, outOfWindow);
+            // start_time in window, id far outside: not counted
+            createSpans(projectName, apiKey, workspaceName, outOfWindow, inWindow);
+
+            var actualCostsSummary = workspaceResourceClient.getCostsSummary(
+                    WorkspaceMetricsSummaryRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .build(),
+                    apiKey, workspaceName);
+
+            assertThat(actualCostsSummary)
+                    .usingComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
+                    .isEqualTo(prepareCostsSummary(List.of(), idInWindow));
+        }
+
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
         void costsSummary_emptyData(boolean withProjectIds) {
@@ -1064,11 +1097,16 @@ class WorkspacesResourceTest {
 
     private List<Span> createSpans(String projectName, String apiKey,
             String workspaceName, Instant time) {
+        return createSpans(projectName, apiKey, workspaceName, time, time);
+    }
+
+    private List<Span> createSpans(String projectName, String apiKey,
+            String workspaceName, Instant idTime, Instant startTime) {
         var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
                 .stream()
                 .map(span -> span.toBuilder()
-                        .startTime(time)
-                        .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                        .startTime(startTime)
+                        .id(idGenerator.getTimeOrderedEpoch(idTime.toEpochMilli()))
                         .projectId(null)
                         .projectName(projectName)
                         .feedbackScores(null)

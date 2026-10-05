@@ -18,6 +18,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
+import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
 import jakarta.annotation.Nullable;
@@ -115,8 +116,10 @@ public interface ProjectService {
     void validateProjectIdExists(UUID projectId, String workspaceId);
 
     static Map<String, Project> groupByName(List<Project> projects) {
+        // Keyed by the stripped name because callers look up with WorkspaceUtils.getProjectName, which strips, while
+        // MySQL's PAD SPACE collation still matches a stored name with trailing spaces.
         return projects.stream().collect(Collectors.toMap(
-                Project::name,
+                WorkspaceUtils::stripProjectName,
                 Function.identity(),
                 BinaryOperatorUtils.last(),
                 () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));

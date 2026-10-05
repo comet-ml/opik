@@ -722,12 +722,22 @@ describe("Gemini thinking level", () => {
       "medium",
       "high",
     ]);
-    // 3.1 Flash Lite has only minimal and high, plus "none" because it does not think by default.
-    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE)).toEqual([
-      "none",
-      "minimal",
-      "high",
-    ]);
+    // 3.1 Flash Lite has all four, plus "none" because it does not think by default. Only the
+    // separate -image model is limited to minimal and high.
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
+    ]) {
+      expect(values(model), model).toEqual([
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+      ]);
+    }
     // Gemini 3 Pro: low and high only.
     expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_PRO)).toEqual(["low", "high"]);
   });
@@ -1005,6 +1015,17 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
         custom_parameters: { thinking: { budget_tokens: 4096 } },
       }).custom_parameters,
     ).toEqual({ thinking: { budget_tokens: 4096 } });
+  });
+
+  it("sends a low or medium level on 3.1 Flash Lite instead of resetting it to none", () => {
+    for (const thinkingLevel of ["low", "medium"] as const) {
+      expect(
+        sanitizeConfigForRequest(
+          PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+          { thinkingLevel },
+        ).custom_parameters,
+      ).toEqual({ thinking: { level: thinkingLevel } });
+    }
   });
 
   it("sends no thinking block for an explicit none", () => {
