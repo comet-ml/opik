@@ -36,10 +36,16 @@ const now = dayjs(PRESET_DATE_RANGES.past24hours.to)
   .add(30, "minutes");
 const later = now.add(90, "minutes");
 const muchLater = now.add(3, "hours");
+const nextUtcHour = now.utc().add(1, "hour").startOf("hour");
 
 const pastCustomRange: DateRangeValue = {
   from: new Date("2024-01-03"),
   to: new Date("2024-01-10"),
+};
+
+const liveCustomRange: DateRangeValue = {
+  from: now.subtract(4, "days").startOf("day").toDate(),
+  to: now.endOf("day").toDate(),
 };
 
 const createWrapper = () => {
@@ -57,20 +63,32 @@ const renderIntervalBounds = (dateRange: DateRangeValue) =>
     { initialProps: { range: dateRange }, wrapper: createWrapper() },
   );
 
-type FetchWindow = (toTime: string, signal: AbortSignal) => Promise<object>;
+type FetchWindow = (
+  toTime: string | undefined,
+  signal: AbortSignal,
+) => Promise<object>;
 
-const renderWindowQuery = (fetchWindow: FetchWindow) =>
+const renderWindowQuery = (
+  fetchWindow: FetchWindow,
+  dateRange: DateRangeValue = liveCustomRange,
+) =>
   renderHook(
     () => {
-      const intervalWindow = useIntervalBounds(PRESET_DATE_RANGES.past7days);
+      const intervalWindow = useIntervalBounds(dateRange);
       useQuery({
         queryKey: [
           "window-query",
-          { toTime: intervalWindow.intervalEnd },
+          {
+            fromTime: intervalWindow.intervalStart,
+            toTime: intervalWindow.intervalEnd,
+          },
         ] as const,
         queryFn: ({ queryKey: [, { toTime }], signal }) =>
           fetchWindow(toTime, signal),
-        ...windowQueryOptions(intervalWindow.refetchInterval),
+        ...windowQueryOptions(
+          intervalWindow.refetchInterval,
+          intervalWindow.selectionKey,
+        ),
       });
       return intervalWindow;
     },
@@ -81,6 +99,10 @@ const tick = (ms = REANCHOR_INTERVAL) =>
   act(() => {
     vi.advanceTimersByTime(ms);
   });
+
+const ticksUntil = (time: dayjs.Dayjs) =>
+  Math.max(0, Math.ceil(time.diff(dayjs()) / REANCHOR_INTERVAL)) *
+  REANCHOR_INTERVAL;
 
 const settle = () =>
   act(() => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -118,19 +140,35 @@ describe("useIntervalBounds", () => {
     vi.useRealTimers();
   });
 
-  it("should keep a preset window across re-renders", () => {
-    const { result, rerender } = renderIntervalBounds(
-      PRESET_DATE_RANGES.past7days,
+  it("should end a custom window ending today at the time it was picked", () => {
+    const { result } = renderIntervalBounds(liveCustomRange);
+
+    expect(result.current.intervalStart).toBe(
+      now.utc().subtract(4, "days").startOf("day").format(),
     );
+    expect(result.current.intervalEnd).toBe(now.utc().format());
+  });
+
+  it("should send a preset from its start with no end", () => {
+    const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
+
+    expect(result.current.intervalStart).toBe(
+      now.utc().subtract(6, "days").startOf("day").format(),
+    );
+    expect(result.current.intervalEnd).toBeUndefined();
+  });
+
+  it("should keep a live custom window across re-renders", () => {
+    const { result, rerender } = renderIntervalBounds(liveCustomRange);
     vi.setSystemTime(later.toDate());
 
-    rerender({ range: PRESET_DATE_RANGES.past7days });
+    rerender({ range: liveCustomRange });
 
     expect(result.current.intervalEnd).toBe(now.utc().format());
   });
 
-  it("should move a preset window to the current time on reanchor", () => {
-    const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
+  it("should move a live custom window to the current time on reanchor", () => {
+    const { result } = renderIntervalBounds(liveCustomRange);
     vi.setSystemTime(later.toDate());
 
     let moved = false;
@@ -140,6 +178,37 @@ describe("useIntervalBounds", () => {
 
     expect(moved).toBe(true);
     expect(result.current.intervalEnd).toBe(later.utc().format());
+  });
+
+  it("should report no move for a preset while its start stays", () => {
+    const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
+    const { intervalStart } = result.current;
+    vi.setSystemTime(now.add(REANCHOR_INTERVAL, "ms").toDate());
+
+    let moved = true;
+    act(() => {
+      moved = result.current.reanchorToNow();
+    });
+
+    expect(moved).toBe(false);
+    expect(result.current.intervalStart).toBe(intervalStart);
+    expect(result.current.intervalEnd).toBeUndefined();
+  });
+
+  it("should move a preset on reanchor once its start rolls forward", () => {
+    const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past24hours);
+    vi.setSystemTime(nextUtcHour.toDate());
+
+    let moved = false;
+    act(() => {
+      moved = result.current.reanchorToNow();
+    });
+
+    expect(moved).toBe(true);
+    expect(result.current.intervalStart).toBe(
+      nextUtcHour.subtract(1, "day").format(),
+    );
+    expect(result.current.intervalEnd).toBeUndefined();
   });
 
   it("should report no move and keep a past custom window", () => {
@@ -158,50 +227,44 @@ describe("useIntervalBounds", () => {
   });
 
   it("should start a fresh window when the range is picked again after a reanchor", () => {
-    const { result, rerender } = renderIntervalBounds(
-      PRESET_DATE_RANGES.past7days,
-    );
+    const { result, rerender } = renderIntervalBounds(liveCustomRange);
     vi.setSystemTime(later.toDate());
     act(() => {
       result.current.reanchorToNow();
     });
 
-    rerender({ range: PRESET_DATE_RANGES.past30days });
+    rerender({ range: pastCustomRange });
     vi.setSystemTime(muchLater.toDate());
-    rerender({ range: PRESET_DATE_RANGES.past7days });
+    rerender({ range: liveCustomRange });
 
     expect(result.current.intervalEnd).toBe(muchLater.utc().format());
   });
 
   it("should keep the window when the same range arrives as a new object", () => {
-    const { result, rerender } = renderIntervalBounds(
-      PRESET_DATE_RANGES.past7days,
-    );
+    const { result, rerender } = renderIntervalBounds(liveCustomRange);
     vi.setSystemTime(later.toDate());
 
-    rerender({ range: { ...PRESET_DATE_RANGES.past7days } });
+    rerender({ range: { ...liveCustomRange } });
 
     expect(result.current.intervalEnd).toBe(now.utc().format());
   });
 
   it("should keep a reanchored window when the same range arrives as a new object", () => {
-    const { result, rerender } = renderIntervalBounds(
-      PRESET_DATE_RANGES.past7days,
-    );
+    const { result, rerender } = renderIntervalBounds(liveCustomRange);
     vi.setSystemTime(later.toDate());
     act(() => {
       result.current.reanchorToNow();
     });
 
     vi.setSystemTime(muchLater.toDate());
-    rerender({ range: { ...PRESET_DATE_RANGES.past7days } });
+    rerender({ range: { ...liveCustomRange } });
 
     expect(result.current.intervalEnd).toBe(later.utc().format());
   });
 
   describe("periodic reanchor", () => {
-    it("should move a preset window's end forward on every tick", () => {
-      const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
+    it("should move a live custom window's end forward on every tick", () => {
+      const { result } = renderIntervalBounds(liveCustomRange);
       const { intervalStart } = result.current;
 
       tick();
@@ -219,9 +282,24 @@ describe("useIntervalBounds", () => {
       expect(result.current.intervalStart).toBe(intervalStart);
     });
 
+    it("should keep a preset's request on the tick until its start rolls forward", () => {
+      const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past24hours);
+      const { intervalStart } = result.current;
+
+      tick();
+      expect(result.current.intervalStart).toBe(intervalStart);
+      expect(result.current.intervalEnd).toBeUndefined();
+
+      tick(ticksUntil(nextUtcHour));
+      expect(result.current.intervalStart).toBe(
+        nextUtcHour.subtract(1, "day").format(),
+      );
+      expect(result.current.intervalEnd).toBeUndefined();
+    });
+
     it("should not move the window on the tick when the automatic reanchor is off", () => {
       const { result } = renderHook(
-        () => useIntervalBounds(PRESET_DATE_RANGES.past7days, false),
+        () => useIntervalBounds(liveCustomRange, false),
         { wrapper: createWrapper() },
       );
 
@@ -231,7 +309,7 @@ describe("useIntervalBounds", () => {
     });
 
     it("should not move the window while the connection is down", () => {
-      const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
+      const { result } = renderIntervalBounds(liveCustomRange);
       onlineManager.setOnline(false);
 
       tick();
@@ -249,18 +327,32 @@ describe("useIntervalBounds", () => {
       expect(result.current.intervalEnd).toBe(intervalEnd);
     });
 
-    it("should leave the refetch to the tick for a live window and to the query for a past one", () => {
-      const { result: live } = renderIntervalBounds(
+    it("should leave the refetch to the tick for a live custom window, and poll a preset or a past one", () => {
+      const { result: live } = renderIntervalBounds(liveCustomRange);
+      const { result: preset } = renderIntervalBounds(
         PRESET_DATE_RANGES.past7days,
       );
       const { result: past } = renderIntervalBounds(pastCustomRange);
 
       expect(live.current.refetchInterval).toBe(false);
+      expect(preset.current.refetchInterval).toBe(REANCHOR_INTERVAL);
       expect(past.current.refetchInterval).toBe(REANCHOR_INTERVAL);
     });
 
+    it("should report that a live window moves by itself, preset or not", () => {
+      const { result: live } = renderIntervalBounds(liveCustomRange);
+      const { result: preset } = renderIntervalBounds(
+        PRESET_DATE_RANGES.past7days,
+      );
+      const { result: past } = renderIntervalBounds(pastCustomRange);
+
+      expect(live.current.movesByItself).toBe(true);
+      expect(preset.current.movesByItself).toBe(true);
+      expect(past.current.movesByItself).toBe(false);
+    });
+
     it("should not move the window while the page is in the background", () => {
-      const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
+      const { result } = renderIntervalBounds(liveCustomRange);
       focusManager.setFocused(false);
 
       tick();
@@ -269,7 +361,7 @@ describe("useIntervalBounds", () => {
     });
 
     it("should restart the cadence after a manual reanchor", () => {
-      const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
+      const { result } = renderIntervalBounds(liveCustomRange);
       const halfTick = REANCHOR_INTERVAL / 2;
       tick(halfTick);
       act(() => {
@@ -296,47 +388,44 @@ describe("useIntervalBounds", () => {
       .startOf("day")
       .add(1, "day");
     const beforeMidnight = midnight.subtract(20, "seconds");
-    const ticksUntil = (time: dayjs.Dayjs) =>
-      Math.max(0, Math.ceil(time.diff(dayjs()) / REANCHOR_INTERVAL)) *
-      REANCHOR_INTERVAL;
+    const endingToday: DateRangeValue = {
+      from: midnight.subtract(4, "days").toDate(),
+      to: midnight.subtract(1, "ms").toDate(),
+    };
+    const endOfLastDay = midnight.subtract(1, "ms").utc().format();
 
     beforeEach(() => {
       vi.setSystemTime(beforeMidnight.toDate());
     });
 
-    it("should keep a preset live and roll its start forward like a fresh load", () => {
+    it("should keep a preset open-ended and polled, and roll its start forward like a fresh load", () => {
       const { result } = renderIntervalBounds(PRESET_DATE_RANGES.past7days);
       const startAtLoad = result.current.intervalStart;
 
       tick();
       expect(dayjs().isAfter(midnight)).toBe(true);
-      expect(result.current.intervalEnd).toBe(dayjs().utc().format());
-      expect(result.current.refetchInterval).toBe(false);
+      expect(result.current.intervalEnd).toBeUndefined();
+      expect(result.current.refetchInterval).toBe(REANCHOR_INTERVAL);
 
-      tick(ticksUntil(beforeMidnight.utc().endOf("day")));
-      expect(result.current.intervalEnd).toBe(dayjs().utc().format());
+      tick(ticksUntil(beforeMidnight.utc().add(1, "day").startOf("day")));
       expect(result.current.intervalStart).toBe(
         dayjs().utc().subtract(6, "days").startOf("day").format(),
       );
       expect(result.current.intervalStart).not.toBe(startAtLoad);
+      expect(result.current.intervalEnd).toBeUndefined();
 
       vi.setSystemTime(dayjs().add(10, "seconds").toDate());
-      let moved = false;
+      let moved = true;
       act(() => {
         moved = result.current.reanchorToNow();
       });
-      expect(moved).toBe(true);
-      expect(result.current.intervalEnd).toBe(dayjs().utc().format());
+      expect(moved).toBe(false);
     });
 
-    it("should keep the last live window of a custom range ending today after midnight and poll it", () => {
-      const endingToday: DateRangeValue = {
-        from: midnight.subtract(4, "days").toDate(),
-        to: midnight.subtract(1, "ms").toDate(),
-      };
+    it("should close a custom range ending today at the end of its day after midnight, and poll it", () => {
       const { result } = renderIntervalBounds(endingToday);
-      const { intervalStart, intervalEnd } = result.current;
-      expect(intervalEnd).toBe(dayjs().utc().format());
+      const { intervalStart } = result.current;
+      expect(result.current.intervalEnd).toBe(dayjs().utc().format());
       expect(result.current.refetchInterval).toBe(false);
 
       tick();
@@ -344,7 +433,7 @@ describe("useIntervalBounds", () => {
       tick(5 * REANCHOR_INTERVAL);
 
       expect(result.current.intervalStart).toBe(intervalStart);
-      expect(result.current.intervalEnd).toBe(intervalEnd);
+      expect(result.current.intervalEnd).toBe(endOfLastDay);
       expect(result.current.refetchInterval).toBe(REANCHOR_INTERVAL);
 
       let moved = true;
@@ -352,7 +441,21 @@ describe("useIntervalBounds", () => {
         moved = result.current.reanchorToNow();
       });
       expect(moved).toBe(false);
-      expect(result.current.intervalEnd).toBe(intervalEnd);
+      expect(result.current.intervalEnd).toBe(endOfLastDay);
+    });
+
+    it("should close a custom range ending today at the end of its day when the page comes back hours after midnight", () => {
+      vi.setSystemTime(now.toDate());
+      const { result } = renderIntervalBounds(endingToday);
+      focusManager.setFocused(false);
+      tick();
+      vi.setSystemTime(midnight.add(5, "hours").toDate());
+
+      act(() => {
+        focusManager.setFocused(true);
+      });
+
+      expect(result.current.intervalEnd).toBe(endOfLastDay);
     });
   });
 
@@ -430,22 +533,41 @@ describe("useIntervalBounds", () => {
         reconnectedAt,
       ]);
     });
+
+    it("should poll a preset's open-ended request on every tick", async () => {
+      const fetchWindow = vi.fn<FetchWindow>().mockResolvedValue({});
+      renderWindowQuery(fetchWindow, PRESET_DATE_RANGES.past7days);
+      await settle();
+
+      tick();
+      await settle();
+      tick();
+      await settle();
+
+      expect(fetchedWindowEnds(fetchWindow)).toEqual([
+        undefined,
+        undefined,
+        undefined,
+      ]);
+    });
   });
 });
 
 describe("windowQueryOptions", () => {
   it("should leave focus, reconnect and a short cache life to a moving window", () => {
-    expect(windowQueryOptions(false)).toEqual({
+    expect(windowQueryOptions(false, "2024-01-03,2024-01-10")).toEqual({
       refetchInterval: false,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       gcTime: 2 * 60 * 1000,
+      meta: { windowSelection: "2024-01-03,2024-01-10" },
     });
   });
 
-  it("should keep the query defaults for a fixed window", () => {
-    expect(windowQueryOptions(REANCHOR_INTERVAL)).toEqual({
+  it("should keep the query defaults for a polled window", () => {
+    expect(windowQueryOptions(REANCHOR_INTERVAL, "past7days")).toEqual({
       refetchInterval: REANCHOR_INTERVAL,
+      meta: { windowSelection: "past7days" },
     });
   });
 });
@@ -471,6 +593,24 @@ describe("keepDataWhileWindowMoves", () => {
         "toTime",
       ]),
     ).toBeUndefined();
+  });
+
+  it("should keep a polled preset's data while its start rolls, for the same selection only", () => {
+    const keep = keepDataWhileWindowMoves(
+      REANCHOR_INTERVAL,
+      { ...params, fromTime: "a2" },
+      ["fromTime", "toTime"],
+      { movesByItself: true, selectionKey: "past7days" },
+    );
+    const queryFor = (windowSelection: string) => ({
+      queryKey: ["stats", params],
+      meta: { windowSelection },
+    });
+
+    expect(keep?.({ stats: [] }, queryFor("past7days"))).toEqual({
+      stats: [],
+    });
+    expect(keep?.({ stats: [] }, queryFor("past30days"))).toBeUndefined();
   });
 });
 
@@ -571,6 +711,24 @@ describe("keepDataWhenOnlyWindowChanged", () => {
     );
 
     expect(placeholder(previousData, previousQuery(statsParams))).toBe(
+      previousData,
+    );
+  });
+
+  it("should drop the data when the previous query was for another range selection", () => {
+    const placeholder = keepDataWhenOnlyWindowChanged(
+      { ...statsParams, fromTime: rolledWindowStart, toTime: movedWindowEnd },
+      ["fromTime", "toTime"],
+    );
+    const queryFor = (windowSelection: string) => ({
+      ...previousQuery(statsParams),
+      meta: { windowSelection },
+    });
+
+    expect(
+      placeholder(previousData, queryFor("past24hours"), "past3days"),
+    ).toBe(undefined);
+    expect(placeholder(previousData, queryFor("past3days"), "past3days")).toBe(
       previousData,
     );
   });
