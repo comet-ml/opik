@@ -34,7 +34,7 @@ public interface FreeFormSqlQueryDAO {
     /**
      * Parses {@code query} via {@code EXPLAIN AST} (without executing it) and returns the AST node labels, one per row.
      */
-    CompletableFuture<List<String>> explainAst(@NonNull FreeFormSqlAccount account, @NonNull String query);
+    CompletableFuture<List<String>> explainAst(FreeFormSqlAccount account, String query);
 
     /**
      * The reserved {@code SQL_project_id} value meaning "every project in that workspace". The row policies match it
@@ -48,29 +48,29 @@ public interface FreeFormSqlQueryDAO {
      * column. {@code projectId} is a single project's id, or {@link #PROJECT_ID_ALL}. {@code queryId} identifies the
      * execution in {@code system.query_log} for the post-run check.
      */
-    CompletableFuture<FreeFormSqlResult> execute(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
-            @NonNull String projectId, @NonNull String query, @NonNull String queryId);
+    CompletableFuture<FreeFormSqlResult> execute(FreeFormSqlAccount account, String workspaceId,
+            String projectId, String query, String queryId);
 
     /**
      * Returns the resolved {@code EXPLAIN QUERY TREE} of {@code query}, one line per row, under the settings
      * {@link #execute} sends. Resolving it evaluates the query's scalar subqueries, as the read-only account.
      */
-    CompletableFuture<List<String>> explainQueryTree(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
-            @NonNull String projectId, @NonNull String query);
+    CompletableFuture<List<String>> explainQueryTree(FreeFormSqlAccount account, String workspaceId,
+            String projectId, String query);
 
     /**
      * Returns {@code EXPLAIN json = 1, actions = 1} of {@code query} under exactly the settings {@link #execute} sends,
      * so the reads it shows are the ones that ran. Note that EXPLAIN evaluates scalar and IN/EXISTS subqueries.
      */
-    CompletableFuture<String> explainPlan(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
-            @NonNull String projectId, @NonNull String query);
+    CompletableFuture<String> explainPlan(FreeFormSqlAccount account, String workspaceId,
+            String projectId, String query);
 
     /**
      * Reads the finished {@code system.query_log} entries of {@code queryId}, initial and shard-side, from every
      * replica, with the tables covered by the applied row policies that apply to {@code user}, the account the query
      * ran as. One read, narrowed to the query id and the last 15 minutes. Runs on the main analytics account: the read-only ones cannot read the log.
      */
-    CompletableFuture<List<FreeFormSqlQueryLogEntry>> fetchQueryLog(@NonNull String queryId, @NonNull String user);
+    CompletableFuture<List<FreeFormSqlQueryLogEntry>> fetchQueryLog(String queryId, String user);
 
 }
 

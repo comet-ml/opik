@@ -79,10 +79,10 @@ class FreeFormSqlRowPolicyConformanceTest {
 
     /** The extended account's other tables that bind the project, as the provisioning declares. */
     private static final List<String> EXTENDED_PROJECT_BOUND_TABLES = List.of("authored_feedback_scores",
-            "feedback_scores", "trace_threads");
+            "trace_threads");
     /** The extended account's tables bound to the workspace only: an experiment or a dataset can span projects. */
     private static final List<String> EXTENDED_WORKSPACE_ONLY_TABLES = List.of("experiments", "experiment_items",
-            "dataset_items", "dataset_item_versions");
+            "dataset_item_versions");
     /** Rows FreeFormSqlTestData seeds per project: one experiment, PER_PROJECT of everything else. */
     private static final Map<String, Integer> SEEDED_PER_PROJECT = Map.of("experiments", 1);
 
@@ -118,16 +118,19 @@ class FreeFormSqlRowPolicyConformanceTest {
     private FreeFormSqlTestData data;
 
     /**
-     * One instance serves every topology, in {@link FreeFormSqlTopology} order: the data is seeded once, the cases run
-     * on the migrated schema, then the tables are wrapped as Distributed, as the cutover wraps live data, and the
-     * cases run again. The wrap cannot be undone, so the migrated topology must come first.
+     * One instance serves every topology, in {@link FreeFormSqlTopology} order: the cases run on the migrated schema,
+     * then the tables are wrapped as Distributed and the cases run again on data seeded after the wrap. The wrap
+     * cannot be undone, so the migrated topology must come first.
      */
     @Parameter
     FreeFormSqlTopology topology;
 
+    private ClientSupport client;
+
     @BeforeParameterizedClassInvocation
     void applyTopology() {
         topology.apply(admin);
+        data = FreeFormSqlTestData.seed(client, wireMock, admin);
         // Every project's rows made it through the topology, so a cross-workspace exclusion is never vacuous.
         for (var project : List.of(data.a1(), data.a2(), data.b1())) {
             readTables().forEach(table -> assertThat(single(admin, """
@@ -141,8 +144,8 @@ class FreeFormSqlRowPolicyConformanceTest {
     @BeforeAll
     void setUpAll(ClientSupport client) {
         ClientSupportUtils.config(client);
+        this.client = client;
         admin = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse, DATABASE_NAME).buildClient();
-        data = FreeFormSqlTestData.seed(client, wireMock, admin);
     }
 
     @AfterAll

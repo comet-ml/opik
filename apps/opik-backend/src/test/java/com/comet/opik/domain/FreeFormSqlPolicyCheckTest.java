@@ -124,6 +124,6 @@ class FreeFormSqlPolicyCheckTest {
     void fails(String name, List<FreeFormSqlQueryLogEntry> entries, String plan,
             FreeFormSqlSubqueries.SubqueryReads subqueryReads, String table, String reason) {
         assertThat(FreeFormSqlPolicyCheck.violation("opik", USER, entries, plan, subqueryReads))
-                .contains(new FreeFormSqlPolicyCheck.Violation(table, reason));
+                .contains(FreeFormSqlPolicyViolation.builder().table(table).reason(reason).build());
     }
 }

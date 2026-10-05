@@ -17,7 +17,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
-import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfigTest;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.WebApplicationException;
@@ -45,6 +44,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Stream;
 
@@ -107,6 +107,7 @@ class FreeFormSqlPostRunCheckTest {
     @Parameter
     FreeFormSqlTopology topology;
 
+    private ClientSupport client;
     private Client admin;
     private Client standard;
     private Client extended;
@@ -118,10 +119,8 @@ class FreeFormSqlPostRunCheckTest {
     @BeforeAll
     void setUpAll(ClientSupport client) {
         ClientSupportUtils.config(client);
+        this.client = client;
         admin = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse, DATABASE_NAME).buildClient();
-        var data = FreeFormSqlTestData.seed(client, wireMock, admin);
-        workspaceA = data.a1().workspace().id();
-        projectA = data.a1().id();
         String policy = "workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')";
         admin.queryAll("CREATE USER %s IDENTIFIED BY '%s' SETTINGS PROFILE 'comet_llm_readonly_freeform_sql_profile'"
                 .formatted(PARTIAL_USER, STANDARD.getPassword()));
@@ -138,13 +137,16 @@ class FreeFormSqlPostRunCheckTest {
     }
 
     /**
-     * One instance serves every topology, in {@link FreeFormSqlTopology} order: the data is seeded once, the cases run
-     * on the migrated schema, then the tables are wrapped as Distributed and the cases run again. The wrap cannot be
-     * undone, so the migrated topology must come first.
+     * One instance serves every topology, in {@link FreeFormSqlTopology} order: the cases run on the migrated schema,
+     * then the tables are wrapped as Distributed and the cases run again on data seeded after the wrap. The wrap
+     * cannot be undone, so the migrated topology must come first.
      */
     @BeforeParameterizedClassInvocation
     void applyTopology() {
         topology.apply(admin);
+        var data = FreeFormSqlTestData.seed(client, wireMock, admin);
+        workspaceA = data.a1().workspace().id();
+        projectA = data.a1().id();
     }
 
     @AfterAll
@@ -177,24 +179,26 @@ class FreeFormSqlPostRunCheckTest {
         standardConfig.setUsername(standardUser);
         var extendedConfig = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
         extendedConfig.setUsername(EXTENDED.getUsername());
-        var dao = new FreeFormSqlQueryDAOImpl(standardClient, extended, admin);
+        var dao = flushingDao(standardClient);
+        var postRunCheck = FreeFormSqlQueryServiceTest.postRunCheck(FreeFormSqlPostRunCheckConfig.Mode.ENFORCE);
         // Names are presentation, out of scope here: the enricher hands the extended account's rows back as they are.
         return new FreeFormSqlQueryService(dao, mock(FreeFormSqlEntityNameEnricher.class,
-                invocation -> invocation.getArgument(0)),
-                logReader(dao),
-                FreeFormSqlPostRunCheckConfigTest.config(FreeFormSqlPostRunCheckConfig.Mode.ENFORCE), analytics,
-                standardConfig, extendedConfig);
+                invocation -> invocation.getArgument(0)), new FreeFormSqlQueryLogReader(dao, postRunCheck),
+                postRunCheck, analytics, standardConfig, extendedConfig);
     }
 
     /**
-     * Reads the log as the application does, after flushing it as admin in place of waiting for ClickHouse's own
-     * flush interval, so a case takes milliseconds rather than the configured delay.
+     * The DAO the application uses, except that each log read first flushes the log as admin in place of waiting for
+     * ClickHouse's own flush interval, so a case takes milliseconds rather than the configured delay.
      */
-    private FreeFormSqlQueryLogReader logReader(FreeFormSqlQueryDAO dao) {
-        return new FreeFormSqlQueryLogReader((queryId, user) -> {
-            admin.queryAll("SYSTEM FLUSH LOGS ON CLUSTER '{cluster}' query_log");
-            return dao.fetchQueryLog(queryId, user);
-        }, 1, 0, FreeFormSqlQueryLogReader.Scheduler.DELAYED);
+    private FreeFormSqlQueryDAO flushingDao(Client standardClient) {
+        return new FreeFormSqlQueryDAOImpl(standardClient, extended, admin) {
+            @Override
+            public CompletableFuture<List<FreeFormSqlQueryLogEntry>> fetchQueryLog(String queryId, String user) {
+                admin.queryAll("SYSTEM FLUSH LOGS ON CLUSTER '{cluster}' query_log");
+                return super.fetchQueryLog(queryId, user);
+            }
+        };
     }
 
     private static String count(String from) {

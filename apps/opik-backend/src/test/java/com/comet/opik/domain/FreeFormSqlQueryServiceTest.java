@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
-import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfigTest;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.BadRequestException;
@@ -79,7 +78,7 @@ class FreeFormSqlQueryServiceTest {
         var analytics = new DatabaseAnalyticsFactory();
         analytics.setDatabaseName(DATABASE);
         service = new FreeFormSqlQueryService(dao, enricher, queryLogReader,
-                FreeFormSqlPostRunCheckConfigTest.config(mode), analytics, account(STANDARD_USER),
+                postRunCheck(mode), analytics, account(STANDARD_USER),
                 account(EXTENDED_USER));
     }
 
@@ -294,6 +293,15 @@ class FreeFormSqlQueryServiceTest {
         verify(dao, never()).explainQueryTree(any(), anyString(), anyString(), anyString());
         verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
         verify(queryLogReader, never()).entries(anyString(), anyString());
+    }
+
+    /** The post-run check in {@code mode}, reading the log once with no wait. */
+    static FreeFormSqlPostRunCheckConfig postRunCheck(FreeFormSqlPostRunCheckConfig.Mode mode) {
+        var config = new FreeFormSqlPostRunCheckConfig();
+        config.setMode(mode);
+        config.setLogReadDelay(io.dropwizard.util.Duration.milliseconds(0));
+        config.setMaxLogReadAttempts(1);
+        return config;
     }
 
     /** A withheld result: the status, and the constant message, with no row and no ClickHouse detail. */

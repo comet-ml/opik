@@ -35,8 +35,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
  * Two workspaces seeded through the public API, as an Opik user would write them: workspace A with projects A1 and
  * A2, workspace B with B1. Each project gets a small sample of every table the free-form SQL accounts read: traces
  * in their own threads, a span per trace, a feedback score per trace, a dataset with items and an experiment over
- * them. Ids are UUIDv7, and the projects' ids are assigned by the API. The two tables that no API call writes in this
- * configuration are seeded directly: see {@link Seeder#project}.
+ * them. Ids are UUIDv7, and the projects' ids are assigned by the API.
  */
 @Builder(toBuilder = true)
 public record FreeFormSqlTestData(Workspace a, Workspace b, Project a1, Project a2, Project b1) {
@@ -57,7 +56,7 @@ public record FreeFormSqlTestData(Workspace a, Workspace b, Project a1, Project 
     public static FreeFormSqlTestData seed(ClientSupport client, WireMockRuntime wireMock, Client admin) {
         var baseUrl = TestUtils.getBaseUrl(client);
         PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-        var seeder = new Seeder(factory, admin, new ProjectResourceClient(client, baseUrl, factory),
+        var seeder = new Seeder(factory, new ProjectResourceClient(client, baseUrl, factory),
                 new TraceResourceClient(client, baseUrl), new SpanResourceClient(client, baseUrl),
                 new DatasetResourceClient(client, baseUrl), new ExperimentResourceClient(client, baseUrl, factory));
 
@@ -87,7 +86,7 @@ public record FreeFormSqlTestData(Workspace a, Workspace b, Project a1, Project 
                 """.formatted(DATABASE_NAME, table, project.workspace().id(), project.id())).getFirst().getString(1));
     }
 
-    private record Seeder(PodamFactory factory, Client admin, ProjectResourceClient projects,
+    private record Seeder(PodamFactory factory, ProjectResourceClient projects,
             TraceResourceClient traces,
             SpanResourceClient spans, DatasetResourceClient datasets, ExperimentResourceClient experiments) {
 
@@ -124,22 +123,6 @@ public record FreeFormSqlTestData(Workspace a, Workspace b, Project a1, Project 
             datasets.createDatasetItems(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetName(datasetName).datasetId(null).items(items).build(), workspace.name(),
                     workspace.apiKey());
-
-            // Two tables the extended account reads that no API call writes in this configuration, so they are the
-            // ones seeded directly: dataset_items, which the API writes only with dataset versioning off (it is on, so
-            // items go to dataset_item_versions), and feedback_scores, which takes the author-less writes of system
-            // paths (a scored request has an author, so its score goes to authored_feedback_scores).
-            admin.queryAll("""
-                    INSERT INTO %s.dataset_items (workspace_id, dataset_id, id)
-                    SELECT '%s', '%s', toString(generateUUIDv7(number)) FROM numbers(%d)
-                    """.formatted(DATABASE_NAME, workspace.id(), ID_GENERATOR.generateId(), PER_PROJECT));
-            admin.queryAll(
-                    """
-                            INSERT INTO %s.feedback_scores (workspace_id, project_id, entity_type, entity_id, name, value, source)
-                            SELECT '%s', '%s', 'trace', arrayJoin([%s]), 'score', 1, 'sdk'
-                            """
-                            .formatted(DATABASE_NAME, workspace.id(), project.id(), projectTraces.stream()
-                                    .map(trace -> "'%s'".formatted(trace.id())).collect(Collectors.joining(", "))));
 
             UUID experimentId = experiments.create(experiments.createPartialExperiment()
                     .datasetName(datasetName).projectId(project.id()).build(), workspace.apiKey(), workspace.name());

@@ -50,21 +50,13 @@ class FreeFormSqlPolicyCheck {
     private static final Set<String> UNCHECKED_READS = Set.of("ReadFromSystemOne", "ReadFromSystemNumbers",
             "ReadFromSystemZeros", "ReadFromRemote", "ReadFromRemoteParallelReplicas");
 
-    /** A table read that could not be shown to be under a row policy, and why. */
-    record Violation(String table, String reason) {
-
-        /** No entry of the query as its account was found, so no read could be checked. */
-        boolean missingLog() {
-            return table.isEmpty();
-        }
-    }
-
     /** @return the first read that cannot be shown to have run under its row policy; empty when there is none. */
-    static Optional<Violation> violation(@NonNull String database, @NonNull String user,
+    static Optional<FreeFormSqlPolicyViolation> violation(@NonNull String database, @NonNull String user,
             @NonNull List<FreeFormSqlQueryLogEntry> entries,
             @NonNull String planJson, @NonNull FreeFormSqlSubqueries.SubqueryReads subqueryReads) {
         if (entries.stream().noneMatch(entry -> entry.initial() && entry.user().equals(user))) {
-            return Optional.of(new Violation("", "no query log entry for the query as " + user));
+            return Optional.of(FreeFormSqlPolicyViolation.builder().table("")
+                    .reason("no query log entry for the query as %s".formatted(user)).build());
         }
         String prefix = database + ".";
         var plannedReads = new HashSet<String>();
@@ -77,7 +69,8 @@ class FreeFormSqlPolicyCheck {
                 continue;
             }
             if (!type.equals("ReadFromMergeTree")) {
-                return Optional.of(new Violation(description, "unverifiable %s read".formatted(type)));
+                return Optional.of(FreeFormSqlPolicyViolation.builder().table(description)
+                        .reason("unverifiable %s read".formatted(type)).build());
             }
             if (!description.startsWith(prefix)) {
                 continue;
@@ -85,7 +78,8 @@ class FreeFormSqlPolicyCheck {
             plannedReads.add(description);
             if (!(read.get("Prewhere info") instanceof Map<?, ?> prewhere
                     && prewhere.get("Row level filter") != null)) {
-                return Optional.of(new Violation(description, "read without a row policy in the plan"));
+                return Optional.of(FreeFormSqlPolicyViolation.builder().table(description)
+                        .reason("read without a row policy in the plan").build());
             }
             filteredReads.add(description);
         }
@@ -108,8 +102,9 @@ class FreeFormSqlPolicyCheck {
                         || (!plannedReads.contains(table) && subqueryReads.filter().contains(table)
                                 && !subqueryReads.scalar().contains(table)));
                 if (!shownElsewhere) {
-                    return Optional.of(new Violation(table,
-                            entry.initial() ? "read without a row policy" : "read without a row policy on a shard"));
+                    return Optional.of(FreeFormSqlPolicyViolation.builder().table(table).reason(
+                            entry.initial() ? "read without a row policy" : "read without a row policy on a shard")
+                            .build());
                 }
             }
         }

@@ -23,6 +23,7 @@ import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -104,11 +105,11 @@ public class FreeFormSqlQueryService {
     private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
 
     /** Returned to the caller, an LLM agent, so it says what to change and how. */
-    static final String SCALAR_SUBQUERY_MESSAGE = "Query rejected: a scalar subquery (a subquery used as a value, "
-            + "e.g. SELECT (SELECT count() FROM spans)) cannot read a table; this one reads %s. Compute the value in a "
-            + "CTE and select from it instead, e.g. WITH s AS (SELECT count() AS n FROM spans) "
-            + "SELECT toJSONString(map('n', toString(s.n))) AS result FROM s, or join it to the main query. "
-            + "Subqueries under IN and EXISTS are allowed.";
+    static final String SCALAR_SUBQUERY_MESSAGE = """
+            Query rejected: a scalar subquery (a subquery used as a value, e.g. SELECT (SELECT count() FROM spans)) \
+            cannot read a table; this one reads %s. Compute the value in a CTE and select from it instead, e.g. \
+            WITH s AS (SELECT count() AS n FROM spans) SELECT toJSONString(map('n', toString(s.n))) AS result FROM s, \
+            or join it to the main query. Subqueries under IN and EXISTS are allowed.""";
 
     /** ClickHouse error codes surfaced to the caller as a clean 4xx rather than a 500. */
     private static final int CH_TOO_MANY_ROWS = 158;
@@ -173,6 +174,7 @@ public class FreeFormSqlQueryService {
     }
 
     /** What the post-run check or the scalar subquery gate found, as its {@code outcome} metric tag. */
+    @RequiredArgsConstructor
     private enum CheckOutcome {
         VERIFIED("verified"),
         VIOLATION("violation"),
@@ -182,10 +184,6 @@ public class FreeFormSqlQueryService {
         SCALAR_READ("scalar_read");
 
         private final String tag;
-
-        CheckOutcome(String tag) {
-            this.tag = tag;
-        }
     }
 
     private void count(CheckOutcome outcome, FreeFormSqlAccount account) {
