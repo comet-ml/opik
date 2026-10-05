@@ -23,7 +23,10 @@ type CloudAIProviderDetailsProps = {
 };
 
 const PIPELINE_MODE_OPTIONS: DropdownOption<OpenAiPipelineMode>[] = [
-  { value: "chat_completions_api", label: "Chat Completions API" },
+  {
+    value: "chat_completions_api",
+    label: "Chat Completions API (recommended)",
+  },
   { value: "responses_api", label: "Responses API" },
 ];
 
@@ -83,24 +86,24 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
           name="openaiPipelineMode"
           render={({ field }) => (
             <FormItem className="mt-2">
-              <Label htmlFor="openaiPipelineMode">Pipeline mode</Label>
+              <Label htmlFor="openaiPipelineMode">OpenAI API</Label>
               <FormControl>
                 <SelectBox
                   id="openaiPipelineMode"
-                  // Field is always seeded for the OpenAI branch by ManageAIProviderDialog
-                  // (defaultValues, resetSelectionState, handleProviderSelect), so non-null here.
+                  // Both ManageAIProviderDialog and SetupProviderDialog seed this field for
+                  // OpenAI, so it is non-null here.
                   value={field.value!}
                   onChange={(value: OpenAiPipelineMode) =>
                     field.onChange(value)
                   }
                   options={PIPELINE_MODE_OPTIONS}
-                  placeholder="Select pipeline mode"
+                  placeholder="Select an API"
                 />
               </FormControl>
               <span className="comet-body-s mt-1 text-light-slate">
-                Chat Completions API is the standard endpoint. Responses API
-                enables agentic tooling features (e.g. stateful tool loops,
-                reasoning summaries) on models that support it.
+                Use Chat Completions unless you need Max reasoning effort, which
+                only the Responses API offers. The Responses API sends text only
+                (no images or audio) and ignores frequency and presence penalty.
               </span>
               <FormMessage />
             </FormItem>
