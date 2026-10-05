@@ -5,6 +5,7 @@ import com.google.common.base.Splitter;
 import io.dropwizard.util.Duration;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -69,14 +70,10 @@ public class DatabaseAnalyticsFactory {
 
     /**
      * Cadence (ms) for {@code http_headers_progress_interval_ms}, the server-side throttle on
-     * {@code X-ClickHouse-Progress} response headers. <em>This field</em> is applied to {@link #build()} only, via
-     * {@link #r2dbcOnlyServerSettings()} — which is not the same as the setting never reaching {@link #buildClient()},
-     * since a cadence an operator puts in {@code custom_http_params} is forwarded there wholesale like every other
-     * entry. Because the field overrides the chain on the R2DBC path and is non-null, the guard itself cannot be
-     * undercut from {@code custom_http_params}. Unlike the fields above it defaults to a value rather than to null, and is
-     * {@link NotNull} so that a YAML overlay binding it to null is a startup failure rather than a silently
-     * reinstated defect: it guards against a client defect rather than tuning anything, so there is no deployment for
-     * which "leave it at the ClickHouse default" is the right answer. The cadence stays freely tunable.
+     * {@code X-ClickHouse-Progress} response headers. <em>This field</em> is applied to {@link #build()} only — which
+     * is not the same as the setting never reaching {@link #buildClient()}, since a cadence an operator puts in
+     * {@code custom_http_params} is forwarded there wholesale like every other entry. On the R2DBC path the field
+     * overrides the chain, so the guard cannot be undercut from {@code custom_http_params}.
      *
      * <p>{@link #build()} returns the R2DBC connection factory, and clickhouse-r2dbc sets
      * {@code send_progress_in_http_headers=1} on every HTTP statement unconditionally
@@ -88,18 +85,17 @@ public class DatabaseAnalyticsFactory {
      * the response fails to parse — reported as an {@code IOException} that the driver rethrows as a bare
      * {@code ConnectException}, which is how it reaches dashboards as a connectivity failure (OPIK-8628).
      *
-     * <p>The value is bounded on both sides: it must stay well under the driver's 30s {@code socket_timeout}, since the
-     * progress headers are what keep the socket producing bytes during a long query, and well above
-     * {@code maxQueryDurationMs / 90} so the cap stays out of reach. 3s leaves ~4.5 minutes of query time within the
-     * 100-header budget against a production maximum of ~66s.
+     * <p>Kept in milliseconds rather than a {@link Duration} to match the ClickHouse setting it carries, and bounded on
+     * both sides. The ceiling is the driver's 30s {@code socket_timeout}: the progress headers are what keep the socket
+     * producing bytes during a long query, so a cadence near it trades this bug for read timeouts — {@link Max} leaves
+     * a 3x margin. The floor is the query duration a deployment must survive, since the 100-header budget is reached
+     * at {@code interval x 90}: 3s covers 270s, against a 106.7s worst case observed during the incident window.
      *
-     * <p>No initializer on purpose: the default lives once, in {@code config.yml}, so there is a single place to read
-     * and change it. {@link NotNull} then makes a configuration that supplies nothing fail at startup rather than
-     * silently reinstating the ClickHouse default. A factory built in code — tests, and
-     * {@code DatabaseAnalyticsModule#buildReadOnlyClient} — leaves it null and emits no setting, which is what
-     * {@link #r2dbcOnlyServerSettings()} already handles.
+     * <p>A primitive with no initializer: the default lives once, in {@code config.yml}, so there is a single place to
+     * read and change it, and {@link Min} then makes a configuration that supplies nothing fail at startup — an absent
+     * key leaves 0, which is out of range — rather than silently reinstating the ClickHouse default.
      */
-    private @NotNull @Min(1) Integer httpHeadersProgressIntervalMs;
+    private @Min(1) @Max(10_000) int httpHeadersProgressIntervalMs;
 
     private Duration healthCheckTimeout = Duration.seconds(1);
 
@@ -225,14 +221,12 @@ public class DatabaseAnalyticsFactory {
      * {@code readonly=1} whose profile allows exactly two settings to change per query, so sending it there fails
      * every read that user makes.
      *
-     * <p>Null-tolerant although the field is {@link NotNull}: the annotation governs the configuration path, while a
-     * factory built in code can still have it cleared, and emitting {@code "null"} as a setting value would be worse
-     * than emitting nothing.
+     * <p>Unconditional: the field is a primitive, so there is no unset state to screen for. A factory built in code
+     * rather than bound from config carries 0, which ClickHouse accepts and treats exactly as the server default this
+     * path would otherwise inherit.
      */
     private Map<String, String> r2dbcOnlyServerSettings() {
-        return httpHeadersProgressIntervalMs == null
-                ? Map.of()
-                : Map.of(HTTP_HEADERS_PROGRESS_INTERVAL_MS, String.valueOf(httpHeadersProgressIntervalMs));
+        return Map.of(HTTP_HEADERS_PROGRESS_INTERVAL_MS, String.valueOf(httpHeadersProgressIntervalMs));
     }
 
     private String serialize(Map<String, String> driverOptions, Map<String, String> serverSettings) {

@@ -4,6 +4,7 @@ import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.query.GenericRecord;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
@@ -49,16 +50,17 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     }
 
     /**
-     * The shipped cadence, set explicitly because the field carries no initializer — the default lives in
-     * {@code config.yml} and is asserted there by {@code DatabaseAnalyticsConfigTest}. A factory built in code gets
-     * nothing, so a suite exercising the guard has to state the value it is exercising.
+     * The configured cadence, read from the same {@code config-test.yml} the app boots with rather than restated here,
+     * so this suite cannot drift from it. A factory built in code carries the primitive's 0, so a suite exercising the
+     * guard has to set the value it is exercising.
      */
-    private static final int SHIPPED_PROGRESS_HEADER_CADENCE_MS = 3000;
+    private static final int CONFIGURED_PROGRESS_HEADER_CADENCE_MS = TestConfigUtils.loadConfigTest()
+            .getDatabaseAnalytics().getHttpHeadersProgressIntervalMs();
 
     private DatabaseAnalyticsFactory factoryWith(String queryParameters) {
         var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, "default");
         factory.setQueryParameters(queryParameters);
-        factory.setHttpHeadersProgressIntervalMs(SHIPPED_PROGRESS_HEADER_CADENCE_MS);
+        factory.setHttpHeadersProgressIntervalMs(CONFIGURED_PROGRESS_HEADER_CADENCE_MS);
         return factory;
     }
 
@@ -213,27 +215,15 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     }
 
     @Test
-    @DisplayName("a factory built in code with no cadence set emits no setting, leaving ClickHouse's own default")
-    void factoryWithoutCadenceEmitsNoSetting() {
-        // The field carries no initializer, so a factory built in code rather than bound from config leaves it null —
-        // DatabaseAnalyticsModule#buildReadOnlyClient and the suites that call build() directly. What must not happen
-        // is emitting the literal "null" as a setting value, which ClickHouse rejects outright; r2dbcOnlyServerSettings()
-        // emits nothing instead, so the server keeps its own default. Deliberately not factoryWith(), which sets one.
-        var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, "default");
-
-        var actualSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
-
-        assertThat(actualSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "100"));
-    }
-
-    @Test
     @DisplayName("R2DBC connection carries the progress-header cadence that keeps responses under Apache HC's cap")
     void r2dbcConnectionCarriesTheProgressHeaderCadence() {
         var factory = factoryWith(null);
 
         var actualSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
 
-        assertThat(actualSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "3000"));
+        assertThat(actualSettings)
+                .isEqualTo(Map.of("http_headers_progress_interval_ms",
+                        String.valueOf(CONFIGURED_PROGRESS_HEADER_CADENCE_MS)));
     }
 
     @Test
@@ -255,15 +245,18 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     @DisplayName("a cadence in custom_http_params: the field wins on R2DBC, the operator's value stands on v2")
     void operatorSuppliedCadenceIsOverriddenOnlyOnTheR2dbcPath() {
         // Two different rules meeting, both pre-existing. On R2DBC the dedicated field overrides a value present in
-        // the chain, exactly as asyncInsertBusyTimeoutMaxMs does — and because @NotNull forces the configuration to
-        // supply one, it always does, so the guard cannot be undercut from custom_http_params. On v2 the field is not applied at all,
+        // the chain, exactly as asyncInsertBusyTimeoutMaxMs does — and because the configuration must supply one for
+        // the app to start, it always does, so the guard cannot be undercut from custom_http_params. On v2 the field
+        // is not applied at all,
         // so the operator's own entry stands, forwarded verbatim like async_insert or max_query_size; singling this
         // one key out for filtering would be the surprising behaviour. Neither reaches the readonly free-form user,
         // whose factory is built without queryParameters (DatabaseAnalyticsModule#buildReadOnlyClient).
         var factory = factoryWith("custom_http_params=http_headers_progress_interval_ms=500");
 
         var r2dbcSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
-        assertThat(r2dbcSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "3000"));
+        assertThat(r2dbcSettings)
+                .isEqualTo(Map.of("http_headers_progress_interval_ms",
+                        String.valueOf(CONFIGURED_PROGRESS_HEADER_CADENCE_MS)));
 
         try (var client = factory.buildClient()) {
             var v2Settings = readSettings(client, "http_headers_progress_interval_ms");
