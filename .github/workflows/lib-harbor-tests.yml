@@ -7,7 +7,7 @@ run-name: "SDK Lib Harbor Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
 env:
-  # Transient PyPI/network failures otherwise red the build on first error.
+  # Retry transient PyPI/network failures longer before failing the build.
   PIP_RETRIES: 8
   PIP_DEFAULT_TIMEOUT: 30
   UV_HTTP_TIMEOUT: 30
