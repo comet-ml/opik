@@ -4,6 +4,9 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.FilterUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -252,23 +255,56 @@ class ThreadDAOImplTest {
                     .uuidToTime(uuidToTime)
                     .build();
 
-            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria))).isTrue();
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria), criteria)).isTrue();
         }
 
-        @Test
-        @DisplayName("a thread filter needs the enriched threads to pick the page, so it takes the full query")
-        void threadFilterIsNotEligible() {
+        static Stream<Arguments> threadFilters() {
+            return Stream.of(
+                    Arguments.of(TraceThreadField.NUMBER_OF_MESSAGES, Operator.GREATER_THAN, "0", true),
+                    Arguments.of(TraceThreadField.STATUS, Operator.EQUAL, "inactive", true),
+                    Arguments.of(TraceThreadField.TAGS, Operator.CONTAINS, "a", true),
+                    Arguments.of(TraceThreadField.DURATION, Operator.GREATER_THAN, "1", true),
+                    Arguments.of(TraceThreadField.FIRST_MESSAGE, Operator.CONTAINS, "a", false),
+                    Arguments.of(TraceThreadField.LAST_MESSAGE, Operator.CONTAINS, "a", false));
+        }
+
+        @ParameterizedTest(name = "{0} {1}: {3}")
+        @MethodSource("threadFilters")
+        @DisplayName("a thread filter takes the page pushdown unless it reads the messages")
+        void threadFilterIsEligibleUnlessItReadsMessages(TraceThreadField field, Operator operator, String value,
+                boolean eligible) {
             var criteria = TraceSearchCriteria.builder()
                     .projectId(UUID.randomUUID())
                     .uuidFromTime(UUID.randomUUID())
-                    .filters(List.of(TraceThreadFilter.builder()
-                            .field(TraceThreadField.NUMBER_OF_MESSAGES)
-                            .operator(Operator.GREATER_THAN)
-                            .value("0")
-                            .build()))
+                    .filters(List.of(TraceThreadFilter.builder().field(field).operator(operator).value(value).build()))
                     .build();
 
-            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria))).isFalse();
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria), criteria)).isEqualTo(eligible);
+        }
+
+        static Stream<Arguments> sorts() {
+            return Stream.of(
+                    Arguments.of(SortableFields.START_TIME, true),
+                    Arguments.of(SortableFields.DURATION, true),
+                    Arguments.of(SortableFields.NUMBER_OF_MESSAGES, true),
+                    Arguments.of(SortableFields.STATUS, true),
+                    Arguments.of(SortableFields.TAGS, true),
+                    Arguments.of(SortableFields.TOTAL_ESTIMATED_COST, false),
+                    Arguments.of("usage.total_tokens", false),
+                    Arguments.of("feedback_scores.accuracy", false));
+        }
+
+        @ParameterizedTest(name = "{0}: {1}")
+        @MethodSource("sorts")
+        @DisplayName("a sort takes the page pushdown unless it needs the spans or the feedback scores")
+        void sortIsEligibleUnlessItNeedsSpansOrFeedback(String field, boolean eligible) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(UUID.randomUUID())
+                    .sortingFields(List.of(SortingField.builder().field(field).direction(Direction.DESC).build()))
+                    .build();
+
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria), criteria)).isEqualTo(eligible);
         }
 
         @Test
