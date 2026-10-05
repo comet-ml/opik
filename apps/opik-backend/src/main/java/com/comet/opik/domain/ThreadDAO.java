@@ -122,7 +122,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 ) AS t
                 GROUP BY thread_id
             ) AS pt
-            <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN (
+            INNER JOIN (
                 SELECT thread_id, id, last_updated_at
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
@@ -494,7 +494,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 GROUP BY
                     t.workspace_id, t.project_id, t.thread_id
             ) AS t
-            <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+            INNER JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                 AND t.project_id = tt.project_id
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
@@ -531,7 +531,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(stream)>
             ORDER BY workspace_id, project_id, thread_model_id DESC
             <else>
-            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC, thread_model_id DESC <else> ORDER BY last_updated_at DESC, start_time ASC, nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC, thread_model_id DESC <endif>
+            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC, thread_model_id DESC, id <else> ORDER BY last_updated_at DESC, start_time ASC, nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC, thread_model_id DESC, id <endif>
             <endif>
             LIMIT :limit <if(page_pushdown)><else><if(offset)>OFFSET :offset<endif><endif>
             SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
@@ -772,7 +772,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
-                <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                INNER JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 <if(annotation_queue_filters || annotation_queue_id)>
@@ -1456,7 +1456,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
-                <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                INNER JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
