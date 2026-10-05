@@ -18,7 +18,10 @@ import {
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 
-import { getDefaultConfigByProvider } from "@/lib/playground";
+import {
+  getDefaultConfigByProvider,
+  restoreMissingProviderAndConfigKeys,
+} from "@/lib/playground";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
@@ -289,6 +292,18 @@ const PlaygroundPrompt = ({
         });
 
         updateOutput(promptId, "", { value: null });
+      } else {
+        const restored = restoreMissingProviderAndConfigKeys(
+          prompt,
+          providerResolver,
+        );
+
+        if (restored !== prompt) {
+          updatePrompt(promptId, {
+            provider: restored.provider,
+            configs: restored.configs,
+          });
+        }
       }
     }
   }, [
@@ -300,6 +315,7 @@ const PlaygroundPrompt = ({
     updatePrompt,
     promptId,
     model,
+    prompt,
   ]);
 
   const handleImportChatPrompt = useCallback(
