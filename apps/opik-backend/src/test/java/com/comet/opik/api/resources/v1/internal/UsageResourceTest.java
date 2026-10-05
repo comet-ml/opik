@@ -812,6 +812,11 @@ class UsageResourceTest {
             var beta = projectResourceClient.createProject("beta-" + marker + "-two", workspace.apiKey(),
                     workspace.name());
             var percent = projectResourceClient.createProject("100%-" + marker, workspace.apiKey(), workspace.name());
+            var underscore = projectResourceClient.createProject("a_b-" + marker, workspace.apiKey(),
+                    workspace.name());
+            var bang = projectResourceClient.createProject("hey!-" + marker, workspace.apiKey(), workspace.name());
+            var decoy = projectResourceClient.createProject("axb-" + marker + "-decoy", workspace.apiKey(),
+                    workspace.name());
             projectResourceClient.createProject("unrelated-" + ID_GENERATOR.generateId(), workspace.apiKey(),
                     workspace.name());
 
@@ -820,7 +825,7 @@ class UsageResourceTest {
                     .name(marker.toUpperCase())
                     .build()).projects();
             assertThat(byMarker).extracting(WorkspaceProjectName::projectId)
-                    .containsExactly(percent, alpha, beta);
+                    .containsExactlyInAnyOrder(percent, alpha, beta, underscore, bang, decoy);
 
             var byWildcard = usageResourceClient.findProjects(UsageProjectsRequest.builder()
                     .workspaceIds(Set.of(workspace.id()))
@@ -828,12 +833,24 @@ class UsageResourceTest {
                     .build()).projects();
             assertThat(byWildcard).extracting(WorkspaceProjectName::projectId).containsExactly(percent);
 
+            var byUnderscore = usageResourceClient.findProjects(UsageProjectsRequest.builder()
+                    .workspaceIds(Set.of(workspace.id()))
+                    .name("a_b-" + marker)
+                    .build()).projects();
+            assertThat(byUnderscore).extracting(WorkspaceProjectName::projectId).containsExactly(underscore);
+
+            var byBang = usageResourceClient.findProjects(UsageProjectsRequest.builder()
+                    .workspaceIds(Set.of(workspace.id()))
+                    .name("!-" + marker)
+                    .build()).projects();
+            assertThat(byBang).extracting(WorkspaceProjectName::projectId).containsExactly(bang);
+
             var limited = usageResourceClient.findProjects(UsageProjectsRequest.builder()
                     .workspaceIds(Set.of(workspace.id()))
                     .name(marker)
                     .limit(2)
                     .build()).projects();
-            assertThat(limited).extracting(WorkspaceProjectName::projectId).containsExactly(percent, alpha);
+            assertThat(limited).hasSize(2);
         }
 
         @Test

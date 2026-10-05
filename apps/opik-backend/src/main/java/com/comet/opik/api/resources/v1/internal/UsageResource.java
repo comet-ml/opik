@@ -7,6 +7,7 @@ import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.api.UsageProjectsRequest;
 import com.comet.opik.api.UsageProjectsResponse;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.ProjectService;
@@ -82,7 +83,8 @@ public class UsageResource {
     @POST
     @Path("/projects")
     @Operation(operationId = "findUsageProjects", summary = "Find projects across workspaces by ids or name", description = "Find projects across the given workspaces, optionally narrowed by project ids or a case-insensitive name substring. Unknown or deleted projects are omitted.", responses = {
-            @ApiResponse(responseCode = "200", description = "UsageProjectsResponse resource", content = @Content(schema = @Schema(implementation = UsageProjectsResponse.class)))})
+            @ApiResponse(responseCode = "200", description = "UsageProjectsResponse resource", content = @Content(schema = @Schema(implementation = UsageProjectsResponse.class))),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response findProjects(
             @RequestBody(content = @Content(schema = @Schema(implementation = UsageProjectsRequest.class))) @NotNull @Valid UsageProjectsRequest request) {
         int limit = Optional.ofNullable(request.limit()).orElse(UsageProjectsRequest.DEFAULT_LIMIT);
