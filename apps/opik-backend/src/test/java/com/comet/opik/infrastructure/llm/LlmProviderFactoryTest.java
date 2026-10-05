@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.api.LlmModelDefinition;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.domain.LlmProviderApiKeyService;
@@ -38,12 +39,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -467,5 +470,30 @@ class LlmProviderFactoryTest {
         var strategy = llmProviderFactory.getStructuredOutputStrategy("claude-sonnet-4-6");
 
         assertThat(strategy).isInstanceOf(InstructionStrategy.class);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"o3, true", "gpt-4o, false", "claude-sonnet-4-6, false", "unknown-model, false"})
+    @DisplayName("isOpenAiReasoningModel follows the registry's reasoning flag")
+    void testIsOpenAiReasoningModel_followsRegistryFlag(String model, boolean expected) {
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
+                registryService);
+
+        assertThat(llmProviderFactory.isOpenAiReasoningModel(model)).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("isOpenAiReasoningModel ignores a reasoning flag on another provider's model")
+    void testIsOpenAiReasoningModel_ignoresOtherProviders() {
+        var registry = mock(LlmModelRegistryService.class);
+        when(registry.findModel("openai/gpt-5-mini")).thenReturn(Optional.of(
+                new LlmModelRegistryService.ModelLookupResult(LlmProvider.OPEN_ROUTER,
+                        LlmModelDefinition.builder().id("openai/gpt-5-mini").reasoning(true).build())));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
+                registry);
+
+        assertThat(llmProviderFactory.isOpenAiReasoningModel("openai/gpt-5-mini")).isFalse();
     }
 }
