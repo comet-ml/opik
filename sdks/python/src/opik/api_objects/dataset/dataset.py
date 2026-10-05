@@ -174,6 +174,12 @@ class DatasetExportOperations(abc.ABC):
                 ``chunk_size`` is not a positive integer or exceeds
                 ``constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE``, or if
                 ``nb_samples`` is not a positive integer.
+
+        Note:
+            To look at a dataset's current items without writing code, AI coding
+            assistants connected to the Opik MCP server can call
+            ``list("dataset_item", dataset_id=...)``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         return [
             item
