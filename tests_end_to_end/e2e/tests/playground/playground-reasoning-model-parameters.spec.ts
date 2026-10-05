@@ -1,5 +1,6 @@
 import { test, expect, PROVIDER_GROUP, REGISTRY_MODEL } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
+import { captureCompletionBody } from '@e2e/core/playground-completions';
 
 /**
  * The playground must not send model parameters the provider rejects
@@ -27,11 +28,6 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  * (see the `modelRegistryProviders` fixture), and the completion is
  * short-circuited at the browser so nothing is ever generated or billed.
  */
-
-/** The completion proxy, on both the `/opik/api` and bare `/api` mounts. */
-function isChatCompletion(url: string): boolean {
-  return new URL(url).pathname.endsWith('/v1/private/chat/completions');
-}
 
 /** The four parameters an OpenAI reasoning model takes none of. */
 const SAMPLING_AND_PENALTY_KEYS = [
@@ -247,40 +243,3 @@ test.describe(
     }
   },
 );
-
-/**
- * Run `act` and return the body of the completion request the browser sent.
- *
- * The route is installed (idempotently — Playwright keeps the most recent
- * matching handler) so the request is answered in the browser and never reaches
- * the backend proxy: every assertion here is on what was SENT, and letting it
- * through would have a provider generate a completion nothing reads.
- *
- * The waiter is armed before `act` because the POST is in flight the moment Run
- * is pressed, so subscribing afterwards would race it.
- */
-async function captureCompletionBody(
-  page: import('@playwright/test').Page,
-  act: () => Promise<void>,
-): Promise<Record<string, unknown>> {
-  await page.route(
-    (url) => isChatCompletion(url.toString()),
-    (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'text/event-stream',
-        body: 'data: [DONE]\n\n',
-      }),
-  );
-  const sent = page.waitForRequest(
-    (r) => r.method() === 'POST' && isChatCompletion(r.url()),
-    { timeout: 60_000 },
-  );
-  await act();
-  const body = (await sent).postDataJSON() as Record<string, unknown> | null;
-  // Asserted, not defaulted: a Run that sent no body at all would otherwise
-  // read as a body with none of the forbidden keys, which is the exact shape
-  // every assertion above is looking for.
-  expect(body, 'the Run posted a JSON completion body').not.toBeNull();
-  return body!;
-}

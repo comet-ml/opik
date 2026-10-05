@@ -57,6 +57,26 @@ export const REGISTRY_MODEL = {
   gemini3: 'Gemini 3 Flash Preview',
   /** Gemini 2.x control: keeps both. Offered by Gemini AND Vertex AI. */
   gemini2: 'Gemini 2.5 Flash',
+  /**
+   * OpenAI reasoning model declaring `responsesApiOnlyEffortOptions: ["max"]` —
+   * the gate opik#8682 added.
+   *
+   * `GPT 5.6 Sol` and not one of the `gpt-6-*` rows that carry the same flag:
+   * the branch is identical for every member of the set, and `gpt-6` is on
+   * `llm-model-policy`'s forbidden list precisely so a spec cannot drift onto a
+   * flagship. Nothing here reaches a provider, but picking the cheapest member
+   * that still shows the behaviour keeps that true by construction.
+   */
+  openAiResponsesOnlyEffort: 'GPT 5.6 Sol',
+  /**
+   * The control beside it: a reasoning model with the SAME five Chat
+   * Completions effort values and NO `responsesApiOnlyEffortOptions`, so Max
+   * must never appear for it under either pipeline mode.
+   *
+   * Sharing the base option set is what makes it a control — a model with a
+   * different base list would differ in more than the one variable under test.
+   */
+  openAiEffortWithoutMax: 'GPT 5.5',
   /** A Claude model with `supportsSamplingParams: false` — nothing a rule can set. */
   claudeWithoutSampling: 'Claude Sonnet 5',
   /** A Claude model that still offers the sampling choice. */

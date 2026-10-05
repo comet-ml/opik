@@ -955,6 +955,84 @@ export class PlaygroundPage {
     return this.modelParametersPanel().getByText(label, { exact: true });
   }
 
+  /**
+   * The Reasoning effort control's trigger inside the open model-parameters
+   * panel.
+   *
+   * The control is a Radix `Select` whose `SelectTrigger` carries no id and no
+   * testid, and whose `<Label htmlFor="reasoningEffort">` points at nothing —
+   * so `getByLabel` cannot reach it. Its role is the handle: the OpenAI panel
+   * mounts exactly one combobox (every other control is a `SliderInputControl`
+   * number input), which is why callers assert `toHaveCount(1)` before reading
+   * it rather than taking `.first()`. The FE should grow a
+   * `data-testid="reasoning-effort-select"` here and this should move to it.
+   */
+  reasoningEffortTrigger(): Locator {
+    return this.modelParametersPanel().getByRole('combobox');
+  }
+
+  /**
+   * The effort the panel currently DISPLAYS.
+   *
+   * Which is not always the effort that is stored: `resolveEffort` masks a
+   * stored value the selected model and pipeline mode do not offer, so a
+   * prompt holding `max` on a Chat Completions key reads "High" here. That gap
+   * is the subject of opik#8682, not an artefact of this reader.
+   */
+  async readReasoningEffort(): Promise<string> {
+    return test.step('read the displayed reasoning effort', async () => {
+      const trigger = this.reasoningEffortTrigger();
+      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
+      return ((await trigger.textContent()) ?? '').trim();
+    });
+  }
+
+  /**
+   * Every effort the control OFFERS, in the order the panel lists them.
+   *
+   * The list is the assertion in its own right — `getOpenAIReasoningEffortOptions`
+   * appends the Responses-API-only values to the base set, so "Max is absent"
+   * and "the other five are still there" are different claims and a caller
+   * wants to make both at once. The options render in a portal, so they are
+   * read from the page's listbox rather than from inside the panel.
+   */
+  async reasoningEffortOptions(): Promise<string[]> {
+    return test.step('read the offered reasoning efforts', async () => {
+      const trigger = this.reasoningEffortTrigger();
+      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await trigger.click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      const options = await listbox.getByRole('option').allTextContents();
+      await this.page.keyboard.press('Escape');
+      await expect(listbox).toBeHidden();
+      return options.map((o) => o.trim());
+    });
+  }
+
+  /** Pick a reasoning effort by its rendered label, e.g. `Max`. */
+  async selectReasoningEffort(label: string): Promise<void> {
+    return test.step(`select reasoning effort "${label}"`, async () => {
+      const trigger = this.reasoningEffortTrigger();
+      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await trigger.click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      const option = listbox.getByRole('option', { name: label, exact: true });
+      // Exactly one, not `.first()`: "High" and "xHigh" are both offered, and
+      // an ambiguous match would silently store the wrong effort.
+      await expect(option, `"${label}" is offered`).toHaveCount(1);
+      await option.click();
+      await expect(listbox).toBeHidden();
+    });
+  }
+
   /** Every slider control mounted in the open panel, by its control id. */
   async mountedModelParameterIds(): Promise<string[]> {
     return test.step('read the controls mounted in the model-parameters panel', async () => {
