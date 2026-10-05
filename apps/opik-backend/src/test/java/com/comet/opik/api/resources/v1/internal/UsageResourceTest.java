@@ -7,6 +7,8 @@ import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
+import com.comet.opik.api.UsageProjectsRequest;
+import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -60,6 +62,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -281,6 +284,7 @@ class UsageResourceTest {
             assertThat(actualRow.user()).isEqualTo(USER);
             assertThat(actualRow.count()).isEqualTo(spansCount);
             assertThat(actualRow.projectId()).isNotNull();
+            assertThat(actualRow.projectName()).isEqualTo(projectName);
 
             assertThat(response.breakdown())
                     .noneMatch(r -> r.workspaceId().equals(workspaceIdForToday));
@@ -752,11 +756,11 @@ class UsageResourceTest {
 
             // The project ids are assigned by the backend, so each project's expected count is keyed by the id it
             // was given rather than by position
+            var firstProjectId = projectResourceClient.getByName(firstProject, apiKey, workspaceName).id();
+            var secondProjectId = projectResourceClient.getByName(secondProject, apiKey, workspaceName).id();
             var expectedCountsByProjectId = Map.of(
-                    projectResourceClient.getByName(firstProject, apiKey, workspaceName).id(),
-                    (long) firstProjectSpans.size(),
-                    projectResourceClient.getByName(secondProject, apiKey, workspaceName).id(),
-                    (long) secondProjectSpans.size());
+                    firstProjectId, (long) firstProjectSpans.size(),
+                    secondProjectId, (long) secondProjectSpans.size());
 
             await().atMost(10, SECONDS).untilAsserted(() -> {
                 var actualRows = usageResourceClient.getWorkspaceSpanCountsBreakdown()
@@ -770,7 +774,100 @@ class UsageResourceTest {
                         .collect(Collectors.toMap(WorkspaceProjectUserCount::projectId,
                                 WorkspaceProjectUserCount::count)))
                         .isEqualTo(expectedCountsByProjectId);
+                assertThat(actualRows.stream()
+                        .collect(Collectors.toMap(WorkspaceProjectUserCount::projectId,
+                                WorkspaceProjectUserCount::projectName)))
+                        .isEqualTo(Map.of(firstProjectId, firstProject, secondProjectId, secondProject));
             });
+        }
+
+        @Test
+        void projectsLookupByIdsSpansWorkspacesAndOmitsUnknownOrForeignOnes() {
+            var first = usageWorkspace();
+            var second = usageWorkspace();
+            var other = usageWorkspace();
+            var firstName = "project-" + ID_GENERATOR.generateId();
+            var secondName = "project-" + ID_GENERATOR.generateId();
+            var firstProjectId = projectResourceClient.createProject(firstName, first.apiKey(), first.name());
+            var secondProjectId = projectResourceClient.createProject(secondName, second.apiKey(), second.name());
+            var otherProjectId = projectResourceClient.createProject("project-" + ID_GENERATOR.generateId(),
+                    other.apiKey(), other.name());
+
+            var actual = usageResourceClient.findProjects(UsageProjectsRequest.builder()
+                    .workspaceIds(Set.of(first.id(), second.id()))
+                    .projectIds(Set.of(firstProjectId, secondProjectId, otherProjectId, UUID.randomUUID()))
+                    .build()).projects();
+
+            assertThat(actual).containsExactlyInAnyOrder(
+                    new WorkspaceProjectName(first.id(), firstProjectId, firstName),
+                    new WorkspaceProjectName(second.id(), secondProjectId, secondName));
+        }
+
+        @Test
+        void projectsSearchMatchesNameSubstringCaseInsensitivelyAndEscapesWildcards() {
+            var workspace = usageWorkspace();
+            var marker = UUID.randomUUID().toString().substring(24);
+            var alpha = projectResourceClient.createProject("Alpha-" + marker + "-one", workspace.apiKey(),
+                    workspace.name());
+            var beta = projectResourceClient.createProject("beta-" + marker + "-two", workspace.apiKey(),
+                    workspace.name());
+            var percent = projectResourceClient.createProject("100%-" + marker, workspace.apiKey(), workspace.name());
+            projectResourceClient.createProject("unrelated-" + ID_GENERATOR.generateId(), workspace.apiKey(),
+                    workspace.name());
+
+            var byMarker = usageResourceClient.findProjects(UsageProjectsRequest.builder()
+                    .workspaceIds(Set.of(workspace.id()))
+                    .name(marker.toUpperCase())
+                    .build()).projects();
+            assertThat(byMarker).extracting(WorkspaceProjectName::projectId)
+                    .containsExactly(percent, alpha, beta);
+
+            var byWildcard = usageResourceClient.findProjects(UsageProjectsRequest.builder()
+                    .workspaceIds(Set.of(workspace.id()))
+                    .name("%-" + marker)
+                    .build()).projects();
+            assertThat(byWildcard).extracting(WorkspaceProjectName::projectId).containsExactly(percent);
+
+            var limited = usageResourceClient.findProjects(UsageProjectsRequest.builder()
+                    .workspaceIds(Set.of(workspace.id()))
+                    .name(marker)
+                    .limit(2)
+                    .build()).projects();
+            assertThat(limited).extracting(WorkspaceProjectName::projectId).containsExactly(percent, alpha);
+        }
+
+        @Test
+        void projectsSearchIsScopedToTheGivenWorkspaces() {
+            var inScope = usageWorkspace();
+            var outOfScope = usageWorkspace();
+            var marker = UUID.randomUUID().toString();
+            var expected = projectResourceClient.createProject("scoped-" + marker, inScope.apiKey(), inScope.name());
+            projectResourceClient.createProject("scoped-" + marker, outOfScope.apiKey(), outOfScope.name());
+
+            var actual = usageResourceClient.findProjects(UsageProjectsRequest.builder()
+                    .workspaceIds(Set.of(inScope.id()))
+                    .name(marker)
+                    .build()).projects();
+
+            assertThat(actual).containsExactly(new WorkspaceProjectName(inScope.id(), expected, "scoped-" + marker));
+        }
+
+        @Test
+        void projectsRejectsAnEmptyWorkspaceScope() {
+            try (var response = usageResourceClient.callFindProjects(
+                    UsageProjectsRequest.builder().workspaceIds(Set.of()).build())) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        private record UsageWorkspace(String id, String name, String apiKey) {
+        }
+
+        private UsageWorkspace usageWorkspace() {
+            var workspace = new UsageWorkspace(UUID.randomUUID().toString(), "test-workspace-" + UUID.randomUUID(),
+                    "apiKey-" + UUID.randomUUID());
+            mockTargetWorkspace(workspace.apiKey(), workspace.name(), workspace.id());
+            return workspace;
         }
 
         private List<Trace> tracesInProjects(String... projectNames) {
