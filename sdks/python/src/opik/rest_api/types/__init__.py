@@ -60,6 +60,8 @@ from .annotation_queue_items_public import AnnotationQueueItemsPublic
 from .annotation_queue_page_public import AnnotationQueuePagePublic
 from .annotation_queue_public import AnnotationQueuePublic
 from .annotation_queue_public_scope import AnnotationQueuePublicScope
+from .annotation_queue_reference import AnnotationQueueReference
+from .annotation_queue_reference_public import AnnotationQueueReferencePublic
 from .annotation_queue_reviewer import AnnotationQueueReviewer
 from .annotation_queue_reviewer_public import AnnotationQueueReviewerPublic
 from .annotation_queue_scope import AnnotationQueueScope
@@ -810,6 +812,8 @@ __all__ = [
     "AnnotationQueuePagePublic",
     "AnnotationQueuePublic",
     "AnnotationQueuePublicScope",
+    "AnnotationQueueReference",
+    "AnnotationQueueReferencePublic",
     "AnnotationQueueReviewer",
     "AnnotationQueueReviewerPublic",
     "AnnotationQueueScope",
