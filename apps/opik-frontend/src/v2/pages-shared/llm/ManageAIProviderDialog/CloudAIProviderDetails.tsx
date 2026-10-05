@@ -23,10 +23,7 @@ type CloudAIProviderDetailsProps = {
 };
 
 const PIPELINE_MODE_OPTIONS: DropdownOption<OpenAiPipelineMode>[] = [
-  {
-    value: "chat_completions_api",
-    label: "Chat Completions API (recommended)",
-  },
+  { value: "chat_completions_api", label: "Chat Completions API" },
   { value: "responses_api", label: "Responses API" },
 ];
 

@@ -51,7 +51,7 @@ describe("adding an OpenAI key from the playground setup dialog", () => {
     startOpenAiSetup();
 
     expect(screen.getByRole("combobox")).toHaveTextContent(
-      "Chat Completions API (recommended)",
+      "Chat Completions API",
     );
     expect(await savedConfiguration()).toEqual({
       openai_pipeline_mode: "chat_completions_api",
