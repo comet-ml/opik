@@ -58,16 +58,12 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class OnlineScoringUserDefinedMetricPythonScorerTest {
 
-    /**
-     * Independently restated: the constant sentence leads and every value trails, so this text is the fixed
-     * prefix an operator greps on. Byte-identical to the span scorer's copy — that is what makes one search
-     * catch both scorers, so a divergence here should fail this test rather than pass quietly.
-     */
+    // Restated independently and byte-identical to the span scorer's copy: that is what makes one search
+    // catch both scorers, so a divergence between them fails here rather than passing quietly.
     private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
             + " so there is no data to evaluate. Check the declared paths against the input, output and"
             + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
 
-    /** Restated from the shared helper: the entry line stays, only the false "Sending" claim is dropped. */
     private static final String EVALUATING_LOG = "Evaluating {} '{}' sampled by rule '{}'";
     private static final String SENDING_LOG = "Sending {} '{}' to Python evaluator: '{}'";
 
@@ -348,10 +344,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
         @Test
         void reportsUnresolvedArgumentsOnTheRuleLogInsteadOfCallingTheEvaluator() {
-            // A metric declaring fields the trace does not carry resolves to an empty replacement map.
-            // That used to reach PythonEvaluatorService.evaluate, whose Preconditions guard threw a raw
-            // IllegalArgumentException; the job was dropped as non-retryable and the user saw nothing
-            // (OPIK-8556). The scorer must now detect it first and name the offending arguments.
+            // Declared fields the trace does not carry resolve to an empty map; the evaluator must not be
+            // called with it, and the user must be told which arguments to fix.
             var message = sampleMessageWithUnresolvableArguments();
 
             scorer.score(message).block();
@@ -368,9 +362,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
         @Test
         void sanitisesAndCapsTheArgumentsItReports() {
-            // Argument names and paths are rule configuration the user controls, and this line persists in
-            // automation_rule_evaluator_logs.message. A newline must not forge an entry there, and one long
-            // value must not flood it — same treatment the judge-supplied names in this file already get.
+            // User-controlled text that persists in automation_rule_evaluator_logs.message: a newline must
+            // not forge an entry there, nor one long value flood it.
             var longPath = "input." + RandomStringUtils.secure().nextAlphanumeric(200);
             var message = sampleMessageWithArguments(Map.of(
                     "a_newline", "input.first\nWARN forged entry",
@@ -383,8 +376,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     eq(UNRESOLVED_ARGUMENTS_LOG),
                     eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
 
-            // Whole rendered string, not fragments: separator, ordering, truncation point and the absence
-            // of anything extra all have to hold, not just the presence of the two entries.
+            // Whole string, not fragments, so separator, ordering, truncation and the absence of extras hold.
             assertThat(reported.getValue()).isEqualTo(
                     "'a_newline' -> 'input.first WARN forged entry', 'b_long' -> '%s…'"
                             .formatted(longPath.substring(0, 100)));
@@ -404,8 +396,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     eq(UNRESOLVED_ARGUMENTS_LOG),
                     eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
 
-            // Built independently from the same inputs so ordering, separator, which ten survive the cap
-            // and the omitted-count text are all pinned, rather than spot-checked.
+            // Built independently so ordering, which ten survive the cap, and the omitted count are pinned.
             var expected = IntStream.range(0, 10)
                     .mapToObj(index -> "'arg_%02d' -> 'input.absent_%02d'".formatted(index, index))
                     .collect(Collectors.joining(", ")) + " and 3 more";
@@ -414,14 +405,10 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
         @Test
         void doesNotClaimItSentDataWhenNoDeclaredArgumentResolves() {
-            // The user reads one sink, in order. The guarded run used to log "Sending traceId ...
-            // 'arguments=[]'" immediately before the warning saying there was nothing to evaluate, so the
-            // rule log contradicted itself one line apart. Asserted as the whole sequence on purpose: a
-            // test that merely checked the warning was present would still pass with that line back.
-            // Load-bearing: a mock Logger answers isInfoEnabled() false by default, which suppresses the
-            // "Sending" line on its own and would make this assertion pass with or without the fix. Stubbed
-            // true so the suppression under test is the only thing that can keep that line out. lenient()
-            // because the fixed code short-circuits on the empty map and never reaches the level check.
+            // Asserted as a sequence: checking only that the warning is present would still pass with the
+            // contradictory "Sending" line back. isInfoEnabled() must be stubbed true or a mock Logger
+            // suppresses that line by itself and the assertion holds with or without the fix; lenient()
+            // because the fixed path short-circuits before the level check.
             lenient().when(userFacingLogger.isInfoEnabled()).thenReturn(true);
             var message = sampleMessageWithUnresolvableArguments();
 
@@ -496,9 +483,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
     }
 
     private TraceToScoreUserDefinedMetricPython sampleMessageWithArguments(Map<String, String> arguments) {
-        // Pin input/output instead of letting Podam fill them: the declared paths have to actually
-        // resolve, or every test here silently hands the evaluator an empty map — which is the very
-        // state OPIK-8556 is about, and is what let that defect through this suite unnoticed.
+        // Pinned, not Podam-filled: the declared paths must actually resolve, or every test here hands the
+        // evaluator an empty map and silently stops covering what it means to.
         var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                 .id(traceId)
                 .projectId(projectId)

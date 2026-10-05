@@ -102,10 +102,7 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
                 .then();
     }
 
-    /**
-     * Completes empty so the message is acked and removed rather than retried: the mismatch is
-     * deterministic (OPIK-8556).
-     */
+    // Completes empty so the message is acked and removed rather than retried: the mismatch is deterministic.
     private Mono<List<PythonScoreResult>> reportUnresolvedArguments(
             SpanToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
         OnlineScoringEngine.logUnresolvedEvaluatorArguments(userFacingLogger, log, mdc, "spanId",

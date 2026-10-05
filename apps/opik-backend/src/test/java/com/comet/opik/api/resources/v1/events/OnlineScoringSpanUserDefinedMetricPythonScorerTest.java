@@ -56,11 +56,8 @@ import static org.mockito.Mockito.when;
 @DisplayName("OnlineScoringSpanUserDefinedMetricPythonScorer Tests")
 class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
-    /**
-     * Independently restated: the constant sentence leads and every value trails, so this text is the fixed
-     * prefix an operator greps on. Byte-identical to the span scorer's copy — that is what makes one search
-     * catch both scorers, so a divergence here should fail this test rather than pass quietly.
-     */
+    // Restated independently and byte-identical to the trace scorer's copy: that is what makes one search
+    // catch both scorers, so a divergence between them fails here rather than passing quietly.
     private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
             + " so there is no data to evaluate. Check the declared paths against the input, output and"
             + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
@@ -199,8 +196,8 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                     .projectName("test-project")
                     .traceId(UUID.randomUUID())
                     .name("test-span")
-                    // The declared paths below have to actually resolve, or the scorer short-circuits
-                    // before the evaluator and this test stops covering what it means to (OPIK-8556).
+                    // The declared paths must actually resolve, or the scorer short-circuits before the
+                    // evaluator and this test stops covering what it means to.
                     .input(JsonUtils.getMapper().valueToTree(Map.of("input", "question")))
                     .output(JsonUtils.getMapper().valueToTree(Map.of("output", "answer")))
                     .build();
@@ -322,9 +319,8 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
         @Test
         @DisplayName("Should report unresolved arguments instead of calling the evaluator")
         void shouldReportUnresolvedArgumentsInsteadOfCallingTheEvaluator() {
-            // Same defect as the trace scorer (OPIK-8556): a metric declaring fields the span does not
-            // carry resolves to an empty map, which used to reach PythonEvaluatorService.evaluate and
-            // throw a raw IllegalArgumentException, dropping the job with nothing shown to the user.
+            // Same defect as the trace scorer: fields the span does not carry resolve to an empty map, and
+            // the evaluator must not be called with it.
             UUID spanId = ID_GENERATOR.generateId();
             String ruleName = "rule-" + RandomStringUtils.secure().nextAlphanumeric(10);
 

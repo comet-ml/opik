@@ -2390,11 +2390,8 @@ class OnlineScoringEngineTest {
 
     @Test
     void logUnresolvedEvaluatorArgumentsSendsTheSamePayloadToBothSinks() {
-        // The two sinks share one constant precisely so they cannot drift apart, but that property is only
-        // real if something asserts the backend payload too. Without this, the internal line could be
-        // reworded — or quietly reduced to different arguments — with every other test still green.
-        // The expected format is restated here independently, so a change to the production constant has
-        // to be made deliberately in both places.
+        // Asserts the backend payload too: without it the internal line could be reworded, or reduced to
+        // different arguments, with every other test still green. Restated so a change must be deliberate.
         var expectedFormat = "None of the metric's declared arguments resolved,"
                 + " so there is no data to evaluate. Check the declared paths against the input, output and"
                 + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
@@ -2420,9 +2417,8 @@ class OnlineScoringEngineTest {
 
     @Test
     void logUnresolvedEvaluatorArgumentsLogsBothSinksInsideTheMdcScope() {
-        // The backend line is only correlatable with the user-facing one if it carries the same
-        // workspace / rule / entity markers, so it has to sit inside the MDC scope too (OPIK-8556).
-        // MDC is a thread-local read at append time, so it is asserted during the call, not after.
+        // The backend line needs the same markers to be correlatable, so it must sit inside the scope too.
+        // MDC is thread-local and read at append time, hence asserted during the call rather than after.
         var mdc = Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 UserLog.WORKSPACE_ID, UUID.randomUUID().toString(),
