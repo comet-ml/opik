@@ -2364,8 +2364,8 @@ class FindTraceThreadsResourceTest {
         }
 
         @Test
-        @DisplayName("a thread whose row is missing is listed by neither path on any window, as the chart and the KPI cards skip it")
-        void whenThreadRowMissing__thenNoListingPathShowsIt() {
+        @DisplayName("a thread whose row is missing is listed by neither path on any window, as the chart and the KPI cards skip it, and listed without a window")
+        void whenThreadRowMissing__thenWindowedListsSkipItAndUnwindowedListShowsIt() {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
             Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
@@ -2386,14 +2386,17 @@ class FindTraceThreadsResourceTest {
                     .build();
             for (Map<String, String> window : List.of(Map.of("from_time", fromTime, "to_time", toTime),
                     Map.of("from_time", fromTime), Map.of("to_time", toTime), Map.<String, String>of())) {
+                // Without a window there is no chart or KPI to align with, and a just-ingested thread shows before
+                // its row is written.
+                List<String> expected = window.isEmpty() ? List.of(withoutRow, withRow) : List.of(withRow);
                 for (List<TraceThreadFilter> filters : List.of(List.<TraceThreadFilter>of(),
                         List.of(alwaysTrueThreadFilter))) {
                     var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, filters,
                             List.of(), withPage(window, 1, 10));
 
                     assertThat(page.content()).as("window %s, filters %s", window, filters)
-                            .extracting(TraceThread::id).containsExactly(withRow);
-                    assertThat(page.total()).as("window %s, filters %s", window, filters).isEqualTo(1);
+                            .extracting(TraceThread::id).containsExactlyInAnyOrderElementsOf(expected);
+                    assertThat(page.total()).as("window %s, filters %s", window, filters).isEqualTo(expected.size());
                 }
             }
         }

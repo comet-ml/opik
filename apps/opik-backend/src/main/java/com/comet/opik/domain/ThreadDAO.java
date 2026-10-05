@@ -130,7 +130,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 ) AS t
                 GROUP BY thread_id
             ) AS pt
-            INNER JOIN (
+            <if(uuid_from_time || uuid_to_time)>INNER<else>LEFT<endif> JOIN (
                 SELECT thread_id, id, last_updated_at
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
@@ -521,7 +521,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 GROUP BY
                     t.workspace_id, t.project_id, t.thread_id
             ) AS t
-            INNER JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+            <if(uuid_from_time || uuid_to_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                 AND t.project_id = tt.project_id
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
@@ -805,7 +805,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
-                INNER JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                <if(uuid_from_time || uuid_to_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 <if(annotation_queue_filters || annotation_queue_id)>
@@ -897,10 +897,12 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_by,
                     created_at,
                     environment
-                FROM traces FINAL
+                FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT id FROM traces_ids)
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), spans_deduped AS (
                 SELECT
                     trace_id,
@@ -967,10 +969,12 @@ class ThreadDAOImpl implements ThreadDAO {
                     SELECT
                         id,
                         <if(truncate)>truncated_input, truncated_output, input_length, output_length, truncation_threshold<else>input, output<endif>
-                    FROM traces FINAL
+                    FROM traces
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND has(arrayConcat(arrayMap(a -> a.7, thread_aggs), arrayMap(a -> a.8, thread_aggs)), id)
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
             ), trace_threads_ids AS (
                 SELECT
@@ -1491,7 +1495,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
-                INNER JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                <if(uuid_from_time || uuid_to_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
@@ -1580,7 +1584,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * these attributes means the page can only be resolved by the full enrichment query (filters/sorts
      * that need the spans/feedback/annotation joins), so we fall back. A time window is not one of them: the
      * resolver then reads only the window's traces and requires the thread row, as the full query's INNER JOIN
-     * does, and breaks ties by the thread row id like the outer ORDER BY, so both paths pick the same page.
+     * does on any window, and breaks ties by the thread row id and then the thread id like the outer ORDER BY, so
+     * both paths pick the same page.
      */
     private static final List<String> PAGE_PUSHDOWN_DISQUALIFIERS = List.of(
             "sort_fields", "traces_pushdown_filter",
