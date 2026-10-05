@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createCompletionAnnouncer,
+  describeRunFailure,
   getDefaultConfigByProvider,
   hasUnsupportedMedia,
   restoreMissingConfigKeys,
@@ -14,6 +15,7 @@ import {
 } from "@/types/providers";
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLM_MESSAGE_ROLE, LLMMessage, MessageContent } from "@/types/llm";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 
 const userMessage = (content: MessageContent): LLMMessage => ({
   id: "message",
@@ -378,5 +380,82 @@ describe("createCompletionAnnouncer", () => {
     announcer.loggingFinished();
 
     expect(announce).not.toHaveBeenCalled();
+  });
+});
+
+describe("describeRunFailure", () => {
+  const OPENAI_RATE_LIMIT =
+    "Rate limit reached for gpt-4o on requests per min (RPM): Limit 3. Please try again in 20s.";
+
+  const failedRun = (
+    overrides: Partial<RunStreamingReturn>,
+  ): RunStreamingReturn => ({
+    result: "",
+    startTime: "",
+    endTime: "",
+    usage: null,
+    choices: null,
+    providerError: null,
+    opikError: null,
+    pythonProxyError: null,
+    errorStatus: null,
+    actualModel: null,
+    actualProvider: null,
+    ...overrides,
+  });
+
+  it("gives a rate-limited run a next step and keeps the provider's message", () => {
+    const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
+
+    expect(describeRunFailure(run, true)).toBe(
+      "Rate limit reached. Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters. " +
+        `Provider message: ${OPENAI_RATE_LIMIT}`,
+    );
+  });
+
+  it("does not point at settings the model has no panel for", () => {
+    const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
+
+    const message = describeRunFailure(run, false);
+
+    expect(message).toBe(
+      `Rate limit reached. Wait a moment and run again. Provider message: ${OPENAI_RATE_LIMIT}`,
+    );
+    expect(message).not.toContain("Model parameters");
+  });
+
+  it("tells an out-of-credits run to add credits, not to slow down", () => {
+    const run = failedRun({
+      errorStatus: 402,
+      opikError: "You exceeded your current quota.",
+    });
+
+    expect(describeRunFailure(run, true)).toBe(
+      "Out of credits. Add credits or raise your quota with the provider, then run again. " +
+        "Provider message: You exceeded your current quota.",
+    );
+  });
+
+  it("explains a 429 that came with no readable message", () => {
+    const run = failedRun({ errorStatus: 429 });
+
+    expect(describeRunFailure(run, false)).toBe(
+      "Rate limit reached. Wait a moment and run again.",
+    );
+  });
+
+  it.each<[string, Partial<RunStreamingReturn>, string]>([
+    [
+      "a provider error",
+      { errorStatus: 401, providerError: "Invalid key" },
+      "Invalid key",
+    ],
+    [
+      "an error with no status",
+      { opikError: "Unexpected error" },
+      "Unexpected error",
+    ],
+  ])("leaves %s as the provider wrote it", (_label, overrides, expected) => {
+    expect(describeRunFailure(failedRun(overrides), true)).toBe(expected);
   });
 });
