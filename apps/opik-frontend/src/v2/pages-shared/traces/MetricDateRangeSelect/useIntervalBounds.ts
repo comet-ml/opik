@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import dayjs from "dayjs";
 import {
   focusManager,
   onlineManager,
@@ -13,6 +14,7 @@ import {
   calculateIntervalBounds,
   IntervalBounds,
   isLiveDateRange,
+  isOpenEndedDateRange,
   reanchorIntervalBounds,
   serializeDateRange,
 } from "./utils";
@@ -34,12 +36,23 @@ const anchorToNow = (dateRange: DateRangeValue): AnchoredBounds => ({
 
 const isFetchingWindow = (
   queryClient: QueryClient,
-  { intervalEnd }: IntervalBounds,
+  { intervalStart }: IntervalBounds,
 ) =>
   queryClient.isFetching({
     predicate: ({ queryKey }) =>
-      isObject(queryKey[1]) && Object.values(queryKey[1]).includes(intervalEnd),
+      isObject(queryKey[1]) &&
+      Object.values(queryKey[1]).includes(intervalStart),
   }) > 0;
+
+// Open-ended requests only see the start, so the window moves for them only when the start does.
+const hasMoved = (
+  dateRange: DateRangeValue,
+  from: IntervalBounds,
+  to: IntervalBounds,
+) =>
+  isOpenEndedDateRange(dateRange)
+    ? from.intervalStart !== to.intervalStart
+    : from !== to;
 
 export const useIntervalBounds = (
   dateRange: DateRangeValue,
@@ -54,6 +67,7 @@ export const useIntervalBounds = (
   if (isNewSelection) setAnchored(current);
 
   const isLive = isLiveDateRange(dateRange);
+  const isOpenEnded = isOpenEndedDateRange(dateRange);
 
   useEffect(() => {
     if (!isLive || !isAutoReanchorEnabled) return;
@@ -67,14 +81,26 @@ export const useIntervalBounds = (
         return;
       }
       if (!isLiveDateRange(anchored.dateRange)) {
-        // Same bounds, new object: the render re-reads the liveness, clears this
-        // timer and switches the queries to polling the window as it stood before
-        // local midnight, instead of re-anchoring a range that is no longer "today".
-        setAnchored({ ...anchored });
+        // The range ended at local midnight: close it at the end of its last local day rather than at the last tick,
+        // which a hidden tab or a sleeping laptop leaves hours early. Not recomputed from the range, whose past-window
+        // form lands a UTC day early for users east of UTC.
+        setAnchored({
+          ...anchored,
+          bounds: {
+            ...anchored.bounds,
+            intervalEnd: dayjs(anchored.dateRange.to)
+              .endOf("day")
+              .utc()
+              .format(),
+          },
+        });
         return;
       }
 
-      setAnchored(anchorToNow(anchored.dateRange));
+      const next = anchorToNow(anchored.dateRange);
+      if (hasMoved(anchored.dateRange, anchored.bounds, next.bounds)) {
+        setAnchored(next);
+      }
     };
     const reanchorOnReturn = (isBack: boolean) => {
       if (isBack) reanchorWhenIdle();
@@ -95,31 +121,46 @@ export const useIntervalBounds = (
     if (!isLiveDateRange(current.dateRange)) return false;
 
     const next = reanchorIntervalBounds(current.dateRange, current.bounds);
-    if (next === current.bounds) return false;
+    if (!hasMoved(current.dateRange, current.bounds, next)) return false;
 
     setAnchored({ ...current, bounds: next });
     return true;
   }, [current]);
 
   return {
-    ...current.bounds,
+    intervalStart: current.bounds.intervalStart,
+    // A preset has no end, so ids minted ahead of the server clock count, as they do in the traces list (OPIK-8206).
+    intervalEnd: isOpenEnded ? undefined : current.bounds.intervalEnd,
     selectionKey: current.selectionKey,
-    refetchInterval: isLive ? (false as const) : REANCHOR_INTERVAL,
+    // An open-ended request does not change as time passes, so a preset is polled; a closed live window moves instead.
+    refetchInterval:
+      isLive && !isOpenEnded ? (false as const) : REANCHOR_INTERVAL,
+    movesByItself: isLive,
     reanchorToNow,
   };
 };
 
 export type IntervalWindow = ReturnType<typeof useIntervalBounds>;
 
-export const windowQueryOptions = (refetchInterval: number | false) =>
-  refetchInterval === false
+export const windowQueryOptions = (
+  refetchInterval: number | false,
+  selectionKey?: string,
+) => ({
+  ...(refetchInterval === false
     ? {
         refetchInterval,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
         gcTime: LIVE_WINDOW_GC_TIME,
       }
-    : { refetchInterval };
+    : { refetchInterval }),
+  meta: { windowSelection: selectionKey },
+});
+
+type WindowMotion = {
+  movesByItself?: boolean;
+  selectionKey?: string;
+};
 
 type WindowFields<TParams> = readonly [
   start: keyof TParams & string,
@@ -143,11 +184,16 @@ export const keepDataWhenOnlyWindowChanged =
   ) =>
   <TData>(
     previousData: TData | undefined,
-    previousQuery: { queryKey: QueryKey } | undefined,
+    previousQuery:
+      | { queryKey: QueryKey; meta?: Record<string, unknown> }
+      | undefined,
+    selectionKey?: string,
   ) => {
     const previousParams = previousQuery?.queryKey[1];
 
+    // A new range selection also changes only the window fields; only a window that moved by itself keeps its data.
     return isObject(previousParams) &&
+      previousQuery?.meta?.windowSelection === selectionKey &&
       isOnlyWindowChange(previousParams, params, windowFields)
       ? previousData
       : undefined;
@@ -159,9 +205,23 @@ export const keepDataWhileWindowMoves = <
   refetchInterval: number | false,
   params: TParams,
   windowFields: WindowFields<TParams>,
+  {
+    movesByItself = refetchInterval === false,
+    selectionKey,
+  }: WindowMotion = {},
 ) =>
-  refetchInterval === false
-    ? keepDataWhenOnlyWindowChanged(params, windowFields)
+  movesByItself
+    ? <TData>(
+        previousData: TData | undefined,
+        previousQuery:
+          | { queryKey: QueryKey; meta?: Record<string, unknown> }
+          | undefined,
+      ) =>
+        keepDataWhenOnlyWindowChanged(params, windowFields)(
+          previousData,
+          previousQuery,
+          selectionKey,
+        )
     : undefined;
 
 export const useIsOnlyWindowBehind = <TParams extends Record<string, unknown>>(
