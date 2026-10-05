@@ -6360,6 +6360,32 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
+        @DisplayName("when traces start less than a microsecond apart, then the earlier one is still the first message")
+        void getTraceThread__whenStartTimesDifferBelowMicrosecond__thenEarlierTraceIsFirst(boolean truncate) {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var sameMicrosecond = Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(60);
+
+            // The test schema stores start_time as DateTime64(9): the earlier trace has the smaller id, so a
+            // tie-break that dropped the nanoseconds would pick the later one
+            var earlier = threadTrace(threadId, projectName, environment, sameMicrosecond.plusNanos(100),
+                    sameMicrosecond.plusSeconds(10));
+            var later = threadTrace(threadId, projectName, environment, sameMicrosecond.plusNanos(900),
+                    sameMicrosecond.plusSeconds(5));
+            traceResourceClient.batchCreateTraces(List.of(later, earlier), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualThread.firstMessage()).isEqualTo(earlier.input());
+            assertThat(actualThread.startTime()).isEqualTo(earlier.startTime());
+            assertThat(actualThread.lastMessage()).isEqualTo(earlier.output());
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
         @DisplayName("when only some traces have an end time, then the last message comes from the latest ended trace")
         void getTraceThread__whenSomeTracesHaveNoEndTime__thenLastMessageFromLatestEnded(boolean truncate) {
             var threadId = UUID.randomUUID().toString();

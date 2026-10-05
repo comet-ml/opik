@@ -810,9 +810,9 @@ class ThreadDAOImpl implements ThreadDAO {
      * The first trace is the earliest start_time and the last the latest end_time, skipping NULL / epoch end_time,
      * as the former {@code argMin(input, start_time)} / {@code argMax(output, nullIf(end_time, epoch))} chose them.
      * Ties are broken explicitly, by the largest id: that is what those first-seen argMin/argMax returned over
-     * traces_final, which is sorted by id DESC. {@code translate} reverses the hex digits of the lowercase UUID id
-     * so that argMin picks the largest one. With no ended trace, last_trace_id is NULL and so is the last message,
-     * as the former argMax over an all-NULL key returned. A scalar rather than a CTE keeps the aggregate to a single
+     * traces_final, which is sorted by id DESC. first_trace_id maximises (-start_time, id), negated as Decimal128(9)
+     * so the legacy DateTime64(9) layout keeps nanosecond order. With no ended trace, last_trace_id is NULL and so is
+     * the last message, as the former argMax over an all-NULL key returned. A scalar rather than a CTE keeps the aggregate to a single
      * evaluation: a CTE is inlined at every reference, and each extra pass costs a round trip to the shards.
      * <p>
      * traces_ids matches any version carrying the thread_id, so a trace whose latest version moved to another
@@ -886,7 +886,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
                            NULL) AS duration,
-                        argMin(t.id, (t.start_time, translate(t.id, '0123456789abcdef', 'fedcba9876543210'))) as first_trace_id,
+                        argMax(t.id, (-CAST(t.start_time AS Decimal128(9)), t.id)) as first_trace_id,
                         argMaxIf(toNullable(t.id), (t.end_time, t.id), t.end_time IS NOT NULL AND t.end_time != toDateTime64('1970-01-01 00:00:00.000', 9)) as last_trace_id,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         sum(s.total_estimated_cost) as total_estimated_cost,
