@@ -14,8 +14,10 @@ from typing import (
     NamedTuple,
 )
 
+import pydantic
+
 from .. import context_storage, logging_messages, tracing_runtime_config
-from ..api_objects import opik_client, span, trace
+from ..api_objects import data_helpers, opik_client, span, trace
 from ..runner import registry
 from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType, TraceSource
 from . import (
@@ -566,7 +568,7 @@ class BaseTrackDecorator(abc.ABC):
         if should_process_span_data and span_data_to_end is not None:
             # save span data only if appropriate
             span_data_to_end.init_end_time().update(
-                **_without_explicitly_set_output_keys(
+                **_merge_captured_output_under_explicit_output(
                     end_kwargs=end_arguments.to_kwargs(),
                     explicit_output=span_data_to_end.output,
                 ),
@@ -575,7 +577,7 @@ class BaseTrackDecorator(abc.ABC):
 
         if trace_data_to_end is not None:
             trace_data_to_end.init_end_time().update(
-                **_without_explicitly_set_output_keys(
+                **_merge_captured_output_under_explicit_output(
                     end_kwargs=end_arguments.to_kwargs(
                         ignore_keys=["usage", "model", "provider"]
                     ),
@@ -659,23 +661,26 @@ def _apply_entrypoint(
     activate_runner()
 
 
-def _without_explicitly_set_output_keys(
+def _merge_captured_output_under_explicit_output(
     end_kwargs: Dict[str, Any], explicit_output: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
     # Output already on the span/trace when the function ends was set by the user
-    # via opik_context during the call, so the captured return value must not
-    # replace it — it only fills in the keys the user left unset.
+    # via opik_context during the call. Merging the captured return value under it,
+    # as if it had been logged first, keeps every explicit value and still logs
+    # whatever the return value adds, nested keys included.
     captured_output = end_kwargs.get("output")
     if captured_output is None or not explicit_output:
         return end_kwargs
 
+    # Some integration decorators capture a pydantic model rather than a dict.
+    if isinstance(captured_output, pydantic.BaseModel):
+        captured_output = captured_output.model_dump()
+
     return {
         **end_kwargs,
-        "output": {
-            key: value
-            for key, value in captured_output.items()
-            if key not in explicit_output
-        },
+        "output": data_helpers.merge_outputs(
+            captured_output, new_outputs=explicit_output
+        ),
     }
 
 

@@ -5,11 +5,13 @@ import threading
 from typing import Dict
 
 from unittest import mock
+import pydantic
 import pytest
 
 from opik import context_storage, opik_context, rest_api, PromptType
 from opik.api_objects import opik_client, trace, prompt
 from opik.decorator import tracker
+from opik.guardrails import tracing as guardrails_tracing
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_STRING,
@@ -1597,6 +1599,100 @@ def test_track__dict_returned_with_key_set_via_opik_context__explicit_value_kept
                 name="f",
                 input={"x": "f-input"},
                 output={"answer": "explicit-answer", "sources": ["doc-1"]},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__nested_dict_returned_with_nested_key_set_via_opik_context__explicit_value_kept_returned_nested_keys_merged(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(
+            output={"details": {"source": "explicit-source"}}
+        )
+        return {
+            "details": {"source": "returned-source", "score": 0.9},
+            "answer": "returned-answer",
+        }
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input"},
+        output={
+            "details": {"source": "returned-source", "score": 0.9},
+            "answer": "returned-answer",
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input"},
+                output={
+                    "details": {"source": "explicit-source", "score": 0.9},
+                    "answer": "returned-answer",
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__guardrail_returns_pydantic_model_with_key_set_via_opik_context__explicit_value_kept_model_fields_merged(
+    fake_backend,
+):
+    class CheckResult(pydantic.BaseModel):
+        validation_passed: bool
+        reason: str
+
+    @guardrails_tracing.GuardrailsTrackDecorator().track
+    def check(generation):
+        opik_context.update_current_span(output={"reason": "explicit-reason"})
+        return CheckResult(validation_passed=True, reason="returned-reason")
+
+    check(generation="some text")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="Guardrail",
+        input={"generation": "some text"},
+        output={"validation_passed": True, "reason": "returned-reason"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="Guardrail",
+                type="guardrail",
+                input={"generation": "some text"},
+                output={"validation_passed": True, "reason": "explicit-reason"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
