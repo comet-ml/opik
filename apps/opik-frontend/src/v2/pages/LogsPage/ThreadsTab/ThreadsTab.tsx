@@ -646,19 +646,20 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
   );
 
-  const { data: statisticData, refetch: refetchStatistic } = useThreadsStatistic(
-    {
-      projectId,
-      filters: threadChipFilters,
-      search: trimmedSearch,
-      fromTime: intervalStart,
-      toTime: intervalEnd,
-      logsSource: LOGS_SOURCE.sdk,
-    },
-    {
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
+  const { data: statisticData, refetch: refetchStatistic } =
+    useThreadsStatistic(
+      {
+        projectId,
+        filters: threadChipFilters,
+        search: trimmedSearch,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+        logsSource: LOGS_SOURCE.sdk,
+      },
+      {
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
 
   // Cheap "does this project have any thread?" probe for the empty-state decision. Hits the LIMIT-1
   // existence endpoint scoped to threads — backed by trace_threads (the same table the list reads,
