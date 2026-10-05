@@ -675,6 +675,67 @@ class BoomMetric(BaseMetric):
         result = metric_fn({}, "anything")
         assert result.value == 0.0
         assert "Error" in result.reason
+        # A metric that could not run is not a metric that scored 0.0. Without
+        # this the placeholder is averaged into the objective as a real zero and
+        # `compute_scoring_health` counts the run as fully healthy.
+        assert result.scoring_failed is True
+
+    def test_code_metric_passes_through_the_metrics_own_scoring_failed(self):
+        """A metric that flags its own failure keeps the flag through the wrapper.
+
+        The judge wrappers all return ``ScoreResult(value=0.0,
+        scoring_failed=True)`` when they cannot reach a judge, and the optimizer
+        drops those from the objective and counts them in `scoring_health`.
+        The code-metric wrapper rebuilds the ScoreResult field by field, so
+        without carrying the flag through, that "could not score" placeholder
+        is stored as if the model had scored zero.
+        """
+        code = """
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class FlaggedMetric(BaseMetric):
+    def __init__(self, name: str = "flagged"):
+        super().__init__(name=name)
+
+    def score(self, output, **kwargs):
+        return ScoreResult(
+            name="flagged",
+            value=0.0,
+            reason="judge unavailable",
+            scoring_failed=True,
+        )
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+
+        result = metric_fn({}, "anything")
+        assert result.value == 0.0
+        assert result.reason == "judge unavailable"
+        assert result.scoring_failed is True
+
+    def test_code_metric_keeps_a_real_zero_unflagged(self):
+        """The control: a metric that genuinely scores 0.0 stays unflagged.
+
+        Without this, a fix that set ``scoring_failed`` unconditionally would
+        pass the two tests above while discarding every real score, since
+        ``scoring_health`` filters the flagged ones out of the objective.
+        """
+        code = """
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class RealZeroMetric(BaseMetric):
+    def __init__(self, name: str = "realzero"):
+        super().__init__(name=name)
+
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=0.0, reason="genuinely wrong")
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+
+        result = metric_fn({}, "anything")
+        assert result.value == 0.0
+        assert result.scoring_failed is False
 
     def test_code_metric_arguments_map_renames_column_strict_signature(self):
         """A STRICT signature + rename map + EXTRA columns must still score.
