@@ -11,6 +11,7 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import SetGuardrailDialog from "@/v2/pages-shared/traces/GuardrailConfig/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useLogsType from "@/v2/pages/LogsPage/useLogsType";
+import useLogsIntervalWindow from "@/v2/pages/LogsPage/useLogsIntervalWindow";
 import {
   resolveProjectDateRangeConfig,
   ProjectDateRangeConfig,
@@ -35,9 +36,11 @@ const LogsPageContent: React.FunctionComponent<LogsPageContentProps> = ({
 
   // Every consumer of the shared date-range key is inside this component, so they all receive the
   // same already-settled config.
+  const intervalWindow = useLogsIntervalWindow(dateRangeConfig);
   const { logsType, needsDefaultResolution, setLogsType } = useLogsType({
     projectId,
     dateRangeConfig,
+    intervalWindow,
   });
 
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
@@ -70,6 +73,7 @@ const LogsPageContent: React.FunctionComponent<LogsPageContentProps> = ({
             projectId={projectId}
             projectName={projectName}
             dateRangeConfig={dateRangeConfig}
+            intervalWindow={intervalWindow}
             logsType={logsType}
             onLogsTypeChange={setLogsType}
           />
