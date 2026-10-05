@@ -14,6 +14,8 @@ const buildItem = (
   overrides: Partial<PlaygroundExperimentItem> = {},
 ): PlaygroundExperimentItem => ({
   hasItem: true,
+  notRun: false,
+  cancelled: false,
   output: "the answer",
   error: null,
   traceId: "trace-1",
