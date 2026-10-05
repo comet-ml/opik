@@ -4,6 +4,7 @@ import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.query.GenericRecord;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
@@ -48,9 +49,18 @@ class DatabaseAnalyticsFactoryIntegrationTest {
         }
     }
 
+    /**
+     * The configured cadence, read from the same {@code config-test.yml} the app boots with rather than restated here,
+     * so this suite cannot drift from it. A factory built in code carries the primitive's 0, so a suite exercising the
+     * guard has to set the value it is exercising.
+     */
+    private static final int CONFIGURED_PROGRESS_HEADER_CADENCE_MS = TestConfigUtils.loadConfigTest()
+            .getDatabaseAnalytics().getHttpHeadersProgressIntervalMs();
+
     private DatabaseAnalyticsFactory factoryWith(String queryParameters) {
         var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, "default");
         factory.setQueryParameters(queryParameters);
+        factory.setHttpHeadersProgressIntervalMs(CONFIGURED_PROGRESS_HEADER_CADENCE_MS);
         return factory;
     }
 
@@ -202,6 +212,96 @@ class DatabaseAnalyticsFactoryIntegrationTest {
 
             assertThat(observed).isEmpty();
         }
+    }
+
+    @Test
+    @DisplayName("a factory built in code, which skips validation, omits the cadence rather than sending 0")
+    void factoryBuiltInCodeOmitsTheCadence() {
+        // Programmatic construction bypasses Bean Validation, so the primitive keeps its 0 — DatabaseAnalyticsModule
+        // #buildReadOnlyClient and the suites that call build() directly. Sending a value that @Min would reject
+        // overrides the server's own cadence with "no throttle"; omitting it inherits the server default, which is
+        // what an unconfigured factory should do. Deliberately not factoryWith(), which sets a cadence.
+        var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, "default");
+
+        var actualSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
+
+        assertThat(actualSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "100"));
+    }
+
+    @Test
+    @DisplayName("R2DBC connection carries the progress-header cadence that keeps responses under Apache HC's cap")
+    void r2dbcConnectionCarriesTheProgressHeaderCadence() {
+        var factory = factoryWith(null);
+
+        var actualSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
+
+        assertThat(actualSettings)
+                .isEqualTo(Map.of("http_headers_progress_interval_ms",
+                        String.valueOf(CONFIGURED_PROGRESS_HEADER_CADENCE_MS)));
+    }
+
+    @Test
+    @DisplayName("v2 client does not carry the progress-header cadence, which a readonly=1 user would reject")
+    void v2ClientDoesNotCarryTheProgressHeaderCadence() {
+        // The guard is clickhouse-r2dbc's alone, and DatabaseAnalyticsModule#buildReadOnlyClient builds a bare factory
+        // for a user whose profile is readonly=1 with a two-setting allowlist — sending anything else fails every read
+        // that user makes. This is that factory's shape: no queryParameters, so no server settings at all.
+        var factory = factoryWith(null);
+
+        try (var client = factory.buildClient()) {
+            var actualSettings = readSettings(client, "http_headers_progress_interval_ms");
+
+            assertThat(actualSettings).isEqualTo(Map.of("http_headers_progress_interval_ms", "100"));
+        }
+    }
+
+    @Test
+    @DisplayName("a cadence in custom_http_params: the field wins on R2DBC, the operator's value stands on v2")
+    void operatorSuppliedCadenceIsOverriddenOnlyOnTheR2dbcPath() {
+        // Two different rules meeting, both pre-existing. On R2DBC the dedicated field overrides a value present in
+        // the chain, exactly as asyncInsertBusyTimeoutMaxMs does — and because the configuration must supply one for
+        // the app to start, it always does, so the guard cannot be undercut from custom_http_params. On v2 the field
+        // is not applied at all,
+        // so the operator's own entry stands, forwarded verbatim like async_insert or max_query_size; singling this
+        // one key out for filtering would be the surprising behaviour. Neither reaches the readonly free-form user,
+        // whose factory is built without queryParameters (DatabaseAnalyticsModule#buildReadOnlyClient).
+        var factory = factoryWith("custom_http_params=http_headers_progress_interval_ms=500");
+
+        var r2dbcSettings = readSettings(factory.build(), "http_headers_progress_interval_ms");
+        assertThat(r2dbcSettings)
+                .isEqualTo(Map.of("http_headers_progress_interval_ms",
+                        String.valueOf(CONFIGURED_PROGRESS_HEADER_CADENCE_MS)));
+
+        try (var client = factory.buildClient()) {
+            var v2Settings = readSettings(client, "http_headers_progress_interval_ms");
+
+            assertThat(v2Settings).isEqualTo(Map.of("http_headers_progress_interval_ms", "500"));
+        }
+    }
+
+    @Test
+    @DisplayName("R2DBC: a query outlasting the 100-header budget at ClickHouse's default progress cadence completes")
+    void longRunningQuerySurvivesTheApacheHeaderCap() {
+        // clickhouse-r2dbc sets send_progress_in_http_headers=1 on every HTTP statement, and the v1 Apache transport
+        // caps a response at Http1Config.DEFAULT.getMaxHeaderCount() == 100 with no option to raise it. One block per
+        // row keeps the query busy for ~12s, which at ClickHouse's 100ms default cadence emits ~120
+        // X-ClickHouse-Progress headers and the response fails to parse ("Maximum header count exceeded", surfaced as a
+        // bare ConnectException). httpHeadersProgressIntervalMs throttles the cadence to 3s, so ~4 headers reach the
+        // client instead. Drop that default to reproduce. Summing `number` alongside the sleep is what forces the
+        // sleep to be evaluated — a bare count() over it is optimised away and returns in milliseconds.
+        var factory = factoryWith(null);
+
+        var sum = Mono.usingWhen(
+                factory.build().create(),
+                connection -> Flux.from(connection.createStatement(
+                        "SELECT sum(number + sleepEachRow(0.1)) AS c FROM numbers(120) SETTINGS max_block_size = 1")
+                        .execute())
+                        .flatMap(result -> result.map((row, _) -> row.get("c", Double.class)))
+                        .single(),
+                Connection::close)
+                .block();
+
+        assertThat(sum).isEqualTo(7140.0d);
     }
 
     @Test

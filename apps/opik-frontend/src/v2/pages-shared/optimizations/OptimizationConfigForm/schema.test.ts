@@ -271,4 +271,18 @@ describe("convertFormDataToStudioConfig — controls the optimizer does not offe
     expect(parameters.throttling).toBeUndefined();
     expect(parameters.maxConcurrentRequests).toBeUndefined();
   });
+
+  // The optimizer reaches OpenAI through LiteLLM on Chat Completions whatever the key's pipeline
+  // mode, and Chat Completions rejects max.
+  it("sends a stored max reasoning effort as high", () => {
+    const parameters = convertFormDataToStudioConfig(
+      {
+        ...formData({ maxCompletionTokens: 4000, reasoningEffort: "max" }),
+        modelName: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      } as unknown as OptimizationConfigFormType,
+      "my-dataset",
+    ).llm_model.parameters as Record<string, unknown>;
+
+    expect(parameters.reasoningEffort).toBe("high");
+  });
 });

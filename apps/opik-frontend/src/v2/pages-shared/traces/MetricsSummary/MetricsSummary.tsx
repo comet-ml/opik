@@ -242,7 +242,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
     return {
       interval,
       intervalStart: chartStart,
-      intervalEnd: chartEnd ?? dayjs().utc().format(),
+      intervalEnd: chartEnd,
     };
   }, [dateRange]);
 

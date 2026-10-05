@@ -7,6 +7,7 @@ import {
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
   LLMVertexAIConfigsType,
+  OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -41,11 +42,18 @@ export const getOpenAIVisibleControls = ({
   model,
   configs,
   supports,
-}: VisibleControlsInput<Partial<LLMOpenAIConfigsType>>) => {
+  openAiPipelineMode,
+}: VisibleControlsInput<Partial<LLMOpenAIConfigsType>> & {
+  openAiPipelineMode?: OpenAiPipelineMode;
+}) => {
   // The resolver owns which sampling params this model accepts and what the request will carry, so
   // both sliders follow it rather than the config's own keys. Reasoning models tune neither.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
-  const { reasoningEffort } = resolveEffort(model ?? "", configs);
+  const { reasoningEffort } = resolveEffort(
+    model ?? "",
+    configs,
+    openAiPipelineMode,
+  );
   const showPenalties = supportsPenaltyParams(model);
 
   return {
@@ -148,6 +156,7 @@ export const hasVisibleControls = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: Partial<LLMPromptConfigsType>,
   unsupportedParams?: ReadonlySet<ModelConfigParam>,
+  openAiPipelineMode?: OpenAiPipelineMode,
 ): boolean => {
   const supports = createSupports(unsupportedParams);
 
@@ -158,6 +167,7 @@ export const hasVisibleControls = (
           model,
           configs: configs as Partial<LLMOpenAIConfigsType>,
           supports,
+          openAiPipelineMode,
         }),
       );
     case PROVIDER_TYPE.ANTHROPIC:

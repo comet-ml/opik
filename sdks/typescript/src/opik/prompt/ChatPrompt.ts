@@ -286,9 +286,14 @@ export class ChatPrompt extends BasePrompt {
    * or a commit hash for backwards compatibility. Inputs matching `/^v\d+$/`
    * are treated as version numbers; anything else is treated as a commit.
    *
+   * To look at a prompt's versions without writing code, AI coding assistants connected to the
+   * Opik MCP server can call `read("prompt", name)`, which returns the prompt together with its
+   * versions.
+   *
    * @param version - Sequential version (`"v<N>"`) or commit hash
    *   (commit input is **deprecated** — pass a `"v<N>"` identifier instead).
    * @returns ChatPrompt instance representing that version, or null if not found
+   * @see https://www.comet.com/docs/opik/mcp-server
    *
    * @example
    * ```typescript

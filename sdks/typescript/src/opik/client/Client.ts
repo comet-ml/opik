@@ -255,10 +255,15 @@ export class OpikClient {
   /**
    * Retrieves an existing dataset by name
    *
+   * To look at a dataset without writing code, AI coding assistants connected to the Opik MCP
+   * server can call `read("dataset", name)` and page through its items with
+   * `list("dataset_item", dataset_id=...)`.
+   *
    * @param name The name of the dataset to retrieve
    * @param projectName Optional project name to scope the dataset lookup. If not provided, uses the client's configured project.
    * @returns A Dataset object associated with the specified name
    * @throws Error if the dataset doesn't exist
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getDataset = async <T extends DatasetItemData = DatasetItemData>(
     name: string,
@@ -355,9 +360,14 @@ export class OpikClient {
   /**
    * Returns all datasets up to the specified limit
    *
+   * To look at datasets without writing code, AI coding assistants connected to the Opik MCP
+   * server can call `list("dataset", name=...)`, which lists datasets and test suites filtered
+   * by a name substring.
+   *
    * @param maxResults Maximum number of datasets to return (default: 100)
    * @param projectName Optional project name to filter datasets by. If not provided, uses the client's configured project.
    * @returns List of Dataset objects
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getDatasets = async <T extends DatasetItemData = DatasetItemData>(
     maxResults: number = 100,
@@ -435,10 +445,15 @@ export class OpikClient {
   /**
    * Retrieves an existing test suite by name.
    *
+   * To look at a test suite without writing code, AI coding assistants connected to the Opik
+   * MCP server can call `read("dataset", name)` and page through its items with
+   * `list("dataset_item", dataset_id=...)`.
+   *
    * @param name The name of the test suite to retrieve
    * @param projectName Optional project name to scope the lookup. If not provided, uses the client's configured project.
    * @returns A TestSuite object
    * @throws DatasetNotFoundError if the test suite doesn't exist
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getTestSuite = async (
     name: string,
@@ -485,9 +500,14 @@ export class OpikClient {
   /**
    * Returns all test suites up to the specified limit.
    *
+   * To look at test suites without writing code, AI coding assistants connected to the Opik
+   * MCP server can call `list("dataset", name=...)`, which lists datasets and test suites
+   * filtered by a name substring.
+   *
    * @param maxResults Maximum number of test suites to return (default: 100)
    * @param projectName Optional project name to filter by. If not provided, uses the client's configured project.
    * @returns List of TestSuite objects
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getTestSuites = async (
     maxResults: number = 1000,
@@ -933,8 +953,13 @@ export class OpikClient {
   /**
    * Gets an experiment by its unique ID
    *
+   * To look at an experiment without writing code, AI coding assistants connected to the Opik
+   * MCP server can call `read("experiment", id)`, and
+   * `list("dataset_item", experiment_ids=[...])` compares runs case by case.
+   *
    * @param id The unique identifier of the experiment
    * @returns The Experiment object
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getExperimentById = async (id: string): Promise<Experiment> => {
     logger.debug(`Getting experiment with ID "${id}"`);
@@ -965,8 +990,13 @@ export class OpikClient {
   /**
    * Gets experiments by name (can return multiple experiments with the same name)
    *
+   * To look at experiments without writing code, AI coding assistants connected to the Opik
+   * MCP server can call `list("experiment", name=...)`, and
+   * `list("dataset_item", experiment_ids=[...])` compares runs case by case.
+   *
    * @param name The name of the experiments to retrieve
    * @returns A list of Experiment objects with the given name
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getExperimentsByName = async (name: string, projectName?: string): Promise<Experiment[]> => {
     const resolvedProjectName = this.resolveProjectName(projectName);
@@ -1004,8 +1034,12 @@ export class OpikClient {
   /**
    * Gets a single experiment by name (returns the first match if multiple exist)
    *
+   * To look at an experiment without writing code, AI coding assistants connected to the Opik
+   * MCP server can call `read("experiment", name)`.
+   *
    * @param name The name of the experiment to retrieve
    * @returns The Experiment object
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getExperiment = async (name: string, projectName?: string): Promise<Experiment> => {
     logger.debug(`Getting experiment with name "${name}"`);
@@ -1022,11 +1056,15 @@ export class OpikClient {
   /**
    * Gets all experiments associated with a dataset
    *
+   * To look at a dataset's experiments without writing code, AI coding assistants connected to
+   * the Opik MCP server can call `list("experiment", filters='dataset_id = "..."')`.
+   *
    * @param datasetName The name of the dataset
    * @param maxResults Maximum number of experiments to return (default: 100)
    * @param projectName Optional project name to scope the dataset lookup. If not provided, uses the client's configured project.
    * @returns A list of Experiment objects associated with the dataset
    * @throws {DatasetNotFoundError} If the dataset doesn't exist
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getDatasetExperiments = async (
     datasetName: string,
@@ -1062,6 +1100,9 @@ export class OpikClient {
   /**
    * Retrieves all experiments associated with a test suite.
    *
+   * To look at a test suite's experiments without writing code, AI coding assistants connected
+   * to the Opik MCP server can call `list("experiment", filters='dataset_id = "..."')`.
+   *
    * @param name The name of the test suite
    * @param maxResults Maximum number of experiments to return (default: 100)
    * @param projectName Optional project name to scope the suite lookup. If not provided, uses the client's configured project.
@@ -1069,6 +1110,7 @@ export class OpikClient {
    *   each carrying the suite-specific assertion aggregates (`passRate`, `passedCount`,
    *   `totalCount`, `assertionScores`) populated by the backend.
    * @throws {DatasetNotFoundError} If the test suite doesn't exist
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getTestSuiteExperiments = async (
     name: string,
@@ -1398,6 +1440,10 @@ export class OpikClient {
    * default 300s). When called inside a track() context the prompt reference
    * is injected into the active trace/span metadata.
    *
+   * To look at a prompt without writing code, AI coding assistants connected to the Opik MCP
+   * server can call `read("prompt", name)`, which returns the prompt together with its
+   * version history.
+   *
    * @param options - Prompt name and optional version pin or environment
    * @param options.name - Name of the prompt
    * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
@@ -1411,6 +1457,7 @@ export class OpikClient {
    * @throws Error if both `commit` and `version` are provided, or if `environment` is
    *   combined with either `commit` or `version`
    * @throws PromptTemplateStructureMismatch if prompt exists but is a chat prompt
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public getPrompt = async (
     options: GetPromptOptions
@@ -1430,6 +1477,10 @@ export class OpikClient {
    * default 300s). When called inside a track() context the prompt reference
    * is injected into the active trace/span metadata.
    *
+   * To look at a prompt without writing code, AI coding assistants connected to the Opik MCP
+   * server can call `read("prompt", name)`, which returns the prompt together with its
+   * version history.
+   *
    * @param options - Prompt name and optional version pin or environment
    * @param options.name - Name of the prompt
    * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
@@ -1443,6 +1494,7 @@ export class OpikClient {
    * @throws Error if both `commit` and `version` are provided, or if `environment` is
    *   combined with either `commit` or `version`
    * @throws PromptTemplateStructureMismatch if prompt exists but is a text prompt
+   * @see https://www.comet.com/docs/opik/mcp-server
    *
    * @example
    * ```typescript
@@ -1634,6 +1686,9 @@ export class OpikClient {
   /**
    * Searches prompts with optional OQL filtering.
    *
+   * To look for prompts without writing code, AI coding assistants connected to the Opik MCP
+   * server can call `list("prompt", name=...)`, which filters by a name substring.
+   *
    * @param filterString - Optional OQL filter string to narrow down search
    *
    * Supported OQL format: `<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*`
@@ -1654,6 +1709,7 @@ export class OpikClient {
    *
    * @returns Promise resolving to array of matching latest prompt versions
    * @throws Error if OQL filter syntax is invalid
+   * @see https://www.comet.com/docs/opik/mcp-server
    *
    * @example
    * ```typescript
@@ -1855,42 +1911,6 @@ export class OpikClient {
     );
   };
 
-  /**
-   * Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
-   * to be found before returning within the specified timeout.
-   *
-   * @param projectName - The name of the project to search in. Defaults to the project configured on the Client.
-   * @param filterString - Filter using Opik Query Language (OQL). Format: `<COLUMN> <OPERATOR> <VALUE> [AND ...]`
-   *   Common columns: `id`, `name`, `start_time`, `end_time`, `input`, `output`, `status`, `tags`, `metadata.*`, `feedback_scores.*`, `usage.*`
-   *   Common operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `not_contains`, `starts_with`, `ends_with`
-   *   Use ISO 8601 format for dates (e.g., "2024-01-01T00:00:00Z")
-   * @param maxResults - Maximum number of traces to return (default: 1000)
-   * @param truncate - Whether to truncate image data in input, output, or metadata (default: true)
-   * @param waitForAtLeast - Minimum number of traces to wait for before returning
-   * @param waitForTimeout - Timeout for waiting in seconds (default: 60)
-   *
-   * @returns Promise resolving to array of traces matching the search criteria
-   * @throws {SearchTimeoutError} If waitForAtLeast traces are not found within the specified timeout
-   *
-   * @example
-   * ```typescript
-   * // Get all traces in a project
-   * const traces = await client.searchTraces({ projectName: "My Project" });
-   *
-   * // Filter by date and metadata
-   * const filtered = await client.searchTraces({
-   *   projectName: "My Project",
-   *   filterString: 'start_time >= "2024-01-01T00:00:00Z" AND metadata.model = "gpt-4"'
-   * });
-   *
-   * // Wait for at least 10 traces
-   * const traces = await client.searchTraces({
-   *   projectName: "My Project",
-   *   waitForAtLeast: 10,
-   *   waitForTimeout: 30
-   * });
-   * ```
-   */
   private async executeSearch<T, TFilter>(
     resourceType: "traces" | "threads" | "spans",
     options: {
@@ -1960,6 +1980,47 @@ export class OpikClient {
     return result;
   }
 
+  /**
+   * Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
+   * to be found before returning within the specified timeout.
+   *
+   * AI coding assistants connected to the Opik MCP server can run this search without writing
+   * code: `list("trace", project_name=..., filters=...)` takes the same OQL as `filterString`,
+   * and also sorts and limits by time (`sort="duration desc"`, `since="24h"`).
+   *
+   * @param projectName - The name of the project to search in. Defaults to the project configured on the Client.
+   * @param filterString - Filter using Opik Query Language (OQL). Format: `<COLUMN> <OPERATOR> <VALUE> [AND ...]`
+   *   Common columns: `id`, `name`, `start_time`, `end_time`, `input`, `output`, `status`, `tags`, `metadata.*`, `feedback_scores.*`, `usage.*`
+   *   Common operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `not_contains`, `starts_with`, `ends_with`
+   *   Use ISO 8601 format for dates (e.g., "2024-01-01T00:00:00Z")
+   * @param maxResults - Maximum number of traces to return (default: 1000)
+   * @param truncate - Whether to truncate image data in input, output, or metadata (default: true)
+   * @param waitForAtLeast - Minimum number of traces to wait for before returning
+   * @param waitForTimeout - Timeout for waiting in seconds (default: 60)
+   *
+   * @returns Promise resolving to array of traces matching the search criteria
+   * @throws {SearchTimeoutError} If waitForAtLeast traces are not found within the specified timeout
+   * @see https://www.comet.com/docs/opik/mcp-server
+   *
+   * @example
+   * ```typescript
+   * // Get all traces in a project
+   * const traces = await client.searchTraces({ projectName: "My Project" });
+   *
+   * // Filter by date and metadata
+   * const filtered = await client.searchTraces({
+   *   projectName: "My Project",
+   *   filterString: 'start_time >= "2024-01-01T00:00:00Z" AND metadata.model = "gpt-4"'
+   * });
+   *
+   * // Wait for at least 10 traces
+   * const traces = await client.searchTraces({
+   *   projectName: "My Project",
+   *   waitForAtLeast: 10,
+   *   waitForTimeout: 30
+   * });
+   * ```
+   */
   public searchTraces = async (options?: {
     projectName?: string;
     filterString?: string;
@@ -1986,6 +2047,10 @@ export class OpikClient {
    * Threads represent conversations or sessions that group related traces together.
    * This method allows you to search and filter threads using Opik Query Language (OQL).
    *
+   * AI coding assistants connected to the Opik MCP server can run this search without writing
+   * code: `list("thread", project_name=..., filters=...)` takes the same OQL as `filterString`,
+   * and `read("thread", id, project_name=...)` returns one thread's messages.
+   *
    * @param options - Search options
    * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
    * @param options.filterString - Filter string using Opik Query Language (OQL).
@@ -1997,6 +2062,7 @@ export class OpikClient {
    * @param options.waitForTimeout - Timeout in seconds when using waitForAtLeast (default: 60)
    * @returns Promise resolving to an array of threads
    * @throws {SearchTimeoutError} If waitForAtLeast is specified and timeout is reached
+   * @see https://www.comet.com/docs/opik/mcp-server
    *
    * @example
    * ```typescript
@@ -2045,6 +2111,10 @@ export class OpikClient {
    * Spans represent individual operations or steps within traces, such as LLM calls or function executions.
    * This method allows you to search and filter spans using Opik Query Language (OQL).
    *
+   * AI coding assistants connected to the Opik MCP server can run this search without writing
+   * code: `list("span", project_name=..., filters=...)` takes the same OQL as `filterString`,
+   * and `read("trace", trace_id)` returns a trace together with all of its spans.
+   *
    * @param options - Search options
    * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
    * @param options.filterString - Filter string using Opik Query Language (OQL).
@@ -2056,6 +2126,7 @@ export class OpikClient {
    * @param options.waitForTimeout - Timeout in seconds when using waitForAtLeast (default: 60)
    * @returns Promise resolving to an array of spans
    * @throws {SearchTimeoutError} If waitForAtLeast is specified and timeout is reached
+   * @see https://www.comet.com/docs/opik/mcp-server
    *
    * @example
    * ```typescript

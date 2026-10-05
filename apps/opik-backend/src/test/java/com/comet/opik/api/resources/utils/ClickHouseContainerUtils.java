@@ -66,6 +66,25 @@ public class ClickHouseContainerUtils {
 
     public static ClickHouseContainer newClickHouseContainer(boolean reusable, Network network,
             GenericContainer<?> zooKeeperContainer) {
+        return baseClickHouseContainer(reusable, network, zooKeeperContainer)
+                // Provision the production-shape Agent Insights read-only user globally
+                // (settings profile, user, per-table SELECT grants, row policies; mirrors
+                // provision_agent_insights_readonly_user.sh). Loaded at server startup.
+                .withCopyFileToContainer(MountableFile.forClasspathResource("users.xml"),
+                        "/etc/clickhouse-server/users.d/users.xml");
+    }
+
+    /**
+     * Without the read-only accounts of {@code users.xml}, for a test that provisions them itself through SQL: accounts
+     * defined in {@code users.xml} are read-only to SQL.
+     */
+    public static ClickHouseContainer newClickHouseContainerWithoutReadOnlyUsers(Network network,
+            GenericContainer<?> zooKeeperContainer) {
+        return baseClickHouseContainer(false, network, zooKeeperContainer);
+    }
+
+    private static ClickHouseContainer baseClickHouseContainer(boolean reusable, Network network,
+            GenericContainer<?> zooKeeperContainer) {
 
         try {
 
@@ -87,12 +106,7 @@ public class ClickHouseContainerUtils {
                     .withUsername("default")
                     .withPassword("")
                     .withCopyFileToContainer(MountableFile.forClasspathResource("clickhouse.xml"),
-                            "/etc/clickhouse-server/config.d/clickhouse.xml")
-                    // Provision the production-shape Agent Insights read-only user globally
-                    // (settings profile, user, per-table SELECT grants, row policies; mirrors
-                    // provision_agent_insights_readonly_user.sh). Loaded at server startup.
-                    .withCopyFileToContainer(MountableFile.forClasspathResource("users.xml"),
-                            "/etc/clickhouse-server/users.d/users.xml");
+                            "/etc/clickhouse-server/config.d/clickhouse.xml");
 
         } catch (Exception e) {
             throw new RuntimeException(e);

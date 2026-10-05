@@ -100,6 +100,20 @@ databaseAnalytics:
   #   async-insert flush; same override semantics as asyncInsertBusyTimeoutMaxMs above. Larger values yield fewer,
   #   larger parts at the cost of more buffer memory.
   asyncInsertMaxDataSize: ${ANALYTICS_DB_ASYNC_INSERT_MAX_DATA_SIZE:-}
+  #  Default: 3000
+  #  Description: Cadence (ms) for http_headers_progress_interval_ms, applied to custom_http_params like the overrides
+  #   above, but only on the R2DBC connection and not on the v2 client (the read-only free-form SQL user runs under
+  #   readonly=1 and rejects per-query setting changes; its factory is built without queryParameters). That is about
+  #   this setting - a cadence written directly into custom_http_params below is still forwarded to both clients like
+  #   every other entry there. clickhouse-r2dbc turns send_progress_in_http_headers on for every HTTP statement and the
+  #   v1 Apache transport caps a response at 100 headers with no way to raise it, so at ClickHouse's 100ms default
+  #   cadence a query running past ~10s overflows the cap and its response fails to parse. Accepted range is 1 .. 10000.
+  #   The ceiling keeps a 3x margin under the driver's 30s socket_timeout, since the progress headers are what keep the
+  #   socket alive during a long query; the 100-header budget is reached at interval x 90, so 3000 covers a 270s query
+  #   against the 106.7s worst case seen during the incident. Supplying nothing leaves the primitive at 0, which is out
+  #   of range and fails startup rather than silently reinstating the bug - which is why the docker-compose passthrough
+  #   carries the literal instead of ':-'.
+  httpHeadersProgressIntervalMs: ${ANALYTICS_DB_HTTP_HEADERS_PROGRESS_INTERVAL_MS:-3000}
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
