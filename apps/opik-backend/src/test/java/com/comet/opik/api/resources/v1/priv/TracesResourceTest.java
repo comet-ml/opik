@@ -6551,6 +6551,46 @@ class TracesResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when a trace is moved to another thread, then each thread is retrieved with only its own traces")
+        void getTraceThread__whenTraceMovedToAnotherThread__thenEachThreadHasOnlyItsOwnTraces(boolean truncate) {
+            // Covers binding and mapping through the public endpoint. Whether the moved trace's versions have merged
+            // yet is irrelevant here, as the right answer is the same either way; the query-level test above is the
+            // one that keeps the stale version present and so guarantees the thread filter is exercised.
+            var threadId = UUID.randomUUID().toString();
+            var movedTo = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+            // The moved trace starts first and ends last, so it would take over both messages if it leaked back
+            var moved = threadTrace(threadId, projectName, environment, now.minusSeconds(100), now.minusSeconds(1));
+            var kept = threadTrace(threadId, projectName, environment, now.minusSeconds(50), now.minusSeconds(40));
+            traceResourceClient.batchCreateTraces(List.of(moved, kept), API_KEY, TEST_WORKSPACE);
+            traceResourceClient.updateTrace(moved.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(movedTo)
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedByThread = Map.of(
+                    threadId, kept,
+                    movedTo, moved.toBuilder().threadId(movedTo).build());
+            expectedByThread.forEach((expectedThreadId, expectedTrace) -> {
+                var threadModelId = awaitThreadModelId(expectedThreadId, projectId);
+                var actualThread = traceResourceClient.getTraceThread(expectedThreadId, projectId, truncate, API_KEY,
+                        TEST_WORKSPACE);
+
+                var expectedThread = getExpectedThreads(List.of(expectedTrace), projectId, expectedThreadId,
+                        List.of(), TraceThreadStatus.ACTIVE).getFirst();
+                TraceAssertions.assertThreads(List.of(expectedThread), List.of(actualThread));
+                assertThat(actualThread.threadModelId()).isEqualTo(threadModelId);
+                assertThat(actualThread.firstMessage()).isEqualTo(expectedTrace.input());
+                assertThat(actualThread.lastMessage()).isEqualTo(expectedTrace.output());
+            });
+        }
+
         private void runClickHouse(TransactionTemplateAsync templateAsync, String sql) {
             templateAsync.nonTransaction(connection -> Mono.from(connection.createStatement(sql).execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
