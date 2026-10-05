@@ -44,6 +44,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -162,9 +163,11 @@ class FindTraceThreadsResourceTest {
     private SpanResourceClient spanResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
     private IdGenerator idGenerator;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, com.comet.opik.domain.IdGenerator idGenerator) {
+    void setUpAll(ClientSupport client, com.comet.opik.domain.IdGenerator idGenerator,
+            TransactionTemplateAsync clickHouseTemplate) {
 
         var baseURI = TestUtils.getBaseUrl(client);
 
@@ -177,6 +180,7 @@ class FindTraceThreadsResourceTest {
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
         this.idGenerator = idGenerator;
+        this.clickHouseTemplate = clickHouseTemplate;
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -2302,6 +2306,54 @@ class FindTraceThreadsResourceTest {
 
             assertThat(batched).extracting(TraceThread::id)
                     .containsExactlyElementsOf(oneBatch.stream().map(TraceThread::id).toList());
+        }
+
+        @Test
+        @DisplayName("a thread whose row is missing is listed by neither path on any window, as the chart and the KPI cards skip it")
+        void whenThreadRowMissing__thenNoListingPathShowsIt() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            String withRow = RandomStringUtils.secure().nextAlphanumeric(10);
+            String withoutRow = RandomStringUtils.secure().nextAlphanumeric(10);
+            traceResourceClient.batchCreateTraces(List.of(
+                    threadTrace(projectName, withRow, now.minus(20, ChronoUnit.SECONDS)),
+                    threadTrace(projectName, withoutRow, now.minus(10, ChronoUnit.SECONDS))), API_KEY, TEST_WORKSPACE);
+            awaitThreadRows(List.of(withRow, withoutRow), projectId);
+            deleteThreadRow(projectId, withoutRow);
+
+            String fromTime = now.minus(60, ChronoUnit.SECONDS).toString();
+            String toTime = now.minus(1, ChronoUnit.SECONDS).toString();
+            var alwaysTrueThreadFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.NUMBER_OF_MESSAGES)
+                    .operator(Operator.GREATER_THAN)
+                    .value("0")
+                    .build();
+            for (Map<String, String> window : List.of(Map.of("from_time", fromTime, "to_time", toTime),
+                    Map.of("from_time", fromTime), Map.of("to_time", toTime), Map.<String, String>of())) {
+                for (List<TraceThreadFilter> filters : List.of(List.<TraceThreadFilter>of(),
+                        List.of(alwaysTrueThreadFilter))) {
+                    var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, filters,
+                            List.of(), withPage(window, 1, 10));
+
+                    assertThat(page.content()).as("window %s, filters %s", window, filters)
+                            .extracting(TraceThread::id).containsExactly(withRow);
+                    assertThat(page.total()).as("window %s, filters %s", window, filters).isEqualTo(1);
+                }
+            }
+        }
+
+        private void deleteThreadRow(UUID projectId, String threadId) {
+            clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                    DELETE FROM trace_threads
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND thread_id = :thread_id
+                    """)
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .bind("project_id", projectId.toString())
+                    .bind("thread_id", threadId)
+                    .execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                    .block();
         }
 
         private void assertPagePushdownMatchesFullQuery(UUID projectId, Map<String, String> window,
