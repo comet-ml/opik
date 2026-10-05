@@ -229,19 +229,26 @@ public class FreeFormSqlQueryService {
      */
     private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> auditSubqueryReads(FreeFormSqlAccount account,
             String workspaceId, String projectScope, String query) {
-        return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query).thenApply(tree -> {
-            var reads = FreeFormSqlSubqueries.subqueryReads(tree, database);
-            if (reads.hasScalar()) {
-                log.warn("Free-form SQL query reads {} in a scalar subquery (audit, not rejected), account '{}'",
-                        describe(reads), account);
-                count(CheckOutcome.SCALAR_READ, account);
-            }
-            return reads;
-        }).exceptionally(error -> {
-            log.warn("Free-form SQL query tree could not be explained for the audit, account '{}'", account, error);
-            count(CheckOutcome.QUERY_TREE_FAILED, account);
-            return FreeFormSqlSubqueries.SubqueryReads.UNKNOWN;
-        });
+        // Only the DAO call recovers: a failure classifying a tree that was returned stays a failed check.
+        return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
+                .exceptionally(error -> {
+                    log.warn("Free-form SQL query tree could not be explained for the audit, account '{}'", account,
+                            error);
+                    count(CheckOutcome.QUERY_TREE_FAILED, account);
+                    return null;
+                })
+                .thenApply(tree -> {
+                    if (tree == null) {
+                        return FreeFormSqlSubqueries.SubqueryReads.UNKNOWN;
+                    }
+                    var reads = FreeFormSqlSubqueries.subqueryReads(tree, database);
+                    if (reads.hasScalar()) {
+                        log.warn("Free-form SQL query reads {} in a scalar subquery (audit, not rejected), "
+                                + "account '{}'", describe(reads), account);
+                        count(CheckOutcome.SCALAR_READ, account);
+                    }
+                    return reads;
+                });
     }
 
     /**

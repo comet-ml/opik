@@ -250,6 +250,22 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
+    @DisplayName("audit: a returned tree that cannot be classified fails the check rather than counting as unavailable")
+    void auditClassifierFailureFailsTheCheck() {
+        givenClickHouseReturnsOneRow();
+        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
+        // A null line makes the parser throw on a tree ClickHouse did return.
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(java.util.Arrays.asList("QUERY id: 0", null)));
+
+        var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
+
+        assertThat(response.results()).isEqualTo(chRows);
+        verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
+        verify(queryLogReader, never()).entries(anyString(), anyString());
+    }
+
+    @Test
     @DisplayName("audit: a scalar subquery reading a table is reported, and the query runs; its tree is explained after")
     void auditRunsScalarReads() {
         givenClickHouseReturnsOneRow();
