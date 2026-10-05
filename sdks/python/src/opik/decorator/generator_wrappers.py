@@ -288,7 +288,10 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
                 return
             loop = self._loop
             if loop is not None and loop.is_running():
-                asyncio.run_coroutine_threadsafe(self._aclose_quietly(), loop)
+                future = asyncio.run_coroutine_threadsafe(self._aclose_quietly(), loop)
+                # asyncio.run() cancels pending tasks on shutdown, so the scheduled
+                # close may never run; end the span in that case too.
+                future.add_done_callback(lambda _: self._finalize_if_unfinished())
                 return
             self._finalize_if_unfinished()
         except Exception:
