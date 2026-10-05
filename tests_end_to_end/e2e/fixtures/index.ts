@@ -1,4 +1,4 @@
-export { test, expect } from './experiment-message-panel.fixture';
+export { test, expect } from './open-ended-window-rows.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -329,4 +329,10 @@ export {
   EXPECTED_DATASET_REMAINING_LINES,
   EXPECTED_OUTPUT_REMAINING_LINES,
 } from './experiment-message-panel.fixture';
+export type {
+  OpenEndedWindowRow,
+  OpenEndedKpiExpectation,
+  OpenEndedWindowRowsRef,
+  OpenEndedWindowRowsFixtures,
+} from './open-ended-window-rows.fixture';
 export type { ProjectRef } from '../core/backend';

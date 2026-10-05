@@ -2692,13 +2692,21 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * Raw fetch for the same two reasons as the workspace read: the pinned SDK
      * has no binding for it, and the status is part of the contract under test
      * — a mis-gated bind surfaces as 500, not as a wrong number.
+     *
+     * `intervalEnd` is OPTIONAL, and omitting it is not the same request with a
+     * default filled in. Every date-range preset that ends today sends no
+     * `interval_end` at all (`calculateIntervalStartAndEnd` returns undefined
+     * for one), and on that branch the read has no upper id bound: a row whose
+     * UUIDv7 id instant is in the future counts, clamped into the latest
+     * bucket. A caller that passed `new Date()` instead would be driving the
+     * other branch and could never observe it.
      */
     async projectMetric(args: {
       projectId: string;
       metricType: ProjectMetricType;
       interval: MetricInterval;
       intervalStart: Date;
-      intervalEnd: Date;
+      intervalEnd?: Date;
       breakdown?: MetricBreakdown;
     }): Promise<RawApiResult & { series: MetricSeries[] }> {
       const { status, message, json } = await rawFetch(
@@ -2709,7 +2717,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             metric_type: args.metricType,
             interval: args.interval,
             interval_start: args.intervalStart.toISOString(),
-            interval_end: args.intervalEnd.toISOString(),
+            ...(args.intervalEnd ? { interval_end: args.intervalEnd.toISOString() } : {}),
             ...(args.breakdown
               ? {
                   breakdown: {

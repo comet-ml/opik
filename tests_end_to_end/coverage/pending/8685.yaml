@@ -1,0 +1,23 @@
+# pending capabilities from opik#8685 — applied by the release job
+#
+# One key, and it is deliberately not folded into an existing one. The axis is
+# the Logs page's OPEN-ENDED window: every date-range preset ends today, so
+# `calculateIntervalStartAndEnd` returns `intervalEnd: undefined` and the page
+# sends no `interval_end` — a branch on which the read has no upper id bound and
+# a far-future UUIDv7 id counts in the current period.
+#
+# `toggle-spans-view` already carries the Spans KPI cards, but it names the
+# Spans toggle and a window that ends now: its spec sends no `interval_end` yet
+# seeds only past rows, so the branch is never observable there, and the key
+# says nothing about the Traces or Threads tabs. `list-traces` names the table's
+# listing, ordering and count — not the cards above it, and not their agreement
+# with the footer, which is the regression here. Folding this under either would
+# retire the question permanently.
+#
+# The dashboards half of this harvest needed no new key: the open-ended metrics
+# series is a date-range variant of the contract `dashboards.metric-date-range`
+# already names, and the spec drives the real date-range-derived window on a
+# rendered widget.
+- area: traces
+  capability: logs-open-ended-window
+  note: "A date-range preset ending today sends no interval_end, on the kpi-cards read and on the chart's metrics read alike: the KPI cards, their period-over-period deltas and the table footer then report one population including a row whose UUIDv7 id instant is mid-2200, on the Traces, Spans and Threads tabs. Pinned against the same seed read with interval_end = now, where every current-period number differs and the prior period is identical"

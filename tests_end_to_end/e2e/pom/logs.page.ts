@@ -99,6 +99,35 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Open Logs with the Traces tab active, optionally at a chosen date range.
+   *
+   * The sibling of `gotoSpans` and `gotoThreads`, and not the same thing as
+   * `goto()`: that one states no `logsType` at all, so the active tab is
+   * whatever localStorage last persisted for the project — and a bare `/logs`
+   * on a fresh profile resolves to Threads, not Traces (`useLogsType`). A spec
+   * about the Traces table has to say so.
+   *
+   * `timeRange` is the page's own `time_range` query param, the same one the
+   * other two take. It is also persisted per project, and it decides whether
+   * the read is windowed at all — so an unstated range is whichever one the
+   * profile last stored.
+   */
+  async gotoTraces(projectId: string, opts: { timeRange?: string } = {}): Promise<void> {
+    return test.step(
+      `Open Logs (Traces) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'traces' });
+        if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+      },
+    );
+  }
+
   /** The Threads/Traces/Spans tab toggle for "Spans". */
   get spansTab(): Locator {
     return this.page.getByRole('radio', { name: 'Spans' });
