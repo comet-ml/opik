@@ -23,11 +23,7 @@ import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
-  useIsOnlyWindowBehind,
-  keepDataWhileWindowMoves,
-  windowQueryOptions,
   DATE_RANGE_PRESET_ALLTIME,
-  IntervalWindow,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
@@ -542,7 +538,6 @@ type TracesSpansTabProps = {
   logsType: LOGS_TYPE;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
   dateRangeConfig: ProjectDateRangeConfig;
-  intervalWindow: IntervalWindow;
 };
 
 export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
@@ -552,24 +547,21 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   projectId,
   projectName,
   dateRangeConfig,
-  intervalWindow,
 }) => {
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
 
-  const { dateRange, handleDateRangeChange, minDate, maxDate } =
-    useMetricDateRangeWithQueryAndStorage({
-      excludePresets: [DATE_RANGE_PRESET_ALLTIME],
-      ...dateRangeConfig,
-    });
   const {
+    dateRange,
+    handleDateRangeChange,
     intervalStart,
     intervalEnd,
-    selectionKey,
-    refetchInterval,
-    movesByItself,
-    reanchorToNow,
-  } = intervalWindow;
+    minDate,
+    maxDate,
+  } = useMetricDateRangeWithQueryAndStorage({
+    excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+    ...dateRangeConfig,
+  });
   const [search = "", setSearch] = useQueryParam(
     `${type}_search`,
     StringParam,
@@ -858,32 +850,29 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const listParams = {
-    projectId,
-    type: type as TRACE_DATA_TYPE,
-    sorting: sortedColumns,
-    filters: effectiveFilters,
-    page: page as number,
-    size: size as number,
-    search: trimmedSearch,
-    truncate: truncationEnabled,
-    stripAttachments: true,
-    fromTime: intervalStart,
-    toTime: intervalEnd,
-    exclude: excludeFields,
-    logsSource: LOGS_SOURCE.sdk,
-  };
   const { data, isPending, isPlaceholderData, isFetching, refetch } =
-    useTracesOrSpansList(listParams, {
-      enabled: isTableDataEnabled,
-      ...windowQueryOptions(refetchInterval, selectionKey),
-      refetchOnMount: false,
-    });
-  const isOnlyWindowBehind = useIsOnlyWindowBehind(
-    { ...listParams, selectionKey },
-    ["fromTime", "toTime"],
-    isPlaceholderData,
-  );
+    useTracesOrSpansList(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+        sorting: sortedColumns,
+        filters: effectiveFilters,
+        page: page as number,
+        size: size as number,
+        search: trimmedSearch,
+        truncate: truncationEnabled,
+        stripAttachments: true,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+        exclude: excludeFields,
+        logsSource: LOGS_SOURCE.sdk,
+      },
+      {
+        enabled: isTableDataEnabled,
+        refetchInterval: REFETCH_INTERVAL,
+        refetchOnMount: false,
+      },
+    );
 
   const { refetch: refetchExportData } = useTracesOrSpansList(
     {
@@ -906,25 +895,21 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
-  const statisticParams = {
-    projectId,
-    type: type as TRACE_DATA_TYPE,
-    filters: effectiveFilters,
-    search: trimmedSearch,
-    fromTime: intervalStart,
-    toTime: intervalEnd,
-    logsSource: LOGS_SOURCE.sdk,
-  };
   const { data: statisticData, refetch: refetchStatistic } =
-    useTracesOrSpansStatistic(statisticParams, {
-      placeholderData: keepDataWhileWindowMoves(
-        refetchInterval,
-        statisticParams,
-        ["fromTime", "toTime"],
-        { movesByItself, selectionKey },
-      ),
-      ...windowQueryOptions(refetchInterval, selectionKey),
-    });
+    useTracesOrSpansStatistic(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+        filters: effectiveFilters,
+        search: trimmedSearch,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+        logsSource: LOGS_SOURCE.sdk,
+      },
+      {
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
 
   // Cheap "does this project have any SDK-logged traces/spans?" probe for the empty-state decision.
   // Scoped to source=sdk to match the sdk-scoped list above, so a project whose only data is non-sdk
@@ -1523,10 +1508,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             size="icon-xs"
             isFetching={isFetching}
             onRefresh={() => {
-              if (!reanchorToNow()) {
-                refetch();
-                refetchStatistic();
-              }
+              refetch();
+              refetchStatistic();
             }}
           />
         </div>
@@ -1543,9 +1526,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           filters={effectiveFilters}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
-          refetchInterval={refetchInterval}
-          movesByItself={movesByItself}
-          selectionKey={selectionKey}
           dateRange={dateRange}
           logsSource={LOGS_SOURCE.sdk}
         />
@@ -1663,9 +1643,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           rowVirtualization={virtualization}
           stickyHeader
           meta={meta}
-          showLoadingOverlay={
-            isPlaceholderData && isFetching && !isOnlyWindowBehind
-          }
+          showLoadingOverlay={isPlaceholderData && isFetching}
         />
         <PageBodyStickyContainer
           className="bottom-0 -mt-px border-t border-border py-2 pb-4"

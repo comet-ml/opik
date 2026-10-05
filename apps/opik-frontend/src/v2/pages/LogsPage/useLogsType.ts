@@ -1,12 +1,11 @@
-import { useMemo, useCallback, useEffect, useState } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
-import { IntervalWindow } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_TYPE } from "@/constants/traces";
 import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 import { LOGS_SOURCE } from "@/types/traces";
-import useLogsIntervalWindow from "@/v2/pages/LogsPage/useLogsIntervalWindow";
 import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 const isLogsType = (value: string | null | undefined): value is LOGS_TYPE =>
@@ -21,7 +20,6 @@ type UseLogsTypeOptions = {
    * read one date-range key, so they must be given the same values.
    */
   dateRangeConfig: ProjectDateRangeConfig;
-  intervalWindow?: IntervalWindow;
 };
 
 /**
@@ -29,62 +27,20 @@ type UseLogsTypeOptions = {
  * threadCount=undefined means stats are still loading.
  */
 const useLogsType = (options: UseLogsTypeOptions) => {
-  const { projectId, dateRangeConfig, intervalWindow } = options;
+  const { projectId, dateRangeConfig } = options;
 
-  const ownIntervalWindow = useLogsIntervalWindow(dateRangeConfig, false);
-  const { selectionKey, intervalStart, intervalEnd } =
-    intervalWindow ?? ownIntervalWindow;
-
-  const [probeWindow, setProbeWindow] = useState({
-    projectId,
-    selectionKey,
-    intervalStart,
-    intervalEnd,
-  });
-  if (
-    probeWindow.projectId !== projectId ||
-    probeWindow.selectionKey !== selectionKey
-  ) {
-    setProbeWindow({ projectId, selectionKey, intervalStart, intervalEnd });
-  }
-
-  const [firstAnswer, setFirstAnswer] = useState<{
-    projectId: string;
-    logsType: LOGS_TYPE;
-  }>();
-  const answeredLogsType =
-    firstAnswer?.projectId === projectId ? firstAnswer.logsType : undefined;
-
-  const [storedLogsType, setStoredLogsType] = useLocalStorageState<LOGS_TYPE>(
-    `project-logsType-${projectId}`,
-  );
-
-  const [logsTypeParam, setLogsTypeParam] = useQueryParam(
-    "logsType",
-    StringParam,
-    QUERY_PARAM_OPTIONS,
-  );
-
-  const [legacyType, setLegacyType] = useQueryParam(
-    "type",
-    StringParam,
-    QUERY_PARAM_OPTIONS,
-  );
-
-  const hasChosenLogsType =
-    isLogsType(logsTypeParam) ||
-    isLogsType(legacyType) ||
-    isLogsType(storedLogsType);
+  const { intervalStart, intervalEnd } =
+    useMetricDateRangeWithQueryAndStorage(dateRangeConfig);
 
   const { data: threadsStats, isError: isStatsError } = useThreadsStatistic(
     {
       projectId,
-      fromTime: probeWindow.intervalStart,
-      toTime: probeWindow.intervalEnd,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
       logsSource: LOGS_SOURCE.sdk,
     },
     {
-      enabled: !!projectId && !hasChosenLogsType && !answeredLogsType,
+      enabled: !!projectId,
       refetchOnMount: false,
     },
   );
@@ -104,16 +60,21 @@ const useLogsType = (options: UseLogsTypeOptions) => {
       : 0;
   }, [threadsStats, isStatsError]);
 
-  const probedLogsType =
-    threadCount === undefined
-      ? undefined
-      : threadCount > 0
-        ? LOGS_TYPE.threads
-        : LOGS_TYPE.traces;
-  if (!answeredLogsType && probedLogsType) {
-    setFirstAnswer({ projectId, logsType: probedLogsType });
-  }
-  const defaultLogsType = answeredLogsType ?? probedLogsType;
+  const [storedLogsType, setStoredLogsType] = useLocalStorageState<LOGS_TYPE>(
+    `project-logsType-${projectId}`,
+  );
+
+  const [logsTypeParam, setLogsTypeParam] = useQueryParam(
+    "logsType",
+    StringParam,
+    QUERY_PARAM_OPTIONS,
+  );
+
+  const [legacyType, setLegacyType] = useQueryParam(
+    "type",
+    StringParam,
+    QUERY_PARAM_OPTIONS,
+  );
 
   // One-time legacy migration: ?type=traces → ?logsType=traces
   useEffect(() => {
@@ -124,9 +85,14 @@ const useLogsType = (options: UseLogsTypeOptions) => {
   }, [legacyType, logsTypeParam, setLogsTypeParam, setLegacyType]);
 
   const logsType = useMemo(() => {
+    const defaultLogsType =
+      threadCount !== undefined && threadCount > 0
+        ? LOGS_TYPE.threads
+        : LOGS_TYPE.traces;
+
     const resolvedDefault = isLogsType(storedLogsType)
       ? storedLogsType
-      : defaultLogsType ?? LOGS_TYPE.traces;
+      : defaultLogsType;
 
     if (isLogsType(logsTypeParam)) {
       return logsTypeParam;
@@ -137,7 +103,7 @@ const useLogsType = (options: UseLogsTypeOptions) => {
     }
 
     return resolvedDefault;
-  }, [logsTypeParam, legacyType, storedLogsType, defaultLogsType]);
+  }, [logsTypeParam, legacyType, storedLogsType, threadCount]);
 
   const setLogsType = useCallback(
     (newLogsType: LOGS_TYPE) => {
@@ -154,7 +120,7 @@ const useLogsType = (options: UseLogsTypeOptions) => {
     !logsTypeParam &&
     !legacyType &&
     !isLogsType(storedLogsType) &&
-    defaultLogsType === undefined;
+    threadCount === undefined;
 
   return {
     logsType,

@@ -21,10 +21,6 @@ import {
   calculateIntervalType,
   calculateIntervalStartAndEnd,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect/utils";
-import {
-  keepDataWhileWindowMoves,
-  windowQueryOptions,
-} from "@/v2/pages-shared/traces/MetricDateRangeSelect/useIntervalBounds";
 import { DateRangeValue } from "@/shared/DateRangeSelect";
 import { TOTAL_COST_LABEL, getChartConfig } from "./helpers";
 
@@ -132,9 +128,6 @@ export type MetricsSummaryProps = {
   filters?: Filters;
   intervalStart?: string;
   intervalEnd?: string;
-  refetchInterval?: number | false;
-  movesByItself?: boolean;
-  selectionKey?: string;
   dateRange: DateRangeValue;
   logsSource?: LOGS_SOURCE;
 };
@@ -146,9 +139,6 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
   filters,
   intervalStart,
   intervalEnd,
-  refetchInterval = REFETCH_INTERVAL,
-  movesByItself,
-  selectionKey,
   dateRange,
   logsSource,
 }) => {
@@ -166,23 +156,19 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
     };
   }, [dateRange, intervalStart, intervalEnd]);
 
-  const kpiCardsParams = {
-    projectId,
-    entityType,
-    filters,
-    intervalStart: chartIntervalConfig.intervalStart,
-    intervalEnd: chartIntervalConfig.intervalEnd,
-    logsSource,
-  };
-  const { data, isPending } = useProjectKpiCards(kpiCardsParams, {
-    placeholderData: keepDataWhileWindowMoves(
-      refetchInterval,
-      kpiCardsParams,
-      ["intervalStart", "intervalEnd"],
-      { movesByItself, selectionKey },
-    ),
-    ...windowQueryOptions(refetchInterval, selectionKey),
-  });
+  const { data, isPending } = useProjectKpiCards(
+    {
+      projectId,
+      entityType,
+      filters,
+      intervalStart: chartIntervalConfig.intervalStart,
+      intervalEnd: chartIntervalConfig.intervalEnd,
+      logsSource,
+    },
+    {
+      refetchInterval: REFETCH_INTERVAL,
+    },
+  );
 
   const metricsMap = useMemo(() => {
     const map = new Map<KpiMetricType, KpiMetric>();
@@ -306,9 +292,6 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
             interval={chartIntervalConfig.interval}
             intervalStart={chartIntervalConfig.intervalStart}
             intervalEnd={chartIntervalConfig.intervalEnd}
-            refetchInterval={refetchInterval}
-            movesByItself={movesByItself}
-            selectionKey={selectionKey}
             metricName={chartConfig.metricName}
             customYTickFormatter={chartConfig.customYTickFormatter}
             renderValue={chartConfig.renderValue}
