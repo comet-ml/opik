@@ -65,6 +65,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean onlineScoringTracingEnabled;
     @JsonProperty
     @NotNull boolean annotationQueueAutomationEnabled;
+    @JsonProperty
+    @NotNull boolean eventBridgeAlertsEnabled;
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;

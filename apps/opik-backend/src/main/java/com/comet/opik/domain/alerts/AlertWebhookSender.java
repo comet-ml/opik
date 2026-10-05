@@ -18,6 +18,7 @@ import java.util.Map;
 
 /**
  * Service responsible for creating and sending webhook notifications for alerts.
+ * Every triggered alert is also published to AWS EventBridge when that is enabled, even without a webhook URL.
  *
  * Handles webhook creation, validation, payload formatting, and delivery
  * for both event-based and metrics-based alerts.
@@ -30,6 +31,7 @@ public class AlertWebhookSender {
     private final @NonNull WebhookPublisher webhookPublisher;
     private final @NonNull WorkspaceNameService workspaceNameService;
     private final @NonNull OpikConfiguration config;
+    private final @NonNull AlertEventBridgePublisher eventBridgePublisher;
 
     /**
      * Creates a consolidated webhook event and sends it via WebhookPublisher.
@@ -57,16 +59,56 @@ public class AlertWebhookSender {
             return Mono.empty();
         }
 
-        if (StringUtils.isEmpty(alert.webhook().url())) {
+        boolean hasWebhookUrl = StringUtils.isNotEmpty(alert.webhook().url());
+        if (!hasWebhookUrl && !eventBridgePublisher.isEnabled()) {
             log.warn("Alert '{}' has no webhook configuration, skipping", alert.id());
             return Mono.empty();
         }
 
+        String resolvedWorkspaceName = StringUtils.isBlank(workspaceName)
+                ? workspaceNameService.getWorkspaceName(workspaceId,
+                        config.getAuthentication().getReactService().url())
+                : workspaceName;
+        Map<String, Object> payload = buildPayload(alert, eventType, eventIds, payloads, userNames);
+
+        // Fire-and-forget: EventBridge retries must not hold up, or fail, the webhook delivery
+        Mono.defer(() -> eventBridgePublisher.publish(alert, workspaceId, resolvedWorkspaceName, eventType, payload))
+                .onErrorResume(error -> {
+                    log.error("Failed to publish alert '{}' to EventBridge", alert.id(), error);
+                    return Mono.empty();
+                })
+                .subscribe();
+
+        if (!hasWebhookUrl) {
+            log.warn("Alert '{}' has no webhook configuration, skipping webhook", alert.id());
+            return Mono.empty();
+        }
+
+        log.info("Sending webhook for alertName='{}', alertId='{}', eventCount='{}', payloadCount='{}'",
+                alert.name(), alert.id(), eventIds.size(), payloads.size());
+
+        // Send via WebhookPublisher with data from alert configuration
+        return webhookPublisher.publishWebhookEvent(
+                eventType,
+                alert,
+                workspaceId,
+                resolvedWorkspaceName,
+                payload,
+                config.getWebhook().getMaxRetries())
+                .doOnSuccess(webhookId -> log.info(
+                        "Successfully sent webhook for alertName='{}', alertId='{}': webhook_id='{}' ",
+                        alert.name(), alert.id(), webhookId))
+                .doOnError(error -> log.error("Failed to send webhook for alertName='{}',alertId='{}':",
+                        alert.name(), alert.id(), error))
+                .then();
+    }
+
+    private Map<String, Object> buildPayload(Alert alert, AlertEventType eventType, List<String> eventIds,
+            List<String> payloads, List<String> userNames) {
         log.debug("Creating consolidated webhook event for alert '{}' with '{}' events and '{}' payloads",
                 alert.id(), eventIds.size(), payloads.size());
 
-        // Create payload with alert and aggregation data
-        Map<String, Object> payload = Map.of(
+        return Map.of(
                 "alertId", alert.id().toString(),
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
@@ -77,26 +119,5 @@ public class AlertWebhookSender {
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
                         alert.name(), eventIds.size(), eventType.getValue()));
-
-        log.info("Sending webhook for alertName='{}', alertId='{}', eventCount='{}', payloadCount='{}'",
-                alert.name(), alert.id(), eventIds.size(), payloads.size());
-
-        // Send via WebhookPublisher with data from alert configuration
-        return webhookPublisher.publishWebhookEvent(
-                eventType,
-                alert,
-                workspaceId,
-                StringUtils.isBlank(workspaceName)
-                        ? workspaceNameService.getWorkspaceName(workspaceId,
-                                config.getAuthentication().getReactService().url())
-                        : workspaceName,
-                payload,
-                config.getWebhook().getMaxRetries())
-                .doOnSuccess(webhookId -> log.info(
-                        "Successfully sent webhook for alertName='{}', alertId='{}': webhook_id='{}' ",
-                        alert.name(), alert.id(), webhookId))
-                .doOnError(error -> log.error("Failed to send webhook for alertName='{}',alertId='{}':",
-                        alert.name(), alert.id(), error))
-                .then();
     }
 }
