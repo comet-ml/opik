@@ -278,24 +278,13 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND project_id = :project_id
                 -- Not the row id range: membership follows the window's traces (OPIK-8335). Narrowed to their threads, unlike the chart,
                 -- because the join and the feedback-score, comment and annotation-queue lookups each read this CTE, and unnarrowed each
-                -- would dedupe every thread row of the project. On a window the thread ids come from a raw scan of its traces: a superset
-                -- is enough, since the join with the filtered traces still decides membership, and the deduped, filtered CTE would be
-                -- evaluated once more for this reference alone.
+                -- would dedupe every thread row of the project.
                 <if(page_pushdown)>
                     AND thread_id IN :page_thread_ids
-                <elseif(uuid_from_time || uuid_to_time)>
-                    AND thread_id IN (
-                        SELECT thread_id FROM traces
-                        WHERE workspace_id = :workspace_id
-                          AND project_id = :project_id
-                          AND thread_id \\<> ''
-                          <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                              >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                          <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                              \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                    )
                 <elseif(traces_final_ids)>
                     AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                <elseif(uuid_from_time || uuid_to_time)>
+                    AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
@@ -644,22 +633,11 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND project_id = :project_id
                 -- Not the row id range: membership follows the window's traces (OPIK-8335). Narrowed to their threads, unlike the chart,
                 -- because the join and the feedback-score, comment and annotation-queue lookups each read this CTE, and unnarrowed each
-                -- would dedupe every thread row of the project. On a window the thread ids come from a raw scan of its traces: a superset
-                -- is enough, since the join with the filtered traces still decides membership, and the deduped, filtered CTE would be
-                -- evaluated once more for this reference alone.
-                <if(uuid_from_time || uuid_to_time)>
-                    AND thread_id IN (
-                        SELECT thread_id FROM traces
-                        WHERE workspace_id = :workspace_id
-                          AND project_id = :project_id
-                          AND thread_id \\<> ''
-                          <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                              >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                          <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                              \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                    )
-                <elseif(traces_final_ids)>
+                -- would dedupe every thread row of the project.
+                <if(traces_final_ids)>
                     AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                <elseif(uuid_from_time || uuid_to_time)>
+                    AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
@@ -1335,22 +1313,11 @@ class ThreadDAOImpl implements ThreadDAO {
                     AND project_id = :project_id
                     -- Not the row id range: membership follows the window's traces (OPIK-8335). Narrowed to their threads, unlike the chart,
                     -- because the join and the feedback-score, comment and annotation-queue lookups each read this CTE, and unnarrowed each
-                    -- would dedupe every thread row of the project. On a window the thread ids come from a raw scan of its traces: a superset
-                    -- is enough, since the join with the filtered traces still decides membership, and the deduped, filtered CTE would be
-                    -- evaluated once more for this reference alone.
-                    <if(uuid_from_time || uuid_to_time)>
-                        AND thread_id IN (
-                            SELECT thread_id FROM traces
-                            WHERE workspace_id = :workspace_id
-                              AND project_id = :project_id
-                              AND thread_id \\<> ''
-                              <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                  >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                              <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                  \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                        )
-                    <elseif(traces_final_ids)>
+                    -- would dedupe every thread row of the project.
+                    <if(traces_final_ids)>
                         AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                    <elseif(uuid_from_time || uuid_to_time)>
+                        AND thread_id IN (SELECT thread_id FROM traces_final)
                     <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                     ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
