@@ -55,6 +55,33 @@ describe("getLoggedParameters", () => {
     ).toBe("high");
   });
 
+  it("records no penalties for a Responses API key, which never sent them", () => {
+    const stored = configs({
+      temperature: 0.3,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.2,
+    });
+
+    expect(
+      getLoggedParameters({
+        model: PROVIDER_MODEL_TYPE.GPT_4O,
+        configs: stored,
+        openAiPipelineMode: "responses_api",
+      }),
+    ).toEqual({ temperature: 0.3 });
+    expect(
+      getLoggedParameters({
+        model: PROVIDER_MODEL_TYPE.GPT_4O,
+        configs: stored,
+        openAiPipelineMode: "chat_completions_api",
+      }),
+    ).toEqual({
+      temperature: 0.3,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.2,
+    });
+  });
+
   it("records what a model that accepts them was sent", () => {
     const parameters = getLoggedParameters({
       model: PROVIDER_MODEL_TYPE.GPT_4O,
