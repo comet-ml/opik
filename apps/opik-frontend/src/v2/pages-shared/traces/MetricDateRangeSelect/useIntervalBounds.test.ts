@@ -584,6 +584,43 @@ describe("useIntervalBounds", () => {
       ]);
     });
 
+    it("should move the window while an unrelated query that shares its start is in flight", async () => {
+      const fetchWindow = vi.fn<FetchWindow>().mockResolvedValue({});
+      const { result } = renderHook(
+        () => {
+          const intervalWindow = useIntervalBounds(liveCustomRange);
+          useQuery({
+            queryKey: [
+              "window-query",
+              {
+                fromTime: intervalWindow.intervalStart,
+                toTime: intervalWindow.intervalEnd,
+              },
+            ] as const,
+            queryFn: ({ queryKey: [, { toTime }], signal }) =>
+              fetchWindow(toTime, signal),
+            ...windowQueryOptions(
+              intervalWindow.refetchInterval,
+              intervalWindow.selectionKey,
+            ),
+          });
+          useQuery({
+            queryKey: ["unrelated", { fromTime: intervalWindow.intervalStart }],
+            queryFn: () => new Promise<object>(() => {}),
+          });
+          return intervalWindow;
+        },
+        { wrapper: createWrapper() },
+      );
+      await settle();
+
+      tick();
+
+      expect(result.current.intervalEnd).toBe(
+        now.add(REANCHOR_INTERVAL, "ms").utc().format(),
+      );
+    });
+
     it("should poll a preset's open-ended request on every tick", async () => {
       const fetchWindow = vi.fn<FetchWindow>().mockResolvedValue({});
       renderWindowQuery(fetchWindow, PRESET_DATE_RANGES.past7days);

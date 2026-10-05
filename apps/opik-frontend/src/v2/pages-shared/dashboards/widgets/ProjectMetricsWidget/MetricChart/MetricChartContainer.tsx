@@ -19,6 +19,7 @@ import {
 import useMetricData from "@/api/projects/useMetricData";
 import {
   keepDataWhileWindowMoves,
+  REANCHOR_INTERVAL,
   windowQueryOptions,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect/useIntervalBounds";
 import { ChartTooltipRenderValueArguments } from "@/shared/Charts/ChartTooltipContent/ChartTooltipContent";
@@ -110,7 +111,7 @@ const MetricContainerChart = ({
   interval,
   intervalStart,
   intervalEnd,
-  refetchInterval = 30000,
+  refetchInterval = REANCHOR_INTERVAL,
   movesByItself,
   selectionKey,
   renderValue = renderTooltipValue,

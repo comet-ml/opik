@@ -21,7 +21,10 @@ type UseLogsTypeOptions = {
    * read one date-range key, so they must be given the same values.
    */
   dateRangeConfig: ProjectDateRangeConfig;
-  intervalWindow?: IntervalWindow;
+  intervalWindow?: Pick<
+    IntervalWindow,
+    "selectionKey" | "intervalStart" | "intervalEnd"
+  >;
 };
 
 /**
