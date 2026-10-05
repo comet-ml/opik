@@ -629,6 +629,85 @@ describe("sanitizeConfigForRequest", () => {
   });
 });
 
+describe("penalties on an OpenAI key set to the Responses API", () => {
+  const STORED = {
+    temperature: 0.4,
+    frequencyPenalty: 0.5,
+    presencePenalty: 0.3,
+  };
+
+  const sentPenalties = (
+    model: PROVIDER_MODEL_TYPE,
+    mode?: OpenAiPipelineMode,
+  ) => {
+    const { frequencyPenalty, presencePenalty } = sanitizeConfigForRequest(
+      model,
+      STORED,
+      mode,
+    );
+    return { frequencyPenalty, presencePenalty };
+  };
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("leaves both out of a non-reasoning model's request and keeps the temperature", () => {
+    expect(
+      supportsPenaltyParams(PROVIDER_MODEL_TYPE.GPT_4O, "responses_api"),
+    ).toBe(false);
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_4O,
+        STORED,
+        "responses_api",
+      ),
+    ).toEqual({ temperature: 0.4 });
+  });
+
+  it("keeps both in the stored config, so moving the key back restores them", () => {
+    sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GPT_4O,
+      STORED,
+      "responses_api",
+    );
+
+    expect(STORED).toEqual({
+      temperature: 0.4,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.3,
+    });
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "sends both when the mode is %s",
+    (mode) => {
+      expect(supportsPenaltyParams(PROVIDER_MODEL_TYPE.GPT_4O, mode)).toBe(
+        true,
+      );
+      expect(sentPenalties(PROVIDER_MODEL_TYPE.GPT_4O, mode)).toEqual({
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.3,
+      });
+    },
+  );
+
+  it("keeps both for models that never reach the OpenAI key", () => {
+    const customId = "custom-llm/my-gateway/gpt-4o" as PROVIDER_MODEL_TYPE;
+    setLatestProviderModelsSnapshot({
+      ...getLatestProviderModelsSnapshot(),
+      "custom-llm:my-gateway": [{ value: customId, label: "gpt-4o" }],
+    });
+
+    for (const model of [customId, PROVIDER_MODEL_TYPE.OPENAI_GPT_4O]) {
+      expect(sentPenalties(model, "responses_api")).toEqual({
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.3,
+      });
+    }
+  });
+});
+
 describe("Gemini thinking level", () => {
   it("is supported by the Gemini 2.5 family, including Flash Lite", () => {
     expect(
