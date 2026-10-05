@@ -53,6 +53,8 @@ interface MetricContainerChartProps {
   intervalStart: string | undefined;
   intervalEnd: string | undefined;
   refetchInterval?: number | false;
+  movesByItself?: boolean;
+  selectionKey?: string;
   metricName: METRIC_NAME_TYPE;
   renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
   labelsMap?: Record<string, string>;
@@ -109,6 +111,8 @@ const MetricContainerChart = ({
   intervalStart,
   intervalEnd,
   refetchInterval = 30000,
+  movesByItself,
+  selectionKey,
   renderValue = renderTooltipValue,
   labelsMap,
   customYTickFormatter,
@@ -148,11 +152,13 @@ const MetricContainerChart = ({
     logsSource,
   };
   const { data: response, isPending } = useMetricData(metricParams, {
-    placeholderData: keepDataWhileWindowMoves(refetchInterval, metricParams, [
-      "intervalStart",
-      "intervalEnd",
-    ]),
-    ...windowQueryOptions(refetchInterval),
+    placeholderData: keepDataWhileWindowMoves(
+      refetchInterval,
+      metricParams,
+      ["intervalStart", "intervalEnd"],
+      { movesByItself, selectionKey },
+    ),
+    ...windowQueryOptions(refetchInterval, selectionKey),
   });
 
   const traces = response?.results;

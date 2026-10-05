@@ -567,6 +567,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     intervalEnd,
     selectionKey,
     refetchInterval,
+    movesByItself,
     reanchorToNow,
   } = intervalWindow;
   const [search = "", setSearch] = useQueryParam(
@@ -875,7 +876,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const { data, isPending, isPlaceholderData, isFetching, refetch } =
     useTracesOrSpansList(listParams, {
       enabled: isTableDataEnabled,
-      ...windowQueryOptions(refetchInterval),
+      ...windowQueryOptions(refetchInterval, selectionKey),
       refetchOnMount: false,
     });
   const isOnlyWindowBehind = useIsOnlyWindowBehind(
@@ -920,8 +921,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         refetchInterval,
         statisticParams,
         ["fromTime", "toTime"],
+        { movesByItself, selectionKey },
       ),
-      ...windowQueryOptions(refetchInterval),
+      ...windowQueryOptions(refetchInterval, selectionKey),
     });
 
   // Cheap "does this project have any SDK-logged traces/spans?" probe for the empty-state decision.
@@ -1542,6 +1544,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           refetchInterval={refetchInterval}
+          movesByItself={movesByItself}
+          selectionKey={selectionKey}
           dateRange={dateRange}
           logsSource={LOGS_SOURCE.sdk}
         />
