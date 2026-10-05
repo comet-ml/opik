@@ -160,7 +160,11 @@ def test_after_model__detached_context__llm_span_not_sent_again_at_next_span(
         tracer.after_model_callback(ctx, _final_response_with_usage())
 
     contextvars.copy_context().run(run_detached_after_model_callback)
-    assert context_storage.top_span_data() is llm_span
+    # The public getters discard finished spans as a side effect, so read the raw
+    # stack to keep the stale span in place for the next-span path under test.
+    assert llm_span.end_time is not None
+    raw_top_span = context_storage.get_current_context_instance()._raw_top_span_data()
+    assert raw_top_span is llm_span
 
     with adk_telemetry.tracer.start_as_current_span("execute_tool get_weather"):
         pass
