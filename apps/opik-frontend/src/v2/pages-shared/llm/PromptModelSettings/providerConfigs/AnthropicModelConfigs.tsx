@@ -120,7 +120,7 @@ const AnthropicModelConfigs = ({
             <Label htmlFor="thinkingEffort" className="text-sm font-medium">
               Thinking effort
             </Label>
-            <ExplainerIcon description="Controls how much effort Claude puts into thinking before responding. Higher effort produces more thorough analysis but takes longer. Uses adaptive thinking mode." />
+            <ExplainerIcon description="Controls how many tokens Claude spends on the whole response, thinking included. Lower effort is faster and cheaper; higher effort is more thorough." />
           </div>
           <SelectBox
             id="thinkingEffort"

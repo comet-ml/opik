@@ -19,12 +19,12 @@ export type ModelConfigParam =
 /**
  * An evaluator rule persists only LlmAsJudgeModelParameters — name, temperature, seed and the
  * free-form custom_parameters. Everything else the rule form used to render was dropped on save.
+ * The Anthropic effort is kept because it is saved inside custom_parameters.output_config.
  */
 export const RULE_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> = new Set([
   "topP",
   "maxCompletionTokens",
   "reasoningEffort",
-  "thinkingEffort",
   "throttling",
   "maxConcurrentRequests",
 ]);

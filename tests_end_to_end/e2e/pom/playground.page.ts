@@ -1158,6 +1158,20 @@ export class PlaygroundPage {
     return this.page.getByTestId(`${controlId}-input`);
   }
 
+  /** The Thinking effort dropdown. Its text is the effort the panel claims. */
+  thinkingEffortSelect(): Locator {
+    return this.modelParametersPanel().getByLabel('Thinking effort');
+  }
+
+  /** Pick a Thinking effort by its displayed label. */
+  async selectThinkingEffort(label: string): Promise<void> {
+    return test.step(`select thinking effort "${label}"`, async () => {
+      await this.thinkingEffortSelect().click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+      await expect(this.thinkingEffortSelect()).toHaveText(label);
+    });
+  }
+
   /** Type a prompt into variant 0's first message row. */
   async fillFirstMessage(text: string): Promise<void> {
     return test.step('fill the first message of variant 0', async () => {
