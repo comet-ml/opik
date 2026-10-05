@@ -1,9 +1,9 @@
 import {
+  keepPreviousData,
   QueryObserverResult,
   RefetchOptions,
   UseQueryOptions,
 } from "@tanstack/react-query";
-import omit from "lodash/omit";
 import { Filters } from "@/types/filters";
 import { ColumnsStatistic } from "@/types/shared";
 import { LOGS_SOURCE } from "@/types/traces";
@@ -48,6 +48,7 @@ export default function useTracesOrSpansStatistic(
   } = useTracesStatistic(params, {
     ...config,
     enabled: isTracesData,
+    placeholderData: keepPreviousData,
   } as never);
 
   const {
@@ -56,10 +57,17 @@ export default function useTracesOrSpansStatistic(
     isPending: isSpansPending,
     isLoading: isSpansLoading,
     refetch: refetchSpan,
-  } = useSpansStatistic(omit(params, "type"), {
-    ...config,
-    enabled: !isTracesData,
-  } as never);
+  } = useSpansStatistic(
+    {
+      ...params,
+      type: undefined,
+    },
+    {
+      ...config,
+      enabled: !isTracesData,
+      placeholderData: keepPreviousData,
+    } as never,
+  );
 
   const data = !isTracesData ? spansData : tracesData;
 

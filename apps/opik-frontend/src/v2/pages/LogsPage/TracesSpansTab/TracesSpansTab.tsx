@@ -24,7 +24,6 @@ import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
   useIsOnlyWindowBehind,
-  keepDataWhileWindowMoves,
   windowQueryOptions,
   DATE_RANGE_PRESET_ALLTIME,
   IntervalWindow,
@@ -906,12 +905,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   };
   const { data: statisticData, refetch: refetchStatistic } =
     useTracesOrSpansStatistic(statisticParams, {
-      placeholderData: keepDataWhileWindowMoves(
-        refetchInterval,
-        statisticParams,
-        ["fromTime", "toTime"],
-        { movesByItself, selectionKey },
-      ),
       ...windowQueryOptions(refetchInterval, selectionKey),
     });
 
