@@ -17,9 +17,9 @@ runs:
       # Set here as well as in the calling workflow: a composite action is
       # reusable, so it must not depend on every future caller remembering these.
       env:
-        PIP_RETRIES: 5
-        PIP_DEFAULT_TIMEOUT: 60
-        UV_HTTP_TIMEOUT: 60
+        PIP_RETRIES: 8
+        PIP_DEFAULT_TIMEOUT: 30
+        UV_HTTP_TIMEOUT: 30
         UV_HTTP_RETRIES: 8
         LIB: ${{ inputs.library_name }}
         PY_VERSION: ${{ inputs.python_version }}
@@ -33,7 +33,7 @@ runs:
         uv venv "$LIB-env" --python "$PY_VERSION"
         source "$LIB-env/bin/activate"
         
-        cd ${{ github.workspace }}/sdks/python
+        cd "$GITHUB_WORKSPACE/sdks/python"
         
         echo "Installing OPIK"
         uv pip install .   
