@@ -51,7 +51,7 @@ describe("the OpenAI API choice on the provider form", () => {
     );
   });
 
-  it("starts open when the saved key uses the Responses API", () => {
+  it("starts open when the form already holds the Responses API", () => {
     renderDetails(PROVIDER_TYPE.OPEN_AI, "responses_api");
 
     expect(screen.getByRole("combobox")).toHaveTextContent("Responses API");
