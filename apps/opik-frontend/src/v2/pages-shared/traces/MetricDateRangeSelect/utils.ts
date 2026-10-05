@@ -94,6 +94,9 @@ const isRelativePreset = (dateRange: DateRangeValue): boolean => {
   return !!preset && preset !== DATE_RANGE_PRESET_ALLTIME;
 };
 
+export const isOpenEndedDateRange = (dateRange: DateRangeValue): boolean =>
+  isRelativePreset(dateRange);
+
 export const isLiveDateRange = (dateRange: DateRangeValue): boolean =>
   isRelativePreset(dateRange) || isEndDateToday(dateRange);
 

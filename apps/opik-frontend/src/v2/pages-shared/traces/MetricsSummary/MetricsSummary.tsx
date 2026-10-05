@@ -19,7 +19,7 @@ import MetricContainerChart from "@/v2/pages-shared/dashboards/widgets/ProjectMe
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
 import {
   calculateIntervalType,
-  calculateIntervalBounds,
+  calculateIntervalStartAndEnd,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect/utils";
 import {
   keepDataWhileWindowMoves,
@@ -133,6 +133,8 @@ export type MetricsSummaryProps = {
   intervalStart?: string;
   intervalEnd?: string;
   refetchInterval?: number | false;
+  movesByItself?: boolean;
+  selectionKey?: string;
   dateRange: DateRangeValue;
   logsSource?: LOGS_SOURCE;
 };
@@ -145,17 +147,22 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
   intervalStart,
   intervalEnd,
   refetchInterval = REFETCH_INTERVAL,
+  movesByItself,
+  selectionKey,
   dateRange,
   logsSource,
 }) => {
   const [selectedMetric, setSelectedMetric] = useState<KpiMetricType>("count");
 
   const chartIntervalConfig = useMemo(() => {
-    const fallbackBounds = calculateIntervalBounds(dateRange);
+    const bounds =
+      intervalStart !== undefined
+        ? { intervalStart, intervalEnd }
+        : calculateIntervalStartAndEnd(dateRange);
     return {
       interval: calculateIntervalType(dateRange),
-      intervalStart: intervalStart ?? fallbackBounds.intervalStart,
-      intervalEnd: intervalEnd ?? fallbackBounds.intervalEnd,
+      intervalStart: bounds.intervalStart,
+      intervalEnd: bounds.intervalEnd,
     };
   }, [dateRange, intervalStart, intervalEnd]);
 
@@ -168,11 +175,13 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
     logsSource,
   };
   const { data, isPending } = useProjectKpiCards(kpiCardsParams, {
-    placeholderData: keepDataWhileWindowMoves(refetchInterval, kpiCardsParams, [
-      "intervalStart",
-      "intervalEnd",
-    ]),
-    ...windowQueryOptions(refetchInterval),
+    placeholderData: keepDataWhileWindowMoves(
+      refetchInterval,
+      kpiCardsParams,
+      ["intervalStart", "intervalEnd"],
+      { movesByItself, selectionKey },
+    ),
+    ...windowQueryOptions(refetchInterval, selectionKey),
   });
 
   const metricsMap = useMemo(() => {
@@ -298,6 +307,8 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
             intervalStart={chartIntervalConfig.intervalStart}
             intervalEnd={chartIntervalConfig.intervalEnd}
             refetchInterval={refetchInterval}
+            movesByItself={movesByItself}
+            selectionKey={selectionKey}
             metricName={chartConfig.metricName}
             customYTickFormatter={chartConfig.customYTickFormatter}
             renderValue={chartConfig.renderValue}

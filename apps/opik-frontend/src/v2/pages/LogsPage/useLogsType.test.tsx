@@ -88,8 +88,14 @@ const probeParams = async () => {
   return mockGet.mock.calls[0][1].params;
 };
 
-const renderAnsweredLogsType = async () => {
-  timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
+const liveCustomRange = `${now
+  .subtract(4, "days")
+  .format("YYYY-MM-DD")},${now.format("YYYY-MM-DD")}`;
+
+const renderAnsweredLogsType = async (
+  range: string = DATE_RANGE_PRESET_PAST_7_DAYS,
+) => {
+  timeRange = range;
   mockGet.mockResolvedValueOnce(threadStats(3));
   const rendered = renderLogsType();
   await waitFor(() =>
@@ -114,13 +120,25 @@ describe("useLogsType", () => {
     vi.useRealTimers();
   });
 
-  it("should probe a preset range with an explicit end at the current time", async () => {
+  it("should probe a preset range from its start with no end, as the tabs do", async () => {
     timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
 
     renderLogsType();
 
-    expect(await probeParams()).toMatchObject({
+    const params = await probeParams();
+    expect(params).toMatchObject({
       from_time: now.utc().subtract(6, "days").startOf("day").format(),
+    });
+    expect(params).not.toHaveProperty("to_time");
+  });
+
+  it("should probe a custom range ending today with an explicit end at the current time", async () => {
+    timeRange = liveCustomRange;
+
+    renderLogsType();
+
+    expect(await probeParams()).toMatchObject({
+      from_time: now.utc().subtract(4, "days").startOf("day").format(),
       to_time: now.utc().format(),
     });
   });
@@ -143,27 +161,28 @@ describe("useLogsType", () => {
 
     renderLogsType();
 
-    expect(await probeParams()).toMatchObject({
+    const params = await probeParams();
+    expect(params).toMatchObject({
       from_time: now.utc().subtract(29, "days").startOf("day").format(),
-      to_time: now.utc().format(),
     });
+    expect(params).not.toHaveProperty("to_time");
   });
 
-  it("should probe its own window with an explicit end when no window is passed", async () => {
-    timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
+  it("should probe its own window when no window is passed", async () => {
+    timeRange = liveCustomRange;
 
     renderHook(() => useLogsType({ projectId: "project-1", dateRangeConfig }), {
       wrapper: createWrapper(),
     });
 
     expect(await probeParams()).toMatchObject({
-      from_time: now.utc().subtract(6, "days").startOf("day").format(),
+      from_time: now.utc().subtract(4, "days").startOf("day").format(),
       to_time: now.utc().format(),
     });
   });
 
   it("should not probe again when the window moves, and keep the tab", async () => {
-    const { result } = await renderAnsweredLogsType();
+    const { result } = await renderAnsweredLogsType(liveCustomRange);
     vi.setSystemTime(now.add(30, "seconds").toDate());
 
     act(() => {
@@ -180,7 +199,7 @@ describe("useLogsType", () => {
   });
 
   it("should keep the probe in flight on its selection's window while the shared window moves", async () => {
-    timeRange = DATE_RANGE_PRESET_PAST_7_DAYS;
+    timeRange = liveCustomRange;
     mockGet.mockReturnValueOnce(new Promise(() => {}));
     const { result } = renderLogsType();
     await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
@@ -219,7 +238,7 @@ describe("useLogsType", () => {
   });
 
   it("should probe another project on the window as it stands, not the one pinned for the previous project", async () => {
-    const { result, rerender } = await renderAnsweredLogsType();
+    const { result, rerender } = await renderAnsweredLogsType(liveCustomRange);
     vi.setSystemTime(now.add(30, "seconds").toDate());
     act(() => {
       result.current.intervalWindow.reanchorToNow();

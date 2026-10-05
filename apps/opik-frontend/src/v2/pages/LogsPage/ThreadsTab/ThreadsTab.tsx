@@ -428,6 +428,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     intervalEnd,
     selectionKey,
     refetchInterval,
+    movesByItself,
     reanchorToNow,
   } = intervalWindow;
   const [search = "", setSearch] = useQueryParam(
@@ -625,7 +626,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     useThreadList(threadListParams, {
       enabled: isTableDataEnabled,
       placeholderData: keepPreviousData,
-      ...windowQueryOptions(refetchInterval),
+      ...windowQueryOptions(refetchInterval, selectionKey),
       refetchOnMount: false,
     });
   const isOnlyWindowBehind = useIsOnlyWindowBehind(
@@ -668,8 +669,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         refetchInterval,
         threadsStatisticParams,
         ["fromTime", "toTime"],
+        { movesByItself, selectionKey },
       ),
-      ...windowQueryOptions(refetchInterval),
+      ...windowQueryOptions(refetchInterval, selectionKey),
     });
 
   // Cheap "does this project have any thread?" probe for the empty-state decision. Hits the LIMIT-1
@@ -947,6 +949,8 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           refetchInterval={refetchInterval}
+          movesByItself={movesByItself}
+          selectionKey={selectionKey}
           dateRange={dateRange}
           logsSource={LOGS_SOURCE.sdk}
         />
