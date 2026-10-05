@@ -15,6 +15,13 @@ let prompt: PlaygroundPromptType | undefined;
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
   useIsPromptRunning: () => false,
+  useDatasetItemsTotal: () => null,
+}));
+
+// The button also refuses a run whose dataset has nothing left to run; these cases are about the
+// media check, so the dataset is left out of the way.
+vi.mock("@/hooks/usePlaygroundDataset", () => ({
+  usePlaygroundDataset: () => ({ datasetId: undefined }),
 }));
 
 const createPrompt = (
