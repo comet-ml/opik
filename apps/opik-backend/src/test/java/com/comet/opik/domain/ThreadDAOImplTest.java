@@ -223,14 +223,90 @@ class ThreadDAOImplTest {
             }
             return template.render();
         }
+    }
 
-        /** The trace_threads_final CTE body, up to its ORDER BY — so the assertions cannot match another CTE. */
-        private static String traceThreadsFinalCte(String sql) {
-            int start = sql.indexOf("trace_threads_final AS (");
+    @Nested
+    @DisplayName("page pushdown on the list template")
+    class PagePushdown {
+
+        private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
+        private static final String PAGE_THREAD_IDS_IN = "AND thread_id IN :page_thread_ids";
+        private static final String TRACES_FINAL_IN = "thread_id IN (SELECT thread_id FROM traces_final)";
+        private static final String WINDOW_START = "AND id >= :uuid_from_time";
+
+        static Stream<Arguments> windows() {
+            return Stream.of(
+                    Arguments.of("from and to", UUID.randomUUID(), UUID.randomUUID()),
+                    Arguments.of("from only", UUID.randomUUID(), null),
+                    Arguments.of("to only", null, UUID.randomUUID()),
+                    Arguments.of("no window", null, null));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("windows")
+        @DisplayName("the default sort takes the page pushdown whatever the window")
+        void defaultSortIsEligibleWhateverTheWindow(String name, UUID uuidFromTime, UUID uuidToTime) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(uuidFromTime)
+                    .uuidToTime(uuidToTime)
+                    .build();
+
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria))).isTrue();
+        }
+
+        @Test
+        @DisplayName("a thread filter needs the enriched threads to pick the page, so it takes the full query")
+        void threadFilterIsNotEligible() {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(UUID.randomUUID())
+                    .filters(List.of(TraceThreadFilter.builder()
+                            .field(TraceThreadField.NUMBER_OF_MESSAGES)
+                            .operator(Operator.GREATER_THAN)
+                            .value("0")
+                            .build()))
+                    .build();
+
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria))).isFalse();
+        }
+
+        @Test
+        @DisplayName("on a window, the pushed-down list reads the bound page ids and keeps the window on their traces")
+        void pushedDownListReadsTheBoundPageIdsOnAWindow() {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(UUID.randomUUID())
+                    .build();
+
+            var sql = listTemplate(criteria).add("page_pushdown", true).render();
+
+            var traceThreadsFinal = traceThreadsFinalCte(sql);
+            assertThat(traceThreadsFinal).contains(PAGE_THREAD_IDS_IN);
+            assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IN);
+            assertThat(tracesFinalCte(sql)).contains(PAGE_THREAD_IDS_IN).contains(WINDOW_START);
+        }
+
+        private static ST listTemplate(TraceSearchCriteria criteria) {
+            return FilterUtils.newTraceThreadFindTemplate(ThreadDAOImpl.SELECT_TRACES_THREADS_BY_PROJECT_IDS,
+                    criteria, SEARCH_CLAUSE, true);
+        }
+
+        private static String tracesFinalCte(String sql) {
+            int start = sql.indexOf("traces_final AS (");
             assertThat(start).isNotNegative();
-            int end = sql.indexOf("ORDER BY (workspace_id, project_id, thread_id, id)", start);
+            int end = sql.indexOf("spans_deduped AS (", start);
             assertThat(end).isGreaterThan(start);
             return sql.substring(start, end);
         }
+    }
+
+    /** The trace_threads_final CTE body, up to its ORDER BY — so the assertions cannot match another CTE. */
+    private static String traceThreadsFinalCte(String sql) {
+        int start = sql.indexOf("trace_threads_final AS (");
+        assertThat(start).isNotNegative();
+        int end = sql.indexOf("ORDER BY (workspace_id, project_id, thread_id, id)", start);
+        assertThat(end).isGreaterThan(start);
+        return sql.substring(start, end);
     }
 }

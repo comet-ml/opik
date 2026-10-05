@@ -82,6 +82,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -2248,12 +2249,8 @@ class FindTraceThreadsResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
             Set<String> threadIds = traces.stream().map(Trace::threadId).collect(Collectors.toSet());
-            // Thread rows are created asynchronously from the trace batch, and the closing stamp is what ties them
-            Awaitility.await()
-                    .atMost(10, TimeUnit.SECONDS)
-                    .pollInterval(100, TimeUnit.MILLISECONDS)
-                    .untilAsserted(() -> threadIds.forEach(threadId -> traceResourceClient.getTraceThread(threadId,
-                            projectId, API_KEY, TEST_WORKSPACE)));
+            // The closing stamp is what ties the threads
+            awaitThreadRows(threadIds, projectId);
             traceResourceClient.closeTraceThreads(threadIds, null, projectName, API_KEY, TEST_WORKSPACE);
             Awaitility.await()
                     .atMost(10, TimeUnit.SECONDS)
@@ -2262,7 +2259,16 @@ class FindTraceThreadsResourceTest {
                             .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).status())
                             .isEqualTo(TraceThreadStatus.INACTIVE)));
 
-            var window = Map.of("from_time", fromTime.toString(), "to_time", toTime.toString());
+            assertPagePushdownMatchesFullQuery(projectId,
+                    Map.of("from_time", fromTime.toString(), "to_time", toTime.toString()), expectedThreadIds);
+            assertPagePushdownMatchesFullQuery(projectId, Map.of("from_time", fromTime.toString()),
+                    expectedThreadIds);
+            assertPagePushdownMatchesFullQuery(projectId, Map.of("to_time", toTime.toString()),
+                    Stream.concat(expectedThreadIds.stream(), Stream.of(beforeWindowThreadId)).toList());
+        }
+
+        private void assertPagePushdownMatchesFullQuery(UUID projectId, Map<String, String> window,
+                List<String> expectedThreadIds) {
             var alwaysTrueThreadFilter = TraceThreadFilter.builder()
                     .field(TraceThreadField.NUMBER_OF_MESSAGES)
                     .operator(Operator.GREATER_THAN)
@@ -2284,6 +2290,16 @@ class FindTraceThreadsResourceTest {
             }
 
             TraceAssertions.assertThreads(fullQueryPage.content(), pushedDownContent);
+        }
+
+        // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
+        private void awaitThreadRows(Collection<String> threadIds, UUID projectId) {
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(traceResourceClient
+                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId())
+                            .isNotNull()));
         }
 
         private Trace threadTrace(String projectName, String threadId, Instant startTime) {
@@ -2343,7 +2359,9 @@ class FindTraceThreadsResourceTest {
                             .startTime(ranBeforeWindow)
                             .endTime(ranBeforeWindow.plusMillis(500))
                             .build(), insideTrace);
-            createAndCloseThreads(traces, projectName, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            awaitThreadRows(List.of(threadId), projectId);
+            traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY, TEST_WORKSPACE);
 
             Instant rowWrittenAt = RetentionUtils.extractInstant(
                     traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId());
