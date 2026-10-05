@@ -814,6 +814,11 @@ class ThreadDAOImpl implements ThreadDAO {
      * so that argMin picks the largest one. With no ended trace, last_trace_id is NULL and so is the last message,
      * as the former argMax over an all-NULL key returned. A scalar rather than a CTE keeps the aggregate to a single
      * evaluation: a CTE is inlined at every reference, and each extra pass costs a round trip to the shards.
+     * <p>
+     * traces_ids matches any version carrying the thread_id, so a trace whose latest version moved to another
+     * thread lands in traces_final under that other thread_id. Only the requested thread is aggregated: the moved
+     * trace is not part of it, and an extra group would otherwise be a second row in arbitrary order, of which
+     * findById keeps the first.
      ***/
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
@@ -892,6 +897,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         argMin(t.environment, t.start_time) as environment
                     FROM traces_final AS t
                     LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+                    WHERE t.thread_id = :thread_id
                     GROUP BY t.workspace_id, t.project_id, t.thread_id
                 )
             ) AS thread_aggs, messages AS (

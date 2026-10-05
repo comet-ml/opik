@@ -6494,6 +6494,56 @@ class TracesResourceTest {
             assertThat(actualThread.lastMessage()).isEqualTo(own.output());
         }
 
+        @Test
+        @DisplayName("when a trace's newer version moves it to another thread, then the requested thread excludes it")
+        void getTraceThread__whenTraceMovedToAnotherThread__thenRequestedThreadExcludesIt(
+                TransactionTemplateAsync templateAsync) {
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+            // Both versions of a moved trace must coexist for traces_ids to match it, so merges are held off.
+            // The extra group's row order is arbitrary, so several threads make a leak all but certain to show.
+            runClickHouse(templateAsync, "SYSTEM STOP MERGES traces");
+            try {
+                var threads = IntStream.range(0, 6).mapToObj(i -> {
+                    var threadId = UUID.randomUUID().toString();
+                    // The moved trace starts first and ends last, so it would take over both messages if counted
+                    var moved = threadTrace(threadId, projectName, environment, now.minusSeconds(100),
+                            now.minusSeconds(1));
+                    var kept = threadTrace(threadId, projectName, environment, now.minusSeconds(50),
+                            now.minusSeconds(40));
+                    traceResourceClient.batchCreateTraces(List.of(moved, kept), API_KEY, TEST_WORKSPACE);
+                    traceResourceClient.updateTrace(moved.id(), TraceUpdate.builder()
+                            .projectName(projectName)
+                            .threadId(UUID.randomUUID().toString())
+                            .build(), API_KEY, TEST_WORKSPACE);
+                    return Map.entry(threadId, kept);
+                }).toList();
+
+                var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+                for (var thread : threads) {
+                    var kept = thread.getValue();
+                    var actualThread = traceResourceClient.getTraceThread(thread.getKey(), projectId, API_KEY,
+                            TEST_WORKSPACE);
+
+                    var expectedThread = getExpectedThreads(List.of(kept), projectId, thread.getKey(), List.of(),
+                            TraceThreadStatus.ACTIVE).getFirst();
+                    TraceAssertions.assertThreads(List.of(expectedThread), List.of(actualThread));
+                    assertThat(actualThread.firstMessage()).isEqualTo(kept.input());
+                    assertThat(actualThread.lastMessage()).isEqualTo(kept.output());
+                }
+            } finally {
+                runClickHouse(templateAsync, "SYSTEM START MERGES traces");
+            }
+        }
+
+        private void runClickHouse(TransactionTemplateAsync templateAsync, String sql) {
+            templateAsync.nonTransaction(connection -> Mono.from(connection.createStatement(sql).execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .defaultIfEmpty(0L)).block();
+        }
+
         private Trace threadTrace(String threadId, String projectName, String environment, Instant startTime,
                 Instant endTime) {
             return createTrace().toBuilder()
