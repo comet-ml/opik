@@ -77,7 +77,8 @@ const PlaygroundOutputCell: React.FunctionComponent<
     ? {
         value: experimentItem.output,
         // Keyed off the item, not its output: a call that returned nothing must settle, not spin.
-        isLoading: !experimentItem.hasItem,
+        // A stopped run leaves rows it never reached with no item at all, so those settle too.
+        isLoading: !experimentItem.hasItem && !experimentItem.notRun,
         traceId: experimentItem.traceId,
         error: experimentItem.error,
       }
@@ -146,6 +147,13 @@ const PlaygroundOutputCell: React.FunctionComponent<
     }
 
     if (isBackendRun) {
+      if (experimentItem.notRun) {
+        return (
+          <p className="comet-body-s text-light-slate">
+            {experimentItem.cancelled ? "Cancelled" : "Not run"}
+          </p>
+        );
+      }
       return <PlaygroundExperimentItemOutput item={experimentItem} />;
     }
 
@@ -201,6 +209,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
                 traceId={traceId}
                 selectedRuleIds={selectedRuleIds}
                 stale={stale}
+                notRun={experimentItem.notRun}
               />
             )}
           </div>

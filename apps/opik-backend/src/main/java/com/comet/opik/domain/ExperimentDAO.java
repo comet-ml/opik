@@ -660,6 +660,7 @@ public class ExperimentDAO {
                     e.type as type,
                     e.evaluation_method as evaluation_method,
                     e.status as status,
+                    e.finished_at as finished_at,
                     e.experiment_scores as experiment_scores,
                     e.dataset_version_id as dataset_version_id,
                     agg.feedback_scores_avg as feedback_scores,
@@ -720,6 +721,7 @@ public class ExperimentDAO {
                     e.type as type,
                     e.evaluation_method as evaluation_method,
                     e.status as status,
+                    e.finished_at as finished_at,
                     e.experiment_scores as experiment_scores,
                     e.dataset_version_id as dataset_version_id,
                     fs.feedback_scores as feedback_scores,
@@ -1834,6 +1836,7 @@ public class ExperimentDAO {
                 dataset_version_id,
                 execution_policy,
                 project_id,
+                finished_at,
                 created_at,
                 last_updated_at
             )
@@ -1858,6 +1861,7 @@ public class ExperimentDAO {
                 dataset_version_id,
                 execution_policy,
                 project_id,
+                <if(finished)> now64(9) <else> finished_at <endif> as finished_at,
                 created_at,
                 now64(9) as last_updated_at
             FROM experiments
@@ -2109,6 +2113,7 @@ public class ExperimentDAO {
                     .evaluationMethod(
                             EvaluationMethod.fromString(row.get("evaluation_method", String.class)).orElse(null))
                     .status(ExperimentStatus.fromString(row.get("status", String.class)))
+                    .finishedAt(row.get("finished_at", Instant.class))
                     .experimentScores(getExperimentScores(row))
                     .datasetVersionId(Optional.ofNullable(row.get("dataset_version_id", String.class))
                             .filter(str -> !str.isBlank())
@@ -2900,6 +2905,10 @@ public class ExperimentDAO {
 
         if (experimentUpdate.status() != null) {
             template.add("status", experimentUpdate.status().getValue());
+        }
+
+        if (experimentUpdate.finished()) {
+            template.add("finished", true);
         }
 
         if (experimentUpdate.experimentScores() != null) {

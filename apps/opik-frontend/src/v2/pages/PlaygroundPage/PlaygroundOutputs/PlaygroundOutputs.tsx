@@ -132,7 +132,6 @@ const PlaygroundOutputs = ({
 
   useEffect(() => {
     setDatasetItemsTotal(datasetItemsData ? total : null);
-    return () => setDatasetItemsTotal(null);
   }, [setDatasetItemsTotal, datasetItemsData, total]);
 
   return (
