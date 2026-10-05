@@ -89,7 +89,7 @@ component:
     serviceAccount:
       create: true
       name: opik-backend
-      # Publishing Opik alerts to Amazon EventBridge (OPIK_ALERTS_EVENTBRIDGE_*
+      # Publishing Opik alerts to Amazon EventBridge (ALERTS_EVENTBRIDGE_*
       # under `env` below) needs an IAM role allowing `events:PutEvents` on the
       # bus, bound to this service account via IRSA (or EKS Pod Identity):
       # annotations:
@@ -218,12 +218,12 @@ component:
       LLM_MODEL_REGISTRY_REMOTE_URL: ""
       LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS: "300"
       # Publish Opik alerts to an Amazon EventBridge event bus (best-effort, no
-      # retry queue). Off by default. EVENT_BUS takes a bus name or ARN; REGION
+      # durable retry). Off by default. EVENT_BUS takes a bus name or ARN; REGION
       # is optional and, when unset, is resolved from the ARN or the pod's region.
       # The service account above needs `events:PutEvents` on the bus.
-      # OPIK_ALERTS_EVENTBRIDGE_ENABLED: "true"
-      # OPIK_ALERTS_EVENTBRIDGE_EVENT_BUS: "arn:aws:events:us-east-1:123456789012:event-bus/comet-alerts"
-      # OPIK_ALERTS_EVENTBRIDGE_REGION: "us-east-1"
+      # ALERTS_EVENTBRIDGE_ENABLED: "true"
+      # ALERTS_EVENTBRIDGE_EVENT_BUS: "arn:aws:events:us-east-1:123456789012:event-bus/comet-alerts"
+      # ALERTS_EVENTBRIDGE_REGION: "us-east-1"
     envFrom:
       - configMapRef:
           name: opik-backend
