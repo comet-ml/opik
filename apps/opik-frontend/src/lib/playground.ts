@@ -255,7 +255,7 @@ export const generateDefaultPrompt = ({
   };
 };
 
-export const restoreMissingProvider = (
+export const restoreMissingProviderAndConfigKeys = (
   prompt: PlaygroundPromptType,
   providerResolver: ProviderResolver,
 ): PlaygroundPromptType => {

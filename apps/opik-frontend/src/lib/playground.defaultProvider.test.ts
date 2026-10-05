@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
-  restoreMissingProvider,
+  restoreMissingProviderAndConfigKeys,
 } from "@/lib/playground";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
@@ -119,11 +119,11 @@ describe("generateDefaultPrompt", () => {
   });
 });
 
-describe("restoreMissingProvider", () => {
+describe("restoreMissingProviderAndConfigKeys", () => {
   it("writes the provider and its default parameters into a prompt stored without them", () => {
     registry.data = OPEN_ROUTER_REGISTRY;
 
-    const restored = restoreMissingProvider(
+    const restored = restoreMissingProviderAndConfigKeys(
       storedPrompt({}),
       renderResolvers().providerResolver,
     );
@@ -140,7 +140,7 @@ describe("restoreMissingProvider", () => {
   it("keeps the parameters the user set on it", () => {
     registry.data = OPEN_ROUTER_REGISTRY;
 
-    const restored = restoreMissingProvider(
+    const restored = restoreMissingProviderAndConfigKeys(
       storedPrompt({ throttling: 2, maxConcurrentRequests: 1 }),
       renderResolvers().providerResolver,
     );
@@ -159,7 +159,10 @@ describe("restoreMissingProvider", () => {
     const prompt = storedPrompt({});
 
     expect(
-      restoreMissingProvider(prompt, renderResolvers().providerResolver),
+      restoreMissingProviderAndConfigKeys(
+        prompt,
+        renderResolvers().providerResolver,
+      ),
     ).toBe(prompt);
   });
 
@@ -168,7 +171,10 @@ describe("restoreMissingProvider", () => {
     const prompt = storedPrompt({ maxTokens: 100 }, OPEN_ROUTER);
 
     expect(
-      restoreMissingProvider(prompt, renderResolvers().providerResolver),
+      restoreMissingProviderAndConfigKeys(
+        prompt,
+        renderResolvers().providerResolver,
+      ),
     ).toBe(prompt);
   });
 });

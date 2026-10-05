@@ -20,7 +20,7 @@ import { Separator } from "@/ui/separator";
 
 import {
   getDefaultConfigByProvider,
-  restoreMissingProvider,
+  restoreMissingProviderAndConfigKeys,
 } from "@/lib/playground";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import {
@@ -283,7 +283,10 @@ const PlaygroundPrompt = ({
 
         updateOutput(promptId, "", { value: null });
       } else {
-        const restored = restoreMissingProvider(prompt, providerResolver);
+        const restored = restoreMissingProviderAndConfigKeys(
+          prompt,
+          providerResolver,
+        );
 
         if (restored !== prompt) {
           updatePrompt(promptId, {
