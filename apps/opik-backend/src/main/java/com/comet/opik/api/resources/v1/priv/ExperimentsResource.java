@@ -22,6 +22,7 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.IdsHolder;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.grouping.ExperimentGroupingFactory;
@@ -600,20 +601,47 @@ public class ExperimentsResource {
     }
 
     @POST
+    @Path("/cancel")
+    @Operation(operationId = "cancelExperiments", summary = "Cancel running experiments", description = "Stops the given experiments: queued items are skipped and the experiments are marked cancelled", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
+    public Response cancelExperiments(
+            @RequestBody(content = @Content(schema = @Schema(implementation = IdsHolder.class))) @NotNull @Valid IdsHolder idsHolder) {
+
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Cancelling experiments '{}', workspaceId '{}'", idsHolder.ids(), workspaceId);
+
+        experimentExecutionService.cancel(idsHolder.ids())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Cancelled experiments '{}', workspaceId '{}'", idsHolder.ids(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
     @Path("/execute")
     @Operation(operationId = "executeExperiment", summary = "Create and execute experiment", description = "Creates experiments for each prompt variant and asynchronously processes all dataset items", responses = {
             @ApiResponse(responseCode = "202", description = "Experiments created and processing started", content = @Content(schema = @Schema(implementation = ExperimentExecutionResponse.class))),
     })
     @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     public Response execute(@NotNull @Valid ExperimentExecutionRequest request) {
-        var context = requestContext.get();
-        var workspaceId = context.getWorkspaceId();
-        var userName = context.getUserName();
+        var workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Executing experiment for dataset '{}', workspaceId '{}', prompts '{}'",
-                request.datasetName(), workspaceId, request.prompts().size());
+        List<DatasetItemFilter> datasetItemFilters = Optional
+                .ofNullable(filtersFactory.newFilters(request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE))
+                .orElse(List.of())
+                .stream()
+                .map(DatasetItemFilter.class::cast)
+                .toList();
 
-        var response = experimentExecutionService.createAndExecute(request)
+        log.info("Executing experiment for dataset '{}', workspaceId '{}', prompts '{}', filters '{}'",
+                request.datasetName(), workspaceId, request.prompts().size(), datasetItemFilters.size());
+
+        var response = experimentExecutionService.createAndExecute(request, datasetItemFilters)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

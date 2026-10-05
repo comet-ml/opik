@@ -113,6 +113,18 @@ class ExperimentMessageRenderer {
                                     builder.addImageUrl(url);
                                 }
                             }
+                            case "video_url" -> {
+                                String url = part.path("video_url").path("url").asText(null);
+                                if (url != null) {
+                                    builder.addVideoUrl(url);
+                                }
+                            }
+                            case "audio_url" -> {
+                                String url = part.path("audio_url").path("url").asText(null);
+                                if (url != null) {
+                                    builder.addAudioUrl(url);
+                                }
+                            }
                             default -> builder.addText(part.toString());
                         }
                     }
