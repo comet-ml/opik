@@ -5621,6 +5621,29 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `POST /v1/private/annotation-queues/{id}/items/delete` — take items back
+     * out of a queue, the way the items table's own remove action does.
+     *
+     * The counterpart of `addAnnotationQueueItems`, and needed for a claim
+     * neither adding nor reading can reach: that automation never RE-adds
+     * something a reviewer removed on purpose. A queue that quietly re-filled
+     * itself would make the remove action useless, and nothing about the
+     * queue's own state would say so.
+     */
+    async removeAnnotationQueueItems(queueId: string, ids: string[]): Promise<void> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/annotation-queues/${queueId}/items/delete`,
+        { body: { ids } },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `removeAnnotationQueueItems('${queueId}'): expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
      * Queue membership for the given ids — the lookup the items table calls to
      * render its Source column.
      *
