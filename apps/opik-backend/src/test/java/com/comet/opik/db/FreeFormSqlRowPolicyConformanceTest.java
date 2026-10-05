@@ -231,12 +231,12 @@ class FreeFormSqlRowPolicyConformanceTest {
     @DisplayName("the extended account's workspace-only tables: its whole workspace, whatever the project")
     void extendedWorkspaceOnlyTablesAreScoped(String table) {
         var project = data.a1();
-        String count = "SELECT count() FROM %s.%s".formatted(DATABASE_NAME, table);
+        String countQuery = "SELECT count() FROM %s.%s".formatted(DATABASE_NAME, table);
         try (var extended = client(EXTENDED)) {
-            assertThat(single(extended, count, project.workspace().id(), project.id().toString()))
+            assertThat(single(extended, countQuery, project.workspace().id(), project.id().toString()))
                     .isEqualTo(expected(table, true));
-            assertThat(single(extended, count, project.workspace().id(), "*")).isEqualTo(expected(table, true));
-            assertThat(single(extended, "%s WHERE workspace_id = '%s'".formatted(count, data.b().id()),
+            assertThat(single(extended, countQuery, project.workspace().id(), "*")).isEqualTo(expected(table, true));
+            assertThat(single(extended, "%s WHERE workspace_id = '%s'".formatted(countQuery, data.b().id()),
                     project.workspace().id(), "*")).isEqualTo("0");
         }
     }
@@ -252,12 +252,12 @@ class FreeFormSqlRowPolicyConformanceTest {
     /** A project-bound table as the extended account: its project, its workspace under '*', never another. */
     private void assertExtendedScope(Client extended, String table) {
         var project = data.a1();
-        String count = "SELECT count() FROM %s.%s".formatted(DATABASE_NAME, table);
-        assertThat(single(extended, count, project.workspace().id(), project.id().toString())).as(table)
+        String countQuery = "SELECT count() FROM %s.%s".formatted(DATABASE_NAME, table);
+        assertThat(single(extended, countQuery, project.workspace().id(), project.id().toString())).as(table)
                 .isEqualTo(expected(table, false));
-        assertThat(single(extended, count, project.workspace().id(), "*")).as(table)
+        assertThat(single(extended, countQuery, project.workspace().id(), "*")).as(table)
                 .isEqualTo(expected(table, true));
-        assertThat(single(extended, "%s WHERE workspace_id = '%s'".formatted(count, data.b().id()),
+        assertThat(single(extended, "%s WHERE workspace_id = '%s'".formatted(countQuery, data.b().id()),
                 project.workspace().id(), "*")).as(table).isEqualTo("0");
     }
 
