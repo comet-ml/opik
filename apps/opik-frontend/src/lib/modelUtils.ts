@@ -148,12 +148,27 @@ const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
 const isVertexModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean =>
   typeof model === "string" && model.startsWith("vertex_ai/");
 
-const GEMINI_3_GENERATION = /^gemini-3(?:[.-]|$)/;
+// An allow-list, so a Gemini generation newer than this list gets no sampling sliders until someone
+// checks it: Google asks to keep every Gemini 3 model at its default temperature, and the aliases,
+// Omni and Robotics ER ids all resolve to Gemini 3-era models. Only native ids are gated — OpenRouter's
+// google/gemini-* and gemma-* fall through, since nothing here describes them.
+const SAMPLING_CAPABLE_GEMINI_GENERATIONS = /^gemini-(?:1\.0|1\.5|2\.0|2\.5)-/;
+const SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS: ReadonlySet<string> = new Set([
+  "gemini-pro-vision",
+]);
 
 export const supportsGeminiSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  !GEMINI_3_GENERATION.test((model ?? "").replace(/^vertex_ai\//, ""));
+): boolean => {
+  const id = (model ?? "").replace(/^vertex_ai\//, "");
+  if (!id.startsWith("gemini-")) {
+    return true;
+  }
+  return (
+    SAMPLING_CAPABLE_GEMINI_GENERATIONS.test(id) ||
+    SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS.has(id)
+  );
+};
 
 /**
  * Checks if a Gemini model supports thinking level parameter
