@@ -121,7 +121,8 @@ export const isExperimentTerminal = (
   status: EXPERIMENT_STATUS | undefined | null,
 ): boolean =>
   status === EXPERIMENT_STATUS.COMPLETED ||
-  status === EXPERIMENT_STATUS.CANCELLED;
+  status === EXPERIMENT_STATUS.CANCELLED ||
+  status === EXPERIMENT_STATUS.FAILED;
 
 export function isTestSuiteExperiment(
   experiment: Experiment | null | undefined,

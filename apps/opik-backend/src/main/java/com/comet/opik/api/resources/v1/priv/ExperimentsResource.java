@@ -601,6 +601,28 @@ public class ExperimentsResource {
     }
 
     @POST
+    @Path("/cancel")
+    @Operation(operationId = "cancelExperiments", summary = "Cancel running experiments", description = "Stops the given experiments: queued items are skipped and the experiments are marked cancelled", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
+    public Response cancelExperiments(
+            @RequestBody(content = @Content(schema = @Schema(implementation = IdsHolder.class))) @NotNull @Valid IdsHolder idsHolder) {
+
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Cancelling experiments '{}', workspaceId '{}'", idsHolder.ids(), workspaceId);
+
+        experimentExecutionService.cancel(idsHolder.ids())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Cancelled experiments '{}', workspaceId '{}'", idsHolder.ids(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
     @Path("/execute")
     @Operation(operationId = "executeExperiment", summary = "Create and execute experiment", description = "Creates experiments for each prompt variant and asynchronously processes all dataset items", responses = {
             @ApiResponse(responseCode = "202", description = "Experiments created and processing started", content = @Content(schema = @Schema(implementation = ExperimentExecutionResponse.class))),

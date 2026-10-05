@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,6 +41,9 @@ class TestSuiteAssertionCounterServiceTest {
     @Mock
     private RAtomicLongReactive atomicLong;
 
+    @Mock
+    private ExperimentCancellationService cancellationService;
+
     private static final String WORKSPACE_ID = "test-workspace";
 
     private TestSuiteAssertionCounterService service;
@@ -49,7 +53,9 @@ class TestSuiteAssertionCounterServiceTest {
         var config = new ExperimentExecutionConfig();
         config.setBatchCounterTtl(Duration.hours(24));
 
-        service = new TestSuiteAssertionCounterService(redisClient, config, experimentService);
+        service = new TestSuiteAssertionCounterService(redisClient, config, experimentService,
+                cancellationService);
+        lenient().when(cancellationService.isCancelled(anyString(), any())).thenReturn(Mono.just(false));
         when(redisClient.getAtomicLong(anyString())).thenReturn(atomicLong);
     }
 
@@ -99,8 +105,11 @@ class TestSuiteAssertionCounterServiceTest {
 
         service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
-        var expectedUpdate = ExperimentUpdate.builder().status(ExperimentStatus.COMPLETED).build();
-        verify(experimentService).update(experimentId, expectedUpdate);
+        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+        verify(experimentService).update(eq(experimentId), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(ExperimentStatus.COMPLETED);
+        // The stamp belongs to the item drain, not to the assertions finishing after it.
+        assertThat(captor.getValue().finished()).isFalse();
         verify(experimentService).finishExperiments(Set.of(experimentId));
     }
 
@@ -116,8 +125,11 @@ class TestSuiteAssertionCounterServiceTest {
 
         service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
-        var expectedUpdate = ExperimentUpdate.builder().status(ExperimentStatus.COMPLETED).build();
-        verify(experimentService).update(experimentId, expectedUpdate);
+        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+        verify(experimentService).update(eq(experimentId), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(ExperimentStatus.COMPLETED);
+        // The stamp belongs to the item drain, not to the assertions finishing after it.
+        assertThat(captor.getValue().finished()).isFalse();
         verify(experimentService).finishExperiments(Set.of(experimentId));
     }
 
