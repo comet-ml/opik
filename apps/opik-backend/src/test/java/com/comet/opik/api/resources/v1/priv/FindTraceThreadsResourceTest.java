@@ -2267,6 +2267,43 @@ class FindTraceThreadsResourceTest {
                     Stream.concat(expectedThreadIds.stream(), Stream.of(beforeWindowThreadId)).toList());
         }
 
+        @Test
+        @DisplayName("the stream continues past its first batch from the last thread model id it returned")
+        void whenStreamPagedByLastThreadModelId__thenBatchesContinueWithoutOverlap() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> threadTrace(projectName, RandomStringUtils.secure().nextAlphanumeric(10),
+                            now.minus(10L + i, ChronoUnit.SECONDS)))
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            awaitThreadRows(traces.stream().map(Trace::threadId).toList(), projectId);
+
+            var oneBatch = traceResourceClient.searchTraceThreadsStream(TraceThreadSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .build(), API_KEY, TEST_WORKSPACE);
+            assertThat(oneBatch).hasSize(traces.size());
+
+            List<TraceThread> batched = new ArrayList<>();
+            UUID lastRetrieved = null;
+            for (int batch = 0; batch <= traces.size(); batch++) {
+                var next = traceResourceClient.searchTraceThreadsStream(TraceThreadSearchStreamRequest.builder()
+                        .projectName(projectName)
+                        .limit(2)
+                        .lastRetrievedThreadModelId(lastRetrieved)
+                        .build(), API_KEY, TEST_WORKSPACE);
+                if (next.isEmpty()) {
+                    break;
+                }
+                batched.addAll(next);
+                lastRetrieved = next.getLast().threadModelId();
+            }
+
+            assertThat(batched).extracting(TraceThread::id)
+                    .containsExactlyElementsOf(oneBatch.stream().map(TraceThread::id).toList());
+        }
+
         private void assertPagePushdownMatchesFullQuery(UUID projectId, Map<String, String> window,
                 List<String> expectedThreadIds) {
             var alwaysTrueThreadFilter = TraceThreadFilter.builder()
