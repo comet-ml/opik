@@ -51,7 +51,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -458,16 +457,11 @@ class SpansReadPathPartitionPruningTest {
         return KpiCardResponse.KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
     }
 
-    /** The searched spans and the responses, created once and shared by the span search tests below. */
+    /** The searched spans and the responses. */
     private record SpanSearch(String token, List<Span> expected, Span.SpanPage page, ProjectStats stats) {
     }
 
-    private SpanSearch spanSearch;
-
     private SpanSearch spanSearch() {
-        if (spanSearch != null) {
-            return spanSearch;
-        }
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
         var token = RandomStringUtils.secure().nextAlphanumeric(12);
         var fromTime = THIS_MONDAY.minusWeeks(10).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
@@ -488,8 +482,7 @@ class SpansReadPathPartitionPruningTest {
                 null, null, fromTime, null, token);
         var stats = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
                 Map.of("search", token, "from_time", fromTime));
-        spanSearch = new SpanSearch(token, expected, page, stats);
-        return spanSearch;
+        return new SpanSearch(token, expected, page, stats);
     }
 
     @Test
@@ -501,25 +494,34 @@ class SpansReadPathPartitionPruningTest {
         TraceAssertions.assertStats(search.stats().stats(), StatsUtils.getProjectSpanStatItems(search.expected()));
     }
 
+    /** One search shared by the statement cases, each checking a different statement of it. */
+    private Stream<Arguments> spanSearchStatements() {
+        var search = spanSearch();
+        return Stream.of("find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
+                "get_span_stats_feedback_scores").map(queryName -> Arguments.of(queryName, search));
+    }
+
     @ParameterizedTest(name = "{0} carries the spans week hint")
-    @ValueSource(strings = {"find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
-            "get_span_stats_feedback_scores"})
-    void spanSearchStatementCarriesTheWeekHint(String queryName) {
-        assertThat(lastSpanSearch(queryName, spanSearch().token()))
+    @MethodSource("spanSearchStatements")
+    void spanSearchStatementCarriesTheWeekHint(String queryName, SpanSearch search) {
+        assertThat(lastSpanSearch(queryName, search))
                 .as("the spans week hint ran in %s, so the results are not a vacuous pass", queryName)
                 .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
     }
 
     @Test
     void spanSearchRunsOnce() {
+        var search = spanSearch();
+
         // The page re-reads its rows through the cached page-id scalar, so the search runs once.
-        assertThat(lastSpanSearch("find_spans_by_project_id", spanSearch().token()))
+        assertThat(lastSpanSearch("find_spans_by_project_id", search))
                 .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
                 .doesNotContain("IN (SELECT id FROM page_ids)");
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
-    private String lastSpanSearch(String queryName, String token) {
+    private String lastSpanSearch(String queryName, SpanSearch search) {
+        var token = search.token();
         return Awaitility.await()
                 .alias("query_log holds a " + queryName + " search for " + token)
                 .atMost(Duration.ofSeconds(30))

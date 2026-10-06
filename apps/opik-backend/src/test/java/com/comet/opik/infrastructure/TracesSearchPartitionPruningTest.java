@@ -34,7 +34,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -183,16 +184,11 @@ class TracesSearchPartitionPruningTest {
         network.close();
     }
 
-    /** The searched data and the responses, created once and shared by the tests below. */
+    /** The searched data and the responses. */
     private record Search(String token, List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
     }
 
-    private Search search;
-
     private Search search() {
-        if (search != null) {
-            return search;
-        }
         var token = RandomStringUtils.secure().nextAlphanumeric(12);
         // Sorted, so the middle project sits between the other two in the (workspace_id, project_id, id) key.
         var projects = Stream.generate(() -> "project-" + RandomStringUtils.secure().nextAlphanumeric(16))
@@ -220,8 +216,7 @@ class TracesSearchPartitionPruningTest {
         var page = traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME, List.of(),
                 List.of(), 10, params);
         var stats = traceResourceClient.getTraceStats(project.getValue(), null, API_KEY, WORKSPACE_NAME, null, params);
-        search = new Search(token, expected, page, stats);
-        return search;
+        return new Search(token, expected, page, stats);
     }
 
     @Test
@@ -235,11 +230,18 @@ class TracesSearchPartitionPruningTest {
                 StatsUtils.getProjectTraceStatItems(search.page().content()));
     }
 
+    /** One search shared by the statement cases, each checking a different statement of it. */
+    private Stream<Arguments> searchStatements() {
+        var search = search();
+        return Stream.of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
+                .map(queryName -> Arguments.of(queryName, search));
+    }
+
     @ParameterizedTest(name = "{0} carries the traces week hint")
-    @ValueSource(strings = {"find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans"})
+    @MethodSource("searchStatements")
     @DisplayName("each search statement carries the traces week hint")
-    void searchStatementCarriesTheWeekHint(String queryName) {
-        assertThat(lastSearch(queryName, search().token()))
+    void searchStatementCarriesTheWeekHint(String queryName, Search search) {
+        assertThat(lastSearch(queryName, search))
                 .as("the traces week hint ran in %s, so the results are not a vacuous pass", queryName)
                 .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
     }
@@ -247,7 +249,9 @@ class TracesSearchPartitionPruningTest {
     @Test
     @DisplayName("the page re-reads its rows through the cached page-id scalar, so the search runs once")
     void searchRunsOnce() {
-        assertThat(lastSearch("find_traces_by_project_id", search().token()))
+        var search = search();
+
+        assertThat(lastSearch("find_traces_by_project_id", search))
                 .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
                 .doesNotContain("IN (SELECT id FROM page_ids)");
     }
@@ -265,7 +269,8 @@ class TracesSearchPartitionPruningTest {
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
-    private String lastSearch(String queryName, String token) {
+    private String lastSearch(String queryName, Search search) {
+        var token = search.token();
         return Awaitility.await()
                 .alias("query_log holds a " + queryName + " search for " + token)
                 .atMost(Duration.ofSeconds(30))
