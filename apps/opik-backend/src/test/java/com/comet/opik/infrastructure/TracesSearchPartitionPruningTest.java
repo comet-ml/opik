@@ -6,6 +6,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
@@ -211,6 +212,9 @@ class TracesSearchPartitionPruningTest {
 
         assertThat(page.total()).isEqualTo(expected.size());
         TraceAssertions.assertTraces(page.content(), expected, USER);
+        var stats = traceResourceClient.getTraceStats(project.getValue(), null, API_KEY, WORKSPACE_NAME, null,
+                Map.of("search", token, "from_time", FROM_TIME.toString()));
+        TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectTraceStatItems(page.content()));
         assertThat(lastSearch(token))
                 .as("the traces week hint ran, so the page above is not a vacuous pass")
                 .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
