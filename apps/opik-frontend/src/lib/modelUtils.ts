@@ -152,7 +152,8 @@ const isVertexModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean =>
 // checks it: Google asks to keep every Gemini 3 model at its default temperature, and the aliases,
 // Omni and Robotics ER ids all resolve to Gemini 3-era models. Only native ids are gated — OpenRouter's
 // google/gemini-* and gemma-* fall through, since nothing here describes them.
-const SAMPLING_CAPABLE_GEMINI_GENERATIONS = /^gemini-(?:1\.0|1\.5|2\.0|2\.5)-/;
+const SAMPLING_CAPABLE_GEMINI_GENERATIONS =
+  /^gemini-(?:1\.0|1\.5|2\.0|2\.5)(?:-|$)/;
 const SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS: ReadonlySet<string> = new Set([
   "gemini-pro-vision",
 ]);

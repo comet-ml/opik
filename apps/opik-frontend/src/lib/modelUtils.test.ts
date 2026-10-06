@@ -2202,6 +2202,7 @@ describe("Gemini and Vertex AI request contract", () => {
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
     PROVIDER_MODEL_TYPE.GEMINI_FLASH_LATEST_HIGH_RES_EXP,
     PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH,
+    PROVIDER_MODEL_TYPE.GEMINI_OMNI_FLASH_PREVIEW,
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_ROBOTICS_ER_2,
   ])("takes no sampling params on %s", (model) => {
@@ -2225,8 +2226,12 @@ describe("Gemini and Vertex AI request contract", () => {
     PROVIDER_MODEL_TYPE.GEMINI_1_5_PRO_LATEST,
     PROVIDER_MODEL_TYPE.GEMINI_1_0_PRO,
     PROVIDER_MODEL_TYPE.GEMINI_PRO_VISION,
+    "gemini-2.5",
+    "vertex_ai/gemini-1.5",
   ])("keeps sampling params on %s", (model) => {
-    expect(supportsGeminiSamplingParams(model)).toBe(true);
+    expect(supportsGeminiSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(
+      true,
+    );
   });
 
   it.each([
