@@ -7,9 +7,10 @@ import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MultivaluedHashMap;
-import jakarta.ws.rs.core.UriInfo;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.glassfish.jersey.server.ExtendedUriInfo;
+import org.glassfish.jersey.uri.UriTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -133,8 +134,9 @@ class AuthFilterCipxTokenTest {
      * @param workspaceHeader stubbed leniently on purpose: it is present on the request and must never be read.
      */
     private ContainerRequestContext requestContext(String workspaceHeader) {
-        UriInfo uriInfo = mock(UriInfo.class);
+        ExtendedUriInfo uriInfo = mock(ExtendedUriInfo.class);
         when(uriInfo.getRequestUri()).thenReturn(URI.create("http://localhost:8080" + INGEST_PATH));
+        when(uriInfo.getMatchedTemplates()).thenReturn(List.of(new UriTemplate(INGEST_PATH)));
 
         ContainerRequestContext context = mock(ContainerRequestContext.class);
         when(context.getCookies()).thenReturn(Map.of());
