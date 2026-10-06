@@ -32,9 +32,11 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -205,9 +207,11 @@ class SpansReadPathPartitionPruningTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync template;
+    private ProjectMetricsDAO projectMetricsDAO;
 
     @BeforeAll
-    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template) {
+    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template,
+            ProjectMetricsDAO projectMetricsDAO) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -216,6 +220,7 @@ class SpansReadPathPartitionPruningTest {
         this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
+        this.projectMetricsDAO = projectMetricsDAO;
         // One batch, so each filler week is one part holding two traces the primary key cannot exclude by id.
         spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
                 .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
@@ -452,6 +457,37 @@ class SpansReadPathPartitionPruningTest {
                 .isEqualTo(expected);
     }
 
+    @Test
+    void alertTotalCostCountsAFarFutureSpanOfATraceInTheWindow() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .projectName(projectName)
+                .startTime(now)
+                .endTime(now.plusMillis(100))
+                .feedbackScores(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+        // The alert window bounds trace_id only, so the far-future week must come from the span-weeks pre-pass.
+        spanResourceClient.batchCreateSpans(List.of(
+                newSpan(now, traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("1.25")).build(),
+                newSpan(Instant.parse("2201-08-30T03:18:08Z"), traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("2.5")).build()),
+                API_KEY, WORKSPACE_NAME);
+
+        var actual = projectMetricsDAO.getTotalCost(List.of(projectId), now.minus(Duration.ofHours(1)), null)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER))
+                .block();
+
+        assertThat(actual).isEqualByComparingTo("3.75");
+        assertThat(lastStatement("AlertMetrics_getTotalCost", projectId.toString()))
+                .as("the spans week hint ran, so the total is not a vacuous pass")
+                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+    }
+
     private static KpiCardResponse.KpiMetric kpi(KpiCardResponse.KpiMetricType type, Double current,
             Double previous) {
         return KpiCardResponse.KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
@@ -521,7 +557,11 @@ class SpansReadPathPartitionPruningTest {
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
     private String lastSpanSearch(String queryName, SpanSearch search) {
-        var token = search.token();
+        return lastStatement(queryName, search.token());
+    }
+
+    /** The latest statement of an op that mentions the token. */
+    private String lastStatement(String queryName, String token) {
         return Awaitility.await()
                 .alias("query_log holds a " + queryName + " search for " + token)
                 .atMost(Duration.ofSeconds(30))
