@@ -6,6 +6,7 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
@@ -28,6 +29,7 @@ import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -70,6 +72,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -135,6 +138,16 @@ class SpansReadPathPartitionPruningTest {
             WHERE log_comment LIKE concat(:op, ':%')
             AND type = 'QueryFinish'
             AND query LIKE concat('%', :span_id, '%')
+            ORDER BY event_time_microseconds DESC
+            LIMIT 1
+            """;
+
+    private static final String LAST_SPAN_SEARCH = """
+            SELECT query
+            FROM system.query_log
+            WHERE log_comment LIKE concat(:query_name, ':%')
+            AND type = 'QueryFinish'
+            AND query LIKE concat('%', :token, '%')
             ORDER BY event_time_microseconds DESC
             LIMIT 1
             """;
@@ -442,6 +455,84 @@ class SpansReadPathPartitionPruningTest {
     private static KpiCardResponse.KpiMetric kpi(KpiCardResponse.KpiMetricType type, Double current,
             Double previous) {
         return KpiCardResponse.KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
+    }
+
+    /** The searched spans and the responses. */
+    private record SpanSearch(String token, List<Span> expected, Span.SpanPage page, ProjectStats stats) {
+    }
+
+    private SpanSearch spanSearch() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var token = RandomStringUtils.secure().nextAlphanumeric(12);
+        var fromTime = THIS_MONDAY.minusWeeks(10).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
+        // Two ordinary weeks and the far-future one a bad clock files spans under.
+        var expected = Stream.of(THIS_MONDAY.minusWeeks(5), THIS_MONDAY, LocalDate.of(2199, 12, 30))
+                .map(monday -> newSpan(monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC),
+                        ID_GENERATOR.generateId()).toBuilder()
+                        .projectName(projectName)
+                        .name("searchable-" + token)
+                        // newSpan leaves end_time unset, so the span has no duration; cost is derived from model/usage.
+                        .duration(null)
+                        .totalEstimatedCost(null)
+                        .build())
+                .sorted(Comparator.comparing(Span::id).reversed())
+                .toList();
+        spanResourceClient.batchCreateSpans(expected, API_KEY, WORKSPACE_NAME);
+        var page = spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, projectName, null, 1, 10, null, null, null,
+                null, null, fromTime, null, token);
+        var stats = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
+                Map.of("search", token, "from_time", fromTime));
+        return new SpanSearch(token, expected, page, stats);
+    }
+
+    @Test
+    void spanSearchBoundedToProjectWeeksReturnsEveryMatch() {
+        var search = spanSearch();
+
+        assertThat(search.page().total()).isEqualTo(search.expected().size());
+        SpanAssertions.assertSpan(search.page().content(), search.expected(), USER);
+        TraceAssertions.assertStats(search.stats().stats(), StatsUtils.getProjectSpanStatItems(search.expected()));
+    }
+
+    /** One search shared by the statement cases, each checking a different statement of it. */
+    private Stream<Arguments> spanSearchStatements() {
+        var search = spanSearch();
+        return Stream.of("find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
+                "get_span_stats_feedback_scores").map(queryName -> Arguments.of(queryName, search));
+    }
+
+    @ParameterizedTest(name = "{0} carries the spans week hint")
+    @MethodSource("spanSearchStatements")
+    void spanSearchStatementCarriesTheWeekHint(String queryName, SpanSearch search) {
+        assertThat(lastSpanSearch(queryName, search))
+                .as("the spans week hint ran in %s, so the results are not a vacuous pass", queryName)
+                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+    }
+
+    @Test
+    void spanSearchRunsOnce() {
+        var search = spanSearch();
+
+        // The page re-reads its rows through the cached page-id scalar, so the search runs once.
+        assertThat(lastSpanSearch("find_spans_by_project_id", search))
+                .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
+                .doesNotContain("IN (SELECT id FROM page_ids)");
+    }
+
+    /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
+    private String lastSpanSearch(String queryName, SpanSearch search) {
+        var token = search.token();
+        return Awaitility.await()
+                .alias("query_log holds a " + queryName + " search for " + token)
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(200))
+                .until(() -> template.nonTransaction(connection -> Mono.from(connection
+                        .createStatement(LAST_SPAN_SEARCH)
+                        .bind("token", token)
+                        .bind("query_name", queryName)
+                        .execute())
+                        .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class)))))
+                        .block(), Objects::nonNull);
     }
 
     private void batchUpdateTags(Span span, Set<UUID> ids) {

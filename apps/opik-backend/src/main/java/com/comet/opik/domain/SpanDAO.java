@@ -946,6 +946,16 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
             ), <endif>comments_final AS (
               SELECT
                    entity_id,
@@ -1127,6 +1137,16 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                   SELECT
@@ -1167,7 +1187,7 @@ public class SpanDAO {
                 FROM spans s
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id IN (SELECT id FROM page_ids)
+                AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
                 <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1238,6 +1258,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
             ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -1325,6 +1354,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT
@@ -1632,6 +1670,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT
@@ -1778,6 +1825,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT entity_id
@@ -3140,6 +3196,10 @@ public class SpanDAO {
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
         Optional.ofNullable(spanSearchCriteria.searchText())
                 .ifPresent(searchText -> template.add("search_text", SPAN_SEARCH_CLAUSE));
+        // Bounds a search scan to the weeks of the project's own spans; pure cost on the unpartitioned legacy table.
+        if (spanColumnsNonNullable()) {
+            template.add("spans_partitioned", true);
+        }
         return template;
     }
 

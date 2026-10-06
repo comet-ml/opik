@@ -1069,6 +1069,15 @@ class TraceDAOImpl implements TraceDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(traces_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM traces
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_id)> AND id \\< :last_received_id<endif>)
+                <endif>
             ), <endif><if(!exclude_feedback_scores)>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -1539,6 +1548,15 @@ class TraceDAOImpl implements TraceDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(traces_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM traces
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_id)> AND id \\< :last_received_id<endif>)
+                <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
@@ -1617,7 +1635,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM traces t
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id IN (SELECT id FROM page_ids)
+                AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
                 <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1771,6 +1789,14 @@ class TraceDAOImpl implements TraceDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(traces_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM traces
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                <endif>
             ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -2045,6 +2071,14 @@ class TraceDAOImpl implements TraceDAO {
                             \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)> AND <search_text> <endif>
+                    <if(traces_partitioned && search_text)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        FROM traces
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id
+                        <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                    <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                     <if(feedback_scores_filters)>
@@ -2908,6 +2942,14 @@ class TraceDAOImpl implements TraceDAO {
                     \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(traces_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM traces
+                    WHERE workspace_id = :workspace_id AND project_id IN :project_ids
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
@@ -3682,6 +3724,17 @@ class TraceDAOImpl implements TraceDAO {
      * unpartitioned legacy one. {@code spanColumnsNonNullable} flips with the EXCHANGE that puts the partitioned
      * successor behind the name, which is how {@code SpanDAO#deleteBatch} already reads it.
      */
+    /**
+     * Enables the traces week hint on the search scans: a key-only pre-pass collects the weeks the project's traces
+     * fall in within the scan's own id bounds, so the read of the large text columns opens only those partitions.
+     * Pure cost on the unpartitioned legacy table, so gated like the spans hint.
+     */
+    private void addTracesPartitionedFlag(ST template) {
+        if (traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
+    }
+
     private void addSpansPartitionedFlag(ST template) {
         if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
@@ -4509,6 +4562,7 @@ class TraceDAOImpl implements TraceDAO {
                     "page:" + page + ":size:" + size + ":" + traceSearchCriteria.toString());
             var template = newTraceThreadFindTemplate(
                     SELECT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
+            addTracesPartitionedFlag(template);
 
             bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
 
@@ -4647,6 +4701,7 @@ class TraceDAOImpl implements TraceDAO {
                     traceSearchCriteria.toString());
             var template = newTraceThreadFindTemplate(
                     COUNT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
+            addTracesPartitionedFlag(template);
             template.add("log_comment", logComment);
 
             if (shouldUseTraceIdPrefilter(traceSearchCriteria, template)) {
@@ -4849,6 +4904,7 @@ class TraceDAOImpl implements TraceDAO {
                         var logComment = getLogComment("get_trace_stats_traces_spans", workspaceId, userName, "");
                         var template = newTraceThreadFindTemplate(
                                 SELECT_TRACES_SPANS_STATS, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
+                        addTracesPartitionedFlag(template);
                         template.add("log_comment", logComment);
                         template.add("has_legacy_scores", hasLegacyScores);
                         addSpansPartitionedFlag(template);

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.domain.IdGenerator;
@@ -118,6 +119,32 @@ class SpansLocalV2PartitioningTest {
             WHERE workspace_id = :workspace_id
             AND id IN :ids
             AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks
+            """;
+
+    /**
+     * The search scan (OPIK-8206): a project's id-range, which prunes no partition on its own, then the same scan with
+     * the week pre-pass the search reads carry. The pre-pass derives the set inside ClickHouse from the project's own
+     * rows within the same bounds, so it can only name weeks the scan can match. Declared once, like
+     * {@link #SELECT_BY_ID_LIST_AND_WEEK_SET}, so the part counts and the rows are about the same statements.
+     */
+    private static final String SELECT_SEARCH_SCAN = """
+            SELECT id
+            FROM spans_local_v2
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND id >= :uuid_from_time
+            """;
+
+    private static final String SELECT_SEARCH_SCAN_WITH_PROJECT_WEEKS = """
+            SELECT id
+            FROM spans_local_v2
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND id >= :uuid_from_time
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                FROM spans_local_v2
+                WHERE workspace_id = :workspace_id AND project_id = :project_id AND id >= :uuid_from_time)
             """;
 
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
@@ -538,6 +565,35 @@ class SpansLocalV2PartitioningTest {
      * Takes the whole statement rather than a fragment, like {@link #prunedParts}, so each read-path case shows the
      * query it pins in full.
      */
+    @Test
+    void searchScanWithProjectWeeksPrunesToProjectWeeks() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var projectIds = List.of(ID_GENERATOR.generateId(weekInstant(1)), ID_GENERATOR.generateId(weekInstant(2)),
+                ID_GENERATOR.generateId(FAR_FUTURE_INSTANT));
+        insert(projectIds, workspaceId, projectId, ID_GENERATOR.generateId(), Instant.now());
+        // Another project's rows in weeks the searched project has none of, inside the same id-range.
+        insert(List.of(ID_GENERATOR.generateId(weekInstant(0)), ID_GENERATOR.generateId(weekInstant(3))), workspaceId,
+                ID_GENERATOR.generateId(), ID_GENERATOR.generateId(), Instant.now());
+        Consumer<Statement> binder = statement -> statement
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId)
+                .bind("uuid_from_time", new InstantToUUIDMapper().toLowerBound(weekInstant(0)).toString());
+
+        var withoutHint = prunedParts(SELECT_SEARCH_SCAN, binder);
+        var withHint = prunedParts(SELECT_SEARCH_SCAN_WITH_PROJECT_WEEKS, binder);
+        var rowsWithoutHint = idsMatching(SELECT_SEARCH_SCAN, workspaceId, binder);
+        var rowsWithHint = idsMatching(SELECT_SEARCH_SCAN_WITH_PROJECT_WEEKS, workspaceId, binder);
+
+        // The id-range alone opens every partition; the project's weeks skip the ones it has no rows in.
+        assertThat(withoutHint.selected()).isEqualTo(withoutHint.total());
+        assertThat(withHint.selected()).isLessThan(withoutHint.selected());
+        // And the hint drops no row the scan admits, the far-future one included.
+        var expectedIds = projectIds.stream().map(UUID::toString).toList();
+        assertThat(rowsWithoutHint).containsExactlyInAnyOrderElementsOf(expectedIds);
+        assertThat(rowsWithHint).containsExactlyInAnyOrderElementsOf(expectedIds);
+    }
+
     private List<String> idsMatching(String selectSql, String workspaceId, Consumer<Statement> binder) {
         return transactionTemplateAsync.stream(connection -> {
             var statement = connection.createStatement(selectSql);
