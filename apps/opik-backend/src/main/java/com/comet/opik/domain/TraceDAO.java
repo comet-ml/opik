@@ -1061,7 +1061,7 @@ class TraceDAOImpl implements TraceDAO {
      * project's items (OPIK-5592).
      */
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH <if(spans_partitioned)>span_weeks AS (
+            WITH <if(span_weeks)>span_weeks AS (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
                 WHERE workspace_id = :workspace_id
@@ -1256,7 +1256,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
-                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
+                <if(span_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
             ),
             span_feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -1405,7 +1405,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
-                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
+                <if(span_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
@@ -4560,6 +4560,13 @@ class TraceDAOImpl implements TraceDAO {
                 && template.getAttribute("annotation_queue_id") == null) {
             template.add("annotation_queues_page_keyed", true);
         }
+
+        // Unbounded, span_weeks is every week the project has spans in, so the pre-pass costs more than it prunes.
+        if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()
+                && Stream.of("page_keyed_aggregates", "trace_id_prefilter", "uuid_from_time", "uuid_to_time")
+                        .anyMatch(name -> template.getAttribute(name) != null)) {
+            template.add("span_weeks", true);
+        }
     }
 
     private boolean shouldPageKeyAggregates(ST template, boolean sortHasFeedbackScores,
@@ -4586,7 +4593,6 @@ class TraceDAOImpl implements TraceDAO {
             var template = newTraceThreadFindTemplate(
                     SELECT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
             addTracesPartitionedFlag(template);
-            addSpansPartitionedFlag(template);
 
             bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
 
@@ -5518,7 +5524,6 @@ class TraceDAOImpl implements TraceDAO {
             var template = newTraceThreadFindTemplate(
                     SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
             addTracesPartitionedFlag(template);
-            addSpansPartitionedFlag(template);
             template.add("log_comment", logComment);
 
             bindTemplateExcludeFieldVariables(criteria, template);

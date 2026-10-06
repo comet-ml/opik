@@ -457,8 +457,7 @@ class SpansReadPathPartitionPruningTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var now = Instant.now();
         // The alert window bounds trace_id only, so the far-future week must come from the span-weeks pre-pass.
-        var spans = createTraceWithAFarFutureSpan(projectName, now);
-        var expected = totalCost(spans);
+        var expected = totalCost(createTraceWithAFarFutureSpan(projectName, now).spans());
 
         var actual = projectMetricsDAO.getTotalCost(List.of(projectId), now.minus(Duration.ofHours(1)), null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
@@ -486,41 +485,60 @@ class SpansReadPathPartitionPruningTest {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
         projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         // The spans reads are keyed by trace id, so the far-future week must come from the span-weeks pre-pass.
-        var spans = createTraceWithAFarFutureSpan(projectName, Instant.now());
-        var expected = new TraceAggregates(spans.size(), totalCost(spans));
+        var created = createTraceWithAFarFutureSpan(projectName, Instant.now());
+        var expected = SpanAggregates.builder().spanCount(created.spans().size())
+                .totalEstimatedCost(totalCost(created.spans())).build();
 
-        var actual = read.apply(projectName, spans.getFirst().traceId()).stream()
-                .map(trace -> new TraceAggregates(trace.spanCount(), trace.totalEstimatedCost()))
-                .toList();
+        var actual = read.apply(projectName, created.trace().id());
 
+        // The whole trace, with the usage its spans add up to, then the span aggregates the trace assertion leaves out.
+        var expectedTrace = created.trace().toBuilder().usage(totalUsage(created.spans())).build();
+        TraceAssertions.assertTraces(actual, List.of(expectedTrace), USER);
         assertThat(actual)
+                .map(trace -> SpanAggregates.builder().spanCount(trace.spanCount())
+                        .totalEstimatedCost(trace.totalEstimatedCost()).build())
                 .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
                         .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                         .build())
                 .containsExactly(expected);
     }
 
-    /** The span aggregates a trace read reports. */
-    private record TraceAggregates(int spanCount, BigDecimal totalEstimatedCost) {
+    /** The span count and total cost reported by a trace read. */
+    @Builder(toBuilder = true)
+    private record SpanAggregates(int spanCount, BigDecimal totalEstimatedCost) {
+    }
+
+    /** A trace and the spans written for it. */
+    @Builder(toBuilder = true)
+    private record TraceWithSpans(Trace trace, List<Span> spans) {
     }
 
     /** A trace at {@code now} with one span beside it and one a bad clock files under a far-future week. */
-    private List<Span> createTraceWithAFarFutureSpan(String projectName, Instant now) {
-        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+    private TraceWithSpans createTraceWithAFarFutureSpan(String projectName, Instant now) {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
                 .projectName(projectName)
-                .startTime(now)
-                .endTime(now.plusMillis(100))
+                // ClickHouse keeps microseconds, and the CI JVM clock has nanoseconds.
+                .startTime(now.truncatedTo(ChronoUnit.MILLIS))
+                .endTime(now.truncatedTo(ChronoUnit.MILLIS).plusMillis(100))
                 .feedbackScores(null)
-                .build(), API_KEY, WORKSPACE_NAME);
+                .usage(null)
+                .build();
+        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
         var spans = Stream.of(now, farFutureInstant())
-                .map(idAt -> newSpan(idAt, traceId).toBuilder()
+                .map(idAt -> newSpan(idAt, trace.id()).toBuilder()
                         .projectName(projectName)
                         .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomInt(1, 100_000), 2))
                         .build())
                 .toList();
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-        return spans;
+        return TraceWithSpans.builder().trace(trace).spans(spans).build();
+    }
+
+    private static Map<String, Long> totalUsage(List<Span> spans) {
+        return spans.stream()
+                .flatMap(span -> span.usage().entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().longValue(), Long::sum));
     }
 
     private static BigDecimal totalCost(List<Span> spans) {
