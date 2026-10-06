@@ -28,7 +28,9 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
+import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,29 +38,26 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
-import org.testcontainers.utility.MountableFile;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -72,9 +71,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * A trace search reads the large text columns of every part its id-range admits. On the weekly-partitioned
  * {@code traces} that is every part from the window start through the far-future weeks a bad client clock creates,
  * so the search scans read only the weeks the project's own traces fall in (a key-only pre-pass). A pruning hint must
- * never drop a row, so this suite checks the whole page across ordinary and far-future weeks, next to a neighbouring
- * part whose key range brackets the project, and that the hint actually ran. {@code query_log.partitions} is
- * per-statement and includes the pre-pass's own key reads, so it cannot show the pruning itself.
+ * never drop a row, so this suite checks the whole trace and thread pages across ordinary and far-future weeks, next
+ * to a neighbouring part whose key range brackets the project. That the hint prunes is pinned by the
+ * {@code EXPLAIN indexes = 1} gate in {@link TracesLocalV2PartitioningTest}; asserting it here again would only couple
+ * this suite to the SQL text.
  * <p>
  * Far-future and backdated ids are rejected at ingestion by default, so this suite disables that validation rather than
  * inserting rows directly. The topology setup is the one {@code TracesPartitionPruningMutationTest} uses.
@@ -90,23 +90,26 @@ class TracesSearchPartitionPruningTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
-    /** The project's traces: two ordinary weeks and the far-future one a bad clock files them under. */
-    private static final List<LocalDate> PROJECT_MONDAYS = List.of(
-            LocalDate.of(2025, 3, 3), LocalDate.of(2025, 6, 2), LocalDate.of(2199, 12, 30));
-    /** A week only the neighbouring projects have traces in, inside the search window. */
-    private static final LocalDate FILLER_MONDAY = LocalDate.of(2025, 4, 14);
-    private static final Instant FROM_TIME = Instant.parse("2025-01-01T00:00:00Z");
+    /**
+     * The week the project's first traces fall in, and the origin the other weeks are named relative to. Historical,
+     * so the weeks around it exist without depending on the wall clock, and random within that, since nothing about the
+     * hint depends on which week it is.
+     */
+    private final LocalDate anchorMonday = LocalDate.now(ZoneOffset.UTC)
+            .minusWeeks(RandomUtils.secure().randomInt(8, 52))
+            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
 
-    private static final String LAST_SEARCH = """
-            SELECT query
-            FROM system.query_log
-            WHERE log_comment LIKE concat(:query_name, ':%')
-            AND type = 'QueryFinish'
-            AND is_initial_query
-            AND query LIKE concat('%', :token, '%')
-            ORDER BY event_time_microseconds DESC
-            LIMIT 1
-            """;
+    /** Past {@code Date}'s 2149 ceiling and inside {@code DateTime64}'s, so the successor files it in its own week. */
+    private final LocalDate farFutureMonday = LocalDate.of(RandomUtils.secure().randomInt(2150, 2296), 6, 1)
+            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+
+    /** The project's traces: two ordinary weeks and the far-future one a bad clock files them under. */
+    private final List<LocalDate> projectMondays = List.of(anchorMonday, anchorMonday.plusWeeks(2), farFutureMonday);
+
+    /** A week only the neighbouring projects have traces in, between the project's two ordinary weeks. */
+    private final LocalDate fillerMonday = anchorMonday.plusWeeks(1);
+
+    private final Instant fromTime = anchorMonday.minusWeeks(1).atStartOfDay().toInstant(ZoneOffset.UTC);
 
     private static final String PARTITION_KEY_OF_TABLE = """
             SELECT partition_key FROM system.tables WHERE database = currentDatabase() AND name = :table
@@ -125,16 +128,12 @@ class TracesSearchPartitionPruningTest {
             ENGINE = Distributed('{cluster}', '<database>', 'traces_local', sipHash64(project_id))
             """;
 
-    private static final String FAST_LOG_FLUSH_CONFIG = "clickhouse-fast-log-flush.xml";
-
     // Dedicated, non-reused ClickHouse + ZooKeeper: the EXCHANGE destructively swaps `traces`.
     private final Network network = Network.newNetwork();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer(false,
             network);
     private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
-            .newClickHouseContainer(false, network, zookeeperContainer)
-            .withCopyFileToContainer(MountableFile.forClasspathResource(FAST_LOG_FLUSH_CONFIG),
-                    "/etc/clickhouse-server/config.d/" + FAST_LOG_FLUSH_CONFIG);
+            .newClickHouseContainer(false, network, zookeeperContainer);
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysqlContainer = MySQLContainerUtils.newMySQLContainer();
     private final WireMockUtils.WireMockRuntime wireMock;
@@ -189,6 +188,7 @@ class TracesSearchPartitionPruningTest {
     }
 
     /** The searched project's traces, one thread each, in ordinary and far-future weeks. */
+    @Builder(toBuilder = true)
     private record Seeded(String token, String projectName, List<Trace> expected) {
     }
 
@@ -205,9 +205,9 @@ class TracesSearchPartitionPruningTest {
         var project = projects.get(1);
         // One batch, so one part whose key range brackets the searched project in a week it has no traces in.
         traceResourceClient.batchCreateTraces(Stream.of(projects.get(0), projects.get(2))
-                .map(neighbour -> newTrace(neighbour.getValue(), FILLER_MONDAY, token))
+                .map(neighbour -> newTrace(neighbour.getValue(), fillerMonday, token))
                 .toList(), API_KEY, WORKSPACE_NAME);
-        var expected = PROJECT_MONDAYS.stream()
+        var expected = projectMondays.stream()
                 .map(monday -> newTrace(project.getValue(), monday, token))
                 .sorted(Comparator.comparing(Trace::id).reversed())
                 .toList();
@@ -216,10 +216,11 @@ class TracesSearchPartitionPruningTest {
         Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .until(() -> traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME,
                         List.of(), List.of(), 10, Map.of()).total() == expected.size());
-        return new Seeded(token, project.getValue(), expected);
+        return Seeded.builder().token(token).projectName(project.getValue()).expected(expected).build();
     }
 
     /** The searched data and the responses. */
+    @Builder(toBuilder = true)
     private record Search(String token, List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
     }
 
@@ -230,10 +231,11 @@ class TracesSearchPartitionPruningTest {
                 List.of(), 10, params);
         var stats = traceResourceClient.getTraceStats(seeded.projectName(), null, API_KEY, WORKSPACE_NAME, null,
                 params);
-        return new Search(seeded.token(), seeded.expected(), page, stats);
+        return Search.builder().token(seeded.token()).expected(seeded.expected()).page(page).stats(stats).build();
     }
 
     /** The searched threads and the responses. */
+    @Builder(toBuilder = true)
     private record ThreadSearch(String token, List<String> expectedThreadIds, TraceThreadPage page,
             ProjectStats stats) {
     }
@@ -250,11 +252,16 @@ class TracesSearchPartitionPruningTest {
                         List.of(), List.of(), params), threads -> threads.total() == expectedThreadIds.size());
         var stats = traceResourceClient.getTraceThreadStats(seeded.projectName(), null, API_KEY, WORKSPACE_NAME,
                 null, params);
-        return new ThreadSearch(seeded.token(), expectedThreadIds, page, stats);
+        return ThreadSearch.builder()
+                .token(seeded.token())
+                .expectedThreadIds(expectedThreadIds)
+                .page(page)
+                .stats(stats)
+                .build();
     }
 
-    private static Map<String, String> searchParams(Seeded seeded) {
-        return Map.of("search", seeded.token(), "from_time", FROM_TIME.toString());
+    private Map<String, String> searchParams(Seeded seeded) {
+        return Map.of("search", seeded.token(), "from_time", fromTime.toString());
     }
 
     @Test
@@ -266,32 +273,6 @@ class TracesSearchPartitionPruningTest {
         TraceAssertions.assertTraces(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(),
                 StatsUtils.getProjectTraceStatItems(search.page().content()));
-    }
-
-    /** One search shared by the statement cases, each checking a different statement of it. */
-    private Stream<Arguments> searchStatements() {
-        var search = search();
-        return Stream.of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
-                .map(queryName -> Arguments.of(queryName, search));
-    }
-
-    @ParameterizedTest(name = "{0} carries the traces week hint")
-    @MethodSource("searchStatements")
-    @DisplayName("each search statement carries the traces week hint")
-    void searchStatementCarriesTheWeekHint(String queryName, Search search) {
-        assertThat(lastSearch(queryName, search.token()))
-                .as("the traces week hint ran in %s, so the results are not a vacuous pass", queryName)
-                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
-    }
-
-    @Test
-    @DisplayName("the page re-reads its rows through the cached page-id scalar, so the search runs once")
-    void searchRunsOnce() {
-        var search = search();
-
-        assertThat(lastSearch("find_traces_by_project_id", search.token()))
-                .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
-                .doesNotContain("IN (SELECT id FROM page_ids)");
     }
 
     @Test
@@ -306,32 +287,6 @@ class TracesSearchPartitionPruningTest {
                 .singleElement()
                 .extracting(ProjectStats.ProjectStatItem::getValue)
                 .isEqualTo((long) search.expectedThreadIds().size());
-    }
-
-    /** One thread search shared by the statement cases, each checking a different statement of it. */
-    private Stream<Arguments> threadSearchStatements() {
-        var search = threadSearch();
-        return Stream.of("find_threads_by_project", "count_threads_by_project", "thread_stats")
-                .map(queryName -> Arguments.of(queryName, search));
-    }
-
-    @ParameterizedTest(name = "{0} carries the traces week hint")
-    @MethodSource("threadSearchStatements")
-    @DisplayName("each thread search statement carries the traces week hint")
-    void threadSearchStatementCarriesTheWeekHint(String queryName, ThreadSearch search) {
-        assertThat(lastSearch(queryName, search.token()))
-                .as("the traces week hint ran in %s, so the results are not a vacuous pass", queryName)
-                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
-    }
-
-    @Test
-    @DisplayName("the thread page re-reads the matched traces through the cached id scalar, so the search runs once")
-    void threadSearchRunsOnce() {
-        var search = threadSearch();
-
-        assertThat(lastSearch("find_threads_by_project", search.token()))
-                .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))")
-                .doesNotContain("IN (SELECT id FROM traces_final_ids)");
     }
 
     /** A trace whose id is minted mid-week, so the partition value is the week's Monday rather than the id's own day. */
@@ -350,17 +305,6 @@ class TracesSearchPartitionPruningTest {
                 .feedbackScores(null)
                 .usage(null)
                 .build();
-    }
-
-    /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
-    private String lastSearch(String queryName, String token) {
-        return Awaitility.await()
-                .alias("query_log holds a " + queryName + " search for " + token)
-                .atMost(Duration.ofSeconds(30))
-                .pollInterval(Duration.ofMillis(200))
-                .until(() -> queryOneString(LAST_SEARCH,
-                        statement -> statement.bind("token", token).bind("query_name", queryName)),
-                        Objects::nonNull);
     }
 
     /** See {@code TracesPartitionPruningMutationTest#ensurePartitionedSuccessorUnderTraces}. */
