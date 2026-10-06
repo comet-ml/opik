@@ -64,6 +64,7 @@ import httpx
 import opik.config as opik_config
 import opik.url_helpers as url_helpers
 from opik import analytics
+from opik import environment
 
 LOGGER = logging.getLogger(__name__)
 
@@ -130,6 +131,10 @@ def _properties(
     properties: Dict[str, analytics.PropertyValue] = {
         "identity_lookup": lookup,
         "workspace_kind": workspace_kind,
+        # Overrides the process-wide tag, read once and often before `opik
+        # configure` has set the URL. A login is unique only within its
+        # deployment, so a join on `user_id` needs the one it came from.
+        "installation_type": environment.get_installation_type(config_),
     }
     if account is not None and account.user_name:
         properties["user_id"] = account.user_name
@@ -149,21 +154,19 @@ def _properties(
 
 def _resolve(config_: opik_config.OpikConfig) -> Tuple[Optional[_Account], str]:
     """The account behind this run, and why it came out that way."""
-    # Asked before the credential, because the two answers mean opposite things: a
-    # missing key is a run that has not got there yet, while a deployment with no
-    # accounts is one that can never be attributed at all.
-    if config_.is_localhost_installation or (
-        not config_.is_cloud_installation and not config_.api_key
-    ):
-        # No accounts on a local Opik, nor on an open source one, which has no key
-        # either. Unattributable by construction, not a gap to close - which is what
-        # the MCP server means by this value too.
-        return None, "none_expected"
-
     if not config_.api_key:
-        # `opik configure` reports its first event before it has asked for a key, so
-        # this is the ordinary state of a first-ever run rather than a failure.
-        return None, "no_credential"
+        # On cloud, `opik configure` reports its first event before it has asked for
+        # a key: a run that has not got there yet. Anywhere else no key means an Opik
+        # with no accounts, which can never be attributed at all - which is what the
+        # MCP server means by `none_expected` too.
+        return (
+            None,
+            "no_credential" if config_.is_cloud_installation else "none_expected",
+        )
+
+    if config_.is_localhost_installation:
+        # Never asked, as by the MCP server: a local Opik has no accounts.
+        return None, "none_expected"
 
     base_url = url_helpers.get_base_url(config_.url_override)
     account = _fetch(config_.api_key, base_url)

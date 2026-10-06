@@ -74,17 +74,23 @@ class TestResolvedAccount:
         assert properties["user_id"] == "someone"
         assert properties["identity_lookup"] == "resolved"
 
-    def test_self_hosted_comet_key__login_is_reported(self):
-        """Self-hosted Comet serves account-details just as cloud does."""
+    def test_self_hosted_comet_key__login_is_reported_with_its_deployment(self):
+        """Self-hosted Comet serves account-details just as cloud does. A login is
+        unique only within its deployment, so it is joined together with
+        `installation_type`: the configured Opik's, not the process tag's."""
+        config_ = _config(cloud=False)
+        config_.url_override = "https://comet.acme.com/opik/api"
+
         with mock.patch.object(
             account_identity.httpx,
             "Client",
             return_value=_responding(body={"userName": "someone"}),
         ):
-            properties = account_identity._properties(_config(cloud=False))
+            properties = account_identity._properties(config_)
 
         assert properties["user_id"] == "someone"
         assert properties["identity_lookup"] == "resolved"
+        assert properties["installation_type"] == "self-hosted"
 
     def test_two_events__cost_one_round_trip(self):
         """A command reports an entry and a result event, not two lookups."""
@@ -337,6 +343,7 @@ class TestThePublicEntryPoint:
         assert properties == {
             "identity_lookup": "resolved",
             "workspace_kind": "configured",
+            "installation_type": "cloud",
             "user_id": "someone",
             "workspace": "their-ws",
             "api_key_sha256": hashlib.sha256(b"secret-key").hexdigest(),
