@@ -144,11 +144,11 @@ GEPA coordinates two model contexts:
 - `GepaOptimizer.model`: LiteLLM model string the optimizer uses for internal reasoning (reflection, mutation prompts, etc.).
 - `ChatPrompt.model`: The model evaluated against your dataset—this should match what you run in production.
 
-Set `model` to any LiteLLM-supported provider (e.g., `"gpt-4o"`, `"azure/gpt-4"`, `"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`) and pass extra parameters via `model_parameters` when you need to tune temperature, max tokens, or other limits:
+Set `model` to any LiteLLM-supported provider (e.g., `"gpt-4o"`, `"azure/gpt-4"`, `"anthropic/claude-opus-4-7"`, `"gemini/gemini-1.5-pro"`) and pass extra parameters via `model_parameters` when you need to tune temperature, max tokens, or other limits:
 
 ```python
 optimizer = GepaOptimizer(
-    model="anthropic/claude-3-opus-20240229",
+    model="anthropic/claude-opus-4-7",
     model_parameters={
         "temperature": 0.7,
         "max_tokens": 4096

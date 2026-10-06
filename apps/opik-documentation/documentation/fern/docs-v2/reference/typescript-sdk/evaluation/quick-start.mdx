@@ -288,3 +288,21 @@ Error: Metric 'ExactMatch' is skipped, missing required arguments: expected. Ava
 
 - Review your `scoringKeyMapping` to ensure it maps correctly to your dataset structure
 - Check that all metric required inputs are provided either in task output or via mapping
+- This message is recorded as the `reason` of a failed score for that metric (see below), so the other metrics on the item are still scored
+
+### Failed metric scores
+
+If a metric throws on an item (a judge API error, a rate limit, missing arguments), `evaluate()` keeps going and records a failed score for that metric instead of dropping it:
+
+```json
+{
+  "name": "hallucination",
+  "value": 0,
+  "reason": "<error message>",
+  "scoringFailed": true
+}
+```
+
+- Failed scores are excluded from the metric's average and are not logged on the trace.
+- The summary shows how many scores failed next to the average, for example `hallucination: 0.9000 (avg) - 3 failed`. If every score of a metric failed, it shows `None (avg)`.
+- In a test suite, an evaluator that throws fails the item's run.

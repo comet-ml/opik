@@ -50,7 +50,7 @@ All models use the LiteLLM format: `provider/model-name`
 ```python
 # Examples of the LiteLLM model format
 model="openai/gpt-4o"                          # OpenAI
-model="anthropic/claude-3-5-sonnet-20241022"   # Anthropic
+model="anthropic/claude-sonnet-4-6"   # Anthropic
 model="gemini/gemini-2.0-flash"                # Google Gemini
 model="azure/my-deployment-name"               # Azure OpenAI
 model="ollama/llama3"                          # Ollama (local)
@@ -100,9 +100,9 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     ```
 
     **Available Models:**
-    - `anthropic/claude-3-5-sonnet-20241022` - Best balance of speed and capability
-    - `anthropic/claude-3-opus-20240229` - Most capable
-    - `anthropic/claude-3-haiku-20240307` - Fastest
+    - `anthropic/claude-sonnet-4-6` - Best balance of speed and capability
+    - `anthropic/claude-opus-4-7` - Most capable
+    - `anthropic/claude-haiku-4-5` - Fastest
 
     **Example:**
     ```python
@@ -113,10 +113,10 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "{question}"}
         ],
-        model="anthropic/claude-3-5-sonnet-20241022"
+        model="anthropic/claude-sonnet-4-6"
     )
 
-    optimizer = MetaPromptOptimizer(model="anthropic/claude-3-5-sonnet-20241022")
+    optimizer = MetaPromptOptimizer(model="anthropic/claude-sonnet-4-6")
     ```
   </Tab>
 
@@ -288,7 +288,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     ```python
     # Format: openrouter/provider/model
     model="openrouter/google/gemini-2.0-flash"
-    model="openrouter/anthropic/claude-3-5-sonnet"
+    model="openrouter/anthropic/claude-sonnet-4.6"
     model="openrouter/meta-llama/llama-3-70b-instruct"
     ```
 
@@ -304,7 +304,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
         model="openrouter/google/gemini-2.0-flash"
     )
 
-    optimizer = MetaPromptOptimizer(model="openrouter/anthropic/claude-3-5-sonnet")
+    optimizer = MetaPromptOptimizer(model="openrouter/anthropic/claude-sonnet-4.6")
     ```
   </Tab>
 </Tabs>
@@ -374,7 +374,7 @@ optimizer = MetaPromptOptimizer(
 ```
 
 <Tip>
-  **Recommendation:** Use a capable model like `gpt-4o` or `claude-3-5-sonnet` for the optimizer, even if your production application uses a smaller model. The optimizer only runs during development, so the cost is minimal compared to the quality improvements you'll achieve.
+  **Recommendation:** Use a capable model like `gpt-4o` or `claude-sonnet-4-6` for the optimizer, even if your production application uses a smaller model. The optimizer only runs during development, so the cost is minimal compared to the quality improvements you'll achieve.
 </Tip>
 
 ## Troubleshooting

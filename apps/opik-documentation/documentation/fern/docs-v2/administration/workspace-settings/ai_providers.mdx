@@ -60,6 +60,7 @@ Below are instructions for obtaining API keys and other required information for
 3. Click "Create new secret key"
 4. Copy your API key (it will only be shown once)
 5. In Opik, select "OpenAI" as the provider and paste your key
+6. (Optional) Under **Custom headers**, add any static HTTP headers to send with every request to OpenAI
 
 #### Anthropic
 
@@ -76,6 +77,15 @@ Below are instructions for obtaining API keys and other required information for
 3. Create a new API key
 4. Copy your API key
 5. In Opik, select "OpenRouter" as the provider and paste your key
+6. (Optional) Under **Custom headers**, add any static HTTP headers to send with every request. For example, OpenRouter's app attribution headers make Opik calls show up under your app name in OpenRouter's activity view:
+   - `HTTP-Referer`: `https://your-app.example.com`
+   - `X-OpenRouter-Title`: `Your App Name`
+
+<Note>
+  For OpenAI and OpenRouter, the `Authorization` and `api-key` headers are rejected, because they would override the API
+  key. Put the key in the API key field instead. Unlike the Custom provider workaround, a built-in provider with custom
+  headers keeps Opik cost tracking.
+</Note>
 
 #### Gemini
 
@@ -242,7 +252,7 @@ Before configuring Bedrock in Opik, ensure you have:
    - **Provider name**: A unique identifier for this provider instance (e.g., "Bedrock us-east-1")
    - **URL**: Your Bedrock endpoint URL (see format below)
    - **Authentication**: Your AWS Bedrock API key (see [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html) for setup instructions), or OAuth2 client credentials if your gateway issues short-lived tokens (see [OAuth2 Client Credentials Authentication](#oauth2-client-credentials-authentication) below)
-   - **Models list**: Comma-separated list of models you want to use (e.g., `us.anthropic.claude-3-5-sonnet-20241022-v2:0,us.meta.llama3-2-3b-instruct-v1:0`)
+   - **Models list**: Comma-separated list of models you want to use (e.g., `us.anthropic.claude-sonnet-4-6,us.meta.llama3-2-3b-instruct-v1:0`)
    - **Custom headers** (optional): Add any additional HTTP headers required by your configuration
 5. Click **Add configuration** to save
 
