@@ -543,11 +543,19 @@ test.describe(
 
     test(
       'the WARN sanitizes a path that looks like a log entry and caps a large argument map',
-      { tag: ['@cap:online-evaluation.automation-logs'] },
+      { tag: ['@cap:online-evaluation.python-rule-scores'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup }) => {
         // API-level: both claims are about the string the engine persists, and
         // the page renders whatever that string is. Driving a browser to read it
         // back would assert the table, which the two tests above already do.
+        //
+        // Deliberately NOT tagged `automation-logs`, which the two tests above
+        // do carry. That key is the /automation-logs PAGE — its taxonomy entry
+        // says so, and `online-evaluation-python-metric-errors.spec.ts` asserts
+        // this same GET /automations/evaluators/{id}/logs stream and declines
+        // the key for exactly this reason: an API read says nothing about what
+        // renders. `python-rule-scores` is what this test really pins — a
+        // python rule that reached no evaluator and therefore stored no score.
         const forgedRuleName = `${testNamespace}-forged`;
         const cappedRuleName = `${testNamespace}-capped`;
 

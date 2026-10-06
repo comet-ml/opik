@@ -180,44 +180,47 @@ def _make_call(
     if call.provider is not None:
         track_kwargs["provider"] = call.provider
 
+    # The sync and async branches differ only in how one call is made, so they
+    # are reduced to the same no-argument callable before `parent_name` is
+    # considered. Written this way deliberately: an earlier version returned
+    # from inside the async branch, which silently ignored `parent_name` for
+    # `use_async` calls and would have answered a nested-async request with an
+    # orphan root span rather than an error.
     if call.use_async:
-        client = track_ollama(
-            ollama.AsyncClient(host=host), **track_kwargs
-        )
+        async_client = track_ollama(ollama.AsyncClient(host=host), **track_kwargs)
 
         async def _run() -> tuple[str, int]:
-            result = await client.chat(**kwargs)
+            result = await async_client.chat(**kwargs)
             if call.stream:
                 return await _collect_async(result)
             return result.message.content or "", 0
 
-        # A fresh loop in this worker thread. The mock endpoint is served by the
-        # app's own loop on the main thread, so a self-request from here does
-        # not deadlock.
-        content, chunk_count = asyncio.run(_run())
-        return OllamaChatResult(
-            label=call.label, content=content, model=body.model, chunk_count=chunk_count
-        )
+        def _one_call() -> tuple[str, int]:
+            # A fresh loop in this worker thread. The mock endpoint is served by
+            # the app's own loop on the main thread, so a self-request from here
+            # does not deadlock. `asyncio.run` copies the calling context into
+            # the task it creates, so an `@opik.track` span opened around this
+            # call is still the current one inside the coroutine.
+            return asyncio.run(_run())
 
-    client = track_ollama(ollama.Client(host=host), **track_kwargs)
+    else:
+        sync_client = track_ollama(ollama.Client(host=host), **track_kwargs)
 
-    def _one_call() -> tuple[str, int]:
-        result = client.chat(**kwargs)
-        if call.stream:
-            return _collect(result)
-        return result.message.content or "", 0
-
-    if call.parent_name is None:
-        content, chunk_count = _one_call()
-        return OllamaChatResult(
-            label=call.label, content=content, model=body.model, chunk_count=chunk_count
-        )
+        def _one_call() -> tuple[str, int]:
+            result = sync_client.chat(**kwargs)
+            if call.stream:
+                return _collect(result)
+            return result.message.content or "", 0
 
     # The nested case. `opik.track` is applied here rather than at import time
     # because the parent's name is the caller's, and the span the chat call must
     # end up under is this function's.
-    tracked = opik.track(name=call.parent_name, project_name=body.project_name)(_one_call)
-    content, chunk_count = tracked()
+    run = (
+        _one_call
+        if call.parent_name is None
+        else opik.track(name=call.parent_name, project_name=body.project_name)(_one_call)
+    )
+    content, chunk_count = run()
     return OllamaChatResult(
         label=call.label, content=content, model=body.model, chunk_count=chunk_count
     )
@@ -237,19 +240,25 @@ def ollama_chat(
     """
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     opik.set_global_client(client, context_wise=True)
-    host = _mock_host(request)
-
-    # The `opik_tracked` guard, checked on a client this route then throws away.
-    # Observing it through the spans would mean asserting an absence of
-    # duplicates, which passes just as well when the tracker never ran.
-    probe = track_ollama(
-        ollama.Client(host=host), project_name=body.project_name
-    )
-    probe_chat = probe.chat
-    rewrapped = track_ollama(probe, project_name=body.project_name)
-    double_track_is_noop = rewrapped is probe and rewrapped.chat is probe_chat
 
     try:
+        host = _mock_host(request)
+
+        # The `opik_tracked` guard, checked on a client this route then throws
+        # away. Observing it through the spans would mean asserting an absence of
+        # duplicates, which passes just as well when the tracker never ran.
+        #
+        # Inside the `try` rather than beside the two lines above: unlike the
+        # sibling routes, this one has setup that calls into the SDK before the
+        # first result, and an exception there would otherwise skip the cleanup
+        # below and leave the `atexit` hook registered for the bridge's life.
+        probe = track_ollama(
+            ollama.Client(host=host), project_name=body.project_name
+        )
+        probe_chat = probe.chat
+        rewrapped = track_ollama(probe, project_name=body.project_name)
+        double_track_is_noop = rewrapped is probe and rewrapped.chat is probe_chat
+
         results = [_make_call(call, body, host) for call in body.calls]
         # Flush before answering so the caller's first REST read is not racing
         # the SDK's background streamer. The spans are still eventually

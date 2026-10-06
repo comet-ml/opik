@@ -19,9 +19,9 @@ import { LogsPage } from '@e2e/pom/logs.page';
  *   or presentational markup in a panel that renders other tenants' logged
  *   output.
  *
- * `traces.messages-tab` is `covered: false`. The one spec that touches a
- * Messages tab, `playground.trace-messages-tab`, drives a trace the playground
- * wrote, whose completion is a bare `{output: string}` — a different mapper, a
+ * `traces.messages-tab` was `covered: false` before this spec. The one spec that
+ * touched a Messages tab, `playground.trace-messages-tab`, drives a trace the
+ * playground wrote, whose completion is a bare `{output: string}` — a different mapper, a
  * different block shape, and prose rather than markup. The nearest trace-side
  * specs (`compare-message-panel`, `playground-failed-run-output`) match
  * `.comet-markdown` by text content, which plain prose satisfies whether or not
