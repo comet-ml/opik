@@ -14,6 +14,7 @@ import lombok.NonNull;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import static com.comet.opik.infrastructure.llm.antropic.AnthropicEffort.FORMAT;
@@ -27,40 +28,45 @@ class AnthropicOutputConfigChatModel implements ChatModel {
 
     private final Map<?, ?> ruleOutputConfig;
     private final Function<Map<String, Object>, ChatModel> modelWithCustomParameters;
-    private final ChatModel withRuleOutputConfig;
+    private final Map<Map<?, ?>, ChatModel> modelsByOutputConfig = new ConcurrentHashMap<>();
 
     AnthropicOutputConfigChatModel(@NonNull Map<?, ?> ruleOutputConfig,
             @NonNull Function<Map<String, Object>, ChatModel> modelWithCustomParameters) {
         this.ruleOutputConfig = ruleOutputConfig;
         this.modelWithCustomParameters = modelWithCustomParameters;
-        this.withRuleOutputConfig = modelWithCustomParameters.apply(Map.of(OUTPUT_CONFIG, ruleOutputConfig));
     }
 
     @Override
     public ChatResponse chat(@NonNull ChatRequest chatRequest) {
         var format = toAnthropicFormat(chatRequest.responseFormat());
         if (format == null) {
-            return withRuleOutputConfig.chat(chatRequest);
+            return modelFor(ruleOutputConfig).chat(chatRequest);
         }
         var outputConfig = new LinkedHashMap<Object, Object>(ruleOutputConfig);
         outputConfig.put(FORMAT, format);
-        return modelWithCustomParameters.apply(Map.of(OUTPUT_CONFIG, outputConfig))
-                .chat(withoutResponseFormat(chatRequest));
+        return modelFor(outputConfig).chat(withoutResponseFormat(chatRequest));
     }
 
     @Override
     public ChatRequestParameters defaultRequestParameters() {
-        return withRuleOutputConfig.defaultRequestParameters();
+        return modelFor(ruleOutputConfig).defaultRequestParameters();
     }
 
     @Override
     public ModelProvider provider() {
-        return withRuleOutputConfig.provider();
+        return modelFor(ruleOutputConfig).provider();
     }
 
     @Override
     public Set<Capability> supportedCapabilities() {
-        return withRuleOutputConfig.supportedCapabilities();
+        return modelFor(ruleOutputConfig).supportedCapabilities();
+    }
+
+    // Each AnthropicChatModel opens its own HTTP client, and scoreTrace retries chat() on this same instance, so a
+    // model is built only when a request first needs it and is reused after that.
+    private ChatModel modelFor(Map<?, ?> outputConfig) {
+        return modelsByOutputConfig.computeIfAbsent(outputConfig,
+                config -> modelWithCustomParameters.apply(Map.of(OUTPUT_CONFIG, config)));
     }
 
     private static AnthropicFormat toAnthropicFormat(ResponseFormat responseFormat) {

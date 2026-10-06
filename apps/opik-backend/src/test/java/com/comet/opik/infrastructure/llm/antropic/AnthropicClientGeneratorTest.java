@@ -11,13 +11,17 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.AnthropicChatRequestParameters;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +35,9 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -466,6 +472,28 @@ class AnthropicClientGeneratorTest {
             assertThat(countOutputConfigKeys(rawBody)).isEqualTo(1);
             assertThat(JsonUtils.getJsonNodeFromString(rawBody).path("output_config"))
                     .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"low\"}"));
+        }
+
+        @Test
+        void buildsOnlyTheModelAJudgeRequestNeedsAndReusesItOnARetry() {
+            var built = new ArrayList<Map<String, Object>>();
+            var chatModel = new AnthropicOutputConfigChatModel(Map.of("effort", "low"), customParameters -> {
+                built.add(customParameters);
+                return new ChatModel() {
+                    @Override
+                    public ChatResponse chat(ChatRequest chatRequest) {
+                        return ChatResponse.builder().aiMessage(AiMessage.from("ok")).build();
+                    }
+                };
+            });
+
+            chatModel.chat(judgeRequest());
+            chatModel.chat(judgeRequest());
+
+            assertThat(built).hasSize(1);
+            assertThat(built.getFirst().get("output_config")).asInstanceOf(InstanceOfAssertFactories.MAP)
+                    .containsEntry("effort", "low")
+                    .containsKey("format");
         }
 
         @ParameterizedTest(name = "{0} at {1}")
