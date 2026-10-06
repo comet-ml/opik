@@ -220,6 +220,24 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
   password: opik
   socketTimeout: 200s
 
+# Description: the free-form SQL post-run check, defense in depth on top of the row policies. It verifies from each
+#   query's system.query_log entries and plan that every table it read was read under a row policy.
+freeFormSqlPostRunCheck:
+  #  Default: audit
+  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
+  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
+  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
+  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  # Quoted: YAML reads a bare off as the boolean false.
+  mode: audit
+  #  Default: 10s
+  #  Description: Wait before each read of the query's log entries. Longer than ClickHouse's query_log flush
+  #   interval (7.5s by default), so every entry is written without forcing a flush. 0 to 60s.
+  logReadDelay: 10s
+  #  Default: 3
+  #  Description: Reads of the query's log entries before the check reports them missing (1 to 10)
+  maxLogReadAttempts: 3
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
