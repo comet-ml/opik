@@ -2,7 +2,9 @@ import { useCallback } from "react";
 import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
+import { OpenAiPipelineMode } from "@/types/providers";
 import usePlaygroundStore, {
+  getExperimentNamesForPrompts,
   usePromptIds,
   usePromptMap,
   useUpdateOutput,
@@ -34,6 +36,7 @@ import { getTextFromMessageContent } from "@/lib/llm";
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
   prompt: PlaygroundPromptType;
+  experimentName?: string;
 }
 
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
@@ -153,6 +156,7 @@ interface UsePromptDatasetItemCombinationArgs {
   ) => void;
   deleteAbortController: (key: string) => void;
   throttlingSeconds: number;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const usePromptDatasetItemCombination = ({
@@ -164,6 +168,7 @@ const usePromptDatasetItemCombination = ({
   addAbortController,
   deleteAbortController,
   throttlingSeconds,
+  openAiPipelineMode,
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
@@ -177,23 +182,27 @@ const usePromptDatasetItemCombination = ({
   const promptMap = usePromptMap();
 
   const createCombinations = useCallback((): DatasetItemPromptCombination[] => {
+    const experimentNames = getExperimentNamesForPrompts(promptIds);
+
     if (datasetItems.length > 0 && promptIds.length > 0) {
       return datasetItems.flatMap((di) =>
         promptIds.map((promptId) => ({
           datasetItem: di,
           prompt: promptMap[promptId],
+          experimentName: experimentNames[promptId],
         })),
       );
     }
 
     return promptIds.map((promptId) => ({
       prompt: promptMap[promptId],
+      experimentName: experimentNames[promptId],
     }));
   }, [datasetItems, promptMap, promptIds]);
 
   const processCombination = useCallback(
     async (
-      { datasetItem, prompt }: DatasetItemPromptCombination,
+      { datasetItem, prompt, experimentName }: DatasetItemPromptCombination,
       logProcessor: LogProcessor,
     ) => {
       if (!usePlaygroundStore.getState().isRunningMap[prompt.id]) {
@@ -212,6 +221,7 @@ const usePromptDatasetItemCombination = ({
         updateOutput(prompt.id, datasetItemId, {
           isLoading: true,
           value: null,
+          error: undefined,
           selectedRuleIds,
           usage: undefined,
         });
@@ -237,6 +247,7 @@ const usePromptDatasetItemCombination = ({
           model: prompt.model,
           messages: providerMessages,
           configs: prompt.configs,
+          openAiPipelineMode,
           signal: controller.signal,
           onAddChunk: (o) => {
             updateOutput(prompt.id, datasetItemId, {
@@ -269,9 +280,18 @@ const usePromptDatasetItemCombination = ({
         logProcessor.log({
           ...run,
           providerMessages,
+          // Only role and content describe the template; id, promptId,
+          // promptVersionId and autoImprove are Playground editor state and
+          // have no place in the stored experiment config.
+          templateMessages: prompt.messages.map(({ role, content }) => ({
+            role,
+            content,
+          })),
           promptLibraryVersions,
           promptLibraryMetadata,
+          experimentName,
           configs: prompt.configs,
+          openAiPipelineMode,
           model: prompt.model,
           provider: prompt.provider,
           promptId: prompt.id,
@@ -292,10 +312,12 @@ const usePromptDatasetItemCombination = ({
         }
       } catch (error) {
         const typedError = error as Error;
+        // Stopping a run is not a failure
+        const stopped = controller.signal.aborted;
 
         updateOutput(prompt.id, datasetItemId, {
-          value: typedError.message,
           isLoading: false,
+          ...(stopped ? {} : { error: typedError.message || "Unknown error" }),
         });
       } finally {
         deleteAbortController(key);
@@ -322,6 +344,7 @@ const usePromptDatasetItemCombination = ({
       deleteAbortController,
       selectedRuleIds,
       throttlingSeconds,
+      openAiPipelineMode,
     ],
   );
 

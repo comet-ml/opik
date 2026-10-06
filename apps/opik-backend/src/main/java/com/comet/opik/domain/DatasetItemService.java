@@ -76,11 +76,11 @@ public interface DatasetItemService {
     Mono<Long> saveBatch(UUID datasetId, List<DatasetItem> items);
 
     Mono<Void> createFromTraces(UUID datasetId, Set<UUID> traceIds, TraceEnrichmentOptions enrichmentOptions,
-            List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy);
+            List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy, Map<String, String> fieldMappings);
 
     Mono<Void> createFromSpans(UUID datasetId, Set<UUID> spanIds,
             SpanEnrichmentOptions enrichmentOptions, List<EvaluatorItem> evaluators,
-            ExecutionPolicy executionPolicy);
+            ExecutionPolicy executionPolicy, Map<String, String> fieldMappings);
 
     Mono<DatasetItem> get(UUID id);
 
@@ -194,7 +194,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             @NonNull Set<UUID> traceIds,
             @NonNull TraceEnrichmentOptions enrichmentOptions,
             List<EvaluatorItem> evaluators,
-            ExecutionPolicy executionPolicy) {
+            ExecutionPolicy executionPolicy,
+            Map<String, String> fieldMappings) {
 
         log.info("Creating dataset items from '{}' traces for dataset '{}'", traceIds.size(), datasetId);
 
@@ -210,8 +211,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         .orElseThrow(() -> new NotFoundException("Dataset not found: '%s'".formatted(datasetId)));
             })).subscribeOn(Schedulers.boundedElastic());
         }).flatMap(dataset -> {
+            var mappings = resolveFieldMappings(fieldMappings, dataset.type());
+
             // Enrich traces with metadata
-            return traceEnrichmentService.enrichTraces(traceIds, enrichmentOptions)
+            return traceEnrichmentService.enrichTraces(traceIds, enrichmentOptions, mappings)
                     .flatMap(enrichedTraces -> {
                         // Convert enriched traces to dataset items
                         List<DatasetItem> datasetItems = enrichedTraces.entrySet().stream()
@@ -223,7 +226,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .evaluators(evaluators)
                                         .executionPolicy(executionPolicy)
                                         .build())
+                                .filter(item -> mappings.isEmpty() || !item.data().isEmpty())
                                 .toList();
+
+                        if (datasetItems.size() < enrichedTraces.size()) {
+                            log.info("Skipped '{}' of '{}' items where no mapped field resolved, dataset '{}'",
+                                    enrichedTraces.size() - datasetItems.size(), enrichedTraces.size(), datasetId);
+                        }
 
                         // Save dataset items - route to versioned or legacy based on toggle
                         if (featureFlags.isDatasetVersioningEnabled()) {
@@ -249,7 +258,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             @NonNull Set<UUID> spanIds,
             @NonNull SpanEnrichmentOptions enrichmentOptions,
             List<EvaluatorItem> evaluators,
-            ExecutionPolicy executionPolicy) {
+            ExecutionPolicy executionPolicy,
+            Map<String, String> fieldMappings) {
 
         log.info("Creating dataset items from '{}' spans for dataset '{}'", spanIds.size(), datasetId);
 
@@ -265,8 +275,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         .orElseThrow(() -> new NotFoundException("Dataset not found: '%s'".formatted(datasetId)));
             })).subscribeOn(Schedulers.boundedElastic());
         }).flatMap(dataset -> {
+            var mappings = resolveFieldMappings(fieldMappings, dataset.type());
+
             // Enrich spans with metadata
-            return spanEnrichmentService.enrichSpans(spanIds, enrichmentOptions)
+            return spanEnrichmentService.enrichSpans(spanIds, enrichmentOptions, mappings)
                     .flatMap(enrichedSpans -> {
                         // Convert enriched spans to dataset items
                         List<DatasetItem> datasetItems = enrichedSpans.entrySet().stream()
@@ -278,7 +290,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .evaluators(evaluators)
                                         .executionPolicy(executionPolicy)
                                         .build())
+                                .filter(item -> mappings.isEmpty() || !item.data().isEmpty())
                                 .toList();
+
+                        if (datasetItems.size() < enrichedSpans.size()) {
+                            log.info("Skipped '{}' of '{}' items where no mapped field resolved, dataset '{}'",
+                                    enrichedSpans.size() - datasetItems.size(), enrichedSpans.size(), datasetId);
+                        }
 
                         // Save dataset items - route to versioned or legacy based on toggle
                         if (featureFlags.isDatasetVersioningEnabled()) {
@@ -295,6 +313,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         return saveBatch(batch, datasetId);
                     });
         }).then();
+    }
+
+    private static Map<String, String> resolveFieldMappings(
+            Map<String, String> fieldMappings, DatasetType datasetType) {
+        if (fieldMappings == null || datasetType == DatasetType.TEST_SUITE) {
+            return Map.of();
+        }
+        return fieldMappings;
     }
 
     Map<String, JsonNode> filterDataForDatasetType(

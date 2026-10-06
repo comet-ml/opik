@@ -135,6 +135,12 @@ class ExperimentMessageRenderer {
             builder.maxCompletionTokens(maxCompletionTokens.intValue());
         }
 
+        // Only OpenRouter's config carries this key, and its panel uses 0 for "no limit", not a zero cap.
+        var maxTokens = configs.get("maxTokens");
+        if (maxTokens != null && maxTokens.isNumber() && maxTokens.intValue() > 0) {
+            builder.maxTokens(maxTokens.intValue());
+        }
+
         var topP = configs.get("topP");
         if (topP != null && topP.isNumber()) {
             builder.topP(topP.doubleValue());

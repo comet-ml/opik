@@ -1,34 +1,34 @@
-// Metric selection uses a tri-state value:
-//   null      -> all metrics selected (nothing persisted yet / "select all")
-//   []        -> none selected
-//   [..ids]   -> an explicit subset
-// These helpers centralize the toggle transitions so the "all" (null) edge
-// cases stay consistent between the UI and any callers reading the value.
+import {
+  EVAL_TRIGGER_SCOPE,
+  EVALUATORS_RULE_SCOPE,
+  EvaluatorsRule,
+} from "@/types/automations";
+import { getUIRuleScope } from "@/v2/pages-shared/automations/AddEditRuleDialog/helpers";
 
+export const isTraceRule = (rule: EvaluatorsRule): boolean =>
+  getUIRuleScope(rule.type) === EVALUATORS_RULE_SCOPE.trace;
+
+// An enabled rule targeting experiments scores every dataset run whether or not it is picked.
+// Mirrors the trigger-scope branch of OnlineScoringSampler.shouldScoreTrace on the backend.
+export const isAlwaysRunRule = (rule: EvaluatorsRule): boolean =>
+  rule.enabled !== false &&
+  (rule.trigger_scope === EVAL_TRIGGER_SCOPE.experiment ||
+    rule.trigger_scope === EVAL_TRIGGER_SCOPE.both);
+
+// A selection is a plain list of rule ids. null is read as empty because the store still writes
+// it whenever a dataset has no stored selection.
 export const toggleMetricSelection = (
   current: string[] | null,
   ruleId: string,
-  allRuleIds: string[],
-): string[] | null => {
-  const total = allRuleIds.length;
-  const isAllSelected = current === null || current.length === total;
+): string[] => {
+  const selected = current ?? [];
 
-  // From "all", toggling one off yields everything-but-that-one.
-  if (isAllSelected) {
-    const next = allRuleIds.filter((id) => id !== ruleId);
-    return next.length > 0 ? next : [];
-  }
-
-  // Toggling an already-selected id off; empty result collapses to [].
-  if (current.includes(ruleId)) {
-    const next = current.filter((id) => id !== ruleId);
-    return next.length > 0 ? next : [];
-  }
-
-  // Toggling a new id on; if that completes the full set, collapse to null ("all").
-  const next = [...current, ruleId];
-  return next.length === total ? null : next;
+  return selected.includes(ruleId)
+    ? selected.filter((id) => id !== ruleId)
+    : [...selected, ruleId];
 };
 
-export const toggleAllMetrics = (isAllSelected: boolean): string[] | null =>
-  isAllSelected ? [] : null;
+export const toggleAllMetrics = (
+  isAllSelected: boolean,
+  allRuleIds: string[],
+): string[] => (isAllSelected ? [] : allRuleIds);

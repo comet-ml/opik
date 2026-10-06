@@ -1,6 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { ProjectsPage } from '@e2e/pom/projects.page';
 import type { PythonSdkClient } from '@e2e/core/sdk';
+import { skipUnlessBackdatedIdsAccepted } from '@e2e/fixtures/uuid-window-guard';
 
 /**
  * The Projects list is the workspace's landing page, and its statistic columns
@@ -19,6 +20,7 @@ import type { PythonSdkClient } from '@e2e/core/sdk';
  * that id. Nothing here depends on data that happens to already exist.
  */
 const OUTSIDE_WINDOW_DAYS = 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const SCORE_NAME = 'sample-quality';
 const LIVE_THREAD = 'live-thread';
 
@@ -95,6 +97,13 @@ test.describe('Projects list — 30-day windowed stats', { tag: ['@area:projects
     'Project stats are scoped to the requested window, and unscoped when none is given',
     { tag: ['@t2-cuj', '@cap:projects.list-projects'] },
     async ({ project, sdkClient, backendClient }) => {
+      // The "outside the window" seed is the subject of both tests and it needs
+      // an id 60 days old, which ingestion refuses where id-timestamp validation
+      // runs in reject mode. Nothing here can be rescued by seeding a valid id:
+      // the 30-day boundary IS the assertion. Probe first so such an env reports
+      // a skip with a reason, rather than the bridge's opaque post-flush 500.
+      await skipUnlessBackdatedIdsAccepted(backendClient, project.name, OUTSIDE_WINDOW_DAYS * DAY_MS);
+
       await test.step('Seed traces inside and outside the 30-day window', async () => {
         await seedWindowedProject(sdkClient.python, project.name);
       });
@@ -138,6 +147,13 @@ test.describe('Projects list — 30-day windowed stats', { tag: ['@area:projects
     { tag: ['@t2-cuj', '@cap:projects.list-projects'] },
     async ({ project, sdkClient, backendClient, testNamespace, page }) => {
       const dormantName = `${testNamespace}-dormant`;
+
+      // The "outside the window" seed is the subject of both tests and it needs
+      // an id 60 days old, which ingestion refuses where id-timestamp validation
+      // runs in reject mode. Nothing here can be rescued by seeding a valid id:
+      // the 30-day boundary IS the assertion. Probe first so such an env reports
+      // a skip with a reason, rather than the bridge's opaque post-flush 500.
+      await skipUnlessBackdatedIdsAccepted(backendClient, project.name, OUTSIDE_WINDOW_DAYS * DAY_MS);
 
       const dormantId = await test.step('Seed an active project and one whose only activity is old', async () => {
         await seedWindowedProject(sdkClient.python, project.name);

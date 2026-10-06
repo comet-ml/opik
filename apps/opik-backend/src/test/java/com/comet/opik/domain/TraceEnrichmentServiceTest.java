@@ -61,7 +61,8 @@ class TraceEnrichmentServiceTest {
             var options = TraceEnrichmentOptions.builder().build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService.enrichTraces(traceIds, options).block();
+            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService.enrichTraces(traceIds, options, Map.of())
+                    .block();
 
             // then
             assertThat(result).isEmpty();
@@ -86,7 +87,8 @@ class TraceEnrichmentServiceTest {
             var options = TraceEnrichmentOptions.builder().build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService.enrichTraces(Set.of(traceId), options)
+            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService
+                    .enrichTraces(Set.of(traceId), options, Map.of())
                     .block();
 
             // then
@@ -145,7 +147,8 @@ class TraceEnrichmentServiceTest {
                     .build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService.enrichTraces(Set.of(traceId), options)
+            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService
+                    .enrichTraces(Set.of(traceId), options, Map.of())
                     .block();
 
             // then
@@ -192,7 +195,8 @@ class TraceEnrichmentServiceTest {
                     .build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService.enrichTraces(Set.of(traceId), options)
+            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService
+                    .enrichTraces(Set.of(traceId), options, Map.of())
                     .block();
 
             // then
@@ -234,7 +238,7 @@ class TraceEnrichmentServiceTest {
 
             // when
             Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService
-                    .enrichTraces(Set.of(traceId1, traceId2), options).block();
+                    .enrichTraces(Set.of(traceId1, traceId2), options, Map.of()).block();
 
             // then
             assertThat(result).hasSize(2);
@@ -271,7 +275,8 @@ class TraceEnrichmentServiceTest {
                     .build();
 
             // when
-            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService.enrichTraces(Set.of(traceId), options)
+            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService
+                    .enrichTraces(Set.of(traceId), options, Map.of())
                     .block();
 
             // then
@@ -287,6 +292,105 @@ class TraceEnrichmentServiceTest {
             // Span should always include feedback scores and comments when present
             assertThat(spanNode.has("feedback_scores")).isTrue();
             assertThat(spanNode.has("comments")).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Field mappings:")
+    class FieldMappings {
+
+        private Trace trace(UUID traceId) {
+            return podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .id(traceId)
+                    .input(JsonUtils.getJsonNodeFromString(
+                            "{\"input_text\": \"bonjour\", \"bucket\": \"greeting\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"verdict\": \"correct\", \"score\": 0.94}"))
+                    .build();
+        }
+
+        @Test
+        @DisplayName("when a mapping is provided, then it overrides the field the options produced")
+        void enrichTraces__whenMappingProvided__thenItOverridesTheEnrichedField() {
+            // given
+            UUID traceId = UUID.randomUUID();
+            when(traceService.getByIds(List.of(traceId))).thenReturn(Flux.just(trace(traceId)));
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+
+            // when
+            Map<String, JsonNode> enrichedData = traceEnrichmentService.enrichTraces(
+                    Set.of(traceId),
+                    TraceEnrichmentOptions.builder().build(),
+                    Map.of("input", "input.input_text", "expected_output", "output.verdict"))
+                    .block()
+                    .get(traceId);
+
+            // then
+            assertThat(enrichedData.get("input").asText()).isEqualTo("bonjour");
+            assertThat(enrichedData.get("expected_output").asText()).isEqualTo("correct");
+        }
+
+        @Test
+        @DisplayName("when a mapping adds a field, then it lands alongside the enriched ones")
+        void enrichTraces__whenMappingAddsField__thenItLandsAlongsideEnrichedOnes() {
+            // given
+            UUID traceId = UUID.randomUUID();
+            when(traceService.getByIds(List.of(traceId))).thenReturn(Flux.just(trace(traceId)));
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+
+            // when
+            Map<String, JsonNode> enrichedData = traceEnrichmentService.enrichTraces(
+                    Set.of(traceId),
+                    TraceEnrichmentOptions.builder().includeTags(true).build(),
+                    Map.of("bucket", "input.bucket"))
+                    .block()
+                    .get(traceId);
+
+            // then
+            assertThat(enrichedData.get("bucket").asText()).isEqualTo("greeting");
+            assertThat(enrichedData).containsKey("tags");
+            assertThat(enrichedData).containsKey("input");
+        }
+
+        @Test
+        @DisplayName("when every mapped path misses, then the enriched data is empty")
+        void enrichTraces__whenEveryMappedPathMisses__thenEnrichedDataIsEmpty() {
+            // given
+            UUID traceId = UUID.randomUUID();
+            when(traceService.getByIds(List.of(traceId))).thenReturn(Flux.just(trace(traceId)));
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+
+            // when
+            Map<String, JsonNode> enrichedData = traceEnrichmentService.enrichTraces(
+                    Set.of(traceId),
+                    TraceEnrichmentOptions.builder().build(),
+                    Map.of("input", "input.nope", "expected_output", "output.nope"))
+                    .block()
+                    .get(traceId);
+
+            // then
+            assertThat(enrichedData).isEmpty();
+        }
+
+        @Test
+        @DisplayName("when a mapped path does not resolve, then the field is absent rather than enriched")
+        void enrichTraces__whenMappedPathDoesNotResolve__thenFieldIsAbsent() {
+            // given
+            UUID traceId = UUID.randomUUID();
+            when(traceService.getByIds(List.of(traceId))).thenReturn(Flux.just(trace(traceId)));
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+
+            // when
+            Map<String, JsonNode> enrichedData = traceEnrichmentService.enrichTraces(
+                    Set.of(traceId),
+                    TraceEnrichmentOptions.builder().build(),
+                    Map.of("input", "input.missing", "tone", "input.tone"))
+                    .block()
+                    .get(traceId);
+
+            // then
+            assertThat(enrichedData).doesNotContainKey("input");
+            assertThat(enrichedData).doesNotContainKey("tone");
+            assertThat(enrichedData).containsKey("expected_output");
         }
     }
 }

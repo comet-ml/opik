@@ -5,6 +5,7 @@ import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 import { snakeCaseObj } from "@/lib/utils";
 import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
 import { PlaygroundPromptType } from "@/types/playground";
+import { OpenAiPipelineMode } from "@/types/providers";
 import { useToast } from "@/ui/use-toast";
 import { AxiosError } from "axios";
 
@@ -25,6 +26,8 @@ interface UseRunExperimentExecutionParams {
   versionHash?: string;
   prompts: PlaygroundPromptType[];
   projectName?: string;
+  experimentNames?: Record<string, string | undefined>;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const runExperimentExecution = async ({
@@ -34,6 +37,8 @@ const runExperimentExecution = async ({
   versionHash,
   prompts,
   projectName,
+  experimentNames,
+  openAiPipelineMode,
 }: UseRunExperimentExecutionParams): Promise<ExperimentExecutionResponse> => {
   const promptVariants = prompts.map((prompt) => {
     const versionRefs = collectPromptVersionRefs(prompt);
@@ -47,8 +52,10 @@ const runExperimentExecution = async ({
       configs: sanitizeConfigForRequest(
         prompt.model,
         prompt.configs as Record<string, unknown>,
+        openAiPipelineMode,
       ),
       prompt_versions: promptVersions,
+      experiment_name: experimentNames?.[prompt.id],
     };
   });
 

@@ -3,7 +3,7 @@ import sortBy from "lodash/sortBy";
 import groupBy from "lodash/groupBy";
 import isFunction from "lodash/isFunction";
 import { Database, ListTree } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -11,6 +11,9 @@ import {
 } from "@/ui/resizable";
 
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
+import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
+import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
+import { useExperimentItemMedia } from "@/hooks/useExperimentItemMedia";
 import NoData from "@/shared/NoData/NoData";
 import { Tag } from "@/ui/tag";
 import {
@@ -28,12 +31,54 @@ import PassFailBadge from "./PassFailBadge";
 import AssertionResultsTable from "./AssertionResultsTable";
 import MultiRunTabs from "./MultiRunTabs";
 
+type ExperimentRunOutputProps = {
+  item: ExperimentItem;
+  projectId?: string;
+  preserveKey: string;
+  maxHeight: string;
+};
+
+const ExperimentRunOutput: React.FC<ExperimentRunOutputProps> = ({
+  item,
+  projectId,
+  preserveKey,
+  maxHeight,
+}) => {
+  const { media, transformedOutput } = useExperimentItemMedia({
+    output: item.output,
+    traceId: item.trace_id,
+    projectId,
+  });
+
+  const highlighter = (
+    <SyntaxHighlighter
+      data={transformedOutput as object}
+      preserveKey={preserveKey}
+      maxHeight={maxHeight}
+    />
+  );
+
+  if (!media.length) {
+    return highlighter;
+  }
+
+  return (
+    <MediaProvider media={media}>
+      <div className="flex flex-col gap-2">
+        <AttachmentsList media={media} />
+        {highlighter}
+      </div>
+    </MediaProvider>
+  );
+};
+
 type SingleExperimentSectionProps = {
   experimentItems: ExperimentItem[];
   experimentName: string;
   status: RunStatus | undefined;
   openTrace: OnChangeFn<string>;
   sectionIdx: number;
+  projectId?: string;
 };
 
 const SingleExperimentSection: React.FC<SingleExperimentSectionProps> = ({
@@ -42,6 +87,7 @@ const SingleExperimentSection: React.FC<SingleExperimentSectionProps> = ({
   status,
   openTrace,
   sectionIdx,
+  projectId,
 }) => {
   const [activeRunIndex, setActiveRunIndex] = useState(0);
 
@@ -87,8 +133,9 @@ const SingleExperimentSection: React.FC<SingleExperimentSectionProps> = ({
       <>
         <div ref={outputRef} className="min-h-0 flex-1 overflow-hidden">
           {item.output && (
-            <SyntaxHighlighter
-              data={item.output}
+            <ExperimentRunOutput
+              item={item}
+              projectId={projectId}
               preserveKey={`eval-suite-sidebar-output-${sectionIdx}-${idx}`}
               maxHeight={outputMaxHeight}
             />
@@ -162,6 +209,7 @@ export const ExperimentItemContent: React.FC<ExperimentItemContentProps> = ({
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
+  const { href: currentHref } = useLocation();
 
   const itemsByExperiment = useMemo(
     () => groupBy(experimentItems, "experiment_id"),
@@ -171,6 +219,14 @@ export const ExperimentItemContent: React.FC<ExperimentItemContentProps> = ({
   const experimentNameMap = useMemo(
     () =>
       Object.fromEntries((experiments ?? []).map((exp) => [exp.id, exp.name])),
+    [experiments],
+  );
+
+  const experimentProjectIdMap = useMemo(
+    () =>
+      Object.fromEntries(
+        (experiments ?? []).map((exp) => [exp.id, exp.project_id]),
+      ),
     [experiments],
   );
 
@@ -187,7 +243,10 @@ export const ExperimentItemContent: React.FC<ExperimentItemContentProps> = ({
                 projectId: activeProjectId!,
                 suiteId: datasetId,
               }}
-              search={datasetItemId ? { row: datasetItemId } : {}}
+              search={{
+                ...(datasetItemId ? { row: datasetItemId } : {}),
+                from: currentHref,
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <Tag
@@ -255,6 +314,9 @@ export const ExperimentItemContent: React.FC<ExperimentItemContentProps> = ({
                 status={status}
                 openTrace={openTrace}
                 sectionIdx={idx}
+                projectId={
+                  experimentProjectIdMap[expId] ?? activeProjectId ?? undefined
+                }
               />
             </ResizablePanel>
           </React.Fragment>

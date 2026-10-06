@@ -1,5 +1,6 @@
 import modelPricing from "@/data/model_prices_and_context_window.json";
 import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
+import { DECISION_MODELS } from "@/constants/decisionModels";
 
 type ModelPricingEntry = {
   supports_vision?: boolean;
@@ -96,6 +97,14 @@ const candidateKeys = (modelName: string): string[] => {
 export const isCustomProviderModel = (model: string): boolean => {
   return model.startsWith(`${CUSTOM_PROVIDER_MODEL_PREFIX}/`);
 };
+
+/**
+ * Checks if a model is a decisions model (TypeSafe Jev): it answers yes/no questions through the
+ * OpenRouter Decisions API instead of chatting, so it takes no model settings, Boolean scores only and
+ * a single text-only user message.
+ */
+export const isDecisionModel = (model?: string | null): boolean =>
+  Boolean(model) && DECISION_MODELS.some((m) => m.value === model);
 
 /**
  * Checks if a model supports image input (vision capabilities).

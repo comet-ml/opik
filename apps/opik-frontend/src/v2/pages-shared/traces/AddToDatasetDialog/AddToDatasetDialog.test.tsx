@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AddToDatasetDialog from "./AddToDatasetDialog";
 import { Trace, Span, SPAN_TYPE } from "@/types/traces";
@@ -54,12 +60,6 @@ vi.mock("@/api/datasets/useProjectDatasetsList", () => ({
   ),
 }));
 
-vi.mock("@/api/datasets/useDatasetVersionsList", () => ({
-  default: vi.fn(() => ({
-    data: { content: [], total: 0 },
-  })),
-}));
-
 vi.mock("@/api/datasets/useAddTracesToDatasetMutation", () => ({
   default: () => ({
     mutate: mockAddTracesToDataset,
@@ -70,6 +70,51 @@ vi.mock("@/api/datasets/useAddSpansToDatasetMutation", () => ({
   default: () => ({
     mutate: mockAddSpansToDataset,
   }),
+}));
+
+const POPULATED_DATASET = {
+  columns: [
+    { name: "input" },
+    { name: "expected_output" },
+    { name: "metadata" },
+    { name: "bucket" },
+    { name: "tone" },
+  ],
+  total: 412,
+};
+
+const EMPTY_DATASET = { columns: [], total: 0 };
+
+const mockDatasetColumns = vi.fn(() => POPULATED_DATASET);
+
+vi.mock("@/api/datasets/useDatasetItemsList", () => ({
+  default: () => ({ data: mockDatasetColumns() }),
+}));
+
+type SampleResult = { data?: Partial<Trace>; isPending: boolean };
+
+const mockTracesByIds = vi.fn(
+  ({ traceIds }: { traceIds: string[] }): SampleResult[] =>
+    traceIds.map((id) => ({
+      data: { id, input: { prompt: "test input", tone: "neutral" } },
+      isPending: false,
+    })),
+);
+
+vi.mock("@/api/traces/useTracesByIds", () => ({
+  default: (params: { traceIds: string[] }) => mockTracesByIds(params),
+}));
+
+const mockSpansByIds = vi.fn(
+  ({ spanIds }: { spanIds: string[] }): SampleResult[] =>
+    spanIds.map((id) => ({
+      data: { id, input: { prompt: "span input" } },
+      isPending: false,
+    })),
+);
+
+vi.mock("@/api/traces/useSpansByIds", () => ({
+  default: (params: { spanIds: string[] }) => mockSpansByIds(params),
 }));
 
 vi.mock("@/store/AppStore", () => ({
@@ -89,13 +134,6 @@ vi.mock("@/ui/use-toast", () => ({
 }));
 
 vi.mock(
-  "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog",
-  () => ({
-    default: () => <div data-testid="add-edit-test-suite-dialog" />,
-  }),
-);
-
-vi.mock(
   "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog",
   () => ({
     default: () => <div data-testid="add-edit-dataset-dialog" />,
@@ -113,6 +151,19 @@ describe("AddToDatasetDialog", () => {
       },
     });
     vi.clearAllMocks();
+    mockDatasetColumns.mockReturnValue(POPULATED_DATASET);
+    mockTracesByIds.mockImplementation(({ traceIds }) =>
+      traceIds.map((id) => ({
+        data: { id, input: { prompt: "test input", tone: "neutral" } },
+        isPending: false,
+      })),
+    );
+    mockSpansByIds.mockImplementation(({ spanIds }) =>
+      spanIds.map((id) => ({
+        data: { id, input: { prompt: "span input" } },
+        isPending: false,
+      })),
+    );
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -142,6 +193,12 @@ describe("AddToDatasetDialog", () => {
     project_id: "project-1",
   };
 
+  const traceWithoutInput = {
+    ...mockTrace,
+    id: "trace-no-input",
+    input: undefined as unknown as object,
+  };
+
   const mockSpan: Span = {
     id: "span-1",
     name: "Test Span",
@@ -168,35 +225,51 @@ describe("AddToDatasetDialog", () => {
     setOpen: vi.fn(),
   };
 
-  const datasetModeProps = {
-    ...baseProps,
-    datasetType: DATASET_TYPE.DATASET,
-  };
-
-  const testSuiteModeProps = {
-    ...baseProps,
-    datasetType: DATASET_TYPE.TEST_SUITE,
-  };
-
   const openDropdownAndSelect = (itemName: string) => {
     const trigger = screen.getByRole("button", {
-      name: new RegExp(`Select a|${itemName}`),
+      name: new RegExp(`Select a dataset|${itemName}`),
     });
     fireEvent.click(trigger);
     const items = screen.getAllByText(itemName);
     fireEvent.click(items[items.length - 1]);
   };
 
-  it("should render the test suite dialog when open", () => {
-    render(<AddToDatasetDialog {...testSuiteModeProps} />, { wrapper });
+  it("should use singular labels for a single row", () => {
+    render(<AddToDatasetDialog {...baseProps} selectedRows={[mockTrace]} />, {
+      wrapper,
+    });
+
+    expect(screen.getByText("1 trace")).toBeInTheDocument();
+
+    openDropdownAndSelect("Test Dataset 1");
 
     expect(
-      screen.getByRole("button", { name: /Select a test suite/i }),
+      screen.getByRole("button", { name: "Add 1 item" }),
+    ).toBeInTheDocument();
+  });
+
+  it("should use plural labels for several rows", () => {
+    render(
+      <AddToDatasetDialog
+        {...baseProps}
+        selectedRows={[mockTrace, mockTrace]}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByText("2 traces")).toBeInTheDocument();
+  });
+
+  it("should render the dataset dialog when open", () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    expect(
+      screen.getByRole("button", { name: /Select a dataset/i }),
     ).toBeInTheDocument();
   });
 
   it("should display enrichment checkboxes when selecting a dataset with traces", () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
@@ -209,7 +282,7 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should have all enrichment checkboxes checked by default", () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
@@ -222,7 +295,7 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should allow unchecking enrichment options", async () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
@@ -241,7 +314,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should display span enrichment checkboxes when selecting a dataset with spans", () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
@@ -259,7 +332,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should have all span enrichment checkboxes checked by default", () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
@@ -276,7 +349,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should allow unchecking span enrichment options", async () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
@@ -298,7 +371,7 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should list only datasets matching dataset type when adding to a dataset", () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     const trigger = screen.getByRole("button", {
       name: /Select a dataset/i,
@@ -310,21 +383,8 @@ describe("AddToDatasetDialog", () => {
     expect(screen.queryByText("Test Suite 1")).not.toBeInTheDocument();
   });
 
-  it("should list only test suites when adding to a test suite", () => {
-    render(<AddToDatasetDialog {...testSuiteModeProps} />, { wrapper });
-
-    const trigger = screen.getByRole("button", {
-      name: /Select a test suite/i,
-    });
-    fireEvent.click(trigger);
-
-    expect(screen.getByText("Test Suite 1")).toBeInTheDocument();
-    expect(screen.getByText("First test suite")).toBeInTheDocument();
-    expect(screen.queryByText("Test Dataset 1")).not.toBeInTheDocument();
-  });
-
   it("should display search input in dropdown", () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     const trigger = screen.getByRole("button", {
       name: /Select a dataset/i,
@@ -335,20 +395,20 @@ describe("AddToDatasetDialog", () => {
     expect(searchInput).toBeInTheDocument();
   });
 
-  it("should display add test suite option in dropdown", () => {
-    render(<AddToDatasetDialog {...testSuiteModeProps} />, { wrapper });
+  it("should display add dataset option in dropdown", () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     const trigger = screen.getByRole("button", {
-      name: /Select a test suite/i,
+      name: /Select a dataset/i,
     });
     fireEvent.click(trigger);
 
-    expect(screen.getByText("Add test suite")).toBeInTheDocument();
+    expect(screen.getByText("Add dataset")).toBeInTheDocument();
   });
 
   it("should show alert when no valid rows are present", () => {
     const propsWithInvalidRows = {
-      ...testSuiteModeProps,
+      ...baseProps,
       selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
     };
 
@@ -356,14 +416,14 @@ describe("AddToDatasetDialog", () => {
 
     expect(
       screen.getByText(
-        "There are no rows that can be added as test suite items. The input field is missing.",
+        "There are no rows that can be added as dataset items. The input field is missing. Turn on advanced mapping to pick the fields to use instead.",
       ),
     ).toBeInTheDocument();
   });
 
   it("should show alert when only some rows are valid", () => {
     const propsWithPartialValid = {
-      ...testSuiteModeProps,
+      ...baseProps,
       selectedRows: [
         mockTrace,
         { ...mockTrace, id: "trace-2", input: undefined as unknown as object },
@@ -374,31 +434,31 @@ describe("AddToDatasetDialog", () => {
 
     expect(
       screen.getByText(
-        "Only rows with input fields will be added as test suite items.",
+        "Only rows with input fields will be added as dataset items.",
       ),
     ).toBeInTheDocument();
   });
 
-  it("should disable dropdown when no valid rows", () => {
+  it("should keep the dropdown open when no valid rows, so advanced mapping stays reachable", () => {
     const propsWithInvalidRows = {
-      ...testSuiteModeProps,
+      ...baseProps,
       selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
     };
 
     render(<AddToDatasetDialog {...propsWithInvalidRows} />, { wrapper });
 
     const trigger = screen.getByRole("button", {
-      name: /Select a test suite/i,
+      name: /Select a dataset/i,
     });
-    expect(trigger).toBeDisabled();
+    expect(trigger).toBeEnabled();
   });
 
   it("should call addTracesToDataset mutation when clicking on dataset with only traces", async () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
-    fireEvent.click(screen.getByRole("button", { name: "Add to dataset" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -422,7 +482,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should call addSpansToDataset mutation when clicking on dataset with only spans", async () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
@@ -430,7 +490,7 @@ describe("AddToDatasetDialog", () => {
 
     openDropdownAndSelect("Test Dataset 1");
 
-    fireEvent.click(screen.getByRole("button", { name: "Add to dataset" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddSpansToDataset).toHaveBeenCalledWith(
@@ -452,7 +512,7 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should respect unchecked enrichment options when adding traces", async () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
@@ -460,7 +520,7 @@ describe("AddToDatasetDialog", () => {
     fireEvent.click(screen.getByLabelText("Tags"));
     fireEvent.click(screen.getByLabelText("Usage metrics"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Add to dataset" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -481,7 +541,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should respect unchecked enrichment options when adding spans", async () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
@@ -493,7 +553,7 @@ describe("AddToDatasetDialog", () => {
     fireEvent.click(screen.getByLabelText("Comments"));
     fireEvent.click(screen.getByLabelText("Metadata"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Add to dataset" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddSpansToDataset).toHaveBeenCalledWith(
@@ -505,6 +565,522 @@ describe("AddToDatasetDialog", () => {
             include_usage: true,
             include_metadata: false,
           },
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+  const enableAdvancedMapping = async () => {
+    fireEvent.click(screen.getByRole("switch", { name: /Advanced mapping/i }));
+    await screen.findByRole("button", { name: /Add field/i });
+  };
+
+  const navigateToPath = (stepsDown: number) => {
+    fireEvent.keyDown(document, { key: "ArrowDown" });
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    for (let i = 0; i < stepsDown; i += 1) {
+      fireEvent.keyDown(document, { key: "ArrowDown" });
+    }
+    fireEvent.keyDown(document, { key: "Enter" });
+  };
+
+  const openRowExplorer = (rowId: string) => {
+    const row = screen.getByTestId(`mapping-row-${rowId}`);
+    fireEvent.click(within(row).getByTestId("path-source-trigger"));
+  };
+
+  const openAddFieldExplorer = () =>
+    fireEvent.click(screen.getByRole("button", { name: /Add field/i }));
+
+  const addFieldFromExplorer = (stepsDown: number) => {
+    openAddFieldExplorer();
+    navigateToPath(stepsDown);
+  };
+
+  it("should reach advanced mapping when no row carries an input", async () => {
+    render(
+      <AddToDatasetDialog {...baseProps} selectedRows={[traceWithoutInput]} />,
+      { wrapper },
+    );
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    openRowExplorer("input");
+    fireEvent.keyDown(document, { key: "ArrowDown" });
+    fireEvent.keyDown(document, { key: "Enter" });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          traceIds: ["trace-no-input"],
+          fieldMappings: expect.objectContaining({ expected_output: "output" }),
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should explain an empty explorer instead of showing a blank popover", async () => {
+    mockTracesByIds.mockImplementation(({ traceIds }) =>
+      traceIds.map(() => ({ data: undefined, isPending: false })),
+    );
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    openAddFieldExplorer();
+
+    expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
+  });
+
+  it("should label a fixed row's explorer by flow while samples load", async () => {
+    mockSpansByIds.mockImplementation(({ spanIds }) =>
+      spanIds.map(() => ({ data: undefined, isPending: true })),
+    );
+    render(<AddToDatasetDialog {...baseProps} selectedRows={[mockSpan]} />, {
+      wrapper,
+    });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    openRowExplorer("input");
+
+    expect(
+      await screen.findByText(/Loading fields from the selected spans/i),
+    ).toBeInTheDocument();
+  });
+
+  it("should say the explorer is loading while the samples are in flight", async () => {
+    mockTracesByIds.mockImplementation(({ traceIds }) =>
+      traceIds.map(() => ({ data: undefined, isPending: true })),
+    );
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    openAddFieldExplorer();
+
+    expect(await screen.findByText(/Loading fields/i)).toBeInTheDocument();
+  });
+
+  it("should not send field mappings while advanced mapping is off", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({ fieldMappings: {} }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should send the chosen path for a fixed row without touching enrichment options", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    openRowExplorer("input");
+    fireEvent.keyDown(document, { key: "ArrowDown" });
+    fireEvent.keyDown(document, { key: "Enter" });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fieldMappings: {
+            input: "input.prompt",
+            expected_output: "output",
+          },
+          enrichmentOptions: {
+            include_spans: true,
+            include_tags: true,
+            include_feedback_scores: true,
+            include_comments: true,
+            include_usage: true,
+            include_metadata: true,
+          },
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should not add a row until a path is picked", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    openAddFieldExplorer();
+    expect(screen.queryByPlaceholderText("Field name")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByPlaceholderText("Field name")).not.toBeInTheDocument();
+  });
+
+  it("should name the added row after the last segment of the picked path", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    addFieldFromExplorer(2);
+
+    expect(screen.getByPlaceholderText("Field name")).toHaveValue("tone");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fieldMappings: {
+            input: "input",
+            expected_output: "output",
+            tone: "input.tone",
+          },
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should title the explorer by flow", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    openAddFieldExplorer();
+    expect(
+      screen.queryByText(/Select a field to map to:/),
+    ).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    openRowExplorer("input");
+
+    expect(screen.getByText(/Select a field to map to:/)).toBeInTheDocument();
+  });
+
+  it("should block submit while a field name is invalid", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    addFieldFromExplorer(2);
+
+    fireEvent.change(screen.getByPlaceholderText("Field name"), {
+      target: { value: "input" },
+    });
+
+    expect(screen.getByText("Field name is already used")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
+    ).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText("Field name"), {
+      target: { value: "tone" },
+    });
+
+    expect(
+      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
+    ).toBeEnabled();
+  });
+
+  it("should overwrite the mapping when the explorer is re-opened", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    addFieldFromExplorer(2);
+
+    openRowExplorer("custom-1");
+
+    fireEvent.keyDown(document, { key: "ArrowUp" });
+    fireEvent.keyDown(document, { key: "Enter" });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fieldMappings: {
+            input: "input",
+            expected_output: "output",
+            tone: "input.prompt",
+          },
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should re-enable an enrichment option from a quick add chip without adding a mapping", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    fireEvent.click(screen.getByLabelText("Tags"));
+    await enableAdvancedMapping();
+
+    fireEvent.click(screen.getByText("Tags"));
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fieldMappings: { input: "input", expected_output: "output" },
+          enrichmentOptions: expect.objectContaining({ include_tags: true }),
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should send field mappings for spans too", async () => {
+    render(<AddToDatasetDialog {...baseProps} selectedRows={[mockSpan]} />, {
+      wrapper,
+    });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    openRowExplorer("expected_output");
+    navigateToPath(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+
+    await waitFor(() => {
+      expect(mockAddSpansToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fieldMappings: {
+            input: "input",
+            expected_output: "input.prompt",
+          },
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should not show the preview in basic mode", () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+
+    expect(screen.queryByText("Preview")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Adding \d+ field/)).not.toBeInTheDocument();
+  });
+
+  it("should preview one row per sampled entity with a column per mapping", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    expect(screen.getByText("Preview")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "input" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "expected_output" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(
+      screen.getByRole("cell", {
+        name: '{"prompt":"test input","tone":"neutral"}',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("should mark unresolved paths as empty and nested spans as deferred", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    const expectedOutput = screen.getByRole("columnheader", {
+      name: "expected_output",
+    });
+    const columnIndex = Array.from(
+      expectedOutput.parentElement!.children,
+    ).indexOf(expectedOutput);
+    const dataRow = screen.getAllByRole("row")[1];
+
+    expect(dataRow.children[columnIndex]).toHaveTextContent("Empty");
+    expect(screen.getByText("Added on import")).toBeInTheDocument();
+  });
+
+  it("should add a preview column when a field is added", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    addFieldFromExplorer(2);
+
+    expect(
+      screen.getByRole("columnheader", { name: "tone" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "neutral" })).toBeInTheDocument();
+  });
+
+  it("should summarise the mapping in the footer", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    expect(screen.getByText(/^Adding 8 fields/)).toHaveTextContent(
+      /fields are empty for some traces$/,
+    );
+  });
+
+  it("should offer the dataset's existing columns as chips", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    const chips = within(screen.getByTestId("quick-add-chips"));
+
+    expect(chips.getByText("bucket")).toBeInTheDocument();
+    expect(chips.getByText("tone")).toBeInTheDocument();
+    expect(chips.queryByText("input")).not.toBeInTheDocument();
+    expect(chips.queryByText("expected_output")).not.toBeInTheDocument();
+    expect(chips.queryByText("metadata")).not.toBeInTheDocument();
+  });
+
+  it("should add a row named after the dataset column and map it", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    fireEvent.click(
+      within(screen.getByTestId("quick-add-chips")).getByText("bucket"),
+    );
+    navigateToPath(2);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fieldMappings: {
+            input: "input",
+            expected_output: "output",
+            bucket: "input.tone",
+          },
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should warn that a brand new column is empty for the existing items", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    addFieldFromExplorer(1);
+
+    const warning = (content: string, element: Element | null) =>
+      element?.tagName === "SPAN" &&
+      /the 412 items already in this dataset/.test(element.textContent ?? "");
+
+    expect(screen.getByText(warning)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Field name"), {
+      target: { value: "bucket" },
+    });
+
+    expect(screen.queryByText(warning)).not.toBeInTheDocument();
+  });
+
+  it("should not warn when the dataset has no items yet", async () => {
+    mockDatasetColumns.mockReturnValue(EMPTY_DATASET);
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    addFieldFromExplorer(1);
+
+    expect(
+      screen.queryByText(
+        (content, element) =>
+          element?.tagName === "SPAN" &&
+          /already in this dataset/.test(element.textContent ?? ""),
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should block submit while a chip-added row has no source", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    fireEvent.click(
+      within(screen.getByTestId("quick-add-chips")).getByText("bucket"),
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.getByText("Select a field to map")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
+    ).toBeDisabled();
+
+    openRowExplorer("custom-1");
+    navigateToPath(2);
+
+    expect(screen.queryByText("Select a field to map")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
+    ).toBeEnabled();
+  });
+
+  it("keeps rows without an input field out of basic mode", () => {
+    render(
+      <AddToDatasetDialog {...baseProps} selectedRows={[traceWithoutInput]} />,
+      { wrapper },
+    );
+
+    expect(
+      screen.getByText(/There are no rows that can be added/),
+    ).toBeInTheDocument();
+  });
+
+  it("stops filtering on the input field once advanced mapping is on", async () => {
+    render(
+      <AddToDatasetDialog
+        {...baseProps}
+        selectedRows={[mockTrace, traceWithoutInput]}
+      />,
+      { wrapper },
+    );
+
+    openDropdownAndSelect("Test Dataset 1");
+    expect(screen.getByText(/Only rows with input fields/)).toBeInTheDocument();
+
+    await enableAdvancedMapping();
+
+    expect(
+      screen.queryByText(/Only rows with input fields/),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          traceIds: ["trace-1", "trace-no-input"],
         }),
         expect.any(Object),
       );

@@ -1,5 +1,20 @@
-import { describe, expect, it } from "vitest";
-import { processSSEChunk } from "./useCompletionProxyStreaming";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderHook } from "@testing-library/react";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import useCompletionProxyStreaming, {
+  processSSEChunk,
+  pythonProxyErrorMessage,
+} from "./useCompletionProxyStreaming";
+import {
+  LLMPromptConfigsType,
+  OpenAiPipelineMode,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
+
+// The app registers this plugin at startup (lib/date.ts); the hook timestamps every run with it.
+dayjs.extend(utc);
 
 describe("processSSEChunk", () => {
   describe("basic line processing", () => {
@@ -233,4 +248,172 @@ describe("processSSEChunk", () => {
       expect(fullContent).toBe("wedding surprise reactions|0.86, beach|0.75");
     });
   });
+});
+
+describe("pythonProxyErrorMessage", () => {
+  // The two shapes the proxy actually sends. Reading only the first left the
+  // second assigning the wrapper object, which reached the user as
+  // "Run failed: [object Object]".
+  it("should read the message nested under detail", () => {
+    expect(pythonProxyErrorMessage({ detail: "Invalid API key" })).toBe(
+      "Invalid API key",
+    );
+  });
+
+  it("should read the message under error", () => {
+    expect(pythonProxyErrorMessage({ error: "Rate limit exceeded" })).toBe(
+      "Rate limit exceeded",
+    );
+  });
+
+  it("should take a detail that is already a message", () => {
+    expect(pythonProxyErrorMessage("Upstream timed out")).toBe(
+      "Upstream timed out",
+    );
+  });
+
+  // A `detail` at all is what says the run failed; the text only describes it.
+  // Returning the blank string would leave the error falsy, and a failed run
+  // with partially streamed content would then render as a successful one.
+  it.each([
+    ["nothing", undefined],
+    ["null", null],
+    ["an unrecognised shape", { code: 500 }],
+    ["a nested object", { detail: { deeper: "value" } }],
+    ["an empty detail", { detail: "" }],
+    ["a whitespace-only detail", { detail: "   " }],
+    ["an empty error", { error: "" }],
+    ["an empty string", ""],
+  ])("should fall back to a generic message given %s", (_label, detail) => {
+    expect(pythonProxyErrorMessage(detail)).toBe("Python proxy error");
+  });
+
+  it("should never return a falsy message, whatever the proxy sends", () => {
+    const shapes = [undefined, null, "", "   ", { detail: "" }, { error: "" }];
+
+    for (const shape of shapes) {
+      expect(pythonProxyErrorMessage(shape)).toBeTruthy();
+    }
+  });
+
+  it("should prefer a usable message over a blank one earlier in the chain", () => {
+    expect(
+      pythonProxyErrorMessage({ error: "", detail: "Invalid API key" }),
+    ).toBe("Invalid API key");
+  });
+
+  it("should trim the message it returns", () => {
+    expect(pythonProxyErrorMessage({ detail: "  Invalid API key  " })).toBe(
+      "Invalid API key",
+    );
+  });
+
+  it("should never hand back a value that renders as [object Object]", () => {
+    const shapes = [
+      { detail: "a" },
+      { error: "b" },
+      "c",
+      { code: 1 },
+      null,
+      undefined,
+    ];
+
+    for (const shape of shapes) {
+      expect(String(pythonProxyErrorMessage(shape))).not.toContain(
+        "[object Object]",
+      );
+    }
+  });
+});
+
+describe("the reasoning effort a playground run sends", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const sentReasoningEffort = async (mode?: OpenAiPipelineMode) => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(""));
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    await result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {
+        maxCompletionTokens: 4000,
+        reasoningEffort: "max",
+      } as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+      openAiPipelineMode: mode,
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    return JSON.parse(init?.body as string).reasoning_effort;
+  };
+
+  it("sends a stored max on a Responses API key", async () => {
+    expect(await sentReasoningEffort("responses_api")).toBe("max");
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "sends a stored max as high when the mode is %s",
+    async (mode) => {
+      expect(await sentReasoningEffort(mode)).toBe("high");
+    },
+  );
+});
+
+describe("the penalties a playground run sends", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const sentBody = async (mode?: OpenAiPipelineMode) => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(""));
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    await result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {
+        temperature: 0.4,
+        maxCompletionTokens: 4000,
+        topP: 1,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.3,
+      } as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+      openAiPipelineMode: mode,
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    return JSON.parse(init?.body as string);
+  };
+
+  it("sends neither on a Responses API key", async () => {
+    const body = await sentBody("responses_api");
+
+    expect(body).not.toHaveProperty("frequency_penalty");
+    expect(body).not.toHaveProperty("presence_penalty");
+    expect(body.temperature).toBe(0.4);
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "sends both when the mode is %s",
+    async (mode) => {
+      const body = await sentBody(mode);
+
+      expect(body.frequency_penalty).toBe(0.5);
+      expect(body.presence_penalty).toBe(0.3);
+    },
+  );
 });

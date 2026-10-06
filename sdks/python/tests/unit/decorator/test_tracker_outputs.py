@@ -1,14 +1,17 @@
 import asyncio
+import dataclasses
 import functools
 import threading
 from typing import Dict
 
 from unittest import mock
+import pydantic
 import pytest
 
 from opik import context_storage, opik_context, rest_api, PromptType
 from opik.api_objects import opik_client, trace, prompt
 from opik.decorator import tracker
+from opik.guardrails import tracing as guardrails_tracing
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_STRING,
@@ -1473,6 +1476,317 @@ def test_track__span_and_trace_input_output_updated_via_opik_context(fake_backen
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+def test_track__trace_output_key_set_via_opik_context_collides_with_return_value__explicit_value_kept(
+    fake_backend,
+):
+    @dataclasses.dataclass
+    class Result:
+        text: str
+        extra: int
+
+    @tracker.track
+    def f(x):
+        opik_context.update_current_trace(output={"output": "explicit-output"})
+        return Result(text="returned-text", extra=1)
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input"},
+        output={"output": "explicit-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input"},
+                output={"output": {"text": "returned-text", "extra": 1}},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__span_output_key_set_via_opik_context_collides_with_return_value__explicit_value_kept(
+    fake_backend,
+):
+    @tracker.track
+    def f_inner(x):
+        opik_context.update_current_span(output={"output": "explicit-output"})
+        return "returned-output"
+
+    @tracker.track
+    def f_outer(x):
+        return f_inner(x)
+
+    f_outer("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f_outer",
+        input={"x": "f-input"},
+        output={"output": "returned-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f_outer",
+                input={"x": "f-input"},
+                output={"output": "returned-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="f_inner",
+                        input={"x": "f-input"},
+                        output={"output": "explicit-output"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[],
+                        source="sdk",
+                    )
+                ],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__dict_returned_with_key_set_via_opik_context__explicit_value_kept_other_keys_merged(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(output={"answer": "explicit-answer"})
+        return {"answer": "returned-answer", "sources": ["doc-1"]}
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input"},
+        output={"answer": "returned-answer", "sources": ["doc-1"]},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input"},
+                output={"answer": "explicit-answer", "sources": ["doc-1"]},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__nested_dict_returned_with_nested_key_set_via_opik_context__explicit_value_kept_returned_nested_keys_merged(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(
+            output={"details": {"source": "explicit-source"}}
+        )
+        return {
+            "details": {"source": "returned-source", "score": 0.9},
+            "answer": "returned-answer",
+        }
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input"},
+        output={
+            "details": {"source": "returned-source", "score": 0.9},
+            "answer": "returned-answer",
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input"},
+                output={
+                    "details": {"source": "explicit-source", "score": 0.9},
+                    "answer": "returned-answer",
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__guardrail_returns_pydantic_model_with_key_set_via_opik_context__explicit_value_kept_model_fields_merged(
+    fake_backend,
+):
+    class CheckResult(pydantic.BaseModel):
+        validation_passed: bool
+        reason: str
+
+    @guardrails_tracing.GuardrailsTrackDecorator().track
+    def check(generation):
+        opik_context.update_current_span(output={"reason": "explicit-reason"})
+        return CheckResult(validation_passed=True, reason="returned-reason")
+
+    check(generation="some text")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="Guardrail",
+        input={"generation": "some text"},
+        output={"validation_passed": True, "reason": "returned-reason"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="Guardrail",
+                type="guardrail",
+                input={"generation": "some text"},
+                output={"validation_passed": True, "reason": "explicit-reason"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__async_function_output_key_set_via_opik_context_collides_with_return_value__explicit_value_kept(
+    fake_backend,
+):
+    @tracker.track
+    async def async_f(x):
+        opik_context.update_current_span(output={"output": "explicit-output"})
+        return "returned-output"
+
+    asyncio.run(async_f("f-input"))
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="async_f",
+        input={"x": "f-input"},
+        output={"output": "returned-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="async_f",
+                input={"x": "f-input"},
+                output={"output": "explicit-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__generator_output_key_set_via_opik_context_collides_with_yielded_values__explicit_value_kept(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(output={"output": "explicit-output"})
+        for value in ["yielded-1", " yielded-2"]:
+            yield value
+
+    for _ in f("generator-input"):
+        pass
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "generator-input"},
+        output={"output": "yielded-1 yielded-2"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "generator-input"},
+                output={"output": "explicit-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
 def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__feedback_scores_are_also_logged(
     fake_backend,
 ):
@@ -1619,6 +1933,45 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_tracker__ignore_list_was_passed__arguments_passed_through_kwargs_are_not_logged(
+    fake_backend,
+):
+    # Arguments that land in **kwargs are captured as one nested dict, which the
+    # ignore list used to leave untouched, so e.g. an api_key was still logged.
+    @tracker.track(ignore_arguments=["api_key"])
+    def f(prompt, **kwargs):
+        return {"some-key": "the-output-value"}
+
+    f("hi", api_key="sk-secret", temperature=0)
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    expected_input = {"prompt": "hi", "kwargs": {"temperature": 0}}
+    assert fake_backend.trace_trees[0].input == expected_input
+    assert fake_backend.trace_trees[0].spans[0].input == expected_input
+
+
+def test_tracker__ignore_list_was_passed__regular_parameter_named_kwargs__its_dict_is_logged_as_is(
+    fake_backend,
+):
+    # Only the **kwargs dict is filtered, not a regular parameter that happens
+    # to be named "kwargs".
+    @tracker.track(ignore_arguments=["api_key"])
+    def f(prompt, kwargs):
+        return {"some-key": "the-output-value"}
+
+    f("hi", {"api_key": "not-a-secret", "temperature": 0})
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    expected_input = {
+        "prompt": "hi",
+        "kwargs": {"api_key": "not-a-secret", "temperature": 0},
+    }
+    assert fake_backend.trace_trees[0].input == expected_input
+    assert fake_backend.trace_trees[0].spans[0].input == expected_input
 
 
 def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__input_dicts_are_empty(
@@ -2234,4 +2587,45 @@ def test_track__environment_parameter__nested_spans_inherit_environment(fake_bac
     )
 
     assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__slots_dataclass_input_and_output__encoded_as_dicts(fake_backend):
+    @dataclasses.dataclass(slots=True)
+    class Point:
+        x: int
+        y: int
+
+    @tracker.track
+    def f(p):
+        return Point(x=p.x + 2, y=p.y + 2)
+
+    f(Point(x=1, y=2))
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"p": {"x": 1, "y": 2}},
+        output={"output": {"x": 3, "y": 4}},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"p": {"x": 1, "y": 2}},
+                output={"output": {"x": 3, "y": 4}},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

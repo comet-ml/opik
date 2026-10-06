@@ -17,7 +17,7 @@ type ExportToButtonProps = {
   generateFileName: (extension: string) => string;
   getData: () => Array<object> | Promise<Array<object>>;
   disabled: boolean;
-  tooltipContent?: string;
+  tooltipContent?: string | React.ReactElement;
   buttonVariant?: "outline" | "ghost" | "ghostInverted";
   buttonSize?: ButtonProps["size"];
 };

@@ -7,6 +7,11 @@ run-name: "SDK Lib LLama Index Tests ${{ github.ref_name }} by @${{ github.actor
 permissions:
   contents: read
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
@@ -39,7 +44,7 @@ jobs:
           python-version: ${{matrix.python_version}}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Install opik
         run: uv pip install --system .

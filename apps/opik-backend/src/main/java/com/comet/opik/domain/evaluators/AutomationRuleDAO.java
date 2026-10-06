@@ -98,22 +98,40 @@ public interface AutomationRuleDAO {
             @Bind("filters") String filters);
 
     /**
+     * Renames a rule without touching any other column, so a caller that only knows the new name does not
+     * have to read the rest back and write it out again — a read-modify-write two writers can lose.
+     */
+    @SqlUpdate("UPDATE automation_rules SET name = :name WHERE id = :id AND workspace_id = :workspaceId")
+    int updateBaseRuleName(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
+            @Bind("name") String name);
+
+    /**
      * Clears the legacy project_id field to prevent stale data.
      * Should be called when projects are removed from the junction table.
      */
     @SqlUpdate("UPDATE automation_rules SET project_id = NULL WHERE id = :id AND workspace_id = :workspaceId")
     int clearLegacyProjectId(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
+    /**
+     * Deletes parent rows of one action only.
+     *
+     * <p>The table holds every kind of rule and each caller owns one subtype, which it deletes separately.
+     * Without the action predicate a caller handed an id of the other kind would take the parent out from
+     * under a subtype row it does not know about, leaving that row unreachable: every read of this table
+     * inner-joins a subtype, so nothing would ever see it again.
+     */
     @SqlUpdate("""
             DELETE FROM automation_rules
             WHERE workspace_id = :workspaceId
+            AND action = :action
             <if(ids)> AND id IN (<ids>) <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     void deleteBaseRules(
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
-            @Bind("workspaceId") String workspaceId);
+            @Bind("workspaceId") String workspaceId,
+            @Bind("action") String action);
 
     @SqlQuery("""
             SELECT COUNT(DISTINCT rule.id)

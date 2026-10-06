@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import dayjs from "dayjs";
-import isObject from "lodash/isObject";
+import get from "lodash/get";
+import isString from "lodash/isString";
 
 import { UsageType } from "@/types/shared";
 import {
@@ -14,7 +15,11 @@ import {
 import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
-import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  LLMPromptConfigsType,
+  OpenAiPipelineMode,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 
 const DATA_PREFIX = "data:";
@@ -53,6 +58,7 @@ interface GetCompletionProxyStreamParams {
   signal: AbortSignal;
   configs: LLMPromptConfigsType;
   workspaceName: string;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const isPythonProxyError = (
@@ -60,6 +66,12 @@ const isPythonProxyError = (
 ): response is ChatCompletionPythonProxyErrorMessageType => {
   return "detail" in response;
 };
+
+export const pythonProxyErrorMessage = (detail: unknown): string =>
+  [detail, get(detail, "error"), get(detail, "detail")]
+    .filter(isString)
+    .map((value) => value.trim())
+    .find((value) => value !== "") ?? "Python proxy error";
 
 const isOpikError = (
   response: ChatCompletionResponse,
@@ -82,10 +94,12 @@ const getCompletionProxyStream = async ({
   signal,
   configs,
   workspaceName,
+  openAiPipelineMode,
 }: GetCompletionProxyStreamParams) => {
   const configsRecord = sanitizeConfigForRequest(
     model,
     configs as unknown as Record<string, unknown>,
+    openAiPipelineMode,
   );
 
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
@@ -112,6 +126,7 @@ export interface RunStreamingArgs {
   configs: LLMPromptConfigsType;
   onAddChunk: (accumulatedValue: string) => void;
   signal: AbortSignal;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 export interface RunStreamingReturn {
@@ -142,6 +157,7 @@ const useCompletionProxyStreaming = ({
       configs,
       onAddChunk,
       signal,
+      openAiPipelineMode,
     }: RunStreamingArgs): Promise<RunStreamingReturn> => {
       const startTime = getNowUtcTimeISOString();
 
@@ -165,6 +181,7 @@ const useCompletionProxyStreaming = ({
           configs,
           signal,
           workspaceName,
+          openAiPipelineMode,
         });
 
         // Extract resolved model and provider from headers
@@ -212,14 +229,7 @@ const useCompletionProxyStreaming = ({
         const handlePythonProxyErrorMessage = (
           parsedMessage: ChatCompletionPythonProxyErrorMessageType,
         ) => {
-          if (
-            isObject(parsedMessage.detail) &&
-            "error" in parsedMessage.detail
-          ) {
-            pythonProxyError = parsedMessage.detail.error;
-          } else {
-            pythonProxyError = parsedMessage.detail ?? "Python proxy error";
-          }
+          pythonProxyError = pythonProxyErrorMessage(parsedMessage.detail);
         };
 
         // buffer to hold incomplete lines across chunks

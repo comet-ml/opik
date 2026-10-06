@@ -1,19 +1,28 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import sortBy from "lodash/sortBy";
 import isFunction from "lodash/isFunction";
-import { FlaskConical, ListTree } from "lucide-react";
+import isEmpty from "lodash/isEmpty";
+import { Braces, FlaskConical, ListTree, MessagesSquare } from "lucide-react";
 
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
+import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
+import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
+import { useExperimentItemMedia } from "@/hooks/useExperimentItemMedia";
+import ExperimentMessagesViewer from "@/v2/pages-shared/experiments/ExperimentMessagesViewer/ExperimentMessagesViewer";
 import ExperimentFeedbackScoresViewer from "@/v2/pages-shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import CopyButton from "@/shared/CopyButton/CopyButton";
 import NoData from "@/shared/NoData/NoData";
 import useExperimentById from "@/api/datasets/useExperimentById";
+import useTraceById from "@/api/traces/useTraceById";
 import { TraceFeedbackScore } from "@/types/traces";
 import { ExperimentItem } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
+import { useToast } from "@/ui/use-toast";
 import { traceExist, traceVisible } from "@/lib/traces";
 import ExperimentCommentsViewer from "./DataTab/ExperimentCommentsViewer";
+import { splitOutputForMessages } from "./splitOutputForMessages";
 import { CommentItems } from "@/types/comment";
 
 type CompareExperimentsViewerProps = {
@@ -40,14 +49,83 @@ const CompareExperimentsViewer: React.FunctionComponent<
 
   const name = data?.name || experimentId;
 
+  const { media, transformedOutput } = useExperimentItemMedia({
+    output: experimentItem.output,
+    traceId: experimentItem.trace_id,
+    projectId: data?.project_id,
+  });
+
+  const inputAndOutput = useMemo(
+    () => ({ input: experimentItem.input, output: experimentItem.output }),
+    [experimentItem.input, experimentItem.output],
+  );
+
+  // Extracted in one pass so input and output media share one placeholder
+  // numbering: separate passes both start at [image_0], and the provider would
+  // then resolve the output's [image_0] to the input's picture.
+  const {
+    media: inputAndOutputMedia,
+    transformedOutput: transformedInputAndOutput,
+  } = useExperimentItemMedia({ output: inputAndOutput });
+
+  const { input: messagesInput, output: messagesOutput } =
+    transformedInputAndOutput as typeof inputAndOutput;
+
+  const messagesMedia = useMemo(
+    () => [
+      ...inputAndOutputMedia,
+      ...media.filter((item) => item.source === "attachment"),
+    ],
+    [inputAndOutputMedia, media],
+  );
+
+  const { toast } = useToast();
+
+  const onChangeApplied = () =>
+    toast({
+      title: "Changes saved",
+      description: "The results table will reflect them within a minute.",
+    });
+
+  const { data: trace } = useTraceById(
+    {
+      traceId: experimentItem.trace_id as string,
+      stripAttachments: true,
+    },
+    {
+      enabled: Boolean(isTraceExist && experimentItem.trace_id),
+    },
+  );
+
   const feedbackScores: TraceFeedbackScore[] = useMemo(
-    () => sortBy(experimentItem.feedback_scores || [], "name"),
-    [experimentItem.feedback_scores],
+    () =>
+      sortBy(
+        (trace ? trace.feedback_scores : experimentItem.feedback_scores) || [],
+        "name",
+      ),
+    [trace, experimentItem.feedback_scores],
   );
 
   const comments: CommentItems = useMemo(
-    () => experimentItem.comments || [],
-    [experimentItem.comments],
+    () => (trace ? trace.comments : experimentItem.comments) || [],
+    [trace, experimentItem.comments],
+  );
+
+  // Gated on the output alone: mapAndCombineMessages silently drops a side it
+  // does not recognise, and this panel is the only place the output is shown.
+  const { rendersAsMessages, remainingOutput } = useMemo(
+    () => splitOutputForMessages(messagesOutput),
+    [messagesOutput],
+  );
+
+  // Scoped to the item because columns are reused across rows: a plain boolean
+  // would open every following row in raw mode too.
+  const [rawOutputItemId, setRawOutputItemId] = useState<string | null>(null);
+  const showRawOutput = rawOutputItemId === experimentItem.id;
+
+  const outputText = useMemo(
+    () => JSON.stringify(experimentItem.output, null, 2),
+    [experimentItem.output],
   );
 
   const onExpandClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -70,17 +148,101 @@ const CompareExperimentsViewer: React.FunctionComponent<
       );
     }
 
-    if (experimentItem.output) {
-      return (
+    if (!experimentItem.output) {
+      return null;
+    }
+
+    const rawToggle = (
+      <TooltipWrapper
+        content={showRawOutput ? "Show as messages" : "Show raw output"}
+      >
+        <Button
+          variant="outline"
+          size="icon-2xs"
+          onClick={() =>
+            setRawOutputItemId(showRawOutput ? null : experimentItem.id)
+          }
+        >
+          {showRawOutput ? <MessagesSquare /> : <Braces />}
+        </Button>
+      </TooltipWrapper>
+    );
+
+    if (!rendersAsMessages || showRawOutput) {
+      // The raw view skips prettifying, which would show only the message text
+      // and hide every other key, and keeps its own mode so it does not share a
+      // stored "pretty" choice with the fallback viewer.
+      const highlighter = showRawOutput ? (
         <SyntaxHighlighter
-          data={experimentItem.output}
+          data={transformedOutput as object}
+          preserveKey={`syntax-highlighter-compare-experiment-output-raw-${sectionIdx}`}
+        />
+      ) : (
+        <SyntaxHighlighter
+          data={transformedOutput as object}
           prettifyConfig={{ fieldType: "output" }}
           preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
         />
       );
+
+      const content = media.length ? (
+        <MediaProvider media={media}>
+          <div className="flex flex-col gap-2">
+            <AttachmentsList media={media} />
+            {highlighter}
+          </div>
+        </MediaProvider>
+      ) : (
+        highlighter
+      );
+
+      if (!rendersAsMessages) {
+        return content;
+      }
+
+      return (
+        <div className="flex flex-col">
+          <div className="flex justify-end pb-1">{rawToggle}</div>
+          {content}
+        </div>
+      );
     }
 
-    return null;
+    return (
+      <MediaProvider media={messagesMedia}>
+        <div className="flex flex-col gap-2">
+          {/* Same list as the provider: the text is numbered across input and
+              output, so the output-only list would mislabel the thumbnails. */}
+          {messagesMedia.length > 0 && (
+            <AttachmentsList media={messagesMedia} />
+          )}
+          <ExperimentMessagesViewer
+            key={experimentItem.id}
+            input={messagesInput}
+            output={messagesOutput}
+            actions={
+              <>
+                {rawToggle}
+                <CopyButton
+                  text={outputText}
+                  message="Successfully copied output"
+                  tooltipText="Copy output"
+                  variant="outline"
+                  size="icon-2xs"
+                />
+              </>
+            }
+          />
+          {!isEmpty(remainingOutput) && (
+            <SyntaxHighlighter
+              data={remainingOutput}
+              prettifyConfig={{ fieldType: "output" }}
+              preserveKey={`syntax-highlighter-compare-experiment-output-remaining-${sectionIdx}`}
+            />
+          )}
+        </div>
+      </MediaProvider>
+    );
   };
 
   return (
@@ -107,7 +269,11 @@ const CompareExperimentsViewer: React.FunctionComponent<
         )}
       </div>
 
-      {renderOutput()}
+      {/* Scrolls within the column so a long conversation does not push the
+          scores and comments sections out of reach, and so each experiment
+          scrolls independently instead of the whole row moving as one block.
+          min-h-0 lets this flex child shrink below its content height. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">{renderOutput()}</div>
 
       {isTraceExist && (
         <div className="sticky bottom-0 right-0 mt-auto flex max-h-[50vh] shrink-0 flex-col bg-background contain-content">
@@ -116,6 +282,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
               feedbackScores={feedbackScores}
               traceId={experimentItem.trace_id as string}
               sectionIdx={sectionIdx}
+              onChangeApplied={onChangeApplied}
             />
           </div>
 
@@ -124,6 +291,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
               comments={comments}
               traceId={experimentItem.trace_id as string}
               sectionIdx={sectionIdx}
+              onChangeApplied={onChangeApplied}
             />
           </div>
         </div>

@@ -1,6 +1,11 @@
 import atexit
+import datetime
+import enum
+import uuid
+from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
+from opik import json_helpers
 
 from ..opik_factory import make_opik_client
 from ..schemas import (
@@ -9,11 +14,14 @@ from ..schemas import (
     DatasetInsertItemsResponse,
     DatasetInsertItemsSessionRequest,
     DatasetInsertItemsSessionResponse,
+    DatasetInsertTypedItemRequest,
+    DatasetInsertTypedItemResponse,
     DatasetReadItemsRequest,
     DatasetReadItemsResponse,
     DatasetReadWithMidReadInsertRequest,
     DatasetReadWithMidReadInsertResponse,
     DatasetResponse,
+    TypedValue,
 )
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -60,23 +68,52 @@ def insert_dataset_items(
     Each call is one `Dataset.insert(...)`, which is the unit a version is cut
     on — the SDK splits the items into batches of 1000 internally, and those
     batches must not become versions of their own.
+
+    A `ValueError` out of `Dataset.insert` is reported as a 200 with
+    `value_error` set rather than raised, as on `/datasets/read-items`: argument
+    rejection is a documented outcome of some of these calls and the caller has
+    to be able to assert the message.
+
+    The catch is the whole call, not just its argument validation, because the
+    two are not separable from out here — a `ValueError` raised mid-upload
+    surfaces the same way. It is reported rather than swallowed, so a caller
+    that cares whether anything was written must read the dataset back instead
+    of trusting `inserted`; `dataset-insert-thread-clamp.spec.ts` does exactly
+    that.
     """
-    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    client = make_opik_client(
+        workspace=body.workspace,
+        api_key=x_opik_api_key,
+        enable_json_request_compression=body.enable_json_request_compression,
+    )
+    # The setting the client was actually built with, read off its own config
+    # rather than from the request: this is what decides whether the upload's
+    # bodies are gzipped, so it is the only honest thing to report back.
+    compression_enabled = client.config.enable_json_request_compression
+    value_error: str | None = None
     try:
         dataset = client.get_dataset(
             name=body.dataset_name, project_name=body.project_name
         )
-        dataset.insert(
-            body.items,
-            num_threads=body.num_threads,
-            deduplication=body.deduplication,
-        )
+        try:
+            dataset.insert(
+                body.items,
+                num_threads=body.num_threads,
+                deduplication=body.deduplication,
+            )
+        except ValueError as err:
+            value_error = str(err)
         dataset_id = str(dataset.id)
     finally:
         client.end(flush=True)
         atexit.unregister(client.end)
 
-    return DatasetInsertItemsResponse(dataset_id=dataset_id, inserted=len(body.items))
+    return DatasetInsertItemsResponse(
+        dataset_id=dataset_id,
+        inserted=0 if value_error else len(body.items),
+        compression_enabled=compression_enabled,
+        value_error=value_error,
+    )
 
 
 @router.post(
@@ -113,6 +150,84 @@ def insert_dataset_items_session(
     return DatasetInsertItemsSessionResponse(
         dataset_id=dataset_id,
         inserted=[len(call.items) for call in body.inserts],
+    )
+
+
+def _materialize(field: str, spec: TypedValue) -> Any:
+    """The real Python object a `TypedValue` describes.
+
+    Raises 422 rather than falling back to the JSON form on a value the kind
+    cannot be built from: a caller asking for a `uuid` and silently receiving
+    the string it sent would get a green test asserting nothing, because a
+    string round-trips trivially.
+    """
+    try:
+        if spec.kind == "float":
+            return float(spec.value)
+        if spec.kind == "uuid":
+            return uuid.UUID(spec.value)
+        if spec.kind == "datetime":
+            return datetime.datetime.fromisoformat(spec.value)
+        if spec.kind == "enum":
+            # A one-member Enum built here rather than a fixed catalogue, so the
+            # caller decides the value its member must serialise to.
+            return enum.Enum(f"{field.title()}Probe", {"MEMBER": spec.value}).MEMBER
+        if spec.kind == "set":
+            return set(spec.value)
+        if spec.kind == "tuple":
+            return tuple(spec.value)
+    except (TypeError, ValueError) as err:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"field '{field}': {spec.value!r} is not a valid {spec.kind} ({err})"
+            ),
+        ) from err
+
+    # Unreachable while `kind` is a Literal pydantic validates, which is the
+    # point: a kind added to the schema and not handled above must fail here
+    # rather than fall out of the function returning None and be inserted as a
+    # null the caller would have to notice.
+    raise HTTPException(
+        status_code=422, detail=f"field '{field}': unhandled kind {spec.kind}"
+    )
+
+
+@router.post(
+    "/insert-typed-item",
+    response_model=DatasetInsertTypedItemResponse,
+    status_code=200,
+)
+def insert_typed_dataset_item(
+    body: DatasetInsertTypedItemRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> DatasetInsertTypedItemResponse:
+    """One `Dataset.insert([item])` whose content carries real Python types.
+
+    See `DatasetInsertTypedItemRequest` for why the types are built here rather
+    than sent. `accelerated` reports which encoder this process holds, which the
+    caller cannot otherwise know — it is diagnostic, and no behaviour here
+    depends on it.
+    """
+    content = {
+        field: _materialize(field, spec) for field, spec in body.typed_content.items()
+    }
+
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    try:
+        dataset = client.get_dataset(
+            name=body.dataset_name, project_name=body.project_name
+        )
+        dataset.insert([content], deduplication=body.deduplication)
+        dataset_id = str(dataset.id)
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    return DatasetInsertTypedItemResponse(
+        dataset_id=dataset_id,
+        inserted=1,
+        accelerated=json_helpers.ACCELERATED,
     )
 
 

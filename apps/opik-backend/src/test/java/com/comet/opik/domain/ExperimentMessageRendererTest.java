@@ -165,7 +165,7 @@ class ExperimentMessageRendererTest {
                             .build());
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gpt-4o", messages, null, null);
+                    "gpt-4o", messages, null, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
@@ -194,7 +194,7 @@ class ExperimentMessageRendererTest {
                     "presencePenalty", mapper.valueToTree(0.3));
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gpt-4o", messages, configs, null);
+                    "gpt-4o", messages, configs, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
@@ -225,7 +225,7 @@ class ExperimentMessageRendererTest {
                     "presence_penalty", mapper.valueToTree(0.3));
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gpt-4o", messages, configs, null);
+                    "gpt-4o", messages, configs, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
@@ -249,13 +249,67 @@ class ExperimentMessageRendererTest {
                             .build());
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gpt-4o", messages, null, null);
+                    "gpt-4o", messages, null, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
             assertThat(request.temperature()).isNull();
             assertThat(request.topP()).isNull();
             assertThat(request.maxCompletionTokens()).isNull();
+        }
+
+        @Test
+        @DisplayName("should send every parameter of the config the OpenRouter panel sends")
+        void applyOpenRouterConfigs() {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            var mapper = JsonUtils.getMapper();
+            var configs = Map.<String, JsonNode>of(
+                    "maxTokens", mapper.valueToTree(512),
+                    "temperature", mapper.valueToTree(0.7),
+                    "topP", mapper.valueToTree(0.9),
+                    "frequencyPenalty", mapper.valueToTree(0.5),
+                    "presencePenalty", mapper.valueToTree(0.3),
+                    "custom_parameters", JsonUtils.getJsonNodeFromString(
+                            "{\"top_k\": 40, \"min_p\": 0.1, \"top_a\": 0.2, \"repetition_penalty\": 1.1}"));
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "openai/gpt-4o", messages, configs, null, null);
+
+            ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
+
+            assertThat(request).isEqualTo(ChatCompletionRequest.builder()
+                    .model("openai/gpt-4o")
+                    .messages(request.messages())
+                    .stream(false)
+                    .maxTokens(512)
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .frequencyPenalty(0.5)
+                    .presencePenalty(0.3)
+                    .customParameters(Map.of("top_k", 40, "min_p", 0.1, "top_a", 0.2, "repetition_penalty", 1.1))
+                    .build());
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"0", "\"512\"", "null"})
+        @DisplayName("should send no max_tokens for 0, which the OpenRouter panel uses for no limit, or a non-number")
+        void skipMaxTokensForZeroOrNonNumericValue(String json) {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "openai/gpt-4o", messages, Map.of("maxTokens", JsonUtils.getJsonNodeFromString(json)), null,
+                    null);
+
+            assertThat(renderer.buildChatCompletionRequest(prompt, messages).maxTokens()).isNull();
         }
 
         @Test
@@ -274,7 +328,7 @@ class ExperimentMessageRendererTest {
                     JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gemini-2.5-flash-lite", messages, configs, null);
+                    "gemini-2.5-flash-lite", messages, configs, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
@@ -294,7 +348,7 @@ class ExperimentMessageRendererTest {
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
                     "gemini-2.5-flash-lite", messages,
-                    Map.of("custom_parameters", JsonUtils.getJsonNodeFromString(json)), null);
+                    Map.of("custom_parameters", JsonUtils.getJsonNodeFromString(json)), null, null);
 
             assertThat(renderer.buildChatCompletionRequest(prompt, messages).customParameters()).isNull();
         }
@@ -312,7 +366,7 @@ class ExperimentMessageRendererTest {
                     "custom_parameters", JsonUtils.getJsonNodeFromString("[1, 2]"));
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gemini-2.5-flash-lite", messages, configs, null);
+                    "gemini-2.5-flash-lite", messages, configs, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 

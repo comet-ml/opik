@@ -31,6 +31,7 @@ import useTreeDetailsStore, {
   TreeNodeConfig,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 import AddToDropdown from "@/v2/pages-shared/traces/AddToDropdown/AddToDropdown";
+import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
 import {
   DetailsActionSection,
   DetailsActionSectionToggle,
@@ -42,7 +43,7 @@ import { TREE_FILTER_COLUMNS } from "@/v2/pages-shared/traces/TraceDetailsPanel/
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
-import { getJSONPaths } from "@/lib/utils";
+import { getJSONPaths, JSON_PATH_FORMAT } from "@/lib/utils";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -112,9 +113,13 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
               treeData.reduce<string[]>((acc, d) => {
                 return acc.concat(
                   isObject(d.metadata) || isArray(d.metadata)
-                    ? getJSONPaths(d.metadata, "metadata").map((path) =>
-                        path.substring(path.indexOf(".") + 1),
-                      )
+                    ? getJSONPaths(
+                        d.metadata,
+                        "metadata",
+                        [],
+                        false,
+                        JSON_PATH_FORMAT.bracket,
+                      ).map((path) => path.substring(path.indexOf(".") + 1))
                     : [],
                 );
               }, []),
@@ -138,7 +143,13 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
                     (internalAcc, key) =>
                       internalAcc.concat(
                         isObject(d[key]) || isArray(d[key])
-                          ? getJSONPaths(d[key], key).map((path) => path)
+                          ? getJSONPaths(
+                              d[key],
+                              key,
+                              [],
+                              false,
+                              JSON_PATH_FORMAT.bracket,
+                            ).map((path) => path)
                           : [],
                       ),
                     [],
@@ -285,17 +296,23 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-muted/50 px-4">
-      <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
-        Inspect:
-      </span>
       {isLoading || !dataToView ? (
         <Skeleton className="h-4 w-32" />
       ) : (
         <>
           <BaseTraceDataTypeIcon type={inspectType} />
-          <span className="comet-body-xs-accented truncate">
-            {dataToView?.name}
-          </span>
+          <TooltipWrapper
+            content={`${isSpan ? "Span" : "Trace"} ID: ${dataToView.id}`}
+          >
+            <span className="comet-body-xs-accented truncate">
+              {dataToView.name || (isSpan ? "Span" : "Trace")}
+            </span>
+          </TooltipWrapper>
+          <CopyEntityActions
+            entityId={dataToView.id}
+            entityLabel={isSpan ? "span" : "trace"}
+            withLink={false}
+          />
         </>
       )}
 

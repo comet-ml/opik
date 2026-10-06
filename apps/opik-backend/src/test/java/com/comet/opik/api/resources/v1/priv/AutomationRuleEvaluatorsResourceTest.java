@@ -22,6 +22,9 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPyt
 import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
@@ -102,6 +105,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -696,6 +700,23 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
+
+        @Test
+        @DisplayName("Batch delete evaluators returns 403 when permission is denied")
+        void deleteEvaluatorsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE.getValue());
+
+            var batchDelete = BatchDelete.builder().ids(Set.of(UUID.randomUUID())).build();
+
+            try (var response = evaluatorsResourceClient.delete(
+                    UUID.randomUUID(), workspaceName, apiKey, batchDelete, HttpStatus.SC_FORBIDDEN)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested
@@ -866,6 +887,58 @@ class AutomationRuleEvaluatorsResourceTest {
             return factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).getCode().toBuilder()
                     .messages(List.of(message))
                     .variables(Map.of())
+                    .build();
+        }
+
+        @Test
+        @DisplayName("create evaluator: when the model is a decisions model and the rule fits it, then create it")
+        void createEvaluator__whenDecisionModelRuleIsValid__thenCreated() {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var jevEvaluator = evaluator.toBuilder().code(jevCode(LlmAsJudgeOutputSchemaType.BOOLEAN)).build();
+
+            var id = evaluatorsResourceClient.createEvaluator(jevEvaluator, WORKSPACE_NAME, API_KEY);
+
+            assertThat(id).isNotNull();
+        }
+
+        @Test
+        @DisplayName("create and update evaluator: when a decisions model rule has a numeric score, then reject it")
+        void createAndUpdateEvaluator__whenDecisionModelRuleHasNumericScore__thenBadRequest() {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var invalidEvaluator = evaluator.toBuilder()
+                    .code(jevCode(LlmAsJudgeOutputSchemaType.INTEGER))
+                    .build();
+
+            try (var actualResponse = evaluatorsResourceClient.createEvaluator(
+                    invalidEvaluator, WORKSPACE_NAME, API_KEY, HttpStatus.SC_BAD_REQUEST)) {
+                assertThat(actualResponse.readEntity(ErrorMessage.class).getMessage())
+                        .contains("Decisions models only support Boolean scores");
+            }
+
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+            var invalidUpdate = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .code(jevCode(LlmAsJudgeOutputSchemaType.INTEGER))
+                    .build();
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
+                    id, WORKSPACE_NAME, invalidUpdate, API_KEY, HttpStatus.SC_BAD_REQUEST)) {
+                assertThat(actualResponse.readEntity(ErrorMessage.class).getMessage())
+                        .contains("Decisions models only support Boolean scores");
+            }
+        }
+
+        private AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode jevCode(LlmAsJudgeOutputSchemaType scoreType) {
+            return AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.builder()
+                    .model(LlmAsJudgeModelParameters.builder().name("~typesafe/jev-latest").build())
+                    .messages(List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Question: {{question}}\nAnswer: {{answer}}")
+                            .build()))
+                    .variables(Map.of("question", "input.question", "answer", "output.answer"))
+                    .schema(List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("answer_relevant")
+                            .type(scoreType)
+                            .description("Does the answer respond to the question?")
+                            .build()))
                     .build();
         }
 
@@ -1625,7 +1698,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             "output", "abc",
                             "reference", "abc"))
                     .build();
-            var pythonEvaluatorResponse = factory.manufacturePojo(PythonEvaluatorResponse.class);
+            var pythonEvaluatorResponse = withUsableScores(factory.manufacturePojo(PythonEvaluatorResponse.class));
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/pythonBackendMock/v1/private/evaluators/python"))
                             .withRequestBody(equalToJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorRequest)))
@@ -1665,6 +1738,74 @@ class AutomationRuleEvaluatorsResourceTest {
         }
 
         @Test
+        void getLogsUserDefinedMetricPythonScorerWhenNoDeclaredArgumentResolves() throws JsonProcessingException {
+            // Deliberately no WireMock stub: the scorer must not call the evaluator at all, and if it did
+            // the unstubbed endpoint would 404 into the ERROR log the assertions below reject.
+            var ruleName = "rule-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
+                    .name(ruleName)
+                    .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
+                            .metric(USER_DEFINED_METRIC)
+                            .arguments(Map.of(
+                                    "expects_sql", "input.expects_sql",
+                                    "plan", "output.execution_plan"))
+                            .build())
+                    .samplingRate(1f)
+                    .filters(List.of())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // Carries neither declared path, so every argument resolves to null and the map comes back empty.
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
+                    .threadId(null) // Must be null for trace-level evaluation
+                    .input(OBJECT_MAPPER.readTree("""
+                            {
+                                "question": "how many rows?"
+                            }
+                            """))
+                    .output(OBJECT_MAPPER.readTree("""
+                            {
+                                "response": "abc"
+                            }
+                            """))
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Asserted as the fully rendered line, which is what actually lands in the table.
+            var expectedMessage = ("None of the metric's declared arguments resolved, so there is no data to"
+                    + " evaluate. Check the declared paths against the input, output and metadata present on the"
+                    + " entity. traceId '%s', rule '%s', unresolved arguments: 'expects_sql' ->"
+                    + " 'input.expects_sql', 'plan' -> 'output.execution_plan'").formatted(trace.id(), ruleName);
+
+            // Explicit window: these logs reach ClickHouse through an async batching appender, so under load
+            // the write outruns Awaitility's 10s default and times out on a correct result.
+            Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(500, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+
+                        // The line has to survive the round-trip into the log table and come back off the API.
+                        assertThat(logPage.content()).anySatisfy(log -> {
+                            assertThat(log.level()).isEqualTo(LogLevel.WARN);
+                            assertThat(log.ruleId()).isEqualTo(id);
+                            assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
+                            assertThat(log.message()).isEqualTo(expectedMessage);
+                        });
+
+                        // A user-configuration mismatch is not a backend fault, so nothing on this rule may be ERROR.
+                        assertThat(logPage.content()).noneMatch(log -> log.level() == LogLevel.ERROR);
+
+                        // Nothing was sent on this run, so the "Sending" line must be absent from what is read.
+                        assertThat(logPage.content()).noneMatch(log -> log.message().contains("to Python evaluator"));
+                    });
+        }
+
+        @Test
         void getLogsTraceThreadUserDefinedMetricPythonScorer() throws JsonProcessingException {
             //Given
             var pythonEvaluatorRequest = TraceThreadPythonEvaluatorRequest.builder()
@@ -1680,7 +1821,7 @@ class AutomationRuleEvaluatorsResourceTest {
                                     .build()))
                     .build();
 
-            var pythonEvaluatorResponse = factory.manufacturePojo(PythonEvaluatorResponse.class);
+            var pythonEvaluatorResponse = withUsableScores(factory.manufacturePojo(PythonEvaluatorResponse.class));
 
             // When
             wireMock.server().stubFor(
@@ -2161,6 +2302,21 @@ class AutomationRuleEvaluatorsResourceTest {
             AutomationRuleEvaluator<?, ?> expectedRuleEvaluator) {
         assertThat(actualRuleEvaluator.getCreatedAt()).isAfter(expectedRuleEvaluator.getCreatedAt());
         assertThat(actualRuleEvaluator.getLastUpdatedAt()).isAfter(expectedRuleEvaluator.getLastUpdatedAt());
+    }
+
+    /**
+     * Podam randomizes {@code scoring_failed}, and a score carrying that flag is dropped with a warning on
+     * the rule's log rather than stored — the SDK pairs the flag with a placeholder zero, which would
+     * otherwise be recorded as a genuine score. These log assertions are about a normal scoring run
+     * (four INFO entries, one of them "stored successfully"), so the flag is pinned off here; leaving it
+     * random would make them pass or fail on the roll.
+     */
+    private PythonEvaluatorResponse withUsableScores(PythonEvaluatorResponse response) {
+        return response.toBuilder()
+                .scores(response.scores().stream()
+                        .map(score -> score.toBuilder().scoringFailed(false).build())
+                        .toList())
+                .build();
     }
 
     private void assertTraceLogResponse(LogPage logPage, UUID id, Trace trace) {

@@ -17,8 +17,8 @@ class ModelCapabilitiesTest {
         // This ensures vision capability detection works consistently with cost calculation
 
         // Claude models with dots should match their hyphenated equivalents
-        assertThat(ModelCapabilities.supportsVision("claude-3.7-sonnet-20250219")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("claude-3-7-sonnet-20250219")).isTrue(); // Both should work
+        assertThat(ModelCapabilities.supportsVision("claude-sonnet-4.5-20250929")).isTrue();
+        assertThat(ModelCapabilities.supportsVision("claude-sonnet-4-5-20250929")).isTrue(); // Both should work
 
         // Gemini models with dots
         assertThat(ModelCapabilities.supportsVision("gemini-2.5-pro")).isTrue();
@@ -46,7 +46,7 @@ class ModelCapabilitiesTest {
                 // Known vision models
                 Arguments.of("gpt-4-turbo", true, "GPT-4 Turbo supports vision"),
                 Arguments.of("gpt-4o", true, "GPT-4o supports vision"),
-                Arguments.of("claude-3-7-sonnet-20250219", true, "Claude 3.7 Sonnet supports vision"),
+                Arguments.of("claude-sonnet-4-5-20250929", true, "Claude Sonnet 4.5 supports vision"),
                 Arguments.of("gemini-2.5-pro", true, "Gemini 2.5 Pro supports vision"),
 
                 // Non-vision models
@@ -70,7 +70,7 @@ class ModelCapabilitiesTest {
                 // Case insensitivity
                 Arguments.of("GPT-4-TURBO", true, "Uppercase vision model should work"),
                 Arguments.of("Gpt-4o", true, "Mixed case vision model should work"),
-                Arguments.of("CLAUDE-3-7-SONNET-20250219", true, "Uppercase Claude should work"),
+                Arguments.of("CLAUDE-SONNET-4-5-20250929", true, "Uppercase Claude should work"),
 
                 // Provider prefix handling
                 Arguments.of("openai/gpt-4o", true, "Model with provider prefix should work"),
@@ -89,7 +89,7 @@ class ModelCapabilitiesTest {
                 Arguments.of("GPT-3.5-TURBO", false, "Uppercase non-vision should not work"),
 
                 // Dot notation (issue #4114)
-                Arguments.of("claude-3.7-sonnet-20250219", true, "Claude with dots should work"),
+                Arguments.of("claude-sonnet-4.5-20250929", true, "Claude with dots should work"),
                 Arguments.of("gemini-2-5-pro", true, "Gemini without dots should work"),
                 Arguments.of("qwen2.5-vl-32b-instruct", true, "Qwen VL with dots should work"),
                 Arguments.of("qwen2-5-vl-32b-instruct", true, "Qwen VL without dots should work"));

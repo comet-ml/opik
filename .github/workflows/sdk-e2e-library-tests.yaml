@@ -24,17 +24,28 @@ on:
         paths:
           - 'sdks/python/**'
           - '.github/workflows/sdk-e2e-library-tests.yaml'
+          - '.github/actions/install_opik_and_run_e2e_lib_integration_tests/**'
+          - 'opik.sh'
+          - 'opik.ps1'
     push:
         branches:
           - 'main'
         paths:
           - 'sdks/python/**'
           - '.github/workflows/sdk-e2e-library-tests.yaml'
+          - '.github/actions/install_opik_and_run_e2e_lib_integration_tests/**'
+          - 'opik.sh'
+          - 'opik.ps1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: True  # unlike other workflows, here we need it for tests
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False
@@ -78,10 +89,12 @@ jobs:
 
   run_e2e_lib_integration:
     name: E2E Lib Integration Python ${{matrix.python_version}}
+    # No explicit if: needed here -- build-opik carries the secrets gate, and
+    # the default success() check skips this whenever build-opik is skipped.
+    # The needs: entries below stay as they are.
     needs: [has_needed_secrets, build-opik]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -108,7 +121,7 @@ jobs:
           docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Install uv and set the Python version ${{ matrix.python_version }}
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: ${{ matrix.python_version }}
 
@@ -152,7 +165,7 @@ jobs:
           GOOGLE_GENAI_USE_VERTEXAI: TRUE
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_PYTHON_SDK_TESTS }}
         uses: ./.github/actions/install_opik_and_run_e2e_lib_integration_tests
         with:
           python_version: ${{ matrix.python_version }}

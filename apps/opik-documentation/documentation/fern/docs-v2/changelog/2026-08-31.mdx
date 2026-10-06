@@ -1,0 +1,37 @@
+## MCP + Skill Pack Setup Can Now Run Without a Terminal
+
+Setting up the Opik MCP server previously meant sitting through an interactive wizard, and it only reached three of the AI assistants people actually use. `opik configure --install-mcp` and `opik mcp configure --ai-client <host>` now run non-interactively — pass the client explicitly (or `--ai-client all`) and the command completes on its own, so it can run from a coding agent, a Dockerfile, or CI. Codex and opencode join Claude Code, Cursor, and VS Code Copilot as supported hosts, and every install now ends with a real verification call that reports the workspace and project count instead of assuming the config it just wrote actually works.
+
+A new `--install-skills` flag (and the equivalent `--skills` on `opik mcp configure`) installs the companion Opik skill pack alongside the MCP server — instructions the assistant reads to know how to use the tools the server exposes, rather than just their tool list. The two are asked about separately since they carry different trust implications: the MCP server writes credentials into a config file, the skill pack installs instruction files the assistant executes with its own permissions. The onboarding copy-paste prompt and docs now point at `/opik-instrument` rather than the unnamespaced `/instrument`, avoiding collisions with other skills of the same name.
+
+## Bug Fixes & Improvements
+
+- **Self-hosted: agentic tool-calling scoring is on by default** — LLM-as-judge online scoring's agentic tool loop (previously introduced behind a toggle) was already enabled on Comet-hosted workspaces; self-hosted installs inherited the toggle's off default. The toggle has been removed and the behavior is now unconditional everywhere.
+
+- **Exports now match what's on screen** — Exporting experiment items ignored the active sort and search, and truncated long field values regardless of the on-screen truncation setting. Exporting traces or threads with a search term containing leading or trailing whitespace could also return different rows than the table showed. All three now export exactly what's displayed.
+
+- **Optimization runs list reports the same best trial as the run page** — The runs list computed its "best" latency and cost from a column that dataset-based runs (Studio runs and every SDK optimizer) never populate, so it silently fell back to the baseline trial with a flat 0% delta on every row. It also didn't discount a candidate that had only evaluated part of the dataset. Both now match the run page's logic, and the previously mislabeled "Opt. cost" column is named consistently between the two screens.
+
+- **Dashboards can be filtered by description, and a failed list load shows an error instead of "no results"** — Filtering dashboards by description previously returned a 400 that several list views quietly rendered as an empty state rather than surfacing. Both are fixed: the filter now works, and a failed request shows an error message on affected pages.
+
+- **Annotation queue names can no longer be blank, and a rejected save no longer discards your edits** — A name of only whitespace passed client-side validation and was rejected by the API, closing the dialog and losing everything typed. Whitespace-only names are now blocked before submission, and the dialog stays open on any save failure so nothing is lost.
+
+- **Dataset item pages with large payloads no longer fail, and filters return correct results** — Reading a page of a large dataset version could exceed memory limits and return a server error, since fetching a single page still had to sort the entire version in memory. Pages are now resolved in two steps that avoid the full sort, and a follow-up fix ensures filters and sorting apply to the right columns so filtered pages return the correct items instead of a short page.
+
+- **More accurate cost and usage across several providers and integrations** — DeepInfra model prices (including its Claude, DeepSeek, Qwen, and Llama catalogs) now load instead of costing $0, since DeepInfra was missing from the internal provider list. Custom OpenTelemetry instrumentation reporting a provider name in the OTel semantic-convention vocabulary (for example `vertex_ai` or `aws.bedrock`) now maps to Opik's canonical provider names instead of silently costing $0. Claude's cache-read and cache-write token counts now flow through correctly when using Claude on Bedrock with streaming. LangChain usage and cost tracking no longer disappears entirely when model metadata can't be resolved.
+
+- **Streaming SDK integrations no longer silently swallow errors** — The Anthropic, Bedrock, and Mistral integrations patch shared streaming classes process-wide to add tracing. A cleanup step meant to run only for tracked calls used a `return` inside a `finally` block, which discarded any in-flight exception — so once any traced call ran, an *untracked* stream elsewhere in the same process that failed would complete silently instead of raising. For Bedrock this could also return `None` in place of real response data from any `botocore` call, not just Opik's. Tracked and untracked streams now both behave as expected.
+
+- **Cursor extension logs each tool and model call as its own span** — A Cursor agent turn previously logged as a single trace and a single span, so a multi-step turn showed only the initial question and the final answer. Each model call now logs as its own LLM span and each tool call as its own tool span, nested under the turn, with tool names interleaved with assistant messages in the trace output.
+
+## Performance Improvements
+
+- **Faster dataset experiment summaries** — The query behind a dataset's experiment summary scanned every experiment item in the whole workspace before filtering down to the requested dataset. It now prunes to the relevant experiments upfront, cutting rows read by roughly 13x on a workspace with 3M experiment items across 200 experiments, and skipping the scan entirely for a dataset with no experiments.
+
+- **Faster dataset item inserts** — Adding items to a dataset updated the version's item count with a read-modify-write cycle inside the per-dataset lock. It's now a single atomic increment, cutting the database round trips on that path from three to one.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.36...2.2.45)
+
+_Releases_: `2.2.37`, `2.2.38`, `2.2.39`, `2.2.40`, `2.2.41`, `2.2.42`, `2.2.43`, `2.2.44`, `2.2.45`

@@ -2,13 +2,14 @@ import { describe, it, expect } from "vitest";
 
 import {
   authConfigToFormValues,
+  builtInProviderHeadersForAPI,
   configStringToQueryParamsArray,
   convertHeadersForAPI,
   formValuesToAuthConfig,
   oauth2CredentialRows,
   queryParamsArrayToConfigString,
 } from "./customProviderConfig";
-import { ProviderAuthConfig } from "@/types/providers";
+import { PROVIDER_TYPE, ProviderAuthConfig } from "@/types/providers";
 
 describe("customProviderConfig", () => {
   describe("queryParamsArrayToConfigString", () => {
@@ -130,6 +131,56 @@ describe("customProviderConfig", () => {
         "api-key": "secret",
         "X-Other": "value",
       });
+    });
+  });
+
+  describe("builtInProviderHeadersForAPI", () => {
+    const rows = [
+      { key: "HTTP-Referer", value: "https://example.com" },
+      { key: "X-OpenRouter-Title", value: "My App" },
+    ];
+
+    it.each([PROVIDER_TYPE.OPEN_AI, PROVIDER_TYPE.OPEN_ROUTER])(
+      "sends headers for %s",
+      (provider) => {
+        expect(builtInProviderHeadersForAPI(provider, rows, false)).toEqual({
+          "HTTP-Referer": "https://example.com",
+          "X-OpenRouter-Title": "My App",
+        });
+      },
+    );
+
+    it.each([
+      PROVIDER_TYPE.ANTHROPIC,
+      PROVIDER_TYPE.VERTEX_AI,
+      PROVIDER_TYPE.CUSTOM,
+      undefined,
+    ])("omits headers for %s", (provider) => {
+      expect(
+        builtInProviderHeadersForAPI(provider, rows, false),
+      ).toBeUndefined();
+      expect(
+        builtInProviderHeadersForAPI(provider, rows, true),
+      ).toBeUndefined();
+    });
+
+    it("omits empty and all-blank rows on create", () => {
+      expect(
+        builtInProviderHeadersForAPI(PROVIDER_TYPE.OPEN_ROUTER, [], false),
+      ).toBeUndefined();
+      expect(
+        builtInProviderHeadersForAPI(
+          PROVIDER_TYPE.OPEN_ROUTER,
+          [{ key: "  ", value: "" }],
+          false,
+        ),
+      ).toBeUndefined();
+    });
+
+    it("sends {} on edit to clear stored headers", () => {
+      expect(
+        builtInProviderHeadersForAPI(PROVIDER_TYPE.OPEN_AI, [], true),
+      ).toEqual({});
     });
   });
 

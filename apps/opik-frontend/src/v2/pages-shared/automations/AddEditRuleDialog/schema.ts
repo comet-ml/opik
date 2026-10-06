@@ -15,6 +15,7 @@ import {
 } from "@/types/providers";
 import {
   getThinkingLevelOptions,
+  resolveSamplingParams,
   updateProviderConfig,
 } from "@/lib/modelUtils";
 import { getProviderFromModel } from "@/lib/provider";
@@ -28,9 +29,15 @@ import {
 import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
 import {
+  isDecisionModel,
   supportsImageInput,
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
+import {
+  DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE,
+  hasSingleUserMessage,
+  isTextOnlyMessage,
+} from "@/v2/pages-shared/automations/AddEditRuleDialog/decisionModelRule";
 import {
   hasImagesInContent,
   getTextFromMessageContent,
@@ -142,6 +149,71 @@ export const FiltersSchema = z
     });
   });
 
+type LLMJudgeRefineData = {
+  model: string;
+  messages: LLMMessage[];
+  variables: Record<string, string>;
+  schema: { type: LLM_SCHEMA_TYPE }[];
+};
+
+// Mirrors the backend's DecisionModelRuleValidator so a rule it would reject fails here first.
+const refineDecisionModelRule = (
+  data: LLMJudgeRefineData,
+  ctx: z.RefinementCtx,
+  scope: EVALUATORS_RULE_SCOPE,
+) => {
+  if (!isDecisionModel(data.model)) {
+    return;
+  }
+
+  if (!data.schema.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Jev needs at least one score",
+      path: ["schema"],
+    });
+  }
+
+  if (data.schema.some((score) => score.type !== LLM_SCHEMA_TYPE.BOOLEAN)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Jev only supports Boolean scores",
+      path: ["schema"],
+    });
+  }
+
+  if (!hasSingleUserMessage(data.messages)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Jev needs exactly one user message",
+      path: ["messages", Math.max(data.messages.length - 1, 0), "content"],
+    });
+  }
+
+  // The model-capability check only looks for images and videos; audio, or media kept from another model,
+  // would otherwise reach the backend.
+  data.messages.forEach((message, index) => {
+    if (!isTextOnlyMessage(message)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Jev only accepts text messages",
+        path: ["messages", index, "content"],
+      });
+    }
+  });
+
+  const forbiddenVariable = DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE[scope];
+  Object.entries(data.variables).forEach(([key, value]) => {
+    if (forbiddenVariable && value === forbiddenVariable) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Jev doesn't support the "${forbiddenVariable}" variable, map it to a trace or span field instead`,
+        path: ["variables", key],
+      });
+    }
+  });
+};
+
 const LLMJudgeBaseSchema = z.object({
   model: z
     .string({
@@ -240,6 +312,8 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
+  refineDecisionModelRule(data, ctx, EVALUATORS_RULE_SCOPE.trace);
+
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );
@@ -295,6 +369,8 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
+  refineDecisionModelRule(data, ctx, EVALUATORS_RULE_SCOPE.span);
+
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );
@@ -338,6 +414,14 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
+  if (isDecisionModel(data.model)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Thread rules don't support Jev, choose a trace or span scope",
+      path: ["model"],
+    });
+  }
+
   const contextCount = data.messages.filter((m) => {
     const content = getTextFromMessageContent(m.content);
     return content.includes("{{context}}");
@@ -575,7 +659,28 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     name: data.model as PROVIDER_MODEL_TYPE,
   };
 
-  if (temperature != null) {
+  // A decisions model takes no model settings and runs no agentic loop, so the settings and budget the
+  // form may still hold from another model are left out rather than sent.
+  if (isDecisionModel(data.model)) {
+    return {
+      model,
+      messages: convertLLMToProviderMessages(data.messages),
+      variables: data.variables,
+      schema: data.schema,
+      max_cost_usd: null,
+    };
+  }
+
+  // This path never reaches sanitizeConfigForRequest, so the capability check belongs here: the form
+  // keeps a temperature the user set on another model, and the providers that take none reject it at
+  // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
+  // a rule that never had a temperature does not gain the resolver's default.
+  const { temperature: resolvedTemperature } = resolveSamplingParams(
+    data.model as PROVIDER_MODEL_TYPE,
+    data.config,
+  );
+
+  if (temperature != null && resolvedTemperature != null) {
     model.temperature = temperature;
   }
 

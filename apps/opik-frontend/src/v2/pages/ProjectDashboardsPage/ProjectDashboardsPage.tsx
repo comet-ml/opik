@@ -55,7 +55,7 @@ const ProjectDashboardsContent: React.FunctionComponent<
   } = usePermissions();
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
-    localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}`,
+    localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}-${projectId}`,
     queryKey: DASHBOARD_QUERY_PARAM_KEY,
     defaultValue: null as string | null,
     queryParamConfig: StringParam,
@@ -82,10 +82,18 @@ const ProjectDashboardsContent: React.FunctionComponent<
   });
 
   useEffect(() => {
-    if (!isPending && dashboardId && !dashboard) {
+    if (isPending || !dashboardId) return;
+
+    // A shared link carries the id in the query string, and reading one by id is not project
+    // scoped, so another project's view would render here. Legacy views carry no project and stay.
+    const belongsToAnotherProject = Boolean(
+      dashboard?.project_id && dashboard.project_id !== projectId,
+    );
+
+    if (!dashboard || belongsToAnotherProject) {
       setDashboardId(DEFAULT_TEMPLATE_ID);
     }
-  }, [isPending, dashboardId, dashboard, setDashboardId]);
+  }, [isPending, dashboardId, dashboard, projectId, setDashboardId]);
 
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
 

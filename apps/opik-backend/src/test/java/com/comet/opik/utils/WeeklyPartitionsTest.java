@@ -8,10 +8,15 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,7 +25,13 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * Covers {@link WeeklyPartitions#groupByPartition}, which groups a delete batch's ids by the weekly partition each
- * resolves to, so the mutation can prune instead of rewriting every part (OPIK-8230).
+ * resolves to so the mutation can prune instead of rewriting every part (OPIK-8230), and
+ * {@link WeeklyPartitions#weeksOf}, which returns the same partitions as one ascending list for a read that carries
+ * them as a single {@code IN} bound (OPIK-8332). The two share {@code partitionsOf}, so the {@code weeksOf} cases pin
+ * what differs — the flattening, the ordering, and that the all-or-nothing rule survives both — rather than
+ * re-deriving every era. Their ids are therefore minted at random instants and their expectations built from the
+ * derivation's single-id answer, which the era cases below pin: what they assert is the relationship between the two,
+ * which holds whatever week the ids land in. The far-future case is the exception and says why.
  * <p>
  * The expected values are not hand-computed: each is what ClickHouse itself returned for
  * {@code toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} for that id, evaluated once with
@@ -39,6 +50,15 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class WeeklyPartitionsTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+
+    /**
+     * The far-future era, the one case whose expected values cannot be generated: an id past 2106 resolves to two
+     * weeks, and the second is what the legacy 32-bit column wraps it to. Naming them means naming this instant, and
+     * both are the values the era cases pin against ClickHouse. Every other {@code weeksOf} case takes a random
+     * {@code id_at}, because what those pin — flattening across ids, ascending order, the all-or-nothing rule — does
+     * not depend on which week the ids land in.
+     */
+    private static final Instant FAR_FUTURE_ID_AT = Instant.parse("2200-01-01T00:00:00Z");
 
     @ParameterizedTest(name = "{0}")
     @MethodSource
@@ -215,6 +235,99 @@ class WeeklyPartitionsTest {
     }
 
     @Test
+    void weeksOfReturnsOneAscendingValuePerWeek() {
+        // Exactly one week apart, so the two land in different weeks whatever the random base: a week is seven days,
+        // so the later id's Monday is always the next one. Passed newest-first, so the ascending order in the result
+        // is the derivation's and not the caller's.
+        //
+        // The expectation is built from the derivation's own single-id answer on purpose: what this pins is the
+        // RELATION between the two calls - a batch's weeks are its ids' weeks, flattened, deduplicated and ascending
+        // - and the per-era values it composes are pinned against ClickHouse above. Not self-confirming: dropping
+        // .sorted(), .distinct() or the flattening from weeksOf each fails one of these cases, because a single-id
+        // call is unaffected by all three.
+        var olderIdAt = randomIdAt();
+        var older = ID_GENERATOR.generateId(olderIdAt);
+        var newer = ID_GENERATOR.generateId(olderIdAt.plus(7, ChronoUnit.DAYS));
+
+        var actualWeeks = WeeklyPartitions.weeksOf(List.of(newer, older));
+        var expectedWeeks = List.of(weekOf(older), weekOf(newer));
+
+        assertThat(actualWeeks).hasValue(expectedWeeks);
+    }
+
+    @Test
+    void weeksOfNamesBothWeeksOfAFarFutureId() {
+        // A read bounds itself with ONE IN list inside one statement, so unlike groupByPartition there is no grouping
+        // to put the id in twice - both of its weeks simply sit in the same list. Omitting either would make the
+        // rendered query correct on one schema and a predicate matching nothing on the other.
+        var farFuture = ID_GENERATOR.generateId(FAR_FUTURE_ID_AT);
+        var expectedWeeks = List.of(20631119L, 21991230L);
+
+        var actualWeeks = WeeklyPartitions.weeksOf(List.of(farFuture));
+
+        assertThat(actualWeeks).hasValue(expectedWeeks);
+    }
+
+    @Test
+    void weeksOfNamesAWeekOnceHoweverManyIdsFallInIt() {
+        // The list is the set of weeks, not one entry per id: a page of same-week ids must bound its read with a
+        // single value, or the IN list grows with the batch for no pruning gain. Both ids are minted at one instant,
+        // which is the only way to be sure they share a week without the test computing weeks itself.
+        var sharedIdAt = randomIdAt();
+        var first = ID_GENERATOR.generateId(sharedIdAt);
+        var second = ID_GENERATOR.generateId(sharedIdAt);
+
+        var actualWeeks = WeeklyPartitions.weeksOf(List.of(first, second));
+        var expectedWeeks = List.of(weekOf(first));
+
+        assertThat(actualWeeks).hasValue(expectedWeeks);
+    }
+
+    private static Stream<Arguments> weeksOfYieldsNoWeeks() {
+        return Stream.of(
+                // Past the ceiling id_at saturates, so the week the row is filed under is not the week its id
+                // computes. Real data contains such ids, so this arm is reached rather than theoretical.
+                arguments("an id past the id_at ceiling", List.of(ID_GENERATOR.generateId(), ID_GENERATOR
+                        .getTimeOrderedEpoch(LocalDate.of(2300, 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC)
+                                .toEpochMilli()))),
+                // randomUUID is a v4 by definition: no embedded timestamp to derive a week from. Unreachable through
+                // ingestion, which rejects a non-v7 id unconditionally, but the derivation still has to refuse it.
+                arguments("a non-v7 id", List.of(ID_GENERATOR.generateId(), UUID.randomUUID())),
+                // Nothing to bound anything to. Every caller guards this before reaching the derivation, so it is the
+                // contract that is pinned here rather than a reachable path.
+                arguments("an empty batch", List.<UUID>of()));
+    }
+
+    /**
+     * The all-or-nothing rule, for the reason a read needs it: a partially derived set is a set some rows are not in,
+     * and for a {@code SELECT} that is silently fewer rows rather than a slower query. One case per way the batch can
+     * fail to derive, since they are one claim with one assertion.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void weeksOfYieldsNoWeeks(String reason, List<UUID> ids) {
+        var actualWeeks = WeeklyPartitions.weeksOf(ids);
+
+        assertThat(actualWeeks).isEmpty();
+    }
+
+    @Test
+    void weeksOfOnANullBatchThrowsRatherThanReadingAsUnbounded() {
+        assertThatThrownBy(() -> WeeklyPartitions.weeksOf(null))
+                .isExactlyInstanceOf(NullPointerException.class)
+                .hasMessage("ids is marked non-null but is null");
+    }
+
+    @Test
+    void weeksOfResultIsImmutable() {
+        // What escapes here decides which partitions a read is bounded to, so a caller holding a mutable reference
+        // could narrow it after derivation and turn a correct read into one that silently returns fewer rows.
+        var actualWeeks = WeeklyPartitions.weeksOf(List.of(ID_GENERATOR.generateId())).orElseThrow();
+
+        assertThatThrownBy(actualWeeks::removeFirst).isExactlyInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
     @DisplayName("groupByPartition's map and its per-partition sets are both immutable")
     void groupByPartitionResultIsImmutable() {
         // The map AND its values are load-bearing here: a caller that narrowed either would emit a DELETE ... IN
@@ -228,5 +341,23 @@ class WeeklyPartitionsTest {
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThatThrownBy(() -> grouped.get(partition).remove(ordinary))
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    /**
+     * An {@code id_at} inside both column types, so an id minted at it resolves to a single week. Random, because no
+     * case that uses it names a week: each builds its expectation from {@link #weekOf}.
+     */
+    private Instant randomIdAt() {
+        return Instant.now().minus(ThreadLocalRandom.current().nextInt(1, 3_650), ChronoUnit.DAYS);
+    }
+
+    /**
+     * The derivation's own answer for one id, which the per-era cases above pin against ClickHouse. The multi-id
+     * cases build their expectations from it so they can use random ids: what they assert is the relationship
+     * between the two — that a batch's weeks are its ids' weeks, deduplicated and ascending — which a broken
+     * flatten, sort or dedup breaks regardless of the values.
+     */
+    private long weekOf(UUID id) {
+        return WeeklyPartitions.weeksOf(List.of(id)).orElseThrow().getFirst();
     }
 }

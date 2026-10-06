@@ -28,6 +28,10 @@ from opik.evaluation.metrics.heuristics import is_json
         "3.14159",
         "1e-5",
         "-2.5e+3",
+        # Legal JSON number literals that overflow to inf; JSON.parse accepts
+        # them too, so they must stay valid even though the value is non-finite.
+        "1e400",
+        "-1e400",
         # JSON Primitives - Null & Booleans
         "null",
         "true",
@@ -87,6 +91,14 @@ def test_is_json__valid_json_inputs__returns_score_one(valid_json_str: str) -> N
         '{ 123: "value" }',
         # Unsupported JavaScript literals
         "undefined",
+        # Non-standard literals that Python's json module accepts by default
+        # but RFC 8259 and JSON.parse reject
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        '{"score": NaN}',
+        "[1, Infinity]",
+        '{"value": -Infinity}',
         # Malformed single tokens
         "{",
         "}",

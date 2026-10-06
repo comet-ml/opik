@@ -36,8 +36,10 @@ servers:
 tags:
 - name: MCP OAuth
   description: MCP OAuth 2.1 Authorization Server resources
+- name: Agent Insights enrollment
+  description: Internal auto-first-run rollout enrollment
 - name: System analytics queries
-  description: Internal endpoint to run Agent Insights free-form SQL
+  description: Internal endpoints to run free-form analytics SQL
 - name: System usage
   description: System usage related resource
 - name: Agent Configs
@@ -330,6 +332,27 @@ paths:
                 $ref: "#/components/schemas/ValidatedToken"
         "401":
           description: "Missing, malformed, or unknown access token"
+  /v1/internal/agent-insights/enrollment:
+    post:
+      tags:
+      - Agent Insights enrollment
+      summary: Enrol projects in the auto-first-run rollout
+      description: "Enrols the given projects, creating their job row if needed, or\
+        \ clears their enrolment. Idempotent."
+      operationId: enrolProjectsInAutoFirstRun
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Request"
+        required: true
+      responses:
+        "200":
+          description: Enrollment result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
   /v1/internal/analytics-queries/projects/{projectId}:
     post:
       tags:
@@ -371,6 +394,43 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "501":
           description: Agent Insights queries are not enabled
+  /v1/internal/analytics-queries:
+    post:
+      tags:
+      - System analytics queries
+      summary: Execute free-form analytics SQL
+      description: "Runs read-only SQL bounded to the caller's workspace. Supply project_id\
+        \ to restrict traces, spans, feedback scores and trace threads to one project,\
+        \ or omit it to cover the whole workspace. Experiments, experiment items and\
+        \ dataset items always cover the whole workspace."
+      operationId: executeScopedAnalyticsQuery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScopedAnalyticsQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: "Agent Insights is disabled, or Custom Charts is not enabled\
+            \ for this workspace"
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -982,8 +1042,9 @@ paths:
       tags:
       - Agent Insights Jobs
       summary: Create Agent Insights job
-      description: Creates the Agent Insights job for a project. 409 if one already
-        exists.
+      description: "Creates the Agent Insights job for a project, disabled: the daily\
+        \ schedule stays off until the job is enabled with PATCH. 409 if one already\
+        \ exists."
       operationId: createAgentInsightsJob
       parameters:
       - name: projectId
@@ -1767,6 +1828,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/annotation-queues/{id}/items/search:
+    post:
+      tags:
+      - Annotation Queues
+      summary: Search annotation queue items
+      description: "Returns queue membership metadata — how each item got into the\
+        \ queue — for the given item ids. A lookup rather than a listing: the caller\
+        \ renders the items table from the traces or threads API with its own sort\
+        \ and filters, so it asks for exactly the ids it is displaying. Ids that are\
+        \ not in the queue are omitted."
+      operationId: searchAnnotationQueueItems
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationQueueItemIds_Public"
+      responses:
+        "200":
+          description: Annotation queue items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnotationQueueItems_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/assertion-results:
     put:
       tags:
@@ -5568,6 +5665,7 @@ paths:
           application/x-protobuf:
             schema:
               $ref: "#/components/schemas/JsonNode"
+        required: true
       responses:
         default:
           description: default response
@@ -8842,6 +8940,12 @@ paths:
         in: query
         schema:
           type: string
+      - name: exclude
+        in: query
+        schema:
+          type: string
+          description: "Enrichment fields to leave out of each thread, e.g. [\"annotation_queues\"\
+            ]"
       - name: search
         in: query
         schema:
@@ -9657,6 +9761,12 @@ components:
           type: string
         logo_uri:
           type: string
+        software_id:
+          type: string
+        software_version:
+          type: string
+        client_uri:
+          type: string
         redirect_uris:
           uniqueItems: true
           type: array
@@ -9692,8 +9802,12 @@ components:
             minLength: 0
             type: string
         logo_uri:
-          maxLength: 2048
-          minLength: 0
+          type: string
+        software_id:
+          type: string
+        software_version:
+          type: string
+        client_uri:
           type: string
     TokenResponse:
       type: object
@@ -9732,6 +9846,49 @@ components:
         expires_at:
           type: string
           format: date-time
+    Response:
+      type: object
+      properties:
+        enrolled:
+          type: integer
+          format: int32
+        cleared:
+          type: integer
+          format: int32
+        unknown_project_ids:
+          uniqueItems: true
+          type: array
+          description: Ids that match no project
+          items:
+            type: string
+            description: Ids that match no project
+            format: uuid
+        already_run_project_ids:
+          uniqueItems: true
+          type: array
+          description: "Ids whose automatic run already happened, so enrolling has\
+            \ no effect"
+          items:
+            type: string
+            description: "Ids whose automatic run already happened, so enrolling has\
+              \ no effect"
+            format: uuid
+    Request:
+      required:
+      - enrolled
+      - project_ids
+      type: object
+      properties:
+        enrolled:
+          type: boolean
+          description: "True enrols the given projects, false clears their enrolment"
+        project_ids:
+          maxItems: 500
+          minItems: 0
+          type: array
+          items:
+            type: string
+            format: uuid
     AnalyticsQueryResponse:
       type: object
       properties:
@@ -9761,6 +9918,20 @@ components:
           type: string
           description: Read-only ClickHouse SQL. Must return exactly one column named
             `result` produced via toJSONString(...)
+    ScopedAnalyticsQueryRequest:
+      required:
+      - query
+      type: object
+      properties:
+        query:
+          minLength: 1
+          type: string
+          description: Read-only ClickHouse SQL. Must return exactly one column named
+            `result` produced via toJSONString(...)
+        project_id:
+          type: string
+          description: Restrict query to this project. Omit to query the whole workspace.
+          format: uuid
     BiInformation:
       type: object
       properties:
@@ -10168,6 +10339,13 @@ components:
           enum:
           - enabled
           - disabled
+        auto_first_run_enrolled:
+          type: boolean
+          readOnly: true
+        auto_first_run_at:
+          type: string
+          format: date-time
+          readOnly: true
         last_scan_at:
           type: string
           format: date-time
@@ -11004,6 +11182,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation"
         reviewers:
           type: array
           readOnly: true
@@ -11033,6 +11213,20 @@ components:
           type: string
           readOnly: true
       description: List of annotation queues to create
+    AnnotationQueueAutomation:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        conditions:
+          $ref: "#/components/schemas/Conditions"
+        max_items_in_queue:
+          type: integer
+          format: int32
+        clear_max_items_in_queue:
+          type: boolean
+          description: "When true, removes the item ceiling so automation adds without\
+            \ bound"
     AnnotationQueueReviewer:
       type: object
       properties:
@@ -11042,6 +11236,28 @@ components:
           type: integer
           format: int64
       readOnly: true
+    ConditionGroup:
+      required:
+      - conditions
+      type: object
+      properties:
+        conditions:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreCondition"
+    Conditions:
+      required:
+      - groups
+      type: object
+      properties:
+        groups:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionGroup"
     FeedbackScoreAverage:
       required:
       - name
@@ -11053,6 +11269,40 @@ components:
           type: string
         value:
           type: number
+    ScoreCondition:
+      required:
+      - operator
+      - score_name
+      - value
+      type: object
+      properties:
+        score_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        operator:
+          type: string
+          enum:
+          - '>'
+          - <
+          - =
+        value:
+          type: number
+          format: double
+    AnnotationQueueAutomation_Write:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        conditions:
+          $ref: "#/components/schemas/Conditions_Write"
+        max_items_in_queue:
+          type: integer
+          format: int32
+        clear_max_items_in_queue:
+          type: boolean
+          description: "When true, removes the item ceiling so automation adds without\
+            \ bound"
     AnnotationQueue_Write:
       required:
       - name
@@ -11094,7 +11344,51 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation_Write"
       description: List of annotation queues to create
+    ConditionGroup_Write:
+      required:
+      - conditions
+      type: object
+      properties:
+        conditions:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreCondition_Write"
+    Conditions_Write:
+      required:
+      - groups
+      type: object
+      properties:
+        groups:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionGroup_Write"
+    ScoreCondition_Write:
+      required:
+      - operator
+      - score_name
+      - value
+      type: object
+      properties:
+        score_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        operator:
+          type: string
+          enum:
+          - '>'
+          - <
+          - =
+        value:
+          type: number
+          format: double
     AnnotationQueueBatch:
       required:
       - annotation_queues
@@ -11123,6 +11417,16 @@ components:
           items:
             $ref: "#/components/schemas/AnnotationQueue_Write"
       description: Batch of annotation queues to create
+    AnnotationQueueAutomation_Public:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        conditions:
+          $ref: "#/components/schemas/Conditions_Public"
+        max_items_in_queue:
+          type: integer
+          format: int32
     AnnotationQueuePage_Public:
       type: object
       properties:
@@ -11196,6 +11500,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation_Public"
         reviewers:
           type: array
           readOnly: true
@@ -11224,6 +11530,28 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    ConditionGroup_Public:
+      required:
+      - conditions
+      type: object
+      properties:
+        conditions:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreCondition_Public"
+    Conditions_Public:
+      required:
+      - groups
+      type: object
+      properties:
+        groups:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionGroup_Public"
     FeedbackScoreAverage_Public:
       required:
       - name
@@ -11236,6 +11564,26 @@ components:
         value:
           type: number
       readOnly: true
+    ScoreCondition_Public:
+      required:
+      - operator
+      - score_name
+      - value
+      type: object
+      properties:
+        score_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        operator:
+          type: string
+          enum:
+          - '>'
+          - <
+          - =
+        value:
+          type: number
+          format: double
     ItemLockInfo:
       type: object
       properties:
@@ -11266,6 +11614,37 @@ components:
         expires_at:
           type: string
           format: date-time
+    AnnotationQueueItem_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - manual
+          - automated
+    AnnotationQueueItems_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnnotationQueueItem_Public"
+    AnnotationQueueItemIds_Public:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     AnnotationQueueUpdate:
       type: object
       properties:
@@ -11293,6 +11672,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation"
     AssertionResultBatch:
       required:
       - assertion_results
@@ -11610,6 +11991,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -12166,6 +12548,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -12542,6 +12925,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -13014,6 +13398,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -13123,6 +13508,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -13241,17 +13627,17 @@ components:
           - function
         content:
           type: string
-        reasoning_content:
+        reasoningContent:
           type: string
         name:
           type: string
-        tool_calls:
+        toolCalls:
           type: array
           items:
             $ref: "#/components/schemas/ToolCall"
         refusal:
           type: string
-        function_call:
+        functionCall:
           $ref: "#/components/schemas/FunctionCall"
     ChatCompletionChoice:
       type: object
@@ -13263,7 +13649,7 @@ components:
           $ref: "#/components/schemas/AssistantMessage"
         delta:
           $ref: "#/components/schemas/Delta"
-        finish_reason:
+        finishReason:
           type: string
         logprobs:
           $ref: "#/components/schemas/LogProbs"
@@ -13283,14 +13669,14 @@ components:
             $ref: "#/components/schemas/ChatCompletionChoice"
         usage:
           $ref: "#/components/schemas/Usage"
-        system_fingerprint:
+        systemFingerprint:
           type: string
-        service_tier:
+        serviceTier:
           type: string
     CompletionTokensDetails:
       type: object
       properties:
-        reasoning_tokens:
+        reasoningTokens:
           type: integer
           format: int32
     Delta:
@@ -13300,13 +13686,13 @@ components:
           type: string
         content:
           type: string
-        reasoning_content:
+        reasoningContent:
           type: string
-        tool_calls:
+        toolCalls:
           type: array
           items:
             $ref: "#/components/schemas/ToolCall"
-        function_call:
+        functionCall:
           $ref: "#/components/schemas/FunctionCall"
     FunctionCall:
       type: object
@@ -13338,7 +13724,7 @@ components:
     PromptTokensDetails:
       type: object
       properties:
-        cached_tokens:
+        cachedTokens:
           type: integer
           format: int32
     ToolCall:
@@ -13358,18 +13744,18 @@ components:
     Usage:
       type: object
       properties:
-        total_tokens:
+        totalTokens:
           type: integer
           format: int32
-        prompt_tokens:
+        promptTokens:
           type: integer
           format: int32
-        prompt_tokens_details:
+        promptTokensDetails:
           $ref: "#/components/schemas/PromptTokensDetails"
-        completion_tokens:
+        completionTokens:
           type: integer
           format: int32
-        completion_tokens_details:
+        completionTokensDetails:
           $ref: "#/components/schemas/CompletionTokensDetails"
     ChatCompletionRequest:
       type: object
@@ -13383,7 +13769,7 @@ components:
         temperature:
           type: number
           format: double
-        top_p:
+        topP:
           type: number
           format: double
         "n":
@@ -13391,32 +13777,32 @@ components:
           format: int32
         stream:
           type: boolean
-        stream_options:
+        streamOptions:
           $ref: "#/components/schemas/StreamOptions"
         stop:
           type: array
           items:
             type: string
-        max_tokens:
+        maxTokens:
           type: integer
           format: int32
-        max_completion_tokens:
+        maxCompletionTokens:
           type: integer
           format: int32
-        presence_penalty:
+        presencePenalty:
           type: number
           format: double
-        frequency_penalty:
+        frequencyPenalty:
           type: number
           format: double
-        logit_bias:
+        logitBias:
           type: object
           additionalProperties:
             type: integer
             format: int32
         user:
           type: string
-        response_format:
+        responseFormat:
           $ref: "#/components/schemas/ResponseFormat"
         seed:
           type: integer
@@ -13425,9 +13811,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Tool"
-        tool_choice:
+        toolChoice:
           type: object
-        parallel_tool_calls:
+        parallelToolCalls:
           type: boolean
         store:
           type: boolean
@@ -13435,20 +13821,20 @@ components:
           type: object
           additionalProperties:
             type: string
-        reasoning_effort:
+        reasoningEffort:
           type: string
-        service_tier:
+        serviceTier:
           type: string
         logprobs:
           type: boolean
-        top_logprobs:
+        topLogprobs:
           type: integer
           format: int32
         functions:
           type: array
           items:
             $ref: "#/components/schemas/Function"
-        function_call:
+        functionCall:
           $ref: "#/components/schemas/FunctionCall"
     Function:
       type: object
@@ -13494,12 +13880,12 @@ components:
           - text
           - json_object
           - json_schema
-        json_schema:
+        jsonSchema:
           $ref: "#/components/schemas/JsonSchema"
     StreamOptions:
       type: object
       properties:
-        include_usage:
+        includeUsage:
           type: boolean
     Tool:
       type: object
@@ -14571,6 +14957,16 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        field_mappings:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional mapping of dataset item field name to a path into\
+              \ the span, e.g. 'input.input_text'. Takes precedence over the fields\
+              \ produced by enrichment_options. Ignored for test suite datasets."
+          description: "Optional mapping of dataset item field name to a path into\
+            \ the span, e.g. 'input.input_text'. Takes precedence over the fields\
+            \ produced by enrichment_options. Ignored for test suite datasets."
     SpanEnrichmentOptions:
       type: object
       properties:
@@ -14609,6 +15005,16 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        field_mappings:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional mapping of dataset item field name to a path into\
+              \ the trace, e.g. 'input.input_text'. Takes precedence over the fields\
+              \ produced by enrichment_options. Ignored for test suite datasets."
+          description: "Optional mapping of dataset item field name to a path into\
+            \ the trace, e.g. 'input.input_text'. Takes precedence over the fields\
+            \ produced by enrichment_options. Ignored for test suite datasets."
     TraceEnrichmentOptions:
       type: object
       properties:
@@ -16412,6 +16818,24 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+        experiment_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+    AnnotationQueueReference:
+      required:
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Annotation queue ID
+          format: uuid
+        name:
+          type: string
+          description: Annotation queue name
+      description: Annotation queue reference with ID and name
+      readOnly: true
     Check:
       type: object
       properties:
@@ -16769,6 +17193,12 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference"
+        annotation_queues:
+          type: array
+          description: Annotation queues this trace is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference"
         source:
           type: string
           enum:
@@ -21263,7 +21693,9 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agentInsightsEnabled
       - alertsEnabled
+      - annotationQueueAutomationEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
       - costIntelligenceEnabled
@@ -21333,9 +21765,13 @@ components:
           type: boolean
         ollieEnabled:
           type: boolean
+        agentInsightsEnabled:
+          type: boolean
         projectHomepageEnabled:
           type: boolean
         onlineScoringTracingEnabled:
+          type: boolean
+        annotationQueueAutomationEnabled:
           type: boolean
         defaultPageSize:
           maximum: 100
@@ -22238,6 +22674,21 @@ components:
             \ is deleted under its full key, so a trace can be deleted without knowing\
             \ its project."
           format: uuid
+    AnnotationQueueReference_Public:
+      required:
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Annotation queue ID
+          format: uuid
+        name:
+          type: string
+          description: Annotation queue name
+      description: Annotation queue reference with ID and name
+      readOnly: true
     Check_Public:
       type: object
       properties:
@@ -22410,6 +22861,12 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference_Public"
+        annotation_queues:
+          type: array
+          description: Annotation queues this trace is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference_Public"
         source:
           type: string
           enum:
@@ -22474,6 +22931,12 @@ components:
           type: array
           items:
             type: string
+        annotation_queues:
+          type: array
+          description: Annotation queues this thread is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference"
         last_updated_at:
           type: string
           format: date-time
@@ -22699,6 +23162,7 @@ components:
             - visibility_mode
             - providers
             - experiment
+            - annotation_queues
             - source
             - environment
         from_time:

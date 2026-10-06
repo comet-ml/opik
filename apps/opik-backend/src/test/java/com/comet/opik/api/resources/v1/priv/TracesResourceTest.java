@@ -19,6 +19,7 @@ import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceSearchStreamRequest;
@@ -67,6 +68,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EnvironmentService;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.ThreadDAOTestQueries;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -77,6 +79,7 @@ import com.comet.opik.podam.InRangeStrategy;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentPayloadUtilsTest;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
@@ -91,6 +94,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.Assertions;
@@ -121,6 +125,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -6074,6 +6079,109 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("when a span is updated, then the thread aggregates use the latest span version only")
+        void getTraceThread__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly() {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(null)
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(0.01, 1))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .comments(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // The update writes a second row version; the aggregates must dedup it without FINAL
+            var latestSpan = span.toBuilder()
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(1, 2))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .build();
+            spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .provider(latestSpan.provider())
+                    .usage(latestSpan.usage())
+                    .totalEstimatedCost(latestSpan.totalEstimatedCost())
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+
+            var expectedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(latestSpan),
+                    TraceThreadStatus.ACTIVE);
+            TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
+            assertThat(actualThread.usage()).isEqualTo(Map.of(latestSpan.usage().keySet().iterator().next(),
+                    latestSpan.usage().values().iterator().next().longValue()));
+            assertThat(actualThread.totalEstimatedCost()).isEqualByComparingTo(latestSpan.totalEstimatedCost());
+        }
+
+        @Test
+        @DisplayName("when a span is re-inserted with a different parent, then the thread aggregates count it once")
+        void getTraceThread__whenSpanReinsertedWithDifferentParent__thenAggregatesCountItOnce() {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            // Batch create skips the parent-mismatch check, so both versions land. The live sorting key still
+            // holds parent_span_id: FINAL keeps both rows and sums them, the id dedup keeps only the latest.
+            var staleSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(generator.generate())
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(0.01, 1))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.MINUTES))
+                    .comments(null)
+                    .feedbackScores(null)
+                    .build();
+            var latestSpan = staleSpan.toBuilder()
+                    .parentSpanId(generator.generate())
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(Map.of(RandomStringUtils.secure().nextAlphanumeric(10),
+                            RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(1, 2))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .lastUpdatedAt(Instant.now())
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(staleSpan), API_KEY, TEST_WORKSPACE);
+            spanResourceClient.batchCreateSpans(List.of(latestSpan), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+
+            var expectedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(latestSpan),
+                    TraceThreadStatus.ACTIVE);
+            TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
+            assertThat(actualThread.totalEstimatedCost()).isEqualByComparingTo(latestSpan.totalEstimatedCost());
+        }
+
+        @Test
         @DisplayName("when trace thread is retrieved with truncate parameter, then messages are truncated accordingly")
         void getTraceThread__whenTruncateParameter__thenMessagesAreTruncatedAccordingly() {
 
@@ -6123,6 +6231,428 @@ class TracesResourceTest {
             // Allow up to 10% overhead for JSON serialization
             assertThat(threadWithTruncate.firstMessage().toString().length()).isLessThan(11000);
             assertThat(threadWithTruncate.lastMessage().toString().length()).isLessThan(11000);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when a thread has several traces, then messages come from the earliest started and latest ended traces and the other aggregates are intact")
+        void getTraceThread__whenSeveralTraces__thenMessagesAndAggregatesMatch(boolean truncate) {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+            // Ids ascend a < b < c, while neither start_time nor end_time follows id order
+            var a = threadTrace(threadId, projectName, environment, now.minusSeconds(40), now.minusSeconds(5));
+            var b = threadTrace(threadId, projectName, environment, now.minusSeconds(50), now.minusSeconds(30));
+            var c = threadTrace(threadId, projectName, environment, now.minusSeconds(20), now.minusSeconds(10));
+            var traces = List.of(a, b, c);
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+            var spans = traces.stream()
+                    .flatMap(trace -> Stream.of(costSpan(trace, projectName), costSpan(trace, projectName)))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var threadModelId = awaitThreadModelId(threadId, projectId);
+
+            var tags = Set.of(RandomStringUtils.secure().nextAlphanumeric(10));
+            traceResourceClient.updateThread(TraceThreadUpdate.builder().tags(tags).build(), threadModelId, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            var comment = threadCommentResourceClient.generateAndCreateComment(threadModelId, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+            traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY, TEST_WORKSPACE);
+            var score = factory.manufacturePojo(FeedbackScoreBatchItemThread.class).toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .build();
+            traceResourceClient.threadFeedbackScores(List.of(score), API_KEY, TEST_WORKSPACE);
+
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+
+            var expectedThread = getExpectedThreads(traces, projectId, threadId, spans, TraceThreadStatus.INACTIVE,
+                    List.of(createExpectedFeedbackScore(score, Instant.now()))).getFirst().toBuilder()
+                    .tags(tags)
+                    .comments(actualThread.comments())
+                    .build();
+            TraceAssertions.assertThreads(List.of(expectedThread), List.of(actualThread));
+            assertThat(actualThread.firstMessage()).isEqualTo(b.input());
+            assertThat(actualThread.lastMessage()).isEqualTo(a.output());
+            assertThat(actualThread.numberOfMessages()).isEqualTo(6);
+            assertThat(actualThread.environment()).isEqualTo(environment);
+            assertComments(List.of(comment), actualThread.comments());
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when a trace is updated, then the thread uses the latest version of its input, output and end time")
+        void getTraceThread__whenTraceUpdated__thenLatestVersionWins(boolean truncate) {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+            var a = threadTrace(threadId, projectName, environment, now.minusSeconds(50), now.minusSeconds(40));
+            var b = threadTrace(threadId, projectName, environment, now.minusSeconds(30), now.minusSeconds(20));
+            traceResourceClient.batchCreateTraces(List.of(a, b), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var initialThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(initialThread.firstMessage()).isEqualTo(a.input());
+            assertThat(initialThread.lastMessage()).isEqualTo(b.output());
+
+            // The update makes `a` both the first and the last trace, with a new payload
+            var updatedA = a.toBuilder()
+                    .input(JsonUtils.getJsonNodeFromString("{\"updated_input\": \"%s\"}".formatted(UUID.randomUUID())))
+                    .output(JsonUtils
+                            .getJsonNodeFromString("{\"updated_output\": \"%s\"}".formatted(UUID.randomUUID())))
+                    .endTime(now.minusSeconds(1))
+                    .build();
+            traceResourceClient.updateTrace(a.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .input(updatedA.input())
+                    .output(updatedA.output())
+                    .endTime(updatedA.endTime())
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+
+            var expectedThread = getExpectedThreads(List.of(updatedA, b), projectId, threadId, List.of(),
+                    TraceThreadStatus.ACTIVE).getFirst();
+            TraceAssertions.assertThreads(List.of(expectedThread), List.of(actualThread));
+            assertThat(actualThread.firstMessage()).isEqualTo(updatedA.input());
+            assertThat(actualThread.lastMessage()).isEqualTo(updatedA.output());
+            assertThat(actualThread.endTime()).isEqualTo(updatedA.endTime());
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when traces tie on start time or end time, then the trace with the largest id wins the tie")
+        void getTraceThread__whenTracesTieOnStartAndEndTime__thenLargestIdWins(boolean truncate) {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            var startTime = now.minusSeconds(60);
+
+            // Ids ascend a < b < c < d; all start together, a and b end last together
+            var a = threadTrace(threadId, projectName, environment, startTime, now.minusSeconds(10));
+            var b = threadTrace(threadId, projectName, environment, startTime, now.minusSeconds(10));
+            var c = threadTrace(threadId, projectName, environment, startTime, now.minusSeconds(20));
+            var d = threadTrace(threadId, projectName, environment, startTime, now.minusSeconds(30));
+            traceResourceClient.batchCreateTraces(List.of(c, a, d, b), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualThread.firstMessage()).isEqualTo(d.input());
+            assertThat(actualThread.lastMessage()).isEqualTo(b.output());
+            assertThat(actualThread.startTime()).isEqualTo(startTime);
+            assertThat(actualThread.endTime()).isEqualTo(a.endTime());
+            assertThat(actualThread.numberOfMessages()).isEqualTo(8);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when traces start less than a microsecond apart, then the earlier one is still the first message")
+        void getTraceThread__whenStartTimesDifferBelowMicrosecond__thenEarlierTraceIsFirst(boolean truncate) {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var sameMicrosecond = Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(60);
+
+            // The test schema stores start_time as DateTime64(9): the earlier trace has the smaller id, so a
+            // tie-break that dropped the nanoseconds would pick the later one
+            var earlier = threadTrace(threadId, projectName, environment, sameMicrosecond.plusNanos(100),
+                    sameMicrosecond.plusSeconds(10));
+            var later = threadTrace(threadId, projectName, environment, sameMicrosecond.plusNanos(900),
+                    sameMicrosecond.plusSeconds(5));
+            traceResourceClient.batchCreateTraces(List.of(later, earlier), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualThread.firstMessage()).isEqualTo(earlier.input());
+            assertThat(actualThread.startTime()).isEqualTo(earlier.startTime());
+            assertThat(actualThread.lastMessage()).isEqualTo(earlier.output());
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when only some traces have an end time, then the last message comes from the latest ended trace")
+        void getTraceThread__whenSomeTracesHaveNoEndTime__thenLastMessageFromLatestEnded(boolean truncate) {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+            var a = threadTrace(threadId, projectName, environment, now.minusSeconds(50), null);
+            var b = threadTrace(threadId, projectName, environment, now.minusSeconds(40), now.minusSeconds(30));
+            var c = threadTrace(threadId, projectName, environment, now.minusSeconds(20), null);
+            traceResourceClient.batchCreateTraces(List.of(a, b, c), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualThread.firstMessage()).isEqualTo(a.input());
+            assertThat(actualThread.lastMessage()).isEqualTo(b.output());
+            assertThat(actualThread.startTime()).isEqualTo(a.startTime());
+            assertThat(actualThread.endTime()).isEqualTo(b.endTime());
+            assertThat(actualThread.numberOfMessages()).isEqualTo(6);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when no trace has an end time, then the thread has no last message, end time or duration")
+        void getTraceThread__whenNoTraceHasEndTime__thenNoLastMessage(boolean truncate) {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+            var a = threadTrace(threadId, projectName, environment, now.minusSeconds(50), null);
+            var b = threadTrace(threadId, projectName, environment, now.minusSeconds(40), null);
+            traceResourceClient.batchCreateTraces(List.of(a, b), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualThread.firstMessage()).isEqualTo(a.input());
+            assertThat(actualThread.lastMessage()).isNull();
+            assertThat(actualThread.endTime()).isNull();
+            assertThat(actualThread.duration()).isNull();
+            assertThat(actualThread.numberOfMessages()).isEqualTo(4);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when a thread has a single trace, then its input and output are the first and last message")
+        void getTraceThread__whenSingleTrace__thenItsInputAndOutputAreTheMessages(boolean truncate) {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+            var trace = threadTrace(threadId, projectName, RandomStringUtils.secure().nextAlphanumeric(10),
+                    now.minusSeconds(50), now.minusSeconds(40));
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+
+            var expectedThread = getExpectedThreads(List.of(trace), projectId, threadId, List.of(),
+                    TraceThreadStatus.ACTIVE).getFirst();
+            TraceAssertions.assertThreads(List.of(expectedThread), List.of(actualThread));
+            assertThat(actualThread.firstMessage()).isEqualTo(trace.input());
+            assertThat(actualThread.lastMessage()).isEqualTo(trace.output());
+        }
+
+        @Test
+        @DisplayName("when messages exceed the truncation threshold, then only those messages are truncated, and only with truncate")
+        void getTraceThread__whenMessagesExceedThreshold__thenOnlyThoseAreTruncated() {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            var longInput = JsonUtils.getJsonNodeFromString("{\"content\": \"%s\"}".formatted("x".repeat(15_000)));
+            var longOutput = JsonUtils.getJsonNodeFromString("{\"result\": \"%s\"}".formatted("y".repeat(15_000)));
+
+            // The first trace carries a long input and a short output, the last one the reverse
+            var first = threadTrace(threadId, projectName, environment, now.minusSeconds(50), now.minusSeconds(45))
+                    .toBuilder().input(longInput).build();
+            var last = threadTrace(threadId, projectName, environment, now.minusSeconds(40), now.minusSeconds(30))
+                    .toBuilder().output(longOutput).build();
+            traceResourceClient.batchCreateTraces(List.of(first, last), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var fullThread = traceResourceClient.getTraceThread(threadId, projectId, false, API_KEY, TEST_WORKSPACE);
+            assertThat(fullThread.firstMessage()).isEqualTo(longInput);
+            assertThat(fullThread.lastMessage()).isEqualTo(longOutput);
+
+            var truncatedThread = traceResourceClient.getTraceThread(threadId, projectId, true, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(truncatedThread.firstMessage().isTextual()).isTrue();
+            assertThat(truncatedThread.firstMessage().asText()).isEqualTo(longInput.toString().substring(0, 10_001));
+            assertThat(truncatedThread.lastMessage().isTextual()).isTrue();
+            assertThat(truncatedThread.lastMessage().asText()).isEqualTo(longOutput.toString().substring(0, 10_001));
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when the same thread id exists in another project and workspace, then their traces do not leak in")
+        void getTraceThread__whenSameThreadIdElsewhere__thenOtherTracesDoNotLeak(boolean truncate) {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+            var own = threadTrace(threadId, projectName, environment, now.minusSeconds(50), now.minusSeconds(40));
+            traceResourceClient.batchCreateTraces(List.of(own), API_KEY, TEST_WORKSPACE);
+
+            // Earlier start and later end than the own trace, so any leak would take over both messages
+            var otherProject = threadTrace(threadId, UUID.randomUUID().toString(), environment,
+                    now.minusSeconds(100), now.minusSeconds(1));
+            traceResourceClient.batchCreateTraces(List.of(otherProject), API_KEY, TEST_WORKSPACE);
+
+            var otherWorkspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var otherApiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(otherApiKey, otherWorkspaceName, UUID.randomUUID().toString());
+            var otherWorkspace = threadTrace(threadId, projectName, environment, now.minusSeconds(100),
+                    now.minusSeconds(1));
+            traceResourceClient.batchCreateTraces(List.of(otherWorkspace), otherApiKey, otherWorkspaceName);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                    TEST_WORKSPACE);
+
+            var expectedThread = getExpectedThreads(List.of(own), projectId, threadId, List.of(),
+                    TraceThreadStatus.ACTIVE).getFirst();
+            TraceAssertions.assertThreads(List.of(expectedThread), List.of(actualThread));
+            assertThat(actualThread.firstMessage()).isEqualTo(own.input());
+            assertThat(actualThread.lastMessage()).isEqualTo(own.output());
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when a trace's newer version moves it to another thread, then find_thread_by_id returns only the requested thread")
+        void findThreadById__whenTraceMovedToAnotherThread__thenOnlyRequestedThreadIsReturned(boolean truncate,
+                TransactionTemplateAsync templateAsync) {
+            var workspaceId = UUID.randomUUID().toString();
+            var projectId = generator.generate();
+            var threadId = UUID.randomUUID().toString();
+            var movedTo = UUID.randomUUID().toString();
+            var moved = generator.generate();
+            var kept = generator.generate();
+
+            // A plain MergeTree copy of traces never collapses versions, so the moved trace's stale version stays
+            // visible to traces_ids on every run, without depending on merge timing in the shared traces table
+            var fixtureTable = "traces_moved_" + RandomStringUtils.secure().nextAlphanumeric(10).toLowerCase();
+            runClickHouse(templateAsync,
+                    "CREATE TABLE %s AS traces ENGINE = MergeTree ORDER BY (workspace_id, project_id, id)"
+                            .formatted(fixtureTable));
+            try {
+                runClickHouse(templateAsync,
+                        """
+                                INSERT INTO %s (id, workspace_id, project_id, thread_id, start_time, end_time, input, output,
+                                    last_updated_at) VALUES
+                                ('%s', '%s', '%s', '%s', now64(9) - 100, now64(9) - 1, '{"v":"stale"}', '{"v":"stale"}', now64(6) - 10),
+                                ('%s', '%s', '%s', '%s', now64(9) - 100, now64(9) - 1, '{"v":"moved"}', '{"v":"moved"}', now64(6)),
+                                ('%s', '%s', '%s', '%s', now64(9) - 50, now64(9) - 40, '{"v":"kept"}', '{"v":"kept"}', now64(6))
+                                """
+                                .formatted(fixtureTable, moved, workspaceId, projectId, threadId, moved, workspaceId,
+                                        projectId, movedTo, kept, workspaceId, projectId, threadId));
+
+                var sql = TemplateUtils.newST(ThreadDAOTestQueries.selectTraceThreadById())
+                        .add("truncate", truncate)
+                        .add("log_comment", "find_thread_by_id_moved_trace_test")
+                        .render()
+                        .replaceAll("FROM traces\\b", "FROM " + fixtureTable);
+                var rows = templateAsync.stream(connection -> Flux.from(connection.createStatement(sql)
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId)
+                        .bind("thread_id", threadId)
+                        .execute())
+                        .flatMap(result -> result.map((row, metadata) -> List.of(
+                                row.get("id", String.class),
+                                String.valueOf(row.get("number_of_messages", Long.class)),
+                                row.get("first_message", String.class),
+                                row.get("last_message", String.class)))))
+                        .collectList()
+                        .block();
+
+                // Without the thread filter the moved trace forms a second row, in arbitrary order
+                assertThat(rows).containsExactly(List.of(threadId, "2", "{\"v\":\"kept\"}", "{\"v\":\"kept\"}"));
+            } finally {
+                runClickHouse(templateAsync, "DROP TABLE IF EXISTS " + fixtureTable);
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when a trace is moved to another thread, then each thread is retrieved with only its own traces")
+        void getTraceThread__whenTraceMovedToAnotherThread__thenEachThreadHasOnlyItsOwnTraces(boolean truncate) {
+            // Covers binding and mapping through the public endpoint. Whether the moved trace's versions have merged
+            // yet is irrelevant here, as the right answer is the same either way; the query-level test above is the
+            // one that keeps the stale version present and so guarantees the thread filter is exercised.
+            var threadId = UUID.randomUUID().toString();
+            var movedTo = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+            var environment = RandomStringUtils.secure().nextAlphanumeric(10);
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+            // The moved trace starts first and ends last, so it would take over both messages if it leaked back
+            var moved = threadTrace(threadId, projectName, environment, now.minusSeconds(100), now.minusSeconds(1));
+            var kept = threadTrace(threadId, projectName, environment, now.minusSeconds(50), now.minusSeconds(40));
+            traceResourceClient.batchCreateTraces(List.of(moved, kept), API_KEY, TEST_WORKSPACE);
+            traceResourceClient.updateTrace(moved.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(movedTo)
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedByThread = Map.of(
+                    threadId, kept,
+                    movedTo, moved.toBuilder().threadId(movedTo).build());
+            expectedByThread.forEach((expectedThreadId, expectedTrace) -> {
+                var threadModelId = awaitThreadModelId(expectedThreadId, projectId);
+                var actualThread = traceResourceClient.getTraceThread(expectedThreadId, projectId, truncate, API_KEY,
+                        TEST_WORKSPACE);
+
+                var expectedThread = getExpectedThreads(List.of(expectedTrace), projectId, expectedThreadId,
+                        List.of(), TraceThreadStatus.ACTIVE).getFirst();
+                TraceAssertions.assertThreads(List.of(expectedThread), List.of(actualThread));
+                assertThat(actualThread.threadModelId()).isEqualTo(threadModelId);
+                assertThat(actualThread.firstMessage()).isEqualTo(expectedTrace.input());
+                assertThat(actualThread.lastMessage()).isEqualTo(expectedTrace.output());
+            });
+        }
+
+        private void runClickHouse(TransactionTemplateAsync templateAsync, String sql) {
+            templateAsync.nonTransaction(connection -> Mono.from(connection.createStatement(sql).execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .defaultIfEmpty(0L)).block();
+        }
+
+        private Trace threadTrace(String threadId, String projectName, String environment, Instant startTime,
+                Instant endTime) {
+            return createTrace().toBuilder()
+                    .id(generator.generate())
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .environment(environment)
+                    .startTime(startTime)
+                    .endTime(endTime)
+                    .build();
+        }
+
+        private Span costSpan(Trace trace, String projectName) {
+            return factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(null)
+                    .usage(Map.of("prompt_tokens", RandomUtils.secure().randomInt(1, 10_000)))
+                    .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(0.01, 1))
+                            .setScale(6, RoundingMode.HALF_UP))
+                    .comments(null)
+                    .feedbackScores(null)
+                    .build();
+        }
+
+        private UUID awaitThreadModelId(String threadId, UUID projectId) {
+            Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> assertThat(
+                    traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId())
+                    .isNotNull());
+            return traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId();
         }
 
         @Test

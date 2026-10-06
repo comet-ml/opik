@@ -72,9 +72,13 @@ def stream_dataset_items(
     filters = _serialize_dataset_item_filters(filter_string)
 
     while should_retrieve_more_items:
+        dropped_records: Dict[str, int] = {"count": 0}
+        page_last_id: Dict[str, Optional[str]] = {"id": None}
 
         @retry_decorator.opik_rest_retry
         def _fetch_batch() -> List[rest_dataset_item_read.DatasetItem]:
+            dropped_records["count"] = 0
+            page_last_id["id"] = None
             return rest_stream_parser.read_and_parse_stream(
                 stream=rest_client.datasets.stream_dataset_items(
                     dataset_name=dataset_name,
@@ -86,17 +90,25 @@ def stream_dataset_items(
                 ),
                 item_class=rest_dataset_item_read.DatasetItem,
                 nb_samples=nb_samples,
+                dropped_records_out=dropped_records,
+                last_id_out=page_last_id,
             )
 
         dataset_items = _fetch_batch()
 
-        if len(dataset_items) == 0:
-            should_retrieve_more_items = False
-            break
+        # The cursor has to be the last id the backend *sent*, not the last record
+        # that parsed, otherwise a bad record at the tail of a page leaves the
+        # cursor above it and the same rows are served again.
+        cursor_before_page = last_retrieved_id
+        if page_last_id["id"] is not None:
+            last_retrieved_id = page_last_id["id"]
+        elif len(dataset_items) > 0:
+            # No line on this page decoded to an object with an id; fall back to the
+            # last record that parsed so the read still advances.
+            last_retrieved_id = dataset_items[-1].id
 
         for item in dataset_items:
             item_id = item.id
-            last_retrieved_id = item_id
 
             if dataset_items_ids_left is not None:
                 if item_id not in dataset_items_ids_left:
@@ -160,6 +172,44 @@ def stream_dataset_items(
             if dataset_items_ids_left is not None and len(dataset_items_ids_left) == 0:
                 should_retrieve_more_items = False
                 break
+
+        # Decided only after the page's items have been yielded: a short page is
+        # the end of the data, but its records are still items. Records the
+        # backend sent that failed to parse were part of this page too, so they
+        # count towards it being full -- treating a page that parses to nothing as
+        # the end of the stream abandoned every item behind it, and made a read
+        # over a dataset with one unreadable record look complete.
+        records_received = len(dataset_items) + dropped_records["count"]
+
+        # A page cut short by nb_samples is truncated, not the end of the data:
+        # read_and_parse_stream stops once that many records have parsed, so the
+        # page never reaches batch_size even though more records follow. Treating
+        # it as a short page ended the stream after the first page, which with
+        # dataset_item_ids missed every item past it.
+        truncated_by_nb_samples = (
+            nb_samples is not None and records_received >= nb_samples
+        )
+
+        if (
+            should_retrieve_more_items
+            and not truncated_by_nb_samples
+            and records_received < batch_size
+        ):
+            should_retrieve_more_items = False
+
+        if (
+            should_retrieve_more_items
+            and not dataset_items
+            and last_retrieved_id == cursor_before_page
+        ):
+            # Neither the result nor the cursor moved, so the next request would
+            # ask for exactly the same page. Stop rather than loop.
+            LOGGER.warning(
+                "Stream of dataset items stopped early: all %d record(s) of the "
+                "current page could not be parsed, so pagination could not advance.",
+                dropped_records["count"],
+            )
+            should_retrieve_more_items = False
 
     if dataset_items_ids_left and len(dataset_items_ids_left) > 0:
         LOGGER.warning(
@@ -285,6 +335,7 @@ def get_datasets(
     rest_client: OpikApi,
     max_results: int = 1000,
     sync_items: bool = False,
+    client: Optional[Any] = None,
 ) -> List[dataset.Dataset]:
     page_size = 100
     datasets: List[dataset.Dataset] = []
@@ -311,6 +362,7 @@ def get_datasets(
                 project_name=project_name,
                 rest_client=rest_client,
                 dataset_items_count=dataset_fern.dataset_items_count,
+                client=client,
             )
             # Seed the id from the listing so reads don't re-resolve each
             # dataset by name.

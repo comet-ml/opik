@@ -2,4 +2,4 @@
 
 import typing
 
-AutomationRuleEvaluatorPublicAction = typing.Union[typing.Literal["evaluator"], typing.Any]
+AutomationRuleEvaluatorPublicAction = typing.Union[typing.Literal["evaluator", "annotation_queue_router"], typing.Any]

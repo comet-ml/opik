@@ -9,7 +9,7 @@ from opik.configurator.mcp import install, spec, targets, verification
 from opik.configurator.mcp import view as mcp_view
 
 
-class RecordingView(mcp_view.LoggingInstallView):
+class RecordingView(mcp_view.InstallView):
     """Captures narration so tests assert on intent, not on log strings."""
 
     #: Set to script the host prompt; ``None`` uses the inherited numbered menu.
@@ -17,8 +17,8 @@ class RecordingView(mcp_view.LoggingInstallView):
 
     def __init__(self):
         self.choose_calls = []
+        self.sign_ins = []
         self.plans = []
-        self.plan_extras = []
         self.steps = []
         self.target_results = []
         self.verifications = []
@@ -27,15 +27,21 @@ class RecordingView(mcp_view.LoggingInstallView):
         self.problems = []
         self.notes = []
 
-    def plan(self, deployment, transport, targets, needs_sign_in=False, extras=()):
-        super().plan(deployment, transport, targets, needs_sign_in)
-        self.plans.append((deployment, transport, list(targets)))
-        self.plan_extras.append(list(extras))
+    def plan(self, deployment, transport, needs_sign_in):
+        self._needs_sign_in = needs_sign_in
+        self.plans.append((deployment, transport))
 
     @contextlib.contextmanager
     def step(self, description):
         self.steps.append(description)
         yield
+
+    #: The exit status the scripted sign-in returns.
+    sign_in_returncode = 0
+
+    def sign_in(self, client_display_name, command):
+        self.sign_ins.append((client_display_name, list(command)))
+        return self.sign_in_returncode
 
     def results(self, results):
         self.target_results.extend(results)
@@ -43,8 +49,8 @@ class RecordingView(mcp_view.LoggingInstallView):
     def verification(self, succeeded, detail):
         self.verifications.append((succeeded, detail))
 
-    def done(self, components, assistants):
-        self.done_calls.append((list(components), list(assistants)))
+    def done(self):
+        self.done_calls.append(True)
 
     def skipped(self, message):
         self.skips.append(message)
@@ -55,11 +61,11 @@ class RecordingView(mcp_view.LoggingInstallView):
     def note(self, message):
         self.notes.append(message)
 
-    def choose_hosts(self, title, candidates, preselected):
-        self.choose_calls.append((title, list(candidates), list(preselected)))
+    def choose_hosts(self, title, candidates):
+        self.choose_calls.append((title, list(candidates)))
         if self.host_choice is not None:
             return list(self.host_choice)
-        return super().choose_hosts(title, candidates, preselected)
+        return mcp_view.numbered_menu(title, candidates)
 
     @property
     def said(self) -> str:
@@ -70,8 +76,7 @@ class RecordingView(mcp_view.LoggingInstallView):
             + self.notes
             + [d for _, d in self.verifications]
             + [r.detail for r in self.target_results]
-            + [f"{d} {t}" for d, t, _ in self.plans]
-            + [loc for _, _, ts in self.plans for loc in (t.location for t in ts)]
+            + [f"{d} {t}" for d, t in self.plans]
         )
 
 
@@ -223,7 +228,7 @@ def test_setup_mcp_server__menu_lists_detected_hosts(monkeypatch):
 
     def fake_input(message):
         prompts.append(message)
-        return "4"  # Skip (2 hosts -> 1,2 hosts, 3 all, 4 skip)
+        return "4"  # Skip (2 hosts -> 1,2 hosts, 3 not listed, 4 skip)
 
     monkeypatch.setattr("builtins.input", fake_input)
 
@@ -231,28 +236,11 @@ def test_setup_mcp_server__menu_lists_detected_hosts(monkeypatch):
 
     assert "Claude Code" in prompts[0]
     assert "Cursor" in prompts[0]
-    assert "All of the above" in prompts[0]
     assert "VS Code Copilot" not in prompts[0]
 
 
-def test_setup_mcp_server__select_all__installs_every_detected_host(monkeypatch):
-    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
-    claude_spy = mock.Mock(return_value=targets.InstallResult("Claude", True, "Added"))
-    cursor_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
-    monkeypatch.setattr(
-        targets,
-        "HOST_TARGETS",
-        [_target("Claude Code", True, claude_spy), _target("Cursor", True, cursor_spy)],
-    )
-    monkeypatch.setattr("builtins.input", lambda message: "3")  # All of the above
-
-    install.setup_mcp_server(**_make_args())
-
-    claude_spy.assert_called_once()
-    cursor_spy.assert_called_once()
-
-
-def test_setup_mcp_server__comma_separated_selection__installs_each(monkeypatch):
+def test_setup_mcp_server__the_menu_installs_the_one_client_chosen(monkeypatch):
+    """The fallback menu takes one client, like the picker it stands in for."""
     monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
     claude_spy = mock.Mock(return_value=targets.InstallResult("Claude", True, "Added"))
     cursor_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
@@ -266,12 +254,13 @@ def test_setup_mcp_server__comma_separated_selection__installs_each(monkeypatch)
             _target("VS Code Copilot", True, vscode_spy),
         ],
     )
-    monkeypatch.setattr("builtins.input", lambda message: "1,3")  # Claude + VS Code
+    answers = iter(["1,3", "3"])  # The comma answer is refused, then VS Code.
+    monkeypatch.setattr("builtins.input", lambda message: next(answers))
 
     install.setup_mcp_server(**_make_args())
 
-    claude_spy.assert_called_once()
     vscode_spy.assert_called_once()
+    claude_spy.assert_not_called()
     cursor_spy.assert_not_called()
 
 
@@ -605,7 +594,6 @@ class TestVerification:
         verify.assert_called_once()
         view = args["view"]
         assert view.verifications == [(True, "connected to workspace ws")]
-        assert view.done_calls == [(["MCP server"], ["Cursor"])]
 
     def test_setup_mcp_server__verification_fails__warns_instead_of_claiming_success(
         self, monkeypatch, verify
@@ -632,8 +620,6 @@ class TestVerification:
 
         view = args["view"]
         assert view.verifications[0][0] is False
-        # A failed check must never be followed by "restart, it works".
-        assert view.done_calls == []
 
     def test_setup_mcp_server__every_host_failed__does_not_verify(
         self, monkeypatch, verify
@@ -718,7 +704,9 @@ class TestWorkspaceAmbiguity:
 
         assert message is not None
         assert "acme" in message and "beta" in message
-        assert "opik configure" in message
+        # Names how to set the workspace, not "run `opik configure`": this fires
+        # from inside `opik configure` too, where that instruction is a loop.
+        assert "OPIK_WORKSPACE" in message
 
     def test_workspace_ambiguity__named_workspace__is_fine(self, monkeypatch):
         list_spy = mock.Mock()
@@ -833,37 +821,6 @@ class TestPlanLabels:
         )
         assert "uvx" in label and "host config" in label
 
-    def test_target_location__claude_code_with_cli__names_the_command(
-        self, monkeypatch
-    ):
-        """Saying `~/.claude.json` would be wrong when we shell out to the CLI."""
-        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/claude")
-        target = targets.find_target("claude-code")
-
-        location = install._target_location(target, mock.Mock())
-
-        assert location == "via `claude mcp add`"
-
-    def test_target_location__claude_code_without_cli__names_the_file(
-        self, monkeypatch
-    ):
-        monkeypatch.setattr(install.shutil, "which", lambda name: None)
-        target = targets.find_target("claude-code")
-
-        assert install._target_location(target, mock.Mock()).endswith(".claude.json")
-
-    def test_target_location__codex__names_the_command(self):
-        """Codex config is TOML; we drive its CLI rather than editing the file."""
-        target = targets.find_target("codex")
-
-        assert install._target_location(target, mock.Mock()) == "via `codex mcp add`"
-
-    def test_target_location__file_hosts__collapse_home(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
-        target = targets.find_target("cursor")
-
-        assert install._target_location(target, mock.Mock()).startswith("~/")
-
     def test_setup_mcp_server__plan_is_shown_before_anything_is_written(
         self, monkeypatch
     ):
@@ -927,7 +884,9 @@ class TestCandidateAndConfirm:
         candidates = [_target("codex", True, mock.Mock())]
 
         assert (
-            install._confirm_targets(candidates, ["codex"], False, RecordingView())
+            install._confirm_targets(
+                candidates, ["codex"], False, RecordingView()
+            ).targets
             == candidates
         )
 
@@ -938,7 +897,7 @@ class TestCandidateAndConfirm:
         candidates = [_target("codex", True, mock.Mock())]
 
         assert (
-            install._confirm_targets(candidates, None, True, RecordingView())
+            install._confirm_targets(candidates, None, True, RecordingView()).targets
             == candidates
         )
 
@@ -947,7 +906,7 @@ class TestCandidateAndConfirm:
         view = RecordingView()
         view.host_choice = []
 
-        assert install._confirm_targets(candidates, None, False, view) == []
+        assert install._confirm_targets(candidates, None, False, view).targets == []
         assert view.choose_calls
 
 
@@ -986,7 +945,7 @@ class TestTerminalRequired:
             view=view,
         )
 
-        assert result == []
+        assert result == install.NOTHING_INSTALLED
         install_spy.assert_not_called()
         assert view.skips, "the user is told why nothing happened"
 
@@ -1014,7 +973,7 @@ class TestTerminalRequired:
             view=RecordingView(),
         )
 
-        assert result == ["cursor"]
+        assert result.registered == ("cursor",)
         install_spy.assert_called_once()
 
     def test_confirm_targets__terminal__still_asks(self, monkeypatch):
@@ -1023,5 +982,282 @@ class TestTerminalRequired:
         view = RecordingView()
         view.host_choice = []
 
-        assert install._confirm_targets(candidates, None, False, view) == []
+        assert install._confirm_targets(candidates, None, False, view).targets == []
         assert view.choose_calls
+
+
+def _stale_install(monkeypatch, version="0.2.12"):
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    monkeypatch.setattr(install.uv_tool, "installed_version", lambda: version)
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    return install_spy
+
+
+def test_setup_mcp_server__stale_tool_install__is_removed_without_asking(monkeypatch):
+    """A stale tool install is removed without asking: it pins an old opik-mcp."""
+    _stale_install(monkeypatch)
+    uninstall = mock.Mock(return_value=(True, "removed"))
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    asked = mock.Mock(return_value="y")
+    monkeypatch.setattr("builtins.input", asked)
+
+    args = _make_args()
+    report = install.setup_mcp_server(**args)
+
+    uninstall.assert_called_once()
+    # Nothing the user was shown mentions the tool install — a guard on what is
+    # actually on screen, rather than on one helper not being called, which went
+    # on passing after that helper stopped being what would have asked.
+    prompts = " ".join(str(call.args[0]) for call in asked.call_args_list)
+    assert "uv tool" not in prompts
+    assert "opik-mcp" not in prompts
+    assert report.stale_tool == "removed"
+
+
+def test_setup_mcp_server__stale_tool_removed__says_what_it_removed(monkeypatch):
+    """The removal says which version went and how to put it back."""
+    _stale_install(monkeypatch)
+    monkeypatch.setattr(install.uv_tool, "uninstall", lambda: (True, "removed"))
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    said = " ".join(args["view"].notes)
+    assert "Removed opik-mcp 0.2.12" in said
+    assert "uv tool install opik-mcp==0.2.12" in said
+
+
+def test_setup_mcp_server__stale_tool_cannot_be_removed__says_so(monkeypatch):
+    """Loud on failure: the server really will keep starting the old version."""
+    _stale_install(monkeypatch)
+    monkeypatch.setattr(install.uv_tool, "uninstall", lambda: (False, "uv exploded"))
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    report = install.setup_mcp_server(**args)
+
+    assert report.stale_tool == "removal_failed"
+    assert any(
+        "uv tool uninstall opik-mcp" in problem for problem in args["view"].problems
+    )
+
+
+def test_setup_mcp_server__stale_tool_install__headless__is_still_removed(monkeypatch):
+    """There is no question left to need a terminal for."""
+    _stale_install(monkeypatch)
+    uninstall = mock.Mock(return_value=(True, "removed"))
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    monkeypatch.setattr(install.interactive_helpers, "is_interactive", lambda: False)
+
+    install.setup_mcp_server(**_make_args(host_keys=["cursor"]))
+
+    uninstall.assert_called_once()
+
+
+def test_setup_mcp_server__stale_install_removed_before_the_prefetch(
+    monkeypatch, prefetch_run
+):
+    # Warming the cache while the install is still there warms an environment the
+    # client would never reach.
+    _stale_install(monkeypatch)
+    order = []
+    monkeypatch.setattr(
+        install.uv_tool,
+        "uninstall",
+        lambda: (order.append("uninstall"), (True, "removed"))[1],
+    )
+    prefetch_run.side_effect = lambda *a, **k: (
+        order.append("prefetch"),
+        subprocess.CompletedProcess([], 0, "", ""),
+    )[1]
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**_make_args())
+
+    assert order == ["uninstall", "prefetch"]
+
+
+def test_setup_mcp_server__no_tool_install__nothing_to_remove(monkeypatch):
+    _stale_install(monkeypatch, version=None)
+    uninstall = mock.Mock()
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    report = install.setup_mcp_server(**_make_args())
+
+    uninstall.assert_not_called()
+    assert report.stale_tool == "absent"
+
+
+class TestClientNotListed:
+    """ "My AI client is not listed" has to end in something actionable.
+
+    Without it, a client Opik cannot detect was a silent decline — the user had
+    no way out and the funnel counted them as a refusal.
+    """
+
+    def _run(self, monkeypatch, choice):
+        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+        monkeypatch.setattr(
+            install.mcp_targets,
+            "detected_targets",
+            lambda: [_target("cursor", True, mock.Mock())],
+        )
+        args = _make_args()
+        args["view"].host_choice = choice
+        return install.setup_mcp_server(**args), args["view"]
+
+    def test_not_listed__shows_the_manual_config_and_the_docs_link(self, monkeypatch):
+        _, view = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+
+        said = " ".join(view.problems)
+        assert "mcpServers" in said, "the block to paste"
+        assert install.MCP_DOCS_URL in said, "where the per-client instructions are"
+
+    def test_not_listed__installs_nothing_and_reports_declined(self, monkeypatch):
+        report, _ = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+
+        assert report.registered == ()
+        assert report.declined is True
+
+    def test_not_listed__is_reported_apart_from_a_plain_decline(self, monkeypatch):
+        """Both register nothing, but only one says the detected list is wrong.
+
+        Which matters past the server: the skill pack follows the registered
+        clients and otherwise falls back to every detected one, so without this
+        "none of these is mine" put the pack in all of them.
+        """
+        not_listed, _ = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+        skipped, _ = self._run(monkeypatch, [])
+
+        assert not_listed.manual is True
+        assert skipped.manual is False
+
+    def test_plain_skip__stays_quiet(self, monkeypatch):
+        """Nothing to paste when the user simply said no."""
+        _, view = self._run(monkeypatch, [])
+
+        assert view.problems == []
+        assert view.skips, "still says the step was skipped"
+
+
+class TestAFailedSignInIsWhereTheRunEnds:
+    """Verification only proves the hosted server is reachable, which it is
+    without a sign-in — so a run with a failed sign-in must not end on "done"."""
+
+    @staticmethod
+    def _run(monkeypatch, verify):
+        monkeypatch.setattr(
+            install.mcp_detection,
+            "detect_hosted_mcp_server",
+            lambda **kwargs: "https://dev.comet.com/opik/api/v1/mcp",
+        )
+        install_spy = mock.Mock(
+            return_value=targets.InstallResult(
+                "Claude Code",
+                True,
+                "Added",
+                sign_in_attempted=True,
+                sign_in_failed=True,
+            )
+        )
+        monkeypatch.setattr(
+            targets, "HOST_TARGETS", [_target("claude-code", True, install_spy)]
+        )
+        monkeypatch.setattr("builtins.input", lambda message: "y")
+        args = _make_args()
+        order = []
+        view = args["view"]
+        original = view.sign_in_failed
+        view.sign_in_failed = lambda names: (order.append("sign-in"), original(names))
+        verify.side_effect = lambda **kwargs: (
+            order.append("verify"),
+            verification.VerificationResult(True, "reachable"),
+        )[1]
+
+        report = install.setup_mcp_server(**args)
+        return report, view, order
+
+    def test_the_view_is_told_before_verification(self, monkeypatch, verify):
+        """So nothing that goes wrong while verifying can swallow the command."""
+        report, view, order = self._run(monkeypatch, verify)
+
+        assert order == ["sign-in", "verify"]
+        assert view._sign_in_failed == ("Claude Code",)
+        assert report.sign_in == "failed"
+
+
+def test_setup_mcp_server__no_api_key_and_no_hosted_server__installs_nothing(
+    monkeypatch,
+):
+    """A local server for Opik Cloud would start with no credentials at all."""
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    install_spy = mock.Mock()
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+
+    report = install.setup_mcp_server(**(args := _make_args(api_key=None)))
+
+    install_spy.assert_not_called()
+    assert report.registered == ()
+    assert "no API key" in args["view"].said
+
+
+def test_setup_mcp_server__no_api_key__does_not_name_a_workspace(monkeypatch):
+    """Signed in with OAuth, the workspace is whichever the user picks then."""
+    monkeypatch.setattr(
+        install.mcp_detection,
+        "detect_hosted_mcp_server",
+        lambda **kwargs: "https://www.comet.com/opik/api/v1/mcp",
+    )
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**(args := _make_args(api_key=None, workspace="default")))
+
+    assert args["view"].plans[0][0] == "Opik Cloud"
+
+
+class TestTheSignInIsItsOwnStep:
+    """Registered under a spinner, then the terminal handed over for the sign-in."""
+
+    @staticmethod
+    def _run(monkeypatch, returncode):
+        monkeypatch.setattr(
+            install.mcp_detection,
+            "detect_hosted_mcp_server",
+            lambda **kwargs: "https://www.comet.com/opik/api/v1/mcp",
+        )
+        install_spy = mock.Mock(
+            return_value=targets.InstallResult("Claude Code", True, "Added")
+        )
+        monkeypatch.setattr(
+            targets, "HOST_TARGETS", [_target("claude-code", True, install_spy)]
+        )
+        monkeypatch.setattr(
+            targets, "sign_in_command", lambda key, spec: ["claude", "mcp", "login"]
+        )
+        monkeypatch.setattr("builtins.input", lambda message: "y")
+        args = _make_args()
+        args["view"].sign_in_returncode = returncode
+        report = install.setup_mcp_server(**args)
+        return report, args["view"]
+
+    def test_the_install_runs_under_a_spinner_before_the_sign_in(self, monkeypatch):
+        _, view = self._run(monkeypatch, returncode=0)
+
+        assert "Adding Opik MCP to claude-code" in view.steps
+        assert view.sign_ins == [("claude-code", ["claude", "mcp", "login"])]
+
+    def test_a_sign_in_that_worked__is_reported_as_succeeded(self, monkeypatch):
+        report, _ = self._run(monkeypatch, returncode=0)
+
+        assert report.sign_in == "succeeded"
+
+    def test_a_sign_in_that_failed__is_reported_as_failed(self, monkeypatch):
+        report, view = self._run(monkeypatch, returncode=1)
+
+        assert report.sign_in == "failed"
+        assert view._sign_in_failed == ("Claude Code",)

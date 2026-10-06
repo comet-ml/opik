@@ -9,6 +9,7 @@ import {
   LLMPromptConfigsType,
   LLMVertexAIConfigsType,
   LLMCustomConfigsType,
+  OpenAiPipelineMode,
   PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
   COMPOSED_PROVIDER_TYPE,
@@ -31,6 +32,8 @@ import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/provid
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { parseComposedProviderType } from "@/lib/provider";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 
 interface PromptModelConfigsProps {
   provider: COMPOSED_PROVIDER_TYPE;
@@ -40,6 +43,14 @@ interface PromptModelConfigsProps {
   configs: Partial<LLMPromptConfigsType>;
   onChange: (configs: Partial<LLMPromptConfigsType>) => void;
   disabled?: boolean;
+  /** Defaults to every parameter supported, which is the playground. */
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
+  /**
+   * Pass only where the request goes through Opik's OpenAI pipeline, which honours the key's mode.
+   * The optimizer calls OpenAI through LiteLLM on Chat Completions whatever the key says, so it must
+   * leave this out and keep the Chat Completions effort values.
+   */
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const PromptModelConfigs = ({
@@ -50,6 +61,8 @@ const PromptModelConfigs = ({
   configs,
   onChange,
   disabled: disabledProp = false,
+  unsupportedParams,
+  openAiPipelineMode,
 }: PromptModelConfigsProps) => {
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
@@ -59,8 +72,10 @@ const PromptModelConfigs = ({
       return (
         <OpenAIModelConfigs
           configs={configs as LLMOpenAIConfigsType}
+          unsupportedParams={unsupportedParams}
           model={model}
           onChange={onChange}
+          openAiPipelineMode={openAiPipelineMode}
         />
       );
     }
@@ -69,6 +84,7 @@ const PromptModelConfigs = ({
       return (
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}
+          unsupportedParams={unsupportedParams}
           onChange={onChange}
           model={model}
         />
@@ -79,6 +95,8 @@ const PromptModelConfigs = ({
       return (
         <OpenRouterModelConfigs
           configs={configs as LLMOpenRouterConfigsType}
+          model={model}
+          unsupportedParams={unsupportedParams}
           onChange={onChange}
         />
       );
@@ -88,6 +106,7 @@ const PromptModelConfigs = ({
       return (
         <GeminiModelConfigs
           configs={configs as LLMGeminiConfigsType}
+          unsupportedParams={unsupportedParams}
           model={model}
           onChange={onChange}
         />
@@ -98,6 +117,7 @@ const PromptModelConfigs = ({
       return (
         <VertexAIModelConfigs
           configs={configs as LLMVertexAIConfigsType}
+          unsupportedParams={unsupportedParams}
           model={model}
           onChange={onChange}
         />
@@ -108,6 +128,8 @@ const PromptModelConfigs = ({
       return (
         <CustomModelConfigs
           configs={configs as LLMCustomConfigsType}
+          model={model}
+          unsupportedParams={unsupportedParams}
           onChange={onChange}
         />
       );
@@ -115,6 +137,24 @@ const PromptModelConfigs = ({
 
     return;
   };
+
+  const providerForm = getProviderForm();
+
+  // Hide, not disable (as for decisions models): an empty panel misleads, and a disabled button can't
+  // say why. Covers providers without a form and models with nothing to set on this surface. No
+  // provider yet keeps the disabled button, so it still hints at settings once a model is picked.
+  if (
+    composedProviderType &&
+    !hasVisibleControls(
+      provider,
+      model ?? "",
+      configs,
+      unsupportedParams,
+      openAiPipelineMode,
+    )
+  ) {
+    return null;
+  }
 
   const disabled = disabledProp || !composedProviderType;
 
@@ -138,7 +178,7 @@ const PromptModelConfigs = ({
           className="mb-5 w-72"
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]}
         />
-        {getProviderForm()}
+        {providerForm}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -3,6 +3,7 @@ package com.comet.opik.domain.evaluators;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.evaluators.AutomationRule;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
@@ -472,7 +473,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
             dao.deleteEvaluatorsByIds(workspaceId, ids);
             projectsDAO.deleteByRuleIds(ids, workspaceId);
-            dao.deleteBaseRules(ids, workspaceId);
+            dao.deleteBaseRules(ids, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR.getAction());
             return null;
         });
     }

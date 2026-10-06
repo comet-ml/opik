@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.55](https://img.shields.io/badge/Version-2.2.55-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.55](https://img.shields.io/badge/AppVersion-2.2.55-informational?style=flat-square)
+![Version: 2.2.92](https://img.shields.io/badge/Version-2.2.92-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.92](https://img.shields.io/badge/AppVersion-2.2.92-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -108,6 +108,7 @@ Call opik api on http://localhost:5173/api
 | chartMigration.nodeSelector | object | `{}` |  |
 | chartMigration.serviceAccountName | string | `""` |  |
 | chartMigration.tolerations | list | `[]` |  |
+| clickhouse.additionalProfiles | list | `[{"name":"default","settings":{"distributed_background_insert_batch":1,"distributed_background_insert_split_batch_on_failure":1,"prefer_localhost_replica":0}}]` | Extra ClickHouse settings profiles. Wins over the operator's own defaults; carries the Distributed insert-queue baseline on `default`. A values file declaring its own list must repeat that entry — Helm replaces lists rather than merging them. |
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
@@ -140,7 +141,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.env.LOG_LEVEL | string | `"info"` |  |
 | clickhouse.backupServer.extraVolumeMounts | list | `[]` | Additional volume mounts for the `clickhouse-backup` container. The mount name can reference a CHI `volumeClaimTemplate` defined in `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume defined in `extraVolumes` above. |
 | clickhouse.backupServer.extraVolumes | list | `[]` | Additional volumes to add to the ClickHouse pod when the backup server is enabled. Use this for non-PVC volume types (emptyDir, configMap, secret, hostPath, etc.). For persistent storage, prefer using `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and reference its name directly in `extraVolumeMounts` below (the clickhouse operator matches volumeMount names to volumeClaimTemplate names automatically). Note that `clickhouse-backup` writes local backups to `/var/lib/clickhouse/backup/` by default (on the same filesystem as ClickHouse data to preserve hard links). Mounting a separate volume at that path will cause backups to use full copies instead of hard links. |
-| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.39"` |  |
+| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.7.4"` |  |
 | clickhouse.backupServer.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.backupServer.monitoring.annotations | object | `{}` |  |
 | clickhouse.backupServer.monitoring.enabled | bool | `false` |  |
@@ -160,9 +161,11 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.relabelings | list | `[]` |  |
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
+| clickhouse.backupServer.securityContext | object | `{"allowPrivilegeEscalation":false}` | securityContext of the clickhouse-backup sidecar; it inherits the pod's uid 101, so it needs the same explicit allowPrivilegeEscalation as `clickhouse.securityContext`. |
 | clickhouse.backupServer.service.name | string | `""` |  |
 | clickhouse.backupServer.service.port | string | `""` |  |
 | clickhouse.configuration.files."conf.d/memory.xml" | string | `"<yandex>\n  <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>\n</yandex>\n"` |  |
+| clickhouse.configuration.files."conf.d/merge_tree.xml" | string | `"<clickhouse>\n  <merge_tree>\n    <!-- 400 GiB; month-sized parts outgrow the 150 GiB default permanently. -->\n    <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>\n    <!-- 7 days quiet makes a part eligible for the force-merge that reclaims LWD mass. -->\n    <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>\n    <!-- Per-part: with 1, a partition still taking writes never becomes eligible. -->\n    <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>\n    <!-- Throttle concurrent big merges so they cannot starve the pool. -->\n    <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>\n  </merge_tree>\n</clickhouse>\n"` |  |
 | clickhouse.configuration.files."conf.d/profiles.xml" | string | `"<clickhouse>\n  <profiles>\n    <default>\n        <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>\n        <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>\n        <!-- CH 25.8 made the experimental Time type opt-in; required for fresh installs to replay migration 000030. -->\n        <enable_time_time64_type>1</enable_time_time64_type>\n        <!-- the new CH 25.x default (1) makes FINAL reads on skip-indexed tables over-read massively; our queries already prune on the PK/project_id, so exact mode isn't needed. -->\n        <use_skip_indexes_if_final_exact_mode>0</use_skip_indexes_if_final_exact_mode>\n    </default>\n  </profiles>\n</clickhouse>\n"` |  |
 | clickhouse.configuration.files."conf.d/system_tables.xml" | string | `"<clickhouse>\n  <opentelemetry_span_log remove=\"1\"/>\n  <asynchronous_metric_log remove=\"1\"/>\n  <processors_profile_log remove=\"1\"/>\n  <text_log remove=\"1\"/>\n  <trace_log remove=\"1\"/>\n  <blob_storage_log remove=\"1\"/>\n  <error_log>\n      <engine>\n          ENGINE MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>error_log</table>\n  </error_log>\n  <latency_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>latency_log</table>\n  </latency_log>\n  <metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>metric_log</table>\n  </metric_log>\n  <query_metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>query_metric_log</table>\n  </query_metric_log>\n</clickhouse>\n"` |  |
 | clickhouse.enabled | bool | `true` |  |
@@ -172,6 +175,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraVolumeMounts | list | `[]` | Additional volume mounts for the ClickHouse server container. Use this to mount volumes that ClickHouse server needs direct access to, such as a backup disk for embedded backups (BACKUP TO Disk(...)). The mount name can reference a CHI volumeClaimTemplate defined in `clickhouse.extraVolumeClaimTemplates` (matched by name automatically by the ClickHouse operator), or a volume defined in `clickhouse.extraVolumes`. |
 | clickhouse.extraVolumes | list | `[]` | Additional pod-level volumes for the ClickHouse pod, independent of the backup server sidecar. Use this for non-PVC volume types (configMap, secret, emptyDir, hostPath, etc.) that should be available to the ClickHouse server container. For persistent storage, prefer defining a CHI-managed PVC via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in `extraVolumeMounts` above. |
 | clickhouse.image | string | `"altinity/clickhouse-server:26.3.16.10001.altinitystable"` |  |
+| clickhouse.lifecycle | object | `{}` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
@@ -209,6 +213,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.readinessProbe.periodSeconds | int | `10` |  |
 | clickhouse.readinessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.replicasCount | int | `1` |  |
+| clickhouse.securityContext | object | `{"allowPrivilegeEscalation":false}` | securityContext of the clickhouse container. The pod runs as uid 101, and policies against privilege escalation (e.g. Azure AKS Deployment Safeguards) refuse a non-root container unless allowPrivilegeEscalation is set false explicitly. |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.serviceAccount.create | bool | `false` |  |
@@ -220,7 +225,8 @@ Call opik api on http://localhost:5173/api
 | clickhouse.templates.replicaServiceTemplate | string | `"clickhouse-replica-svc-template"` |  |
 | clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
-| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until a migration attaches the `tiered_replicated` policy to a table, so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. |
+| clickhouse.terminationGracePeriodSeconds | int | `nil` | Pod termination grace period in seconds. Unset keeps the Kubernetes default (30). |
+| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"coldTierMigration":{"activeDeadlineSeconds":1320,"enabled":true,"image":"alpine/kubectl:1.35.0","nodeSelector":{},"pollTimeoutSeconds":1200,"serviceAccountName":"","tolerations":[]},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until a migration attaches the `tiered_replicated` policy to a table, so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
@@ -495,6 +501,7 @@ Call opik api on http://localhost:5173/api
 | databaseAnalyticsDataModel.deletionEventsInsertBatchSize | int | `1000` |  |
 | databaseAnalyticsDataModel.spanColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.spanDeletionEventsCaptureEnabled | bool | `false` |  |
+| databaseAnalyticsDataModel.spansDistributedWrapEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.traceColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.tracesDistributedWrapEnabled | bool | `false` |  |

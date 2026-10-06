@@ -37,6 +37,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -78,7 +79,14 @@ class ThreadDAOImpl implements ThreadDAO {
      * When treating a list of traces as threads, many aggregations are performed to get the thread details.
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
+     * <p>
+     * {@code annotation_queue_items} is keyed {@code (workspace_id, project_id, queue_id, item_id)}, so the
+     * annotation-queue CTE binds {@code queue_id} to the project's thread-scope queues before looking up
+     * {@code item_id}. That is what lets the lookup use the full primary key instead of a generic scan of the
+     * project's items (OPIK-5592).
      ***/
+    // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
+    // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
     @VisibleForTesting
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
@@ -368,18 +376,31 @@ class ThreadDAOImpl implements ThreadDAO {
                 LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), thread_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND scope = 'thread'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), thread_annotation_queue_ids AS (
                  SELECT thread_id,
-                        groupArray(id) AS annotation_queue_ids
+                        groupArray(id) AS annotation_queue_ids,
+                        groupArray(tuple(id, name)) AS annotation_queues
                  FROM (
-                    SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
-                    FROM annotation_queue_items aqi
-                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
-                    WHERE aq.scope = 'thread'
-                      AND workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as thread_id
+                    FROM (
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND queue_id IN (SELECT id FROM thread_scope_queues)
+                          AND item_id IN (SELECT thread_model_id FROM trace_threads_final)
+                          <if(uuid_from_time)> AND item_id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND item_id \\<= :uuid_to_time <endif>
+                    ) AS aqi
+                    JOIN thread_scope_queues AS aq ON aq.id = aqi.queue_id
                  ) AS annotation_queue_ids_with_thread_id
                  GROUP BY thread_id
             )
@@ -420,6 +441,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
                 c.comments AS comments
+                <if(!exclude_annotation_queues)>, ttaqi.annotation_queues AS annotation_queues<endif>
             FROM (
                 SELECT
                     t.thread_id as id,
@@ -457,7 +479,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
-            <if(annotation_queue_filters || annotation_queue_id)>
+            <if(!exclude_annotation_queues || annotation_queue_filters || annotation_queue_id)>
             LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
             <endif>
             WHERE workspace_id = :workspace_id
@@ -492,7 +514,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC <endif>
             <endif>
             LIMIT :limit <if(page_pushdown)><else><if(offset)>OFFSET :offset<endif><endif>
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
             ;
             """;
 
@@ -780,8 +802,28 @@ class ThreadDAOImpl implements ThreadDAO {
      *  - The last updated time of the thread, which is the last_updated_at of the last trace in the list.
      *  - The creator of the thread, which is the created_by of the first trace in the list.
      *  - The creation time of the thread, which is the created_at of the first trace in the list.
+     * <p>
+     * Two phases, so input/output are read for two traces instead of all of them (OPIK-8678): traces_final keeps
+     * narrow columns only, the {@code thread_aggs} scalar aggregates them once and names the first and last trace,
+     * and {@code messages} reads the payloads of just those ids, with the same latest-version dedup.
+     * <p>
+     * The first trace is the earliest start_time and the last the latest end_time, skipping NULL / epoch end_time,
+     * as the former {@code argMin(input, start_time)} / {@code argMax(output, nullIf(end_time, epoch))} chose them.
+     * Ties are broken explicitly, by the largest id: that is what those first-seen argMin/argMax returned over
+     * traces_final, which is sorted by id DESC. first_trace_id maximises (-start_time, id), negated as Decimal128(9)
+     * so the legacy DateTime64(9) layout keeps nanosecond order. With no ended trace, last_trace_id is NULL and so is
+     * the last message, as the former argMax over an all-NULL key returned. A scalar rather than a CTE keeps the aggregate to a single
+     * evaluation: a CTE is inlined at every reference, and each extra pass costs a round trip to the shards.
+     * <p>
+     * traces_ids matches any version carrying the thread_id, so a trace whose latest version moved to another
+     * thread lands in traces_final under that other thread_id. Only the requested thread is aggregated: the moved
+     * trace is not part of it, and an extra group would otherwise be a second row in arbitrary order, of which
+     * findById keeps the first.
      ***/
-    private static final String SELECT_TRACES_THREAD_BY_ID = """
+    // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
+    // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
+    @VisibleForTesting
+    static final String SELECT_TRACES_THREAD_BY_ID = """
             WITH traces_ids AS (
                 SELECT
                     id
@@ -791,17 +833,35 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND thread_id = :thread_id
             ), traces_final AS (
                 SELECT
-                    *,
-                    truncated_input,
-                    truncated_output,
-                    input_length,
-                    output_length,
-                    truncation_threshold
+                    id,
+                    workspace_id,
+                    project_id,
+                    thread_id,
+                    start_time,
+                    end_time,
+                    last_updated_at,
+                    last_updated_by,
+                    created_by,
+                    created_at,
+                    environment
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT id FROM traces_ids)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), spans_deduped AS (
+                SELECT
+                    trace_id,
+                    id,
+                    usage,
+                    total_estimated_cost,
+                    provider
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
                 SELECT
@@ -809,11 +869,55 @@ class ThreadDAOImpl implements ThreadDAO {
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
-                GROUP BY workspace_id, project_id, trace_id
+                FROM spans_deduped
+                GROUP BY trace_id
+            ), (
+                SELECT groupArray(tuple(thread_id, workspace_id, project_id, start_time, end_time, duration,
+                    first_trace_id, last_trace_id, number_of_messages, total_estimated_cost, usage, last_updated_at,
+                    last_updated_by, created_by, created_at, environment))
+                FROM (
+                    SELECT
+                        t.thread_id as thread_id,
+                        t.workspace_id as workspace_id,
+                        t.project_id as project_id,
+                        min(t.start_time) as start_time,
+                        max(t.end_time) as end_time,
+                        if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
+                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                           NULL) AS duration,
+                        argMax(t.id, (-CAST(t.start_time AS Decimal128(9)), t.id)) as first_trace_id,
+                        argMaxIf(toNullable(t.id), (t.end_time, t.id), t.end_time IS NOT NULL AND t.end_time != toDateTime64('1970-01-01 00:00:00.000', 9)) as last_trace_id,
+                        count(DISTINCT t.id) * 2 as number_of_messages,
+                        sum(s.total_estimated_cost) as total_estimated_cost,
+                        sumMap(s.usage) as usage,
+                        max(t.last_updated_at) as last_updated_at,
+                        argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
+                        argMin(t.created_by, t.created_at) as created_by,
+                        min(t.created_at) as created_at,
+                        argMin(t.environment, t.start_time) as environment
+                    FROM traces_final AS t
+                    LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+                    WHERE t.thread_id = :thread_id
+                    GROUP BY t.workspace_id, t.project_id, t.thread_id
+                )
+            ) AS thread_aggs, messages AS (
+                SELECT
+                    mapFromArrays(
+                        groupArray(id),
+                        groupArray(<if(truncate)>tuple(truncated_input, truncated_output, input_length, output_length, truncation_threshold)<else>tuple(input, output)<endif>)
+                    ) AS by_id
+                FROM (
+                    SELECT
+                        id,
+                        <if(truncate)>truncated_input, truncated_output, input_length, output_length, truncation_threshold<else>input, output<endif>
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND has(arrayConcat(arrayMap(a -> a.7, thread_aggs), arrayMap(a -> a.8, thread_aggs)), id)
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
             ), trace_threads_ids AS (
                 SELECT
                     id as thread_model_id
@@ -959,6 +1063,30 @@ class ThreadDAOImpl implements ThreadDAO {
                 LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), thread_scope_queues AS (
+                SELECT id, name
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND scope = 'thread'
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), thread_annotation_queues AS (
+                 SELECT thread_id,
+                        groupArray(tuple(id, name)) AS annotation_queues
+                 FROM (
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as thread_id
+                    FROM (
+                        SELECT queue_id, item_id
+                        FROM annotation_queue_items
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND queue_id IN (SELECT id FROM thread_scope_queues)
+                          AND item_id IN (SELECT thread_model_id FROM trace_threads_ids)
+                    ) AS aqi
+                    JOIN thread_scope_queues AS aq ON aq.id = aqi.queue_id
+                 ) AS queues_with_thread_id
+                 GROUP BY thread_id
             )
             SELECT
                 t.workspace_id as workspace_id,
@@ -967,10 +1095,10 @@ class ThreadDAOImpl implements ThreadDAO {
                 t.start_time as start_time,
                 t.end_time as end_time,
                 t.duration as duration,
-                <if(truncate)> t.truncated_first_message as first_message <else> t.first_message as first_message<endif>,
-                <if(truncate)> t.truncated_last_message as last_message <else> t.last_message as last_message<endif>,
-                <if(truncate)> t.first_message_length >= t.first_message_truncation_threshold as first_message_truncated <else> false as first_message_truncated <endif>,
-                <if(truncate)> t.last_message_length >= t.last_message_truncation_threshold as last_message_truncated <else> false as last_message_truncated <endif>,
+                tupleElement(m.by_id[t.first_trace_id], 1) as first_message,
+                if(t.last_trace_id IS NULL, NULL, tupleElement(m.by_id[assumeNotNull(t.last_trace_id)], 2)) as last_message,
+                <if(truncate)> tupleElement(m.by_id[t.first_trace_id], 3) >= tupleElement(m.by_id[t.first_trace_id], 5) as first_message_truncated <else> false as first_message_truncated <endif>,
+                <if(truncate)> if(t.last_trace_id IS NULL, NULL, tupleElement(m.by_id[assumeNotNull(t.last_trace_id)], 4) >= tupleElement(m.by_id[assumeNotNull(t.last_trace_id)], 5)) as last_message_truncated <else> false as last_message_truncated <endif>,
                 t.number_of_messages as number_of_messages,
                 t.total_estimated_cost as total_estimated_cost,
                 t.usage as usage,
@@ -984,42 +1112,22 @@ class ThreadDAOImpl implements ThreadDAO {
                 if(tt.environment = '', t.environment, tt.environment) as environment,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
-                c.comments AS comments
+                c.comments AS comments,
+                ttaq.annotation_queues AS annotation_queues
             FROM (
                 SELECT
-                    t.thread_id as thread_id,
-                    t.workspace_id as workspace_id,
-                    t.project_id as project_id,
-                    min(t.start_time) as start_time,
-                    max(t.end_time) as end_time,
-                    if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
-                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                       NULL) AS duration,
-                    argMin(t.input, t.start_time) as first_message,
-                    argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
-                    argMin(t.truncated_input, t.start_time) as truncated_first_message,
-                    argMax(t.truncated_output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as truncated_last_message,
-                    argMin(t.input_length, t.start_time) as first_message_length,
-                    argMax(t.output_length, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message_length,
-                    argMin(t.truncation_threshold, t.start_time) as first_message_truncation_threshold,
-                    argMax(t.truncation_threshold, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message_truncation_threshold,
-                    count(DISTINCT t.id) * 2 as number_of_messages,
-                    sum(s.total_estimated_cost) as total_estimated_cost,
-                    sumMap(s.usage) as usage,
-                    max(t.last_updated_at) as last_updated_at,
-                    argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
-                    argMin(t.created_by, t.created_at) as created_by,
-                    min(t.created_at) as created_at,
-                    argMin(t.environment, t.start_time) as environment
-                FROM traces_final AS t
-                LEFT JOIN spans_agg AS s ON t.id = s.trace_id
-                GROUP BY t.workspace_id, t.project_id, t.thread_id
+                    a.1 AS thread_id, a.2 AS workspace_id, a.3 AS project_id, a.4 AS start_time, a.5 AS end_time,
+                    a.6 AS duration, a.7 AS first_trace_id, a.8 AS last_trace_id, a.9 AS number_of_messages,
+                    a.10 AS total_estimated_cost, a.11 AS usage, a.12 AS last_updated_at, a.13 AS last_updated_by,
+                    a.14 AS created_by, a.15 AS created_at, a.16 AS environment
+                FROM (SELECT arrayJoin(thread_aggs) AS a)
             ) AS t
+            CROSS JOIN messages AS m
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
-            SETTINGS log_comment = '<log_comment>'
+            LEFT JOIN thread_annotation_queues ttaq ON ttaq.thread_id = tt.thread_model_id
+            SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
             """;
 
     /***
@@ -1027,6 +1135,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * 1. First level: Uses the same thread aggregation as SELECT_TRACES_THREADS_BY_PROJECT_IDS (reusing the exact CTEs and aggregation logic)
      * 2. Second level: Wraps the thread results and calculates stats across all threads (AVG, SUM, quantiles)
      ***/
+    // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
+    // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
     @VisibleForTesting
     static final String SELECT_TRACE_THREADS_STATS = """
             SELECT
@@ -1359,7 +1469,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id) <endif>
             ) AS threads
             GROUP BY threads.workspace_id, threads.project_id
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
             ;
             """;
 
@@ -1448,6 +1558,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                     traceColumnsNonNullable());
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                            addExcludeFlags(template, criteria);
 
                             template = template.add("offset", offset)
                                     .add("log_comment", getLogComment("find_threads_by_project", workspaceId, userName,
@@ -1504,6 +1615,13 @@ class ThreadDAOImpl implements ThreadDAO {
         return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
     }
 
+    private void addExcludeFlags(ST template, TraceSearchCriteria criteria) {
+        var exclude = Optional.ofNullable(criteria.excludeThreadFields()).orElse(Set.of());
+        if (exclude.contains(TraceThread.TraceThreadField.ANNOTATION_QUEUES)) {
+            template.add("exclude_annotation_queues", true);
+        }
+    }
+
     @Override
     public Mono<TraceThread> findById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
         return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
@@ -1555,6 +1673,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     THREAD_SEARCH_CLAUSE,
                     traceColumnsNonNullable());
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            addExcludeFlags(template, criteria);
 
             template.add("limit", limit)
                     .add("stream", true)
@@ -1692,6 +1811,12 @@ class ThreadDAOImpl implements ThreadDAO {
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
                 .environment(row.get("environment", String.class))
+                .annotationQueues(rowMetadata.contains("annotation_queues")
+                        ? Optional.ofNullable(row.get("annotation_queues", List[].class))
+                                .map(AnnotationQueueReferenceMapper::map)
+                                .filter(not(List::isEmpty))
+                                .orElse(null)
+                        : null)
                 .build());
     }
 

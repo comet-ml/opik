@@ -1,6 +1,12 @@
 name: Deploy Opik Python SDK docs
 run-name: Deploy Python SDK docs ${{ github.ref_name }} to S3 ${{ inputs.environment || 'production' }} by @${{ github.actor }}
 
+env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
 on:
   workflow_dispatch:
     inputs:
@@ -41,7 +47,7 @@ jobs:
           show-progress: false
       
       - name: Setup uv
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Build Python SDK docs
         run: |

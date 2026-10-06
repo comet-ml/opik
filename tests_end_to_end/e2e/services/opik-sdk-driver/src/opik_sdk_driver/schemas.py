@@ -144,17 +144,104 @@ class DatasetInsertItemsRequest(BaseModel):
     # both paths must land in ONE dataset version with identical counters.
     # Parallel upload needs a backend >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
     # (2.2.8); against an older one the SDK silently falls back to sequential.
+    #
+    # A plain int, not a constrained one, and for the same reason as on the read
+    # request: the SDK's own validation of it (0, negative) and its clamp at
+    # DATASET_ITEMS_WRITE_MAX_THREADS are part of what a caller reads this route
+    # to assert, so pydantic must not reject those values before the SDK sees
+    # them.
     num_threads: int = 1
     # Mirrors Dataset.insert's own default. False bypasses the content-hash
     # dedup path entirely: every item is sent as-is, so identical content
     # inserted twice is stored twice.
     deduplication: bool = True
+    # Whether the item batches are gzipped on the wire. None leaves the
+    # deployment's own setting in place; False selects the uncompressed upload
+    # arm, where the send pool joins and ships raw chunks instead of the writer
+    # emitting a compressed stream. Both arms must store identical items, and
+    # the response reports which one actually ran.
+    enable_json_request_compression: bool | None = None
     workspace: str | None = None
 
 
 class DatasetInsertItemsResponse(BaseModel):
     dataset_id: str
+    # Items handed to Dataset.insert(), not what the backend stored after
+    # deduplication. Zero when `value_error` is set — which is what the SDK
+    # rejecting the arguments means, but NOT what a ValueError raised partway
+    # through an upload would mean. Read the dataset back to learn what landed
+    # rather than inferring it from this.
     inserted: int
+    # Whether this upload's bodies were gzipped, read back off the client that
+    # was built rather than echoed from the request. A caller comparing a
+    # compressed run against an uncompressed one has to be able to show the two
+    # arms genuinely differed; an echoed flag would agree with itself even if
+    # the override never reached the transport.
+    compression_enabled: bool
+    # The ValueError message when the SDK rejected the arguments, else None. The
+    # route answers 200 either way so the caller can assert on the message, the
+    # same contract as /datasets/read-items. Validation runs before any batch is
+    # sent, so a rejected insert leaves the dataset exactly as it was.
+    value_error: str | None = None
+
+
+class TypedValue(BaseModel):
+    """One dataset-item field, named by the Python type it must be built as.
+
+    Everything on `/datasets/insert-items` arrives as JSON, so by the time the
+    bridge sees it a `uuid.UUID` is already a string and a `set` is already a
+    list — which is exactly the normalisation the content-hash path exists to
+    perform, and therefore the thing a caller cannot test through that route.
+    This carries the *instruction* over the wire instead of the value, and the
+    bridge materialises the real Python object before `Dataset.insert` ever
+    sees it.
+
+    `value` is the JSON form the object is built FROM, not what it must store
+    as; the caller asserts the stored form against the backend afterwards.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["float", "uuid", "enum", "datetime", "set", "tuple"]
+    value: Any
+
+
+class DatasetInsertTypedItemRequest(BaseModel):
+    """Insert ONE item whose content carries non-JSON-native Python types.
+
+    `Dataset.insert` hashes an item's content to decide whether it has already
+    been stored, and a value the encoder cannot represent natively reaches that
+    digest through `streaming_writer.encode_flexible` — a UUID becomes a string,
+    an Enum its value, a set a canonically-ordered list. None of those survive
+    the round trip as themselves, so the digest of the live object has to equal
+    the digest of the JSON it becomes, or an item could never deduplicate
+    against its own stored form.
+
+    One insert per request, deliberately: the bridge builds a fresh client (and
+    therefore a `Dataset` whose hash cache starts unsynced) per request, so a
+    caller posting this twice gets the second insert's digest compared against
+    what the backend actually stored rather than against an in-process cache.
+    That is the comparison worth making, and a repeat loop inside one request
+    would quietly avoid it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    typed_content: dict[str, TypedValue]
+    deduplication: bool = True
+    workspace: str | None = None
+
+
+class DatasetInsertTypedItemResponse(BaseModel):
+    dataset_id: str
+    inserted: int
+    # Which JSON encoder answered in the process that computed the digest.
+    # Diagnostic only — the round trip must hold either way — but a caller
+    # reading a failure needs to know which one it was looking at, because the
+    # two do not produce identical bytes for every value.
+    accelerated: bool
 
 
 class DatasetInsertCall(BaseModel):
@@ -299,6 +386,51 @@ class ExperimentEvaluateRequest(BaseModel):
     workspace: str | None = None
 
 
+class ExperimentReadItemsRequest(BaseModel):
+    """One `Experiment.get_items()` call, with its paging knobs exposed.
+
+    `page_size` and `num_threads` are `None` by default so the route can tell
+    "the caller wants the SDK's default" from "the caller chose the value that
+    happens to equal it" — the whole point of the read is comparing the
+    defaults against explicit settings, and passing a hardcoded copy of the
+    default would compare a value against itself.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    experiment_id: str
+    max_results: int | None = None
+    page_size: int | None = None
+    num_threads: int | None = None
+    workspace: str | None = None
+
+
+class ExperimentItemFingerprint(BaseModel):
+    """The identity of one experiment item, in the order the read returned it.
+
+    Deliberately not the whole item: the assertion is that the SAME rows come
+    back in the SAME order under every paging knob, so what matters is the
+    identity triple and the caller-supplied index that says where the row
+    belongs. Returning the full `dataset_item_data` for thousands of rows would
+    make the response enormous for no extra discriminating power.
+    """
+
+    id: str
+    dataset_item_id: str
+    trace_id: str
+    # The monotonic `idx` the seed wrote onto the dataset item, or None when the
+    # row came back without one. Never defaulted to a number: an absent index is
+    # how a dropped or corrupted `dataset_item_data` would show, and coercing it
+    # to 0 would hide exactly that.
+    idx: int | None
+
+
+class ExperimentReadItemsResponse(BaseModel):
+    experiment_id: str
+    count: int
+    items: list[ExperimentItemFingerprint]
+
+
 class ExperimentItemScore(BaseModel):
     dataset_item_id: str
     input: str
@@ -357,6 +489,74 @@ class ExperimentCompareSeedResponse(BaseModel):
     dataset_name: str
     item_count: int
     experiments: list[CompareExperimentResult]
+
+
+class ReadabilityItemSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: Stable handle for the row, echoed back on every score so the caller can
+    #: pair a score with the text that produced it without matching on the text.
+    key: str
+    text: str
+
+
+class ReadabilityEvaluateRequest(BaseModel):
+    workspace: str | None = None
+    project_name: str
+    dataset_name: str
+    dataset_description: str | None = None
+    experiment_name: str
+    items: list[ReadabilityItemSeed]
+    #: One `Readability` metric is built per language, all scored in the SAME
+    #: `evaluate()` run — which is the only way to reach the module-wide lock.
+    languages: list[str]
+    task_threads: int = 4
+
+
+class ReadabilityLocaleScore(BaseModel):
+    dataset_item_id: str
+    key: str
+    language: str
+    metric_name: str
+    #: The score `evaluate()` produced, with every language's metric running
+    #: concurrently in the scoring thread pool.
+    evaluated_value: float
+    #: The same text and language scored on its own, sequentially, outside
+    #: `evaluate()`. This is the uncontended ground truth: if the locale lock
+    #: stops holding, `evaluated_value` drifts away from it while this stays put.
+    serial_value: float
+    #: Surfaced rather than folded into the value, so the caller can refuse a
+    #: run whose scores are the 0.0 of a failed metric rather than a real score.
+    scoring_failed: bool
+
+
+class ReadabilityEvaluateResponse(BaseModel):
+    experiment_id: str
+    experiment_name: str
+    dataset_id: str
+    item_count: int
+    scored_item_count: int
+    scores: list[ReadabilityLocaleScore]
+
+
+class ReadabilityScoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    language: str
+
+
+class ReadabilityScoreResponse(BaseModel):
+    language: str
+    scored: bool
+    value: float | None = None
+    reading_ease: float | None = None
+    #: The exception's class name rather than a boolean, so the caller asserts
+    #: WHICH error it got. Before opik#8318 an unknown locale surfaced as a bare
+    #: `KeyError(None)` from pyphen; the fix is that it is now a named
+    #: `MetricComputationError`, and only the class name can tell those apart.
+    error_type: str | None = None
+    error_message: str | None = None
 
 
 class TestSuiteItemSeed(BaseModel):
@@ -526,3 +726,64 @@ class ThreadsEvaluateResponse(BaseModel):
     # `context` field would serialize an absent key as `"context": null` and
     # destroy the distinction the caller is asserting on.
     conversation: list[dict[str, Any]]
+
+
+class StreamReadShape(BaseModel):
+    """One `search_*` call's paging arguments, exposed verbatim.
+
+    `max_batch_size` is the whole point of the route this belongs to: it is what
+    makes a MULTI-PAGE read cheap to provoke. Every other estate call through
+    `read_and_parse_full_stream` asks for fewer rows than one page holds, so the
+    rewritten cursor arithmetic (opik#8411) has never actually paged.
+
+    Plain ints, not constrained ones: the SDK's own handling of a `max_results`
+    that is not a multiple of the batch size — and of one larger than the
+    population — is part of what a caller reads this route to assert, so pydantic
+    must not reject or round them first.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Caller-chosen handle, echoed back so a response can be matched to the shape
+    # that produced it without depending on list order.
+    key: str
+    max_results: int
+    # Omitted means "the SDK's own default" (MAX_ENDPOINT_BATCH_SIZE, 2000),
+    # which is itself one of the shapes worth asserting — a single-page read that
+    # must agree with the many-page ones.
+    max_batch_size: int | None = None
+
+
+class StreamReadResult(BaseModel):
+    """The ids one shape's read returned, in the order the SDK assembled them.
+
+    Order is carried, not just membership: `read_and_parse_full_stream` appends
+    page by page, so a cursor that re-served a page shows up as a duplicate and a
+    cursor that skipped one shows up as a gap — and a set comparison would hide
+    the first while a count alone would hide both.
+    """
+
+    key: str
+    ids: list[str]
+
+
+class StreamReadsRequest(BaseModel):
+    """Several `search_traces` / `search_spans` reads of one project, in one call.
+
+    Batched deliberately. Each shape is a whole multi-page read of the same
+    seeded population, so issuing them as separate HTTP requests would multiply
+    the bridge's client construction and the rate-limit exposure for no
+    assertion, and the shapes are only meaningful when compared to each other.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    trace_shapes: list[StreamReadShape] = []
+    span_shapes: list[StreamReadShape] = []
+    workspace: str | None = None
+
+
+class StreamReadsResponse(BaseModel):
+    traces: list[StreamReadResult] = []
+    spans: list[StreamReadResult] = []

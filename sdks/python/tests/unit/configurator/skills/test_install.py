@@ -93,9 +93,29 @@ class TestSetupSkills:
         assert install.setup_skills(["emacs"]).succeeded is False
         download_spy.assert_not_called()
 
-    def test_setup_skills__empty_host_list__returns_false(self, fake_home, monkeypatch):
-        monkeypatch.setattr(pack, "download", mock.Mock())
-        assert install.setup_skills([]).succeeded is False
+    def test_setup_skills__no_hosts__installs_the_shared_copy_and_links_nothing(
+        self, fake_home, fake_pack
+    ):
+        """What "my AI client is not listed" asks for.
+
+        Naming no client is not a request we failed to honour — it is the user
+        saying the detected ones are not theirs, and the shared directory is the
+        half of the pack an unlisted client can still be pointed at.
+        """
+        assert install.setup_skills([]).succeeded is True
+
+        assert (fake_home / ".agents" / "skills" / "opik" / "SKILL.md").exists()
+        assert not (fake_home / ".claude").exists()
+
+    def test_setup_skills__hosts_none_of_which_are_known__is_still_a_failure(
+        self, fake_home, monkeypatch
+    ):
+        """Asking for clients and placing the pack in none of them is different."""
+        download_spy = mock.Mock()
+        monkeypatch.setattr(pack, "download", download_spy)
+
+        assert install.setup_skills(["emacs", "vim"]).succeeded is False
+        download_spy.assert_not_called()
 
     def test_setup_skills__rerun__replaces_and_stays_idempotent(
         self, fake_home, fake_pack
@@ -175,31 +195,3 @@ class TestLinking:
 
         assert linked == ["opik"]
         assert failure is None
-
-
-class TestPluginOverlapDetection:
-    def test_claude_code_with_plugin_skill__is_flagged(self, fake_home):
-        (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
-            parents=True
-        )
-
-        assert install._claude_code_plugin_ships_its_own_skill(["claude-code"]) is True
-
-    def test_no_plugin__is_not_flagged(self, fake_home):
-        assert install._claude_code_plugin_ships_its_own_skill(["claude-code"]) is False
-
-    def test_claude_code_not_targeted__is_not_flagged(self, fake_home):
-        (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
-            parents=True
-        )
-
-        assert install._claude_code_plugin_ships_its_own_skill(["codex"]) is False
-
-    def test_setup_skills__surfaces_the_overlap_on_the_result(
-        self, fake_home, fake_pack
-    ):
-        (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
-            parents=True
-        )
-
-        assert install.setup_skills(["claude-code"]).plugin_overlap is True

@@ -2,6 +2,12 @@ name: "Guardrails Backend Unit Tests"
 run-name: "Guardrails Backend Unit Tests on ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
+env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
 
 on:
   workflow_dispatch:
@@ -46,7 +52,7 @@ jobs:
           python-version: '3.10'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Install dependencies
         run: |

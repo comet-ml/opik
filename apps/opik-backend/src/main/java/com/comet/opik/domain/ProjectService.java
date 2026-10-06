@@ -6,6 +6,7 @@ import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -18,6 +19,8 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
+import com.comet.opik.utils.WorkspaceUtils;
+import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
@@ -78,6 +81,9 @@ public interface ProjectService {
 
     List<Project> findByIds(String workspaceId, Set<UUID> ids);
 
+    List<WorkspaceProjectName> findAcrossWorkspaces(Set<String> workspaceIds, Set<UUID> projectIds, String name,
+            int limit);
+
     Mono<Set<UUID>> findProjectIdsByWorkspace();
 
     List<Project> findByNames(String workspaceId, List<String> names);
@@ -88,7 +94,9 @@ public interface ProjectService {
 
     Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
 
-    Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
+    Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids);
+
+    Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
     Mono<Project> getOrCreate(String projectName);
 
@@ -114,8 +122,10 @@ public interface ProjectService {
     void validateProjectIdExists(UUID projectId, String workspaceId);
 
     static Map<String, Project> groupByName(List<Project> projects) {
+        // Keyed by the stripped name because callers look up with WorkspaceUtils.getProjectName, which strips, while
+        // MySQL's PAD SPACE collation still matches a stored name with trailing spaces.
         return projects.stream().collect(Collectors.toMap(
-                Project::name,
+                WorkspaceUtils::stripProjectName,
                 Function.identity(),
                 BinaryOperatorUtils.last(),
                 () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
@@ -138,6 +148,9 @@ class ProjectServiceImpl implements ProjectService {
     private static final String LAST_UPDATED_TRACE_AT_SORT = "COALESCE(last_updated_trace_at, last_updated_at)";
     private static final Map<String, String> SORTING_FIELD_MAPPING = Map.of(
             SortableFields.LAST_UPDATED_TRACE_AT, LAST_UPDATED_TRACE_AT_SORT);
+
+    private static final int DEMO_PROJECT_WORKSPACE_CHUNK_SIZE = 1_000;
+    private static final int ID_LOOKUP_CHUNK_SIZE = 1_000;
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
@@ -405,6 +418,36 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public List<WorkspaceProjectName> findAcrossWorkspaces(@NonNull Set<String> workspaceIds, Set<UUID> projectIds,
+            String name, int limit) {
+        if (workspaceIds.isEmpty()) {
+            return List.of();
+        }
+        String escapedName = StringUtils.isBlank(name) ? null : escapeLike(name.strip());
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(ProjectDAO.class)
+                .findAcrossWorkspaces(workspaceIds, projectIds, escapedName, limit));
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
+
+    @Override
+    public Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids) {
+        if (CollectionUtils.isEmpty(ids)) {
+            return Mono.just(Map.of());
+        }
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+            var repository = handle.attach(ProjectDAO.class);
+            return Lists.partition(List.copyOf(ids), ID_LOOKUP_CHUNK_SIZE)
+                    .stream()
+                    .flatMap(chunk -> repository.findNamesByIds(chunk).stream())
+                    .collect(Collectors.toUnmodifiableMap(WorkspaceProjectName::projectId,
+                            WorkspaceProjectName::name));
+        })).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
     public Mono<Set<UUID>> findProjectIdsByWorkspace() {
         return Mono.deferContextual(ctx -> Mono
                 .fromCallable(() -> template.inTransaction(READ_ONLY,
@@ -474,24 +517,35 @@ class ProjectServiceImpl implements ProjectService {
                 .collect(Collectors.toMap(Project::id, Project::name));
     }
 
-    public Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps() {
-        return Mono.fromCallable(() -> this.findByGlobalNames(DemoData.PROJECTS))
-                .map(projects -> projects.stream()
-                        .collect(Collectors.toMap(Project::id, Project::createdAt)))
-                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
-    }
-
-    private List<Project> findByGlobalNames(List<String> names) {
-        if (names.isEmpty()) {
-            return List.of();
+    /**
+     * Bounded demo-project lookup: the demo projects belonging to {@code workspaceIds}, and the only such lookup
+     * there is. Anything unscoped grows with every signup, since one demo project is created per signup, and a
+     * caller would pay for the whole demo population however few workspaces it cares about.
+     *
+     * <p>Scoping by workspace is what lets {@code projects_workspace_id_name_uk (workspace_id, name)} serve the
+     * query, and it bounds the result to the demo projects of those workspaces — a handful each, since
+     * {@link DemoData#PROJECTS} is a fixed list.
+     *
+     * <p>Returning a demo project that saw no activity is harmless: callers test membership, so an id absent from
+     * their rows is never consulted.
+     *
+     * <p>The workspaces are chunked, which keeps the {@code IN} list within the driver's bind-parameter limit
+     * however many are passed. A day's active workspaces sit well inside one chunk, so this is a single query in
+     * practice rather than a loop.
+     */
+    @Override
+    public Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds) {
+        if (CollectionUtils.isEmpty(workspaceIds)) {
+            return Mono.just(Set.of());
         }
-
-        return template.inTransaction(READ_ONLY, handle -> {
-
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
             var repository = handle.attach(ProjectDAO.class);
-
-            return repository.findByGlobalNames(names);
-        });
+            return Lists.partition(List.copyOf(workspaceIds), DEMO_PROJECT_WORKSPACE_CHUNK_SIZE)
+                    .stream()
+                    .flatMap(chunk -> repository.findByGlobalNames(DemoData.PROJECTS, Set.copyOf(chunk)).stream())
+                    .map(Project::id)
+                    .collect(Collectors.toUnmodifiableSet());
+        })).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override

@@ -11,6 +11,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -18,10 +19,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Single derivation point for the {@code id_at} weekly partition value(s) a batch of ids resolves to, so a mutation
+ * Single derivation point for the {@code id_at} weekly partition value(s) a batch of ids resolves to, so a statement
  * can name its own partitions instead of being planned against every part of the table. {@link #groupByPartition}
  * groups ids by the partition each belongs to, for a caller emitting one statement per partition (OPIK-8230) that
- * must bind only the ids belonging to it.
+ * must bind only the ids belonging to it; {@link #weeksOf} returns just the values, for a read that carries them as
+ * one {@code IN} list inside a single statement (OPIK-8332).
  *
  * <p>Mirrors the partition expression of {@code traces_local_v2} / {@code spans_local_v2} exactly —
  * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))}, where {@code id_at} is
@@ -147,6 +149,35 @@ public class WeeklyPartitions {
         // unmodifiable explicitly; it does not do so for you.
         return Optional.of(grouped.entrySet().stream()
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Set.copyOf(entry.getValue()))));
+    }
+
+    /**
+     * The weekly partition values the ids resolve to — ascending and distinct — or empty if any id's partition cannot
+     * be derived exactly, under the same all-or-nothing rule as {@link #groupByPartition} and for the same reason: a
+     * set that is merely close is a read silently returning fewer rows than it should. The caller must then omit its
+     * predicate entirely and emit the unbounded form.
+     * <p>
+     * The flat set is what a {@code SELECT} needs, where {@code groupByPartition}'s per-partition grouping is what a
+     * mutation needs: one statement carries the whole set as an {@code IN} list, so a far-future id simply
+     * contributes both of its values to it (see the class javadoc). Ascending so the rendered statement is
+     * byte-identical for a given id set whatever order the caller iterates in — the values reach ClickHouse inlined,
+     * and an unstable order would make one query shape read as many in {@code system.query_log}.
+     *
+     * @throws NullPointerException if {@code ids} is null, for the reason {@link #groupByPartition} gives.
+     */
+    public static Optional<List<Long>> weeksOf(@NonNull Collection<UUID> ids) {
+        var perId = ids.stream().map(WeeklyPartitions::partitionsOf).toList();
+
+        if (perId.isEmpty() || perId.stream().anyMatch(Optional::isEmpty)) {
+            return Optional.empty();
+        }
+
+        return Optional.of(perId.stream()
+                .flatMap(Optional::stream)
+                .flatMap(Set::stream)
+                .distinct()
+                .sorted()
+                .toList());
     }
 
     /**

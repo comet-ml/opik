@@ -1,14 +1,11 @@
 import React, { useCallback, useMemo, useState } from "react";
-import copy from "clipboard-copy";
 import FileSaver from "file-saver";
 import { json2csv } from "json-2-csv";
 import get from "lodash/get";
 import {
   ArrowUpRight,
-  Copy,
   Download,
   MoreHorizontal,
-  Share,
   Sparkles,
   Trash,
 } from "lucide-react";
@@ -41,6 +38,8 @@ import {
   DetailsActionSection,
   DetailsActionSectionValue,
 } from "@/v2/pages-shared/traces/DetailsActionSection";
+import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
+import AnnotationQueuesNavigation from "@/v2/pages-shared/traces/AnnotationQueuesNavigation/AnnotationQueuesNavigation";
 import {
   mapRowDataForExport,
   TRACE_EXPORT_COLUMNS,
@@ -111,6 +110,12 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   }, [treeData, traceId]);
   const canNavigateToExperiment =
     Boolean(experiment) && canViewExperiments && Boolean(activeProjectId);
+  const annotationQueues = useMemo(() => {
+    const node = treeData.find((item) => item.id === traceId);
+    return node && "annotation_queues" in node
+      ? node.annotation_queues
+      : undefined;
+  }, [treeData, traceId]);
 
   const handleTraceDelete = useCallback(() => {
     onDelete();
@@ -213,7 +218,18 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   return (
     <ResizableSidePanelTopBar
       variant="info"
-      title={traceName}
+      title={
+        <TooltipWrapper content={`Trace ID: ${traceId}`}>
+          <span>{traceName || "Trace"}</span>
+        </TooltipWrapper>
+      }
+      titleSuffix={
+        <CopyEntityActions
+          className="pl-1"
+          entityId={traceId}
+          entityLabel="trace"
+        />
+      }
       leftIcon={traceType && <BaseTraceDataTypeIcon type={traceType} />}
       onClose={onClose}
     >
@@ -238,40 +254,6 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              toast({ description: "URL copied to clipboard" });
-              copy(window.location.href);
-            }}
-          >
-            <Share className="mr-2 size-4" />
-            Share
-          </DropdownMenuItem>
-          <TooltipWrapper content={traceId} side="left">
-            <DropdownMenuItem
-              onClick={() => {
-                toast({ description: "Trace ID copied to clipboard" });
-                copy(traceId);
-              }}
-            >
-              <Copy className="mr-2 size-4" />
-              Copy trace ID
-            </DropdownMenuItem>
-          </TooltipWrapper>
-          {spanId && (
-            <TooltipWrapper content={spanId} side="left">
-              <DropdownMenuItem
-                onClick={() => {
-                  toast({ description: "Span ID copied to clipboard" });
-                  copy(spanId);
-                }}
-              >
-                <Copy className="mr-2 size-4" />
-                Copy span ID
-              </DropdownMenuItem>
-            </TooltipWrapper>
-          )}
-          <DropdownMenuSeparator />
           {(["csv", "json"] as const).map((format) => {
             const item = (
               <DropdownMenuItem
@@ -354,6 +336,8 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           </Button>
         </TooltipWrapper>
       )}
+
+      <AnnotationQueuesNavigation queues={annotationQueues} />
 
       {hasThread && (
         <TooltipWrapper content="Go to thread">

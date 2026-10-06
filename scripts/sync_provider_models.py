@@ -75,6 +75,11 @@ OPENAI_EXCLUDE_PATTERNS = [
 # Only these prefixes are chat/completion models usable in our playground.
 OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")
 
+# LiteLLM flags these ChatGPT snapshots as supporting reasoning, but OpenAI's model pages list no reasoning for them and the API answers
+# reasoning_effort with 400 "Invalid 'reasoning_effort' for non-reasoning model". Must equal the `reasoning: false` rows of
+# OPENAI_MODEL_CAPABILITIES in apps/opik-frontend/src/constants/llm.ts (its llm.test.ts fails otherwise); one shared list is OPIK-8637.
+OPENAI_NON_REASONING_MODELS = {"gpt-5-chat-latest", "gpt-5.1-chat-latest", "gpt-5.2-chat-latest", "gpt-5.3-chat-latest"}
+
 ANTHROPIC_EXCLUDE_PATTERNS = [
     r"-latest$",
     r"^claude-3-",
@@ -476,7 +481,7 @@ def fetch_gemini_models(api_key: str) -> list[tuple[str, str]]:
         page_token = data.get("nextPageToken")
         if not page_token:
             break
-    return sorted(set(results), key=lambda x: x[0])
+    return sorted(set(results))
 
 
 def load_model_prices() -> dict:
@@ -892,7 +897,7 @@ def sync_vertexai(
     source_models: list[tuple[str, bool]],
     java_content: str,
     label_overrides: dict[str, str] | None = None,
-) -> tuple[str, list[ModelEntry], list[str], list[str]]:
+) -> tuple[str, list[ModelEntry], list[str], list[str], list[tuple[str, str]]]:
     """Add-only sync for VertexAI. Never removes, reports stale for manual review."""
     current = parse_java_enum_3arg(java_content)
     current_qualified = {q for q, _, _ in current.values()}
@@ -911,10 +916,21 @@ def sync_vertexai(
 
     entries = []
     model_entries = []
+    collisions: list[tuple[str, str]] = []
+    # Reserved up front, not claimed while iterating: hand-crafted names drop suffixes
+    # (GEMINI_2_0_FLASH is "gemini-2.0-flash-001"), and a new "gemini-2.0-flash" sorts
+    # before it, so it would otherwise take the name and push the existing model out.
+    used_enum_names = set(qualified_to_existing_name.values())
 
     for qualified in sorted(all_qualified):
         value = qualified.removeprefix("vertex_ai/")
-        enum_name = qualified_to_existing_name.get(qualified) or model_to_enum_name(qualified, "vertexai")
+        enum_name = qualified_to_existing_name.get(qualified)
+        if enum_name is None:
+            enum_name = model_to_enum_name(qualified, "vertexai")
+            if enum_name in used_enum_names:
+                collisions.append((qualified, enum_name))
+                continue
+            used_enum_names.add(enum_name)
 
         if qualified in current_so_by_qualified:
             so = current_so_by_qualified[qualified]
@@ -931,10 +947,10 @@ def sync_vertexai(
             label=label,
         ))
 
-    added = sorted(source_set - current_qualified)
+    added = sorted(source_set - current_qualified - {q for q, _ in collisions})
 
     new_java = regenerate_java_3arg(java_content, entries)
-    return new_java, model_entries, added, stale
+    return new_java, model_entries, added, stale, collisions
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -989,6 +1005,7 @@ def regenerate_llm_models_yaml(
     existing_content: str,
     models_by_provider: dict[str, list[ModelEntry]],
     dropdown_by_provider: dict[str, list[ModelEntry]] | None = None,
+    openai_reasoning: dict[str, bool] | None = None,
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
@@ -1001,12 +1018,18 @@ def regenerate_llm_models_yaml(
       curated order and carry their human-readable `label`; the remaining
       entries follow alphabetically with no label.
     - Preserves reasoning flags carried over from the existing file.
+    - In the openai section only, also emits `reasoning: true` for models
+      that `openai_reasoning` marks, except OPENAI_NON_REASONING_MODELS.
+      Other sections stay carry-over only: LiteLLM's flag means "can emit
+      reasoning tokens", which is broader than what the frontend treats as
+      a reasoning model, and nothing reads the flag for other providers.
     - Sections for providers not managed here (bedrock, ollama, opik-free,
       custom-llm) are preserved as-is if present.
     """
     # Carry over existing reasoning flags by provider/model-id
     reasoning_flags = _parse_yaml_reasoning_flags(existing_content)
     dropdown_by_provider = dropdown_by_provider or {}
+    openai_reasoning = openai_reasoning or {}
 
     lines: list[str] = []
 
@@ -1054,7 +1077,12 @@ def regenerate_llm_models_yaml(
 
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
-            if provider_reasoning.get(model_id):
+            seeded_reasoning = (
+                provider_key == "openai"
+                and openai_reasoning.get(model_id, False)
+                and model_id not in OPENAI_NON_REASONING_MODELS
+            )
+            if provider_reasoning.get(model_id) or seeded_reasoning:
                 lines.append("    reasoning: true")
 
     # Preserve any provider sections not managed by the sync script
@@ -1096,6 +1124,17 @@ def _build_structured_output_lookup(prices: dict) -> dict[str, bool]:
     return lookup
 
 
+def _build_reasoning_lookup(prices: dict) -> dict[str, bool]:
+    return {
+        key: bool(info.get("supports_reasoning"))
+        for key, info in prices.items()
+        if isinstance(info, dict)
+        and info.get("litellm_provider") == "openai"
+        # LiteLLM lists the Responses-API-only models (codex, -pro, deep-research) with mode "responses", not "chat".
+        and info.get("mode") in ("chat", "responses")
+    }
+
+
 def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
     """Extract VertexAI models from the prices JSON.
 
@@ -1121,6 +1160,28 @@ def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
     return sorted(vertexai_all.items(), key=lambda x: x[0])
 
 
+def _seeded_reasoning_ids(
+    existing_yaml_content: str, openai_entries: list[ModelEntry], openai_reasoning: dict[str, bool]
+) -> list[str]:
+    already_flagged = _parse_yaml_reasoning_flags(existing_yaml_content).get("openai", {})
+    return sorted(
+        entry.value
+        for entry in openai_entries
+        if openai_reasoning.get(entry.value, False)
+        and entry.value not in OPENAI_NON_REASONING_MODELS
+        and entry.value not in already_flagged
+    )
+
+
+def _should_write_files(
+    total_added: int, seeded_reasoning_ids: list[str], force_regen: bool, fell_back: bool
+) -> bool:
+    # A run whose provider API failed rebuilds that provider's labels and dropdown from the prices JSON, so even a real addition would ship degraded data.
+    if force_regen:
+        return True
+    return not fell_back and (total_added > 0 or bool(seeded_reasoning_ids))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Sync LLM provider model definitions")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing")
@@ -1132,6 +1193,7 @@ def main():
     openai_key = os.environ.get("OPENAI_API_KEY")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     gemini_key = os.environ.get("GEMINI_API_KEY")
+    fell_back = False
 
     prices = load_model_prices()
     so_lookup = _build_structured_output_lookup(prices)
@@ -1157,6 +1219,7 @@ def main():
             print(f"  Found {len(openai_models)} models from API", file=sys.stderr)
         except Exception as e:
             print(f"  WARNING: OpenAI API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
+            fell_back = True
             openai_models = extract_models_from_prices(prices, "openai", OPENAI_EXCLUDE_PATTERNS)
     else:
         print("  OpenAI: using prices JSON (no OPENAI_API_KEY)", file=sys.stderr)
@@ -1172,10 +1235,11 @@ def main():
             anthropic_labels = {id_: name for id_, name in anthropic_api if name}
             print(f"  Found {len(anthropic_models)} models from API", file=sys.stderr)
         except Exception as e:
-            print(f"  WARNING: Anthropic API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
+            print(f"::warning::Anthropic API fetch failed, falling back to prices JSON (model list will lack API display names): {e}", file=sys.stderr)
+            fell_back = True
             anthropic_models = extract_models_from_prices(prices, "anthropic", ANTHROPIC_EXCLUDE_PATTERNS)
     else:
-        print("  Anthropic: using prices JSON (no ANTHROPIC_API_KEY)", file=sys.stderr)
+        print("::warning::Anthropic: using prices JSON (no ANTHROPIC_API_KEY); model list will lack API display names", file=sys.stderr)
         anthropic_models = extract_models_from_prices(prices, "anthropic", ANTHROPIC_EXCLUDE_PATTERNS)
 
     # Gemini
@@ -1189,6 +1253,7 @@ def main():
             print(f"  Found {len(gemini_models)} models from API", file=sys.stderr)
         except Exception as e:
             print(f"  WARNING: Gemini API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
+            fell_back = True
             gemini_models = extract_models_from_prices(
                 prices, "gemini", GEMINI_EXCLUDE_PATTERNS, key_prefix="gemini/"
             )
@@ -1235,11 +1300,11 @@ def main():
     )
     all_changes["gemini"] = {"entries": ge_entries, "added": ge_added, "stale": ge_stale, "collisions": ge_collisions}
 
-    new_va_java, va_entries, va_added, va_stale = sync_vertexai(
+    new_va_java, va_entries, va_added, va_stale, va_collisions = sync_vertexai(
         vertexai_models, va_java,
         label_overrides=gemini_labels,
     )
-    all_changes["vertexai"] = {"entries": va_entries, "added": va_added, "stale": va_stale}
+    all_changes["vertexai"] = {"entries": va_entries, "added": va_added, "stale": va_stale, "collisions": va_collisions}
 
     # 4. Regenerate TypeScript files
     # TS enum (providers.ts) gets ALL models — same as Java enums
@@ -1259,8 +1324,13 @@ def main():
     # section in curated order and carry human-readable labels; the rest
     # follow alphabetically without a label.
     llm_models_yaml_content = read_file(LLM_MODELS_YAML)
+    openai_reasoning = _build_reasoning_lookup(prices)
     new_llm_models_yaml = regenerate_llm_models_yaml(
         llm_models_yaml_content, models_by_provider, dropdown_by_provider,
+        openai_reasoning=openai_reasoning,
+    )
+    seeded_reasoning_ids = _seeded_reasoning_ids(
+        llm_models_yaml_content, models_by_provider["openai"], openai_reasoning,
     )
 
     # 5. Print summary
@@ -1300,8 +1370,16 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if total_added == 0 and not args.force_regen:
-        if total_stale > 0:
+    if seeded_reasoning_ids:
+        print("### Registry")
+        for model_id in seeded_reasoning_ids:
+            print(f"  + {model_id} (reasoning)")
+        print()
+
+    if not _should_write_files(total_added, seeded_reasoning_ids, args.force_regen, fell_back):
+        if fell_back and (total_added > 0 or seeded_reasoning_ids):
+            print("A provider API call failed: fallback data not published; retry when the API is reachable, or rerun with --force-regen.")
+        elif total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
         else:
             print("No changes found.")

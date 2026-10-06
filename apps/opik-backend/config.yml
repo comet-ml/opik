@@ -100,6 +100,20 @@ databaseAnalytics:
   #   async-insert flush; same override semantics as asyncInsertBusyTimeoutMaxMs above. Larger values yield fewer,
   #   larger parts at the cost of more buffer memory.
   asyncInsertMaxDataSize: ${ANALYTICS_DB_ASYNC_INSERT_MAX_DATA_SIZE:-}
+  #  Default: 3000
+  #  Description: Cadence (ms) for http_headers_progress_interval_ms, applied to custom_http_params like the overrides
+  #   above, but only on the R2DBC connection and not on the v2 client (the read-only free-form SQL user runs under
+  #   readonly=1 and rejects per-query setting changes; its factory is built without queryParameters). That is about
+  #   this setting - a cadence written directly into custom_http_params below is still forwarded to both clients like
+  #   every other entry there. clickhouse-r2dbc turns send_progress_in_http_headers on for every HTTP statement and the
+  #   v1 Apache transport caps a response at 100 headers with no way to raise it, so at ClickHouse's 100ms default
+  #   cadence a query running past ~10s overflows the cap and its response fails to parse. Accepted range is 1 .. 10000.
+  #   The ceiling keeps a 3x margin under the driver's 30s socket_timeout, since the progress headers are what keep the
+  #   socket alive during a long query; the 100-header budget is reached at interval x 90, so 3000 covers a 270s query
+  #   against the 106.7s worst case seen during the incident. Supplying nothing leaves the primitive at 0, which is out
+  #   of range and fails startup rather than silently reinstating the bug - which is why the docker-compose passthrough
+  #   carries the literal instead of ':-'.
+  httpHeadersProgressIntervalMs: ${ANALYTICS_DB_HTTP_HEADERS_PROGRESS_INTERVAL_MS:-3000}
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
@@ -135,6 +149,13 @@ databaseAnalyticsDataModel:
   #   end_time/duration/ttft columns; span writes bind null for absent end_time/ttft. Set true once replaced with
   #   sentinel-defaulted non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates
   #   reads too. Flip in lockstep with the Slice 3 cutover EXCHANGE, independently of the trace flag.
+  #   Also gates partition-scoped span cascade deletes, as the trace flag does for traces: that same EXCHANGE puts the
+  #   weekly-partitioned successor behind the name span mutations target, so true additionally means the trace-delete
+  #   cascade may scope itself with IN PARTITION instead of being registered against every part of the table.
+  #   IN PARTITION against an unpartitioned table is a hard error (code 248), not a lost optimisation, so setting this
+  #   true ahead of the EXCHANGE breaks deletes. Off falls back to the unbounded delete: correct, merely slower. The
+  #   spans retention sweeps are not scoped either way: retention and a cut-over `spans` must not both be live until
+  #   a sweep has been measured there - see SpanDAO.DELETE_FOR_RETENTION.
   spanColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE:-false}
   #  Default: false
   #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
@@ -165,6 +186,26 @@ databaseAnalyticsDataModel:
   #   wrong in either direction and the backend fails readiness at startup with a message naming the flag and the
   #   observed engine, rather than serving traffic whose trace deletes are guaranteed to fail.
   tracesDistributedWrapEnabled: ${ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED:-false}
+  #  Default: false
+  #  Description: Spans sibling of tracesDistributedWrapEnabled. The Slice 3 cutover wraps `spans` as a Distributed
+  #   table over the `spans_local` shard, co-located with traces on sipHash64(project_id). Leave false at deploy time
+  #   and while `spans` is still a MergeTree (deletes work directly); set true in lockstep with applying the spans wrap.
+  #   While true, SpanDAO routes its cascade and retention deletes to `spans_local`; reads and inserts stay on the
+  #   Distributed `spans`. Post-wrap, changes to `spans` split by kind exactly as for traces: row mutations (DELETE) +
+  #   MATERIALIZE COLUMN/ADD INDEX/MODIFY TTL target `spans_local` only (the Distributed `spans` rejects them);
+  #   ADD/DROP/MODIFY COLUMN must target both `spans_local` and `spans`, else reads can't see the column (code 47).
+  #   Independent of the trace flag, and asserted against the live database by its own `clickhouse-spans-topology`
+  #   readiness check below (the `clickhouse-traces-topology` one asserts the trace flag only): set it wrong in either
+  #   direction and the backend fails readiness at startup with a message naming the flag and the observed engine,
+  #   rather than serving traffic whose span deletes are guaranteed to fail.
+  spansDistributedWrapEnabled: ${ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED:-false}
+
+bulkInsert:
+  # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as
+  # JSONEachRow through the ClickHouse Java client v2, with no parameter binding. Both write identical
+  # cells, so this is safe to flip either way on a running install. Default false so an upgrade does not
+  # silently change the write path.
+  v2ClientEnabled: ${ANALYTICS_DB_BULK_INSERT_V2_CLIENT_ENABLED:-false}
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -184,6 +225,12 @@ uuidValidation:
   #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
   #   embedded timestamp more than this far in the past or future are rejected.
   window: ${UUID_VALIDATION_WINDOW:-24h}
+  #  Default: 30d
+  #  Description: Wider override of `window` (between 12h and 45d) for a centrally managed set of
+  #   workspaces. That set is empty by default, which leaves this setting inert; the workspaces in it are
+  #   still rejected beyond this override. A value at or below `window` is ignored, since the override
+  #   only ever widens.
+  bypassWindow: ${UUID_VALIDATION_BYPASS_WINDOW:-30d}
 
 # Description: credentials for the Agent Insights read-only free-form SQL ClickHouse user (restricted user with a
 #   read-only profile + row policies, provisioned by OPIK-6846). Only the user/password live here; the connection
@@ -200,6 +247,51 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #  Description: Socket read timeout for the read-only client (client-v2 default is 0/none). Kept
   #   above the read-only profile's max_execution_time (180s) so the server-side cap fires first.
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
+
+# Description: credentials for the extended free-form SQL read-only ClickHouse user.
+# Only used for workspaces in customCharts.enabledWorkspaces.
+databaseAnalyticsReadOnlyFreeFormExtendedSql:
+  #  Default: comet_readonly_freeform_extended_sql_user
+  #  Description: The read-only username used to connect to the server
+  username: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}
+  #  Default: opik
+  #  Description: The read-only user password used to connect to the server
+  password: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}
+  #  Default: 200s
+  #  Description: Socket read timeout, kept above the profile's max_execution_time (180s) so the server cap fires first
+  socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_SOCKET_TIMEOUT:-200s}
+
+# Custom Charts. The ClickHouse credentials it runs as are in databaseAnalyticsReadOnlyFreeFormExtendedSql instead:
+# those describe a database connection and keep the same shape as the account Agent Insights uses.
+customCharts:
+  #  Default: empty (feature off everywhere)
+  #  Description: Comma-separated workspace ids allowed to call POST /v1/internal/analytics-queries, which runs as
+  #   the wider ClickHouse account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account
+  #   for every workspace. Requires serviceToggles.ollieEnabled, which
+  #   gates the endpoint, and the account to be provisioned first (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
+  enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
+  #  Default: 5000
+  #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
+  #   than labelling some and not others.
+  maxNameLookupIds: ${CUSTOM_CHARTS_MAX_NAME_LOOKUP_IDS:-5000}
+
+# Description: the free-form SQL post-run check, defense in depth on top of the row policies. It verifies from each
+#   query's system.query_log entries and plan that every table it read was read under a row policy.
+freeFormSqlPostRunCheck:
+  #  Default: audit
+  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
+  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
+  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
+  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  # Quoted: YAML reads a bare off as the boolean false.
+  mode: "${FREE_FORM_SQL_POST_RUN_CHECK_MODE:-audit}"
+  #  Default: 10s
+  #  Description: Wait before each read of the query's log entries. Longer than ClickHouse's query_log flush
+  #   interval (7.5s by default), so every entry is written without forcing a flush. 0 to 60s.
+  logReadDelay: ${FREE_FORM_SQL_POST_RUN_CHECK_LOG_READ_DELAY:-10s}
+  #  Default: 3
+  #  Description: Reads of the query's log entries before the check reports them missing (1 to 10)
+  maxLogReadAttempts: ${FREE_FORM_SQL_POST_RUN_CHECK_MAX_LOG_READ_ATTEMPTS:-3}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -234,6 +326,11 @@ health:
     - name: clickhouse-readonly-freeform-sql
       critical: false
       type: ready
+    # Non-critical for the same reason as the check above: Custom Charts is opt-in per workspace, and when no
+    # workspace is allowlisted the probe reports healthy without querying ClickHouse.
+    - name: clickhouse-readonly-freeform-extended-sql
+      critical: false
+      type: ready
     # Toggle-gated (databaseAnalytics.clusterHealthCheckEnabled). When the toggle is off the probe reports healthy
     # without querying ClickHouse, so single-shard / OSS environments are unaffected. When on, a node that can't see
     # the Distributed cluster definition can't serve distributed queries and must be pulled from rotation.
@@ -264,6 +361,16 @@ health:
     # rather than a fleet-wide outage; the cluster-wide "did this DDL reach every replica" gate lives in the cutover's
     # exchange_and_wrap.sh / finalize.sh, and the self-host troubleshooting page carries the query for operators.
     - name: clickhouse-traces-topology
+      critical: true
+      type: ready
+    # The spans sibling of the check above, asserting databaseAnalyticsDataModel.spansDistributedWrapEnabled against
+    # the actual `spans` topology. They share one implementation, so everything said above applies here too, over
+    # `spans`/`spans_local` and the spans flag. A separate probe rather than one merged check because the two cutovers
+    # flip independently: an estate can be wrapped on traces and not on spans, and an operator reading /health-check
+    # has to see which of the two disagrees with its table. It matters more on spans, not less: spans have no
+    # standalone delete endpoint, so an unguarded mismatch surfaces as a failing trace-delete cascade or a retention
+    # sweep that reclaims nothing, never on the operation that caused it.
+    - name: clickhouse-spans-topology
       critical: true
       type: ready
     - name: mysql
@@ -386,14 +493,23 @@ mcpOAuth:
   # Description: Access token lifetime
   accessTokenTtl: ${MCP_OAUTH_ACCESS_TOKEN_TTL:-PT1H}
   # Default: P7D
-  # Description: Refresh token absolute lifetime (not sliding)
+  # Description: Refresh token idle lifetime. Sliding: every rotation issues the new refresh token with this much lifetime from now, so an actively used connector stays connected; one left unused for this long has to re-authorize. At most 365 days
   refreshTokenTtl: ${MCP_OAUTH_REFRESH_TOKEN_TTL:-P7D}
+  # Default: P30D
+  # Description: Absolute lifetime of a token family, measured from the authorization that created it. Caps the sliding refresh lifetime: no matter how actively a connector is used, it has to re-authorize once this has elapsed. Never effectively shorter than refreshTokenTtl; at most 365 days
+  refreshTokenAbsoluteTtl: ${MCP_OAUTH_REFRESH_TOKEN_ABSOLUTE_TTL:-P30D}
   # Default: PT60S
   # Description: Authorization code lifetime
   codeTtl: ${MCP_OAUTH_CODE_TTL:-PT60S}
-  # Default: PT30S
-  # Description: Grace window during which a just-rotated refresh token is still accepted
-  refreshRotationGrace: ${MCP_OAUTH_REFRESH_ROTATION_GRACE:-PT30S}
+  # Default: PT2M
+  # Description: Grace window after a refresh-token rotation during which re-presenting the rotated token still mints a token pair (MCP hosts refresh from several parallel tool calls at once); after it, re-presentation is treated as reuse and revokes the whole token family
+  refreshRotationGrace: ${MCP_OAUTH_REFRESH_ROTATION_GRACE:-PT2M}
+  # Default: 10
+  # Description: How many extra token pairs a single rotated refresh token may still mint inside the grace window (one per parallel host request that lost the rotation race). Requests beyond it are refused with invalid_grant one by one; the family and the pairs already handed out stay valid, since hitting the cap is oversubscription, not reuse
+  refreshRotationMaxRetries: ${MCP_OAUTH_REFRESH_ROTATION_MAX_RETRIES:-10}
+  # Default: PT10S
+  # Description: Lease of the per-family Redis lock under which refresh-token rotation, in-grace retries and revocation run. Must outlast the MySQL transaction that rotates a token; if it lapses mid-rotation a concurrent refresh with the same token may be refused instead of served
+  refreshLockLease: ${MCP_OAUTH_REFRESH_LOCK_LEASE:-PT10S}
   # Default: PT5M
   # Description: TTL of the Redis lock held by the scrub job. The lock is held until expiry (not released after the scrub), so keeping it close to the 5-minute schedule prevents staggered replicas from re-scrubbing within the same cycle.
   scrubLockTimeout: ${MCP_OAUTH_SCRUB_LOCK_TIMEOUT:-PT5M}
@@ -1091,6 +1207,12 @@ agentInsightsReport:
   # Default: 0 5 0 * * ? (daily at 00:05 UTC)
   # Description: Quartz cron expression (UTC) for the daily Agent Insights report sweep
   schedule: ${AGENT_INSIGHTS_REPORT_SCHEDULE:-'0 5 0 * * ?'}
+  # Default: 0 */10 * * * ? (every 10 minutes)
+  # Description: Quartz cron expression (UTC) for the Agent Insights auto-first-run sweep, which runs the first diagnostic for projects enrolled in the rollout (auto_first_run_enrolled set) once they pass the trace threshold
+  autoFirstRunSchedule: ${AGENT_INSIGHTS_REPORT_AUTO_FIRST_RUN_SCHEDULE:-'0 */10 * * * ?'}
+  # Default: 10
+  # Description: Maximum projects onboarded per auto-first-run sweep. Nothing downstream bounds how many diagnostics run at once (the Redis consumer, the platform executor and the Ollie pod all hand off and return), so this is the only control: runs arrive at this rate and last several minutes, so raising it raises concurrent runs proportionally. Must be between 1 and 1000.
+  autoFirstRunMaxPerRun: ${AGENT_INSIGHTS_REPORT_AUTO_FIRST_RUN_MAX_PER_RUN:-10}
   # Default: 5m
   # Description: Timeout for the daily Agent Insights report job sweep (distributed lock hold time)
   jobTimeout: ${AGENT_INSIGHTS_REPORT_JOB_TIMEOUT:-5m}
@@ -1104,7 +1226,7 @@ agentInsightsReport:
   # Description: Consumer group name for Agent Insights report trigger processing
   consumerGroupName: ${AGENT_INSIGHTS_REPORT_CONSUMER_GROUP_NAME:-'agent-insights-report-consumers'}
   # Default: 5
-  # Description: Maximum number of report triggers to process in a single batch (caps concurrent runs)
+  # Description: Maximum number of report triggers read and dispatched concurrently. Caps concurrent trigger calls, not concurrent runs: the trigger is acked once the platform accepts it, and the analysis runs detached on the Ollie pod.
   consumerBatchSize: ${AGENT_INSIGHTS_REPORT_CONSUMER_BATCH_SIZE:-5}
   # Default: 1s
   # Description: How often to poll Redis for new report triggers
@@ -1127,6 +1249,79 @@ agentInsightsReport:
   # Default: 100
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: ${AGENT_INSIGHTS_REPORT_STREAM_TRIM_LIMIT:-100}
+
+# Configuration for automatic annotation queue population (OPIK-6303). A feedback-score event is guarded
+# in the listener and the routing work is done by a stream consumer, so it survives a replica restart.
+annotationQueueRouting:
+  # Mechanics only. Whether the feature runs at all is serviceToggles.annotationQueueAutomationEnabled.
+  # Default: annotation-queue-routing
+  # Description: Redis stream name for queued annotation queue routing work
+  streamName: ${ANNOTATION_QUEUE_ROUTING_STREAM_NAME:-'annotation-queue-routing'}
+  # Default: annotation-queue-routing-consumers
+  # Description: Consumer group name for annotation queue routing
+  consumerGroupName: ${ANNOTATION_QUEUE_ROUTING_CONSUMER_GROUP_NAME:-'annotation-queue-routing-consumers'}
+  # Default: 100
+  # Description: Messages read per tick and the number processed concurrently. A message is one (workspace,
+  #   scope) batch flushed from the buffer, and processing it is a few bulk database queries, so this bounds
+  #   concurrent database work by batch. 100 matches the other database-only consumers
+  #   (experimentDenormalization, traceThreadConfig); the 5-10 used elsewhere caps slow external calls (LLM,
+  #   webhook, export) that this consumer does not make.
+  consumerBatchSize: ${ANNOTATION_QUEUE_ROUTING_CONSUMER_BATCH_SIZE:-100}
+  # Default: 15s
+  # Description: How long an entity must go without a new feedback score before the flush may take it (100ms-1m).
+  #   Every score written to it in the meantime folds into the one buffer member and restarts the wait, so the
+  #   consumer never reads a score younger than this, which keeps it clear of ClickHouse replica lag. Latency
+  #   added to every routed item. Same semantics as the experimentDenormalization debounce.
+  debounceDelay: ${ANNOTATION_QUEUE_ROUTING_DEBOUNCE_DELAY:-15s}
+  # Default: 2m
+  # Description: TTL of the Redis buffer key (10s-10m). Set when the key is created and renewed by every flush run,
+  #   so if nothing drains the buffer it expires this long after the last flush instead of growing without limit.
+  #   Matches experimentDenormalization, whose buckets expire at twice their debounce delay.
+  bufferTtl: ${ANNOTATION_QUEUE_ROUTING_BUFFER_TTL:-2m}
+  # Default: 5s
+  # Description: Interval at which the flush job publishes due buffer members to the stream (1s-1m). An item is
+  #   routed between debounceDelay and debounceDelay + jobInterval after its last score. Same cadence as the
+  #   experimentDenormalization flush job.
+  jobInterval: ${ANNOTATION_QUEUE_ROUTING_JOB_INTERVAL:-5s}
+  # Default: 4s
+  # Description: Time the flush job holds the distributed lock (500ms-1m). Kept below jobInterval so the lock
+  #   releases before the next cycle. A lease, not a timeout: a run that outlives it may overlap the next
+  #   replica's, costing at most a duplicate message.
+  jobLockTime: ${ANNOTATION_QUEUE_ROUTING_JOB_LOCK_TIME:-4s}
+  # Default: 300ms
+  # Description: Time the flush job waits to acquire the lock before skipping the run (100ms-5s)
+  jobLockWaitTime: ${ANNOTATION_QUEUE_ROUTING_JOB_LOCK_WAIT_TIME:-300ms}
+  # Default: 1000
+  # Description: Maximum number of buffer members read per page when flushing, and therefore the most entities one
+  #   stream message can carry (100-5000)
+  jobBatchSize: ${ANNOTATION_QUEUE_ROUTING_JOB_BATCH_SIZE:-1000}
+  # Default: 1s
+  # Description: How often to poll Redis for new routing work. Together with consumerBatchSize and
+  #   claimIntervalRatio this sets the throughput ceiling: new messages per second per replica is about
+  #   (consumerBatchSize / poolingInterval) x (1 - 1 / claimIntervalRatio), because every
+  #   claimIntervalRatio-th tick spends its turn on autoClaim rather than reading new work. At the shipped
+  #   values that is about 90/s per replica. Raise it and the backlog grows until streamMaxLen trimming
+  #   silently discards the oldest messages; consumerBatchSize is the lever to raise alongside it.
+  poolingInterval: ${ANNOTATION_QUEUE_ROUTING_POOLING_INTERVAL:-1s}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling)
+  longPollingDuration: ${ANNOTATION_QUEUE_ROUTING_LONG_POLLING_DURATION:-5s}
+  # Default: 3
+  # Description: Maximum number of retries for a failing message before it is dropped
+  maxRetries: ${ANNOTATION_QUEUE_ROUTING_MAX_RETRIES:-3}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals. Lower values recover stuck work sooner
+  #   but cost new-message throughput, since a claim tick reads nothing new - see poolingInterval above.
+  claimIntervalRatio: ${ANNOTATION_QUEUE_ROUTING_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 5m
+  # Description: How long a message can stay pending before it is auto-claimed by another consumer
+  pendingMessageDuration: ${ANNOTATION_QUEUE_ROUTING_PENDING_MESSAGE_DURATION:-5m}
+  # Default: 100000
+  # Description: Maximum stream length before old entries are trimmed
+  streamMaxLen: ${ANNOTATION_QUEUE_ROUTING_STREAM_MAX_LEN:-100000}
+  # Default: 1000
+  # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+  streamTrimLimit: ${ANNOTATION_QUEUE_ROUTING_STREAM_TRIM_LIMIT:-1000}
 
 # Configuration for Optimization Studio logs synchronization
 optimizationLogs:
@@ -1224,6 +1419,15 @@ environment:
   maxPerWorkspace: ${OPIK_ENVIRONMENT_MAX_PER_WORKSPACE:-100}
 
 # Data retention policy enforcement
+# Spans gate (OPIK-8364): unlike the trace sweeps, the spans retention sweeps cannot prune to partitions - their range
+# keys on trace_id while the partition column derives from the span's own id. On an install whose `spans` has been cut
+# over to the weekly-partitioned successor, retention and that cutover must NOT both be live until one sweep has been
+# measured there - which gates both orderings, since an install already running retention would otherwise cut over
+# without ever crossing a gate worded as "do not enable retention". The cost scales with the table's partition count
+# rather than with the rows the window matches (parts_to_do and wall time in system.mutations), and it is unproven
+# that an unpruned sweep reclaims storage at all - partition pruning is also what lets a lightweight delete release
+# bytes rather than only mask rows (OPIK-5295). SpanDAO.DELETE_FOR_RETENTION records why, what is open, and what to
+# do if the measurement disappoints.
 # The job splits the workspace UUID space into N=executionsPerDay fractions and processes one fraction per tick.
 # Use a value that divides 1440 evenly for consistent interval spacing (e.g., 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 32, 36, 48, 60, 80, 96, 120, 144, 160, 180, 240, 288).
 retention:
@@ -1338,22 +1542,25 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: ${LLM_PROVIDER_OPENROUTER_URL:-https://openrouter.ai/api/v1}
+  # Default: https://openrouter.ai/api/alpha/decisions
+  # Description: OpenRouter Decisions API URL, used by decisions models such as TypeSafe Jev. It lives outside
+  #   /api/v1, so it can't be derived from openRouterUrl. Also used when a workspace's OpenRouter provider sets a
+  #   custom base URL: that URL only applies to chat models
+  openRouterDecisionsUrl: ${LLM_PROVIDER_OPENROUTER_DECISIONS_URL:-https://openrouter.ai/api/alpha/decisions}
 
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
     # Description: Vertex AI SCOPE API URL
     scope: ${LLM_PROVIDER_VERTEXAI_SCOPE:-https://www.googleapis.com/auth/cloud-platform}
-    # Default: GRPC
-    # Description: Transport used by the Vertex AI SDK. One of GRPC or REST
-    transport: ${LLM_PROVIDER_VERTEXAI_TRANSPORT:-GRPC}
-    # Description: API endpoint per multi-region location, keyed by lower-case location. The SDK derives the host from
-    # the location as '<location>-aiplatform.googleapis.com', which is only correct for single-region locations, so
-    # multi-region locations need their host set explicitly. Single-region locations are not listed and keep the SDK
-    # default. Required: these hosts exist only here, the application defines no fallback for them.
+    # Description: API endpoint per multi-region location, keyed by lower-case location. The SDK derives the endpoint
+    # from the location as '<location>-aiplatform.googleapis.com', which is only correct for single-region locations, so
+    # multi-region locations need their endpoint set explicitly. Single-region locations are not listed and keep the SDK
+    # default. Required: these endpoints exist only here, the application defines no fallback for them.
+    # Values may be a bare host or an https:// URL; https:// is assumed when no scheme is given.
     multiRegionApiEndpoints:
-      global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-aiplatform.googleapis.com}
-      eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-aiplatform.eu.rep.googleapis.com}
-      us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-aiplatform.us.rep.googleapis.com}
+      global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-https://aiplatform.googleapis.com}
+      eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-https://aiplatform.eu.rep.googleapis.com}
+      us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-https://aiplatform.us.rep.googleapis.com}
 
 # Configuration for cache manager
 cacheManager:
@@ -1367,6 +1574,11 @@ cacheManager:
     # Default: {}
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
+    # Default: PT1S
+    # Description: Cache TTL for the annotation queue routing guard, read once per feedback score
+    #   event. Kept short because a stale negative is silent: the events it turns away are dropped
+    #   at the guard and there is no backfill, so this is the floor under the eviction on rule writes.
+    annotation_queue_automations: ${CACHE_MANAGER_ANNOTATION_QUEUE_AUTOMATIONS_DURATION:-PT1S}
     # Default: PT1H
     # Description: Cache TTL for the per-project size estimate (ScopeMetadata) gating dynamic sorting.
     # The estimate scans all of the project's spans, so cache misses are expensive by design.
@@ -1376,6 +1588,11 @@ cacheManager:
     # Default: PT30M
     # Description: Cache TTL for the max(timeout_mark_thread_as_inactive) across all workspaces, used to compute the closing job lookback window
     max_timeout_mark_thread_as_inactive: ${CACHE_MANAGER_MAX_TIMEOUT_MARK_THREAD_AS_INACTIVE_DURATION:-PT30M}
+    # Default: PT10S
+    # Description: Cache TTL for the compare-view target projects, whose answer doesn't depend on page/size.
+    # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
+    # survive a single read.
+    experiment_compare_target_projects: ${CACHE_MANAGER_EXPERIMENT_COMPARE_TARGET_PROJECTS_DURATION:-PT10S}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -1567,6 +1784,11 @@ serviceToggles:
   #   freeform SQL path: the read-only ClickHouse client and the clickhouse-readonly-freeform-sql health check.
   #   When off, the read-only client is never queried.
   ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
+  # Default: true
+  # Description: Kill switch for Agent Insights (Diagnostics), effective only while ollieEnabled is on. When false,
+  #   the report and auto-first-run crons are not scheduled, triggers are dropped, enrolment is refused and the UI
+  #   hides Diagnostics. Ollie chat and its freeform SQL path are unaffected.
+  agentInsightsEnabled: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"true"}
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
   projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
@@ -1575,6 +1797,11 @@ serviceToggles:
   #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
   #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
   onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not automatic annotation queue population is enabled. When false the score
+  #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
+  #   automation controls on annotation queues.
+  annotationQueueAutomationEnabled: ${TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED:-"true"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
@@ -1801,6 +2028,11 @@ webhook:
   # Default: 5s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: ${WEBHOOK_CONNECTION_TIMEOUT:-5s}
+  # Default: relaxed
+  # Description: Outbound destination policy for webhook URLs. 'strict' refuses loopback,
+  #   link-local, private and unresolvable destinations; 'relaxed' allows them, as self-hosted
+  #   deployments legitimately point webhooks at internal services
+  destinationGuard: ${WEBHOOK_DESTINATION_GUARD:-relaxed}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${WEBHOOK_CLAIM_INTERVAL_RATIO:-10}
@@ -1842,6 +2074,11 @@ webhook:
     # Default: 1s
     # Description: Maximum time to wait for acquiring metrics alert job lock
     metricsAlertJobLockWaitTimeout: ${WEBHOOK_METRICS_ALERT_JOB_LOCK_WAIT_TIMEOUT:-1s}
+    # Default: 24h
+    # Description: Window used to evaluate a threshold alert whose config was persisted without one.
+    #              Matches the alerts form's own default so such an alert evaluates over the same period
+    #              an equivalent alert created today would get.
+    defaultAlertWindow: ${WEBHOOK_METRICS_DEFAULT_ALERT_WINDOW:-24h}
 
 # Free Model configuration (admin-configured server-side LLM provider)
 # Note: The model name "opik-free-model" is hardcoded and cannot be changed.

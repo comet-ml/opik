@@ -1,5 +1,10 @@
 name: Quickstart Guide Snippets Tests
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False
   ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
@@ -38,7 +43,7 @@ jobs:
                 python-version: 3.12
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@v10.0.1
+              uses: astral-sh/setup-uv@v10.2.0
 
             - name: Install Opik
               run: uv pip install --system opik
@@ -68,7 +73,7 @@ jobs:
                 OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
                 AWS_ACCESS_KEY_ID: ${{ secrets.BEDROCK_AWS_ACCESS_KEY_ID }}
                 AWS_SECRET_ACCESS_KEY: ${{ secrets.BEDROCK_AWS_SECRET_ACCESS_KEY }}
-                ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+                ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
               run: |
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'

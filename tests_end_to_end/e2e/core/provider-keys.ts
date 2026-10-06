@@ -56,10 +56,82 @@ export async function findProviderKeyByName(providerName: string): Promise<Provi
   return body.content.find((key) => key.provider_name === providerName) ?? null;
 }
 
+/**
+ * Find a key for a BUILT-IN provider (`openrouter`, `openai`, …), which is
+ * addressed by its provider type rather than by a name.
+ *
+ * `findProviderKeyByName` cannot see these at all: a built-in provider has no
+ * `provider_name`, because there is only ever one key per provider per
+ * workspace. That also makes it un-namespaceable — a spec cannot give itself a
+ * private one — so a caller that needs a built-in key must REUSE whatever the
+ * workspace already has and delete only a key it seeded itself. Clobbering a
+ * real key on a shared workspace is not recoverable from a test run.
+ */
+export async function findProviderKeyByProvider(provider: string): Promise<ProviderKeyRef | null> {
+  const response = await fetch(endpoint(), { headers: restHeaders() });
+  if (!response.ok) throw new Error(`list provider keys returned ${response.status}`);
+  const body = (await response.json()) as { content: ProviderKeyRef[] };
+  return body.content.find((key) => key.provider === provider) ?? null;
+}
+
+/** Delete one provider key by id — for built-ins, which have no name to look up. */
+export async function deleteProviderKeyById(id: string): Promise<void> {
+  const response = await fetch(endpoint('/delete'), {
+    method: 'POST',
+    headers: restHeaders(),
+    body: JSON.stringify({ ids: [id] }),
+  });
+  if (!response.ok) {
+    throw new Error(`delete provider key returned ${response.status}`);
+  }
+}
+
+/**
+ * How the OPIK BACKEND addresses its own HTTP connector — not how this process
+ * addresses the deployment.
+ *
+ * The default is the backend's own `SERVER_APPLICATION_PORT` (8080, see
+ * apps/opik-backend/config.yml), which every deployment shape can reach from
+ * inside itself: a host process, a docker-compose container, a pod. That is the
+ * whole point — unlike `mockAuthBaseUrlForBackend`, this needs no topology
+ * knowledge and no host-reachable address, so it works identically on a local
+ * `oss` stack and on a remote deployment. Override only if the connector is
+ * moved off 8080.
+ */
+export const backendSelfUrl = process.env.OPIK_BACKEND_SELF_URL || 'http://localhost:8080';
+
+/**
+ * A custom-llm `base_url` that always answers a permanent HTTP 404.
+ *
+ * langchain4j appends `/chat/completions`, so the backend ends up asking its own
+ * connector for a route that does not exist and gets its standard
+ * `{"code":404,"message":"HTTP 404 Not Found"}` back. That makes "the provider
+ * refused with a 4xx" a routing fact rather than a data fact — no external
+ * service, no credentials, no mock process, and nothing that can start
+ * succeeding.
+ *
+ * Deliberately not httpbin.org or any other public status echo: a permanent test
+ * must not depend on a third party being up, and an external body would also be
+ * empty, which the scorer renders as a blank error reason.
+ */
+export const notFoundProviderBaseUrl = `${backendSelfUrl}/qa-no-such-llm-endpoint`;
+
 export async function createProviderKey(payload: {
   provider: string;
-  provider_name: string;
-  base_url: string;
+  /**
+   * Required for the provider types that compose their key from it (custom,
+   * bedrock, ollama); omitted for a built-in provider, which has exactly one
+   * row per workspace and no name of its own.
+   */
+  provider_name?: string;
+  /** Omitted for a built-in provider, which the backend routes itself. */
+  base_url?: string;
+  /**
+   * Static bearer, for providers that are not in OAuth2 token-auth mode. The
+   * endpoint requires one whenever `auth_config` is absent, so a static-auth
+   * provider cannot be created without it.
+   */
+  api_key?: string;
   configuration?: Record<string, string>;
   auth_config?: ProviderAuthConfig;
 }): Promise<void> {
@@ -71,6 +143,57 @@ export async function createProviderKey(payload: {
   if (!response.ok) {
     throw new Error(`create provider key returned ${response.status}: ${await response.text()}`);
   }
+}
+
+/**
+ * The provider TYPES (`openai`, `gemini`, …) the workspace already has a key
+ * for, built-in ones included — unlike `findProviderKeyByName`, which matches
+ * the user-defined `provider_name` only custom providers carry.
+ */
+export async function listConfiguredProviderTypes(): Promise<string[]> {
+  const response = await fetch(endpoint(), { headers: restHeaders() });
+  if (!response.ok) throw new Error(`list provider keys returned ${response.status}`);
+  const body = (await response.json()) as { content: ProviderKeyRef[] };
+  return body.content.map((key) => key.provider);
+}
+
+/**
+ * Make sure a BUILT-IN provider (`openai`, `anthropic`, `gemini`, `vertex-ai`)
+ * has a key on the workspace, and report whether one had to be added.
+ *
+ * Strictly additive, and that is load-bearing in both directions:
+ *
+ *  - It never overwrites. A built-in provider is ONE row per workspace, so
+ *    writing over an existing key would destroy a real credential another spec
+ *    (or a human) depends on.
+ *  - It never deletes, and neither should its caller. Because there is only one
+ *    row per provider, a fixture that removed its own key would pull the
+ *    provider out from under any spec running in parallel that needs the same
+ *    one. This is why `ConfigurationPage.ensureProviderConfigured` has no
+ *    teardown either.
+ *
+ * `apiKey` is used only when the provider is absent. Pass a real key from the
+ * environment when the runner has one; a placeholder is acceptable only for
+ * specs that never let a request reach the provider, and the caller owns that
+ * judgement (see the `modelRegistryProviders` fixture for the trade-off a
+ * placeholder leaves behind).
+ */
+export async function ensureBuiltInProviderKey(
+  provider: string,
+  apiKey: string,
+): Promise<{ added: boolean }> {
+  if ((await listConfiguredProviderTypes()).includes(provider)) return { added: false };
+  try {
+    // Only `provider` and `api_key`: a built-in provider carries no name of
+    // its own and no base URL, and sending empty ones would store them.
+    await createProviderKey({ provider, api_key: apiKey });
+  } catch (err) {
+    // A parallel worker may have created it between the read and this write.
+    // The endpoint refuses the duplicate, which is the outcome we wanted.
+    if (!(await listConfiguredProviderTypes()).includes(provider)) throw err;
+    return { added: false };
+  }
+  return { added: true };
 }
 
 export async function deleteProviderKeyByName(providerName: string): Promise<void> {

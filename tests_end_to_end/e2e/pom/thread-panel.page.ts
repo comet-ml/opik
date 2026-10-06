@@ -66,6 +66,55 @@ export class ThreadPanelPage {
     return this.turn(traceId).getByText(output, { exact: true });
   }
 
+  /**
+   * The header's duration chip, matched on the formatted string it must show.
+   *
+   * The chip is an unlabelled `<div>` holding a clock icon and the output of
+   * `formatDuration(thread.duration, false)`; its only accessible name is a
+   * hover tooltip ("Thread duration") rendered in a portal, so there is no
+   * role, label or testid to select it by. Matching the expected text exactly
+   * and scoped to the panel is the most stable handle available on a deployed
+   * build — the FE should grow a `data-testid="thread-duration"` here, and this
+   * should move to it.
+   *
+   * Exact, not substring: "0.005s" is a substring of nothing else here, but
+   * "1h 15.3s" would also match a hypothetical "1h 15.3s ago", and a duration
+   * assertion that passes on a longer string is not asserting the format.
+   */
+  durationChip(formatted: string): Locator {
+    return this.root.getByText(formatted, { exact: true });
+  }
+
+  /**
+   * The header's "N messages" chip, matched on the string it must show.
+   *
+   * Same shape and same caveat as `durationChip`: an unlabelled `<div>` holding
+   * a hash icon and `` `${thread.number_of_messages} messages` ``, whose only
+   * accessible name is a portal-rendered tooltip ("Number of messages in the
+   * thread"). There is no role, label or testid to select it by, and this spec
+   * ships into a repo where the frontend cannot be touched in the same change,
+   * so the exact text scoped to the panel is the most stable handle available.
+   * The FE should grow a `data-testid="thread-message-count"` here.
+   *
+   * Exact, so "4 messages" cannot be satisfied by "14 messages" — the
+   * substring match is precisely the one that would hide a leaked aggregate.
+   */
+  messagesChip(count: number): Locator {
+    return this.root.getByText(`${count} messages`, { exact: true });
+  }
+
+  /**
+   * The header's estimated-cost chip.
+   *
+   * `formatCost` floors to two decimals and renders anything under $0.01 as the
+   * literal "<$0.01", so a caller asserting a real number has to seed a thread
+   * above that floor — below it every thread in the project renders the same
+   * string and the chip can no longer tell them apart.
+   */
+  costChip(formatted: string): Locator {
+    return this.root.getByText(formatted, { exact: true });
+  }
+
   // --- Feedback scores tab ---
   //
   // The panel's second tab. It renders the same ConfigurableFeedbackScoreTable

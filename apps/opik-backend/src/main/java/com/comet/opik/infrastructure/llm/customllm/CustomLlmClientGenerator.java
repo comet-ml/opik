@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.domain.llm.langchain4j.OpikOpenAiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -87,7 +88,13 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .filter(MapUtils::isNotEmpty)
                 .ifPresent(builder::customHeaders);
 
-        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+        // The judge path never reaches ChatCompletionService, so the capability gate has to be here
+        // too: this generator serves CUSTOM_LLM and BEDROCK, which is how a Claude model that takes
+        // no sampling params arrives without the Anthropic provider's own gate. An evaluator rule on
+        // one of those otherwise fails every scoring run with a 400.
+        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
+            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+        }
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
         // Pass custom parameters directly to constructor since builder inheritance
