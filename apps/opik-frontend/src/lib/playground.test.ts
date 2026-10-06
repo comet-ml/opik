@@ -30,6 +30,10 @@ const videoMessage = userMessage([
   { type: "video_url", video_url: { url: "https://example.com/cat.mp4" } },
 ]);
 
+const audioMessage = userMessage([
+  { type: "audio_url", audio_url: { url: "https://example.com/cat.mp3" } },
+]);
+
 describe("hasUnsupportedMedia", () => {
   it("returns false when no model is selected", () => {
     expect(hasUnsupportedMedia({ model: "", messages: [imageMessage] })).toBe(
@@ -71,6 +75,24 @@ describe("hasUnsupportedMedia", () => {
         messages: [videoMessage],
       }),
     ).toBe(true);
+  });
+
+  it("returns true for audio on a model without audio support", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_4,
+        messages: [audioMessage],
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for audio on a model flagged for audio under another name", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+        messages: [audioMessage],
+      }),
+    ).toBe(false);
   });
 });
 
