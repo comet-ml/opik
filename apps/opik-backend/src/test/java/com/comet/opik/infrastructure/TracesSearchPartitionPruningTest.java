@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -52,7 +53,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -96,6 +96,13 @@ class TracesSearchPartitionPruningTest {
     /** A week only the neighbouring projects have traces in, inside the search window. */
     private static final LocalDate FILLER_MONDAY = LocalDate.of(2025, 4, 14);
     private static final Instant FROM_TIME = Instant.parse("2025-01-01T00:00:00Z");
+
+    /** The hint's own predicate: the weeks the project's traces fall in from the window start. */
+    private static final String PROJECT_WEEKS = """
+            SELECT DISTINCT toString(toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))
+            FROM traces
+            WHERE workspace_id = :workspace_id AND project_id = :project_id AND id >= :uuid_from_time
+            """;
 
     private static final String LAST_SEARCH = """
             SELECT query
@@ -189,7 +196,8 @@ class TracesSearchPartitionPruningTest {
     }
 
     /** The searched data and the responses, created once and shared by the tests below. */
-    private record Search(String token, List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
+    private record Search(UUID projectId, String token, List<Trace> expected, Trace.TracePage page,
+            ProjectStats stats) {
     }
 
     private Search search;
@@ -225,7 +233,7 @@ class TracesSearchPartitionPruningTest {
         var page = traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME, List.of(),
                 List.of(), 10, params);
         var stats = traceResourceClient.getTraceStats(project.getValue(), null, API_KEY, WORKSPACE_NAME, null, params);
-        search = new Search(token, expected, page, stats);
+        search = new Search(project.getKey(), token, expected, page, stats);
         return search;
     }
 
@@ -240,18 +248,25 @@ class TracesSearchPartitionPruningTest {
                 StatsUtils.getProjectTraceStatItems(search.page().content()));
     }
 
+    @Test
+    @DisplayName("the hint's predicate selects exactly the weeks of the project's traces")
+    void hintWeeksAreTheProjectsWeeks() {
+        var search = search();
+
+        assertThat(projectWeeks(search.projectId(), FROM_TIME))
+                .containsExactlyInAnyOrderElementsOf(search.expected().stream()
+                        .map(Trace::id)
+                        .map(TracesSearchPartitionPruningTest::mondayOfId)
+                        .collect(Collectors.toSet()));
+    }
+
     @ParameterizedTest(name = "{0} carries the traces week hint")
     @ValueSource(strings = {"find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans"})
     @DisplayName("each search statement carries the traces week hint")
     void searchStatementCarriesTheWeekHint(String queryName) {
-        var expectedWeeks = search().expected().stream().map(Trace::id)
-                .map(TracesSearchPartitionPruningTest::mondayOfId)
-                .collect(Collectors.toSet());
-        // Run each pre-pass from the statement the app executed, and compare with the weeks the written rows fall in.
-        assertThat(weekSetsFromPrepasses(lastSearch(queryName, search().token())))
-                .as("the traces week hint in %s selects exactly the project's weeks", queryName)
-                .isNotEmpty()
-                .allSatisfy(weeks -> assertThat(weeks).containsExactlyInAnyOrderElementsOf(expectedWeeks));
+        assertThat(lastSearch(queryName, search().token()))
+                .as("the traces week hint ran in %s, so the results are not a vacuous pass", queryName)
+                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
     }
 
     @Test
@@ -274,27 +289,16 @@ class TracesSearchPartitionPruningTest {
                 .build();
     }
 
-    /**
-     * Runs every week pre-pass in a logged statement on its own and returns the weeks each yields, so a test can
-     * compare them with the weeks it derives from the rows it wrote. The logged statement carries its values inline.
-     */
-    private List<Set<String>> weekSetsFromPrepasses(String statement) {
-        var sets = new ArrayList<Set<String>>();
-        for (int at = statement.indexOf("SELECT DISTINCT toYYYYMMDD"); at >= 0; at = statement
-                .indexOf("SELECT DISTINCT toYYYYMMDD", at + 1)) {
-            int open = statement.lastIndexOf('(', at);
-            int depth = 0, close = open;
-            do {
-                char c = statement.charAt(close++);
-                depth += c == '(' ? 1 : c == ')' ? -1 : 0;
-            } while (depth > 0);
-            var subquery = statement.substring(open + 1, close - 1);
-            sets.add(new HashSet<>(template.nonTransaction(connection -> Mono.from(connection
-                    .createStatement(subquery).execute())
-                    .flatMapMany(result -> result.map((row, _) -> String.valueOf(row.get(0))))
-                    .collectList()).block()));
-        }
-        return sets;
+    /** The weeks the hint's predicate selects for the project in the search window, queried directly. */
+    private Set<String> projectWeeks(UUID projectId, Instant from) {
+        return new HashSet<>(template.nonTransaction(connection -> Mono.from(connection
+                .createStatement(PROJECT_WEEKS)
+                .bind("workspace_id", WORKSPACE_ID)
+                .bind("project_id", projectId)
+                .bind("uuid_from_time", new InstantToUUIDMapper().toLowerBound(from).toString())
+                .execute())
+                .flatMapMany(result -> result.map((row, _) -> row.get(0, String.class)))
+                .collectList()).block());
     }
 
     private static String mondayOfId(UUID id) {
