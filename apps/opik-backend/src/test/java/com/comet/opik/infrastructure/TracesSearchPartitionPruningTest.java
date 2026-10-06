@@ -237,7 +237,7 @@ class TracesSearchPartitionPruningTest {
     /** The searched threads and the responses. */
     @Builder(toBuilder = true)
     private record ThreadSearch(String token, List<String> expectedThreadIds, TraceThreadPage page,
-            ProjectStats stats) {
+            TraceThreadPage searchOnlyPage, ProjectStats stats) {
     }
 
     private ThreadSearch threadSearch() {
@@ -250,12 +250,16 @@ class TracesSearchPartitionPruningTest {
         var page = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .until(() -> traceResourceClient.getTraceThreads(null, seeded.projectName(), API_KEY, WORKSPACE_NAME,
                         List.of(), List.of(), params), threads -> threads.total() == expectedThreadIds.size());
+        // Without a time range the page is resolved by the page-pushdown scan rather than the prefilter.
+        var searchOnlyPage = traceResourceClient.getTraceThreads(null, seeded.projectName(), API_KEY,
+                WORKSPACE_NAME, List.of(), List.of(), Map.of("search", seeded.token()));
         var stats = traceResourceClient.getTraceThreadStats(seeded.projectName(), null, API_KEY, WORKSPACE_NAME,
                 null, params);
         return ThreadSearch.builder()
                 .token(seeded.token())
                 .expectedThreadIds(expectedThreadIds)
                 .page(page)
+                .searchOnlyPage(searchOnlyPage)
                 .stats(stats)
                 .build();
     }
@@ -281,6 +285,8 @@ class TracesSearchPartitionPruningTest {
         var search = threadSearch();
 
         assertThat(search.page().content()).extracting(TraceThread::id)
+                .containsExactlyInAnyOrderElementsOf(search.expectedThreadIds());
+        assertThat(search.searchOnlyPage().content()).extracting(TraceThread::id)
                 .containsExactlyInAnyOrderElementsOf(search.expectedThreadIds());
         assertThat(search.stats().stats())
                 .filteredOn(stat -> StatsMapper.THREAD_COUNT.equals(stat.getName()))
