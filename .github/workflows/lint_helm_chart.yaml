@@ -41,6 +41,9 @@ jobs:
     steps:
         - name: Checkout
           uses: actions/checkout@v7
+          with:
+            # Read-only job (helm only, no git/gh calls): don't leave github.token in .git/config.
+            persist-credentials: false
 
         - name: Install Helm ${{ matrix.helm-version }}
           uses: azure/setup-helm@v5.0.1
@@ -66,6 +69,9 @@ jobs:
     steps:
         - name: Checkout
           uses: actions/checkout@v7
+          with:
+            # Read-only job (helm only, no git/gh calls): don't leave github.token in .git/config.
+            persist-credentials: false
 
         - name: Install Helm
           uses: azure/setup-helm@v5.0.1
@@ -122,6 +128,9 @@ jobs:
     steps:
         - name: Checkout
           uses: actions/checkout@v7
+          with:
+            # Read-only job (helm only, no git/gh calls): don't leave github.token in .git/config.
+            persist-credentials: false
 
         - name: Render with Helm 3.x
           uses: azure/setup-helm@v5.0.1
