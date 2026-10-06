@@ -72,8 +72,10 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -505,9 +507,14 @@ class SpansReadPathPartitionPruningTest {
     @ValueSource(strings = {"find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
             "get_span_stats_feedback_scores"})
     void spanSearchStatementCarriesTheWeekHint(String queryName) {
-        assertThat(lastSpanSearch(queryName, spanSearch().token()))
-                .as("the spans week hint ran in %s, so the results are not a vacuous pass", queryName)
-                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+        var expectedWeeks = spanSearch().expected().stream().map(Span::id)
+                .map(SpansReadPathPartitionPruningTest::mondayOfId)
+                .collect(Collectors.toSet());
+        // Run each pre-pass from the statement the app executed, and compare with the weeks the written rows fall in.
+        assertThat(preparedWeekSets(lastSpanSearch(queryName, spanSearch().token())))
+                .as("the spans week hint in %s selects exactly the project's weeks", queryName)
+                .isNotEmpty()
+                .allSatisfy(weeks -> assertThat(weeks).containsExactlyInAnyOrderElementsOf(expectedWeeks));
     }
 
     @Test
@@ -516,6 +523,35 @@ class SpansReadPathPartitionPruningTest {
         assertThat(lastSpanSearch("find_spans_by_project_id", spanSearch().token()))
                 .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
                 .doesNotContain("IN (SELECT id FROM page_ids)");
+    }
+
+    /**
+     * Runs every week pre-pass in a logged statement on its own and returns the weeks each yields, so a test can
+     * compare them with the weeks it derives from the rows it wrote. The logged statement carries its values inline.
+     */
+    private List<Set<String>> preparedWeekSets(String statement) {
+        var sets = new ArrayList<Set<String>>();
+        for (int at = statement.indexOf("SELECT DISTINCT toYYYYMMDD"); at >= 0; at = statement
+                .indexOf("SELECT DISTINCT toYYYYMMDD", at + 1)) {
+            int open = statement.lastIndexOf('(', at);
+            int depth = 0, close = open;
+            do {
+                char c = statement.charAt(close++);
+                depth += c == '(' ? 1 : c == ')' ? -1 : 0;
+            } while (depth > 0);
+            var subquery = statement.substring(open + 1, close - 1);
+            sets.add(new HashSet<>(template.nonTransaction(connection -> Mono.from(connection
+                    .createStatement(subquery).execute())
+                    .flatMapMany(result -> result.map((row, _) -> String.valueOf(row.get(0))))
+                    .collectList()).block()));
+        }
+        return sets;
+    }
+
+    private static String mondayOfId(UUID id) {
+        var monday = Instant.ofEpochMilli(id.getMostSignificantBits() >>> 16).atZone(ZoneOffset.UTC).toLocalDate()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        return "%04d%02d%02d".formatted(monday.getYear(), monday.getMonthValue(), monday.getDayOfMonth());
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */

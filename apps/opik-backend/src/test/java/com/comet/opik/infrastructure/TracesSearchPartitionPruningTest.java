@@ -46,15 +46,20 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -239,9 +244,14 @@ class TracesSearchPartitionPruningTest {
     @ValueSource(strings = {"find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans"})
     @DisplayName("each search statement carries the traces week hint")
     void searchStatementCarriesTheWeekHint(String queryName) {
-        assertThat(lastSearch(queryName, search().token()))
-                .as("the traces week hint ran in %s, so the results are not a vacuous pass", queryName)
-                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+        var expectedWeeks = search().expected().stream().map(Trace::id)
+                .map(TracesSearchPartitionPruningTest::mondayOfId)
+                .collect(Collectors.toSet());
+        // Run each pre-pass from the statement the app executed, and compare with the weeks the written rows fall in.
+        assertThat(preparedWeekSets(lastSearch(queryName, search().token())))
+                .as("the traces week hint in %s selects exactly the project's weeks", queryName)
+                .isNotEmpty()
+                .allSatisfy(weeks -> assertThat(weeks).containsExactlyInAnyOrderElementsOf(expectedWeeks));
     }
 
     @Test
@@ -262,6 +272,35 @@ class TracesSearchPartitionPruningTest {
                 .feedbackScores(null)
                 .usage(null)
                 .build();
+    }
+
+    /**
+     * Runs every week pre-pass in a logged statement on its own and returns the weeks each yields, so a test can
+     * compare them with the weeks it derives from the rows it wrote. The logged statement carries its values inline.
+     */
+    private List<Set<String>> preparedWeekSets(String statement) {
+        var sets = new ArrayList<Set<String>>();
+        for (int at = statement.indexOf("SELECT DISTINCT toYYYYMMDD"); at >= 0; at = statement
+                .indexOf("SELECT DISTINCT toYYYYMMDD", at + 1)) {
+            int open = statement.lastIndexOf('(', at);
+            int depth = 0, close = open;
+            do {
+                char c = statement.charAt(close++);
+                depth += c == '(' ? 1 : c == ')' ? -1 : 0;
+            } while (depth > 0);
+            var subquery = statement.substring(open + 1, close - 1);
+            sets.add(new HashSet<>(template.nonTransaction(connection -> Mono.from(connection
+                    .createStatement(subquery).execute())
+                    .flatMapMany(result -> result.map((row, _) -> String.valueOf(row.get(0))))
+                    .collectList()).block()));
+        }
+        return sets;
+    }
+
+    private static String mondayOfId(UUID id) {
+        var monday = Instant.ofEpochMilli(id.getMostSignificantBits() >>> 16).atZone(ZoneOffset.UTC).toLocalDate()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        return "%04d%02d%02d".formatted(monday.getYear(), monday.getMonthValue(), monday.getDayOfMonth());
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
