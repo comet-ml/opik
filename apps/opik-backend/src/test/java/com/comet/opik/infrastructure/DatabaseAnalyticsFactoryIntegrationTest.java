@@ -305,6 +305,59 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     }
 
     @Test
+    @DisplayName("session timezone reaches both clients and overrides a value in custom_http_params")
+    void sessionTimezoneIsAppliedToBothClients() {
+        var factory = factoryWith("custom_http_params=session_timezone=America/New_York");
+        factory.setSessionTimezone("UTC");
+
+        assertThat(readSettings(factory.build(), "session_timezone"))
+                .isEqualTo(Map.of("session_timezone", "UTC"));
+        try (var client = factory.buildClient()) {
+            assertThat(readSettings(client, "session_timezone")).isEqualTo(Map.of("session_timezone", "UTC"));
+        }
+    }
+
+    @Test
+    @DisplayName("a factory built in code omits the session timezone, which a readonly=1 user would reject")
+    void factoryBuiltInCodeOmitsTheSessionTimezone() {
+        // The shape of DatabaseAnalyticsModule#buildReadOnlyClient: a bare factory, so the server default (empty) stands.
+        var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, "default");
+
+        try (var client = factory.buildClient()) {
+            assertThat(readSettings(client, "session_timezone")).isEqualTo(Map.of("session_timezone", ""));
+        }
+    }
+
+    private Stream<Arguments> epochSentinelScenarios() {
+        // A non-UTC session in the chain stands in for a non-UTC server: the app binds the absolute epoch
+        // (Instant.EPOCH), while its SQL compares against a timezone-less literal resolved in the session timezone.
+        return Stream.of(
+                Arguments.of("non-UTC session, field unset: the literal is not the epoch", null, false),
+                Arguments.of("non-UTC session, field UTC: the literal is the epoch", "UTC", true));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("epochSentinelScenarios")
+    void epochSentinelLiteralMatchesTheAbsoluteEpoch(String name, String sessionTimezone, boolean expected) {
+        var factory = factoryWith("custom_http_params=session_timezone=America/New_York");
+        factory.setSessionTimezone(sessionTimezone);
+        var sql = "SELECT toDateTime64('1970-01-01 00:00:00', 6) = toDateTime64(0, 6) AS matches";
+
+        var r2dbcMatches = Mono.usingWhen(
+                factory.build().create(),
+                connection -> Flux.from(connection.createStatement(sql).execute())
+                        .flatMap(result -> result.map((row, _) -> row.get("matches", Boolean.class)))
+                        .single(),
+                Connection::close)
+                .block();
+        assertThat(r2dbcMatches).isEqualTo(expected);
+
+        try (var client = factory.buildClient()) {
+            assertThat(client.queryAll(sql).getFirst().getBoolean("matches")).isEqualTo(expected);
+        }
+    }
+
+    @Test
     @DisplayName("a bulk JSONEachRow insert completes against the built client")
     void bulkInsertRoundTrip() throws Exception {
         var factory = factoryWith("custom_http_params=async_insert=0,wait_for_async_insert=1");

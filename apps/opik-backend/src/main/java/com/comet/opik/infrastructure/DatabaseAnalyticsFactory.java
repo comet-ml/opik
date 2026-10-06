@@ -29,6 +29,7 @@ public class DatabaseAnalyticsFactory {
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS = "async_insert_busy_timeout_min_ms";
     private static final String ASYNC_INSERT_MAX_DATA_SIZE = "async_insert_max_data_size";
     private static final String HTTP_HEADERS_PROGRESS_INTERVAL_MS = "http_headers_progress_interval_ms";
+    private static final String SESSION_TIMEZONE = "session_timezone";
     // Shared by the @Min bound and the range check in r2dbcOnlyServerSettings(), so the two cannot disagree.
     private static final int MIN_PROGRESS_HEADER_CADENCE_MS = 1;
     private static final String KEY_VALUE_FORMAT = "%s=%s";
@@ -69,6 +70,15 @@ public class DatabaseAnalyticsFactory {
      * ingestion at the cost of more buffer memory.
      */
     private @Min(1) Long asyncInsertMaxDataSize;
+
+    /**
+     * Timezone for {@code session_timezone}, so timezone-less literals such as the epoch sentinel
+     * {@code toDateTime64('1970-01-01 00:00:00', 6)} resolve to the same instant the Java side binds
+     * ({@code Instant.EPOCH}), whatever timezone the ClickHouse server runs in. Same semantics as
+     * {@link #asyncInsertBusyTimeoutMaxMs}; unset on the readonly free-form SQL factory, whose {@code readonly=1}
+     * user rejects it.
+     */
+    private String sessionTimezone;
 
     /**
      * Cadence (ms) for {@code http_headers_progress_interval_ms}, the server-side throttle on
@@ -211,6 +221,9 @@ public class DatabaseAnalyticsFactory {
         }
         if (asyncInsertMaxDataSize != null) {
             overrides.put(ASYNC_INSERT_MAX_DATA_SIZE, String.valueOf(asyncInsertMaxDataSize));
+        }
+        if (StringUtils.isNotBlank(sessionTimezone)) {
+            overrides.put(SESSION_TIMEZONE, sessionTimezone);
         }
         return overrides;
     }
