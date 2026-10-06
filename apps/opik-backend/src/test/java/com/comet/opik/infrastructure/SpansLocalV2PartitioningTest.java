@@ -135,7 +135,12 @@ class SpansLocalV2PartitioningTest {
             AND id >= :uuid_from_time
             """;
 
-    private static final String SELECT_SEARCH_SCAN_WITH_PROJECT_WEEKS = SELECT_SEARCH_SCAN + """
+    private static final String SELECT_SEARCH_SCAN_WITH_PROJECT_WEEKS = """
+            SELECT id
+            FROM spans_local_v2
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND id >= :uuid_from_time
             AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                 FROM spans_local_v2
@@ -561,7 +566,7 @@ class SpansLocalV2PartitioningTest {
      * query it pins in full.
      */
     @Test
-    void searchScanWithProjectWeeksPrunesToTheProjectsWeeks() {
+    void searchScanWithProjectWeeksPrunesToProjectWeeks() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
         var projectIds = List.of(ID_GENERATOR.generateId(weekInstant(1)), ID_GENERATOR.generateId(weekInstant(2)),

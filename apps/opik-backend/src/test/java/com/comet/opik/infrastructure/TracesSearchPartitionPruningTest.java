@@ -226,7 +226,7 @@ class TracesSearchPartitionPruningTest {
 
     @Test
     @DisplayName("a search bounded to the project's own weeks still returns its matches in every week")
-    void searchBoundedToTheProjectsWeeksReturnsEveryMatch() {
+    void searchBoundedToProjectWeeksReturnsEveryMatch() {
         var search = search();
 
         assertThat(search.page().total()).isEqualTo(search.expected().size());

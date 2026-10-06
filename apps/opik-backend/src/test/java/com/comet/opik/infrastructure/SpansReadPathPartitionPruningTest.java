@@ -493,7 +493,7 @@ class SpansReadPathPartitionPruningTest {
     }
 
     @Test
-    void spanSearchBoundedToTheProjectsWeeksReturnsEveryMatch() {
+    void spanSearchBoundedToProjectWeeksReturnsEveryMatch() {
         var search = spanSearch();
 
         assertThat(search.page().total()).isEqualTo(search.expected().size());
