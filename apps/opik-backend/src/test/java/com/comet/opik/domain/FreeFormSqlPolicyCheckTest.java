@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /** The rule alone; FreeFormSqlPostRunCheckTest runs it on ClickHouse's real query log and plans. */
@@ -125,5 +127,29 @@ class FreeFormSqlPolicyCheckTest {
             FreeFormSqlSubqueries.SubqueryReads subqueryReads, String table, String reason) {
         assertThat(FreeFormSqlPolicyCheck.violation("opik", USER, entries, plan, subqueryReads))
                 .contains(FreeFormSqlPolicyViolation.builder().table(table).reason(reason).build());
+    }
+
+    static Stream<Arguments> invalidViolations() {
+        return Stream.of(
+                arguments(null, "read without a row policy", "table must not be null"),
+                arguments("opik.traces", null, "reason must not be blank"),
+                arguments("opik.traces", "", "reason must not be blank"),
+                arguments("opik.traces", "   ", "reason must not be blank"));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("a violation needs a table, empty when no log entry was found, and a reason")
+    void invalidViolations(String table, String reason, String message) {
+        assertThatThrownBy(() -> FreeFormSqlPolicyViolation.builder().table(table).reason(reason).build())
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining(message);
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {"'', true", "opik.traces, false"})
+    @DisplayName("only the empty table marks a missing log entry")
+    void missingLog(String table, boolean missing) {
+        assertThat(FreeFormSqlPolicyViolation.builder().table(table).reason("r").build().missingLog())
+                .isEqualTo(missing);
     }
 }

@@ -61,8 +61,8 @@ class FreeFormSqlPolicyCheck {
         String prefix = database + ".";
         var plannedReads = new HashSet<String>();
         var filteredReads = new HashSet<String>();
-        List<Map<String, Object>> reads = JSON_PATH_CONTEXT.parse(planJson).read(READS);
-        for (var read : reads) {
+        List<Map<String, Object>> plannedReadNodes = JSON_PATH_CONTEXT.parse(planJson).read(READS);
+        for (var read : plannedReadNodes) {
             String type = String.valueOf(read.get("Node Type"));
             String description = String.valueOf(read.getOrDefault("Description", ""));
             if (UNCHECKED_READS.contains(type)) {
