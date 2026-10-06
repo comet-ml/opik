@@ -79,8 +79,14 @@ public class CsvDatasetItemProcessor {
         }
 
         try {
-            validateCsvHeaders(tempFile);
             uploadSupport.verifyDatasetExists(datasetId, workspaceId, visibility);
+            try {
+                validateCsvHeaders(tempFile);
+            } catch (BadRequestException e) {
+                // Same terminal state as an async failure, so the UI shows the failed-import banner
+                uploadSupport.markFailed(datasetId, workspaceId);
+                throw e;
+            }
             uploadSupport.markProcessing(datasetId, workspaceId);
         } catch (Exception e) {
             uploadSupport.deleteTempFile(tempFile);

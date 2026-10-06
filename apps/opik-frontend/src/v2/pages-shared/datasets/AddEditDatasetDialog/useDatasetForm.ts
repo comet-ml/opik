@@ -189,9 +189,9 @@ const useDatasetForm = ({
   );
 
   const uploadItems = useCallback(
-    (datasetId: string, onDone: () => void) => {
+    (datasetId: string, onDone: (uploaded: boolean) => void) => {
       if (!uploadFile || !uploadFormat) {
-        onDone();
+        onDone(true);
         return;
       }
       const label = formatToHumanLabel(uploadFormat);
@@ -201,6 +201,7 @@ const useDatasetForm = ({
             title: `${label} upload accepted`,
             description: `Your ${label} file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.`,
           });
+          onDone(true);
         },
         onError: (error: unknown) => {
           console.error(`Error uploading ${label} file:`, error);
@@ -212,8 +213,8 @@ const useDatasetForm = ({
             ),
             variant: "destructive",
           });
+          onDone(false);
         },
-        onSettled: onDone,
       };
 
       if (uploadFormat === "csv") {
@@ -252,9 +253,10 @@ const useDatasetForm = ({
         onDatasetCreated?.(newDataset);
       };
 
-      const finalize = () => {
+      const finalize = (uploaded: boolean) => {
         setIsSubmitting(false);
-        if (onCreateSuccess) {
+        // A success toast here would replace the upload error toast
+        if (onCreateSuccess && uploaded) {
           onCreateSuccess(newDataset, navigateToDataset);
         } else {
           navigateToDataset();
@@ -267,7 +269,7 @@ const useDatasetForm = ({
         };
         applyEvaluationCriteria(newDataset.id, uploadThenFinalize);
       } else {
-        applyEvaluationCriteria(newDataset.id, finalize);
+        applyEvaluationCriteria(newDataset.id, () => finalize(true));
       }
     },
     [

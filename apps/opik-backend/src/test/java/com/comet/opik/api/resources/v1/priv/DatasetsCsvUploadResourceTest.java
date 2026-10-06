@@ -473,6 +473,8 @@ class DatasetsCsvUploadResourceTest {
         }
 
         assertThat(getDatasetItems(createdDatasetId)).isEmpty();
+        assertThat(datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE).status())
+                .isEqualTo(DatasetStatus.FAILED);
     }
 
     private Response uploadCsvFile(UUID datasetId, String csvContent) {

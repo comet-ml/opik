@@ -349,6 +349,8 @@ class DatasetsJsonUploadResourceTest {
         }
 
         assertThat(getDatasetItems(datasetId)).isEmpty();
+        assertThat(datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE).status())
+                .isEqualTo(DatasetStatus.FAILED);
     }
 
     @Test
@@ -370,6 +372,8 @@ class DatasetsJsonUploadResourceTest {
         }
 
         assertThat(getDatasetItems(datasetId)).isEmpty();
+        assertThat(datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE).status())
+                .isEqualTo(DatasetStatus.FAILED);
     }
 
     @ParameterizedTest
@@ -386,6 +390,8 @@ class DatasetsJsonUploadResourceTest {
         }
 
         assertThat(getDatasetItems(datasetId)).isEmpty();
+        assertThat(datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE).status())
+                .isEqualTo(DatasetStatus.FAILED);
     }
 
     @Test
@@ -405,6 +411,8 @@ class DatasetsJsonUploadResourceTest {
         }
 
         assertThat(getDatasetItems(datasetId)).isEmpty();
+        assertThat(datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE).status())
+                .isEqualTo(DatasetStatus.FAILED);
     }
 
     @Test

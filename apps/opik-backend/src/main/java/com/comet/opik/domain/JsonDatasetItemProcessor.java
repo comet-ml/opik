@@ -99,7 +99,13 @@ public class JsonDatasetItemProcessor {
         try {
             // Cheap lookup first so a missing/inaccessible dataset doesn't pay for the full-file parse
             uploadSupport.verifyDatasetExists(datasetId, workspaceId, visibility);
-            validateStructure(tempFile, format);
+            try {
+                validateStructure(tempFile, format);
+            } catch (BadRequestException e) {
+                // Same terminal state as an async failure, so the UI shows the failed-import banner
+                uploadSupport.markFailed(datasetId, workspaceId);
+                throw e;
+            }
             uploadSupport.markProcessing(datasetId, workspaceId);
         } catch (Exception e) {
             uploadSupport.deleteTempFile(tempFile);
