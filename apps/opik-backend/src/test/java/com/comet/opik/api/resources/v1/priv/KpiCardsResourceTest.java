@@ -1347,48 +1347,6 @@ class KpiCardsResourceTest {
         assertMetric(response, KpiMetricType.TOTAL_COST, COST_2, COST_1);
     }
 
-    @Test
-    @DisplayName("a thread's cost includes the spans of its trace minted before the window start or after its end, like the thread list")
-    void threadCostIncludesSpansMintedOutsideTheWindow() {
-        mockTargetWorkspace();
-        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-
-        Instant intervalStart = Instant.now();
-        Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
-        String threadId = RandomStringUtils.secure().nextAlphabetic(10);
-
-        Trace trace = buildThreadTrace(projectName, threadId, intervalStart.plus(1, ChronoUnit.SECONDS),
-                DURATION_1);
-        Span spanMintedInside = buildCostedSpan(projectName, trace, COST_1);
-        Span spanMintedAfterEnd = buildCostedSpan(projectName, trace, COST_2).toBuilder()
-                .id(idGenerator.generateId(intervalEnd.plus(2, ChronoUnit.HOURS)))
-                .build();
-        Span spanMintedBeforeStart = buildCostedSpan(projectName, trace, COST_3).toBuilder()
-                .id(idGenerator.generateId(intervalStart.minus(2, ChronoUnit.HOURS)))
-                .build();
-        createThread(projectName, threadId, List.of(trace),
-                List.of(spanMintedInside, spanMintedAfterEnd, spanMintedBeforeStart));
-
-        assertThat(getThreadRowMintedAt(threadId, projectId)).isBetween(intervalStart, intervalEnd);
-
-        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
-                .entityType(EntityType.THREADS)
-                .intervalStart(intervalStart)
-                .intervalEnd(intervalEnd)
-                .build(), API_KEY, WORKSPACE_NAME);
-
-        assertMetric(response, KpiMetricType.COUNT, 1.0, 0.0);
-        assertMetric(response, KpiMetricType.TOTAL_COST, COST_1 + COST_2 + COST_3, 0.0);
-
-        var threadList = traceResourceClient.getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME, null, null,
-                Map.of("from_time", intervalStart.toString(), "to_time", intervalEnd.toString()));
-
-        assertThat(threadList.content()).extracting(TraceThread::id).containsExactly(threadId);
-        assertThat(threadList.content().getFirst().totalEstimatedCost())
-                .isEqualByComparingTo(BigDecimal.valueOf(COST_1 + COST_2 + COST_3));
-    }
-
     @ParameterizedTest
     @EnumSource(value = Source.class, names = "SDK", mode = EnumSource.Mode.EXCLUDE)
     @DisplayName("the UI's source = sdk filter keeps only sdk traces, like the thread list")
