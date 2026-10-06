@@ -105,6 +105,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -1734,6 +1735,74 @@ class AutomationRuleEvaluatorsResourceTest {
                 var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
                 assertTraceLogResponse(logPage, id, trace);
             });
+        }
+
+        @Test
+        void getLogsUserDefinedMetricPythonScorerWhenNoDeclaredArgumentResolves() throws JsonProcessingException {
+            // Deliberately no WireMock stub: the scorer must not call the evaluator at all, and if it did
+            // the unstubbed endpoint would 404 into the ERROR log the assertions below reject.
+            var ruleName = "rule-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
+                    .name(ruleName)
+                    .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
+                            .metric(USER_DEFINED_METRIC)
+                            .arguments(Map.of(
+                                    "expects_sql", "input.expects_sql",
+                                    "plan", "output.execution_plan"))
+                            .build())
+                    .samplingRate(1f)
+                    .filters(List.of())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // Carries neither declared path, so every argument resolves to null and the map comes back empty.
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
+                    .threadId(null) // Must be null for trace-level evaluation
+                    .input(OBJECT_MAPPER.readTree("""
+                            {
+                                "question": "how many rows?"
+                            }
+                            """))
+                    .output(OBJECT_MAPPER.readTree("""
+                            {
+                                "response": "abc"
+                            }
+                            """))
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Asserted as the fully rendered line, which is what actually lands in the table.
+            var expectedMessage = ("None of the metric's declared arguments resolved, so there is no data to"
+                    + " evaluate. Check the declared paths against the input, output and metadata present on the"
+                    + " entity. traceId '%s', rule '%s', unresolved arguments: 'expects_sql' ->"
+                    + " 'input.expects_sql', 'plan' -> 'output.execution_plan'").formatted(trace.id(), ruleName);
+
+            // Explicit window: these logs reach ClickHouse through an async batching appender, so under load
+            // the write outruns Awaitility's 10s default and times out on a correct result.
+            Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(500, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+
+                        // The line has to survive the round-trip into the log table and come back off the API.
+                        assertThat(logPage.content()).anySatisfy(log -> {
+                            assertThat(log.level()).isEqualTo(LogLevel.WARN);
+                            assertThat(log.ruleId()).isEqualTo(id);
+                            assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
+                            assertThat(log.message()).isEqualTo(expectedMessage);
+                        });
+
+                        // A user-configuration mismatch is not a backend fault, so nothing on this rule may be ERROR.
+                        assertThat(logPage.content()).noneMatch(log -> log.level() == LogLevel.ERROR);
+
+                        // Nothing was sent on this run, so the "Sending" line must be absent from what is read.
+                        assertThat(logPage.content()).noneMatch(log -> log.message().contains("to Python evaluator"));
+                    });
         }
 
         @Test
