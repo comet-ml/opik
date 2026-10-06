@@ -34,7 +34,7 @@ const PlaygroundPrompts = ({
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel } =
+  const { calculateModelProvider, calculateDefaultModel, hasRegistryModels } =
     useLLMProviderModelsData();
 
   useEffect(() => {
@@ -67,6 +67,7 @@ const PlaygroundPrompts = ({
           key={promptId}
           providerKeys={providerKeys}
           isPendingProviderKeys={isPendingProviderKeys}
+          hasRegistryModels={hasRegistryModels}
           providerResolver={calculateModelProvider}
           modelResolver={calculateDefaultModel}
           onRun={runSingle ? () => runSingle(promptId) : undefined}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react";
 import first from "lodash/first";
+import isEmpty from "lodash/isEmpty";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
@@ -321,6 +322,7 @@ const useLLMProviderModelsData = () => {
     isFetched,
     isError,
     error,
+    hasRegistryModels: !isEmpty(fetched),
   };
 };
 

@@ -1,6 +1,10 @@
 import React from "react";
 import { act, render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   afterEach,
   beforeEach,
@@ -12,6 +16,7 @@ import {
 } from "vitest";
 
 import PlaygroundPage from "./PlaygroundPage";
+import { TooltipProvider } from "@/ui/tooltip";
 import usePlaygroundStore from "@/store/PlaygroundStore";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import api, {
@@ -155,6 +160,55 @@ const OPEN_ROUTER_REGISTRY: LlmModelsByProvider = {
   ],
 };
 
+const ANTHROPIC_AND_OPENAI_KEYS = {
+  content: [
+    { id: "key-1", provider: PROVIDER_TYPE.ANTHROPIC },
+    { id: "key-2", provider: PROVIDER_TYPE.OPEN_AI },
+  ],
+  total: 2,
+};
+
+const OPENAI_REGISTRY: LlmModelsByProvider = {
+  [PROVIDER_TYPE.OPEN_AI]: [
+    {
+      id: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      label: "GPT 4o Mini",
+      structuredOutput: true,
+      reasoning: false,
+    },
+    {
+      id: PROVIDER_MODEL_TYPE.GPT_4_1_MINI,
+      label: "GPT 4.1 Mini",
+      structuredOutput: true,
+      reasoning: false,
+    },
+  ],
+};
+
+const storePrompts = (
+  prompts: { model: PROVIDER_MODEL_TYPE; provider: COMPOSED_PROVIDER_TYPE }[],
+) => {
+  const promptMap = Object.fromEntries(
+    prompts.map(({ model, provider }, index) => [
+      `p${index + 1}`,
+      {
+        id: `p${index + 1}`,
+        name: "Prompt",
+        messages: [],
+        model,
+        provider,
+        configs: getDefaultConfigByProvider(provider, model),
+      },
+    ]),
+  );
+
+  usePlaygroundStore.setState({
+    lastActiveProjectId: PROJECT_ID,
+    promptIds: Object.keys(promptMap),
+    promptMap,
+  });
+};
+
 type Reply = () => Promise<{ data: unknown }>;
 
 const reply =
@@ -205,7 +259,9 @@ const renderPage = () => {
 
   render(
     <QueryClientProvider client={queryClient}>
-      <PlaygroundPage />
+      <TooltipProvider>
+        <PlaygroundPage />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 };
@@ -335,5 +391,60 @@ describe("PlaygroundPage default prompt", () => {
       ),
       throttling: 2,
     });
+  });
+});
+
+describe("PlaygroundPage stored models", () => {
+  const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
+  const GEMINI = PROVIDER_TYPE.GEMINI as COMPOSED_PROVIDER_TYPE;
+
+  afterEach(() => {
+    focusManager.setFocused(undefined);
+  });
+
+  it("keeps every stored model while the model registry has failed", async () => {
+    backend.providerKeys = reply(ANTHROPIC_AND_OPENAI_KEYS);
+    backend.registry = fail;
+    storePrompts([
+      { model: PROVIDER_MODEL_TYPE.GPT_4O_MINI, provider: OPEN_AI },
+      { model: PROVIDER_MODEL_TYPE.GPT_4_1_MINI, provider: OPEN_AI },
+    ]);
+
+    renderPage();
+    await advance(30_000);
+
+    expect(variantCards()).toHaveLength(2);
+    expect(storedPrompts().map(({ model }) => model)).toEqual([
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.GPT_4_1_MINI,
+    ]);
+  });
+
+  it("checks the stored models once the model registry answers after failing", async () => {
+    backend.providerKeys = reply(ANTHROPIC_AND_OPENAI_KEYS);
+    backend.registry = fail;
+    storePrompts([
+      { model: PROVIDER_MODEL_TYPE.GPT_4O_MINI, provider: OPEN_AI },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, provider: GEMINI },
+    ]);
+
+    renderPage();
+    await advance(30_000);
+
+    expect(storedPrompts().map(({ model }) => model)).toEqual([
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+    ]);
+
+    backend.registry = reply(OPENAI_REGISTRY);
+    await act(async () => {
+      focusManager.setFocused(true);
+    });
+    await advance();
+
+    expect(storedPrompts().map(({ model }) => model)).toEqual([
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    ]);
   });
 });
