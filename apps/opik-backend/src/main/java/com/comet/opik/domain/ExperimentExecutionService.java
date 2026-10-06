@@ -141,7 +141,9 @@ public class ExperimentExecutionService {
 
                                                         if (messages.size() > experimentExecutionConfig
                                                                 .getStreamMaxLen()) {
-                                                            return Mono.error(tooLargeToRun(messages.size()));
+                                                            return markExperimentsFailed(experimentIds)
+                                                                    .then(Mono.error(
+                                                                            tooLargeToRun(messages.size())));
                                                         }
 
                                                         return itemPublisher.publish(batchId, messages, testSuite)
@@ -179,16 +181,26 @@ public class ExperimentExecutionService {
                     .status(ExperimentStatus.CANCELLED)
                     .build();
 
-            // Marked first: the mark is what stops an item a consumer already holds, and purging before
-            // marking would leave that window unguarded
-            return cancellationService.cancel(workspaceId, experimentIds)
-                    .thenMany(Flux.fromIterable(experimentIds)
-                            .concatMap(experimentId -> experimentService.update(experimentId, statusUpdate)
-                                    .then(cancellationService.purgeQueued(workspaceId, experimentId))
-                                    .flatMap(drained -> recordFinishedIfDrained(experimentId, drained))))
-                    .then()
-                    .doOnSuccess(unused -> log.info("Cancelled '{}' experiments, workspaceId '{}'",
-                            experimentIds.size(), workspaceId));
+            return stillRunning(experimentIds)
+                    .flatMap(running -> {
+                        if (running.isEmpty()) {
+                            log.info("Nothing to cancel, all '{}' experiments had already finished",
+                                    experimentIds.size());
+                            return Mono.<Void>empty();
+                        }
+
+                        // Marked first: the mark is what stops an item a consumer already holds, and
+                        // purging before marking would leave that window unguarded
+                        return cancellationService.cancel(workspaceId, running)
+                                .thenMany(Flux.fromIterable(running)
+                                        .concatMap(experimentId -> experimentService
+                                                .update(experimentId, statusUpdate)
+                                                .then(cancellationService.purgeQueued(workspaceId, experimentId))
+                                                .flatMap(drained -> recordFinishedIfDrained(experimentId, drained))))
+                                .then()
+                                .doOnSuccess(unused -> log.info("Cancelled '{}' experiments, workspaceId '{}'",
+                                        running.size(), workspaceId));
+                    });
         });
     }
 
@@ -309,6 +321,23 @@ public class ExperimentExecutionService {
     }
 
     /**
+     * The ones a stop can still affect. An experiment that has already finished must keep the outcome
+     * it earned: a prompt that completes before its siblings keeps its Stop button until the whole run
+     * settles, so cancelling what is already done is a click away and would relabel it.
+     */
+    private Mono<Set<UUID>> stillRunning(Set<UUID> experimentIds) {
+        return Flux.fromIterable(experimentIds)
+                .filterWhen(experimentId -> experimentService.getById(experimentId)
+                        .map(experiment -> experiment.status() == null || !experiment.status().isTerminal())
+                        .onErrorResume(error -> {
+                            log.warn("Could not read experiment '{}' before cancelling, cancelling anyway",
+                                    experimentId, error);
+                            return Mono.just(true);
+                        }))
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * A run whose remaining items were all purged has stopped producing with nothing left to notice
      * it: no message will reach a consumer to count the last one down. Anything above zero is still
      * with a consumer, which will record it on the way out.
@@ -319,6 +348,20 @@ public class ExperimentExecutionService {
         }
 
         return experimentService.update(experimentId, ExperimentUpdate.builder().finished(true).build());
+    }
+
+    /**
+     * The experiment records exist before their items are counted, so a run refused at that point
+     * would otherwise be left behind reading as still running, for work that will never start.
+     */
+    private Mono<Void> markExperimentsFailed(List<UUID> experimentIds) {
+        var statusUpdate = ExperimentUpdate.builder()
+                .status(ExperimentStatus.FAILED)
+                .finished(true)
+                .build();
+        return Flux.fromIterable(experimentIds)
+                .concatMap(id -> experimentService.update(id, statusUpdate))
+                .then();
     }
 
     /**
