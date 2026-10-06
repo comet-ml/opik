@@ -8,12 +8,11 @@
  * (plus Anthropic's max output tokens) fall back to a default rather than hiding, so absence from
  * the config says nothing.
  *
- * The plain temperature and max-output-tokens sliders check this list too, so it still holds when a
- * config carries a key its surface cannot keep. Every surface stores temperature today, and the
- * Claude sampling choice does not consult it.
+ * The plain max-output-tokens sliders check this list too, so it still holds when a config carries
+ * the key. Temperature is left out on purpose: every surface stores it, and listing it would also
+ * mean teaching the Claude sampling choice about it.
  */
 export type ModelConfigParam =
-  | "temperature"
   | "topP"
   | "maxCompletionTokens"
   | "reasoningEffort"

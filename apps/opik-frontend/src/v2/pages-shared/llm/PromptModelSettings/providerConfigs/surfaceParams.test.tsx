@@ -13,7 +13,6 @@ import GeminiModelConfigs from "./GeminiModelConfigs";
 import OpenAIModelConfigs from "./OpenAIModelConfigs";
 import VertexAIModelConfigs from "./VertexAIModelConfigs";
 import {
-  ModelConfigParam,
   OPTIMIZATION_UNSUPPORTED_PARAMS,
   RULE_UNSUPPORTED_PARAMS,
 } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -117,47 +116,6 @@ describe("controls an evaluator rule cannot store", () => {
       screen.queryByTestId("maxCompletionTokens-input"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
-  });
-});
-
-describe("a surface that cannot store temperature", () => {
-  const CUSTOM_CONFIG = {
-    temperature: 0.4,
-    maxCompletionTokens: 4000,
-  } as LLMCustomConfigsType;
-  const UNSUPPORTED_TEMPERATURE: ReadonlySet<ModelConfigParam> = new Set([
-    "temperature",
-  ]);
-
-  it("hides the temperature slider on the custom panel", () => {
-    renderPanel(
-      <CustomModelConfigs
-        configs={CUSTOM_CONFIG}
-        model={"custom-llm/gw/mistral-large-2411" as PROVIDER_MODEL_TYPE}
-        onChange={vi.fn()}
-        unsupportedParams={UNSUPPORTED_TEMPERATURE}
-      />,
-    );
-
-    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
-    expect(screen.getByTestId("maxCompletionTokens-input")).toBeInTheDocument();
-  });
-
-  // Pins today's behaviour: ExclusiveSamplingParams only asks about topP, so a Claude model keeps
-  // its temperature half. No surface lists temperature yet; one that does needs the choice to learn it.
-  it("still offers the Claude sampling choice with temperature live", () => {
-    renderPanel(
-      <CustomModelConfigs
-        configs={CUSTOM_CONFIG}
-        model={"custom-llm/gw/claude-opus-4-6" as PROVIDER_MODEL_TYPE}
-        onChange={vi.fn()}
-        unsupportedParams={UNSUPPORTED_TEMPERATURE}
-      />,
-    );
-
-    expect(screen.getByText("Sampling")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Temperature" })).toBeChecked();
-    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
   });
 });
 

@@ -65,7 +65,7 @@ const CustomModelConfig = ({
         />
       ) : (
         <>
-          {supports("temperature") && !isUndefined(configs.temperature) && (
+          {!isUndefined(configs.temperature) && (
             <SliderInputControl
               value={configs.temperature}
               onChange={(v) => onChange({ temperature: v })}
