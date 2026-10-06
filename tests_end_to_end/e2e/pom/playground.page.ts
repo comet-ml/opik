@@ -1487,13 +1487,11 @@ export class PlaygroundPage {
     return test.step(`measure ${panel} panel header/body column drift`, async () => {
       const half = (h: 'header' | 'body') =>
         panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
-      const headerLefts = new Map(
-        await half('header')
-          .locator('th[data-header-id]')
-          .evaluateAll((cells) =>
-            cells.map((c) => [c.getAttribute('data-header-id') ?? '', c.getBoundingClientRect().left] as const),
-          ),
-      );
+      const headerCells = await half('header')
+        .locator('th[data-header-id]')
+        .evaluateAll((cells) =>
+          cells.map((c) => [c.getAttribute('data-header-id') ?? '', c.getBoundingClientRect().left] as const),
+        );
       const firstRow = half('body').locator('tr[data-row-id]').first();
       const cellIdPrefix = `${await firstRow.getAttribute('data-row-id')}_`;
       const bodyLefts = await firstRow.locator('td[data-cell-id]').evaluateAll(
@@ -1504,10 +1502,12 @@ export class PlaygroundPage {
           }),
         cellIdPrefix,
       );
-      const headerless = bodyLefts.filter(([columnId]) => !headerLefts.has(columnId));
+      const columnIds = (cells: ReadonlyArray<readonly [string, number]>) =>
+        cells.map(([columnId]) => columnId).sort();
+      const headerLefts = new Map(headerCells);
 
       expect(bodyLefts.length).toBeGreaterThan(0);
-      expect(headerless).toEqual([]);
+      expect(columnIds(bodyLefts)).toEqual(columnIds(headerCells));
       return Math.max(
         ...bodyLefts.map(([columnId, left]) => Math.abs(left - (headerLefts.get(columnId) ?? Number.NaN))),
       );
