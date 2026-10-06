@@ -296,13 +296,15 @@ If a metric throws on an item (a judge API error, a rate limit, missing argument
 
 ```json
 {
-  "name": "hallucination",
+  "name": "hallucination_metric",
   "value": 0,
   "reason": "<error message>",
   "scoringFailed": true
 }
 ```
 
+- The failed score appears in `result.testResults[].scoreResults` with `value: 0`. Filter on `scoringFailed` when you compute your own aggregates.
 - Failed scores are excluded from the metric's average and are not logged on the trace.
-- The summary shows how many scores failed next to the average, for example `hallucination: 0.9000 (avg) - 3 failed`. If every score of a metric failed, it shows `None (avg)`.
-- In a test suite, an evaluator that throws fails the item's run.
+- The summary shows how many scores failed next to the average, for example `hallucination_metric: 0.9000 (avg) - 3 failed`. If every score of a metric failed, it shows `None (avg)`.
+- If the task itself throws, the item gets a failed score named `__opik_task_error__`. It is reported separately and left out of the metric lines.
+- In a test suite, an evaluator that throws fails the item's run. It is not sent to Opik as an assertion result.

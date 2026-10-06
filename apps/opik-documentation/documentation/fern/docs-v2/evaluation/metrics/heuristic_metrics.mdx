@@ -375,7 +375,7 @@ Install the optional dependency when using this metric:
 pip install textstat
 ```
 
-Pass `language` to score text in another language, for example `Readability(language="de_DE")`. It sets the `textstat` locale for syllable counting and both Flesch formulas (default `en_US`). If `textstat` does not know the locale, scoring raises `MetricComputationError` and the score is recorded as failed.
+Pass `language` to score text in another language, for example `Readability(language="de_DE")`. It sets the `textstat` locale used for syllable counting, and so for both Flesch scores (default `en_US`). If `textstat` does not know the locale, `score()` raises `MetricComputationError`; inside `evaluate()` the score is recorded as failed.
 
 Pass `enforce_bounds=True` alongside `min_grade` and/or `max_grade` to turn the metric into a strict guardrail that only reports 1.0 when the text meets your grade limits.
 

@@ -60,7 +60,7 @@ Below are instructions for obtaining API keys and other required information for
 3. Click "Create new secret key"
 4. Copy your API key (it will only be shown once)
 5. In Opik, select "OpenAI" as the provider and paste your key
-6. (Optional) Under **Custom headers**, add any static HTTP headers to send with every request to OpenAI
+6. (Optional) Under **Custom headers**, add any static HTTP headers to send with every request to OpenAI (see the note under OpenRouter for the headers you can't set)
 
 #### Anthropic
 
@@ -83,8 +83,9 @@ Below are instructions for obtaining API keys and other required information for
 
 <Note>
   For OpenAI and OpenRouter, the `Authorization` and `api-key` headers are rejected, because they would override the API
-  key. Put the key in the API key field instead. Unlike the Custom provider workaround, a built-in provider with custom
-  headers keeps Opik cost tracking.
+  key, with the error "Use the API key field instead of this header". Put the key in the API key field instead. You no
+  longer need a Custom provider entry (see vLLM / Custom Provider below) just to send headers, and the built-in provider
+  keeps Opik cost tracking.
 </Note>
 
 #### Gemini
