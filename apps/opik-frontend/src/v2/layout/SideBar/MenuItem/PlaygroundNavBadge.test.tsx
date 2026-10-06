@@ -10,7 +10,7 @@ let hasUnseenRunCompletion: boolean;
 let isRunInFlight: boolean;
 let statuses: (EXPERIMENT_STATUS | undefined)[];
 const setHasUnseenRunCompletion = vi.fn();
-const setIsRunInFlight = vi.fn();
+const settleRun = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({
   useRouterState: ({ select }: { select: (s: unknown) => boolean }) =>
@@ -41,7 +41,7 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useHasUnseenRunCompletion: () => hasUnseenRunCompletion,
   useSetHasUnseenRunCompletion: () => setHasUnseenRunCompletion,
   useIsRunInFlight: () => isRunInFlight,
-  useSetIsRunInFlight: () => setIsRunInFlight,
+  useSettleRun: () => settleRun,
 }));
 
 const queriesEnabled = () =>
@@ -52,7 +52,7 @@ const renderBadge = () => render(<PlaygroundNavBadge collapsed={false} />);
 describe("PlaygroundNavBadge", () => {
   beforeEach(() => {
     setHasUnseenRunCompletion.mockClear();
-    setIsRunInFlight.mockClear();
+    settleRun.mockClear();
     useQueriesSpy.mockClear();
     isRunInFlight = true;
     isOnPlayground = false;
@@ -93,7 +93,7 @@ describe("PlaygroundNavBadge", () => {
 
     renderBadge();
 
-    expect(setIsRunInFlight).toHaveBeenCalledWith(false);
+    expect(settleRun).toHaveBeenCalled();
   });
 
   it("flags a run that finished while the user was elsewhere", () => {

@@ -204,20 +204,26 @@ const PlaygroundPage = () => {
   );
   const datasetName = selectedDataset?.name || null;
 
-  const { runAll, stopAll, runSingle, stopSingle } = useActionButtonActions({
-    workspaceName,
-    datasetName,
-    datasetVersionId: parsedVersionId || undefined,
-    datasetId: plainDatasetId || undefined,
-    versionHash: versionHash || undefined,
-    projectName: activeProject?.name,
-  });
+  const { runAll, stopAll, stopWatching, runSingle, stopSingle } =
+    useActionButtonActions({
+      workspaceName,
+      datasetName,
+      datasetVersionId: parsedVersionId || undefined,
+      datasetId: plainDatasetId || undefined,
+      versionHash: versionHash || undefined,
+      projectName: activeProject?.name,
+    });
 
   const isExperimentMode = !!datasetId && canViewDatasets;
 
+  // Through a ref, with no dependencies: this must run when the page goes away and at no other
+  // time. Depending on the callback re-runs the cleanup whenever its identity changes — which it
+  // does once the dataset id resolves — tearing down a run that is still going.
+  const stopWatchingRef = useRef(stopWatching);
+  stopWatchingRef.current = stopWatching;
   useEffect(() => {
-    return () => stopAll();
-  }, [stopAll]);
+    return () => stopWatchingRef.current();
+  }, []);
 
   const headerMaxWidth = isPendingPlaygroundSetup
     ? undefined

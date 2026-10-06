@@ -159,6 +159,8 @@ export type PlaygroundStore = {
   datasetItemsTotal: number | null;
   hasUnseenRunCompletion: boolean;
   isRunInFlight: boolean;
+  /** True from mount until a reloaded page has learned whether its run is still going. */
+  isResumingRun: boolean;
   scoresByDatasetId: Record<string, string[] | null>;
   appliedChatPromptVersionsBackfilled: boolean;
 
@@ -189,6 +191,8 @@ export type PlaygroundStore = {
   setPromptRunning: (promptId: string, running: boolean) => void;
   setAllRunning: (running: boolean) => void;
   clearRunningMap: () => void;
+  settleRun: () => void;
+  setIsResumingRun: (value: boolean) => void;
   setExperimentName: (name: string | null) => void;
   setSuggestedExperimentName: (name: string) => void;
   setDatasetFilters: (filters: Filters) => void;
@@ -232,6 +236,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       datasetItemsTotal: null,
       hasUnseenRunCompletion: false,
       isRunInFlight: false,
+      isResumingRun: false,
       scoresByDatasetId: {},
       appliedChatPromptVersionsBackfilled: true,
 
@@ -418,6 +423,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       clearRunningMap: () => {
         set((state) => ({ ...state, isRunningMap: {} }));
       },
+      settleRun: () => {
+        set((state) => ({ ...state, isRunningMap: {}, isRunInFlight: false }));
+      },
+      setIsResumingRun: (value) => {
+        set((state) => ({ ...state, isResumingRun: value }));
+      },
       setExperimentName: (name) => {
         set((state) => ({
           ...state,
@@ -570,6 +581,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           datasetItemsTotal,
           isRunning,
           isRunningMap,
+          isResumingRun,
           ...rest
         } = state;
         /* eslint-enable @typescript-eslint/no-unused-vars */
@@ -705,6 +717,15 @@ export const useSetAllRunning = () =>
 
 export const useClearRunningMap = () =>
   usePlaygroundStore((state) => state.clearRunningMap);
+
+export const useSettleRun = () =>
+  usePlaygroundStore((state) => state.settleRun);
+
+export const useIsResumingRun = () =>
+  usePlaygroundStore((state) => state.isResumingRun);
+
+export const useSetIsResumingRun = () =>
+  usePlaygroundStore((state) => state.setIsResumingRun);
 
 export const useExperimentName = () =>
   usePlaygroundStore((state) => state.experimentName);
