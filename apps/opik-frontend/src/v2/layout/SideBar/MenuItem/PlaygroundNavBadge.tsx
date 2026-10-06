@@ -10,7 +10,7 @@ import {
   useHasUnseenRunCompletion,
   useIsRunInFlight,
   useSetHasUnseenRunCompletion,
-  useSetIsRunInFlight,
+  useSettleRun,
 } from "@/store/PlaygroundStore";
 
 const POLL_INTERVAL_MS = 10000;
@@ -35,7 +35,7 @@ const PlaygroundNavBadge: React.FC<PlaygroundNavBadgeProps> = ({
   const hasUnseenRunCompletion = useHasUnseenRunCompletion();
   const setHasUnseenRunCompletion = useSetHasUnseenRunCompletion();
   const isRunInFlight = useIsRunInFlight();
-  const setIsRunInFlight = useSetIsRunInFlight();
+  const settleRun = useSettleRun();
 
   const isOnPlayground = useRouterState({
     select: (state) => state.location.pathname.endsWith("/playground"),
@@ -69,7 +69,7 @@ const PlaygroundNavBadge: React.FC<PlaygroundNavBadgeProps> = ({
 
   useEffect(() => {
     if (shouldWatch && allLoaded && allTerminal) {
-      setIsRunInFlight(false);
+      settleRun();
       setHasUnseenRunCompletion(true);
     }
   }, [
@@ -77,7 +77,7 @@ const PlaygroundNavBadge: React.FC<PlaygroundNavBadgeProps> = ({
     allLoaded,
     allTerminal,
     setHasUnseenRunCompletion,
-    setIsRunInFlight,
+    settleRun,
   ]);
 
   useEffect(() => {
