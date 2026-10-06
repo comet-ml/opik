@@ -207,7 +207,7 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
           userPrompt: '{{input}}',
           modelDisplayName: HANGING_MODEL,
         });
-        await playground.duplicateLastVariant();
+        await playground.duplicateVariant(0);
         await playground.clickRunExperiment();
         await playground.selectRunExperimentSource({ mode: 'dataset', entityName: dataset.name });
         await expect(playground.loadedSourcePill()).toBeVisible();
@@ -329,7 +329,7 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
           userPrompt: '{{input}}',
           modelDisplayName: HANGING_MODEL,
         });
-        await playground.duplicateLastVariant();
+        await playground.duplicateVariant(0);
         await playground.clickRunExperiment();
         await playground.selectRunExperimentSource({ mode: 'dataset', entityName: dataset.name });
         await expect(playground.loadedSourcePill()).toBeVisible();

@@ -59,7 +59,7 @@ test.describe('Playground — reset', { tag: ['@t2-cuj', '@area:playground'] }, 
 
       await test.step('Grow the prompt list: type a prompt and duplicate it', async () => {
         await playground.fillUserMessage('Summarise the following in one sentence.');
-        await playground.duplicateLastVariant();
+        await playground.duplicateVariant(0);
         // Assert the state the next step resets FROM. Without this, a reset
         // that did nothing at all would pass the assertions below, because the
         // page would already be sitting at one empty card.
