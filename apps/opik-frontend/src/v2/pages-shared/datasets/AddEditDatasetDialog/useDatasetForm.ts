@@ -189,7 +189,7 @@ const useDatasetForm = ({
   );
 
   const uploadItems = useCallback(
-    (datasetId: string, onDone: (uploaded: boolean) => void) => {
+    (datasetId: string, onDone: (uploadAccepted: boolean) => void) => {
       if (!uploadFile || !uploadFormat) {
         onDone(true);
         return;
@@ -253,10 +253,10 @@ const useDatasetForm = ({
         onDatasetCreated?.(newDataset);
       };
 
-      const finalize = (uploaded: boolean) => {
+      const finalize = (uploadAccepted: boolean) => {
         setIsSubmitting(false);
         // A success toast here would replace the upload error toast
-        if (onCreateSuccess && uploaded) {
+        if (onCreateSuccess && uploadAccepted) {
           onCreateSuccess(newDataset, navigateToDataset);
         } else {
           navigateToDataset();

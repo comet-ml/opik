@@ -35,21 +35,21 @@ vi.mock("@/api/datasets/useDatasetCreateMutation", () => ({
   }),
 }));
 
+const uploadMutate = (_: unknown, options: MutateOptions) => {
+  if (uploadSucceeds) {
+    options.onSuccess?.();
+  } else {
+    options.onError?.(new Error("File failed validation"));
+  }
+  options.onSettled?.();
+};
+
 vi.mock("@/api/datasets/useDatasetItemsFromCsvMutation", () => ({
-  default: () => ({
-    mutate: (_: unknown, options: MutateOptions) => {
-      if (uploadSucceeds) {
-        options.onSuccess?.();
-      } else {
-        options.onError?.(new Error("CSV contains duplicate column header"));
-      }
-      options.onSettled?.();
-    },
-  }),
+  default: () => ({ mutate: uploadMutate }),
 }));
 
 vi.mock("@/api/datasets/useDatasetItemsFromJsonMutation", () => ({
-  default: () => ({ mutate: vi.fn() }),
+  default: () => ({ mutate: uploadMutate }),
 }));
 
 vi.mock("@/api/datasets/useDatasetUpdateMutation", () => ({
@@ -60,7 +60,7 @@ vi.mock("@/api/datasets/useDatasetItemChangesMutation", () => ({
   default: () => ({ mutate: vi.fn() }),
 }));
 
-const createWithCsv = () => {
+const createWithFile = (file: File) => {
   const setOpen = vi.fn();
   const onDatasetCreated = vi.fn();
   const onCreateSuccess = vi.fn();
@@ -77,9 +77,7 @@ const createWithCsv = () => {
   );
 
   act(() => {
-    result.current.handleFileSelect(
-      new File(["input,input\na,b\n"], "items.csv", { type: "text/csv" }),
-    );
+    result.current.handleFileSelect(file);
   });
   act(() => {
     result.current.submitHandler();
@@ -93,30 +91,39 @@ beforeEach(() => {
   uploadSucceeds = true;
 });
 
-describe("useDatasetForm create with file upload", () => {
-  it("calls onCreateSuccess when the upload is accepted", () => {
-    const { onCreateSuccess, onDatasetCreated } = createWithCsv();
+const FILES = [
+  { label: "CSV", file: new File(["input\na\n"], "items.csv") },
+  { label: "JSON", file: new File(['[{"input":"a"}]'], "items.json") },
+];
 
-    expect(onCreateSuccess).toHaveBeenCalledWith(
-      NEW_DATASET,
-      expect.any(Function),
-    );
-    expect(onDatasetCreated).not.toHaveBeenCalled();
-  });
+describe.each(FILES)(
+  "useDatasetForm create with $label upload",
+  ({ label, file }) => {
+    it("calls onCreateSuccess when the upload is accepted", () => {
+      const { onCreateSuccess, onDatasetCreated } = createWithFile(file);
 
-  it("skips onCreateSuccess and opens the dataset when the upload is rejected", () => {
-    uploadSucceeds = false;
-    const { onCreateSuccess, onDatasetCreated, setOpen } = createWithCsv();
+      expect(onCreateSuccess).toHaveBeenCalledWith(
+        NEW_DATASET,
+        expect.any(Function),
+      );
+      expect(onDatasetCreated).not.toHaveBeenCalled();
+    });
 
-    expect(onCreateSuccess).not.toHaveBeenCalled();
-    expect(onDatasetCreated).toHaveBeenCalledWith(NEW_DATASET);
-    expect(setOpen).toHaveBeenCalledWith(false);
-    expect(toast).toHaveBeenCalledTimes(1);
-    expect(toast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Error uploading CSV file",
-        variant: "destructive",
-      }),
-    );
-  });
-});
+    it("skips onCreateSuccess and opens the dataset when the upload is rejected", () => {
+      uploadSucceeds = false;
+      const { onCreateSuccess, onDatasetCreated, setOpen } =
+        createWithFile(file);
+
+      expect(onCreateSuccess).not.toHaveBeenCalled();
+      expect(onDatasetCreated).toHaveBeenCalledWith(NEW_DATASET);
+      expect(setOpen).toHaveBeenCalledWith(false);
+      expect(toast).toHaveBeenCalledTimes(1);
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: `Error uploading ${label} file`,
+          variant: "destructive",
+        }),
+      );
+    });
+  },
+);
