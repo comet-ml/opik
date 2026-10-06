@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import dayjs from "dayjs";
 import {
   focusManager,
@@ -51,12 +51,15 @@ const closeAtEndOfDay = (anchored: AnchoredBounds): AnchoredBounds => ({
 const hasEnded = (anchored: AnchoredBounds) =>
   anchored.live && !isLiveDateRange(anchored.dateRange);
 
-// Scoped by the selection that windowQueryOptions tags each of the window's queries with, so an unrelated query that
-// happens to share the start does not hold the window back.
-const isFetchingWindow = (queryClient: QueryClient, selectionKey: string) =>
+// Matched on the key windowQueryMeta tags each of this window's requests with, so a request of another window over
+// the same range, or an unrelated one that shares the start, does not hold this window back.
+const isFetchingWindow = (queryClient: QueryClient, windowSelection: string) =>
   queryClient.isFetching({
-    predicate: ({ meta }) => meta?.windowSelection === selectionKey,
+    predicate: ({ meta }) => meta?.windowSelection === windowSelection,
   }) > 0;
+
+const scopeToWindow = (windowId: string, selectionKey: string) =>
+  `${windowId}|${selectionKey}`;
 
 // Open-ended requests only see the start, so the window moves for them only when the start does.
 const hasMoved = (
@@ -73,6 +76,7 @@ export const useIntervalBounds = (
   isAutoReanchorEnabled = true,
 ) => {
   const queryClient = useQueryClient();
+  const windowId = useId();
   const [anchored, setAnchored] = useState(() => anchorToNow(dateRange));
 
   const isNewSelection =
@@ -93,7 +97,10 @@ export const useIntervalBounds = (
       if (
         !focusManager.isFocused() ||
         !onlineManager.isOnline() ||
-        isFetchingWindow(queryClient, anchored.selectionKey)
+        isFetchingWindow(
+          queryClient,
+          scopeToWindow(windowId, anchored.selectionKey),
+        )
       ) {
         return;
       }
@@ -120,7 +127,7 @@ export const useIntervalBounds = (
       unsubscribeFocus();
       unsubscribeOnline();
     };
-  }, [anchored, isLive, isAutoReanchorEnabled, queryClient]);
+  }, [anchored, isLive, isAutoReanchorEnabled, queryClient, windowId]);
 
   const reanchorToNow = useCallback(() => {
     if (!current.live) return false;
@@ -140,7 +147,7 @@ export const useIntervalBounds = (
     intervalStart: current.bounds.intervalStart,
     // A preset has no end, so ids minted ahead of the server clock count, as they do in the traces list (OPIK-8206).
     intervalEnd: isOpenEnded ? undefined : current.bounds.intervalEnd,
-    selectionKey: current.selectionKey,
+    selectionKey: scopeToWindow(windowId, current.selectionKey),
     // An open-ended request does not change as time passes, so a preset is polled; a closed live window moves instead.
     refetchInterval:
       isLive && !isOpenEnded ? (false as const) : REANCHOR_INTERVAL,
@@ -150,6 +157,12 @@ export const useIntervalBounds = (
 };
 
 export type IntervalWindow = ReturnType<typeof useIntervalBounds>;
+
+// Also for a request that only fetches on demand, such as an export: while it loads the window holds still, since a
+// move would switch its observer to the new window's key and resolve the export with that key's empty result.
+export const windowQueryMeta = (selectionKey?: string) => ({
+  windowSelection: selectionKey,
+});
 
 export const windowQueryOptions = (
   refetchInterval: number | false,
@@ -163,7 +176,7 @@ export const windowQueryOptions = (
         gcTime: LIVE_WINDOW_GC_TIME,
       }
     : { refetchInterval }),
-  meta: { windowSelection: selectionKey },
+  meta: windowQueryMeta(selectionKey),
 });
 
 type WindowMotion = {
