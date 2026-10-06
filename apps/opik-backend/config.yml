@@ -1122,7 +1122,7 @@ experimentExecution:
   longPollingDuration: ${EXPERIMENT_EXECUTION_LONG_POLLING_DURATION:-5s}
   # Default: 10000
   # Description: Maximum length of the Redis Stream (trimmed non-strictly)
-  streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-10000}
+  streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-50000}
   # Default: 100
   # Description: Trim limit for the Redis Stream
   streamTrimLimit: ${EXPERIMENT_EXECUTION_STREAM_TRIM_LIMIT:-100}

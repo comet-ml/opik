@@ -27,7 +27,9 @@ public record ExperimentExecutionRequest(
         String projectName,
         @NotNull UUID datasetId,
         String versionHash,
-        List<Experiment.PromptVersionLink> promptVersions) {
+        List<Experiment.PromptVersionLink> promptVersions,
+        List<UUID> selectedRuleIds,
+        String filters) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)

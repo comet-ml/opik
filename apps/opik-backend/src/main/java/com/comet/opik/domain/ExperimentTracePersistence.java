@@ -10,12 +10,15 @@ import com.comet.opik.api.TestSuiteMetadataKeys;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -31,6 +34,8 @@ class ExperimentTracePersistence {
 
     private static final String TRACE_SPAN_NAME = "chat_completion_create";
     private static final String OPIK_PROMPTS_METADATA_KEY = "opik_prompts";
+    private static final String SELECTED_RULE_IDS_METADATA_KEY = "selected_rule_ids";
+    private static final String DATASET_ITEM_DATA_METADATA_KEY = "dataset_item_data";
 
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
@@ -53,7 +58,10 @@ class ExperimentTracePersistence {
             @NonNull UUID datasetId,
             String versionHash,
             @NonNull UUID datasetItemId,
-            List<OpikPromptEntry> opikPrompts) {
+            Map<String, JsonNode> datasetItemData,
+            List<OpikPromptEntry> opikPrompts,
+            boolean testSuite,
+            List<UUID> selectedRuleIds) {
     }
 
     Mono<Void> persistTraceSpanAndItem(@NonNull PersistenceContext ctx) {
@@ -70,13 +78,25 @@ class ExperimentTracePersistence {
 
         ObjectNode metadata = JsonUtils.createObjectNode();
         metadata.put("created_from", "playground");
-        metadata.put(TestSuiteMetadataKeys.DATASET_ID, ctx.datasetId().toString());
-        if (ctx.versionHash() != null) {
-            metadata.put(TestSuiteMetadataKeys.DATASET_VERSION_HASH, ctx.versionHash());
+
+        if (ctx.testSuite()) {
+            metadata.put(TestSuiteMetadataKeys.DATASET_ID, ctx.datasetId().toString());
+            if (ctx.versionHash() != null) {
+                metadata.put(TestSuiteMetadataKeys.DATASET_VERSION_HASH, ctx.versionHash());
+            }
+            metadata.put(TestSuiteMetadataKeys.DATASET_ITEM_ID, ctx.datasetItemId().toString());
+            metadata.put(TestSuiteMetadataKeys.MODEL, ctx.prompt().model());
+            metadata.put(TestSuiteMetadataKeys.EXPERIMENT_ID, ctx.experimentId().toString());
         }
-        metadata.put(TestSuiteMetadataKeys.DATASET_ITEM_ID, ctx.datasetItemId().toString());
-        metadata.put(TestSuiteMetadataKeys.MODEL, ctx.prompt().model());
-        metadata.put(TestSuiteMetadataKeys.EXPERIMENT_ID, ctx.experimentId().toString());
+
+        if (CollectionUtils.isNotEmpty(ctx.selectedRuleIds())) {
+            metadata.set(SELECTED_RULE_IDS_METADATA_KEY, JsonUtils.getMapper().valueToTree(ctx.selectedRuleIds()));
+        }
+
+        if (MapUtils.isNotEmpty(ctx.datasetItemData())) {
+            metadata.set(DATASET_ITEM_DATA_METADATA_KEY, JsonUtils.getMapper().valueToTree(ctx.datasetItemData()));
+        }
+
         if (ctx.opikPrompts() != null && !ctx.opikPrompts().isEmpty()) {
             metadata.set(OPIK_PROMPTS_METADATA_KEY, JsonUtils.getMapper().valueToTree(ctx.opikPrompts()));
         }

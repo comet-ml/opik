@@ -10,8 +10,6 @@ import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
 import isUndefined from "lodash/isUndefined";
-import get from "lodash/get";
-import lodashSet from "lodash/set";
 
 interface PlaygroundOutput {
   isLoading: boolean;
@@ -28,73 +26,24 @@ interface PlaygroundOutput {
   };
 }
 
-interface PlaygroundOutputWithDatasetItem {
-  datasetItemMap: {
-    [datasetItemId: string]: PlaygroundOutput;
-  };
-}
-
 interface PlaygroundOutputMap {
-  [promptId: string]: PlaygroundOutput | PlaygroundOutputWithDatasetItem;
+  [promptId: string]: PlaygroundOutput;
 }
-
-const isPlaygroundOutputWithDatasetItem = (
-  output: PlaygroundOutput | PlaygroundOutputWithDatasetItem,
-): output is PlaygroundOutputWithDatasetItem => {
-  return "datasetItemMap" in output;
-};
 
 const updateAllStaleStatusesForPromptOutput = (
   promptId: string,
   outputMap: PlaygroundOutputMap,
   value: boolean,
 ) => {
-  if (!outputMap[promptId]) {
-    return outputMap;
-  }
-
   const promptOutput = outputMap[promptId];
 
-  if (!isPlaygroundOutputWithDatasetItem(promptOutput)) {
-    const currentStaleStatus = promptOutput.stale;
-    if (currentStaleStatus !== value) {
-      return {
-        ...outputMap,
-        [promptId]: {
-          ...promptOutput,
-          stale: value,
-        },
-      };
-    }
+  if (!promptOutput || promptOutput.stale === value) {
     return outputMap;
   }
-
-  const datasetItemMap = promptOutput.datasetItemMap;
-  const datasetItemIds = Object.keys(datasetItemMap);
-
-  const updatedDatasetItemMap = datasetItemIds.reduce<
-    PlaygroundOutputWithDatasetItem["datasetItemMap"]
-  >((updatedMap, datasetItemId) => {
-    const datasetItem = datasetItemMap[datasetItemId];
-    const currentStaleStatus = datasetItem.stale;
-
-    if (currentStaleStatus !== value) {
-      updatedMap[datasetItemId] = {
-        ...datasetItem,
-        stale: value,
-      };
-    } else {
-      updatedMap[datasetItemId] = datasetItem;
-    }
-
-    return updatedMap;
-  }, {});
 
   return {
     ...outputMap,
-    [promptId]: {
-      datasetItemMap: updatedDatasetItemMap,
-    },
+    [promptId]: { ...promptOutput, stale: value },
   };
 };
 
@@ -120,6 +69,12 @@ export type PlaygroundStore = {
   lastSuggestedExperimentName: string | null;
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
+  runTotalItems: number;
+  datasetItemsTotal: number | null;
+  hasUnseenRunCompletion: boolean;
+  isRunInFlight: boolean;
+  /** True from mount until a reloaded page has learned whether its run is still going. */
+  isResumingRun: boolean;
   scoresByDatasetId: Record<string, string[] | null>;
 
   setPromptMap: (
@@ -133,26 +88,24 @@ export type PlaygroundStore = {
   addPrompt: (prompt: PlaygroundPromptType, position?: number) => void;
   deletePrompt: (promptId: string) => void;
   resetOutputMap: () => void;
-  updateOutput: (
-    promptId: string,
-    datasetItemId: string,
-    changes: Partial<PlaygroundOutput>,
-  ) => void;
-  updateOutputTraceId: (
-    promptId: string,
-    datasetItemId: string,
-    traceId: string,
-  ) => void;
+  updateOutput: (promptId: string, changes: Partial<PlaygroundOutput>) => void;
+  updateOutputTraceId: (promptId: string, traceId: string) => void;
   setDatasetVariables: (variables: string[]) => void;
   setDatasetSampleData: (data: JsonObject | null) => void;
   triggerProviderValidation: () => void;
   setSelectedRuleIds: (ruleIds: string[] | null) => void;
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
+  setRunTotalItems: (total: number) => void;
+  setDatasetItemsTotal: (total: number | null) => void;
+  setHasUnseenRunCompletion: (value: boolean) => void;
+  setIsRunInFlight: (value: boolean) => void;
   clearCreatedExperiments: () => void;
   setIsRunning: (isRunning: boolean) => void;
   setPromptRunning: (promptId: string, running: boolean) => void;
   setAllRunning: (running: boolean) => void;
   clearRunningMap: () => void;
+  settleRun: () => void;
+  setIsResumingRun: (value: boolean) => void;
   setExperimentName: (name: string | null) => void;
   setSuggestedExperimentName: (name: string) => void;
   setDatasetFilters: (filters: Filters) => void;
@@ -192,6 +145,11 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       lastSuggestedExperimentName: null,
       datasetType: null,
       experimentByPromptId: {},
+      runTotalItems: 0,
+      datasetItemsTotal: null,
+      hasUnseenRunCompletion: false,
+      isRunInFlight: false,
+      isResumingRun: false,
       scoresByDatasetId: {},
 
       updatePrompt: (promptId, changes) => {
@@ -265,45 +223,30 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
-      updateOutput: (
-        promptId,
-        datasetItemId,
-        changes: Partial<PlaygroundOutput>,
-      ) => {
-        set((state) => {
-          const key = datasetItemId
-            ? [promptId, "datasetItemMap", datasetItemId]
-            : [promptId];
-
-          const output = get(state.outputMap, key);
-          const newOutput = { ...output, stale: false, ...changes };
-          const newOutputMap = { ...state.outputMap };
-
-          lodashSet(newOutputMap, key, newOutput);
-
-          return {
-            ...state,
-            outputMap: newOutputMap,
-          };
-        });
+      updateOutput: (promptId, changes: Partial<PlaygroundOutput>) => {
+        set((state) => ({
+          ...state,
+          outputMap: {
+            ...state.outputMap,
+            [promptId]: {
+              ...state.outputMap[promptId],
+              stale: false,
+              ...changes,
+            },
+          },
+        }));
       },
-      updateOutputTraceId: (promptId, datasetItemId, traceId) => {
+      updateOutputTraceId: (promptId, traceId) => {
         set((state) => {
-          const key = datasetItemId
-            ? [promptId, "datasetItemMap", datasetItemId]
-            : [promptId];
-
-          const output = get(state.outputMap, key);
+          const output = state.outputMap[promptId];
           if (!output) return state;
 
-          const newOutput = { ...output, traceId };
-          const newOutputMap = { ...state.outputMap };
-
-          lodashSet(newOutputMap, key, newOutput);
-
           return {
             ...state,
-            outputMap: newOutputMap,
+            outputMap: {
+              ...state.outputMap,
+              [promptId]: { ...output, traceId },
+            },
           };
         });
       },
@@ -339,6 +282,18 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setRunTotalItems: (total) => {
+        set((state) => ({ ...state, runTotalItems: total }));
+      },
+      setDatasetItemsTotal: (total) => {
+        set((state) => ({ ...state, datasetItemsTotal: total }));
+      },
+      setHasUnseenRunCompletion: (value) => {
+        set((state) => ({ ...state, hasUnseenRunCompletion: value }));
+      },
+      setIsRunInFlight: (value) => {
+        set((state) => ({ ...state, isRunInFlight: value }));
+      },
       setCreatedExperiments: (experiments) => {
         set((state) => {
           return {
@@ -353,6 +308,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             ...state,
             createdExperiments: [],
             experimentByPromptId: {},
+            runTotalItems: 0,
           };
         });
       },
@@ -376,6 +332,17 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       },
       clearRunningMap: () => {
         set((state) => ({ ...state, isRunningMap: {} }));
+      },
+      settleRun: () => {
+        set((state) => ({
+          ...state,
+          isRunningMap: {},
+          isRunInFlight: false,
+          isResumingRun: false,
+        }));
+      },
+      setIsResumingRun: (value) => {
+        set((state) => ({ ...state, isResumingRun: value }));
       },
       setExperimentName: (name) => {
         set((state) => ({
@@ -511,8 +478,10 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           progressPhase,
           progressTotal,
           progressCompleted,
+          datasetItemsTotal,
           isRunning,
           isRunningMap,
+          isResumingRun,
           ...rest
         } = state;
         /* eslint-enable @typescript-eslint/no-unused-vars */
@@ -533,46 +502,11 @@ const usePlaygroundStore = create<PlaygroundStore>()(
   ),
 );
 
-export const useOutputByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) =>
-  usePlaygroundStore((state) => {
-    const outputMapEntry = state.outputMap?.[promptId];
-
-    if (
-      outputMapEntry &&
-      datasetItemId &&
-      isPlaygroundOutputWithDatasetItem(outputMapEntry)
-    ) {
-      return outputMapEntry.datasetItemMap?.[datasetItemId] ?? null;
-    }
-
-    if (outputMapEntry && !isPlaygroundOutputWithDatasetItem(outputMapEntry)) {
-      return outputMapEntry;
-    }
-
-    return null;
-  });
-
-export const useFirstOutputUsageByPromptId = (promptId: string) =>
-  usePlaygroundStore((state) => {
-    const outputMapEntry = state.outputMap?.[promptId];
-    if (!outputMapEntry || !isPlaygroundOutputWithDatasetItem(outputMapEntry))
-      return undefined;
-    const firstKey = Object.keys(outputMapEntry.datasetItemMap)[0];
-    return firstKey
-      ? outputMapEntry.datasetItemMap[firstKey]?.usage
-      : undefined;
-  });
+export const useOutputByPromptId = (promptId: string) =>
+  usePlaygroundStore((state) => state.outputMap?.[promptId] ?? null);
 
 export const useIsPromptOutputStale = (promptId: string) =>
-  usePlaygroundStore((state) => {
-    const entry = state.outputMap?.[promptId];
-    if (!entry) return false;
-    if (!isPlaygroundOutputWithDatasetItem(entry)) return entry.stale;
-    return Object.values(entry.datasetItemMap).some((o) => o.stale);
-  });
+  usePlaygroundStore((state) => state.outputMap?.[promptId]?.stale ?? false);
 
 export const usePromptMap = () =>
   usePlaygroundStore((state) => state.promptMap);
@@ -637,6 +571,27 @@ export const useCreatedExperiments = () =>
 export const useSetCreatedExperiments = () =>
   usePlaygroundStore((state) => state.setCreatedExperiments);
 
+export const useSetRunTotalItems = () =>
+  usePlaygroundStore((state) => state.setRunTotalItems);
+
+export const useDatasetItemsTotal = () =>
+  usePlaygroundStore((state) => state.datasetItemsTotal);
+
+export const useIsRunInFlight = () =>
+  usePlaygroundStore((state) => state.isRunInFlight);
+
+export const useSetIsRunInFlight = () =>
+  usePlaygroundStore((state) => state.setIsRunInFlight);
+
+export const useHasUnseenRunCompletion = () =>
+  usePlaygroundStore((state) => state.hasUnseenRunCompletion);
+
+export const useSetHasUnseenRunCompletion = () =>
+  usePlaygroundStore((state) => state.setHasUnseenRunCompletion);
+
+export const useSetDatasetItemsTotal = () =>
+  usePlaygroundStore((state) => state.setDatasetItemsTotal);
+
 export const useClearCreatedExperiments = () =>
   usePlaygroundStore((state) => state.clearCreatedExperiments);
 
@@ -662,6 +617,15 @@ export const useSetAllRunning = () =>
 
 export const useClearRunningMap = () =>
   usePlaygroundStore((state) => state.clearRunningMap);
+
+export const useSettleRun = () =>
+  usePlaygroundStore((state) => state.settleRun);
+
+export const useIsResumingRun = () =>
+  usePlaygroundStore((state) => state.isResumingRun);
+
+export const useSetIsResumingRun = () =>
+  usePlaygroundStore((state) => state.setIsResumingRun);
 
 export const useExperimentName = () =>
   usePlaygroundStore((state) => state.experimentName);
