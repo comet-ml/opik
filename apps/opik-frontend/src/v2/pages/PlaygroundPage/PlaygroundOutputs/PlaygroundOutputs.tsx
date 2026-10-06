@@ -106,6 +106,7 @@ const PlaygroundOutputs = ({
   const total = datasetItemsData?.total || 0;
 
   const isExperimentMode = !!parsedDatasetId;
+  const showPerPromptRun = promptIds.length > 1;
 
   useEffect(() => {
     setDatasetVariables(datasetColumns.map((c) => c.name));
@@ -164,8 +165,8 @@ const PlaygroundOutputs = ({
               key={`output-${promptId}`}
               promptId={promptId}
               promptIndex={idx}
-              onRun={() => runSingle(promptId)}
-              onStop={() => stopSingle(promptId)}
+              onRun={showPerPromptRun ? () => runSingle(promptId) : undefined}
+              onStop={showPerPromptRun ? () => stopSingle(promptId) : undefined}
             />
           ))}
         </div>

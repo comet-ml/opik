@@ -465,8 +465,9 @@ export class PlaygroundPage {
 
   // ── per-column run / stop ───────────────────────────────────────────────
   //
-  // `PlaygroundRunButton` is mounted per variant, and in experiment mode (a
-  // dataset or suite loaded) it renders inside the variant card — in free mode
+  // `PlaygroundRunButton` is mounted per variant, but only once there are two
+  // or more; with one, it would duplicate the header's Run. In experiment mode
+  // (a dataset or suite loaded) it renders inside the variant card — in free mode
   // the same component renders under the OUTPUT column instead, which is why
   // these are scoped to the card rather than looked up page-wide. It carries no
   // testid and its label swaps between Run and Stop with the variant's own
