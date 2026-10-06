@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure;
 
-import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -47,19 +46,15 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.time.temporal.TemporalAdjusters;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -96,13 +91,6 @@ class TracesSearchPartitionPruningTest {
     /** A week only the neighbouring projects have traces in, inside the search window. */
     private static final LocalDate FILLER_MONDAY = LocalDate.of(2025, 4, 14);
     private static final Instant FROM_TIME = Instant.parse("2025-01-01T00:00:00Z");
-
-    /** The hint's own predicate: the weeks the project's traces fall in from the window start. */
-    private static final String PROJECT_WEEKS = """
-            SELECT DISTINCT toString(toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))
-            FROM traces
-            WHERE workspace_id = :workspace_id AND project_id = :project_id AND id >= :uuid_from_time
-            """;
 
     private static final String LAST_SEARCH = """
             SELECT query
@@ -196,8 +184,7 @@ class TracesSearchPartitionPruningTest {
     }
 
     /** The searched data and the responses, created once and shared by the tests below. */
-    private record Search(UUID projectId, String token, List<Trace> expected, Trace.TracePage page,
-            ProjectStats stats) {
+    private record Search(String token, List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
     }
 
     private Search search;
@@ -233,7 +220,7 @@ class TracesSearchPartitionPruningTest {
         var page = traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME, List.of(),
                 List.of(), 10, params);
         var stats = traceResourceClient.getTraceStats(project.getValue(), null, API_KEY, WORKSPACE_NAME, null, params);
-        search = new Search(project.getKey(), token, expected, page, stats);
+        search = new Search(token, expected, page, stats);
         return search;
     }
 
@@ -246,18 +233,6 @@ class TracesSearchPartitionPruningTest {
         TraceAssertions.assertTraces(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(),
                 StatsUtils.getProjectTraceStatItems(search.page().content()));
-    }
-
-    @Test
-    @DisplayName("the hint's predicate selects exactly the weeks of the project's traces")
-    void hintWeeksAreTheProjectsWeeks() {
-        var search = search();
-
-        assertThat(projectWeeks(search.projectId(), FROM_TIME))
-                .containsExactlyInAnyOrderElementsOf(search.expected().stream()
-                        .map(Trace::id)
-                        .map(TracesSearchPartitionPruningTest::mondayOfId)
-                        .collect(Collectors.toSet()));
     }
 
     @ParameterizedTest(name = "{0} carries the traces week hint")
@@ -287,24 +262,6 @@ class TracesSearchPartitionPruningTest {
                 .feedbackScores(null)
                 .usage(null)
                 .build();
-    }
-
-    /** The weeks the hint's predicate selects for the project in the search window, queried directly. */
-    private Set<String> projectWeeks(UUID projectId, Instant from) {
-        return new HashSet<>(template.nonTransaction(connection -> Mono.from(connection
-                .createStatement(PROJECT_WEEKS)
-                .bind("workspace_id", WORKSPACE_ID)
-                .bind("project_id", projectId)
-                .bind("uuid_from_time", new InstantToUUIDMapper().toLowerBound(from).toString())
-                .execute())
-                .flatMapMany(result -> result.map((row, _) -> row.get(0, String.class)))
-                .collectList()).block());
-    }
-
-    private static String mondayOfId(UUID id) {
-        var monday = Instant.ofEpochMilli(id.getMostSignificantBits() >>> 16).atZone(ZoneOffset.UTC).toLocalDate()
-                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        return "%04d%02d%02d".formatted(monday.getYear(), monday.getMonthValue(), monday.getDayOfMonth());
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */

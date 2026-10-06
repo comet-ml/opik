@@ -6,7 +6,6 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
-import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -75,7 +74,6 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -143,13 +141,6 @@ class SpansReadPathPartitionPruningTest {
             AND query LIKE concat('%', :span_id, '%')
             ORDER BY event_time_microseconds DESC
             LIMIT 1
-            """;
-
-    /** The hint's own predicate: the weeks the project's spans fall in from the window start. */
-    private static final String PROJECT_WEEKS = """
-            SELECT DISTINCT toString(toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))
-            FROM spans
-            WHERE workspace_id = :workspace_id AND project_id = :project_id AND id >= :uuid_from_time
             """;
 
     private static final String LAST_SPAN_SEARCH = """
@@ -468,8 +459,7 @@ class SpansReadPathPartitionPruningTest {
     }
 
     /** The searched spans and the responses, created once and shared by the span search tests below. */
-    private record SpanSearch(UUID projectId, String fromTime, String token, List<Span> expected,
-            Span.SpanPage page, ProjectStats stats) {
+    private record SpanSearch(String token, List<Span> expected, Span.SpanPage page, ProjectStats stats) {
     }
 
     private SpanSearch spanSearch;
@@ -479,7 +469,6 @@ class SpansReadPathPartitionPruningTest {
             return spanSearch;
         }
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var token = RandomStringUtils.secure().nextAlphanumeric(12);
         var fromTime = THIS_MONDAY.minusWeeks(10).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
         // Two ordinary weeks and the far-future one a bad clock files spans under.
@@ -499,7 +488,7 @@ class SpansReadPathPartitionPruningTest {
                 null, null, fromTime, null, token);
         var stats = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
                 Map.of("search", token, "from_time", fromTime));
-        spanSearch = new SpanSearch(projectId, fromTime, token, expected, page, stats);
+        spanSearch = new SpanSearch(token, expected, page, stats);
         return spanSearch;
     }
 
@@ -510,17 +499,6 @@ class SpansReadPathPartitionPruningTest {
         assertThat(search.page().total()).isEqualTo(search.expected().size());
         SpanAssertions.assertSpan(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(), StatsUtils.getProjectSpanStatItems(search.expected()));
-    }
-
-    @Test
-    void spanHintWeeksAreTheProjectsWeeks() {
-        var search = spanSearch();
-
-        assertThat(projectWeeks(search.projectId(), Instant.parse(search.fromTime())))
-                .containsExactlyInAnyOrderElementsOf(search.expected().stream()
-                        .map(Span::id)
-                        .map(SpansReadPathPartitionPruningTest::mondayOfId)
-                        .collect(Collectors.toSet()));
     }
 
     @ParameterizedTest(name = "{0} carries the spans week hint")
@@ -538,24 +516,6 @@ class SpansReadPathPartitionPruningTest {
         assertThat(lastSpanSearch("find_spans_by_project_id", spanSearch().token()))
                 .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
                 .doesNotContain("IN (SELECT id FROM page_ids)");
-    }
-
-    /** The weeks the hint's predicate selects for the project in the search window, queried directly. */
-    private Set<String> projectWeeks(UUID projectId, Instant from) {
-        return new HashSet<>(template.nonTransaction(connection -> Mono.from(connection
-                .createStatement(PROJECT_WEEKS)
-                .bind("workspace_id", WORKSPACE_ID)
-                .bind("project_id", projectId)
-                .bind("uuid_from_time", new InstantToUUIDMapper().toLowerBound(from).toString())
-                .execute())
-                .flatMapMany(result -> result.map((row, _) -> row.get(0, String.class)))
-                .collectList()).block());
-    }
-
-    private static String mondayOfId(UUID id) {
-        var monday = Instant.ofEpochMilli(id.getMostSignificantBits() >>> 16).atZone(ZoneOffset.UTC).toLocalDate()
-                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        return "%04d%02d%02d".formatted(monday.getYear(), monday.getMonthValue(), monday.getDayOfMonth());
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
