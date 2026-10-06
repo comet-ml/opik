@@ -6,17 +6,22 @@ import { cn } from "@/lib/utils";
 import LegendItem from "@/shared/Charts/LegendItem/LegendItem";
 import type { LegendLabelAction } from "@/shared/Charts/LegendItem/LegendItem";
 
-// Only the scrollbar thumb is hidden at rest (the legend stays visible, readable by
-// assistive tech and keyboard-scrollable); it's painted while the legend or an ancestor
-// `group/chart` is hovered, or the legend has keyboard focus. The scrollbar always
-// exists, so nothing reflows. Safari doesn't repaint it on :hover, so it stays hidden there.
+// Only applies where main.scss already replaces the native scrollbar (dark theme, or
+// Windows via .comet-custom-scrollbar / .firefox); elsewhere the native macOS overlay
+// scrollbar is kept, since it floats over the labels and Safari draws it. There, only the
+// thumb is hidden at rest (the legend stays visible, readable by assistive tech and
+// keyboard-scrollable); it's painted while the legend or an ancestor `group/chart` is
+// hovered, or the legend has keyboard focus. The scrollbar always exists, so nothing
+// reflows. Safari doesn't repaint it on :hover, so it stays hidden there in dark theme.
 const LEGEND_SCROLLBAR_CLASSES = cn(
+  // The global dark thumb (#242424) is near-invisible over a card without its track.
+  "[--legend-scrollbar-thumb:var(--scrollbar-thumb)] dark:[--legend-scrollbar-thumb:hsl(var(--muted-gray))]",
   // `!` beats the theme-wide .dark / .comet-custom-scrollbar 16px scrollbar rules.
-  "[&::-webkit-scrollbar-thumb]:!rounded-full [&::-webkit-scrollbar-thumb]:!border-0 [&::-webkit-scrollbar-track]:!bg-transparent [&::-webkit-scrollbar]:!w-2 [&::-webkit-scrollbar]:!bg-transparent",
-  "[&::-webkit-scrollbar-thumb]:!bg-transparent group-hover/chart:[&::-webkit-scrollbar-thumb]:!bg-[var(--scrollbar-thumb)] [&:focus-visible::-webkit-scrollbar-thumb]:!bg-[var(--scrollbar-thumb)] [&:hover::-webkit-scrollbar-thumb]:!bg-[var(--scrollbar-thumb)]",
-  // Firefox only: in Chrome these standard properties disable the ::-webkit-scrollbar
-  // styling above and fall back to macOS overlay scrollbars.
-  "[@supports(-moz-appearance:none)]:[scrollbar-color:transparent_transparent] [@supports(-moz-appearance:none)]:[scrollbar-width:thin] [@supports(-moz-appearance:none)]:group-hover/chart:[scrollbar-color:var(--scrollbar-thumb)_transparent] [@supports(-moz-appearance:none)]:hover:[scrollbar-color:var(--scrollbar-thumb)_transparent] [@supports(-moz-appearance:none)]:focus-visible:[scrollbar-color:var(--scrollbar-thumb)_transparent]",
+  "[:is(.dark,.comet-custom-scrollbar)_&]:[&::-webkit-scrollbar-thumb]:!rounded-full [:is(.dark,.comet-custom-scrollbar)_&]:[&::-webkit-scrollbar-thumb]:!border-0 [:is(.dark,.comet-custom-scrollbar)_&]:[&::-webkit-scrollbar-track]:!bg-transparent [:is(.dark,.comet-custom-scrollbar)_&]:[&::-webkit-scrollbar]:!w-2 [:is(.dark,.comet-custom-scrollbar)_&]:[&::-webkit-scrollbar]:!bg-transparent",
+  "[:is(.dark,.comet-custom-scrollbar)_&]:[&::-webkit-scrollbar-thumb]:!bg-transparent [:is(.dark,.comet-custom-scrollbar)_&]:group-hover/chart:[&::-webkit-scrollbar-thumb]:!bg-[var(--legend-scrollbar-thumb)] [:is(.dark,.comet-custom-scrollbar)_&]:[&:focus-visible::-webkit-scrollbar-thumb]:!bg-[var(--legend-scrollbar-thumb)] [:is(.dark,.comet-custom-scrollbar)_&]:[&:hover::-webkit-scrollbar-thumb]:!bg-[var(--legend-scrollbar-thumb)]",
+  // .firefox is only set on Windows. These standard properties must stay out of Chrome,
+  // where they disable the ::-webkit-scrollbar styling above.
+  "[.firefox_&]:[scrollbar-color:transparent_transparent] [.firefox_&]:[scrollbar-width:thin] [.firefox_&]:group-hover/chart:[scrollbar-color:var(--legend-scrollbar-thumb)_transparent] [.firefox_&]:hover:[scrollbar-color:var(--legend-scrollbar-thumb)_transparent] [.firefox_&]:focus-visible:[scrollbar-color:var(--legend-scrollbar-thumb)_transparent]",
 );
 
 type ChartVerticalLegendProps = React.ComponentProps<
