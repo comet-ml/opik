@@ -18,7 +18,10 @@ import {
   parseComposedProviderType,
 } from "@/lib/provider";
 import omit from "lodash/omit";
-import { getLatestModelFlags } from "@/lib/modelRegistryStore";
+import {
+  getLatestModelFlags,
+  getLatestProviderModelsSnapshot,
+} from "@/lib/modelRegistryStore";
 import { PROVIDER_MODELS } from "@/constants/providerModels";
 
 export const getRoutableProviderModelValue = (
@@ -692,13 +695,27 @@ export const resolveSamplingParams = (
   return { temperature, topP };
 };
 
+// LlmProviderOpenAiResponsesMapper drops both penalties on a key set to the Responses API, which
+// rejects them. The OpenAI list is checked because getProviderFromModel also answers OpenAI for a
+// custom gateway's ids, and those never reach the OpenAI key.
+const isSentThroughOpenAiResponsesApi = (
+  model: PROVIDER_MODEL_TYPE | "",
+  openAiPipelineMode?: OpenAiPipelineMode,
+): boolean =>
+  openAiPipelineMode === "responses_api" &&
+  (getLatestProviderModelsSnapshot()[PROVIDER_TYPE.OPEN_AI] ?? []).some(
+    (option) => option.value === model,
+  );
+
 export const supportsPenaltyParams = (
   model?: PROVIDER_MODEL_TYPE | "",
+  openAiPipelineMode?: OpenAiPipelineMode,
 ): boolean =>
   !model ||
   getProviderFromModel(model as PROVIDER_MODEL_TYPE) !==
     PROVIDER_TYPE.OPEN_AI ||
-  !isReasoningModel(model);
+  (!isReasoningModel(model) &&
+    !isSentThroughOpenAiResponsesApi(model, openAiPipelineMode));
 
 export type EffortParams = {
   reasoningEffort?: OpenAIReasoningEffort;
@@ -777,7 +794,7 @@ export const sanitizeConfigForRequest = (
     }
   }
 
-  if (!supportsPenaltyParams(model)) {
+  if (!supportsPenaltyParams(model, openAiPipelineMode)) {
     delete sanitized.frequencyPenalty;
     delete sanitized.presencePenalty;
   }
