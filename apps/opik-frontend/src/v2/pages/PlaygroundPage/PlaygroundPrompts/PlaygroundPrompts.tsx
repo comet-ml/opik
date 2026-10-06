@@ -30,7 +30,7 @@ const PlaygroundPrompts = ({
   const promptCount = usePromptCount();
   const promptIds = usePromptIds();
   const setPromptMap = useSetPromptMap();
-  const showPerPromptRun = promptCount > 1;
+  const showPerPromptRunControls = promptCount > 1;
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -71,12 +71,12 @@ const PlaygroundPrompts = ({
           providerResolver={calculateModelProvider}
           modelResolver={calculateDefaultModel}
           onRun={
-            showPerPromptRun && runSingle
+            showPerPromptRunControls && runSingle
               ? () => runSingle(promptId)
               : undefined
           }
           onStop={
-            showPerPromptRun && stopSingle
+            showPerPromptRunControls && stopSingle
               ? () => stopSingle(promptId)
               : undefined
           }
