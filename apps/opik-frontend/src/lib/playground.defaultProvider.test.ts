@@ -64,13 +64,19 @@ const renderResolvers = () => {
 
 const storedPrompt = (
   configs: Record<string, unknown>,
-  provider: COMPOSED_PROVIDER_TYPE | "" = "",
+  {
+    provider = "",
+    model = PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+  }: {
+    provider?: COMPOSED_PROVIDER_TYPE | "";
+    model?: PROVIDER_MODEL_TYPE;
+  } = {},
 ) =>
   ({
     name: "Prompt",
     id: "p1",
     messages: [],
-    model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+    model,
     provider,
     configs: configs as LLMPromptConfigsType,
   }) as PlaygroundPromptType;
@@ -120,40 +126,45 @@ describe("generateDefaultPrompt", () => {
 });
 
 describe("restoreMissingProviderAndConfigKeys", () => {
-  it("writes the provider and its default parameters into a prompt stored without them", () => {
-    registry.data = OPEN_ROUTER_REGISTRY;
+  const STORED_MODELS = [
+    PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+    PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_5,
+  ];
 
-    const restored = restoreMissingProviderAndConfigKeys(
-      storedPrompt({}),
-      renderResolvers().providerResolver,
-    );
+  it.each(STORED_MODELS)(
+    "writes the provider and all its default parameters into a %s prompt stored without them",
+    (model) => {
+      registry.data = OPEN_ROUTER_REGISTRY;
 
-    expect(restored.provider).toBe(OPEN_ROUTER);
-    expect(restored.configs).toEqual(
-      getDefaultConfigByProvider(
-        OPEN_ROUTER,
-        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
-      ),
-    );
-  });
+      const restored = restoreMissingProviderAndConfigKeys(
+        storedPrompt({}, { model }),
+        renderResolvers().providerResolver,
+      );
 
-  it("keeps the parameters the user set on it", () => {
-    registry.data = OPEN_ROUTER_REGISTRY;
+      expect(restored.provider).toBe(OPEN_ROUTER);
+      expect(restored.configs).toEqual(
+        getDefaultConfigByProvider(OPEN_ROUTER, model),
+      );
+    },
+  );
 
-    const restored = restoreMissingProviderAndConfigKeys(
-      storedPrompt({ throttling: 2, maxConcurrentRequests: 1 }),
-      renderResolvers().providerResolver,
-    );
+  it.each(STORED_MODELS)(
+    "keeps the parameters the user set on a %s prompt",
+    (model) => {
+      registry.data = OPEN_ROUTER_REGISTRY;
 
-    expect(restored.configs).toEqual({
-      ...getDefaultConfigByProvider(
-        OPEN_ROUTER,
-        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
-      ),
-      throttling: 2,
-      maxConcurrentRequests: 1,
-    });
-  });
+      const restored = restoreMissingProviderAndConfigKeys(
+        storedPrompt({ throttling: 2, maxConcurrentRequests: 1 }, { model }),
+        renderResolvers().providerResolver,
+      );
+
+      expect(restored.configs).toEqual({
+        ...getDefaultConfigByProvider(OPEN_ROUTER, model),
+        throttling: 2,
+        maxConcurrentRequests: 1,
+      });
+    },
+  );
 
   it("leaves the prompt alone while its model resolves to no provider", () => {
     const prompt = storedPrompt({});
@@ -168,7 +179,7 @@ describe("restoreMissingProviderAndConfigKeys", () => {
 
   it("leaves a prompt that has a provider alone", () => {
     registry.data = OPEN_ROUTER_REGISTRY;
-    const prompt = storedPrompt({ maxTokens: 100 }, OPEN_ROUTER);
+    const prompt = storedPrompt({ maxTokens: 100 }, { provider: OPEN_ROUTER });
 
     expect(
       restoreMissingProviderAndConfigKeys(
