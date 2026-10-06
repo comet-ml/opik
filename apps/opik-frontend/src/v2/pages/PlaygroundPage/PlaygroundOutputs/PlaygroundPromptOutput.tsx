@@ -39,7 +39,8 @@ const PlaygroundPromptOutput = ({
     usage?.model,
   );
 
-  const hasOutput = !stale && (value !== null || Boolean(error) || isLoading);
+  const hasCurrentRun =
+    !stale && (value !== null || Boolean(error) || isLoading);
 
   const renderContent = () => {
     if (isLoading && !value) {
@@ -66,7 +67,7 @@ const PlaygroundPromptOutput = ({
           onStop={onStop}
         />
       )}
-      {hasOutput ? (
+      {hasCurrentRun ? (
         <div className="flex-1 bg-background p-4">
           <div className="mb-3 flex items-center gap-5">
             <span className="flex items-center gap-2">
