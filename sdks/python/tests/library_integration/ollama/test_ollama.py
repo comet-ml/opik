@@ -521,3 +521,46 @@ def test_ollama_async_chat__stream__aggregated_into_one_span(fake_backend, monke
     assert span.output["message"]["content"] == "Blue, due to Rayleigh scattering."
     assert span.usage["prompt_tokens"] == 10
     _assert_durations_in_metadata_not_usage(span)
+
+
+def test_ollama_chat__positional_arguments__logged_like_keywords(
+    fake_backend, monkeypatch
+):
+    client = ollama.Client()
+    wrapped = track_ollama(client)
+    monkeypatch.setattr(client, "_request", lambda *a, **kw: _response())
+
+    messages = [{"role": "user", "content": "hi"}]
+    wrapped.chat(MODEL, messages)
+    opik.flush_tracker()
+
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.input == {"messages": messages}
+    assert span.model == MODEL
+
+
+def test_ollama_chat__function_tool__logged_as_json_schema(fake_backend, monkeypatch):
+    def get_weather(city: str) -> str:
+        """Get the current weather for a city.
+
+        Args:
+          city: The name of the city
+        """
+        return "sunny"
+
+    client = ollama.Client()
+    wrapped = track_ollama(client)
+    monkeypatch.setattr(client, "_request", lambda *a, **kw: _response())
+
+    wrapped.chat(
+        model=MODEL,
+        messages=[{"role": "user", "content": "weather in Paris?"}],
+        tools=[get_weather],
+    )
+    opik.flush_tracker()
+
+    (tool,) = fake_backend.trace_trees[0].spans[0].input["tools"]
+    assert tool["type"] == "function"
+    assert tool["function"]["name"] == "get_weather"
+    assert tool["function"]["description"] == "Get the current weather for a city."
+    assert "city" in tool["function"]["parameters"]["properties"]

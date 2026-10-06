@@ -1,3 +1,4 @@
+import inspect
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -33,6 +34,9 @@ class OllamaChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.StartSpanParameters:
         assert kwargs is not None, "Expected kwargs to be not None in chat(**kwargs)"
 
+        # chat(model, messages) may be called positionally; log it the same way
+        kwargs = _bind_call_arguments(func, args, kwargs)
+
         name = track_options.name if track_options.name is not None else func.__name__
         if kwargs.get("stream") is True:
             name = "chat_stream"
@@ -42,6 +46,8 @@ class OllamaChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
         input, new_metadata = dict_utils.split_dict_by_keys(
             kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
+        if input.get("tools"):
+            input["tools"] = _tools_as_schemas(input["tools"])
         metadata = dict_utils.deepmerge(metadata, new_metadata)
         metadata.update({"created_from": "ollama", "type": "ollama_chat"})
 
@@ -143,3 +149,39 @@ def _build_usage(result_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
             usage[key] = value
 
     return llm_usage.build_opik_usage_from_unknown_provider(usage)
+
+
+def _bind_call_arguments(
+    func: Callable, args: Tuple, kwargs: Dict[str, Any]
+) -> Dict[str, Any]:
+    if not args:
+        return kwargs
+    try:
+        bound = inspect.signature(func).bind_partial(*args, **kwargs)
+    except (TypeError, ValueError):
+        return kwargs
+    arguments = dict(bound.arguments)
+    arguments.pop("self", None)
+    return arguments
+
+
+def _tools_as_schemas(tools: Any) -> Any:
+    """Log Python-function tools as the JSON schema ollama sends to the model.
+
+    ollama accepts plain functions as tools and converts them itself, so the
+    raw kwarg would otherwise be logged as ``<function name at 0x...>``.
+    """
+    try:
+        from ollama._utils import convert_function_to_tool
+
+        schemas = []
+        for tool in tools:
+            if callable(tool):
+                tool = convert_function_to_tool(tool)
+            if hasattr(tool, "model_dump"):
+                tool = tool.model_dump(exclude_none=True)
+            schemas.append(tool)
+        return schemas
+    except Exception:
+        LOGGER.debug("Failed to convert ollama tools to schemas", exc_info=True)
+        return tools
