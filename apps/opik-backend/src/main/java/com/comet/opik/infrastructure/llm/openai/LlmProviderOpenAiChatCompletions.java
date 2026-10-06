@@ -39,9 +39,10 @@ class LlmProviderOpenAiChatCompletions extends LlmProviderOpenAi {
 
     /**
      * OpenAI accepts {@code max} only on the Responses API and answers 400 for it on Chat Completions,
-     * for every model, so it runs at {@code high} here: the same value the playground shows for a stored
-     * max on a Chat Completions key. Callers that cannot know the key's mode (test-suite runs of saved
-     * prompts, older clients, direct API calls) get a run instead of a 400.
+     * for every model, so it runs at {@code high} here. The frontend already sends a stored max as high on
+     * a Chat Completions key, so playground and test-suite runs never depend on this: it is for callers
+     * that cannot see the key's mode, such as direct calls to the chat completions or experiment execute
+     * endpoints.
      */
     static ChatCompletionRequest withChatCompletionsEffort(@NonNull ChatCompletionRequest request) {
         if (!RESPONSES_API_ONLY_EFFORT.equals(request.reasoningEffort())) {
