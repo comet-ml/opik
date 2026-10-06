@@ -40,13 +40,10 @@ class HostTarget:
     # ``top_level_key`` (Codex uses TOML) supply their own reader; see
     # ``read_registered_block``.
     read_block: Optional[Callable[[], Optional[Dict[str, Any]]]] = None
-    # The client's own commands, for the hosts with a CLI: the browser sign-in to
-    # the hosted server, and the list of servers with their status. Named at the
-    # end of a run that leaves either to the user or the agent that ran it.
+    # For the hosts with a CLI, its sign-in to the hosted server and its list of
+    # servers with their status, named where a run leaves them to the user.
     sign_in_command: Optional[str] = None
     status_command: Optional[str] = None
-    # Signs in to the hosted server while being added, as `codex mcp add` does.
-    signs_in_when_added: bool = False
 
 
 def _home() -> pathlib.Path:
@@ -312,9 +309,9 @@ def sign_in_command(
 
     Only Claude Code: Codex signs in inside `codex mcp add`, and the GUI clients
     prompt on first use. Only for the hosted server — a local one carries the API
-    key. Also without a terminal: a coding agent runs on the user's machine,
-    where the browser opens. Run separately from the install so the caller can
-    show progress for the install, then run the sign-in its own way.
+    key — with a terminal or without, since a coding agent's machine has a browser.
+    Run separately from the install so the caller can show progress for the
+    install and hand the terminal over for the sign-in.
     """
     if target_key != "claude-code":
         return None
@@ -393,27 +390,23 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             label="codex mcp remove",
         )
         result = _run_client_cli(command, label="codex mcp add")
-    except _CliTimedOut as error:
+    except _CliUnavailable as error:
         # For the hosted server `codex mcp add` writes the entry, then waits for the
         # browser sign-in. One nobody finished in time leaves a registered server
         # that `codex mcp login` completes, not a failed install.
-        if _codex_has_hosted_entry(server_spec):
+        if (
+            isinstance(error, _CliTimedOut)
+            and isinstance(server_spec, mcp_spec.RemoteServerSpec)
+            and (_read_codex_block() or {}).get("url") == server_spec.url
+        ):
             return InstallResult(
                 target_display_name="Codex",
                 succeeded=True,
                 sign_in_attempted=True,
                 sign_in_failed=True,
-                detail=(
-                    f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "
-                    f"`codex mcp add`; its sign-in did not finish within "
-                    f"{CLIENT_CLI_TIMEOUT_SECONDS}s"
-                ),
+                detail=f"Added '{SERVER_NAME}' via `codex mcp add`; not signed in",
                 summary="Updated" if was_registered else "Added",
             )
-        return InstallResult(
-            target_display_name="Codex", succeeded=False, detail=str(error)
-        )
-    except _CliUnavailable as error:
         return InstallResult(
             target_display_name="Codex", succeeded=False, detail=str(error)
         )
@@ -437,23 +430,6 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             f"`codex mcp add` failed (exit {result.returncode}): "
             f"{_first_line(result.stderr) or _first_line(result.stdout) or 'no output'}"
         ),
-    )
-
-
-def _codex_has_hosted_entry(server_spec: mcp_spec.McpServerSpec) -> bool:
-    """Whether Codex now has ``server_spec``'s hosted server registered."""
-    if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
-        return False
-    block = _read_codex_block()
-    return block is not None and block.get("url") == server_spec.url
-
-
-def signs_in_while_added(
-    target: "HostTarget", server_spec: mcp_spec.McpServerSpec
-) -> bool:
-    """Whether adding ``server_spec`` to ``target`` waits on a browser sign-in."""
-    return target.signs_in_when_added and isinstance(
-        server_spec, mcp_spec.RemoteServerSpec
     )
 
 
@@ -571,7 +547,6 @@ HOST_TARGETS: List[HostTarget] = [
         sign_in_command=f"codex mcp login {SERVER_NAME}",
         # Masks env values, unlike `codex mcp get`.
         status_command="codex mcp list",
-        signs_in_when_added=True,
     ),
     HostTarget(
         key="cursor",

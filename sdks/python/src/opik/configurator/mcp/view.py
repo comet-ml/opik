@@ -54,61 +54,41 @@ SIGN_IN_HINT = (
 
 def sign_in_failed_message(client_display_name: str) -> str:
     """What to do about a client that was registered but not signed in."""
-    target = next(
-        (
-            target
-            for target in mcp_targets.HOST_TARGETS
-            if target.display_name == client_display_name
-        ),
-        None,
-    )
-    finish = (
-        f"Run `{target.sign_in_command}` to finish it"
-        if target is not None and target.sign_in_command
-        else "Sign in from its MCP settings"
+    command = next(
+        target.sign_in_command
+        for target in mcp_targets.HOST_TARGETS
+        if target.display_name == client_display_name
     )
     return (
-        f"{client_display_name} is registered but not signed in. {finish} — until "
-        "then the server contributes no tools."
+        f"{client_display_name} is registered but not signed in. Run `{command}` to "
+        "finish it — until then the server contributes no tools."
     )
 
 
 def next_steps(
-    registered_clients: Sequence[str],
     hosted: bool,
-    sign_in_pending: Sequence[str] = (),
-    signed_in: Sequence[str] = (),
+    registered: Sequence[Tuple[mcp_targets.HostTarget, mcp_targets.InstallResult]],
 ) -> List[str]:
-    """What is left in each client after a run without a terminal, a line each.
-
-    Read by whoever ran it, often a coding agent. ``signed_in`` and
-    ``sign_in_pending`` are the clients this run signed in, and those whose
-    sign-in it started but that did not finish.
-    """
+    """What is left in each registered client, a line each, for whoever ran a run
+    without a terminal: often a coding agent."""
     steps = []
-    for key in registered_clients:
-        target = mcp_targets.find_target(key)
-        if target is None:
+    for target, result in registered:
+        name, check = target.display_name, f"check with `{target.status_command}`"
+        if not hosted or (result.sign_in_attempted and not result.sign_in_failed):
+            if target.status_command:
+                steps.append(f"{name}: {'signed in; ' if hosted else ''}{check}.")
             continue
-        name = target.display_name
-        check = f"check with `{target.status_command}`"
         sign_in = (
             "the sign-in did not finish. Sign in"
-            if key in sign_in_pending
+            if result.sign_in_failed
             else "sign in"
         )
-        if not hosted:
-            if target.status_command:
-                steps.append(f"{name}: {check}.")
-        elif key in signed_in:
-            steps.append(f"{name}: signed in; {check}.")
-        elif key == "claude-code":
+        if target.key == "claude-code":
             # `claude mcp login` refuses to run without a terminal, so an agent
             # cannot run it: this one is for the user.
             steps.append(
-                f"{name}: {sign_in} from a terminal with "
-                f"`{target.sign_in_command}`, or with `/mcp` in a Claude Code "
-                f"session; then {check}."
+                f"{name}: {sign_in} from a terminal with `{target.sign_in_command}`, "
+                f"or with `/mcp` in a Claude Code session; then {check}."
             )
         elif target.sign_in_command:
             steps.append(

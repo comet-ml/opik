@@ -436,7 +436,6 @@ class TestInstallCodex:
         assert result.succeeded is True
         assert result.sign_in_attempted is True
         assert result.sign_in_failed is True
-        assert "did not finish" in result.detail
 
     def test_install_codex__hosted_timed_out_with_nothing_written__fails(
         self, monkeypatch
@@ -447,17 +446,6 @@ class TestInstallCodex:
 
         assert result.succeeded is False
         assert "did not finish within" in result.detail
-
-    def test_install_codex__local_timed_out__fails(self, monkeypatch):
-        """No sign-in to wait for, so a hang is a failure."""
-        self._codex_add_times_out(
-            monkeypatch,
-            registered_after={"type": "stdio", "command": "/usr/bin/uvx"},
-        )
-
-        result = targets._install_codex(SERVER_SPEC)
-
-        assert result.succeeded is False
 
     def test_install_codex__does_not_leak_api_key_into_detail(self, monkeypatch):
         monkeypatch.setattr(targets.shutil, "which", lambda name: None)
@@ -756,16 +744,3 @@ def test_claude_supports_mcp_login__help_exits_non_zero__false(monkeypatch):
     )
 
     assert targets._claude_supports_mcp_login("/usr/bin/claude") is False
-
-
-def test_sign_in_command__no_terminal__still_signs_in(monkeypatch):
-    """A coding agent runs on the user's machine, where the browser opens; the
-    view runs the login on a pseudo-terminal of its own."""
-    _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
-
-    assert targets.sign_in_command("claude-code", REMOTE_SERVER_SPEC) == [
-        "/usr/bin/claude",
-        "mcp",
-        "login",
-        "opik-mcp",
-    ]

@@ -103,13 +103,12 @@ class TestRichInstallView:
 
         assert "Signing in" in capture.get()
 
-    def test_done__sign_in_needed__without_a_terminal__leaves_it_to_the_next_steps(
-        self, view
-    ):
-        """The hint says every client prompts; Claude Code does not, and the
-        unattended ending names each client's own sign-in command instead."""
+    def test_done__without_a_terminal__says_nothing(self, view):
+        """The run ends on each client's next step instead, which also names its
+        own sign-in command; the generic hint says every client prompts."""
         installer = view.RichInstallView()
         installer.plan("Opik Cloud", "Hosted server", needs_sign_in=True)
+        installer.sign_in_failed(["Codex"])
         with (
             mock.patch.object(
                 view.interactive_helpers, "is_interactive", return_value=False
@@ -118,22 +117,7 @@ class TestRichInstallView:
         ):
             installer.done()
 
-        assert "Signing in" not in capture.get()
-
-    @pytest.mark.parametrize("interactive", [True, False])
-    def test_done__sign_in_pending__said_once(self, view, interactive):
-        """In a terminal by this block; without one by the next steps instead."""
-        installer = view.RichInstallView()
-        installer.sign_in_failed(["Codex"])
-        with (
-            mock.patch.object(
-                view.interactive_helpers, "is_interactive", return_value=interactive
-            ),
-            view.console.capture() as capture,
-        ):
-            installer.done()
-
-        assert ("codex mcp login opik-mcp" in capture.get()) is interactive
+        assert capture.get() == ""
 
     def test_sign_in__without_a_terminal__runs_on_a_pseudo_terminal(self, view):
         """An agent's shell has no terminal, but the user's browser is there."""
@@ -155,18 +139,6 @@ class TestRichInstallView:
             ["claude", "mcp", "login", "opik-mcp"], timeout_seconds=60
         )
         handover.assert_not_called()
-
-    def test_next_steps__each_client_then_a_new_session(self, view):
-        with view.console.capture() as capture:
-            view.render_next_steps(
-                ["Claude Code: sign in with `claude mcp login opik-mcp`."]
-            )
-
-        out = capture.get()
-        assert "Next steps" in out
-        assert "claude mcp login opik-mcp" in out
-        assert "Start a new session" in out
-        assert out.index("claude mcp login") < out.index("Start a new session")
 
     def test_done__does_not_say_done(self, view):
         """The run goes on to the suggested first prompt, so it is not done yet."""
@@ -797,7 +769,12 @@ class TestTheSavedConnection:
     def _render(*args):
         from opik.cli import install_view as rich_view
 
-        with rich_view.console.capture() as capture:
+        with (
+            mock.patch.object(
+                rich_view.interactive_helpers, "is_interactive", return_value=True
+            ),
+            rich_view.console.capture() as capture,
+        ):
             rich_view.render_connection(*args)
         return [line.rstrip() for line in capture.get().splitlines()]
 

@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 
+from opik.configurator.mcp import targets
 from opik.configurator.mcp import view as mcp_view
 
 
@@ -95,58 +96,56 @@ class TestTargetResult:
         assert result.short == "no codex CLI on PATH"
 
 
+def _registered(*keys, signed_in=(), pending=()):
+    """Install results for real clients, as the installer hands them over."""
+    return [
+        (
+            targets.find_target(key),
+            targets.InstallResult(
+                key,
+                True,
+                "Added",
+                sign_in_attempted=key in signed_in or key in pending,
+                sign_in_failed=key in pending,
+            ),
+        )
+        for key in keys
+    ]
+
+
 class TestNextSteps:
     """What an unattended run leaves for each client, read by whoever ran it."""
 
     def test_hosted__claude_code_not_signed_in__a_step_for_the_user(self):
         """`claude mcp login` refuses to run without a terminal, so an agent
         cannot run it; `/mcp` also covers builds without the command."""
-        [step] = mcp_view.next_steps(["claude-code"], hosted=True)
+        [step] = mcp_view.next_steps(True, _registered("claude-code"))
 
-        assert step.startswith("Claude Code:")
         assert "from a terminal with `claude mcp login opik-mcp`" in step
         assert "`/mcp`" in step
-        assert "`claude mcp list`" in step
 
-    @pytest.mark.parametrize(
-        "client, check",
-        [("claude-code", "claude mcp list"), ("codex", "codex mcp list")],
-    )
-    def test_hosted__signed_in_by_the_run__only_a_check(self, client, check):
-        [step] = mcp_view.next_steps([client], hosted=True, signed_in=[client])
+    @pytest.mark.parametrize("key", ["claude-code", "codex"])
+    def test_hosted__signed_in_by_the_run__only_a_check(self, key):
+        [step] = mcp_view.next_steps(True, _registered(key, signed_in=[key]))
 
-        assert f"signed in; check with `{check}`" in step
+        assert "signed in; check with" in step
         assert "login" not in step
 
-    def test_hosted__a_client_without_a_cli_signs_in_from_its_settings(self):
-        [step] = mcp_view.next_steps(["cursor"], hosted=True)
-
-        assert step.startswith("Cursor:")
-        assert "MCP settings" in step
-
-    def test_hosted__opencode_signs_in_with_its_own_command(self):
-        """`opencode mcp list` reports the hosted server as needing it."""
-        [step] = mcp_view.next_steps(["opencode"], hosted=True)
-
-        assert "`opencode mcp auth opik-mcp`" in step
-        assert "`opencode mcp list`" in step
-
-    @pytest.mark.parametrize(
-        "client, command",
-        [
-            ("codex", "codex mcp login opik-mcp"),
-            ("claude-code", "claude mcp login opik-mcp"),
-        ],
-    )
-    def test_hosted__a_sign_in_that_did_not_finish_comes_first(self, client, command):
-        [step] = mcp_view.next_steps([client], hosted=True, sign_in_pending=[client])
+    def test_hosted__a_sign_in_that_did_not_finish__comes_first(self):
+        [step] = mcp_view.next_steps(True, _registered("codex", pending=["codex"]))
 
         assert "the sign-in did not finish" in step
-        assert step.index(command) < step.index("mcp list")
+        assert step.index("codex mcp login opik-mcp") < step.index("codex mcp list")
+
+    def test_hosted__each_client_its_own_way_in(self):
+        opencode, cursor = mcp_view.next_steps(True, _registered("opencode", "cursor"))
+
+        assert "`opencode mcp auth opik-mcp`" in opencode
+        assert cursor == "Cursor: sign in from its MCP settings when it asks."
 
     def test_local__nothing_to_sign_in_to(self):
         steps = mcp_view.next_steps(
-            ["claude-code", "codex", "cursor", "opencode"], hosted=False
+            False, _registered("claude-code", "codex", "cursor", "opencode")
         )
 
         assert steps == [
@@ -155,20 +154,18 @@ class TestNextSteps:
             "opencode: check with `opencode mcp list`.",
         ]
 
+    @pytest.mark.parametrize("hosted", [True, False])
+    def test_never_claude_mcp_get__it_prints_the_api_key(self, hosted):
+        steps = mcp_view.next_steps(hosted, _registered("claude-code"))
+
+        assert not any("claude mcp get" in step for step in steps)
+
     @pytest.mark.parametrize(
         "client, command",
         [
             ("Claude Code", "`claude mcp login opik-mcp`"),
             ("Codex", "`codex mcp login opik-mcp`"),
-            ("opencode", "`opencode mcp auth opik-mcp`"),
-            ("Cursor", "MCP settings"),
         ],
     )
-    def test_sign_in_failed__names_that_clients_own_way_in(self, client, command):
+    def test_sign_in_failed__names_that_clients_own_command(self, client, command):
         assert command in mcp_view.sign_in_failed_message(client)
-
-    @pytest.mark.parametrize("hosted", [True, False])
-    def test_never_claude_mcp_get__it_prints_the_api_key(self, hosted):
-        steps = mcp_view.next_steps(["claude-code"], hosted=hosted)
-
-        assert not any("claude mcp get" in step for step in steps)

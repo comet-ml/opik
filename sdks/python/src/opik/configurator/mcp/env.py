@@ -23,9 +23,7 @@ def build_mcp_env(
 
     These are the variables read by opik-mcp's own settings (``OPIK_API_KEY``,
     ``OPIK_WORKSPACE``, ``COMET_URL_OVERRIDE``, ``OPIK_URL``) — note opik-mcp
-    takes the instance address as ``COMET_URL_OVERRIDE`` or ``OPIK_URL``, not the
-    SDK's ``OPIK_URL_OVERRIDE``. ``COMET_WORKSPACE`` is its deprecated alias for
-    the workspace, which configs written by older SDKs still carry:
+    takes the address as one of the last two, not the SDK's ``OPIK_URL_OVERRIDE``:
 
     - Cloud: ``OPIK_API_KEY`` + ``OPIK_WORKSPACE``.
     - Self-hosted Comet: also ``COMET_URL_OVERRIDE`` set to the instance base URL;

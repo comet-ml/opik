@@ -1255,8 +1255,6 @@ class TestTheSignInIsItsOwnStep:
         report, _ = self._run(monkeypatch, returncode=0)
 
         assert report.sign_in == "succeeded"
-        assert report.signed_in == ("claude-code",)
-        assert report.sign_in_pending == ()
 
     def test_a_sign_in_that_failed__is_reported_as_failed(self, monkeypatch):
         report, view = self._run(monkeypatch, returncode=1)
@@ -1265,44 +1263,26 @@ class TestTheSignInIsItsOwnStep:
         assert view._sign_in_failed == ("Claude Code",)
 
 
-class TestCodexSignsInWhileBeingAdded:
-    """`codex mcp add` opens the browser sign-in and waits for it."""
+class TestTheNextStepsComeFromTheResults:
+    """What a run without a terminal ends on is decided where the results are."""
 
-    @staticmethod
-    def _run(monkeypatch, result):
+    def test_a_sign_in_that_did_not_finish__is_named(self, monkeypatch):
         monkeypatch.setattr(
             install.mcp_detection,
             "detect_hosted_mcp_server",
             lambda **kwargs: "https://www.comet.com/opik/api/v1/mcp",
         )
+        result = targets.InstallResult(
+            "Codex", True, "Added", sign_in_attempted=True, sign_in_failed=True
+        )
         codex = _target("codex", True, mock.Mock(return_value=result))
-        codex.signs_in_when_added = True
+        codex.sign_in_command = "codex mcp login opik-mcp"
+        codex.status_command = "codex mcp list"
         monkeypatch.setattr(targets, "HOST_TARGETS", [codex])
-        args = _make_args(host_keys=["codex"])
-        return install.setup_mcp_server(**args), args["view"]
 
-    def test_the_spinner_says_it_is_waiting_for_the_browser(self, monkeypatch):
-        _, view = self._run(
-            monkeypatch,
-            targets.InstallResult("Codex", True, "Added", sign_in_attempted=True),
+        report = install.setup_mcp_server(**_make_args(host_keys=["codex"]))
+
+        assert report.next_steps == (
+            "codex: the sign-in did not finish. Sign in with "
+            "`codex mcp login opik-mcp`, then check with `codex mcp list`.",
         )
-
-        assert view.steps[-2] == (
-            "Adding Opik MCP to codex, waiting for the sign-in in your browser"
-        )
-
-    def test_a_sign_in_that_ran_out_of_time__is_named_for_the_ending(self, monkeypatch):
-        report, _ = self._run(
-            monkeypatch,
-            targets.InstallResult(
-                "Codex",
-                True,
-                "Added",
-                sign_in_attempted=True,
-                sign_in_failed=True,
-            ),
-        )
-
-        assert report.registered == ("codex",)
-        assert report.sign_in == "failed"
-        assert report.sign_in_pending == ("codex",)

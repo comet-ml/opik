@@ -266,19 +266,13 @@ def render_mcp_banner() -> None:
     )
 
 
-def render_connection(
-    opik_url: str,
-    workspace: Optional[str],
-    source: str,
-    change_command: Optional[str] = "opik mcp configure --ignore-opik-config",
-) -> None:
+def render_connection(opik_url: str, workspace: Optional[str], source: str) -> None:
     """Which saved Opik the AI client is being connected to, from where, and how
     to choose another.
 
     Said up front because nothing later names it, and a wrong Opik is otherwise
     only found out once the AI client cannot reach it. Laid out like the block
     `opik configure` closes on, which says the same things about the same file.
-    ``change_command`` is None when the user just named the Opik in a flag.
     """
     console.print(text.Text("Connecting to", style="bold"))
     grid = table.Table.grid(padding=(0, 2))
@@ -290,16 +284,21 @@ def render_connection(
         grid.add_row("Workspace", text.Text(workspace))
     grid.add_row("From", text.Text(_collapse_home(source)))
     console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
-    if change_command is not None:
-        console.print(
-            padding.Padding(
-                text.Text.assemble(
-                    ("To change the MCP connection config: ", "dim"),
-                    (change_command, _CODE_STYLE),
+    console.print(
+        padding.Padding(
+            text.Text.assemble(
+                ("To change the MCP connection config: ", "dim"),
+                (
+                    # The flag asks, which needs a terminal.
+                    "opik mcp configure --ignore-opik-config"
+                    if interactive_helpers.is_interactive()
+                    else "opik mcp configure --deployment <cloud|local|self-hosted>",
+                    _CODE_STYLE,
                 ),
-                _FIELDS_INDENT,
-            )
+            ),
+            _FIELDS_INDENT,
         )
+    )
     console.print()
 
 
@@ -416,26 +415,16 @@ def render_restart_note(mcp_installed: bool) -> None:
 
 
 def render_next_steps(steps: Sequence[str]) -> None:
-    """The ending for a run without a terminal: what is left in each client.
-
-    Often read by the coding agent that ran it, which can run the commands, and
-    whose own session has to start over to load the server.
-    """
+    """The ending for a run without a terminal, often read by the coding agent
+    that ran it: what is left in each client, then a new session to load it."""
     console.print()
     console.print(text.Text("Next steps", style="bold"))
-    for step in steps:
+    for step in [
+        *steps,
+        'Start a new session in your AI client, then ask it to "list my Opik '
+        'projects via Opik MCP".',
+    ]:
         console.print(padding.Padding(_emphasize(step), (0, 0, 0, 2)))
-    console.print(
-        padding.Padding(
-            text.Text.assemble(
-                ("Start a new session in your AI client", "bold"),
-                (", then ask it to ", ""),
-                ('"list my Opik projects via Opik MCP"', "green"),
-                (".", ""),
-            ),
-            (0, 0, 0, 2),
-        )
-    )
 
 
 def render_note(message: str, hint: Optional[str] = None) -> None:
@@ -480,13 +469,9 @@ class RichInstallView(mcp_view.InstallView):
         if not interactive_helpers.is_interactive():
             # Nobody at a terminal, but most likely someone at the browser: a
             # coding agent running this on their machine.
-            with self.step(
-                f"Signing in to Opik MCP in {client_display_name}, waiting for the "
-                "sign-in in your browser"
-            ):
-                return terminal_session.run_unattended(
-                    command, timeout_seconds=mcp_targets.CLIENT_CLI_TIMEOUT_SECONDS
-                )
+            return terminal_session.run_unattended(
+                command, timeout_seconds=mcp_targets.CLIENT_CLI_TIMEOUT_SECONDS
+            )
         console.print()
         returncode = terminal_session.run(
             command,
@@ -575,11 +560,12 @@ class RichInstallView(mcp_view.InstallView):
     def done(self) -> None:
         """Close the run with anything the user still has to do, if there is any.
 
-        No "Done": the run goes on to the suggested first prompt.
+        No "Done": the run goes on to the suggested first prompt. Without a terminal
+        the run ends on each client's next step instead (`render_next_steps`).
         """
-        # Without a terminal the run ends on each client's next step instead
-        # (`render_next_steps`), which says the same per client.
-        if self._sign_in_failed and interactive_helpers.is_interactive():
+        if not interactive_helpers.is_interactive():
+            return
+        if self._sign_in_failed:
             console.print()
             console.print(
                 text.Text.assemble(
@@ -596,9 +582,7 @@ class RichInstallView(mcp_view.InstallView):
                     )
                 )
             return
-        # Without a terminal the run ends on each client's own sign-in command
-        # instead; this says they all prompt, and Claude Code does not.
-        if self._needs_sign_in and interactive_helpers.is_interactive():
+        if self._needs_sign_in:
             console.print()
             console.print(
                 padding.Padding(

@@ -303,8 +303,9 @@ class TestCodingAgentFlow:
                 return_value=assistants.Outcome(
                     clients=1,
                     skills=False,
-                    registered_clients=("claude-code",),
-                    transport="remote",
+                    next_steps=(
+                        "Claude Code: sign in with `claude mcp login opik-mcp`.",
+                    ),
                 ),
             ),
             configure_cli.install_view.console.capture() as capture,

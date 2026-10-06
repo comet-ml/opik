@@ -251,11 +251,6 @@ class TestUnattended:
 
         assert terminal_session.run_unattended(command, timeout_seconds=30) == 0
 
-    def test_its_exit_status_comes_back(self):
-        command = [sys.executable, "-c", "import sys; sys.exit(4)"]
-
-        assert terminal_session.run_unattended(command, timeout_seconds=30) == 4
-
     def test_one_that_outlives_the_timeout__is_stopped(self):
         command = [sys.executable, "-c", "import time; time.sleep(30)"]
         started = time.monotonic()

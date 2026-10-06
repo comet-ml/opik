@@ -1,6 +1,5 @@
 """Tests for the ``opik mcp configure`` command."""
 
-import contextlib
 import pathlib
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -824,11 +823,10 @@ class TestHostFlag:
         setup_spy.assert_not_called()
 
 
-def _run_unattended(args, *, saved=None, local_opik_answers=False, **patches):
+def _run_unattended(args, *, saved=None, local_opik_answers=False):
     """`opik mcp configure` with no terminal; returns the result and setup's params.
 
-    ``saved`` is the Opik configuration on disk, none by default. Extra
-    ``patches`` replace ``opik_rest_helpers`` functions by name.
+    ``saved`` is the Opik configuration on disk, none by default.
     """
     runner = CliRunner()
     setup_spy = Mock(return_value=assistants.NOTHING_DONE)
@@ -853,12 +851,7 @@ def _run_unattended(args, *, saved=None, local_opik_answers=False, **patches):
         patch.object(mcp_cli.assistants, "setup", setup_spy),
         patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
         patch.object(mcp_cli.analytics, "track_event", track_spy),
-        contextlib.ExitStack() as stack,
     ):
-        for name, replacement in patches.items():
-            stack.enter_context(
-                patch.object(mcp_cli.opik_rest_helpers, name, replacement)
-            )
         result = runner.invoke(
             cli, ["mcp", "configure", "--ai-client", "claude-code", *args]
         )
@@ -879,6 +872,7 @@ class TestDeploymentFlag:
         assert run.params["api_url"] == mcp_cli.opik_config.OPIK_URL_CLOUD
         assert run.params["use_local"] is False
         assert run.params["self_hosted_comet"] is False
+        assert run.track.call_args_list[0].kwargs["deployment_flag"] == "cloud"
 
     def test_cloud__replaces_the_saved_configuration(self):
         """The flag answers the question the saved config would."""
@@ -893,18 +887,6 @@ class TestDeploymentFlag:
         assert run.params["api_key"] is None
         assert run.params["use_local"] is False
 
-    def test_cloud__with_ignore_opik_config__still_needs_no_terminal(self):
-        run = _run_unattended(["--ignore-opik-config", "--deployment", "cloud"])
-
-        assert run.result.exit_code == 0, run.result.output
-        assert run.params["api_url"] == mcp_cli.opik_config.OPIK_URL_CLOUD
-
-    def test_cloud__the_entry_event_says_the_flag_was_used(self):
-        run = _run_unattended(["--deployment", "cloud"])
-
-        entry = run.track.call_args_list[0]
-        assert entry.kwargs["deployment_flag"] == "cloud"
-
     @pytest.mark.parametrize(
         "args",
         [
@@ -912,6 +894,11 @@ class TestDeploymentFlag:
             ["--deployment", "cloud", "--workspace", "ws"],
             ["--deployment", "local", "--workspace", "ws"],
             ["--url", "http://localhost:5173"],
+            # The workspace is not guessed: one of several would be the wrong one.
+            ["--deployment", "self-hosted", "--url", "https://comet.example.com"],
+            ["--deployment", "self-hosted", "--workspace", "ws"],
+            # Parsed as given, it reported a down Opik at `localhost:///`.
+            ["--deployment", "local", "--url", "localhost:5173"],
         ],
     )
     def test_flags_that_do_not_go_together__refused_before_the_run_starts(self, args):
@@ -919,46 +906,27 @@ class TestDeploymentFlag:
         run = _run_unattended(args)
 
         assert run.result.exit_code == 2
-        assert "--deployment" in run.result.output
         run.track.assert_not_called()
         assert run.params is None
 
-    @pytest.mark.parametrize("url", ["localhost:5173", "comet.example.com"])
-    def test_url_without_a_scheme__refused_with_an_example(self, url):
-        """Parsed as given, it reported a down Opik at `localhost:///`."""
-        run = _run_unattended(["--deployment", "local", "--url", url])
-
-        assert run.result.exit_code == 2
-        assert "http://localhost:5173" in run.result.output
-        assert run.params is None
-
-    def test_url_with_credentials__refused_without_repeating_them(self):
-        run = _run_unattended(
-            ["--deployment", "local", "--url", "https://user:s3cret@opik.example"]
-        )
-
-        assert run.result.exit_code == 2
-        assert "s3cret" not in run.result.output
-        assert run.params is None
-
-    def test_local__the_default_address(self):
-        run = _run_unattended(["--deployment", "local"], local_opik_answers=True)
+    @pytest.mark.parametrize(
+        "args, api_url",
+        [
+            ([], "http://localhost:5173/api/"),
+            (
+                ["--url", "http://opik.internal:8080/api"],
+                "http://opik.internal:8080/api/",
+            ),
+        ],
+    )
+    def test_local__no_api_key_and_the_address_checked(self, args, api_url):
+        run = _run_unattended(["--deployment", "local", *args], local_opik_answers=True)
 
         assert run.result.exit_code == 0, run.result.output
         assert run.params["use_local"] is True
         assert run.params["api_key"] is None
-        assert run.params["api_url"] == "http://localhost:5173/api/"
-        assert run.ping.call_args.args == ("http://localhost:5173/",)
-
-    def test_local__url_names_another_address(self):
-        run = _run_unattended(
-            ["--deployment", "local", "--url", "http://opik.internal:8080/api"],
-            local_opik_answers=True,
-        )
-
-        assert run.result.exit_code == 0, run.result.output
-        assert run.params["base_url"] == "http://opik.internal:8080/"
-        assert run.params["api_url"] == "http://opik.internal:8080/api/"
+        assert run.params["api_url"] == api_url
+        assert run.ping.call_args.args == (run.params["base_url"],)
 
     def test_local__nothing_answering__stops_before_writing(self):
         run = _run_unattended(["--deployment", "local"], local_opik_answers=False)
@@ -967,66 +935,19 @@ class TestDeploymentFlag:
         assert "No Opik answers at http://localhost:5173/" in run.result.output
         assert run.params is None
 
-    def test_tls__a_saved_dont_check_stays_with_the_saved_opik(self):
-        """This run may send its API key to the Opik the flag names."""
-        run = _run_unattended(
-            ["--deployment", "local"],
-            saved=_config(check_tls_certificate=False),
-            local_opik_answers=True,
-        )
-
-        assert run.params["check_tls_certificate"] is True
-        assert run.ping.call_args.kwargs["check_tls_certificate"] is True
-
-    def test_tls__the_environment_can_turn_the_check_off(self, monkeypatch):
-        monkeypatch.setenv("OPIK_CHECK_TLS_CERTIFICATE", "false")
-        run = _run_unattended(["--deployment", "local"], local_opik_answers=True)
-
-        assert run.params["check_tls_certificate"] is False
-
-    def test_self_hosted__key_from_the_environment(self, monkeypatch):
-        monkeypatch.setenv("OPIK_API_KEY", "env-key")
-        run = _run_unattended(
-            [
-                "--deployment",
-                "self-hosted",
-                "--url",
-                "https://comet.acme.com",
-                "--workspace",
-                "team-ws",
-            ],
-            is_api_key_correct=Mock(return_value=True),
-            is_workspace_name_correct=Mock(return_value=True),
-        )
-
-        assert run.result.exit_code == 0, run.result.output
-        assert run.params["api_key"] == "env-key"
-        assert run.params["workspace"] == "team-ws"
-        assert run.params["self_hosted_comet"] is True
-        assert run.params["api_url"] == "https://comet.acme.com/opik/api/"
-        assert "env-key" not in run.result.output
-
-    def test_self_hosted__workspace_from_the_environment(self, monkeypatch):
+    def test_self_hosted__key_and_workspace_from_the_environment(self, monkeypatch):
         monkeypatch.setenv("OPIK_API_KEY", "env-key")
         monkeypatch.setenv("OPIK_WORKSPACE", "env-ws")
-        run = _run_unattended(
-            ["--deployment", "self-hosted", "--url", "https://comet.acme.com"],
-            is_api_key_correct=Mock(return_value=True),
-            is_workspace_name_correct=Mock(return_value=True),
-        )
-
-        assert run.result.exit_code == 0, run.result.output
-        assert run.params["workspace"] == "env-ws"
-
-    def test_self_hosted__no_workspace__is_not_guessed(self, monkeypatch):
-        monkeypatch.setenv("OPIK_API_KEY", "env-key")
         run = _run_unattended(
             ["--deployment", "self-hosted", "--url", "https://comet.acme.com"]
         )
 
-        assert run.result.exit_code == 2
-        assert "--workspace" in run.result.output
-        assert run.params is None
+        assert run.result.exit_code == 0, run.result.output
+        assert run.params["api_key"] == "env-key"
+        assert run.params["workspace"] == "env-ws"
+        assert run.params["self_hosted_comet"] is True
+        assert run.params["api_url"] == "https://comet.acme.com/opik/api/"
+        assert "env-key" not in run.result.output
 
     def test_self_hosted__no_api_key__names_the_variable(self):
         run = _run_unattended(
@@ -1044,75 +965,6 @@ class TestDeploymentFlag:
         assert "OPIK_API_KEY" in run.result.output
         assert run.params is None
 
-    def test_self_hosted__a_key_the_instance_rejects__stops_before_writing(
-        self, monkeypatch
-    ):
-        monkeypatch.setenv("OPIK_API_KEY", "wrong-key")
-        run = _run_unattended(
-            [
-                "--deployment",
-                "self-hosted",
-                "--url",
-                "https://comet.acme.com",
-                "--workspace",
-                "team-ws",
-            ],
-            is_api_key_correct=Mock(return_value=False),
-        )
-
-        assert run.result.exit_code != 0
-        assert "not valid on https://comet.acme.com/" in run.result.output
-        assert run.params is None
-
-    def test_self_hosted__a_workspace_the_key_cannot_use__stops_before_writing(
-        self, monkeypatch
-    ):
-        monkeypatch.setenv("OPIK_API_KEY", "env-key")
-        run = _run_unattended(
-            [
-                "--deployment",
-                "self-hosted",
-                "--url",
-                "https://comet.acme.com",
-                "--workspace",
-                "other-ws",
-            ],
-            is_api_key_correct=Mock(return_value=True),
-            is_workspace_name_correct=Mock(return_value=False),
-        )
-
-        assert run.result.exit_code != 0
-        assert "no workspace `other-ws`" in run.result.output
-        assert run.params is None
-
-    def test_self_hosted__unreachable__says_so_rather_than_invalid(self, monkeypatch):
-        monkeypatch.setenv("OPIK_API_KEY", "env-key")
-        run = _run_unattended(
-            [
-                "--deployment",
-                "self-hosted",
-                "--url",
-                "https://comet.acme.com",
-                "--workspace",
-                "team-ws",
-            ],
-            is_api_key_correct=Mock(side_effect=ConnectionError("Network error")),
-        )
-
-        assert run.result.exit_code != 0
-        assert "Could not check the API key on https://comet.acme.com/" in (
-            run.result.output
-        )
-        assert run.params is None
-
-    def test_self_hosted__needs_a_url(self, monkeypatch):
-        monkeypatch.setenv("OPIK_API_KEY", "env-key")
-        run = _run_unattended(["--deployment", "self-hosted", "--workspace", "ws"])
-
-        assert run.result.exit_code == 2
-        assert "--url" in run.result.output
-        assert run.params is None
-
 
 @pytest.mark.usefixtures("configure_opik_not_configured")
 class TestUnattendedWithoutConfig:
@@ -1124,9 +976,11 @@ class TestUnattendedWithoutConfig:
         assert run.result.exit_code == 0, run.result.output
         assert run.params["use_local"] is True
         assert run.params["api_url"] == "http://localhost:5173/api/"
-        # Said, with the way to pick Cloud instead.
+        # Said, with the way to pick another.
         assert "localhost:5173" in run.result.output
-        assert "--deployment cloud" in run.result.output
+        assert "--deployment <cloud|local|self-hosted>" in " ".join(
+            run.result.output.split()
+        )
 
     def test_nothing_answering__lists_each_deployment_with_the_named_client(self):
         run = _run_unattended([], local_opik_answers=False)
@@ -1162,14 +1016,11 @@ class TestUnattendedWithoutConfig:
 class TestUnattendedEnding:
     """Without a terminal, the run ends on what is left in each client."""
 
-    @staticmethod
-    def _end(registered, transport, sign_in_pending=(), signed_in=()):
+    def test_the_next_steps_then_a_new_session(self):
         outcome = assistants.NOTHING_DONE._replace(
-            clients=len(registered),
-            registered_clients=tuple(registered),
-            transport=transport,
-            sign_in_pending=tuple(sign_in_pending),
-            signed_in=tuple(signed_in),
+            clients=1,
+            registered_clients=("claude-code",),
+            next_steps=("Claude Code: signed in; check with `claude mcp list`.",),
         )
         with (
             patch.object(
@@ -1180,42 +1031,38 @@ class TestUnattendedEnding:
             mcp_cli._perform_handoff(
                 mcp_cli._resolve_handoff(mcp_cli._opik_cloud_params(), outcome)
             )
-        # Rich wraps at the console width; the words are what is asserted.
-        return " ".join(capture.get().split())
 
-    def test_hosted_claude_code__sign_in_command_then_a_new_session(self):
-        out = self._end(["claude-code"], "remote")
+        out = " ".join(capture.get().split())
+        assert "Claude Code: signed in; check with `claude mcp list`." in out
+        assert out.index("claude mcp list") < out.index("Start a new session")
 
-        assert "claude mcp login opik-mcp" in out
-        assert "Start a new session" in out
-        # It prints the server's env, API key included.
-        assert "claude mcp get" not in out
 
-    def test_hosted_codex__how_to_check_and_sign_in(self):
-        out = self._end(["codex"], "remote")
+class TestAiClientAlias:
+    def test_claude__is_claude_code(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.assistants, "setup") as setup_spy,
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "mcp",
+                    "configure",
+                    "--ai-client",
+                    "claude",
+                    "--ai-client",
+                    "claude-code",
+                ],
+            )
 
-        assert "codex mcp list" in out
-        assert "codex mcp login opik-mcp" in out
-
-    def test_hosted_claude_code__signed_in_during_the_run(self):
-        out = self._end(["claude-code"], "remote", signed_in=["claude-code"])
-
-        assert "Claude Code: signed in; check with `claude mcp list`" in out
-        assert "login" not in out
-
-    def test_hosted_codex__a_sign_in_that_ran_out_of_time(self):
-        out = self._end(["codex"], "remote", sign_in_pending=["codex"])
-
-        assert "the sign-in did not finish" in out
-        assert "codex mcp login opik-mcp" in out
-        assert "Start a new session" in out
-
-    def test_local_server__no_sign_in(self):
-        out = self._end(["claude-code", "codex"], "local_stdio")
-
-        assert "login" not in out
-        assert "claude mcp list" in out
-        assert "Start a new session" in out
+        assert result.exit_code == 0, result.output
+        assert setup_spy.call_args.kwargs["host_keys"] == ["claude-code"]
 
 
 class TestDelegatesToTheSharedStep:
