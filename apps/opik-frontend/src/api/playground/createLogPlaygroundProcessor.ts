@@ -1,10 +1,7 @@
-import asyncLib from "async";
 import { v7 } from "uuid";
 import pick from "lodash/pick";
 
 import {
-  LogExperiment,
-  LogExperimentItem,
   LogExperimentPromptVersion,
   LogErrorInfo,
   LogSpan,
@@ -13,11 +10,7 @@ import {
 } from "@/types/playground";
 
 import { LOGS_SOURCE, SPAN_TYPE } from "@/types/traces";
-import api, {
-  EXPERIMENTS_REST_ENDPOINT,
-  SPANS_REST_ENDPOINT,
-  TRACES_REST_ENDPOINT,
-} from "@/api/api";
+import api, { SPANS_REST_ENDPOINT, TRACES_REST_ENDPOINT } from "@/api/api";
 import { snakeCaseObj } from "@/lib/utils";
 import { createBatchProcessor } from "@/lib/batches";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
@@ -61,13 +54,8 @@ export interface TraceMapping {
 }
 
 export interface LogProcessorArgs {
-  onAddExperimentRegistry: (
-    loggedExperiments: LogExperiment[],
-    experimentPromptMap: Record<string, string>,
-  ) => void;
   onError: (error: Error) => void;
   onCreateTraces: (traces: LogTrace[], mappings: TraceMapping[]) => void;
-  onExperimentItemsComplete?: (experimentIds: string[]) => void;
   projectName?: string;
 }
 
@@ -82,21 +70,15 @@ export const NOOP_LOG_PROCESSOR: LogProcessor = {
 };
 
 export const buildLogProcessor = ({
-  datasetName,
   canLogTraceSpanThread,
-  canCreateExperiments,
   args,
 }: {
-  datasetName: string | null;
   canLogTraceSpanThread: boolean;
-  canCreateExperiments: boolean;
   args: LogProcessorArgs;
-}): LogProcessor => {
-  const shouldLog = datasetName
-    ? canLogTraceSpanThread && canCreateExperiments
-    : canLogTraceSpanThread;
-  return shouldLog ? createLogPlaygroundProcessor(args) : NOOP_LOG_PROCESSOR;
-};
+}): LogProcessor =>
+  canLogTraceSpanThread
+    ? createLogPlaygroundProcessor(args)
+    : NOOP_LOG_PROCESSOR;
 
 const createBatchTraces = async (traces: LogTrace[]) => {
   return api.post(`${TRACES_REST_ENDPOINT}batch`, {
@@ -107,28 +89,6 @@ const createBatchTraces = async (traces: LogTrace[]) => {
 const createBatchSpans = async (spans: LogSpan[]) => {
   return api.post(`${SPANS_REST_ENDPOINT}batch`, {
     spans: spans.map(snakeCaseObj),
-  });
-};
-
-const createExperiment = async (experiment: LogExperiment) => {
-  return api.post(EXPERIMENTS_REST_ENDPOINT, snakeCaseObj(experiment));
-};
-
-const createBatchExperimentItems = async (
-  experimentItems: LogExperimentItem[],
-) => {
-  await api.post(`${EXPERIMENTS_REST_ENDPOINT}items`, {
-    experiment_items: experimentItems.map(snakeCaseObj),
-  });
-};
-
-const finishExperiments = async (experimentIds: string[]) => {
-  if (experimentIds.length === 0) {
-    return;
-  }
-
-  await api.post(`${EXPERIMENTS_REST_ENDPOINT}finish`, {
-    ids: experimentIds,
   });
 };
 
@@ -269,62 +229,12 @@ export const getLoggedParameters = (
     run.openAiPipelineMode,
   );
 
-const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
-  // Use the actual model from the response headers if available
-  const experimentModel = run.actualModel || run.model;
-
-  const experimentMetadata: Record<string, unknown> = {
-    model: experimentModel,
-    messages: JSON.stringify(run.templateMessages ?? run.providerMessages),
-    model_config: getLoggedParameters(run),
-  };
-
-  // Add selected_rule_ids to experiment metadata if provided
-  if (run.selectedRuleIds && run.selectedRuleIds.length > 0) {
-    experimentMetadata.selected_rule_ids = run.selectedRuleIds;
-  }
-
-  return {
-    id: v7(),
-    datasetName: run.datasetName!,
-    ...(run.datasetVersionId && {
-      datasetVersionId: run.datasetVersionId,
-    }),
-    ...(run.experimentName && { name: run.experimentName }),
-    metadata: experimentMetadata,
-    ...(run.promptLibraryVersions?.length && {
-      prompt_versions: run.promptLibraryVersions,
-    }),
-  };
-};
-
-const getExperimentItemFromRun = (
-  run: LogQueueParams,
-  experimentId: string,
-  traceId: string,
-): LogExperimentItem => {
-  return {
-    id: v7(),
-    datasetItemId: run.datasetItemId!,
-    experimentId,
-    traceId,
-  };
-};
-
-const CREATE_EXPERIMENT_CONCURRENCY_RATE = 5;
-
 const createLogPlaygroundProcessor = ({
-  onAddExperimentRegistry,
   onError,
   onCreateTraces,
-  onExperimentItemsComplete,
   projectName = PLAYGROUND_PROJECT_NAME,
 }: LogProcessorArgs): LogProcessor => {
-  const experimentPromptMap: Record<string, string> = {};
-  const experimentRegistry: LogExperiment[] = [];
   const traceMappings: TraceMapping[] = [];
-  let areExperimentsCreated = false;
-  let isLoggingFinished = false;
 
   const spanBatch = createBatchProcessor<LogSpan>(async (spans) => {
     try {
@@ -343,107 +253,24 @@ const createLogPlaygroundProcessor = ({
     }
   });
 
-  const experimentItemsBatch = createBatchProcessor<LogExperimentItem>(
-    async (experimentItems) => {
-      try {
-        await createBatchExperimentItems(experimentItems);
-      } catch {
-        onError(
-          new Error("There has been an error with logging experiment items"),
-        );
-      }
-    },
-  );
-
-  const experimentsQueue = asyncLib.queue<LogExperiment>(async (e) => {
-    try {
-      await createExperiment(e);
-      experimentRegistry.push(e);
-    } catch {
-      onError(new Error("There has been an error with logging experiments"));
-    }
-  }, CREATE_EXPERIMENT_CONCURRENCY_RATE);
-
-  experimentsQueue.drain(() => {
-    onAddExperimentRegistry(experimentRegistry, experimentPromptMap);
-    areExperimentsCreated = true;
-    tryFinishExperiments();
-  });
-
-  const tryFinishExperiments = async () => {
-    // Only finish when both conditions are met:
-    // 1. All experiments have been created (queue drained)
-    // 2. finishLogging was called (all batches flushed and no more items will be added)
-    if (
-      areExperimentsCreated &&
-      isLoggingFinished &&
-      experimentRegistry.length > 0
-    ) {
-      try {
-        const experimentIds = experimentRegistry.map((e) => e.id);
-        await finishExperiments(experimentIds);
-        onExperimentItemsComplete?.(experimentIds);
-      } catch {
-        onError(
-          new Error("There has been an error with finishing experiments"),
-        );
-      }
-    }
-  };
-
   return {
     log: (run: LogQueueParams) => {
-      const { promptId, datasetName, datasetItemId } = run;
+      const trace = getTraceFromRun(run, projectName, LOGS_SOURCE.playground);
+      const span = getSpanFromRun(
+        run,
+        trace.id,
+        projectName,
+        LOGS_SOURCE.playground,
+      );
 
-      const isWithExperiments = !!datasetName;
-      const source = isWithExperiments
-        ? LOGS_SOURCE.experiment
-        : LOGS_SOURCE.playground;
-
-      const trace = getTraceFromRun(run, projectName, source);
-      const span = getSpanFromRun(run, trace.id, projectName, source);
-
-      // Store the trace mapping
-      traceMappings.push({
-        traceId: trace.id,
-        promptId,
-        datasetItemId,
-      });
+      traceMappings.push({ traceId: trace.id, promptId: run.promptId });
 
       traceBatch.addItem(trace);
       spanBatch.addItem(span);
-
-      if (!isWithExperiments) {
-        return;
-      }
-
-      // create a missing experiment
-      if (!experimentPromptMap[promptId]) {
-        const experiment = getExperimentFromRun(run);
-        experimentPromptMap[promptId] = experiment.id;
-        experimentsQueue.push(experiment);
-      }
-
-      const experimentId = experimentPromptMap[promptId];
-      const experimentItem = getExperimentItemFromRun(
-        run,
-        experimentId,
-        trace.id,
-      );
-
-      experimentItemsBatch.addItem(experimentItem);
     },
     finishLogging: () => {
-      // Flush all batches (triggers async API calls)
-      spanBatch.flush();
       traceBatch.flush();
-      experimentItemsBatch.flush();
-
-      // Mark that logging is finished - no more items will be added
-      isLoggingFinished = true;
-
-      // Try to finish experiments if queue has also drained
-      tryFinishExperiments();
+      spanBatch.flush();
     },
   };
 };

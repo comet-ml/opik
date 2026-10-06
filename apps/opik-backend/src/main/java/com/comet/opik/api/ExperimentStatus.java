@@ -12,10 +12,15 @@ import java.util.Arrays;
 public enum ExperimentStatus {
     RUNNING("running"),
     COMPLETED("completed"),
-    CANCELLED("cancelled");
+    CANCELLED("cancelled"),
+    FAILED("failed");
 
     @JsonValue
     private final String value;
+
+    public boolean isTerminal() {
+        return this != RUNNING;
+    }
 
     @JsonCreator
     public static ExperimentStatus fromString(String value) {

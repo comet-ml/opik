@@ -177,6 +177,37 @@ class ExperimentMessageRendererTest {
         }
 
         @Test
+        @DisplayName("should carry image, video and audio parts as media, not as text")
+        void buildRequestWithMediaParts() {
+            var mapper = JsonUtils.getMapper();
+            var content = mapper.createArrayNode();
+            content.add(mapper.createObjectNode().put("type", "text").put("text", "Describe these"));
+            for (var type : List.of("image_url", "video_url", "audio_url")) {
+                var part = mapper.createObjectNode().put("type", type);
+                part.set(type, mapper.createObjectNode().put("url", "https://example.com/media"));
+                content.add(part);
+            }
+
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(content)
+                            .build());
+            var prompt = new ExperimentExecutionRequest.PromptVariant("gpt-4o", messages, null, null, null);
+
+            var request = renderer.buildChatCompletionRequest(prompt, messages);
+
+            var parts = (List<?>) ((OpikUserMessage) request.messages().getFirst()).content();
+            var types = parts.stream().map(part -> JsonUtils.getMapper().valueToTree(part))
+                    .map(node -> ((JsonNode) node).path("type").asText())
+                    .toList();
+
+            // A url arriving as text is the failure this guards: the model then answers from the
+            // file name instead of the media, which reads like a real answer.
+            assertThat(types).containsExactly("text", "image_url", "video_url", "audio_url");
+        }
+
+        @Test
         @DisplayName("should apply config parameters when provided")
         void applyConfigParameters() {
             var messages = List.of(
