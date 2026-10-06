@@ -18,6 +18,7 @@ import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.ValueEntry;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
@@ -3845,6 +3846,41 @@ class SpansResourceTest {
                                                     .build()))
                                     .build(),
                             "scores[0].value must be less than or equal to 999999999.999999999"));
+        }
+
+        @Test
+        @DisplayName("when a score has an evaluator revision, then it is read back on the score and its entry")
+        void feedback__whenEvaluatorRevisionIsSet__thenReadItBack() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            var withRevision = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(id)
+                    .projectName(DEFAULT_PROJECT)
+                    .name("with_revision")
+                    .evaluatorRevision("judge@3f9c2a1")
+                    .build();
+            var withoutRevision = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(id)
+                    .projectName(DEFAULT_PROJECT)
+                    .name("without_revision")
+                    .evaluatorRevision(null)
+                    .build();
+            spanResourceClient.feedbackScores(List.of(withRevision, withoutRevision), API_KEY, TEST_WORKSPACE);
+
+            var scores = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY).feedbackScores().stream()
+                    .collect(Collectors.toMap(FeedbackScore::name, score -> score));
+
+            assertThat(scores.get("with_revision").evaluatorRevision()).isEqualTo("judge@3f9c2a1");
+            assertThat(scores.get("with_revision").valueByAuthor().values())
+                    .extracting(ValueEntry::evaluatorRevision)
+                    .containsOnly("judge@3f9c2a1");
+            assertThat(scores.get("without_revision").evaluatorRevision()).isNull();
+            assertThat(scores.get("without_revision").valueByAuthor().values())
+                    .extracting(ValueEntry::evaluatorRevision)
+                    .containsOnlyNulls();
         }
 
         @Test

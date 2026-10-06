@@ -63,16 +63,10 @@ def test_log_feedback_score__evaluator_revision_too_long__score_not_sent(
 
 
 @pytest.mark.parametrize(
-    "evaluator_revision, is_valid",
-    [
-        ("judge@1", True),
-        ("r" * 256, True),
-        (None, True),
-        ("r" * 257, False),
-        (123, False),
-    ],
+    "evaluator_revision",
+    ["judge@1", "r" * 256, None],
 )
-def test_feedback_score_validator__evaluator_revision(evaluator_revision, is_valid):
+def test_feedback_score_validator__evaluator_revision__valid(evaluator_revision):
     score: Dict[str, Any] = {
         "id": "some-id",
         "name": "accuracy",
@@ -82,7 +76,32 @@ def test_feedback_score_validator__evaluator_revision(evaluator_revision, is_val
 
     result = feedback_score_validator.FeedbackScoreValidator(score).validate()
 
-    assert result.ok() is is_valid
+    assert result.ok() is True
+
+
+@pytest.mark.parametrize(
+    "evaluator_revision, expected_error",
+    [
+        ("r" * 257, "at most 256 characters"),
+        (123, "valid string"),
+    ],
+)
+def test_feedback_score_validator__evaluator_revision__invalid(
+    evaluator_revision, expected_error
+):
+    score: Dict[str, Any] = {
+        "id": "some-id",
+        "name": "accuracy",
+        "value": 1.0,
+        "evaluator_revision": evaluator_revision,
+    }
+
+    result = feedback_score_validator.FeedbackScoreValidator(score).validate()
+
+    assert result.ok() is False
+    (reason,) = result.failure_reasons
+    assert reason.startswith("feedback_score.evaluator_revision - ")
+    assert expected_error in reason
 
 
 def test_parse_feedback_score_messages__evaluator_revision__carried_to_message():
