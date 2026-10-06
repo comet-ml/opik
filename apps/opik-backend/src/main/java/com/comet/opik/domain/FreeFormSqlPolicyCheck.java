@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
 @UtilityClass
 class FreeFormSqlPolicyCheck {
 
-    private static final ParseContext JSON = JsonPath.using(Configuration.builder()
+    private static final ParseContext JSON_PATH_CONTEXT = JsonPath.using(Configuration.builder()
             .options(Option.DEFAULT_PATH_LEAF_TO_NULL, Option.SUPPRESS_EXCEPTIONS)
             .build());
     private static final JsonPath READS = JsonPath.compile("$..[?(@['Node Type'] =~ /ReadFrom.*/)]");
@@ -61,7 +61,7 @@ class FreeFormSqlPolicyCheck {
         String prefix = database + ".";
         var plannedReads = new HashSet<String>();
         var filteredReads = new HashSet<String>();
-        List<Map<String, Object>> reads = JSON.parse(planJson).read(READS);
+        List<Map<String, Object>> reads = JSON_PATH_CONTEXT.parse(planJson).read(READS);
         for (var read : reads) {
             String type = String.valueOf(read.get("Node Type"));
             String description = String.valueOf(read.getOrDefault("Description", ""));

@@ -18,7 +18,7 @@ record FreeFormSqlPolicyViolation(@NonNull String table, @NonNull String reason)
         }
     }
 
-    /** No entry of the query as its account was found, so no read could be checked. */
+    /** No log entry for the query, run as its account, was found, so no read could be checked. */
     boolean missingLog() {
         return table.isEmpty();
     }
