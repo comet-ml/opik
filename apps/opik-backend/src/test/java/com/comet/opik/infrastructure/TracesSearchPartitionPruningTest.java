@@ -248,7 +248,7 @@ class TracesSearchPartitionPruningTest {
                 .map(TracesSearchPartitionPruningTest::mondayOfId)
                 .collect(Collectors.toSet());
         // Run each pre-pass from the statement the app executed, and compare with the weeks the written rows fall in.
-        assertThat(preparedWeekSets(lastSearch(queryName, search().token())))
+        assertThat(weekSetsFromPrepasses(lastSearch(queryName, search().token())))
                 .as("the traces week hint in %s selects exactly the project's weeks", queryName)
                 .isNotEmpty()
                 .allSatisfy(weeks -> assertThat(weeks).containsExactlyInAnyOrderElementsOf(expectedWeeks));
@@ -278,7 +278,7 @@ class TracesSearchPartitionPruningTest {
      * Runs every week pre-pass in a logged statement on its own and returns the weeks each yields, so a test can
      * compare them with the weeks it derives from the rows it wrote. The logged statement carries its values inline.
      */
-    private List<Set<String>> preparedWeekSets(String statement) {
+    private List<Set<String>> weekSetsFromPrepasses(String statement) {
         var sets = new ArrayList<Set<String>>();
         for (int at = statement.indexOf("SELECT DISTINCT toYYYYMMDD"); at >= 0; at = statement
                 .indexOf("SELECT DISTINCT toYYYYMMDD", at + 1)) {
