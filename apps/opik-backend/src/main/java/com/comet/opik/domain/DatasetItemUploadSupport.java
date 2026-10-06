@@ -91,10 +91,6 @@ public class DatasetItemUploadSupport {
         datasetService.updateStatus(datasetId, workspaceId, DatasetStatus.PROCESSING);
     }
 
-    public void markFailed(UUID datasetId, String workspaceId) {
-        datasetService.updateStatus(datasetId, workspaceId, DatasetStatus.FAILED);
-    }
-
     /**
      * Subscribes to the format-specific pipeline and wires terminal handling:
      * flips dataset status to {@code COMPLETED}/{@code FAILED} and always deletes the temp file.

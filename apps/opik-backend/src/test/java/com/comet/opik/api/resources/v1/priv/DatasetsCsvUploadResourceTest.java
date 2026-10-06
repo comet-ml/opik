@@ -457,7 +457,8 @@ class DatasetsCsvUploadResourceTest {
     @ValueSource(strings = {
             "input,input,expected_output\na,b,c\n",
             "input,Input,expected_output\na,b,c\n",
-            "input, input ,expected_output\na,b,c\n"})
+            "input, input ,expected_output\na,b,c\n",
+            "id,\u0130d,expected_output\na,b,c\n"})
     void uploadCsvFile__duplicateHeaders(String csvContent) {
         Dataset dataset = buildDataset().toBuilder()
                 .id(null)
@@ -473,8 +474,6 @@ class DatasetsCsvUploadResourceTest {
         }
 
         assertThat(getDatasetItems(createdDatasetId)).isEmpty();
-        assertThat(datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE).status())
-                .isEqualTo(DatasetStatus.FAILED);
     }
 
     private Response uploadCsvFile(UUID datasetId, String csvContent) {

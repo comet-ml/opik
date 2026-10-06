@@ -99,13 +99,7 @@ public class JsonDatasetItemProcessor {
         try {
             // Cheap lookup first so a missing/inaccessible dataset doesn't pay for the full-file parse
             uploadSupport.verifyDatasetExists(datasetId, workspaceId, visibility);
-            try {
-                validateStructure(tempFile, format);
-            } catch (BadRequestException e) {
-                // Same terminal state as an async failure, so the UI shows the failed-import banner
-                uploadSupport.markFailed(datasetId, workspaceId);
-                throw e;
-            }
+            validateStructure(tempFile, format);
             uploadSupport.markProcessing(datasetId, workspaceId);
         } catch (Exception e) {
             uploadSupport.deleteTempFile(tempFile);
@@ -154,6 +148,10 @@ public class JsonDatasetItemProcessor {
                         parser.skipChildren();
                         index++;
                     }
+                    // The importer stops at the closing bracket, so anything after it would be dropped silently
+                    if (parser.nextToken() != null) {
+                        throw new BadRequestException("JSON file has content after the top-level array");
+                    }
                     if (index == 0) {
                         throw new BadRequestException("JSON file contains no items");
                     }
@@ -174,6 +172,11 @@ public class JsonDatasetItemProcessor {
                                         "JSONL line %d is not a JSON object".formatted(lineNumber));
                             }
                             lineParser.skipChildren();
+                            // The importer reads one object per line, so a second value on the line would be dropped silently
+                            if (lineParser.nextToken() != null) {
+                                throw new BadRequestException(
+                                        "JSONL line %d has content after the JSON object".formatted(lineNumber));
+                            }
                         } catch (JsonProcessingException e) {
                             throw new BadRequestException("JSONL line %d is not valid JSON: %s"
                                     .formatted(lineNumber, e.getOriginalMessage()));
@@ -188,8 +191,8 @@ public class JsonDatasetItemProcessor {
         } catch (JsonProcessingException e) {
             throw new BadRequestException("JSON file is not valid JSON: %s".formatted(e.getOriginalMessage()));
         } catch (IOException e) {
-            log.error("Failed to validate JSON file", e);
-            throw new BadRequestException("Failed to read JSON file");
+            log.error("Failed to read uploaded JSON temp file", e);
+            throw new InternalServerErrorException("Failed to process JSON file");
         }
     }
 

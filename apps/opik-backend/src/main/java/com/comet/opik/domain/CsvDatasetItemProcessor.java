@@ -13,9 +13,11 @@ import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.csv.CSVException;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.csv.DuplicateHeaderMode;
 import org.apache.commons.io.input.BOMInputStream;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
@@ -27,11 +29,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -79,14 +78,8 @@ public class CsvDatasetItemProcessor {
         }
 
         try {
+            validateCsvHeaders(tempFile);
             uploadSupport.verifyDatasetExists(datasetId, workspaceId, visibility);
-            try {
-                validateCsvHeaders(tempFile);
-            } catch (BadRequestException e) {
-                // Same terminal state as an async failure, so the UI shows the failed-import banner
-                uploadSupport.markFailed(datasetId, workspaceId);
-                throw e;
-            }
             uploadSupport.markProcessing(datasetId, workspaceId);
         } catch (Exception e) {
             uploadSupport.deleteTempFile(tempFile);
@@ -119,19 +112,12 @@ public class CsvDatasetItemProcessor {
                 throw new BadRequestException("CSV file must contain headers");
             }
 
-            // Case-insensitive because the parser ignores header case, so it cannot tell such columns apart
-            Set<String> seenHeaders = new HashSet<>();
             for (int i = 0; i < headers.size(); i++) {
                 String header = headers.get(i);
                 if (StringUtils.isBlank(header)) {
                     throw new BadRequestException(
                             String.format("CSV header at position %d is empty or blank. All headers must have a name.",
                                     i + 1));
-                }
-                if (!seenHeaders.add(header.toLowerCase(Locale.ROOT))) {
-                    throw new BadRequestException(
-                            "CSV contains duplicate column header '%s'. All column headers must be unique."
-                                    .formatted(header));
                 }
             }
 
@@ -142,10 +128,16 @@ public class CsvDatasetItemProcessor {
             if (message != null && message.contains("header name is missing")) {
                 throw new BadRequestException("CSV contains empty header names. All column headers must have a name.");
             }
+            if (message != null && message.contains("duplicate name")) {
+                throw new BadRequestException(
+                        "CSV contains duplicate column headers. All column headers must be unique.");
+            }
             throw new BadRequestException("Invalid CSV format");
+        } catch (CSVException e) {
+            throw new BadRequestException("Invalid CSV format: %s".formatted(e.getMessage()));
         } catch (IOException e) {
-            log.error("Failed to validate CSV headers", e);
-            throw new BadRequestException("Failed to read CSV file");
+            log.error("Failed to read uploaded CSV temp file", e);
+            throw new InternalServerErrorException("Failed to process CSV file");
         }
     }
 
@@ -218,6 +210,8 @@ public class CsvDatasetItemProcessor {
                 .setHeader()
                 .setSkipHeaderRecord(true)
                 .setIgnoreHeaderCase(true)
+                // Uses the parser's own case-insensitive comparison, so columns it would merge are rejected
+                .setDuplicateHeaderMode(DuplicateHeaderMode.DISALLOW)
                 .setTrim(true)
                 .setIgnoreEmptyLines(true)
                 .get()

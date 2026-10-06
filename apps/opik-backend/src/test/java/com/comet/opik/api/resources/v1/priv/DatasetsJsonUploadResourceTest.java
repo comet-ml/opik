@@ -349,8 +349,6 @@ class DatasetsJsonUploadResourceTest {
         }
 
         assertThat(getDatasetItems(datasetId)).isEmpty();
-        assertThat(datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE).status())
-                .isEqualTo(DatasetStatus.FAILED);
     }
 
     @Test
@@ -372,8 +370,6 @@ class DatasetsJsonUploadResourceTest {
         }
 
         assertThat(getDatasetItems(datasetId)).isEmpty();
-        assertThat(datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE).status())
-                .isEqualTo(DatasetStatus.FAILED);
     }
 
     @ParameterizedTest
@@ -390,8 +386,37 @@ class DatasetsJsonUploadResourceTest {
         }
 
         assertThat(getDatasetItems(datasetId)).isEmpty();
-        assertThat(datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE).status())
-                .isEqualTo(DatasetStatus.FAILED);
+    }
+
+    @ParameterizedTest
+    @DisplayName("JSON array followed by more content -> 400 Bad Request")
+    @ValueSource(strings = {
+            "[{\"input\":\"a\"}][{\"input\":\"b\"}]",
+            "[{\"input\":\"a\"}] garbage"})
+    void uploadJsonArray__trailingContent__rejected(String jsonContent) {
+        UUID datasetId = createDataset();
+
+        try (var response = uploadJsonFile(datasetId, jsonContent, "JSON")) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        }
+
+        assertThat(getDatasetItems(datasetId)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @DisplayName("JSONL line with more content after its object -> 400 Bad Request")
+    @ValueSource(strings = {
+            "{\"input\":\"q1\"}{\"input\":\"q2\"}\n",
+            "{\"input\":\"q1\"} xyz\n"})
+    void uploadJsonl__trailingContentOnLine__rejected(String jsonlContent) {
+        UUID datasetId = createDataset();
+
+        try (var response = uploadJsonFile(datasetId, jsonlContent, "JSONL")) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class)).contains("JSONL line 1");
+        }
+
+        assertThat(getDatasetItems(datasetId)).isEmpty();
     }
 
     @Test
@@ -411,8 +436,6 @@ class DatasetsJsonUploadResourceTest {
         }
 
         assertThat(getDatasetItems(datasetId)).isEmpty();
-        assertThat(datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE).status())
-                .isEqualTo(DatasetStatus.FAILED);
     }
 
     @Test
