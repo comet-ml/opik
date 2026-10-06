@@ -432,7 +432,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     t.id as id,
                     -- Placed by its first in-window trace id, not start_time: membership is decided on trace ids, so a start_time
                     -- before the window (ids minted at ingest by a backfill) would drop a thread the thread list shows.
-                    UUIDv7ToDateTime(toUUID(t.first_trace_id), 'UTC') as thread_time,
+                    UUIDv7ToDateTime(toUUID(t.first_trace_id)) as thread_time,
                     t.end_time as end_time,
                     t.duration as duration,
                     t.first_message as first_message,
@@ -983,7 +983,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY name, bucket
             ORDER BY name, bucket
             <if(with_fill)>WITH FILL
-                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
@@ -1092,7 +1092,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
@@ -1126,7 +1126,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
@@ -1235,7 +1235,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
@@ -1275,7 +1275,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             <if(with_fill)>WITH FILL
-                FROM toDateTime64(toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), <step>), 0, 'UTC')
+                FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
