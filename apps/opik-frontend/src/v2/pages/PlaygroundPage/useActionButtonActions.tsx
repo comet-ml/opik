@@ -333,8 +333,11 @@ const useActionButtonActions = ({
   const finishPollScope = useCallback(
     (scope?: PollScope) => {
       if (scope?.scopedPromptIds) {
-        setIsRunInFlight(false);
         scope.scopedPromptIds.forEach((id) => setPromptRunning(id, false));
+        const { isRunningMap } = usePlaygroundStore.getState();
+        if (!Object.values(isRunningMap).some(Boolean)) {
+          setIsRunInFlight(false);
+        }
       } else {
         settleRun();
         isToStopRef.current = false;
@@ -949,6 +952,9 @@ const useActionButtonActions = ({
       } catch {
         // A run we cannot read the status of is one we cannot resume; the cells still fill in on
         // their own, so leaving the page idle is better than a progress bar that never moves.
+        // Settled rather than simply left alone: isRunInFlight is persisted, so giving up without
+        // clearing it strands the sidebar watcher polling for a status that never arrives.
+        settleRun();
       } finally {
         setIsResumingRun(false);
       }

@@ -360,7 +360,11 @@ public class ExperimentExecutionService {
                 .finished(true)
                 .build();
         return Flux.fromIterable(experimentIds)
-                .concatMap(id -> experimentService.update(id, statusUpdate))
+                .concatMap(id -> experimentService.update(id, statusUpdate)
+                        .onErrorResume(error -> {
+                            log.error("Failed to mark refused experiment '{}' as failed", id, error);
+                            return Mono.empty();
+                        }))
                 .then();
     }
 

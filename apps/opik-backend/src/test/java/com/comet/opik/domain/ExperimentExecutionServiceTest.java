@@ -49,7 +49,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -625,29 +624,73 @@ class ExperimentExecutionServiceTest {
                     datasetVersionService, itemPublisher, idGenerator,
                     new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService);
 
+            stubDatasetItems(IntStream.range(0, 501)
+                    .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
+                    .toList());
+            when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+            stubExperimentCreate();
+            when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+            // Two variants over 501 items is 1,002 messages against a queue bounded at 1,000.
+            assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello"), buildPrompt("gpt-4", "Hi")))
+                    .build()))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("1,002")
+                    .hasMessageContaining("1,000");
+
+            verify(itemPublisher, never()).publish(any(), any(), anyBoolean());
+
+            // The records exist by this point; left alone they would read as running for ever. Every
+            // one of them has to be marked, and marked finished: 'finished' is what makes the DAO
+            // stamp finished_at, which is how the page tells a stopped row from one still running.
+            var createCaptor = ArgumentCaptor.forClass(Experiment.class);
+            verify(experimentService, times(2)).create(createCaptor.capture());
+            var createdIds = createCaptor.getAllValues().stream().map(Experiment::id).toList();
+
+            var idCaptor = ArgumentCaptor.forClass(UUID.class);
+            var updateCaptor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+            verify(experimentService, times(2)).update(idCaptor.capture(), updateCaptor.capture());
+
+            assertThat(idCaptor.getAllValues()).containsExactlyInAnyOrderElementsOf(createdIds);
+            assertThat(updateCaptor.getAllValues()).allSatisfy(update -> {
+                assertThat(update.status()).isEqualTo(ExperimentStatus.FAILED);
+                assertThat(update.finished()).isTrue();
+            });
+        }
+
+        // The cleanup runs to report a refusal. One record failing to update must not cancel the
+        // rest, nor replace the 400 the caller is owed with whatever persistence threw.
+        @Test
+        void refusalSurvivesAFailingCleanupUpdate() {
+            var config = new ExperimentExecutionConfig();
+            config.setStreamMaxLen(1000);
+            service = new ExperimentExecutionService(
+                    experimentService, cancellationService, datasetService, datasetItemService,
+                    datasetVersionService, itemPublisher, idGenerator,
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService);
+
             stubDatasetItems(IntStream.range(0, 1001)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
                     .toList());
             when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
             stubExperimentCreate();
-            when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+            // The first variant's cleanup fails; the second must still be marked.
+            when(experimentService.update(any(UUID.class), any()))
+                    .thenReturn(Mono.error(new IllegalStateException("persistence is down")))
+                    .thenReturn(Mono.empty());
 
             assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
                     .datasetId(UUID.randomUUID())
-                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello"), buildPrompt("gpt-4", "Hi")))
                     .build()))
-                    .isInstanceOf(BadRequestException.class)
-                    .hasMessageContaining("1,001")
-                    .hasMessageContaining("1,000");
+                    .as("the caller still learns the run was refused, not that a write failed")
+                    .isInstanceOf(BadRequestException.class);
 
-            verify(itemPublisher, never()).publish(any(), any(), anyBoolean());
-
-            // The records exist by this point; left alone they would read as running for ever.
-            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
-            verify(experimentService, atLeastOnce()).update(any(UUID.class), captor.capture());
-            assertThat(captor.getAllValues())
-                    .allSatisfy(update -> assertThat(update.status()).isEqualTo(ExperimentStatus.FAILED));
+            verify(experimentService, times(2)).update(any(UUID.class), any());
         }
 
         @Test
