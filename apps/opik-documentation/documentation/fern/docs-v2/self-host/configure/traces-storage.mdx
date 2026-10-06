@@ -18,10 +18,12 @@ precision.
   dashboards, BI tools, notebooks or saved queries.
 </Note>
 
-## Timestamps are stored at microsecond precision
+## Event timestamps are stored at microsecond precision
 
 `start_time`, `end_time` and `created_at` are `DateTime64(6, 'UTC')`; they were `DateTime64(9)`.
-Digits beyond the microsecond are dropped on write. No Opik SDK sends sub-microsecond timestamps, so
+`last_updated_at` was already `DateTime64(6, 'UTC')`. The internal `id_at` partitioning column is
+derived from the trace id and holds whole seconds (`DateTime64(0, 'UTC')`); don't use it as an event
+time. Digits beyond the microsecond are dropped on write. No Opik SDK sends sub-microsecond timestamps, so
 this only matters if you send ISO-8601 timestamps with nanosecond precision yourself: they come back
 truncated to microseconds.
 
@@ -64,13 +66,14 @@ ClickHouse aggregates skip `NULL`, but they treat `NaN` differently depending on
 | `avg`, `sum` | the result becomes `nan` | Use `avgIf(x, NOT isNaN(x))` / `sumIf(x, NOT isNaN(x))` |
 | `count(x)` | `NaN` rows are counted | Use `countIf(NOT isNaN(x))` |
 
-For example, the average duration of finished traces per day:
+For example, the average duration of finished traces per day. Replace `opik` with your
+`ANALYTICS_DB_DATABASE_NAME` if you changed it:
 
 ```sql
 SELECT toDate(start_time) AS day,
        avgIf(duration, NOT isNaN(duration)) AS avg_duration_ms,
        countIf(NOT isNaN(duration))         AS finished_traces
-FROM traces
+FROM opik.traces
 GROUP BY day
 ORDER BY day
 ```
