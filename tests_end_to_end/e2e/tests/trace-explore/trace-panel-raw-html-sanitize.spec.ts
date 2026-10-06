@@ -40,9 +40,11 @@ import { LogsPage } from '@e2e/pom/logs.page';
  *
  * Every marker is a distinct nonsense token so that an assertion cannot be
  * satisfied by the surrounding prose, and `**PROSE_MARKER**` is deliberately
- * first: it is the only reason `isStringMarkdown` returns true for this string,
- * and so the only reason `MarkdownPreview` takes its `ReactMarkdown` branch at
- * all. Without it the whole answer renders as pre-wrapped plain text, where
+ * first: the emphasis is what makes `isStringMarkdown` return true for this
+ * string — no other line here matches one of its patterns — and so what makes
+ * `MarkdownPreview` take its `ReactMarkdown` branch at all. Raw HTML does not
+ * count as markdown to that check. Without it the answer renders as
+ * pre-wrapped plain text, where
  * every text marker below is present and no `<script>` exists — a shape that
  * would satisfy a naive version of both tests while proving nothing. Each test
  * therefore asserts a *parsed element* before it asserts anything about
