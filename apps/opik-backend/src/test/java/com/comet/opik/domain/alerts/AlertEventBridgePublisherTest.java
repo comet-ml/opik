@@ -113,6 +113,20 @@ class AlertEventBridgePublisherTest {
     }
 
     @Test
+    void publishWhenWorkspaceNameNullOmitsNameAndUrl() {
+        when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
+        var alert = alert(Map.of("base_url", "https://opik.example.com/"));
+
+        StepVerifier.create(publisher.publish(alert, WORKSPACE_ID, null, AlertEventType.TRACE_COST,
+                payload(alert, List.of("event-1"), List.of()))).verifyComplete();
+
+        JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
+        assertThat(detail.get("workspaceId").asText()).isEqualTo(WORKSPACE_ID);
+        assertThat(detail.has("workspaceName")).isFalse();
+        assertThat(detail.has("url")).isFalse();
+    }
+
+    @Test
     void publishWhenDetailExceedsLimitTruncates() {
         when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
         var alert = alert(null);

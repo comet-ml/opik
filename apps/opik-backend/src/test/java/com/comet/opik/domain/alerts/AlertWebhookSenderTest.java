@@ -6,6 +6,7 @@ import com.comet.opik.api.Webhook;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookPublisher;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import jakarta.ws.rs.InternalServerErrorException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,11 +19,13 @@ import reactor.test.StepVerifier;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -127,6 +130,34 @@ class AlertWebhookSenderTest {
                 eq(AlertEventType.TRACE_COST), anyMap());
         verify(webhookPublisher).publishWebhookEvent(eq(AlertEventType.TRACE_COST), eq(alert), eq(WORKSPACE_ID),
                 eq(WORKSPACE_NAME), anyMap(), anyInt());
+    }
+
+    @Test
+    void createAndSendWebhookWhenWorkspaceNameLookupFailsStillPublishesToEventBridge() {
+        var lookupFailure = new InternalServerErrorException();
+        when(workspaceNameService.getWorkspaceName(WORKSPACE_ID, REACT_SERVICE_URL)).thenThrow(lookupFailure);
+        when(eventBridgePublisher.publish(any(), anyString(), isNull(), any(), anyMap())).thenReturn(Mono.empty());
+        var alert = alert(true, "https://example.com/hook");
+
+        assertThatThrownBy(() -> send(alert, "")).isSameAs(lookupFailure);
+
+        verify(eventBridgePublisher).publish(eq(alert), eq(WORKSPACE_ID), isNull(),
+                eq(AlertEventType.TRACE_COST), anyMap());
+        verifyNoInteractions(webhookPublisher);
+    }
+
+    @Test
+    void createAndSendWebhookWhenWorkspaceNameLookupFailsWithoutUrlPublishesToEventBridge() {
+        when(workspaceNameService.getWorkspaceName(WORKSPACE_ID, REACT_SERVICE_URL))
+                .thenThrow(new InternalServerErrorException());
+        when(eventBridgePublisher.publish(any(), anyString(), isNull(), any(), anyMap())).thenReturn(Mono.empty());
+        var alert = alert(true, "");
+
+        StepVerifier.create(send(alert, "")).verifyComplete();
+
+        verify(eventBridgePublisher).publish(eq(alert), eq(WORKSPACE_ID), isNull(),
+                eq(AlertEventType.TRACE_COST), anyMap());
+        verifyNoInteractions(webhookPublisher);
     }
 
     @Test

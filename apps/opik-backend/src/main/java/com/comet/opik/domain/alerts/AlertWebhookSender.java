@@ -65,14 +65,25 @@ public class AlertWebhookSender {
             return Mono.empty();
         }
 
-        String resolvedWorkspaceName = StringUtils.isBlank(workspaceName)
-                ? workspaceNameService.getWorkspaceName(workspaceId,
-                        config.getAuthentication().getReactService().url())
-                : workspaceName;
+        String resolvedWorkspaceName = workspaceName;
+        RuntimeException workspaceNameFailure = null;
+        if (StringUtils.isBlank(workspaceName)) {
+            try {
+                resolvedWorkspaceName = workspaceNameService.getWorkspaceName(workspaceId,
+                        config.getAuthentication().getReactService().url());
+            } catch (RuntimeException exception) {
+                // EventBridge still gets the event without a name; the webhook keeps failing on it as before
+                log.warn("Failed to resolve workspace name for workspaceId='{}', alertId='{}'",
+                        workspaceId, alert.id(), exception);
+                resolvedWorkspaceName = null;
+                workspaceNameFailure = exception;
+            }
+        }
+        String eventBridgeWorkspaceName = resolvedWorkspaceName;
         Map<String, Object> payload = buildPayload(alert, eventType, eventIds, payloads, userNames);
 
         // Fire-and-forget: EventBridge retries must not hold up, or fail, the webhook delivery
-        Mono.defer(() -> eventBridgePublisher.publish(alert, workspaceId, resolvedWorkspaceName, eventType, payload))
+        Mono.defer(() -> eventBridgePublisher.publish(alert, workspaceId, eventBridgeWorkspaceName, eventType, payload))
                 .onErrorResume(error -> {
                     log.error("Failed to publish alert '{}' to EventBridge", alert.id(), error);
                     return Mono.empty();
@@ -82,6 +93,10 @@ public class AlertWebhookSender {
         if (!hasWebhookUrl) {
             log.warn("Alert '{}' has no webhook configuration, skipping webhook", alert.id());
             return Mono.empty();
+        }
+
+        if (workspaceNameFailure != null) {
+            throw workspaceNameFailure;
         }
 
         log.info("Sending webhook for alertName='{}', alertId='{}', eventCount='{}', payloadCount='{}'",
