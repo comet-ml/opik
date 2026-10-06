@@ -13,17 +13,25 @@ import {
 const mockToast = vi.fn();
 const mockCreateVersion = vi.fn();
 const mockCreatePrompt = vi.fn();
+let mockIsSavingVersion = false;
+let mockIsCreatingPrompt = false;
 
 vi.mock("@/ui/use-toast", () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
 vi.mock("@/api/prompts/useCreatePromptVersionMutation", () => ({
-  default: () => ({ mutate: mockCreateVersion }),
+  default: () => ({
+    mutate: mockCreateVersion,
+    isPending: mockIsSavingVersion,
+  }),
 }));
 
 vi.mock("@/api/prompts/usePromptCreateMutation", () => ({
-  default: () => ({ mutate: mockCreatePrompt }),
+  default: () => ({
+    mutate: mockCreatePrompt,
+    isPending: mockIsCreatingPrompt,
+  }),
 }));
 
 vi.mock("@/api/prompts/usePromptById", () => ({
@@ -80,14 +88,18 @@ const renderDialog = (
     </PermissionsProvider>,
   );
 
-const clickSave = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Save to library" }));
+const saveButton = () =>
+  screen.getByRole("button", { name: "Save to library" });
+
+const clickSave = () => fireEvent.click(saveButton());
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockIsSavingVersion = false;
+  mockIsCreatingPrompt = false;
+});
 
 describe("AddNewPromptVersionDialog success toast", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it.each([
     [PROMPT_TEMPLATE_STRUCTURE.CHAT, 'Saved new chat prompt "My prompt"'],
     [PROMPT_TEMPLATE_STRUCTURE.TEXT, 'Saved new prompt "My prompt"'],
@@ -140,4 +152,20 @@ describe("AddNewPromptVersionDialog success toast", () => {
       expect(onSave).toHaveBeenCalledWith(VERSION, "Support bot", "prompt-1");
     },
   );
+});
+
+describe("AddNewPromptVersionDialog while a save is in flight", () => {
+  it("keeps Save disabled while a new prompt is being created", () => {
+    mockIsCreatingPrompt = true;
+    renderDialog({ defaultName: "My prompt" });
+
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it("keeps Save disabled while a new version is being saved", () => {
+    mockIsSavingVersion = true;
+    renderDialog({ prompt: EXISTING_PROMPT });
+
+    expect(saveButton()).toBeDisabled();
+  });
 });
