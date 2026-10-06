@@ -564,3 +564,56 @@ def test_ollama_chat__function_tool__logged_as_json_schema(fake_backend, monkeyp
     assert tool["function"]["name"] == "get_weather"
     assert tool["function"]["description"] == "Get the current weather for a city."
     assert "city" in tool["function"]["parameters"]["properties"]
+
+
+def test_ollama_async_chat__stream__positional_arguments__logged_like_keywords(
+    fake_backend, monkeypatch
+):
+    client = ollama.AsyncClient()
+    wrapped = track_ollama(client)
+
+    async def _request(*args, **kwargs):
+        async def _gen():
+            yield _chunk(content="Blue.")
+            yield _chunk(content="", done=True)
+
+        return _gen()
+
+    monkeypatch.setattr(client, "_request", _request)
+
+    messages = [{"role": "user", "content": "Why is the sky blue?"}]
+
+    async def drive():
+        stream = await wrapped.chat(MODEL, messages, stream=True)
+        return [chunk async for chunk in stream]
+
+    asyncio.run(drive())
+    opik.flush_tracker()
+
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.name == "chat_stream"
+    assert span.input == {"messages": messages}
+    assert span.model == MODEL
+    assert span.output["message"]["content"] == "Blue."
+
+
+def test_ollama_chat__unconvertible_tool__logged_by_name(fake_backend, monkeypatch):
+    def broken_tool(city):  # no type hints or docstring to build a schema from
+        return city
+
+    client = ollama.Client()
+    wrapped = track_ollama(client)
+    monkeypatch.setattr(client, "_request", lambda *a, **kw: _response())
+    monkeypatch.setattr(
+        "ollama._utils.convert_function_to_tool",
+        lambda func: (_ for _ in ()).throw(ValueError("cannot convert")),
+    )
+
+    wrapped.chat(
+        model=MODEL,
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[broken_tool],
+    )
+    opik.flush_tracker()
+
+    assert fake_backend.trace_trees[0].spans[0].input["tools"] == ["broken_tool"]

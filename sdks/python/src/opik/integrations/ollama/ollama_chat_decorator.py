@@ -169,19 +169,26 @@ def _tools_as_schemas(tools: Any) -> Any:
     """Log Python-function tools as the JSON schema ollama sends to the model.
 
     ollama accepts plain functions as tools and converts them itself, so the
-    raw kwarg would otherwise be logged as ``<function name at 0x...>``.
+    raw kwarg would otherwise be logged as ``<function name at 0x...>``. A tool
+    that can't be converted is logged by its name; logging never fails the
+    user's call.
     """
-    try:
-        from ollama._utils import convert_function_to_tool
+    if not isinstance(tools, (list, tuple)):
+        return tools
 
-        schemas = []
-        for tool in tools:
+    from ollama._utils import convert_function_to_tool
+
+    schemas = []
+    for tool in tools:
+        try:
             if callable(tool):
                 tool = convert_function_to_tool(tool)
             if hasattr(tool, "model_dump"):
                 tool = tool.model_dump(exclude_none=True)
-            schemas.append(tool)
-        return schemas
-    except Exception:
-        LOGGER.debug("Failed to convert ollama tools to schemas", exc_info=True)
-        return tools
+        except Exception:
+            LOGGER.debug(
+                "Failed to convert ollama tool %r to a schema", tool, exc_info=True
+            )
+            tool = getattr(tool, "__name__", str(tool))
+        schemas.append(tool)
+    return schemas
