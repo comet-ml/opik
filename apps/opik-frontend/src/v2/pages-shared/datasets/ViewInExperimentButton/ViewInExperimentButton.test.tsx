@@ -124,7 +124,8 @@ describe("ViewInExperimentButton", () => {
     fireEvent.click(screen.getByText("Experiment"));
 
     expect(navigate).toHaveBeenCalledWith({
-      to: COMPARE_PATH,
+      to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
+      params: { workspaceName: "ws", projectId: "p1", datasetId: "d1" },
       search: { experiments: ["exp-1"], row: "item-2", search: "foo" },
     });
   });

@@ -7,7 +7,10 @@ import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
-import { parseExperimentReturnHref } from "@/v2/pages-shared/datasets/DatasetItemsPage/parseExperimentReturnHref";
+import {
+  COMPARE_EXPERIMENTS_ROUTE,
+  parseExperimentReturnHref,
+} from "@/v2/pages-shared/datasets/DatasetItemsPage/parseExperimentReturnHref";
 
 type ViewInExperimentButtonProps = {
   datasetItemId: string;
@@ -61,7 +64,8 @@ const ViewInExperimentButton: React.FC<ViewInExperimentButtonProps> = ({
         size="2xs"
         onClick={() =>
           navigate({
-            to: experimentReturn.to,
+            to: COMPARE_EXPERIMENTS_ROUTE,
+            params: experimentReturn.params,
             search: { ...returnSearch, row: datasetItemId },
           })
         }

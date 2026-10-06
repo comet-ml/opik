@@ -30,7 +30,10 @@ import {
   TooltipTrigger,
 } from "@/ui/tooltip";
 import { Dataset } from "@/types/datasets";
-import { parseExperimentReturnHref } from "./parseExperimentReturnHref";
+import {
+  COMPARE_EXPERIMENTS_ROUTE,
+  parseExperimentReturnHref,
+} from "./parseExperimentReturnHref";
 
 interface DatasetItemsPageHeaderProps {
   dataset: Dataset | undefined;
@@ -84,7 +87,8 @@ const DatasetItemsPageHeader: React.FunctionComponent<
         <div className="flex min-w-0 items-center gap-2">
           {experimentReturn ? (
             <BackButton
-              to={experimentReturn.to}
+              to={COMPARE_EXPERIMENTS_ROUTE}
+              params={experimentReturn.params}
               search={router.options.parseSearch(experimentReturn.searchStr)}
               tooltip="Back to experiment"
             />
