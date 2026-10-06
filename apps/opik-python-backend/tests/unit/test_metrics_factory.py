@@ -737,6 +737,72 @@ class RealZeroMetric(BaseMetric):
         assert result.value == 0.0
         assert result.scoring_failed is False
 
+    def test_code_metric_returning_no_score_result_reports_a_failed_score(self):
+        """A score() that returns nothing usable is a failure, not a zero.
+
+        `process_worker.to_scores` (process_worker.py:259-267) keeps only
+        `ScoreResult` items, so any other return value -- `None` from an
+        early-return path, a bare float, a list of non-`ScoreResult` -- reaches
+        the wrapper as `{"scores": []}`. That branch is separate from the
+        `"error" in response` branch above it, and it is the one a
+        forgot-to-return bug lands in rather than an exception.
+
+        The value is still 0.0 so the run completes, but the flag has to be set
+        or the placeholder is averaged into the objective as a real zero while
+        `compute_scoring_health` reports the run as fully healthy.
+        """
+        code = """
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class NothingMetric(BaseMetric):
+    def __init__(self, name: str = "nothing"):
+        super().__init__(name=name)
+
+    def score(self, output, **kwargs):
+        if not output:
+            # Forgot to return a ScoreResult on this path.
+            return None
+        return ScoreResult(name=self.name, value=1.0)
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+
+        # `output` is falsy, so score() returns None and the worker reports no scores.
+        result = metric_fn({}, "")
+        assert result.value == 0.0
+        assert result.reason == "No ScoreResult returned by metric"
+        assert result.scoring_failed is True
+
+        # And the control: the same metric on the path that does return a
+        # ScoreResult is untouched by any of this.
+        ok = metric_fn({}, "a real answer")
+        assert ok.value == 1.0
+        assert ok.scoring_failed is False
+
+    def test_code_metric_returning_a_bare_value_also_reports_a_failed_score(self):
+        """The other shape `to_scores` silently drops: a non-`ScoreResult` return.
+
+        Same branch, different user bug, so it is pinned separately rather than
+        parameterised -- `to_scores` drops a bare float on a different branch
+        than it drops a `None`, and only one of them is an exception.
+        """
+        code = """
+from opik.evaluation.metrics import BaseMetric
+
+class FloatMetric(BaseMetric):
+    def __init__(self, name: str = "floaty"):
+        super().__init__(name=name)
+
+    def score(self, output, **kwargs):
+        return 0.75
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+
+        result = metric_fn({}, "anything")
+        assert result.value == 0.0
+        assert result.reason == "No ScoreResult returned by metric"
+        assert result.scoring_failed is True
+
     def test_code_metric_arguments_map_renames_column_strict_signature(self):
         """A STRICT signature + rename map + EXTRA columns must still score.
 
