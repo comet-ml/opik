@@ -157,11 +157,20 @@ const baseModelName = (modelName: string) => {
 // gemini-2.5-flash has no flag while gemini/gemini-2.5-flash does. An exact-name
 // lookup like supportsImageInput's would block audio on models that accept it,
 // so support is pooled across every provider-prefixed name of the same model.
-const AUDIO_CAPABLE_BASE_NAMES = new Set(
-  Object.entries(modelEntries)
-    .filter(([modelName, entry]) => modelName && entry?.supports_audio_input)
-    .map(([modelName]) => baseModelName(modelName)),
-);
+// An explicit false under any name still wins: one stray flag
+// (replicate/openai/gpt-4o) would otherwise allow audio on gpt-4o, which takes none.
+const audioBaseNames = (flag: boolean) =>
+  new Set(
+    Object.entries(modelEntries)
+      .filter(
+        ([modelName, entry]) =>
+          modelName && entry?.supports_audio_input === flag,
+      )
+      .map(([modelName]) => baseModelName(modelName)),
+  );
+
+const AUDIO_CAPABLE_BASE_NAMES = audioBaseNames(true);
+const AUDIO_DENIED_BASE_NAMES = audioBaseNames(false);
 
 export const supportsAudioInput = (model?: string | null): boolean => {
   if (!model) {
@@ -172,7 +181,11 @@ export const supportsAudioInput = (model?: string | null): boolean => {
     return true;
   }
 
-  return AUDIO_CAPABLE_BASE_NAMES.has(baseModelName(model));
+  const baseName = baseModelName(model);
+  return (
+    AUDIO_CAPABLE_BASE_NAMES.has(baseName) &&
+    !AUDIO_DENIED_BASE_NAMES.has(baseName)
+  );
 };
 
 /**

@@ -10,6 +10,7 @@ describe("supportsAudioInput", () => {
       PROVIDER_MODEL_TYPE.GEMINI_3_5_TRANSCRIBE,
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
       PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_AUDIO_PREVIEW,
     ])("allows audio for %s", (model) => {
       expect(supportsAudioInput(model)).toBe(true);
     });
@@ -26,6 +27,17 @@ describe("supportsAudioInput", () => {
   describe("models without audio support", () => {
     it.each([PROVIDER_MODEL_TYPE.GPT_4, PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5])(
       "blocks audio for %s",
+      (model) => {
+        expect(supportsAudioInput(model)).toBe(false);
+      },
+    );
+
+    it.each([
+      PROVIDER_MODEL_TYPE.GPT_4O,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_EXTENDED,
+    ])(
+      "blocks audio for %s, which another provider's name explicitly denies",
       (model) => {
         expect(supportsAudioInput(model)).toBe(false);
       },
