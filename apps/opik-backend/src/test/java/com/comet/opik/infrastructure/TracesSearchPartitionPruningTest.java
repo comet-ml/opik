@@ -2,6 +2,8 @@ package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThread.TraceThreadPage;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -18,6 +20,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -185,11 +188,11 @@ class TracesSearchPartitionPruningTest {
         network.close();
     }
 
-    /** The searched data and the responses. */
-    private record Search(String token, List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
+    /** The searched project's traces, one thread each, in ordinary and far-future weeks. */
+    private record Seeded(String token, String projectName, List<Trace> expected) {
     }
 
-    private Search search() {
+    private Seeded seed() {
         var token = RandomStringUtils.secure().nextAlphanumeric(12);
         // Sorted, so the middle project sits between the other two in the (workspace_id, project_id, id) key.
         var projects = Stream.generate(() -> "project-" + RandomStringUtils.secure().nextAlphanumeric(16))
@@ -213,11 +216,45 @@ class TracesSearchPartitionPruningTest {
         Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .until(() -> traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME,
                         List.of(), List.of(), 10, Map.of()).total() == expected.size());
-        var params = Map.of("search", token, "from_time", FROM_TIME.toString());
-        var page = traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME, List.of(),
+        return new Seeded(token, project.getValue(), expected);
+    }
+
+    /** The searched data and the responses. */
+    private record Search(String token, List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
+    }
+
+    private Search search() {
+        var seeded = seed();
+        var params = searchParams(seeded);
+        var page = traceResourceClient.getTraces(seeded.projectName(), null, API_KEY, WORKSPACE_NAME, List.of(),
                 List.of(), 10, params);
-        var stats = traceResourceClient.getTraceStats(project.getValue(), null, API_KEY, WORKSPACE_NAME, null, params);
-        return new Search(token, expected, page, stats);
+        var stats = traceResourceClient.getTraceStats(seeded.projectName(), null, API_KEY, WORKSPACE_NAME, null,
+                params);
+        return new Search(seeded.token(), seeded.expected(), page, stats);
+    }
+
+    /** The searched threads and the responses. */
+    private record ThreadSearch(String token, List<String> expectedThreadIds, TraceThreadPage page,
+            ProjectStats stats) {
+    }
+
+    private ThreadSearch threadSearch() {
+        var seeded = seed();
+        var params = searchParams(seeded);
+        var expectedThreadIds = seeded.expected().stream().map(Trace::threadId).sorted().toList();
+        // A time-bounded thread list joins trace_threads, whose rows closing a thread writes.
+        expectedThreadIds.forEach(threadId -> traceResourceClient.closeTraceThread(threadId, null,
+                seeded.projectName(), API_KEY, WORKSPACE_NAME));
+        var page = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                .until(() -> traceResourceClient.getTraceThreads(null, seeded.projectName(), API_KEY, WORKSPACE_NAME,
+                        List.of(), List.of(), params), threads -> threads.total() == expectedThreadIds.size());
+        var stats = traceResourceClient.getTraceThreadStats(seeded.projectName(), null, API_KEY, WORKSPACE_NAME,
+                null, params);
+        return new ThreadSearch(seeded.token(), expectedThreadIds, page, stats);
+    }
+
+    private static Map<String, String> searchParams(Seeded seeded) {
+        return Map.of("search", seeded.token(), "from_time", FROM_TIME.toString());
     }
 
     @Test
@@ -242,7 +279,7 @@ class TracesSearchPartitionPruningTest {
     @MethodSource("searchStatements")
     @DisplayName("each search statement carries the traces week hint")
     void searchStatementCarriesTheWeekHint(String queryName, Search search) {
-        assertThat(lastSearch(queryName, search))
+        assertThat(lastSearch(queryName, search.token()))
                 .as("the traces week hint ran in %s, so the results are not a vacuous pass", queryName)
                 .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
     }
@@ -252,9 +289,49 @@ class TracesSearchPartitionPruningTest {
     void searchRunsOnce() {
         var search = search();
 
-        assertThat(lastSearch("find_traces_by_project_id", search))
+        assertThat(lastSearch("find_traces_by_project_id", search.token()))
                 .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
                 .doesNotContain("IN (SELECT id FROM page_ids)");
+    }
+
+    @Test
+    @DisplayName("a thread search bounded to the project's own weeks still returns its threads in every week")
+    void threadSearchBoundedToProjectWeeksReturnsEveryMatch() {
+        var search = threadSearch();
+
+        assertThat(search.page().content()).extracting(TraceThread::id)
+                .containsExactlyInAnyOrderElementsOf(search.expectedThreadIds());
+        assertThat(search.stats().stats())
+                .filteredOn(stat -> StatsMapper.THREAD_COUNT.equals(stat.getName()))
+                .singleElement()
+                .extracting(ProjectStats.ProjectStatItem::getValue)
+                .isEqualTo((long) search.expectedThreadIds().size());
+    }
+
+    /** One thread search shared by the statement cases, each checking a different statement of it. */
+    private Stream<Arguments> threadSearchStatements() {
+        var search = threadSearch();
+        return Stream.of("find_threads_by_project", "count_threads_by_project", "thread_stats")
+                .map(queryName -> Arguments.of(queryName, search));
+    }
+
+    @ParameterizedTest(name = "{0} carries the traces week hint")
+    @MethodSource("threadSearchStatements")
+    @DisplayName("each thread search statement carries the traces week hint")
+    void threadSearchStatementCarriesTheWeekHint(String queryName, ThreadSearch search) {
+        assertThat(lastSearch(queryName, search.token()))
+                .as("the traces week hint ran in %s, so the results are not a vacuous pass", queryName)
+                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+    }
+
+    @Test
+    @DisplayName("the thread page re-reads the matched traces through the cached id scalar, so the search runs once")
+    void threadSearchRunsOnce() {
+        var search = threadSearch();
+
+        assertThat(lastSearch("find_threads_by_project", search.token()))
+                .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))")
+                .doesNotContain("IN (SELECT id FROM traces_final_ids)");
     }
 
     /** A trace whose id is minted mid-week, so the partition value is the week's Monday rather than the id's own day. */
@@ -268,14 +345,15 @@ class TracesSearchPartitionPruningTest {
                 .endTime(startTime.plusMillis(100))
                 .projectName(projectName)
                 .name("searchable-" + token)
+                // Thread search matches thread_id, not the trace name.
+                .threadId("thread-" + token + "-" + RandomStringUtils.secure().nextAlphanumeric(8))
                 .feedbackScores(null)
                 .usage(null)
                 .build();
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
-    private String lastSearch(String queryName, Search search) {
-        var token = search.token();
+    private String lastSearch(String queryName, String token) {
         return Awaitility.await()
                 .alias("query_log holds a " + queryName + " search for " + token)
                 .atMost(Duration.ofSeconds(30))
