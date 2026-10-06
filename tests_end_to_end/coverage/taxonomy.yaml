@@ -320,6 +320,27 @@ areas:
       # asserted as set equality against a direct REST enumeration rather than
       # as a count.
       sdk-multipage-stream-reads: { covered: false }
+      # New for 2.2.92, from the release pass's own exploration of opik#8368.
+      #
+      # The spans an `opik.integrations.*` TRACKER writes — here `track_ollama`,
+      # which wraps `ollama.Client.chat` / `AsyncClient.chat` including
+      # `stream=True`. Nothing in the estate drove any tracker before this: the
+      # `opik-sdk-driver` had no `integrations` route and no spec imported one,
+      # so the only guard was the PR's own `test_ollama.py` behind a new
+      # workflow that needs a live Ollama.
+      #
+      # Deliberately named for THIS tracker and not for the family. A generic
+      # key would read as a claim about every `opik.integrations.*` module, of
+      # which this spec exercises exactly one — and a capability counted as
+      # covered is never re-derived.
+      #
+      # Its own key rather than folded into `span-model-cost-tokens`, which the
+      # exploration's candidate reached for. That key is about server-side PRICE
+      # resolution over hand-seeded spans: its spec writes the usage map itself,
+      # so it cannot see a tracker that mapped the provider's counters onto the
+      # wrong keys, which is the silent-wrongness half here. Folding this under
+      # it would retire the question permanently.
+      sdk-ollama-tracker-spans: { covered: false, note: "track_ollama writing one llm span per chat() call against a mock /api/chat: a streamed call aggregated into ONE span carrying the concatenated text the done chunk does not, prompt_eval_count/eval_count mapped onto prompt_tokens/completion_tokens with the native counters kept under original_usage.*, the provider default and its override, the stream-renamed span, a call nested under an @opik.track parent, and AsyncClient behaving identically. Span population pinned by exhaustion over the whole project, so a span-per-chunk fails. Not covered: any other opik.integrations.* tracker, tool_calls, thinking, and cost (a mock model name resolves no price)" }
       add-trace-to-dataset:   { covered: true,  tier: t2-cuj, note: "AddToDatasetDialog, and the create-dataset-items-from-{traces,spans} endpoints behind it: field_mappings resolving a path, taking precedence over enrichment_options on a collision, being dropped when the path resolves to nothing, and being ignored for a TEST_SUITE dataset; plus the four validation rejections (blank name, blank path, uncompilable path, over the 100-entry cap) and that none of them writes. Driven through the dialog's Advanced mapping section for one trace — defaults, Preview, re-pointing a row through the JSON tree — and read back through the API" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details. Not covered from the traces side; the playground-written shape is covered under playground.trace-messages-tab, which does not generalise to SDK-logged traces." }
