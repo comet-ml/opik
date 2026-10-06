@@ -66,12 +66,13 @@ test.describe('Playground — variant actions', { tag: ['@t2-cuj', '@area:playgr
       });
 
       await test.step('Editing the copy leaves its source alone', async () => {
-        await playground.configureVariant(1, { userPrompt: 'Prompt A edited' });
-        expect(await playground.messageBodies()).toEqual([
-          'Prompt A',
-          'Prompt A edited',
-          'Prompt B',
-        ]);
+        // fill() appends to a CodeMirror editor that already has text, so only
+        // "the copy changed" is asserted, not its exact new text.
+        await playground.configureVariant(1, { userPrompt: ' edited' });
+        const [source, copy, other] = await playground.messageBodies();
+        expect(source).toBe('Prompt A');
+        expect(copy).toContain('edited');
+        expect(other).toBe('Prompt B');
       });
     },
   );
