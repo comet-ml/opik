@@ -22,6 +22,9 @@ import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.TestSuiteConfig;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
+import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -1054,6 +1057,84 @@ class TestSuiteAssertionSamplerTest {
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(1);
             assertThat(messages.getFirst().llmAsJudgeCode().model().name()).isEqualTo(traceModel);
+            assertThat(messages.getFirst().judgeFallbackModels()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("judges with the highest-priority provider and keeps the other connected ones as fallbacks")
+        void carriesOtherConnectedProvidersAsFallbacks() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            UUID versionId = Generators.timeBasedEpochGenerator().generate();
+            UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String versionHash = "abc123";
+
+            when(llmProviderApiKeyService.find(workspaceId))
+                    .thenReturn(new ProviderApiKey.ProviderApiKeyPage(1, 3, 3, List.of(
+                            ProviderApiKey.builder().provider(LlmProvider.GEMINI).build(),
+                            ProviderApiKey.builder().provider(LlmProvider.OPEN_AI).build(),
+                            ProviderApiKey.builder().provider(LlmProvider.ANTHROPIC).build()),
+                            List.of()));
+
+            var evaluatorConfig = new LlmAsJudgeCode(
+                    LlmAsJudgeModelParameters.builder().build(),
+                    List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Evaluate {input}")
+                            .build()),
+                    Map.of("input", "input"),
+                    List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("check")
+                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                            .description("Is it correct?")
+                            .build()));
+
+            var datasetVersion = DatasetVersion.builder()
+                    .id(versionId)
+                    .datasetId(datasetId)
+                    .versionHash(versionHash)
+                    .evaluators(List.of(EvaluatorItem.builder()
+                            .name("test-evaluator")
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(evaluatorConfig)))
+                            .build()))
+                    .build();
+
+            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
+                    .thenReturn(versionId);
+            when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
+                    .thenReturn(datasetVersion);
+            when(datasetItemService.get(datasetItemId, versionId))
+                    .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
+            when(idGenerator.generateId()).thenReturn(Generators.timeBasedEpochGenerator().generate());
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\"}"
+                            .formatted(datasetId, versionHash, datasetItemId));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            sampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, "test-user"));
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+
+            var message = captor.getValue().getFirst();
+            assertThat(message.llmAsJudgeCode().model().name())
+                    .isEqualTo(AnthropicModelName.CLAUDE_HAIKU_4_5.toString());
+            assertThat(message.judgeFallbackModels()).containsExactly(
+                    OpenaiModelName.GPT_4O_MINI.toString(),
+                    GeminiModelName.GEMINI_2_0_FLASH.toString());
         }
 
         @Test
