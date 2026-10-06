@@ -194,7 +194,7 @@ class TracesSearchPartitionPruningTest {
 
     private Search search;
 
-    private synchronized Search search() {
+    private Search search() {
         if (search != null) {
             return search;
         }

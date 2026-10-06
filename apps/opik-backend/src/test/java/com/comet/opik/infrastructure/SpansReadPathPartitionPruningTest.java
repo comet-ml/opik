@@ -466,7 +466,7 @@ class SpansReadPathPartitionPruningTest {
 
     private SpanSearch spanSearch;
 
-    private synchronized SpanSearch spanSearch() {
+    private SpanSearch spanSearch() {
         if (spanSearch != null) {
             return spanSearch;
         }
