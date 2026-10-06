@@ -26,7 +26,18 @@ const ANTHROPIC_CONFIG = {
 const RULE_CONFIG = { temperature: 0.4 };
 
 describe("hasVisibleControls", () => {
-  it("is false for a Claude model without sampling params on a rule", () => {
+  it("is false on a rule for a newly synced Claude with no capability row", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        "claude-opus-9" as PROVIDER_MODEL_TYPE,
+        ANTHROPIC_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it("is true for a Claude model without sampling params on a rule, which keeps its effort", () => {
     expect(
       hasVisibleControls(
         PROVIDER_TYPE.ANTHROPIC,
@@ -34,7 +45,7 @@ describe("hasVisibleControls", () => {
         ANTHROPIC_CONFIG,
         RULE_UNSUPPORTED_PARAMS,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("is true for the same Claude model on the playground", () => {
