@@ -10,6 +10,9 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
  */
 const PANEL_POINTER_PARK = { x: 4, y: 300 } as const;
 
+const escapeForRegExp = (literal: string): string =>
+  literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export class TracePanelPage {
   constructor(
     private readonly page: Page,
@@ -150,6 +153,73 @@ export class TracePanelPage {
    */
   estimatedCost(formatted: string): Locator {
     return this.dataViewer.getByText(formatted, { exact: true });
+  }
+
+  // --- Quick attribute filters (Details tab) ---
+
+  /**
+   * A collapsible `CodeBlock` in the data viewer — "Input", "Output",
+   * "Metadata", "Token usage" — addressed through its own header button.
+   *
+   * The block renders no `data-testid`, and its header button is the only
+   * labelled thing in it, so the block is reached by walking up from that
+   * button to the nearest ancestor that holds CodeMirror's rendered lines.
+   * Addressed by that predicate rather than by depth (`ancestor::div[2]`, the
+   * button's grandparent today) so a wrapper added or removed between the
+   * header row and the block does not silently retarget every attribute
+   * lookup below — the same shape `compare-experiments.page.ts` uses to reach
+   * a cell's enclosing table. Scoped to the data viewer rather than the page
+   * because the Logs chip bar also carries a button called "Metadata", and an
+   * unscoped lookup would filter lines inside a chip popover.
+   */
+  private codeBlock(title: string): Locator {
+    return this.dataViewer
+      .getByRole('button', { name: title, exact: true })
+      .locator('xpath=ancestor::div[.//*[contains(@class, "cm-line")]][1]');
+  }
+
+  /**
+   * One rendered attribute line inside a `CodeBlock`.
+   *
+   * Metadata renders as YAML (no `prettifyConfig`, so the mode defaults to
+   * yaml and is not persisted), which makes a leaf line read `key: value`. The
+   * key is anchored to the start of the line so `provider:` cannot be matched
+   * by a line for `providers:` or by one whose VALUE happens to contain the
+   * word — the distinction between those two keys is exactly what the filter
+   * resolver turns on.
+   */
+  attributeLine(blockTitle: string, key: string): Locator {
+    return this.codeBlock(blockTitle)
+      .locator('.cm-line')
+      .filter({ hasText: new RegExp(`^\\s*${escapeForRegExp(key)}:`) });
+  }
+
+  /**
+   * The quick-filter icon on an attribute line, if the attribute has one.
+   *
+   * Rendered by a CodeMirror widget as a `role="button"` span whose
+   * `aria-label` is the action's current label — which is the point: the label
+   * changes to "Filter in Spans table" when the filter would be applied to a
+   * table other than the one on screen, so it is both the handle and a thing
+   * worth asserting. Absent entirely when the attribute cannot be filtered.
+   */
+  quickFilterButton(blockTitle: string, key: string): Locator {
+    return this.attributeLine(blockTitle, key).getByRole('button');
+  }
+
+  /**
+   * Click an attribute's quick-filter icon.
+   *
+   * The widget acts on `mousedown` (it must, to beat CodeMirror's own
+   * selection handling), which Playwright's `click()` dispatches — so this is
+   * an ordinary click and not a dispatched event.
+   */
+  async applyQuickFilter(blockTitle: string, key: string): Promise<void> {
+    return test.step(`Quick-filter on the "${key}" attribute of ${blockTitle}`, async () => {
+      const button = this.quickFilterButton(blockTitle, key);
+      await expect(button, `quick-filter icon for "${key}"`).toHaveCount(1);
+      await button.click();
+    });
   }
 
   // --- Attachments ---
@@ -313,6 +383,55 @@ export class TracePanelPage {
   /** The annotate score row for a named feedback definition. */
   annotateScoreRow(definitionName: string): Locator {
     return this.root.getByTestId(`annotate-score-row-${definitionName}`);
+  }
+
+  // --- Annotate panel: comments ---
+
+  /**
+   * The "Add a comment..." composer in the Annotate panel's Comments section.
+   *
+   * Addressed by its placeholder: `CommentsSection` renders the textarea
+   * through `UserCommentForm.TextareaField` with no test id and no label, and
+   * the placeholder is the only stable handle it exposes.
+   */
+  get commentComposer(): Locator {
+    return this.root.getByPlaceholder('Add a comment...');
+  }
+
+  /**
+   * Write a comment and submit it, resolving once it is on screen.
+   *
+   * The submit control carries the accessible name "Approve edit comment" in
+   * both the add and edit modes — `UserCommentForm.SubmitButton` uses the one
+   * sr-only string for each — so the name is matched rather than the icon, and
+   * it is scoped to the composer's own form so an existing comment's edit
+   * button cannot be clicked instead.
+   *
+   * Waits for the posted comment to render rather than for the click: the
+   * write is a mutation whose result arrives asynchronously, and a caller that
+   * read straight after would race it.
+   */
+  async addComment(text: string): Promise<void> {
+    return test.step(`Add the comment "${text}"`, async () => {
+      const composer = this.commentComposer;
+      await composer.waitFor({ state: 'visible' });
+      await composer.fill(text);
+      // The submit is disabled until the form is valid AND dirty, so a failure
+      // to reach an enabled button means the text never registered — worth
+      // failing on here rather than on the absent comment later.
+      const submit = this.root
+        .locator('form')
+        .filter({ has: this.page.getByPlaceholder('Add a comment...') })
+        .getByRole('button', { name: 'Approve edit comment' });
+      await expect(submit, 'the comment submit button is enabled once text is typed').toBeEnabled();
+      await submit.click();
+      await expect(this.commentText(text), `the posted comment "${text}"`).toBeVisible();
+    });
+  }
+
+  /** A posted comment in the Annotate panel, by its exact text. */
+  commentText(text: string): Locator {
+    return this.root.getByText(text, { exact: true });
   }
 
   /** Set (or change) the numeric value in a named annotate score row. */

@@ -24,6 +24,7 @@ import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
+  OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -40,10 +41,15 @@ export interface LogQueueParams extends RunStreamingReturn {
   model: PROVIDER_MODEL_TYPE | "";
   provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
+  // The prompt as authored, with {{variables}} intact. providerMessages is this
+  // template rendered against one dataset item, so it describes a single run
+  // rather than the experiment (OPIK-7965).
+  templateMessages?: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   promptLibraryMetadata?: PromptLibraryMetadata;
   experimentName?: string;
   configs: LLMPromptConfigsType;
+  openAiPipelineMode?: OpenAiPipelineMode;
   selectedRuleIds: string[] | null;
   datasetItemData?: object;
 }
@@ -255,11 +261,12 @@ const getSpanFromRun = (
  * call never ran at.
  */
 export const getLoggedParameters = (
-  run: Pick<LogQueueParams, "model" | "configs">,
+  run: Pick<LogQueueParams, "model" | "configs" | "openAiPipelineMode">,
 ): Record<string, unknown> =>
   sanitizeConfigForRequest(
     run.model,
     run.configs as unknown as Record<string, unknown>,
+    run.openAiPipelineMode,
   );
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
@@ -268,7 +275,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
 
   const experimentMetadata: Record<string, unknown> = {
     model: experimentModel,
-    messages: JSON.stringify(run.providerMessages),
+    messages: JSON.stringify(run.templateMessages ?? run.providerMessages),
     model_config: getLoggedParameters(run),
   };
 

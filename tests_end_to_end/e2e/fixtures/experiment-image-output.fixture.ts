@@ -51,6 +51,12 @@ export interface ImageOutputItemRef {
   expectedThumbnailCount: number;
 }
 
+/** An item carrying a picture in the trace INPUT as well as in its output. */
+export interface InputImageItemRef extends ImageOutputItemRef {
+  /** The raw input string written to the trace, image and all. */
+  rawInput: string;
+}
+
 export interface ExperimentImageOutputRef {
   datasetId: string;
   datasetName: string;
@@ -71,6 +77,20 @@ export interface ExperimentImageOutputRef {
   mixed: ImageOutputItemRef;
   /** The same PNG twice: two placeholders, one deduplicated thumbnail. */
   repeated: ImageOutputItemRef;
+  /**
+   * A BLUE png in the trace INPUT and a RED one in its output — the one shape
+   * that can tell the two media lists apart (opik#8547, `5497c82`).
+   *
+   * The compare panel extracts input and output media in ONE pass so the
+   * conversation's `[image_N]` tokens and the thumbnail strip agree: the
+   * input's picture takes [image_0] and the output's takes [image_1]. The
+   * sibling items above cannot see that, because their images live in the
+   * output alone — there the combined pass and an output-only pass number
+   * identically, so both agree whether or not the strip is using the right
+   * list. With a picture on each side the two lists disagree, and the strip
+   * either carries the conversation's numbering or mislabels every thumbnail.
+   */
+  inputAndOutput: InputImageItemRef;
 }
 
 export interface ExperimentImageOutputFixtures {
@@ -94,9 +114,21 @@ const READABLE_TIMEOUT_MS = 30_000;
 
 const MIXED_OUTPUT = `A:${RED_PNG_BASE64} B:${GREEN_GIF_BASE64} C:${BLUE_PNG_BASE64}`;
 const REPEATED_OUTPUT = `first:${RED_PNG_BASE64} second:${RED_PNG_BASE64}`;
+/**
+ * One picture on each side, each its own colour and so its own data URL.
+ *
+ * The numbering is predictable because the panel extracts over
+ * `{ input, output }` in that key order: blue is [image_0] and red is
+ * [image_1]. Both are PNGs deliberately — the format-grouped pass that `mixed`
+ * exercises then plays no part, so the only thing deciding the tokens here is
+ * which SIDE each picture is on, which is what this item exists to pin.
+ */
+const INPUT_IMAGE_INPUT = `in:${BLUE_PNG_BASE64}`;
+const INPUT_IMAGE_OUTPUT = `out:${RED_PNG_BASE64}`;
 
 /**
- * An experiment whose items carry images inline in their trace output.
+ * An experiment whose items carry images inline in their trace payload — two
+ * in the output alone, and one (`inputAndOutput`) on both sides.
  *
  * Seeded through REST rather than the bridge's `evaluate` route for the reason
  * `experimentItemRead` gives: these rows exist to be rendered, not scored, and a
@@ -114,8 +146,10 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
 
     const mixedItemId = uuid7();
     const repeatedItemId = uuid7();
+    const inputImageItemId = uuid7();
     const mixedTraceId = uuid7();
     const repeatedTraceId = uuid7();
+    const inputImageTraceId = uuid7();
 
     const dataset = await sdkClient.python.createDataset({
       project_name: project.name,
@@ -130,6 +164,7 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
         items: [
           { id: mixedItemId, data: { input: 'mixed-formats' } },
           { id: repeatedItemId, data: { input: 'repeated-image' } },
+          { id: inputImageItemId, data: { input: 'image-on-both-sides' } },
         ],
       });
 
@@ -148,6 +183,12 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
             input: { input: 'repeated-image' },
             output: { output: REPEATED_OUTPUT },
           },
+          {
+            id: inputImageTraceId,
+            name: `${testNamespace}-img-trace-input-and-output`,
+            input: { input: INPUT_IMAGE_INPUT },
+            output: { output: INPUT_IMAGE_OUTPUT },
+          },
         ],
       });
       seededTraces = true;
@@ -162,6 +203,7 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
       await backendClient.createExperimentItems([
         { experimentId, datasetItemId: mixedItemId, traceId: mixedTraceId },
         { experimentId, datasetItemId: repeatedItemId, traceId: repeatedTraceId },
+        { experimentId, datasetItemId: inputImageItemId, traceId: inputImageTraceId },
       ]);
 
       // Prove the images survived the write before any test opens a browser.
@@ -171,14 +213,21 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
       // thumbnails simply absent — and a UI assertion over that reads as the
       // rendering defect this spec is hunting rather than as the seed failure it
       // would actually be.
-      for (const [label, traceId, expected] of [
-        ['mixed', mixedTraceId, MIXED_OUTPUT],
-        ['repeated', repeatedTraceId, REPEATED_OUTPUT],
+      //
+      // The input half matters for the same reason and one more: the whole
+      // claim of `inputAndOutput` is that the panel numbers ACROSS the two
+      // sides, which is unobservable if the input's picture never reached the
+      // trace.
+      for (const [label, traceId, field, expected] of [
+        ['mixed', mixedTraceId, 'output', MIXED_OUTPUT],
+        ['repeated', repeatedTraceId, 'output', REPEATED_OUTPUT],
+        ['input-and-output (input)', inputImageTraceId, 'input', INPUT_IMAGE_INPUT],
+        ['input-and-output (output)', inputImageTraceId, 'output', INPUT_IMAGE_OUTPUT],
       ] as const) {
-        await waitForStoredOutput(backendClient, label, traceId, expected);
+        await waitForStoredText(backendClient, label, traceId, field, expected);
       }
 
-      await waitForRows(backendClient, dataset.id, experimentId, 2);
+      await waitForRows(backendClient, dataset.id, experimentId, 3);
 
       const ref: ExperimentImageOutputRef = {
         datasetId: dataset.id,
@@ -212,11 +261,35 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
           // Both placeholders point at one URL, and the list deduplicates by URL.
           expectedThumbnailCount: 1,
         },
+        inputAndOutput: {
+          datasetItemId: inputImageItemId,
+          traceId: inputImageTraceId,
+          rawInput: INPUT_IMAGE_INPUT,
+          rawOutput: INPUT_IMAGE_OUTPUT,
+          // [image_1], not [image_0]: the input's picture was numbered first,
+          // and the output's text has to say so.
+          expectedText: 'out:[image_1]',
+          expectedUrlByPlaceholder: {
+            '[image_0]': BLUE_PNG_URL,
+            '[image_1]': RED_PNG_URL,
+          },
+          // Two distinct URLs, so nothing deduplicates.
+          expectedThumbnailCount: 2,
+        },
       };
 
       await testInfo.attach('opik.experimentImageOutput', {
         body: JSON.stringify(
-          { ...ref, mixed: { ...ref.mixed, rawOutput: '<elided>' }, repeated: { ...ref.repeated, rawOutput: '<elided>' } },
+          {
+            ...ref,
+            mixed: { ...ref.mixed, rawOutput: '<elided>' },
+            repeated: { ...ref.repeated, rawOutput: '<elided>' },
+            inputAndOutput: {
+              ...ref.inputAndOutput,
+              rawInput: '<elided>',
+              rawOutput: '<elided>',
+            },
+          },
           null,
           2,
         ),
@@ -236,7 +309,9 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
         await safe(`experiment ${experimentName}`, () => backendClient.deleteExperiment(experimentId));
         await safe(`dataset ${datasetName}`, () => backendClient.deleteDataset(dataset.id));
         if (seededTraces) {
-          await safe('2 traces', () => backendClient.deleteTraces([mixedTraceId, repeatedTraceId]));
+          await safe('3 traces', () =>
+            backendClient.deleteTraces([mixedTraceId, repeatedTraceId, inputImageTraceId]),
+          );
         }
       }
     }
@@ -244,7 +319,11 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
 });
 
 /**
- * Block until one trace reads back with its output byte-for-byte as written.
+ * Block until one side of a trace reads back byte-for-byte as written.
+ *
+ * `field` is both the half of the payload to read and the key inside it — the
+ * seeds are written as `{ input: { input: … } }` and `{ output: { output: … } }`
+ * — so one helper covers both sides.
  *
  * Polls rather than reads once, so the ingestion window is not mistaken for a
  * corrupt seed. The distinction is kept in the failure message: "never became
@@ -252,12 +331,15 @@ export const test = baseTest.extend<ExperimentImageOutputFixtures>({
  * the wrong number of characters is the truncation this check exists to catch,
  * and the two want different responses from whoever reads the report.
  */
-async function waitForStoredOutput(
+async function waitForStoredText(
   backendClient: {
-    getTracePayload: (traceId: string) => Promise<{ output: unknown } | null>;
+    getTracePayload: (
+      traceId: string,
+    ) => Promise<{ input: unknown; output: unknown } | null>;
   },
   label: string,
   traceId: string,
+  field: 'input' | 'output',
   expected: string,
 ): Promise<void> {
   const start = Date.now();
@@ -267,7 +349,7 @@ async function waitForStoredOutput(
     const payload = await backendClient.getTracePayload(traceId);
     if (payload !== null) {
       seen = true;
-      stored = (payload.output as { output?: unknown } | null)?.output;
+      stored = (payload[field] as Record<string, unknown> | null)?.[field];
       if (stored === expected) return;
     }
     await new Promise((r) => setTimeout(r, QUERYABLE_POLL_MS));
@@ -275,7 +357,7 @@ async function waitForStoredOutput(
   throw new Error(
     `[experimentImageOutput fixture] the ${label} trace ${traceId} ` +
       (seen
-        ? `did not store its output verbatim: expected ${expected.length} chars, got ` +
+        ? `did not store its ${field} verbatim: expected ${expected.length} chars, got ` +
           `${typeof stored === 'string' ? `${stored.length} chars` : typeof stored}`
         : 'never became readable') +
       ` after ${Date.now() - start}ms`,

@@ -3,9 +3,15 @@ import React from "react";
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import {
+  createSupports,
+  getOpenAIVisibleControls,
+  isAnyControlVisible,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
+import {
   LLMOpenAIConfigsType,
+  OpenAiPipelineMode,
+  OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
-  ReasoningEffort,
 } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import {
@@ -13,7 +19,6 @@ import {
   resolveEffort,
   resolveSamplingParams,
 } from "@/lib/modelUtils";
-import isUndefined from "lodash/isUndefined";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import {
   Select,
@@ -30,6 +35,7 @@ interface OpenAIModelSettingsProps {
   model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMOpenAIConfigsType>) => void;
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const OpenAIModelConfigs = ({
@@ -37,16 +43,26 @@ const OpenAIModelConfigs = ({
   model,
   onChange,
   unsupportedParams,
+  openAiPipelineMode,
 }: OpenAIModelSettingsProps) => {
-  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
-  // The resolver owns which sampling params this model accepts and what the request will carry, so
-  // both sliders follow it rather than the config's own keys. Reasoning models tune neither.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
-  const { reasoningEffort } = resolveEffort(model ?? "", configs);
+  const { reasoningEffort } = resolveEffort(
+    model ?? "",
+    configs,
+    openAiPipelineMode,
+  );
+  const visible = getOpenAIVisibleControls({
+    model,
+    configs,
+    supports: createSupports(unsupportedParams),
+    openAiPipelineMode,
+  });
+
+  if (!isAnyControlVisible(visible)) return null;
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {!isUndefined(temperature) && (
+      {visible.temperature && (
         <SliderInputControl
           value={temperature}
           onChange={(v) => onChange({ temperature: v })}
@@ -62,7 +78,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.maxCompletionTokens) && (
+      {visible.maxCompletionTokens && (
         <SliderInputControl
           value={configs.maxCompletionTokens}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
@@ -78,7 +94,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {supports("topP") && !isUndefined(topP) && (
+      {visible.topP && (
         <SliderInputControl
           value={topP}
           onChange={(v) => onChange({ topP: v })}
@@ -94,7 +110,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.frequencyPenalty) && (
+      {visible.frequencyPenalty && (
         <SliderInputControl
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
@@ -110,7 +126,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.presencePenalty) && (
+      {visible.presencePenalty && (
         <SliderInputControl
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
@@ -126,7 +142,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {supports("reasoningEffort") && reasoningEffort !== undefined && (
+      {visible.reasoningEffort && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="reasoningEffort" className="text-sm font-medium">
@@ -136,7 +152,7 @@ const OpenAIModelConfigs = ({
           </div>
           <Select
             value={reasoningEffort}
-            onValueChange={(value: ReasoningEffort) =>
+            onValueChange={(value: OpenAIReasoningEffort) =>
               onChange({ reasoningEffort: value })
             }
           >
@@ -144,17 +160,19 @@ const OpenAIModelConfigs = ({
               <SelectValue placeholder="Select reasoning effort" />
             </SelectTrigger>
             <SelectContent>
-              {getOpenAIReasoningEffortOptions(model).map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
+              {getOpenAIReasoningEffortOptions(model, openAiPipelineMode).map(
+                (opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ),
+              )}
             </SelectContent>
           </Select>
         </div>
       )}
 
-      {supports("throttling") && (
+      {visible.throttling && (
         <SliderInputControl
           value={configs.throttling ?? DEFAULT_OPEN_AI_CONFIGS.THROTTLING}
           onChange={(v) => onChange({ throttling: v })}
@@ -170,7 +188,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {supports("maxConcurrentRequests") && (
+      {visible.maxConcurrentRequests && (
         <SliderInputControl
           value={
             configs.maxConcurrentRequests ??

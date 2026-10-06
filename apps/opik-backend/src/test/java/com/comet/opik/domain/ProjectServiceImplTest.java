@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
+import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -17,6 +18,7 @@ import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -26,6 +28,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -35,6 +38,7 @@ import static org.mockito.Mockito.when;
 class ProjectServiceImplTest {
 
     private static final int DEMO_PROJECT_WORKSPACE_CHUNK_SIZE = 1_000;
+    private static final int ID_LOOKUP_CHUNK_SIZE = 1_000;
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -123,12 +127,69 @@ class ProjectServiceImplTest {
             verifyNoInteractions(template);
         }
 
+        @Test
+        void findNamesByIdsAcrossWorkspaces__whenIdsExceedTheChunkSize__thenEveryChunkIsMerged() {
+            var ids = Stream.generate(ID_GENERATOR::generateId)
+                    .limit(ID_LOOKUP_CHUNK_SIZE + 1)
+                    .collect(Collectors.toUnmodifiableSet());
+            var queriedBatches = new ArrayList<Collection<UUID>>();
+
+            stubTransaction();
+            when(projectDAO.findNamesByIds(anyCollection())).thenAnswer(invocation -> {
+                Collection<UUID> batch = invocation.getArgument(0);
+                queriedBatches.add(batch);
+                return batch.stream()
+                        .map(id -> new WorkspaceProjectName("ws-" + id, id, "name-" + id))
+                        .toList();
+            });
+
+            var actualNames = projectService.findNamesByIdsAcrossWorkspaces(ids).block();
+
+            assertThat(queriedBatches)
+                    .hasSizeGreaterThan(1)
+                    .allSatisfy(batch -> assertThat(batch).hasSizeLessThanOrEqualTo(ID_LOOKUP_CHUNK_SIZE));
+            assertThat(queriedBatches.stream().flatMap(Collection::stream).toList())
+                    .containsExactlyInAnyOrderElementsOf(ids);
+            assertThat(actualNames).hasSize(ids.size())
+                    .allSatisfy((id, name) -> assertThat(name).isEqualTo("name-" + id));
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        void findNamesByIdsAcrossWorkspaces__whenNoIds__thenReturnsEmptyWithoutTouchingTheDatabase(Set<UUID> ids) {
+            var actualNames = projectService.findNamesByIdsAcrossWorkspaces(ids).block();
+
+            assertThat(actualNames).isEmpty();
+            verifyNoInteractions(template);
+        }
+
         private void stubTransaction() {
             when(template.inTransaction(eq(READ_ONLY), any())).thenAnswer(invocation -> {
                 TxAction<?> callback = invocation.getArgument(1);
                 return callback.execute(handle);
             });
             when(handle.attach(ProjectDAO.class)).thenReturn(projectDAO);
+        }
+    }
+
+    @Nested
+    class GroupByName {
+
+        /**
+         * Callers look up with {@code WorkspaceUtils.getProjectName}, which strips, while MySQL's PAD SPACE collation
+         * still returns a project stored with trailing spaces. Keying by the raw name made the lookup miss and the
+         * feedback-score batch fail with an NPE on {@code project.id()}.
+         */
+        @Test
+        void groupByName__whenStoredNameHasSurroundingWhitespace__thenFoundByStrippedName() {
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name("  Padded Project  ")
+                    .build();
+
+            var projectsByName = ProjectService.groupByName(List.of(project));
+
+            assertThat(projectsByName.get("Padded Project")).isEqualTo(project);
+            assertThat(projectsByName.get("padded project")).isEqualTo(project);
         }
     }
 }
