@@ -1,9 +1,12 @@
 package com.comet.opik.infrastructure.aws;
 
 import com.comet.opik.infrastructure.AlertsEventBridgeConfig;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 
 import java.util.Optional;
@@ -34,5 +37,29 @@ class AwsModuleTest {
         config.setRegion(region);
 
         assertThat(AwsModule.eventBridgeRegion(config)).isEqualTo(expected);
+    }
+
+    @Test
+    void eventBridgeClientWhenDisabledIsEmpty() {
+        var toggles = new ServiceTogglesConfig();
+        toggles.setEventBridgeAlertsEnabled(false);
+
+        assertThat(new AwsModule().eventBridgeClient(toggles, new AlertsEventBridgeConfig(),
+                AnonymousCredentialsProvider.create())).isEmpty();
+    }
+
+    @Test
+    void eventBridgeClientWhenEnabledIsPresent() {
+        var toggles = new ServiceTogglesConfig();
+        toggles.setEventBridgeAlertsEnabled(true);
+        var config = new AlertsEventBridgeConfig();
+        config.setEventBus(ARN_BUS);
+
+        var client = new AwsModule().eventBridgeClient(toggles, config, AnonymousCredentialsProvider.create());
+
+        assertThat(client).isPresent();
+        try (var eventBridgeClient = client.get()) {
+            assertThat(eventBridgeClient.serviceClientConfiguration().region()).isEqualTo(Region.EU_WEST_1);
+        }
     }
 }
