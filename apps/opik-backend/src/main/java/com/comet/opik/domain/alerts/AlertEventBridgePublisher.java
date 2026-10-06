@@ -12,6 +12,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -91,7 +92,7 @@ public class AlertEventBridgePublisher {
      */
     public Mono<Void> publish(@NonNull Alert alert,
             @NonNull String workspaceId,
-            String workspaceName,
+            @Nullable String workspaceName,
             @NonNull AlertEventType eventType,
             @NonNull Map<String, Object> payload) {
         if (client.isEmpty()) {
