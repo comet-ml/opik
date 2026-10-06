@@ -892,6 +892,160 @@ export class PlaygroundPage {
   }
 
   /**
+   * Select a model from a NAMED provider group.
+   *
+   * `selectModel` takes the first option matching the display name, which is
+   * ambiguous for a model two providers both offer under one label: "Gemini 3
+   * Flash Preview" is `gemini-3-flash-preview` under Gemini and
+   * `vertex_ai/gemini-3-flash-preview` under Vertex AI. Those are the two
+   * spellings the generation gate has to strip a prefix off, so they are
+   * exactly the pair a spec must be able to tell apart — and taking `.first()`
+   * would have it silently assert the same one twice.
+   *
+   * While the search box holds text the picker renders a flat list grouped by
+   * provider, each group labelled, which is what makes the scope available.
+   */
+  async selectModelFromProvider(
+    index: number,
+    providerGroup: string,
+    modelDisplayName: string,
+  ): Promise<void> {
+    return test.step(
+      `select "${modelDisplayName}" from the ${providerGroup} group for variant ${index}`,
+      async () => {
+        assertAllowedModelDisplayName(modelDisplayName);
+        const listbox = this.page.getByRole('listbox');
+        await expect(async () => {
+          await this.modelPicker(index).click();
+          await expect(listbox).toBeVisible({ timeout: 2_000 });
+        }).toPass({ timeout: 15_000 });
+
+        // Re-filtered and re-clicked for the same reason as setModelForVariant:
+        // the option list remounts when /llm/models resolves, detaching options
+        // mid-click.
+        await expect(async () => {
+          await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+          // By the group's accessible NAME, which Radix takes from its
+          // `SelectLabel`, not by its text: a `hasText` filter for "Gemini"
+          // also matches the Vertex AI group, whose options are all called
+          // "Gemini …". Exact, so "Gemini" cannot select "Gemini (legacy)".
+          const group = listbox.getByRole('group', { name: providerGroup, exact: true });
+          // Exactly one group, so a provider label that stopped being unique
+          // fails here instead of selecting from whichever matched first.
+          await expect(group, `the ${providerGroup} provider group`).toHaveCount(1);
+          const option = group.getByRole('option', { name: modelDisplayName, exact: true });
+          await expect(option, `"${modelDisplayName}" under ${providerGroup}`).toHaveCount(1);
+          await option.click({ timeout: 2_000 });
+          await expect(listbox).toBeHidden({ timeout: 2_000 });
+        }).toPass({ timeout: 30_000 });
+      },
+    );
+  }
+
+  /**
+   * A named control's label inside the open model-parameters panel.
+   *
+   * For the controls that are not sliders — "Reasoning effort" and "Thinking
+   * level" are a Radix `Select` whose trigger carries no id (their `<Label
+   * htmlFor>` points at nothing, so `getByLabel` cannot reach them) — the
+   * label text is the available handle. Exact, so "Max output tokens" cannot
+   * be satisfied by a longer label.
+   */
+  modelParameterLabel(label: string): Locator {
+    return this.modelParametersPanel().getByText(label, { exact: true });
+  }
+
+  /**
+   * The Reasoning effort control's trigger inside the open model-parameters
+   * panel.
+   *
+   * The control is a Radix `Select` whose `SelectTrigger` carries no id and no
+   * testid, and whose `<Label htmlFor="reasoningEffort">` points at nothing —
+   * so `getByLabel` cannot reach it. Its role is the handle: the OpenAI panel
+   * mounts exactly one combobox (every other control is a `SliderInputControl`
+   * number input), which is why callers assert `toHaveCount(1)` before reading
+   * it rather than taking `.first()`. The FE should grow a
+   * `data-testid="reasoning-effort-select"` here and this should move to it.
+   */
+  reasoningEffortTrigger(): Locator {
+    return this.modelParametersPanel().getByRole('combobox');
+  }
+
+  /**
+   * The effort the panel currently DISPLAYS.
+   *
+   * Which is not always the effort that is stored: `resolveEffort` masks a
+   * stored value the selected model and pipeline mode do not offer, so a
+   * prompt holding `max` on a Chat Completions key reads "High" here. That gap
+   * is the subject of opik#8682, not an artefact of this reader.
+   */
+  async readReasoningEffort(): Promise<string> {
+    return test.step('read the displayed reasoning effort', async () => {
+      const trigger = this.reasoningEffortTrigger();
+      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
+      return ((await trigger.textContent()) ?? '').trim();
+    });
+  }
+
+  /**
+   * Every effort the control OFFERS, in the order the panel lists them.
+   *
+   * The list is the assertion in its own right — `getOpenAIReasoningEffortOptions`
+   * appends the Responses-API-only values to the base set, so "Max is absent"
+   * and "the other five are still there" are different claims and a caller
+   * wants to make both at once. The options render in a portal, so they are
+   * read from the page's listbox rather than from inside the panel.
+   */
+  async reasoningEffortOptions(): Promise<string[]> {
+    return test.step('read the offered reasoning efforts', async () => {
+      const trigger = this.reasoningEffortTrigger();
+      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await trigger.click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      const options = await listbox.getByRole('option').allTextContents();
+      await this.page.keyboard.press('Escape');
+      await expect(listbox).toBeHidden();
+      return options.map((o) => o.trim());
+    });
+  }
+
+  /** Pick a reasoning effort by its rendered label, e.g. `Max`. */
+  async selectReasoningEffort(label: string): Promise<void> {
+    return test.step(`select reasoning effort "${label}"`, async () => {
+      const trigger = this.reasoningEffortTrigger();
+      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await trigger.click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      const option = listbox.getByRole('option', { name: label, exact: true });
+      // Exactly one, not `.first()`: "High" and "xHigh" are both offered, and
+      // an ambiguous match would silently store the wrong effort.
+      await expect(option, `"${label}" is offered`).toHaveCount(1);
+      await option.click();
+      await expect(listbox).toBeHidden();
+    });
+  }
+
+  /** Every slider control mounted in the open panel, by its control id. */
+  async mountedModelParameterIds(): Promise<string[]> {
+    return test.step('read the controls mounted in the model-parameters panel', async () => {
+      const ids = await this.modelParametersPanel()
+        .locator('input[data-testid$="-input"]')
+        .evaluateAll((els) =>
+          els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/-input$/, '')),
+        );
+      return ids;
+    });
+  }
+
+  /**
    * Click Run (free mode) and wait for the "No runs yet" placeholder to disappear.
    * The prompt content must already be loaded — this does NOT fill a message body.
    */
@@ -1115,11 +1269,29 @@ export class PlaygroundPage {
     });
   }
 
-  /** Close the model-parameters popover, and wait until it is really gone. */
+  /**
+   * Close the model-parameters popover, and wait until it is really gone.
+   *
+   * Escape is pressed until the panel actually goes, not once: the dropdown
+   * swallows the first Escape while focus is still on the menu CONTAINER, and
+   * only a second press closes it. A caller that has already clicked an
+   * interactive child (moving focus into the panel) gets out on the first
+   * press, which is why this went unnoticed — but a spec that only reads the
+   * panel never moves focus and would hang on a single press.
+   */
   async closeModelParameters(): Promise<void> {
     return test.step('close model parameters', async () => {
-      await this.page.keyboard.press('Escape');
-      await this.modelParametersPanel().waitFor({ state: 'hidden' });
+      const panel = this.modelParametersPanel();
+      await expect
+        .poll(
+          async () => {
+            if (!(await panel.isVisible().catch(() => false))) return false;
+            await this.page.keyboard.press('Escape');
+            return panel.isVisible().catch(() => false);
+          },
+          { message: 'the model-parameters panel closes', intervals: [100, 250, 500, 1000] },
+        )
+        .toBe(false);
     });
   }
 
