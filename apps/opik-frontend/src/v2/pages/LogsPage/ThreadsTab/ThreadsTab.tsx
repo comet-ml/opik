@@ -22,6 +22,7 @@ import {
   useMetricDateRangeWithQueryAndStorage,
   useIsOnlyWindowBehind,
   keepDataWhileWindowMoves,
+  windowQueryMeta,
   windowQueryOptions,
   DATE_RANGE_PRESET_ALLTIME,
   IntervalWindow,
@@ -652,6 +653,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     {
       enabled: false,
       refetchOnMount: "always",
+      meta: windowQueryMeta(selectionKey),
     },
   );
 
