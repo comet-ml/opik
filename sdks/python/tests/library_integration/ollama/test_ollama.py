@@ -537,6 +537,9 @@ def test_ollama_chat__positional_arguments__logged_like_keywords(
     span = fake_backend.trace_trees[0].spans[0]
     assert span.input == {"messages": messages}
     assert span.model == MODEL
+    # defaults the caller didn't pass (stream, think, format, ...) aren't logged
+    assert "think" not in span.metadata
+    assert "stream" not in span.metadata
 
 
 def test_ollama_chat__function_tool__logged_as_json_schema(fake_backend, monkeypatch):

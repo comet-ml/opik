@@ -1,4 +1,3 @@
-import inspect
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -8,7 +7,7 @@ from typing_extensions import override
 import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
 from opik.api_objects import span
-from opik.decorator import arguments_helpers, base_track_decorator
+from opik.decorator import arguments_helpers, base_track_decorator, inspect_helpers
 
 from . import stream_wrappers
 
@@ -156,13 +155,14 @@ def _bind_call_arguments(
 ) -> Dict[str, Any]:
     if not args:
         return kwargs
-    try:
-        bound = inspect.signature(func).bind_partial(*args, **kwargs)
-    except (TypeError, ValueError):
-        return kwargs
-    arguments = dict(bound.arguments)
-    arguments.pop("self", None)
-    return arguments
+    arguments = inspect_helpers.extract_inputs(func, args, kwargs)
+    # extract_inputs fills in every default; keep only what the caller passed
+    positional_names = list(arguments)[: len(args)]
+    return {
+        key: value
+        for key, value in arguments.items()
+        if key in kwargs or key in positional_names
+    }
 
 
 def _tools_as_schemas(tools: Any) -> Any:
