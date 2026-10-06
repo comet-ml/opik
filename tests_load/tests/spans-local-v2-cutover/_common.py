@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cutover_common import (  # noqa: E402  (must follow the sys.path bootstrap above)
     BAD_ID_INSTANT,
+    CEILING_ID_INSTANT,
     LOGGER,
     discover_workspace_and_project,
     json_payload,
@@ -31,6 +32,7 @@ from cutover_common.delete_traffic import build_delete_traffic_command  # noqa: 
 
 __all__ = [
     "BAD_ID_INSTANT",
+    "CEILING_ID_INSTANT",
     "DEFAULT_PROJECT",
     "LOGGER",
     "build_delete_traffic_command",

@@ -39,6 +39,7 @@ import {
   DetailsActionSectionValue,
 } from "@/v2/pages-shared/traces/DetailsActionSection";
 import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
+import AnnotationQueuesNavigation from "@/v2/pages-shared/traces/AnnotationQueuesNavigation/AnnotationQueuesNavigation";
 import {
   mapRowDataForExport,
   TRACE_EXPORT_COLUMNS,
@@ -109,6 +110,12 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   }, [treeData, traceId]);
   const canNavigateToExperiment =
     Boolean(experiment) && canViewExperiments && Boolean(activeProjectId);
+  const annotationQueues = useMemo(() => {
+    const node = treeData.find((item) => item.id === traceId);
+    return node && "annotation_queues" in node
+      ? node.annotation_queues
+      : undefined;
+  }, [treeData, traceId]);
 
   const handleTraceDelete = useCallback(() => {
     onDelete();
@@ -329,6 +336,8 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           </Button>
         </TooltipWrapper>
       )}
+
+      <AnnotationQueuesNavigation queues={annotationQueues} />
 
       {hasThread && (
         <TooltipWrapper content="Go to thread">

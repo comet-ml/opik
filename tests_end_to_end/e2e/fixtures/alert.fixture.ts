@@ -11,6 +11,14 @@ export const ALERT_EVENT_TYPE = {
   traceCost: 'trace:cost',
   traceLatency: 'trace:latency',
   traceErrors: 'trace:errors',
+  /**
+   * The two triggers that render `FeedbackScoreConditions` — the only ones that
+   * do. Their config is not a threshold and a window but OR-ed groups of AND-ed
+   * conditions, so they are not interchangeable with the `trace:*` threshold
+   * triggers above in `configureThresholdTrigger`.
+   */
+  traceFeedbackScore: 'trace:feedback_score',
+  traceThreadFeedbackScore: 'trace_thread:feedback_score',
 } as const;
 
 export type AlertEventType = (typeof ALERT_EVENT_TYPE)[keyof typeof ALERT_EVENT_TYPE];
@@ -24,6 +32,8 @@ export const ALERT_EVENT_TITLE: Record<AlertEventType, string> = {
   [ALERT_EVENT_TYPE.traceCost]: 'Cost threshold',
   [ALERT_EVENT_TYPE.traceLatency]: 'Latency threshold',
   [ALERT_EVENT_TYPE.traceErrors]: 'Trace errors threshold',
+  [ALERT_EVENT_TYPE.traceFeedbackScore]: 'Trace feedback score threshold',
+  [ALERT_EVENT_TYPE.traceThreadFeedbackScore]: 'Thread feedback score threshold',
 };
 
 export interface AlertSeed {

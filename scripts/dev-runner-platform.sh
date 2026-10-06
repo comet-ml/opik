@@ -354,7 +354,7 @@ start_platform_backend_local() {
         JWT_SAME_SITE=LAX \
         MPM_DRUID_ENABLED=False \
         SMART_API_KEY_ENABLED=False \
-        COMET_REDIRECT_URL_SEGMENT=":$PLATFORM_PROXY_PORT" \
+        COMET_REDIRECT_URL_SEGMENT=":$PLATFORM_PROXY_PORT/api" \
         OPIK_BASE_URL="http://localhost:${BACKEND_PORT}/" \
         COMET_LLM_INTEGRATION=true \
         JAVA_HOME="$em_jh" \

@@ -26,6 +26,7 @@ import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
@@ -351,6 +352,15 @@ public class ExperimentDAO {
                     AND project_id IN :target_project_ids
                     <endif>
                     AND id IN (SELECT trace_id FROM experiment_items_final)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_final
+                        )
+                    )
+                    <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, id
                 ) AS t ON ei.trace_id = t.id
@@ -448,6 +458,15 @@ public class ExperimentDAO {
                         AND project_id IN :target_project_ids
                         <endif>
                         AND id IN (SELECT trace_id FROM experiment_items_final)
+                        <if(traces_partitioned)>
+                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                            SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                            FROM (
+                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                                FROM experiment_items_final
+                            )
+                        )
+                        <endif>
                     ) AS t ON et.trace_id = t.id
                     LEFT JOIN feedback_scores_final fs ON fs.entity_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
@@ -931,6 +950,15 @@ public class ExperimentDAO {
                     AND id IN (SELECT trace_id FROM experiment_items_final)
                     <endif>
                     AND id IN (SELECT trace_id FROM experiment_items_final)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_final
+                        )
+                    )
+                    <endif>
                 ) t ON ei.trace_id = t.id
                 GROUP BY ei.experiment_id
             )
@@ -1119,6 +1147,15 @@ public class ExperimentDAO {
                         AND project_id IN :target_project_ids
                         <endif>
                         AND id IN (SELECT trace_id FROM experiment_items_final)
+                        <if(traces_partitioned)>
+                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                            SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                            FROM (
+                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                                FROM experiment_items_final
+                            )
+                        )
+                        <endif>
                     ) t ON ei.trace_id = t.id
                     GROUP BY ei.experiment_id
                 ) ep ON ef.id = ep.experiment_id
@@ -1192,6 +1229,15 @@ public class ExperimentDAO {
                 FROM traces
                 WHERE workspace_id = :workspace_id
                   AND id IN (SELECT trace_id FROM legacy_trace_scope)
+                  <if(traces_partitioned)>
+                  AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                      SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                      FROM (
+                          SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                          FROM legacy_trace_scope
+                      )
+                  )
+                  <endif>
             )
             SELECT DISTINCT project_id
             FROM (
@@ -1289,6 +1335,15 @@ public class ExperimentDAO {
                     AND project_id IN :target_project_ids
                     <endif>
                     AND id IN (SELECT trace_id FROM experiment_items_final)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_final
+                        )
+                    )
+                    <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, id
                 ) AS t ON ei.trace_id = t.id
@@ -1384,6 +1439,15 @@ public class ExperimentDAO {
                         AND project_id IN :target_project_ids
                         <endif>
                         AND id IN (SELECT trace_id FROM experiment_items_final)
+                        <if(traces_partitioned)>
+                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                            SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                            FROM (
+                                SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                                FROM experiment_items_final
+                            )
+                        )
+                        <endif>
                     ) AS t ON et.trace_id = t.id
                     LEFT JOIN feedback_scores_final fs ON fs.entity_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
@@ -1627,18 +1691,28 @@ public class ExperimentDAO {
      * empty, which is what {@code FIND} returns in that case too.
      */
     private static final String FIND_METADATA_BY_ID = """
+            WITH experiment_items_trace_scope AS (
+                SELECT ei.trace_id
+                FROM experiment_items ei
+                WHERE ei.workspace_id = :workspace_id
+                AND ei.experiment_id = :id
+            )
             SELECT
                 * EXCEPT (project_id),
                 if(notEmpty(project_id), project_id, (
                     SELECT t.project_id
                     FROM traces t
                     WHERE t.workspace_id = :workspace_id
-                    AND t.id IN (
-                        SELECT ei.trace_id
-                        FROM experiment_items ei
-                        WHERE ei.workspace_id = :workspace_id
-                        AND ei.experiment_id = :id
+                    AND t.id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(t.id_at) - toIntervalDay(toDayOfWeek(t.id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_trace_scope
+                        )
                     )
+                    <endif>
                     AND notEmpty(t.project_id)
                     LIMIT 1
                 )) AS project_id,
@@ -1801,6 +1875,7 @@ public class ExperimentDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
+    private final @NonNull OpikConfiguration configuration;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment, @NonNull String executionPolicyJson) {
@@ -1893,6 +1968,7 @@ public class ExperimentDAO {
                             .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                                 var template = getSTWithLogComment(FIND, "get_experiment_by_id", workspaceId, userName,
                                         "");
+                                addTracesPartitionedFlag(template);
                                 template.add("id", id.toString());
                                 template.add("limit", limit);
                                 template.add("has_aggregated", hasAggregated);
@@ -1919,6 +1995,7 @@ public class ExperimentDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(FIND_METADATA_BY_ID, "get_experiment_metadata_by_id",
                             workspaceId, userName, "experimentId=%s".formatted(id));
+                    addTracesPartitionedFlag(template);
                     var statement = connection.createStatement(template.render())
                             .bind("id", id)
                             .bind("workspace_id", workspaceId);
@@ -1946,6 +2023,7 @@ public class ExperimentDAO {
                                 var template = getSTWithLogComment(FIND, "get_experiments_by_ids", workspaceId,
                                         userName,
                                         ids.size());
+                                addTracesPartitionedFlag(template);
                                 template.add("ids_list", ids);
                                 template.add("has_aggregated", hasAggregated);
                                 template.add("has_raw", hasRaw);
@@ -1964,6 +2042,7 @@ public class ExperimentDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(FIND, "get_experiments_stream", workspaceId, userName, "");
+                    addTracesPartitionedFlag(template);
                     template.add("name", request.name());
                     if (request.lastRetrievedId() != null) {
                         template.add("lastRetrievedId", request.lastRetrievedId());
@@ -2250,8 +2329,36 @@ public class ExperimentDAO {
         return experimentAggregatesDAO.getAggregationBranchCounts(criteria);
     }
 
+    /**
+     * Enables the week bound the experiment reads of {@code traces} carry (OPIK-8343). They reach {@code traces}
+     * through a trace-id set drawn from {@code experiment_items}, and that set prunes no partition on its own:
+     * {@code traces} is partitioned on {@code id_at}, MATERIALIZED from the UUIDv7 {@code id} through
+     * {@code UUIDv7ToDateTime}, a derivation the planner cannot see through. The bound names the weeks those same ids
+     * resolve to, written as the partition key's own expression so ClickHouse matches it directly.
+     * <p>
+     * It cannot change results: every id in the {@code id IN} subquery contributes its own week, so no row that set
+     * admits can fail the week set. That holds only while the two read the <b>same</b> relation, which is what to
+     * check per site. Deriving through {@code toDateTime64(..., 0, 'UTC')} — the column's own type — is what keeps it
+     * exact for an id past that type's range, where the stored value saturates and the derived one saturates with it;
+     * {@code toUUIDOrZero} rather than {@code toUUID} so an unparseable id cannot fail the read, since such an id
+     * matches no trace and the extra week it contributes is never load-bearing. {@code Date32} throughout rather than
+     * {@code toMonday}, which wraps a far-future {@code id_at} and would turn the hint into a filter (OPIK-8241).
+     * <p>
+     * Gated because on the legacy {@code traces} the bound would be wrong rather than merely useless: that
+     * {@code id_at} is a 32-bit {@code DateTime}, so a far-future id is filed under a wrapped past week this set does
+     * not name, and there are no partitions to prune in exchange. {@code traceColumnsNonNullable} is what says which
+     * table is live — the EXCHANGE that makes those columns non-nullable is the same one that puts the partitioned
+     * successor behind the name, so {@code TraceDAO#deleteBatch} and {@code OptimizationDAO} already read it that way.
+     */
+    private void addTracesPartitionedFlag(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
+    }
+
     private ST newFindTemplate(String query, ExperimentSearchCriteria criteria, String queryName, String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
+        addTracesPartitionedFlag(template);
         Optional.ofNullable(criteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
@@ -2596,6 +2703,7 @@ public class ExperimentDAO {
 
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String queryName, String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
+        addTracesPartitionedFlag(template);
 
         ExperimentGroupMappers.applyGroupCriteriaToTemplate(template, criteria, filterQueryBuilder);
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
@@ -2623,6 +2731,7 @@ public class ExperimentDAO {
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
                     var template = TemplateUtils.newST(SELECT_TARGET_PROJECTS);
+                    addTracesPartitionedFlag(template);
 
                     Optional.ofNullable(criteria.datasetId())
                             .ifPresent(datasetId -> template.add("dataset_id", datasetId));

@@ -39,7 +39,7 @@ tags:
 - name: Agent Insights enrollment
   description: Internal auto-first-run rollout enrollment
 - name: System analytics queries
-  description: Internal endpoint to run Agent Insights free-form SQL
+  description: Internal endpoints to run free-form analytics SQL
 - name: System usage
   description: System usage related resource
 - name: Agent Configs
@@ -394,6 +394,43 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "501":
           description: Agent Insights queries are not enabled
+  /v1/internal/analytics-queries:
+    post:
+      tags:
+      - System analytics queries
+      summary: Execute free-form analytics SQL
+      description: "Runs read-only SQL bounded to the caller's workspace. Supply project_id\
+        \ to restrict traces, spans, feedback scores and trace threads to one project,\
+        \ or omit it to cover the whole workspace. Experiments, experiment items and\
+        \ dataset items always cover the whole workspace."
+      operationId: executeScopedAnalyticsQuery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScopedAnalyticsQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: "Agent Insights is disabled, or Custom Charts is not enabled\
+            \ for this workspace"
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -8903,6 +8940,12 @@ paths:
         in: query
         schema:
           type: string
+      - name: exclude
+        in: query
+        schema:
+          type: string
+          description: "Enrichment fields to leave out of each thread, e.g. [\"annotation_queues\"\
+            ]"
       - name: search
         in: query
         schema:
@@ -9875,6 +9918,20 @@ components:
           type: string
           description: Read-only ClickHouse SQL. Must return exactly one column named
             `result` produced via toJSONString(...)
+    ScopedAnalyticsQueryRequest:
+      required:
+      - query
+      type: object
+      properties:
+        query:
+          minLength: 1
+          type: string
+          description: Read-only ClickHouse SQL. Must return exactly one column named
+            `result` produced via toJSONString(...)
+        project_id:
+          type: string
+          description: Restrict query to this project. Omit to query the whole workspace.
+          format: uuid
     BiInformation:
       type: object
       properties:
@@ -11166,6 +11223,10 @@ components:
         max_items_in_queue:
           type: integer
           format: int32
+        clear_max_items_in_queue:
+          type: boolean
+          description: "When true, removes the item ceiling so automation adds without\
+            \ bound"
     AnnotationQueueReviewer:
       type: object
       properties:
@@ -11238,6 +11299,10 @@ components:
         max_items_in_queue:
           type: integer
           format: int32
+        clear_max_items_in_queue:
+          type: boolean
+          description: "When true, removes the item ceiling so automation adds without\
+            \ bound"
     AnnotationQueue_Write:
       required:
       - name
@@ -16756,6 +16821,21 @@ components:
         experiment_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+    AnnotationQueueReference:
+      required:
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Annotation queue ID
+          format: uuid
+        name:
+          type: string
+          description: Annotation queue name
+      description: Annotation queue reference with ID and name
+      readOnly: true
     Check:
       type: object
       properties:
@@ -17113,6 +17193,12 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference"
+        annotation_queues:
+          type: array
+          description: Annotation queues this trace is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference"
         source:
           type: string
           enum:
@@ -21607,7 +21693,9 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agentInsightsEnabled
       - alertsEnabled
+      - annotationQueueAutomationEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
       - costIntelligenceEnabled
@@ -21677,9 +21765,13 @@ components:
           type: boolean
         ollieEnabled:
           type: boolean
+        agentInsightsEnabled:
+          type: boolean
         projectHomepageEnabled:
           type: boolean
         onlineScoringTracingEnabled:
+          type: boolean
+        annotationQueueAutomationEnabled:
           type: boolean
         defaultPageSize:
           maximum: 100
@@ -22582,6 +22674,21 @@ components:
             \ is deleted under its full key, so a trace can be deleted without knowing\
             \ its project."
           format: uuid
+    AnnotationQueueReference_Public:
+      required:
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Annotation queue ID
+          format: uuid
+        name:
+          type: string
+          description: Annotation queue name
+      description: Annotation queue reference with ID and name
+      readOnly: true
     Check_Public:
       type: object
       properties:
@@ -22754,6 +22861,12 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference_Public"
+        annotation_queues:
+          type: array
+          description: Annotation queues this trace is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference_Public"
         source:
           type: string
           enum:
@@ -22818,6 +22931,12 @@ components:
           type: array
           items:
             type: string
+        annotation_queues:
+          type: array
+          description: Annotation queues this thread is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference"
         last_updated_at:
           type: string
           format: date-time
@@ -23043,6 +23162,7 @@ components:
             - visibility_mode
             - providers
             - experiment
+            - annotation_queues
             - source
             - environment
         from_time:

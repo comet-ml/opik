@@ -176,6 +176,7 @@ services:
       # Ollie / Agent Insights read-only freeform SQL (default off). When true, the backend provisions the restricted
       # read-only user (provision_agent_insights_readonly_user.sh, after migrations) and connects as it.
       TOGGLE_OLLIE_ENABLED: ${TOGGLE_OLLIE_ENABLED:-"false"}
+      TOGGLE_CUSTOM_CHARTS_WORKSPACES: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
       # Self-hosted deployments legitimately point custom-provider token auth at internal gateways;
       # the application default is "strict" (SSRF guard) for non-self-hosted deployments.
       LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: ${LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD:-"relaxed"}
@@ -193,6 +194,11 @@ services:
       ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS: ${ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS:-}
       ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS: ${ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS:-}
       ANALYTICS_DB_ASYNC_INSERT_MAX_DATA_SIZE: ${ANALYTICS_DB_ASYNC_INSERT_MAX_DATA_SIZE:-}
+      # Carries the literal rather than ':-' like its siblings above: Compose renders ':-' to a defined-but-empty
+      # variable, and Dropwizard resolves a defined-but-empty variable to empty rather than to the ':-3000' default in
+      # config.yml. That would bind the setting to null, which is a startup failure now that it is @NotNull, and was a
+      # silently reinstated OPIK-8628 before. The siblings can use ':-' because their config.yml default is empty too.
+      ANALYTICS_DB_HTTP_HEADERS_PROGRESS_INTERVAL_MS: ${ANALYTICS_DB_HTTP_HEADERS_PROGRESS_INTERVAL_MS:-3000}
       # Flip TRACE_COLUMNS_NON_NULLABLE to true in lockstep with the EXCHANGE (the successor's end_time/ttft are
       # non-nullable sentinel columns; a null bind would be rejected). The SPAN sibling is for the later spans cutover.
       ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
@@ -241,6 +247,7 @@ services:
       TOGGLE_OPIK_AI_ENABLED: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
       TOGGLE_WELCOME_WIZARD_ENABLED: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"true"}
+      TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED: ${TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED:-"true"}
       LLM_MODEL_REGISTRY_DEFAULT_RESOURCE: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
       LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
       LLM_MODEL_REGISTRY_REMOTE_ENABLED: ${LLM_MODEL_REGISTRY_REMOTE_ENABLED:-"false"}

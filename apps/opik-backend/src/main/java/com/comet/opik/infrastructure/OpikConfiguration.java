@@ -31,7 +31,16 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
+
+    @Valid @NotNull @JsonProperty
     private BulkInsertConfig bulkInsert = BulkInsertConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
+    private CustomChartsConfig customCharts = new CustomChartsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private FreeFormSqlPostRunCheckConfig freeFormSqlPostRunCheck = new FreeFormSqlPostRunCheckConfig();
 
     @Valid @NotNull @JsonProperty
     private UuidValidationConfig uuidValidation = UuidValidationConfig.builder().build();

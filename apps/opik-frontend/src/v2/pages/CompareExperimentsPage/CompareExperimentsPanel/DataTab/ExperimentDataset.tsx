@@ -17,6 +17,7 @@ import difference from "lodash/difference";
 import union from "lodash/union";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
+import { useLocation } from "@tanstack/react-router";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { useDatasetIdFromCompareExperimentsURL } from "@/v2/pages/CompareExperimentsPage/useDatasetIdFromCompareExperimentsURL";
@@ -38,6 +39,7 @@ const DYNAMIC_DATA_SET_ITEM_KEYS =
 
 const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
   const datasetId = useDatasetIdFromCompareExperimentsURL();
+  const { href: currentHref } = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const handleResize = useCallback((node: HTMLDivElement) => {
@@ -126,6 +128,7 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
               resource={RESOURCE_TYPE.datasetItem}
               search={{
                 row: datasetItemId,
+                from: currentHref,
               }}
               tooltipContent="View this item in the test suite"
               className="h-8"
@@ -176,7 +179,11 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
         </div>
       </div>
 
-      <ExperimentDatasetItems data={data} selectedKeys={selectedKeys || []} />
+      <ExperimentDatasetItems
+        key={datasetItemId}
+        data={data}
+        selectedKeys={selectedKeys || []}
+      />
     </div>
   );
 };

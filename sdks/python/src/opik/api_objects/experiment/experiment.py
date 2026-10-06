@@ -617,8 +617,12 @@ class Experiment:
         absent nothing has been checked yet, so each item is validated and sized here and
         a bad one raises when it is reached, with earlier batches already delivered.
 
-        Batch boundaries are identical to ``split_into_batches`` either way, for input
-        that has no oversized item -- which is the only input either path accepts.
+        Batch boundaries are no longer identical to ``split_into_batches``: that helper
+        now charges a batch for the brackets and commas its JSON list adds, and this loop
+        budgets records only, so the two pack to different points. Neither number is the
+        size of the request the endpoint sees, which is why
+        ``EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB`` sits 0.5MB under the endpoint's own
+        4MB limit.
 
         Each record is serialised once, here, and what a batch carries is those bytes.
         The length of a fragment is the size it is budgeted at, so the number that closes
@@ -711,6 +715,13 @@ class Experiment:
                 ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``, or if
                 ``num_threads`` is not a positive integer or exceeds
                 ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
+
+        Note:
+            To look at an experiment's results without writing code, AI coding
+            assistants connected to the Opik MCP server can call
+            ``list("dataset_item", experiment_ids=[...])``, which shows each case's
+            scores and compares several experiments case by case.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         validation_helpers.validate_bounded_positive_int(
             page_size, "page_size", constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE

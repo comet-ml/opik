@@ -78,6 +78,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.SentinelTranslation.emptyUuidToNullableUuid;
 import static com.comet.opik.utils.SentinelTranslation.epochToNull;
 import static com.comet.opik.utils.SentinelTranslation.nanToNull;
 import static com.comet.opik.utils.SentinelTranslation.nullToEpoch;
@@ -945,6 +946,16 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
             ), <endif>comments_final AS (
               SELECT
                    entity_id,
@@ -1126,6 +1137,16 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                   SELECT
@@ -1166,7 +1187,7 @@ public class SpanDAO {
                 FROM spans s
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id IN (SELECT id FROM page_ids)
+                AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
                 <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1237,6 +1258,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
             ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -1324,6 +1354,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT
@@ -1631,6 +1670,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT
@@ -1777,6 +1825,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT entity_id
@@ -2112,11 +2169,11 @@ public class SpanDAO {
 
                 bindNanSentinel(statement, "ttft" + i, span.ttft());
 
-                if (span.source() != null) {
-                    statement.bind("source" + i, span.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
+                // The column is non-nullable with DEFAULT 'unknown'; binding NULL makes the
+                // driver wrap it in a nullable guard, costing two swallowed exceptions per row.
+                statement.bind("source" + i, span.source() == null
+                        ? Source.UNKNOWN_VALUE
+                        : span.source().getValue());
 
                 statement.bind("environment" + i, StringUtils.defaultString(span.environment()));
 
@@ -2197,11 +2254,9 @@ public class SpanDAO {
 
             bindNanSentinel(statement, "ttft", span.ttft());
 
-            if (span.source() != null) {
-                statement.bind("source", span.source().getValue());
-            } else {
-                statement.bindNull("source", String.class);
-            }
+            statement.bind("source", span.source() == null
+                    ? Source.UNKNOWN_VALUE
+                    : span.source().getValue());
 
             statement.bind("environment", StringUtils.defaultString(span.environment()));
 
@@ -2341,11 +2396,10 @@ public class SpanDAO {
                     bindEpochSentinel(statement, "end_time", spanUpdate.endTime());
                     bindNanSentinel(statement, "ttft", spanUpdate.ttft());
 
-                    if (spanUpdate.source() != null) {
-                        statement.bind("source", spanUpdate.source().getValue());
-                    } else {
-                        statement.bindNull("source", String.class);
-                    }
+                    // 'unknown' is also what the merge above treats as "no source supplied".
+                    statement.bind("source", spanUpdate.source() == null
+                            ? Source.UNKNOWN_VALUE
+                            : spanUpdate.source().getValue());
 
                     bindUserNameAndWorkspace(statement, userName, workspaceId);
 
@@ -2807,10 +2861,10 @@ public class SpanDAO {
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
                 .traceId(row.get("trace_id", UUID.class))
-                .parentSpanId(Optional.ofNullable(row.get("parent_span_id", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(UUID::fromString)
-                        .orElse(null))
+                // Not an isBlank guard: on the partitioned successor the column is FixedString(36), whose empty
+                // (root-span) value reaches Java NUL-padded, and NUL is not whitespace. See
+                // SentinelTranslation#emptyUuidToNullableUuid.
+                .parentSpanId(emptyUuidToNullableUuid(row.get("parent_span_id", String.class)))
                 .name(StringUtils.defaultIfBlank(getValue(exclude, SpanField.NAME, row, "name", String.class),
                         null))
                 .type(SpanType.fromString(getValue(exclude, SpanField.TYPE, row, "type", String.class)))
@@ -2851,7 +2905,7 @@ public class SpanDAO {
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
-                .usage(getValue(exclude, SpanField.USAGE, row, "usage", Map.class))
+                .usage(UsageUtils.toIntegerUsage(getValue(exclude, SpanField.USAGE, row, "usage", Map.class)))
                 .comments(Optional
                         .ofNullable(getValue(exclude, SpanField.COMMENTS, row, "comments", List[].class))
                         .map(CommentResultMapper::getComments)
@@ -3142,6 +3196,10 @@ public class SpanDAO {
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
         Optional.ofNullable(spanSearchCriteria.searchText())
                 .ifPresent(searchText -> template.add("search_text", SPAN_SEARCH_CLAUSE));
+        // Bounds a search scan to the weeks of the project's own spans; pure cost on the unpartitioned legacy table.
+        if (spanColumnsNonNullable()) {
+            template.add("spans_partitioned", true);
+        }
         return template;
     }
 

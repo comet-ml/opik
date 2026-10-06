@@ -13,31 +13,35 @@ score them, and fix the code against real data instead of your description of it
 ## Install in 30 seconds
 
 One command connects your assistant to your traces and teaches it how to create
-them in the first place. It needs [`uv`](https://docs.astral.sh/uv/) and no Opik
-SDK:
+them in the first place. It needs Node.js and [`uv`](https://docs.astral.sh/uv/),
+and no Opik SDK:
 
 <Steps>
-  <Step title="Install uv, if you don't have it">
-    ```bash title="macOS / Linux"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-
-    ```powershell title="Windows"
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-    ```
-
-    Open a new terminal afterwards so `uvx` is on your `PATH`.
-  </Step>
   <Step title="Run the setup command">
     ```bash
-    uvx opik mcp configure
+    npx opik mcp configure
     ```
+
+    {/* The title's text is the anchor `npx opik` links to when uv is missing
+        (sdks/typescript/src/opik/cli/bin.ts): keep it unchanged. The group is
+        what makes that link open it; a lone Accordion stays shut. */}
+    <AccordionGroup>
+      <Accordion title={<>Install <code>uv</code>, if you don't have it</>}>
+        ```bash title="macOS / Linux"
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        ```
+
+        ```powershell title="Windows"
+        powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+        ```
+      </Accordion>
+    </AccordionGroup>
 
     It detects your AI client (Claude Code, Cursor, VS Code Copilot, Codex,
     opencode), picks the right server for your Opik deployment, configures it,
     installs the Opik skill pack, and checks that what it just wrote works.
   </Step>
-  <Step title="Start a new session">
+  <Step title="Try with your agent">
     Assistants read their configuration at startup, so **start a new session**
     before trying anything. On Opik Cloud, complete the browser sign-in when your
     client prompts for it, then ask your assistant to confirm the connection:
@@ -54,7 +58,7 @@ with a prompt you paste into it:
 <div className="mcp-clients no-external-icon">
   <a className="mcp-client" href="cursor:////anysphere.cursor-deeplink/mcp/install?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0=" title="Open Cursor and add the Opik MCP server (Cursor Pro or higher; MCP is not available on the Hobby plan)"><img src="/img/mcp/cursor.svg" alt="" /><span>Cursor</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
   <a className="mcp-client" href="https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D" target="_blank" rel="noreferrer" title="Open VS Code and add the Opik MCP server"><img src="/img/mcp/vscode.svg" alt="" /><span>VS Code</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
-  <a className="mcp-client" href="#" data-opik-copy="Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server). Detect the coding agents installed here and which one you are; ask me 'only you, or all of them?' and wait. For each chosen agent, add the MCP server `opik-mcp` (Streamable HTTP, https://www.comet.com/opik/api/v1/mcp, no credentials) to its user-level config: use the client's own command with user scope where it has one (`claude mcp add --transport http --scope user ...`, `codex mcp add ... --url ...`), otherwise `npx add-mcp <url> --name opik-mcp -g -a <agent>`. Skip an agent that already has a server with that URL. Install the skills the same way: `npx skills add comet-ml/opik-skills -g -y -a <agent>`. Never print secrets you see in config files. Verify in the agent you are: reload MCP servers or ask me to, complete the browser sign-in if prompted, then call the Opik `list` tool with entity_type project and show the result; if the server only loads in a new session, say so and tell me what to ask you next. Report per agent: file, entry added, verified or pending sign-in. Change nothing else." title="Copies an installation prompt. Paste it into any coding agent."><span>Install prompt</span><Icon icon="fa-regular fa-copy" /><Icon icon="fa-solid fa-check" /><Icon icon="fa-solid fa-xmark" /></a>
+  <a className="mcp-client" href="#" data-opik-copy="Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server). Detect the coding agents installed here and which one you are; ask me 'only you, or all of them?' and wait. For each chosen agent, add the MCP server `opik-mcp` (Streamable HTTP, https://www.comet.com/opik/api/v1/mcp, no credentials) to its user-level config: use the client's own command with user scope where it has one (`claude mcp add --transport http --scope user ...`, `codex mcp add ... --url ...`), otherwise `npx add-mcp <url> --name opik-mcp -g -a <agent>`. Skip an agent that already has a server with that URL. Install the skills the same way: `npx skills add comet-ml/opik-skills -g -y -a <agent>`. Never print secrets you see in config files. Verify in the agent you are: reload MCP servers or ask me to, and get it signed in: Claude Code never prompts for this, so ask me to run /mcp and choose Authenticate; other clients open the browser sign-in themselves. Then call the Opik `list` tool with entity_type project and show the result; if the server only loads in a new session, say so and tell me what to ask you next. Report per agent: file, entry added, verified or pending sign-in. Change nothing else." title="Copies an installation prompt. Paste it into any coding agent."><span>Install prompt</span><Icon icon="fa-regular fa-copy" /><Icon icon="fa-solid fa-check" /><Icon icon="fa-solid fa-xmark" /></a>
 </div>
 
 Writing the config yourself, or the CLI didn't detect your client?
@@ -75,9 +79,9 @@ Writing the config yourself, or the CLI didn't detect your client?
     It queries your failing, slowest and most expensive traces over any time
     window, and tells you what they have in common.
   </Card>
-  <Card title="Build a test suite from real traces" icon="fa-solid fa-vial">
-    It filters your traces, turns the interesting ones into suite items, and runs
-    an experiment over them.
+  <Card title="Analyze your experiments" icon="fa-solid fa-vial">
+    It finds the regressions and low performing cases, debugs the specific traces
+    behind them, and turns that into conclusions and action items.
   </Card>
 </CardGroup>
 

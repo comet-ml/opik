@@ -84,6 +84,20 @@ databaseAnalytics:
   #   async-insert flush; same override semantics as asyncInsertBusyTimeoutMaxMs above. Larger values yield fewer,
   #   larger parts at the cost of more buffer memory.
   asyncInsertMaxDataSize: # Empty - ClickHouse/server-side value applies
+  #  Default: 3000
+  #  Description: Cadence (ms) for http_headers_progress_interval_ms, applied to custom_http_params like the overrides
+  #   above, but only on the R2DBC connection and not on the v2 client (the read-only free-form SQL user runs under
+  #   readonly=1 and rejects per-query setting changes; its factory is built without queryParameters). That is about
+  #   this setting - a cadence written directly into custom_http_params below is still forwarded to both clients like
+  #   every other entry there. clickhouse-r2dbc turns send_progress_in_http_headers on for every HTTP statement and the
+  #   v1 Apache transport caps a response at 100 headers with no way to raise it, so at ClickHouse's 100ms default
+  #   cadence a query running past ~10s overflows the cap and its response fails to parse. Accepted range is 1 .. 10000.
+  #   The ceiling keeps a 3x margin under the driver's 30s socket_timeout, since the progress headers are what keep the
+  #   socket alive during a long query; the 100-header budget is reached at interval x 90, so 3000 covers a 270s query
+  #   against the 106.7s worst case seen during the incident. Supplying nothing leaves the primitive at 0, which is out
+  #   of range and fails startup rather than silently reinstating the bug - which is why the docker-compose passthrough
+  #   carries the literal instead of ':-'.
+  httpHeadersProgressIntervalMs: 3000
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
@@ -199,6 +213,31 @@ databaseAnalyticsReadOnlyFreeFormSql:
   # Plain value (no env var).
   socketTimeout: 200s
 
+# Description: credentials for the extended free-form SQL read-only user. The block is required even when
+# the feature is off: an absent block fails config validation at boot.
+databaseAnalyticsReadOnlyFreeFormExtendedSql:
+  username: comet_readonly_freeform_extended_sql_user
+  password: opik
+  socketTimeout: 200s
+
+# Description: the free-form SQL post-run check, defense in depth on top of the row policies. It verifies from each
+#   query's system.query_log entries and plan that every table it read was read under a row policy.
+freeFormSqlPostRunCheck:
+  #  Default: audit
+  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
+  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
+  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
+  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  # Quoted: YAML reads a bare off as the boolean false.
+  mode: audit
+  #  Default: 10s
+  #  Description: Wait before each read of the query's log entries. Longer than ClickHouse's query_log flush
+  #   interval (7.5s by default), so every entry is written without forcing a flush. 0 to 60s.
+  logReadDelay: 10s
+  #  Default: 3
+  #  Description: Reads of the query's log entries before the check reports them missing (1 to 10)
+  maxLogReadAttempts: 3
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
@@ -237,6 +276,11 @@ health:
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: clickhouse-readonly-freeform-sql
+      critical: false
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
       initialState: false
@@ -665,6 +709,7 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: https://openrouter.ai/api/v1
+  openRouterDecisionsUrl: https://openrouter.ai/api/alpha/decisions
   # Configuration for Vertex AI client
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
@@ -910,8 +955,20 @@ serviceToggles:
   #   the read-only ClickHouse client.
   ollieEnabled: "false"
   # Default: true
+  # Description: Kill switch for Agent Insights, effective only while ollieEnabled is on.
+  agentInsightsEnabled: "true"
+  # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"
+  # Default: true, matched here so the test application boots the feature the way a deployment does:
+  #   the score listener registered, the Redis buffer flush job scheduled and the routing consumer
+  #   started. Unlike the other scheduled jobs this configuration switches off, this one cannot be
+  #   separated from its feature — annotationQueueRouting.enabled and jobEnabled were removed in review
+  #   as a configuration smell, leaving a single switch for both.
+  # Description: Whether or not automatic annotation queue population is enabled. When false the score
+  #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
+  #   automation controls on annotation queues.
+  annotationQueueAutomationEnabled: "true"
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
@@ -1156,16 +1213,7 @@ environment:
   maxPerWorkspace: 5
 
 annotationQueueRouting:
-  # Default: false
-  # Description: When false, score events are never buffered or published and nothing is routed automatically.
-  #   Off here too, matching production: no test reads this block. The routing tests build their own
-  #   config, so leaving it on only made the listener run an automation lookup for every feedback score
-  #   written by every other integration test in the suite.
-  enabled: false
-  # Default: true
-  # Description: When enabled (and the feature above is on), schedule the periodic flush job. Set false to buffer
-  #   in Redis without a scheduler (e.g. tests that invoke the job manually).
-  jobEnabled: true
+  # Mechanics only. Whether the feature runs at all is serviceToggles.annotationQueueAutomationEnabled.
   # Default: annotation-queue-routing
   # Description: Redis stream name for queued annotation queue routing work
   streamName: 'annotation-queue-routing'
@@ -1186,7 +1234,7 @@ annotationQueueRouting:
   #   added to every routed item. Same semantics as the experimentDenormalization debounce.
   debounceDelay: 15s
   # Default: 2m
-  # Description: TTL of the Redis buffer key (10s-1h). Set when the key is created and renewed by every flush run,
+  # Description: TTL of the Redis buffer key (10s-10m). Set when the key is created and renewed by every flush run,
   #   so if nothing drains the buffer it expires this long after the last flush instead of growing without limit.
   #   Matches experimentDenormalization, whose buckets expire at twice their debounce delay.
   bufferTtl: 2m

@@ -830,6 +830,9 @@ def _discover_trace_projects(
         read_source=_fetch_page,
         max_results=sys.maxsize,
         parsed_item_class=ExperimentItemPublic,
+        # Traces behind an item this read could not parse would never be copied,
+        # and the caller only sees a warning. Fail instead.
+        strict=True,
     )
 
     for item in items:

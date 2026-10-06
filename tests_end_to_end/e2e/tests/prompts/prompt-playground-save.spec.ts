@@ -26,7 +26,7 @@ test.describe(
     for (const { promptType, title, promptNameSuffix, editedContent } of PROMPT_VARIANTS) {
       test(
         title,
-        async ({ project, page, sdkClient, registerPromptCleanup, testNamespace }) => {
+        async ({ project, page, sdkClient, providerKeys, registerPromptCleanup, testNamespace }) => {
           test.setTimeout(90_000);
 
           const promptName = `${testNamespace}-${promptNameSuffix}`;
@@ -53,6 +53,10 @@ test.describe(
           });
 
           const playground = new PlaygroundPage(page, project.id);
+
+          await test.step('Give the workspace a provider so the Playground mounts', async () => {
+            await providerKeys.createUnreachable({ providerName: `${testNamespace}-unreachable` });
+          });
 
           await test.step('Pre-initialize Playground (set lastActiveProjectId)', async () => {
             await playground.goto();

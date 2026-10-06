@@ -25,6 +25,11 @@ permissions:
   packages: read
 
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False
@@ -97,7 +102,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.1.0
+          uses: astral-sh/setup-uv@v10.2.0
 
         - name: Run latest Opik server
           env:
@@ -187,7 +192,7 @@ jobs:
             python-version: "3.12"
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.1.0
+          uses: astral-sh/setup-uv@v10.2.0
 
         - name: Cache HuggingFace datasets
           uses: actions/cache@v6

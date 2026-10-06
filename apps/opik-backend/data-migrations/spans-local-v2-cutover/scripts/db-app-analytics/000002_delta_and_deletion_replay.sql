@@ -3,19 +3,25 @@
 -- Run this only after the whole backfill (step 1) is complete and reconciled.
 
 -- Step 0: The SQL below (delta-insert + deletion replay) is the single source driven by ../delta_replay.sh, which reads
--- this file, substitutes the placeholders and runs it — never run this file by hand. It handles all six
+-- this file, substitutes the placeholders and runs it — never run this file by hand. It handles all eight
 -- placeholders below, listed so a new one is never missed here (an unsubstituted ${...} reaches the server as a
 -- literal and the statement fails): ${ANALYTICS_DB_DATABASE_NAME}, ${BACKFILL_START}, ${MAX_INSERT_BLOCK_SIZE},
--- ${MIN_INSERT_BLOCK_SIZE_BYTES}, ${MAX_PARTITIONS_PER_INSERT_BLOCK} and ${MAX_INSERT_THREADS} -- the last of which the
+-- ${MIN_INSERT_BLOCK_SIZE_BYTES}, ${MAX_PARTITIONS_PER_INSERT_BLOCK}, ${MAX_INSERT_THREADS} -- the last of which the
 -- driver instead REMOVES from the SETTINGS clause when --max-insert-threads is omitted, so the server's value is
--- inherited. Invocation:
+-- inherited -- and ${PARTITION_SCOPE}, which is not a value substitution at all: the driver EXPANDS the whole
+-- `deletion-replay` block once per partition the bridged ids resolve to, rendering that placeholder as
+-- `IN PARTITION <p>` in each copy, and ${BRIDGE_WINDOW_END} as the upper bound of the bridge window that scope was
+-- derived from — empty in the unbounded form, which needs none (OPIK-8607; see step 3, and
+-- 000002_delete_partition_scope.sql for the derivation, and for why the two must share one bound).
+-- Invocation:
 --   ../delta_replay.sh --database opik --backfill-start '2026-06-01 12:00:00.000000 UTC'
 -- The ' UTC' marker is mandatory: the driver refuses an anchor without it, because the bounds below parse the
 -- value as UTC and one captured elsewhere would shift them silently.
 -- The go/no-go checkpoint between the steps stays with the operator, where situational awareness matters most — that is
 -- judgement, not SQL. The driver invokes clickhouse-client with --time, so it prints each statement's elapsed seconds
--- to stderr (delta-insert first, deletion replay second); the second value is the replay measurement in step 4. A bare
--- --query prints no timing, hence the flag.
+-- to stderr: the delta-insert first, then one per replay statement, since OPIK-8607 turned that statement into one
+-- per partition. Their SUM is the replay measurement in step 4, and the driver prints how many it emitted so the two
+-- can be matched up. A bare --query prints no timing, hence the flag.
 
 -- Step 1: BACKFILL_START is the timestamp captured BEFORE the backfill began. backfill.sh prints it at startup
 -- ("RECORD backfill_start=..."); if you ran the backfill manually, use the now64(6, 'UTC') you captured before the first
@@ -184,16 +190,38 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- lightweight_deletes_sync = 2: block until the delete mutation has completed on EVERY replica, not just the one that
 -- accepted it. The mutation is otherwise asynchronous, so without this the verify step (and the EXCHANGE) could run
 -- against a replica where the mask is not yet applied — a false mismatch, or worse an incomplete cutover.
--- Uses ${BACKFILL_START}. Retention is disabled everywhere (see step 5), so this is user-scale volume — a single
--- mutation. If it is ever large (e.g. retention enabled), bound each mutation by a created_at week (the non-wrapping,
--- minmax-indexed slice backfill.sh uses) and loop the weeks — NOT toMonday(id_at), which wraps far-future/epoch ids and
--- no longer matches the successor's honest-Date32 partition expression.
+-- Uses ${BACKFILL_START}. Retention is disabled everywhere (see step 5), so this is user-scale volume — a small number
+-- of mutations. If it is ever large (e.g. retention enabled), bound each mutation by a created_at week (the
+-- non-wrapping, minmax-indexed slice backfill.sh uses) and loop the weeks — NOT toMonday(id_at), which wraps
+-- far-future/epoch ids and no longer matches the successor's honest-Date32 partition expression.
+--
+-- ${PARTITION_SCOPE} IS WHAT KEEPS THIS STATEMENT RUNNABLE AT ALL (OPIK-8607). Unbounded, this mutation allocates a
+-- block number in EVERY partition of the destination inside a single atomic ZooKeeper request; past `jute.maxbuffer`
+-- ZK drops the connection and the session expires, so the replay — a mandatory step — fails deterministically, and a
+-- weekly partition key grows that count every week. So delta_replay.sh derives the partitions from the bridged ids
+-- (000002_delete_partition_scope.sql) and expands this block once per partition, each copy naming its own. The
+-- row-matching predicate below is IDENTICAL in every copy, so the union of the copies removes exactly the rows the
+-- single unbounded statement removed: `IN PARTITION` narrows which PARTS the mutation is registered against, never
+-- which rows match.
+--
+-- IT IS ALSO CHEAPER, which is worth knowing because it bounds how freely the scope may be widened. A scoped
+-- statement is registered against its partition's parts and no others: measured on a local rehearsal at 43 partitions
+-- / 52 parts, the unbounded form rewrote all 52 even on a re-run with nothing left to mask — its cost follows the
+-- scope, not the matches — while the scoped form rewrote the 4 parts of the single partition it named.
+--
+-- TWO THINGS IT DOES NOT DO. It does not survive an id whose
+-- partition cannot be derived exactly, for which the driver falls back to a single unbounded statement, correct and
+-- merely slow. And it is not applied when the target is not partitioned by `id_at`: `IN PARTITION` against a table
+-- with no partition key is a hard `INVALID_PARTITION_VALUE` error, not a no-op, so the driver checks
+-- `system.tables.partition_key` first. That check is inert here — this block always targets the partitioned
+-- `spans_local_v2` — and load-bearing in 000004.
 -- length(...) = 36 guards: toFixedString(x, 36) THROWS on a value longer than 36 bytes, which would abort the whole
 -- replay on a single malformed bridge row. For source_table='spans' the ids are 36-char UUIDs, so this is latent — but
 -- a malformed (non-36-char) deleted_id/project_id can't match a real span id anyway, so skipping it via the length
 -- guard loses nothing and turns a hard abort mid-cutover into a benign no-op. Same guards in the reverse-replay.
 -- >>> BEGIN deletion-replay
 DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2
+${PARTITION_SCOPE}
 WHERE (
     (workspace_id, project_id, id) IN (
         SELECT
@@ -203,6 +231,7 @@ WHERE (
         FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
         WHERE source_table = 'spans'
           AND event_time >= toDateTime64('${BACKFILL_START}', 6, 'UTC')
+          ${BRIDGE_WINDOW_END}
           AND project_id != ''
           AND length(project_id) = 36
           AND length(deleted_id) = 36
@@ -234,6 +263,14 @@ SETTINGS allow_nondeterministic_mutations = 1,
 -- accumulated during the replay itself. Note the anchor is fixed, so a re-run re-copies the WHOLE window rather than
 -- only what is new — the statement does not get cheaper, and ReplacingMergeTree dedups the re-copies. What shrinks is
 -- the residual: after each pass, only the writes that arrived during that pass are uncaught.
+--
+-- SCOPING WIDENS THAT RESIDUAL BACKWARDS BY THE DELTA'S DURATION, which is worth stating rather than leaving to be
+-- rediscovered. The driver derives the partition set BEFORE sending this file, so a delete bridged while the delta
+-- INSERT is still running lands in the replay's predicate but not necessarily in its partition set, and a scoped
+-- statement cannot mask a row outside the partitions it names. Two things close it, and both run unconditionally:
+-- exchange_and_wrap.sh re-runs this same block immediately before the swap, deriving its scope right before sending
+-- it; and 000006's post-swap replay sweeps from gap_start, which is earlier still. So this pass being non-final is
+-- the same property the procedure already relies on — only its window is wider now.
 
 -- Step 5 (retention — see README): Data Retention is disabled in every deployment (RETENTION_ENABLED=false), so the
 -- retention delete path does not fire during the cutover. The only deletes in this window are user-initiated cascades,

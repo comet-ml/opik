@@ -530,7 +530,7 @@ class OpenTelemetryResourceTest {
                             "anthropic.claude-3-5-sonnet-20241022-v2:0", null, "bedrock"),
                     arguments("az.ai.openai", "gen_ai.system", "az.ai.openai", "gpt-4o", null, "azure"),
                     arguments("mistral_ai", "gen_ai.system", "mistral_ai", "mistral-large-latest", null, "mistral"),
-                    arguments("x_ai", "gen_ai.system", "x_ai", "grok-3", null, "xai"),
+                    arguments("x_ai", "gen_ai.system", "x_ai", "grok-4.3", null, "xai"),
                     // gen_ai.provider.name replaced gen_ai.system and was previously not read at all.
                     arguments("gen_ai.provider.name", "gen_ai.provider.name", "gcp.vertex_ai",
                             "gemini-3.1-flash-lite", null, "google_vertexai"),

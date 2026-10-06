@@ -1215,6 +1215,7 @@ class TracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        exclude: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
@@ -1241,6 +1242,8 @@ class TracesClient:
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        exclude : typing.Optional[str]
 
         search : typing.Optional[str]
 
@@ -1273,6 +1276,7 @@ class TracesClient:
             strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            exclude=exclude,
             search=search,
             from_time=from_time,
             to_time=to_time,
@@ -2999,6 +3003,7 @@ class AsyncTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        exclude: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
@@ -3025,6 +3030,8 @@ class AsyncTracesClient:
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        exclude : typing.Optional[str]
 
         search : typing.Optional[str]
 
@@ -3060,6 +3067,7 @@ class AsyncTracesClient:
             strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            exclude=exclude,
             search=search,
             from_time=from_time,
             to_time=to_time,

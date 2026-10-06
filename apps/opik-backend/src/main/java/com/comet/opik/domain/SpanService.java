@@ -674,7 +674,17 @@ public class SpanService {
                 .collectList()
                 .flatMap(rows -> demoProjectIdsOf(rows, WorkspaceProjectUserCount::workspaceId)
                         .map(demoProjectIds -> DemoDataExclusionUtils.excludeDemoProjects(rows, demoProjectIds)))
+                .flatMap(this::withProjectNames)
                 .map(rows -> UsageByWorkspaceProjectUserResponse.builder().breakdown(rows).build());
+    }
+
+    private Mono<List<WorkspaceProjectUserCount>> withProjectNames(List<WorkspaceProjectUserCount> rows) {
+        return projectService.findNamesByIdsAcrossWorkspaces(rows.stream()
+                .map(WorkspaceProjectUserCount::projectId)
+                .collect(Collectors.toSet()))
+                .map(names -> rows.stream()
+                        .map(row -> row.toBuilder().projectName(names.get(row.projectId())).build())
+                        .toList());
     }
 
     /** The demo projects of the workspaces that actually had spans, which is what bounds the lookup. */

@@ -4,7 +4,6 @@ FROM node:20.19.6-alpine3.23 AS builder
 WORKDIR /opt/frontend
 
 COPY package*.json ./
-COPY patches ./patches
 RUN npm ci
 # Copy and build the application
 COPY . .
@@ -26,7 +25,7 @@ RUN npm run build -- --mode $BUILD_MODE \
 
 # Production stage
 # Using nginx alpine image with OpenTelemetry support
-FROM nginx:1.30.1-alpine-otel AS nginx
+FROM nginx:1.30.5-alpine-otel AS nginx
 
 # Add label for later inspection
 ARG BUILD_MODE=production
@@ -38,8 +37,10 @@ COPY --chown=1001:1001 nginx /etc/nginx
 # Copy entrypoint script to the docker-entrypoint.d directory so it runs automatically
 COPY --chmod=0755 patch-nginx.conf.sh /docker-entrypoint.d/99-patch-nginx.conf.sh
       
-# Fix permissions
-RUN chown -R 1001:1001 /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d \
+# Refresh libexpat and fix permissions
+# hadolint ignore=DL3018
+RUN apk add --no-cache --upgrade libexpat \
+ && chown -R 1001:1001 /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d \
  && rm -f /var/log/nginx/access.log /var/log/nginx/error.log
 
 # Copy the built files from the builder stage
