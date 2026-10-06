@@ -1,5 +1,6 @@
 import { RunnerConnectionStatus } from "@/types/agent-sandbox";
 import { CELL_HORIZONTAL_ALIGNMENT } from "@/types/shared";
+import type { RenderVegaChart } from "@/lib/charts/vega";
 
 export type BridgeTheme = "light" | "dark";
 export type BridgeSurface = "sidebar" | "page";
@@ -24,6 +25,31 @@ export interface BridgeContext {
   theme: BridgeTheme;
   surface: BridgeSurface;
   projectStats?: ProjectStats;
+  // Host chart renderer, so Ollie's chat charts share the dashboard widget's theme and palette. Optional and
+  // additive: a console that does not know it keeps its own renderer. Mirror in `ollie-console/src/bridge.ts`.
+  charts?: BridgeCharts;
+  // The dashboard the user has open, so Ollie's chart card can offer "Add to <it>". Mirror in the console bridge.
+  dashboard?: BridgeDashboard | null;
+}
+
+// An Ollie chart widget opened for editing ("Edit in Ollie"). The dashboard is the bridge context's `dashboard`.
+export interface ChartEditRequest {
+  widgetId: string;
+  title: string;
+  description?: string | null;
+  spec: Record<string, unknown>;
+  query: { sql: string; projectId?: string | null };
+}
+
+export interface BridgeDashboard {
+  id: string;
+  // `dashboard`: Workspace → Dashboards. `insights_view`: a project's Dashboards tab.
+  kind: "dashboard" | "insights_view";
+}
+
+export interface BridgeCharts {
+  // Renders into an element of the console iframe and returns a disposer. Its identity changes with the theme.
+  renderVega: RenderVegaChart;
 }
 
 export interface RunnerBridgeState {
@@ -93,6 +119,8 @@ export interface HostEventMap {
   "visibility:changed": { isOpen: boolean };
   "runner:state-changed": RunnerBridgeState;
   "conversation:start": { message: string };
+  // Open Ollie on an existing chart widget so the user can change it, then save or duplicate it.
+  "chart:edit": ChartEditRequest;
   // Explain (host → shell). `explainId` correlates concurrent explains over
   // the single bridge. `chat:continue` carries the verbatim Q&A already shown
   // in the popover so the console seeds one consistent session.
@@ -118,6 +146,8 @@ export interface SidebarEventMap {
   // "explain" degrade to no-buttons). `explain:done` carries no sessionId —
   // there is no session; Continue seeds one later from the streamed text.
   "console:ready": { bridgeVersion: number; capabilities: string[] };
+  // A chart was added to this dashboard from the console; refetch so an open dashboard shows it.
+  "dashboard:updated": BridgeDashboard;
   "explain:chunk": { explainId: string; delta: string };
   "explain:done": { explainId: string };
   // `code` is an optional, machine-readable reason (e.g. "unavailable",
@@ -139,6 +169,8 @@ export interface AssistantSidebarBridge {
     data: SidebarEventMap[E],
   ): void;
   startConversation(message: string): void;
+  // Opens the sidebar and hands it the widget; replayed if the console is not listening yet.
+  editChart?(request: ChartEditRequest): void;
 }
 
 declare global {

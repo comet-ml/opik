@@ -1,0 +1,330 @@
+/*
+ * The 171 chart tokens the chart gallery's widgets use. Needs opik-primitives.css (or Opik's main.scss).
+ * From opik-widgets-prototype f74d776, vocabulary 1.1.0. Generated: regenerate with
+ * `npm run tokens:export`. Light mode on :root; dark mode on :root[data-theme="dark"] (draft).
+ * HSL primitives are space-separated channels: use hsl(var(--x)).
+ */
+:root {
+  /* Charts */
+  --chart-tick-stroke: hsl(
+    var(--muted-slate)
+  ); /* axis labels: Tailwind muted-slate #64748B */
+
+  /* Categorical (Opik chart colours) */
+  --chart-1: var(--chart-purple); /* Charts-Purple #945FCF */
+  --chart-2: var(--chart-teal); /* Charts-Turquoise #12A4B4 */
+  --chart-3: var(--chart-yellow); /* Charts-Yellow #F4B400 */
+  --chart-4: var(--chart-pink); /* Charts-Pink #ED4A7B */
+  --chart-5: var(--chart-green); /* Charts-Green #19A979 */
+  --chart-6: var(--chart-orange); /* Charts-Orange #FB9341 */
+  --chart-7: var(--chart-burgundy); /* Charts-Burgundy #BF399E */
+  --chart-8: var(--chart-blue); /* Charts-Blue #5899DA */
+  --chart-9: var(--chart-red); /* Charts-Red #EF6868 */
+  --chart-10: hsl(var(--primary)); /* Comet-Primary-Blue #5155F5 */
+  --chart-other: #6c8893;
+  --chart-series-baseline: hsl(
+    var(--muted-slate)
+  ); /* the baseline run in experiment comparisons (visual.baseline) */
+
+  /* Strong variants for thin marks (lines, points, sparklines, outlines, pins) */
+  --chart-1-strong: var(--chart-1); /* 4.38:1 */
+  --chart-2-strong: #1d9ead; /* turquoise 3.00 → 3.21:1 */
+  --chart-3-strong: #b78819; /* yellow 1.85 → 3.21:1 */
+  --chart-4-strong: var(--chart-4); /* 3.58:1 */
+  --chart-5-strong: #08a374; /* green 3.00 → 3.23:1 */
+  --chart-6-strong: #da7519; /* orange 2.25 → 3.21:1 */
+  --chart-7-strong: var(--chart-7); /* 4.89:1 */
+  --chart-8-strong: #5293d4; /* blue 3.01 → 3.24:1 */
+  --chart-9-strong: #eb6464; /* red 3.07 → 3.21:1 */
+  --chart-10-strong: var(--chart-10); /* 5.33:1 */
+  --chart-other-strong: var(--chart-other); /* 3.76:1 */
+
+  /* Status, for charts */
+  --chart-good: #0d7c39; /* green-700, lightness-matched */
+  --chart-warning: #8c5f0c; /* deep amber, OKLCH L 0.52: clear of bad and of --chart-3-strong (was #9a6700, 0.103 ΔE from it) */
+  --chart-bad: #bc211f; /* red-700, lightness-matched */
+  --chart-neutral: hsl(
+    215 19% 35%
+  ); /* slate-500 was too close to Charts Gray */
+  --chart-good-fill: var(--chart-good);
+  --chart-warning-fill: var(--chart-warning);
+  --chart-bad-fill: var(
+    --chart-bad
+  ); /* Text on white (≥ 4.5:1): the -800 steps. */
+
+  /* Tints */
+  --chart-good-tint: #e0f7e4;
+  --chart-bad-tint: #ffebe8;
+  --chart-neutral-tint: hsl(
+    210 40% 96.1%
+  ); /* Diverging (deltas): bad · bad tint · neutral tint · good tint · good. The middle is the neutral tint (not the dark neutral), so the scale is lightest at zero change. */
+
+  /* Diverging (deltas) */
+  --chart-div-3: var(--chart-neutral-tint);
+
+  /* Type */
+  --chart-font-size-xs: 10px; /* axis ticks, value labels, small SVG labels */
+  --chart-font-size-sm: 11px; /* SVG category labels, funnel stage names, 100% segment labels */
+  --chart-font-size-md: 0.75rem; /* heatmap cell values, legend, tooltip, notes */
+  --chart-font-size-lg: 1rem; /* donut centre total */
+  --chart-font-size-kpi: 32px; /* KPI value */
+  --chart-font-weight-light: 200; /* axis ticks */
+  --chart-font-weight-regular: 400; /* labels */
+  --chart-font-weight-medium: 500; /* tooltip values, treemap names */
+  --chart-font-weight-semibold: 600; /* KPI value, donut total, 100% segment labels */
+  --chart-letter-spacing-axis: 0.05rem;
+  --chart-line-height-kpi: 1;
+  --chart-line-height-md: 1rem; /* 12px HTML text (legend, tooltip, tables), as Tailwind text-xs */
+
+  /* Stroke */
+  --chart-stroke-hairline: 0.5px; /* map borders */
+  --chart-stroke-thin: 1px; /* slice separators, grid, outlines of light marks */
+  --chart-stroke-outline: 1.25px; /* bubble, box, whisker, outlier and pin outlines */
+  --chart-stroke-default: 1.5px; /* lines, area strokes, sparklines, active-dot ring */
+  --chart-stroke-emphasis: 2px; /* bullet target, box median, highlighted series */
+  --chart-separator-thick: 2px; /* treemap leaf gaps */
+
+  /* Dash patterns (SVG stroke-dasharray) */
+  --chart-dash-solid: none;
+  --chart-dash-dashed: 6 4;
+  --chart-dash-dotted: 0 4;
+  --chart-dash-reference: 4 4; /* reference lines and crosshairs */
+
+  /* Markers (radii; theme.ts turns them into Recharts ZAxis areas where needed) */
+  --chart-marker-sm: 2.5px; /* static dots (≤ 2 points), sparkline end dot, outliers */
+  --chart-marker-md: 3.5px; /* hover / active dots */
+  --chart-bubble-min: 4px;
+  --chart-bubble-max: 13px;
+  --chart-pin-min: 3px;
+  --chart-pin-max: 18px; /* Opacity */
+
+  /* Opacity */
+  --chart-opacity-subtle: 0.2; /* single area fill, box fill */
+  --chart-opacity-soft: 0.35; /* stacked area fill */
+  --chart-opacity-medium: 0.5; /* bubbles, pins */
+  --chart-opacity-strong: 0.7; /* scatter points */
+  --chart-opacity-inactive: 0.6; /* hover cursor, hidden legend item */
+  --chart-tooltip-secondary-opacity: 0.8; /* tooltip series names, treemap values */
+  --chart-pattern-opacity: 0.18; /* 100% stacked pattern marks */
+  --chart-funnel-step-opacity: 0.12; /* opacity lost per funnel stage */
+
+  /* Radius */
+  --chart-radius-xs: 1px; /* bullet measure bar */
+  --chart-radius-sm: 2px; /* heatmap cells, box, treemap leaves, swatches, delta chips */
+  --chart-radius-mark: 3px; /* bars, gantt spans */
+  --chart-tooltip-radius: var(--radius); /* Bar and mark sizing */
+
+  /* Bar and mark sizing */
+  --chart-bar-size-sm: 18px; /* horizontal bars */
+  --chart-bar-size-md: 2rem; /* column, grouped, stacked */
+  --chart-bar-size-lg: 4rem; /* 100% stacked */
+  --chart-bar-gap: 0.25rem; /* between bars in a group */
+  --chart-bar-category-gap: 10%; /* column, grouped */
+  --chart-bar-category-gap-loose: 20%; /* horizontal, stacked */
+  --chart-bar-category-gap-none: 1px; /* histogram */
+  --chart-label-padding: 0.25rem; /* space between a label and the edge of its mark or band (segments, leaves, cells, ticks) */
+  --chart-bullet-band-height: 20px;
+  --chart-bullet-measure-height: 6px;
+  --chart-bullet-target-height: 16px;
+  --chart-gantt-bar-ratio: 0.6;
+  --chart-gantt-bar-min: 2px;
+  --chart-box-width-ratio: 0.42;
+  --chart-box-width-max: 44px;
+  --chart-heatmap-cell-gap: 2px; /* heatmap grid gap */
+  --chart-pie-outer: 80%;
+  --chart-donut-ring: 40%; /* ring thickness as a share of the radius */
+  --chart-sparkline-sm-width: 120px; /* Number widget sparkline (v2) */
+  --chart-sparkline-sm-height: 28px;
+  --chart-sparkline-md-height: 32px; /* KPI sparkline */
+  --chart-sparkline-md-max-width: 224px;
+  --chart-pattern-size: 6px; /* 100% stacked pattern tile */
+  --chart-outlier-spread: 2px; /* box plot: horizontal step between overlapping outliers */
+
+  /* Plot layout */
+  --chart-plot-padding-sm: 0.375rem; /* small gap between a plot and its labels (box plot top, y-axis labels, bullet values) */
+  --chart-plot-padding-md: 22px; /* band below a hand-built plot for its category labels (box plot) */
+  --chart-plot-min: 2.5rem; /* smallest plot width or height a hand-built chart draws */
+  --chart-tick-offset: 7px; /* hand-built SVG axes: from the axis line to the top of the tick labels' capitals */
+  --chart-label-min-gap: 0.25rem; /* closest two placed labels may come (bubble, pin) */
+  --chart-label-column-min: 6rem; /* bullet and gantt name columns: the widest name + padding, clamped */
+  --chart-label-column-max: 150px; /* Axes */
+  --chart-funnel-label-min: 96px; /* room right of the funnel: the widest stage label + padding, clamped */
+  --chart-funnel-label-max: 160px;
+  --chart-bullet-value-room: 52px; /* room right of the bullet bands for the value */
+  --chart-bullet-row-height: 30px;
+  --chart-gantt-row-min: 16px;
+  --chart-gantt-row-max: 24px;
+  --chart-gantt-reserved-height: 52px; /* kept for the time axis and legend below the rows */
+  --chart-gantt-indent: 10px; /* per nesting level */
+  --chart-pin-growth-divisor: 30; /* pins grow by at most the map width ÷ this (capped at --chart-pin-max) */
+  --chart-tooltip-edge: 80px; /* SVG tooltips keep their centre this far from the card edges */
+  --chart-tooltip-gap: 6px; /* between an SVG tooltip and its mark */
+
+  /* Axes */
+  --chart-axis-font-size: var(--chart-font-size-xs);
+  --chart-axis-font-weight: var(--chart-font-weight-light);
+  --chart-axis-letter-spacing: var(--chart-letter-spacing-axis);
+  --chart-axis-category-height: 1.5rem;
+  --chart-axis-min: 1.5rem;
+  --chart-axis-max: 120px; /* Grid, baseline, hover cursor */
+
+  /* Grid, baseline, hover cursor */
+  --chart-grid: hsl(
+    210 40% 96.1%
+  ); /* Opik's light grid, as a named palette step */
+  --chart-baseline: hsl(
+    var(--slate-300)
+  ); /* value-from-zero charts only (bars, areas, histogram, funnel) */
+  --chart-cursor: hsl(var(--muted));
+  --chart-cursor-opacity: var(
+    --chart-opacity-inactive
+  ); /* Legacy (Opik charts): Opik's own line, bar and grouped charts keep their original geometry */
+
+  /* Legacy (Opik charts) */
+  --chart-margin-opik-left: -8px;
+  --chart-margin-opik-right: 0.5rem;
+  --chart-tick-offset-opik: 0px; /* Opik's tick labels sit with their capitals at Recharts' tick position */
+  --chart-axis-value-width-opik: 3rem;
+  --chart-axis-category-width-opik: 72px; /* Plot area */
+
+  /* Plot area */
+  --chart-margin-top: 0.5rem;
+  --chart-margin-right: 0.75rem;
+  --chart-margin-bottom: 0px;
+  --chart-margin-left: 0px; /* Aliases kept for the theme's existing names */
+
+  /* Aliases kept for the theme's existing names */
+  --chart-stroke-width: var(--chart-stroke-default);
+  --chart-active-dot-r: var(--chart-marker-md);
+  --chart-active-dot-ring: var(--chart-stroke-default);
+  --chart-static-dot-r: var(--chart-marker-sm);
+  --chart-bar-max: var(--chart-bar-size-md);
+  --chart-bar-radius: var(
+    --chart-radius-mark
+  ); /* ===== Chart component tokens (--chart-<component>-*) ===== */
+  --chart-kpi-font-size: var(--chart-font-size-kpi); /* Legend */
+
+  /* Legend */
+  --chart-legend-swatch: 8px;
+  --chart-legend-max-height: 48px;
+  --chart-legend-gap-x: 12px;
+  --chart-legend-gap-y: 4px;
+  --chart-legend-font-size: var(
+    --chart-font-size-md
+  ); /* Tooltip: Opik's white card */
+
+  /* Tooltip */
+  --chart-tooltip-bg: hsl(var(--background));
+  --chart-tooltip-fg: hsl(var(--foreground));
+  --chart-tooltip-muted: hsl(var(--muted-slate));
+  --chart-tooltip-border: hsl(var(--border) / 0.5);
+  --chart-tooltip-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1),
+    0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --chart-tooltip-font-size: var(--chart-font-size-md);
+  --chart-tooltip-padding-x: 10px;
+  --chart-tooltip-padding-y: 6px;
+  --chart-tooltip-min-width: 128px; /* Per-type overrides (chartTheme.types): references, never numbers of their own */
+
+  /* Per-type overrides (chartTheme.types) */
+  --chart-hbar-margin-right: 48px;
+  --chart-hbar-category-gap: var(--chart-bar-category-gap-loose);
+  --chart-hbar-bar-max: var(--chart-bar-size-sm);
+  --chart-stacked-category-gap: var(--chart-bar-category-gap-loose);
+  --chart-stacked-bar-max: var(--chart-bar-size-md);
+  --chart-stacked100-bar-max: var(--chart-bar-size-lg);
+  --chart-histogram-category-gap: var(--chart-bar-category-gap-none);
+  --chart-map-land: hsl(var(--muted));
+  --chart-map-border: hsl(var(--background));
+  --chart-bullet-mark: hsl(var(--background)); /* Loading skeletons */
+
+  /* Loading skeletons */
+  --chart-skeleton-fill: hsl(var(--muted));
+  --chart-skeleton-mark: hsl(var(--border));
+  --chart-skeleton-duration: 1600ms;
+  --chart-skeleton-sheen: hsl(var(--background) / 0.35);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  /* Charts */
+  --chart-tick-stroke: hsl(var(--muted-slate));
+
+  /* Categorical (Opik chart colours) */
+  --chart-1: var(--chart-purple);
+  --chart-2: var(--chart-teal);
+  --chart-3: var(--chart-yellow);
+  --chart-4: var(--chart-pink);
+  --chart-5: var(--chart-green);
+  --chart-6: var(--chart-orange);
+  --chart-7: var(--chart-burgundy);
+  --chart-8: var(--chart-blue);
+  --chart-9: var(--chart-red);
+  --chart-10: hsl(var(--primary));
+  --chart-other: #6c8893;
+  --chart-series-baseline: hsl(var(--muted-slate));
+
+  /* Strong variants for thin marks (lines, points, sparklines, outlines, pins) */
+  --chart-1-strong: #ad78ea;
+  --chart-2-strong: #3ebdce;
+  --chart-3-strong: #fed483;
+  --chart-4-strong: #fe7396;
+  --chart-5-strong: #41c391;
+  --chart-6-strong: #fdba8c;
+  --chart-7-strong: #db54b7;
+  --chart-8-strong: #71b2f5;
+  --chart-9-strong: #fd8d8a;
+  --chart-10-strong: hsl(var(--primary-hover));
+  --chart-other-strong: #84a0ac;
+
+  /* Status, for charts */
+  --chart-good: #8beaa0;
+  --chart-warning: #fed7a1;
+  --chart-bad: #ffbfb6;
+  --chart-neutral: hsl(var(--muted-slate));
+  --chart-good-fill: color-mix(
+    in srgb,
+    var(--chart-good) 60%,
+    hsl(var(--background))
+  );
+  --chart-warning-fill: color-mix(
+    in srgb,
+    var(--chart-warning) 60%,
+    hsl(var(--background))
+  );
+  --chart-bad-fill: color-mix(
+    in srgb,
+    var(--chart-bad) 60%,
+    hsl(var(--background))
+  );
+
+  /* Tints */
+  --chart-good-tint: #11291a;
+  --chart-bad-tint: #371515;
+  --chart-neutral-tint: hsl(var(--muted));
+
+  /* Diverging (deltas) */
+  --chart-div-3: var(--chart-neutral-tint);
+
+  /* Grid, baseline, hover cursor */
+  --chart-grid: hsl(var(--border));
+  --chart-baseline: hsl(var(--muted-gray));
+  --chart-cursor: hsl(var(--muted));
+
+  /* Tooltip */
+  --chart-tooltip-bg: hsl(var(--tooltip));
+  --chart-tooltip-fg: hsl(var(--foreground));
+  --chart-tooltip-muted: hsl(var(--muted-slate));
+  --chart-tooltip-border: hsl(var(--border));
+  --chart-tooltip-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5),
+    0 8px 10px -6px rgb(0 0 0 / 0.4);
+
+  /* Per-type overrides (chartTheme.types) */
+  --chart-map-land: hsl(var(--secondary));
+  --chart-map-border: hsl(var(--background));
+  --chart-bullet-mark: hsl(var(--background));
+
+  /* Loading skeletons */
+  --chart-skeleton-fill: hsl(var(--muted));
+  --chart-skeleton-mark: hsl(var(--secondary));
+  --chart-skeleton-sheen: hsl(var(--background) / 0.35);
+}
