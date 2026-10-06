@@ -207,6 +207,15 @@ const useActionButtonActions = ({
     resetProgress();
   }, [resetOutputMap, clearCreatedExperiments, settleRun, resetProgress]);
 
+  // isRunInFlight is shared by every prompt, and the sidebar watches the run through it. An action
+  // scoped to one prompt may only clear it once no sibling is left running.
+  const releaseRunInFlight = useCallback(() => {
+    const { isRunningMap } = usePlaygroundStore.getState();
+    if (!Object.values(isRunningMap).some(Boolean)) {
+      setIsRunInFlight(false);
+    }
+  }, [setIsRunInFlight]);
+
   const cancelBackendRun = useCallback(
     (promptIds?: string[]) => {
       if (!isBackendRun) return;
@@ -219,13 +228,13 @@ const useActionButtonActions = ({
 
       if (experimentIds.length === 0) return;
 
-      setIsRunInFlight(false);
+      releaseRunInFlight();
       cancelExperimentRun({ experimentIds });
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
       queryClient.invalidateQueries({ queryKey: ["experiment"] });
       queryClient.invalidateQueries({ queryKey: [COMPARE_EXPERIMENTS_KEY] });
     },
-    [isBackendRun, cancelExperimentRun, setIsRunInFlight, queryClient],
+    [isBackendRun, cancelExperimentRun, releaseRunInFlight, queryClient],
   );
 
   /**
@@ -334,16 +343,13 @@ const useActionButtonActions = ({
     (scope?: PollScope) => {
       if (scope?.scopedPromptIds) {
         scope.scopedPromptIds.forEach((id) => setPromptRunning(id, false));
-        const { isRunningMap } = usePlaygroundStore.getState();
-        if (!Object.values(isRunningMap).some(Boolean)) {
-          setIsRunInFlight(false);
-        }
+        releaseRunInFlight();
       } else {
         settleRun();
         isToStopRef.current = false;
       }
     },
-    [settleRun, setPromptRunning, setIsRunInFlight],
+    [settleRun, setPromptRunning, releaseRunInFlight],
   );
 
   const handlePollError = useCallback(
