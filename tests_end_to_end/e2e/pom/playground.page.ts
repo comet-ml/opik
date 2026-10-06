@@ -1473,18 +1473,38 @@ export class PlaygroundPage {
     });
   }
 
-  /** The `scrollLeft` of a panel's sticky header half and its body half. */
-  async panelScrollOffsets(
-    panel: 'variables' | 'outputs',
-  ): Promise<{ header: number; body: number }> {
-    return test.step(`read ${panel} panel header/body scroll offsets`, async () => {
+  async panelBodyScrollLeft(panel: 'variables' | 'outputs'): Promise<number> {
+    return test.step(`read the ${panel} panel body scroll offset`, async () => {
+      const body = panel === 'variables' ? this.variablesPanel('body') : this.outputsPanel('body');
+      return body.evaluate((el) => el.scrollLeft);
+    });
+  }
+
+  // Compared by position, not scrollLeft: with scroll-driven animations the header
+  // never scrolls, it is translated.
+  async panelColumnDrift(panel: 'variables' | 'outputs'): Promise<number> {
+    return test.step(`measure ${panel} panel header/body column drift`, async () => {
       const half = (h: 'header' | 'body') =>
         panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
-      const [header, body] = await Promise.all([
-        half('header').evaluate((el) => el.scrollLeft),
-        half('body').evaluate((el) => el.scrollLeft),
-      ]);
-      return { header, body };
+      const headerLefts = await half('header')
+        .locator('thead tr:last-child th')
+        .evaluateAll((cells) => cells.map((c) => c.getBoundingClientRect().left));
+      const bodyLefts = await half('body')
+        .locator('tbody tr[data-row-id]')
+        .first()
+        .locator('td')
+        .evaluateAll((cells) => cells.map((c) => c.getBoundingClientRect().left));
+      expect(bodyLefts).toHaveLength(headerLefts.length);
+      return Math.max(...headerLefts.map((left, i) => Math.abs(left - bodyLefts[i])));
+    });
+  }
+
+  async wheelOverPanelHeader(panel: 'variables' | 'outputs', deltaX: number): Promise<void> {
+    return test.step(`wheel ${deltaX}px sideways over the ${panel} panel header`, async () => {
+      const header = panel === 'variables' ? this.variablesPanel('header') : this.outputsPanel('header');
+      await header.hover();
+      await this.page.mouse.wheel(deltaX, 0);
+      await this.settle();
     });
   }
 
