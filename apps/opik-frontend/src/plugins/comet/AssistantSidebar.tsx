@@ -5,9 +5,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useParams, useRouter } from "@tanstack/react-router";
+import { useParams, useRouter, useRouterState } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AssistantSurfaceVariant,
+  BridgeCharts,
+  BridgeDashboard,
+  ChartEditRequest,
   BridgeContext,
   BridgeSurface,
   RunnerBridgeState,
@@ -15,13 +19,19 @@ import {
 } from "@/types/assistant-sidebar";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useTheme } from "@/contexts/theme-provider";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
+import { renderVegaChart } from "@/lib/charts/vega";
 import { useToast } from "@/ui/use-toast";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
 import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
-import { BASE_API_URL } from "@/api/api";
+import { BASE_API_URL, DASHBOARDS_KEY, INSIGHTS_VIEWS_KEY } from "@/api/api";
+import {
+  DASHBOARD_EXTERNAL_UPDATE_EVENT,
+  isTemplateId,
+} from "@/lib/dashboard/utils";
 import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
 import OllieLoader from "@/plugins/comet/OllieLoader";
 import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
@@ -114,9 +124,27 @@ function useBridgeContext(
   const { themeMode } = useTheme();
   const workspace = useWorkspace();
 
-  const { projectId } = useParams({ strict: false }) as {
+  const { projectId, dashboardId } = useParams({ strict: false }) as {
     projectId?: string;
+    dashboardId?: string;
   };
+  // A project's Dashboards tab keeps the open view in ?dashboardId=; the workspace page has it in the path.
+  const searchDashboardId = useRouterState({
+    select: (s) =>
+      s.location.pathname.endsWith("/dashboards")
+        ? (s.location.search as Record<string, unknown>).dashboardId
+        : undefined,
+  });
+  const dashboard = useMemo<BridgeDashboard | null>(() => {
+    if (dashboardId) return { id: dashboardId, kind: "dashboard" };
+    if (
+      typeof searchDashboardId === "string" &&
+      !isTemplateId(searchDashboardId)
+    ) {
+      return { id: searchDashboardId, kind: "insights_view" };
+    }
+    return null;
+  }, [dashboardId, searchDashboardId]);
   const { data: project } = useProjectById(
     { projectId: projectId! },
     { enabled: !!projectId },
@@ -128,6 +156,20 @@ function useBridgeContext(
 
   const organizationId = workspace?.organizationId ?? null;
   const projectStats = useProjectOnboardingStats(resolvedProjectId);
+  const { colorMap } = useWorkspaceColorMap();
+
+  // themeMode is a dependency on purpose: a new identity tells the console to redraw with the new theme.
+  const charts = useMemo<BridgeCharts>(
+    () => ({
+      renderVega: (el, input, options) =>
+        renderVegaChart(el, input, {
+          colorOverride: (label) => colorMap?.[label],
+          ...options,
+        }),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [colorMap, themeMode],
+  );
 
   return useMemo<BridgeContext>(
     () => ({
@@ -141,6 +183,8 @@ function useBridgeContext(
       theme: themeMode,
       surface,
       projectStats,
+      charts,
+      dashboard,
     }),
     [
       workspaceId,
@@ -152,6 +196,8 @@ function useBridgeContext(
       themeMode,
       surface,
       projectStats,
+      charts,
+      dashboard,
     ],
   );
 }
@@ -200,6 +246,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   const onWidthChangeRef = useLatestRef(onWidthChange);
   const listenersRef = useRef<HostListeners>(createHostListeners());
   const lastRunnerStateRef = useRef<RunnerBridgeState | null>(null);
+  const pendingChartEditRef = useRef<ChartEditRequest | null>(null);
 
   const { handleRequestPair } = useRunnerBridgeSync({
     projectId: context.projectId,
@@ -210,6 +257,18 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   });
 
   const onRequestPairRef = useLatestRef(handleRequestPair);
+
+  const queryClient = useQueryClient();
+  const onDashboardUpdatedRef = useLatestRef(
+    ({ id }: SidebarEventMap["dashboard:updated"]) => {
+      for (const key of [DASHBOARDS_KEY, INSIGHTS_VIEWS_KEY]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+      window.dispatchEvent(
+        new CustomEvent(DASHBOARD_EXTERNAL_UPDATE_EVENT, { detail: { id } }),
+      );
+    },
+  );
 
   const onNotificationRef = useLatestRef(
     (data: SidebarEventMap["notification"]) => {
@@ -262,9 +321,11 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
       onNotification: onNotificationRef,
       onRequestVisibility: onRequestVisibilityRef,
       onRequestPair: onRequestPairRef,
+      onDashboardUpdated: onDashboardUpdatedRef,
       context: contextRef,
       listeners: listenersRef,
       lastRunnerState: lastRunnerStateRef,
+      pendingChartEdit: pendingChartEditRef,
     }),
   );
 

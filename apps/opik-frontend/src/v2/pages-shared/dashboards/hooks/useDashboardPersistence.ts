@@ -11,7 +11,10 @@ import {
 import useInsightsViewById from "@/api/insights-views/useInsightsViewById";
 import useInsightsViewUpdateMutation from "@/api/insights-views/useInsightsViewUpdateMutation";
 import { Dashboard, DASHBOARD_SCOPE, DashboardState } from "@/types/dashboard";
-import { isDashboardChanged } from "@/lib/dashboard/utils";
+import {
+  DASHBOARD_EXTERNAL_UPDATE_EVENT,
+  isDashboardChanged,
+} from "@/lib/dashboard/utils";
 import {
   loadLocal,
   saveLocal,
@@ -68,10 +71,11 @@ export const useDashboardPersistence = ({
 }: UseDashboardPersistenceParams): UseDashboardPersistenceReturn => {
   const apiConfig = getApiConfig(scope);
 
-  const { data: dashboard, isPending } = apiConfig.useByIdHook(
-    { dashboardId },
-    { enabled },
-  );
+  const {
+    data: dashboard,
+    isPending,
+    refetch,
+  } = apiConfig.useByIdHook({ dashboardId }, { enabled });
 
   const { mutate: syncToServer } = apiConfig.useUpdateMutationHook({
     skipDefaultError: true,
@@ -122,6 +126,27 @@ export const useDashboardPersistence = ({
       setResolvedConfig(null);
     };
   }, [dashboard?.id, syncToServer]);
+
+  // Another writer (Ollie's "Add to dashboard" / "Save changes") updated this dashboard on the server. The page only
+  // loads the server config when the id changes, so reload it explicitly; otherwise the next autosave of the stale
+  // local state would overwrite the change.
+  useEffect(() => {
+    const onExternalUpdate = (event: Event) => {
+      const { id } = (event as CustomEvent<{ id: string }>).detail ?? {};
+      if (!id || id !== dashboardRef.current?.id) return;
+      refetch().then(({ data }) => {
+        if (!data?.config) return;
+        lastSavedConfigRef.current = data.config;
+        setResolvedConfig(data.config);
+      });
+    };
+    window.addEventListener(DASHBOARD_EXTERNAL_UPDATE_EVENT, onExternalUpdate);
+    return () =>
+      window.removeEventListener(
+        DASHBOARD_EXTERNAL_UPDATE_EVENT,
+        onExternalUpdate,
+      );
+  }, [refetch]);
 
   const lastSavedConfigRef = useRef<DashboardState | null>(null);
   const [saveStatus, setSaveStatus] = useState<DashboardSaveStatus>("idle");

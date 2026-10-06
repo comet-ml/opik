@@ -15,6 +15,9 @@ import {
   selectRuntimeConfig,
 } from "@/store/DashboardStore";
 import WidgetTypeSelector from "./WidgetTypeSelector";
+import OllieIcon from "@/icons/ollie-owl.svg?react";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WidgetConfigPreview from "./WidgetConfigPreview";
 import {
   DashboardWidget,
@@ -105,6 +108,15 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     onOpenChange(false);
   };
 
+  const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
+  // Hands the request to Ollie, which draws it and offers "Add to <this dashboard>" on the chart.
+  const handleDescribeToOllie = () => {
+    onOpenChange(false);
+    window.opikBridge?.startConversation(
+      "I want to add a custom widget to this dashboard. Ask me what it should show.",
+    );
+  };
+
   const dialogTitle = isEditMode ? "Edit widget" : "Add widget";
 
   return (
@@ -145,6 +157,19 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
             <WidgetConfigPreview />
           </div>
         </div>
+
+        {!isEditMode && ollieEnabled && (
+          <div className="flex items-center justify-between gap-4 border-t pt-4">
+            <span className="comet-body-s text-light-slate">
+              Need something these don&apos;t cover? Describe the widget you
+              need.
+            </span>
+            <Button variant="outline" onClick={handleDescribeToOllie}>
+              <OllieIcon className="mr-2 size-4 text-[var(--color-ollie)]" />
+              Describe it to Ollie
+            </Button>
+          </div>
+        )}
 
         <DialogFooter className="flex flex-row justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={handleCancel}>

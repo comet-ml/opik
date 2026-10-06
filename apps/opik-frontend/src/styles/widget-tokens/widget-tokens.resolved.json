@@ -1,0 +1,1471 @@
+{
+  "$description": "Every exported token resolved, light and dark (draft). Vocabulary 1.1.0, opik-widgets-prototype f74d776.",
+  "tokens": {
+    "--chart-tick-stroke": {
+      "light": "#65758b",
+      "dark": "#a3a3a3",
+      "type": "color",
+      "group": "Charts",
+      "kind": "chart token",
+      "note": "axis labels: Tailwind muted-slate #64748B"
+    },
+    "--chart-1": {
+      "light": "#945fcf",
+      "dark": "#945fcf",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Charts-Purple #945FCF"
+    },
+    "--chart-2": {
+      "light": "#12a4b4",
+      "dark": "#12a4b4",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Charts-Turquoise #12A4B4"
+    },
+    "--chart-3": {
+      "light": "#f4b400",
+      "dark": "#f4b400",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Charts-Yellow #F4B400"
+    },
+    "--chart-4": {
+      "light": "#ed4a7b",
+      "dark": "#ed4a7b",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Charts-Pink #ED4A7B"
+    },
+    "--chart-5": {
+      "light": "#19a979",
+      "dark": "#19a979",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Charts-Green #19A979"
+    },
+    "--chart-6": {
+      "light": "#fb9341",
+      "dark": "#fb9341",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Charts-Orange #FB9341"
+    },
+    "--chart-7": {
+      "light": "#bf399e",
+      "dark": "#bf399e",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Charts-Burgundy #BF399E"
+    },
+    "--chart-8": {
+      "light": "#5899da",
+      "dark": "#5899da",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Charts-Blue #5899DA"
+    },
+    "--chart-9": {
+      "light": "#ef6868",
+      "dark": "#ef6868",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Charts-Red #EF6868"
+    },
+    "--chart-10": {
+      "light": "#5154f5",
+      "dark": "#3c71f6",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "Comet-Primary-Blue #5155F5"
+    },
+    "--chart-other": {
+      "light": "#6c8893",
+      "dark": "#6c8893",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token"
+    },
+    "--chart-series-baseline": {
+      "light": "#65758b",
+      "dark": "#a3a3a3",
+      "type": "color",
+      "group": "Categorical (Opik chart colours)",
+      "kind": "chart token",
+      "note": "the baseline run in experiment comparisons (visual.baseline)"
+    },
+    "--chart-1-strong": {
+      "light": "#945fcf",
+      "dark": "#ad78ea",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "4.38:1"
+    },
+    "--chart-2-strong": {
+      "light": "#1d9ead",
+      "dark": "#3ebdce",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "turquoise 3.00 → 3.21:1"
+    },
+    "--chart-3-strong": {
+      "light": "#b78819",
+      "dark": "#fed483",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "yellow 1.85 → 3.21:1"
+    },
+    "--chart-4-strong": {
+      "light": "#ed4a7b",
+      "dark": "#fe7396",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "3.58:1"
+    },
+    "--chart-5-strong": {
+      "light": "#08a374",
+      "dark": "#41c391",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "green 3.00 → 3.23:1"
+    },
+    "--chart-6-strong": {
+      "light": "#da7519",
+      "dark": "#fdba8c",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "orange 2.25 → 3.21:1"
+    },
+    "--chart-7-strong": {
+      "light": "#bf399e",
+      "dark": "#db54b7",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "4.89:1"
+    },
+    "--chart-8-strong": {
+      "light": "#5293d4",
+      "dark": "#71b2f5",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "blue 3.01 → 3.24:1"
+    },
+    "--chart-9-strong": {
+      "light": "#eb6464",
+      "dark": "#fd8d8a",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "red 3.07 → 3.21:1"
+    },
+    "--chart-10-strong": {
+      "light": "#5154f5",
+      "dark": "#6da2f8",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "5.33:1"
+    },
+    "--chart-other-strong": {
+      "light": "#6c8893",
+      "dark": "#84a0ac",
+      "type": "color",
+      "group": "Strong variants for thin marks (lines, points, sparklines, outlines, pins)",
+      "kind": "chart token",
+      "note": "3.76:1"
+    },
+    "--chart-good": {
+      "light": "#0d7c39",
+      "dark": "#8beaa0",
+      "type": "color",
+      "group": "Status, for charts",
+      "kind": "chart token",
+      "note": "green-700, lightness-matched"
+    },
+    "--chart-warning": {
+      "light": "#8c5f0c",
+      "dark": "#fed7a1",
+      "type": "color",
+      "group": "Status, for charts",
+      "kind": "chart token",
+      "note": "deep amber, OKLCH L 0.52: clear of bad and of --chart-3-strong (was #9a6700, 0.103 ΔE from it)"
+    },
+    "--chart-bad": {
+      "light": "#bc211f",
+      "dark": "#ffbfb6",
+      "type": "color",
+      "group": "Status, for charts",
+      "kind": "chart token",
+      "note": "red-700, lightness-matched"
+    },
+    "--chart-neutral": {
+      "light": "#48566a",
+      "dark": "#a3a3a3",
+      "type": "color",
+      "group": "Status, for charts",
+      "kind": "chart token",
+      "note": "slate-500 was too close to Charts Gray"
+    },
+    "--chart-good-fill": {
+      "light": "#0d7c39",
+      "dark": "#5b9467",
+      "type": "color",
+      "group": "Status, for charts",
+      "kind": "chart token",
+      "note": "good as a large fill (bullet bands, 100% stacked segments): the mark itself in light mode; in dark, the mark at 60% over the surface, so fills aren't pastel"
+    },
+    "--chart-warning-fill": {
+      "light": "#8c5f0c",
+      "dark": "#a08868",
+      "type": "color",
+      "group": "Status, for charts",
+      "kind": "chart token",
+      "note": "warning as a large fill (bullet bands, 100% stacked segments): the mark itself in light mode; in dark, the mark at 60% over the surface, so fills aren't pastel"
+    },
+    "--chart-bad-fill": {
+      "light": "#bc211f",
+      "dark": "#a07a74",
+      "type": "color",
+      "group": "Status, for charts",
+      "kind": "chart token",
+      "note": "bad as a large fill (bullet bands, 100% stacked segments): the mark itself in light mode; in dark, the mark at 60% over the surface, so fills aren't pastel"
+    },
+    "--chart-good-tint": {
+      "light": "#e0f7e4",
+      "dark": "#11291a",
+      "type": "color",
+      "group": "Tints",
+      "kind": "chart token"
+    },
+    "--chart-bad-tint": {
+      "light": "#ffebe8",
+      "dark": "#371515",
+      "type": "color",
+      "group": "Tints",
+      "kind": "chart token"
+    },
+    "--chart-neutral-tint": {
+      "light": "#f1f5f9",
+      "dark": "#1c1c1c",
+      "type": "color",
+      "group": "Tints",
+      "kind": "chart token"
+    },
+    "--chart-div-3": {
+      "light": "#f1f5f9",
+      "dark": "#1c1c1c",
+      "type": "color",
+      "group": "Diverging (deltas)",
+      "kind": "chart token"
+    },
+    "--chart-font-size-xs": {
+      "light": 10,
+      "dark": 10,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "axis ticks, value labels, small SVG labels"
+    },
+    "--chart-font-size-sm": {
+      "light": 11,
+      "dark": 11,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "SVG category labels, funnel stage names, 100% segment labels"
+    },
+    "--chart-font-size-md": {
+      "light": 12,
+      "dark": 12,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "heatmap cell values, legend, tooltip, notes"
+    },
+    "--chart-font-size-lg": {
+      "light": 16,
+      "dark": 16,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "donut centre total"
+    },
+    "--chart-font-size-kpi": {
+      "light": 32,
+      "dark": 32,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "KPI value"
+    },
+    "--chart-font-weight-light": {
+      "light": 200,
+      "dark": 200,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "axis ticks"
+    },
+    "--chart-font-weight-regular": {
+      "light": 400,
+      "dark": 400,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "labels"
+    },
+    "--chart-font-weight-medium": {
+      "light": 500,
+      "dark": 500,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "tooltip values, treemap names"
+    },
+    "--chart-font-weight-semibold": {
+      "light": 600,
+      "dark": 600,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "KPI value, donut total, 100% segment labels"
+    },
+    "--chart-letter-spacing-axis": {
+      "light": 0.8,
+      "dark": 0.8,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token"
+    },
+    "--chart-line-height-kpi": {
+      "light": 1,
+      "dark": 1,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token"
+    },
+    "--chart-line-height-md": {
+      "light": 16,
+      "dark": 16,
+      "type": "number",
+      "group": "Type",
+      "kind": "chart token",
+      "note": "12px HTML text (legend, tooltip, tables), as Tailwind text-xs"
+    },
+    "--chart-stroke-hairline": {
+      "light": 0.5,
+      "dark": 0.5,
+      "type": "number",
+      "group": "Stroke",
+      "kind": "chart token",
+      "note": "map borders"
+    },
+    "--chart-stroke-thin": {
+      "light": 1,
+      "dark": 1,
+      "type": "number",
+      "group": "Stroke",
+      "kind": "chart token",
+      "note": "slice separators, grid, outlines of light marks"
+    },
+    "--chart-stroke-outline": {
+      "light": 1.25,
+      "dark": 1.25,
+      "type": "number",
+      "group": "Stroke",
+      "kind": "chart token",
+      "note": "bubble, box, whisker, outlier and pin outlines"
+    },
+    "--chart-stroke-default": {
+      "light": 1.5,
+      "dark": 1.5,
+      "type": "number",
+      "group": "Stroke",
+      "kind": "chart token",
+      "note": "lines, area strokes, sparklines, active-dot ring"
+    },
+    "--chart-stroke-emphasis": {
+      "light": 2,
+      "dark": 2,
+      "type": "number",
+      "group": "Stroke",
+      "kind": "chart token",
+      "note": "bullet target, box median, highlighted series"
+    },
+    "--chart-separator-thick": {
+      "light": 2,
+      "dark": 2,
+      "type": "number",
+      "group": "Stroke",
+      "kind": "chart token",
+      "note": "treemap leaf gaps"
+    },
+    "--chart-dash-solid": {
+      "light": "none",
+      "dark": "none",
+      "type": "string",
+      "group": "Dash patterns (SVG stroke-dasharray)",
+      "kind": "chart token"
+    },
+    "--chart-dash-dashed": {
+      "light": "6 4",
+      "dark": "6 4",
+      "type": "string",
+      "group": "Dash patterns (SVG stroke-dasharray)",
+      "kind": "chart token"
+    },
+    "--chart-dash-dotted": {
+      "light": "0 4",
+      "dark": "0 4",
+      "type": "string",
+      "group": "Dash patterns (SVG stroke-dasharray)",
+      "kind": "chart token"
+    },
+    "--chart-dash-reference": {
+      "light": "4 4",
+      "dark": "4 4",
+      "type": "string",
+      "group": "Dash patterns (SVG stroke-dasharray)",
+      "kind": "chart token",
+      "note": "reference lines and crosshairs"
+    },
+    "--chart-marker-sm": {
+      "light": 2.5,
+      "dark": 2.5,
+      "type": "number",
+      "group": "Markers (radii; theme.ts turns them into Recharts ZAxis areas where needed)",
+      "kind": "chart token",
+      "note": "static dots (≤ 2 points), sparkline end dot, outliers"
+    },
+    "--chart-marker-md": {
+      "light": 3.5,
+      "dark": 3.5,
+      "type": "number",
+      "group": "Markers (radii; theme.ts turns them into Recharts ZAxis areas where needed)",
+      "kind": "chart token",
+      "note": "hover / active dots"
+    },
+    "--chart-opacity-subtle": {
+      "light": 0.2,
+      "dark": 0.2,
+      "type": "number",
+      "group": "Opacity",
+      "kind": "chart token",
+      "note": "single area fill, box fill"
+    },
+    "--chart-opacity-soft": {
+      "light": 0.35,
+      "dark": 0.35,
+      "type": "number",
+      "group": "Opacity",
+      "kind": "chart token",
+      "note": "stacked area fill"
+    },
+    "--chart-opacity-medium": {
+      "light": 0.5,
+      "dark": 0.5,
+      "type": "number",
+      "group": "Opacity",
+      "kind": "chart token",
+      "note": "bubbles, pins"
+    },
+    "--chart-opacity-strong": {
+      "light": 0.7,
+      "dark": 0.7,
+      "type": "number",
+      "group": "Opacity",
+      "kind": "chart token",
+      "note": "scatter points"
+    },
+    "--chart-opacity-inactive": {
+      "light": 0.6,
+      "dark": 0.6,
+      "type": "number",
+      "group": "Opacity",
+      "kind": "chart token",
+      "note": "hover cursor, hidden legend item"
+    },
+    "--chart-radius-xs": {
+      "light": 1,
+      "dark": 1,
+      "type": "number",
+      "group": "Radius",
+      "kind": "chart token",
+      "note": "bullet measure bar"
+    },
+    "--chart-radius-sm": {
+      "light": 2,
+      "dark": 2,
+      "type": "number",
+      "group": "Radius",
+      "kind": "chart token",
+      "note": "heatmap cells, box, treemap leaves, swatches, delta chips"
+    },
+    "--chart-radius-mark": {
+      "light": 3,
+      "dark": 3,
+      "type": "number",
+      "group": "Radius",
+      "kind": "chart token",
+      "note": "bars, gantt spans"
+    },
+    "--chart-bar-size-sm": {
+      "light": 18,
+      "dark": 18,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "horizontal bars"
+    },
+    "--chart-bar-size-md": {
+      "light": 32,
+      "dark": 32,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "column, grouped, stacked"
+    },
+    "--chart-bar-size-lg": {
+      "light": 64,
+      "dark": 64,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "100% stacked"
+    },
+    "--chart-bar-gap": {
+      "light": 4,
+      "dark": 4,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "between bars in a group"
+    },
+    "--chart-bar-category-gap": {
+      "light": 10,
+      "dark": 10,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "column, grouped"
+    },
+    "--chart-bar-category-gap-loose": {
+      "light": 20,
+      "dark": 20,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "horizontal, stacked"
+    },
+    "--chart-bar-category-gap-none": {
+      "light": 1,
+      "dark": 1,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "histogram"
+    },
+    "--chart-label-padding": {
+      "light": 4,
+      "dark": 4,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "space between a label and the edge of its mark or band (segments, leaves, cells, ticks)"
+    },
+    "--chart-plot-padding-sm": {
+      "light": 6,
+      "dark": 6,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "small gap between a plot and its labels (box plot top, y-axis labels, bullet values)"
+    },
+    "--chart-plot-padding-md": {
+      "light": 22,
+      "dark": 22,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "band below a hand-built plot for its category labels (box plot)"
+    },
+    "--chart-plot-min": {
+      "light": 40,
+      "dark": 40,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "smallest plot width or height a hand-built chart draws"
+    },
+    "--chart-tick-offset": {
+      "light": 7,
+      "dark": 7,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "hand-built SVG axes: from the axis line to the top of the tick labels' capitals"
+    },
+    "--chart-label-min-gap": {
+      "light": 4,
+      "dark": 4,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "closest two placed labels may come (bubble, pin)"
+    },
+    "--chart-label-column-min": {
+      "light": 96,
+      "dark": 96,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "bullet and gantt name columns: the widest name + padding, clamped"
+    },
+    "--chart-label-column-max": {
+      "light": 150,
+      "dark": 150,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token"
+    },
+    "--chart-axis-font-size": {
+      "light": "10px",
+      "dark": "10px",
+      "type": "string",
+      "group": "Axes",
+      "kind": "chart token"
+    },
+    "--chart-axis-font-weight": {
+      "light": 200,
+      "dark": 200,
+      "type": "number",
+      "group": "Axes",
+      "kind": "chart token"
+    },
+    "--chart-axis-letter-spacing": {
+      "light": "0.05rem",
+      "dark": "0.05rem",
+      "type": "string",
+      "group": "Axes",
+      "kind": "chart token"
+    },
+    "--chart-axis-category-height": {
+      "light": 24,
+      "dark": 24,
+      "type": "number",
+      "group": "Axes",
+      "kind": "chart token"
+    },
+    "--chart-axis-min": {
+      "light": 24,
+      "dark": 24,
+      "type": "number",
+      "group": "Axes",
+      "kind": "chart token",
+      "note": "Narrowest axis: measured tick labels + padding, clamped to [min, max]"
+    },
+    "--chart-axis-max": {
+      "light": 120,
+      "dark": 120,
+      "type": "number",
+      "group": "Axes",
+      "kind": "chart token",
+      "note": "Widest axis; longer category labels truncate to it"
+    },
+    "--chart-grid": {
+      "light": "#f1f5f9",
+      "dark": "#292929",
+      "type": "color",
+      "group": "Grid, baseline, hover cursor",
+      "kind": "chart token",
+      "note": "Opik's light grid, as a named palette step"
+    },
+    "--chart-baseline": {
+      "light": "#cbd5e1",
+      "dark": "#4d4d4d",
+      "type": "color",
+      "group": "Grid, baseline, hover cursor",
+      "kind": "chart token",
+      "note": "value-from-zero charts only (bars, areas, histogram, funnel)"
+    },
+    "--chart-cursor": {
+      "light": "#f1f5f9",
+      "dark": "#1c1c1c",
+      "type": "color",
+      "group": "Grid, baseline, hover cursor",
+      "kind": "chart token"
+    },
+    "--chart-cursor-opacity": {
+      "light": "0.6",
+      "dark": "0.6",
+      "type": "string",
+      "group": "Grid, baseline, hover cursor",
+      "kind": "chart token"
+    },
+    "--chart-margin-opik-left": {
+      "light": -8,
+      "dark": -8,
+      "type": "number",
+      "group": "Legacy (Opik charts)",
+      "kind": "chart token"
+    },
+    "--chart-margin-opik-right": {
+      "light": 8,
+      "dark": 8,
+      "type": "number",
+      "group": "Legacy (Opik charts)",
+      "kind": "chart token"
+    },
+    "--chart-tick-offset-opik": {
+      "light": 0,
+      "dark": 0,
+      "type": "number",
+      "group": "Legacy (Opik charts)",
+      "kind": "chart token",
+      "note": "Opik's tick labels sit with their capitals at Recharts' tick position"
+    },
+    "--chart-axis-value-width-opik": {
+      "light": 48,
+      "dark": 48,
+      "type": "number",
+      "group": "Legacy (Opik charts)",
+      "kind": "chart token",
+      "note": "Opik's value axis width (legacy chart style)"
+    },
+    "--chart-axis-category-width-opik": {
+      "light": 72,
+      "dark": 72,
+      "type": "number",
+      "group": "Legacy (Opik charts)",
+      "kind": "chart token",
+      "note": "Opik's category axis width on horizontal bars (legacy chart style)"
+    },
+    "--chart-margin-top": {
+      "light": 8,
+      "dark": 8,
+      "type": "number",
+      "group": "Plot area",
+      "kind": "chart token"
+    },
+    "--chart-margin-right": {
+      "light": 12,
+      "dark": 12,
+      "type": "number",
+      "group": "Plot area",
+      "kind": "chart token"
+    },
+    "--chart-margin-bottom": {
+      "light": 0,
+      "dark": 0,
+      "type": "number",
+      "group": "Plot area",
+      "kind": "chart token"
+    },
+    "--chart-margin-left": {
+      "light": 0,
+      "dark": 0,
+      "type": "number",
+      "group": "Plot area",
+      "kind": "chart token"
+    },
+    "--chart-stroke-width": {
+      "light": "1.5px",
+      "dark": "1.5px",
+      "type": "string",
+      "group": "Aliases kept for the theme's existing names",
+      "kind": "chart token"
+    },
+    "--chart-active-dot-r": {
+      "light": "3.5px",
+      "dark": "3.5px",
+      "type": "string",
+      "group": "Aliases kept for the theme's existing names",
+      "kind": "chart token"
+    },
+    "--chart-active-dot-ring": {
+      "light": "1.5px",
+      "dark": "1.5px",
+      "type": "string",
+      "group": "Aliases kept for the theme's existing names",
+      "kind": "chart token"
+    },
+    "--chart-static-dot-r": {
+      "light": "2.5px",
+      "dark": "2.5px",
+      "type": "string",
+      "group": "Aliases kept for the theme's existing names",
+      "kind": "chart token"
+    },
+    "--chart-bar-max": {
+      "light": "2rem",
+      "dark": "2rem",
+      "type": "string",
+      "group": "Aliases kept for the theme's existing names",
+      "kind": "chart token"
+    },
+    "--chart-bar-radius": {
+      "light": "3px",
+      "dark": "3px",
+      "type": "string",
+      "group": "Aliases kept for the theme's existing names",
+      "kind": "chart token"
+    },
+    "--chart-bubble-min": {
+      "light": 4,
+      "dark": 4,
+      "type": "number",
+      "group": "Markers (radii; theme.ts turns them into Recharts ZAxis areas where needed)",
+      "kind": "chart token"
+    },
+    "--chart-bubble-max": {
+      "light": 13,
+      "dark": 13,
+      "type": "number",
+      "group": "Markers (radii; theme.ts turns them into Recharts ZAxis areas where needed)",
+      "kind": "chart token"
+    },
+    "--chart-pin-min": {
+      "light": 3,
+      "dark": 3,
+      "type": "number",
+      "group": "Markers (radii; theme.ts turns them into Recharts ZAxis areas where needed)",
+      "kind": "chart token"
+    },
+    "--chart-pin-max": {
+      "light": 18,
+      "dark": 18,
+      "type": "number",
+      "group": "Markers (radii; theme.ts turns them into Recharts ZAxis areas where needed)",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-secondary-opacity": {
+      "light": 0.8,
+      "dark": 0.8,
+      "type": "number",
+      "group": "Opacity",
+      "kind": "chart token",
+      "note": "tooltip series names, treemap values"
+    },
+    "--chart-pattern-opacity": {
+      "light": 0.18,
+      "dark": 0.18,
+      "type": "number",
+      "group": "Opacity",
+      "kind": "chart token",
+      "note": "100% stacked pattern marks"
+    },
+    "--chart-funnel-step-opacity": {
+      "light": 0.12,
+      "dark": 0.12,
+      "type": "number",
+      "group": "Opacity",
+      "kind": "chart token",
+      "note": "opacity lost per funnel stage"
+    },
+    "--chart-tooltip-radius": {
+      "light": "0.5rem",
+      "dark": "0.5rem",
+      "type": "string",
+      "group": "Radius",
+      "kind": "chart token"
+    },
+    "--chart-bullet-band-height": {
+      "light": 20,
+      "dark": 20,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-bullet-measure-height": {
+      "light": 6,
+      "dark": 6,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-bullet-target-height": {
+      "light": 16,
+      "dark": 16,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-gantt-bar-ratio": {
+      "light": 0.6,
+      "dark": 0.6,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-gantt-bar-min": {
+      "light": 2,
+      "dark": 2,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-box-width-ratio": {
+      "light": 0.42,
+      "dark": 0.42,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-box-width-max": {
+      "light": 44,
+      "dark": 44,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-heatmap-cell-gap": {
+      "light": 2,
+      "dark": 2,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "heatmap grid gap"
+    },
+    "--chart-pie-outer": {
+      "light": 80,
+      "dark": 80,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-donut-ring": {
+      "light": 40,
+      "dark": 40,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "ring thickness as a share of the radius"
+    },
+    "--chart-sparkline-sm-width": {
+      "light": 120,
+      "dark": 120,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "Number widget sparkline (v2)"
+    },
+    "--chart-sparkline-sm-height": {
+      "light": 28,
+      "dark": 28,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-sparkline-md-height": {
+      "light": 32,
+      "dark": 32,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "KPI sparkline"
+    },
+    "--chart-sparkline-md-max-width": {
+      "light": 224,
+      "dark": 224,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token"
+    },
+    "--chart-pattern-size": {
+      "light": 6,
+      "dark": 6,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "100% stacked pattern tile"
+    },
+    "--chart-outlier-spread": {
+      "light": 2,
+      "dark": 2,
+      "type": "number",
+      "group": "Bar and mark sizing",
+      "kind": "chart token",
+      "note": "box plot: horizontal step between overlapping outliers"
+    },
+    "--chart-funnel-label-min": {
+      "light": 96,
+      "dark": 96,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "room right of the funnel: the widest stage label + padding, clamped"
+    },
+    "--chart-funnel-label-max": {
+      "light": 160,
+      "dark": 160,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token"
+    },
+    "--chart-bullet-value-room": {
+      "light": 52,
+      "dark": 52,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "room right of the bullet bands for the value"
+    },
+    "--chart-bullet-row-height": {
+      "light": 30,
+      "dark": 30,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token"
+    },
+    "--chart-gantt-row-min": {
+      "light": 16,
+      "dark": 16,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token"
+    },
+    "--chart-gantt-row-max": {
+      "light": 24,
+      "dark": 24,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token"
+    },
+    "--chart-gantt-reserved-height": {
+      "light": 52,
+      "dark": 52,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "kept for the time axis and legend below the rows"
+    },
+    "--chart-gantt-indent": {
+      "light": 10,
+      "dark": 10,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "per nesting level"
+    },
+    "--chart-pin-growth-divisor": {
+      "light": 30,
+      "dark": 30,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "pins grow by at most the map width ÷ this (capped at --chart-pin-max)"
+    },
+    "--chart-tooltip-edge": {
+      "light": 80,
+      "dark": 80,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "SVG tooltips keep their centre this far from the card edges"
+    },
+    "--chart-tooltip-gap": {
+      "light": 6,
+      "dark": 6,
+      "type": "number",
+      "group": "Plot layout",
+      "kind": "chart token",
+      "note": "between an SVG tooltip and its mark"
+    },
+    "--chart-kpi-font-size": {
+      "light": "32px",
+      "dark": "32px",
+      "type": "string",
+      "group": "Aliases kept for the theme's existing names",
+      "kind": "chart token"
+    },
+    "--chart-legend-swatch": {
+      "light": 8,
+      "dark": 8,
+      "type": "number",
+      "group": "Legend",
+      "kind": "chart token"
+    },
+    "--chart-legend-max-height": {
+      "light": 48,
+      "dark": 48,
+      "type": "number",
+      "group": "Legend",
+      "kind": "chart token"
+    },
+    "--chart-legend-gap-x": {
+      "light": 12,
+      "dark": 12,
+      "type": "number",
+      "group": "Legend",
+      "kind": "chart token"
+    },
+    "--chart-legend-gap-y": {
+      "light": 4,
+      "dark": 4,
+      "type": "number",
+      "group": "Legend",
+      "kind": "chart token"
+    },
+    "--chart-legend-font-size": {
+      "light": "0.75rem",
+      "dark": "0.75rem",
+      "type": "string",
+      "group": "Legend",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-bg": {
+      "light": "#ffffff",
+      "dark": "#171717",
+      "type": "color",
+      "group": "Tooltip",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-fg": {
+      "light": "#373d4e",
+      "dark": "#e1e7ef",
+      "type": "color",
+      "group": "Tooltip",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-muted": {
+      "light": "#65758b",
+      "dark": "#a3a3a3",
+      "type": "color",
+      "group": "Tooltip",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-border": {
+      "light": "#e4eaf1",
+      "dark": "#292929",
+      "type": "color",
+      "group": "Tooltip",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-shadow": {
+      "light": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+      "dark": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+      "type": "string",
+      "group": "Tooltip",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-font-size": {
+      "light": "0.75rem",
+      "dark": "0.75rem",
+      "type": "string",
+      "group": "Tooltip",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-padding-x": {
+      "light": 10,
+      "dark": 10,
+      "type": "number",
+      "group": "Tooltip",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-padding-y": {
+      "light": 6,
+      "dark": 6,
+      "type": "number",
+      "group": "Tooltip",
+      "kind": "chart token"
+    },
+    "--chart-tooltip-min-width": {
+      "light": 128,
+      "dark": 128,
+      "type": "number",
+      "group": "Tooltip",
+      "kind": "chart token"
+    },
+    "--chart-hbar-margin-right": {
+      "light": 48,
+      "dark": 48,
+      "type": "number",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token"
+    },
+    "--chart-hbar-category-gap": {
+      "light": "20%",
+      "dark": "20%",
+      "type": "string",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token"
+    },
+    "--chart-hbar-bar-max": {
+      "light": "18px",
+      "dark": "18px",
+      "type": "string",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token"
+    },
+    "--chart-stacked-category-gap": {
+      "light": "20%",
+      "dark": "20%",
+      "type": "string",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token"
+    },
+    "--chart-stacked-bar-max": {
+      "light": "2rem",
+      "dark": "2rem",
+      "type": "string",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token"
+    },
+    "--chart-stacked100-bar-max": {
+      "light": "4rem",
+      "dark": "4rem",
+      "type": "string",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token"
+    },
+    "--chart-histogram-category-gap": {
+      "light": "1px",
+      "dark": "1px",
+      "type": "string",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token"
+    },
+    "--chart-map-land": {
+      "light": "#f1f5f9",
+      "dark": "#2e2e2e",
+      "type": "color",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token",
+      "note": "Countries without data (choropleth) and the land under pins"
+    },
+    "--chart-map-border": {
+      "light": "#ffffff",
+      "dark": "#121212",
+      "type": "color",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token",
+      "note": "Country borders: the surface colour, so shapes separate"
+    },
+    "--chart-bullet-mark": {
+      "light": "#ffffff",
+      "dark": "#121212",
+      "type": "color",
+      "group": "Per-type overrides (chartTheme.types)",
+      "kind": "chart token",
+      "note": "Bullet value bar and SLO marker: the surface colour, so it reverses with the theme against the status bands"
+    },
+    "--chart-skeleton-fill": {
+      "light": "#f1f5f9",
+      "dark": "#1c1c1c",
+      "type": "color",
+      "group": "Loading skeletons",
+      "kind": "chart token",
+      "note": "Placeholder grid, label placeholders, bands and area fills while a chart loads (one step off the surface)"
+    },
+    "--chart-skeleton-mark": {
+      "light": "#e4eaf1",
+      "dark": "#2e2e2e",
+      "type": "color",
+      "group": "Loading skeletons",
+      "kind": "chart token",
+      "note": "Placeholder bars, lines, points and arcs while a chart loads (light enough to read as a placeholder, not data)"
+    },
+    "--chart-skeleton-duration": {
+      "light": "1600ms",
+      "dark": "1600ms",
+      "type": "string",
+      "group": "Loading skeletons",
+      "kind": "chart token",
+      "note": "One sweep across a loading chart"
+    },
+    "--chart-skeleton-sheen": {
+      "light": "#ffffff",
+      "dark": "#121212",
+      "type": "color",
+      "group": "Loading skeletons",
+      "kind": "chart token",
+      "note": "The soft sheen that sweeps across a loading chart: the surface at 35%, so marks under it lighten slightly as it passes"
+    },
+    "--background": {
+      "light": "#ffffff",
+      "dark": "#121212",
+      "type": "color",
+      "group": "Core",
+      "kind": "Opik primitive",
+      "note": "Core"
+    },
+    "--foreground": {
+      "light": "#373d4e",
+      "dark": "#e1e7ef",
+      "type": "color",
+      "group": "Core",
+      "kind": "Opik primitive",
+      "note": "Core"
+    },
+    "--border": {
+      "light": "#e4eaf1",
+      "dark": "#292929",
+      "type": "color",
+      "group": "Core",
+      "kind": "Opik primitive",
+      "note": "Core"
+    },
+    "--primary": {
+      "light": "#5154f5",
+      "dark": "#3c71f6",
+      "type": "color",
+      "group": "Primary (indigo)",
+      "kind": "Opik primitive",
+      "note": "Primary (indigo)"
+    },
+    "--primary-hover": {
+      "light": "#353ad0",
+      "dark": "#6da2f8",
+      "type": "color",
+      "group": "Primary (indigo)",
+      "kind": "Opik primitive",
+      "note": "Primary (indigo)"
+    },
+    "--secondary": {
+      "light": "#e6e6fe",
+      "dark": "#2e2e2e",
+      "type": "color",
+      "group": "Primary (indigo)",
+      "kind": "Opik primitive",
+      "note": "Primary (indigo)"
+    },
+    "--muted": {
+      "light": "#f1f5f9",
+      "dark": "#1c1c1c",
+      "type": "color",
+      "group": "Neutrals",
+      "kind": "Opik primitive",
+      "note": "Neutrals"
+    },
+    "--muted-slate": {
+      "light": "#65758b",
+      "dark": "#a3a3a3",
+      "type": "color",
+      "group": "Neutrals",
+      "kind": "Opik primitive",
+      "note": "Neutrals"
+    },
+    "--muted-gray": {
+      "light": "#9ca3b0",
+      "dark": "#4d4d4d",
+      "type": "color",
+      "group": "Neutrals",
+      "kind": "Opik primitive",
+      "note": "Neutrals"
+    },
+    "--slate-300": {
+      "light": "#cbd5e1",
+      "dark": "#cbd5e1",
+      "type": "color",
+      "group": "Neutrals",
+      "kind": "Opik primitive",
+      "note": "Neutrals"
+    },
+    "--tooltip": {
+      "light": "#373d4e",
+      "dark": "#171717",
+      "type": "color",
+      "group": "Tooltip",
+      "kind": "Opik primitive",
+      "note": "Tooltip"
+    },
+    "--chart-blue": {
+      "light": "#5899da",
+      "dark": "#5899da",
+      "type": "color",
+      "group": "Charts",
+      "kind": "Opik primitive",
+      "note": "Charts"
+    },
+    "--chart-yellow": {
+      "light": "#f4b400",
+      "dark": "#f4b400",
+      "type": "color",
+      "group": "Charts",
+      "kind": "Opik primitive",
+      "note": "Charts"
+    },
+    "--chart-green": {
+      "light": "#19a979",
+      "dark": "#19a979",
+      "type": "color",
+      "group": "Charts",
+      "kind": "Opik primitive",
+      "note": "Charts"
+    },
+    "--chart-red": {
+      "light": "#ef6868",
+      "dark": "#ef6868",
+      "type": "color",
+      "group": "Charts",
+      "kind": "Opik primitive",
+      "note": "Charts"
+    },
+    "--chart-burgundy": {
+      "light": "#bf399e",
+      "dark": "#bf399e",
+      "type": "color",
+      "group": "Charts",
+      "kind": "Opik primitive",
+      "note": "Charts"
+    },
+    "--chart-purple": {
+      "light": "#945fcf",
+      "dark": "#945fcf",
+      "type": "color",
+      "group": "Charts",
+      "kind": "Opik primitive",
+      "note": "Charts"
+    },
+    "--chart-pink": {
+      "light": "#ed4a7b",
+      "dark": "#ed4a7b",
+      "type": "color",
+      "group": "Charts",
+      "kind": "Opik primitive",
+      "note": "Charts"
+    },
+    "--chart-orange": {
+      "light": "#fb9341",
+      "dark": "#fb9341",
+      "type": "color",
+      "group": "Charts",
+      "kind": "Opik primitive",
+      "note": "Charts"
+    },
+    "--chart-teal": {
+      "light": "#12a4b4",
+      "dark": "#12a4b4",
+      "type": "color",
+      "group": "Charts",
+      "kind": "Opik primitive",
+      "note": "Charts"
+    },
+    "--radius": {
+      "light": 8,
+      "dark": 8,
+      "type": "number",
+      "group": "Shape & layout",
+      "kind": "Opik primitive",
+      "note": "Shape & layout"
+    }
+  }
+}

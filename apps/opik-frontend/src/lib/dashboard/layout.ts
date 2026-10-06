@@ -28,6 +28,8 @@ export const getWidgetSizeConfig = (type: string): WidgetSizeConfig => {
       return { w: 2, h: 4, minW: 2, minH: 4 };
     case WIDGET_TYPE.EXPERIMENT_LEADERBOARD:
       return { w: 6, h: 6, minW: 4, minH: 4 };
+    case WIDGET_TYPE.OLLIE_CHART:
+      return { w: 2, h: 4, minW: 2, minH: 3 };
     default:
       return { w: 2, h: 2, minW: MIN_WIDGET_WIDTH, minH: MIN_WIDGET_HEIGHT };
   }
