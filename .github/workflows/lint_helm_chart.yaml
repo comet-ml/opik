@@ -52,7 +52,6 @@ jobs:
               set -e
               cd deployment/helm_chart/opik
               helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
-              helm repo add bitnami https://charts.bitnami.com/bitnami
               helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
               helm dependency build
               helm lint --values values.yaml .
@@ -81,7 +80,6 @@ jobs:
               set -e
               cd deployment/helm_chart/opik
               helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
-              helm repo add bitnami https://charts.bitnami.com/bitnami
               helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
               helm dependency build
               helm unittest .
@@ -136,7 +134,6 @@ jobs:
               cd deployment/helm_chart/opik
               rm -rf charts Chart.lock
               helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
-              helm repo add bitnami https://charts.bitnami.com/bitnami
               helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
               helm dependency build
               helm template opik . --values values.yaml > "${RUNNER_TEMP}/render-helm3.yaml"
@@ -154,7 +151,6 @@ jobs:
               # Wipe Helm 3's resolved deps so Helm 4 runs its own dependency resolution.
               rm -rf charts Chart.lock
               helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
-              helm repo add bitnami https://charts.bitnami.com/bitnami
               helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
               helm dependency build
               helm template opik . --values values.yaml > "${RUNNER_TEMP}/render-helm4.yaml"
