@@ -148,6 +148,12 @@ openai:
     structuredOutput: true
     reasoning: true
 anthropic:
+  - id: "claude-opus-5-5"
+    label: "Claude Opus 5.5"
+    structuredOutput: true
+  - id: "claude-sonnet-5-5"
+    label: "Claude Sonnet 5.5"
+    structuredOutput: true
   - id: "claude-opus-5"
     label: "Claude Opus 5"
     structuredOutput: true
@@ -175,6 +181,14 @@ anthropic:
   - id: "claude-haiku-4-5-20251001"
     label: "Claude Haiku 4.5"
     structuredOutput: true
+  - id: "claude-opus-4-1-20250805"
+    label: "Claude Opus 4.1"
+  - id: "claude-opus-4-20250514"
+    label: "Claude Opus 4"
+  - id: "claude-sonnet-4-20250514"
+    label: "Claude Sonnet 4"
+  - id: "claude-3-7-sonnet-20250219"
+    label: "Claude 3.7 Sonnet"
   - id: "claude-fable-5"
     label: "Claude Fable 5"
     structuredOutput: true
@@ -188,18 +202,10 @@ anthropic:
     label: "Claude Mythos 5.1"
     structuredOutput: true
   - id: "claude-mythos-preview"
-    label: "Claude Mythos Preview"
-    structuredOutput: true
-  - id: "claude-3-7-sonnet-20250219"
-  - id: "claude-opus-4-1-20250805"
-    structuredOutput: true
-  - id: "claude-opus-4-20250514"
     structuredOutput: true
   - id: "claude-opus-4-6-20260205"
     structuredOutput: true
   - id: "claude-opus-4-7-20260416"
-    structuredOutput: true
-  - id: "claude-sonnet-4-20250514"
     structuredOutput: true
   - id: "claude-sonnet-4-5"
     structuredOutput: true
@@ -221,6 +227,9 @@ gemini:
     structuredOutput: true
   - id: "gemini-3.1-flash-lite"
     label: "Gemini 3.1 Flash Lite"
+  - id: "gemini-3-pro-preview"
+    label: "Gemini 3 Pro Preview"
+    structuredOutput: true
   - id: "gemini-3-flash-preview"
     label: "Gemini 3 Flash Preview"
     structuredOutput: true
@@ -262,8 +271,6 @@ gemini:
   - id: "gemini-3-pro-image"
   - id: "gemini-3-pro-image-preview"
     structuredOutput: true
-  - id: "gemini-3-pro-preview"
-    structuredOutput: true
   - id: "gemini-3.1-flash-image"
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
@@ -281,6 +288,10 @@ vertex-ai:
   - id: "gemini-3.8-flash"
     qualifiedName: "vertex_ai/gemini-3.8-flash"
     label: "Gemini 3.8 Flash"
+    structuredOutput: true
+  - id: "gemini-3.8-flash-cyber"
+    qualifiedName: "vertex_ai/gemini-3.8-flash-cyber"
+    label: "Gemini 3.8 Flash Cyber"
     structuredOutput: true
   - id: "gemini-3.7-flash"
     qualifiedName: "vertex_ai/gemini-3.7-flash"
@@ -336,6 +347,9 @@ vertex-ai:
   - id: "gemini-omni-1.1-flash"
     qualifiedName: "vertex_ai/gemini-omni-1.1-flash"
     label: "Gemini Omni 1.1 Flash"
+  - id: "gemini-omni-1.1-flash-preview"
+    qualifiedName: "vertex_ai/gemini-omni-1.1-flash-preview"
+    label: "Gemini Omni 1.1 Flash Preview"
   - id: "gemini-robotics-er-2"
     qualifiedName: "vertex_ai/gemini-robotics-er-2"
     label: "Gemini Robotics Er 2"
@@ -374,8 +388,10 @@ openrouter:
     structuredOutput: true
   - id: "aion-labs/aion-3.5"
     label: "aion-labs/aion-3.5"
+    structuredOutput: true
   - id: "aion-labs/aion-3.5-mini"
     label: "aion-labs/aion-3.5-mini"
+    structuredOutput: true
   - id: "aion-labs/aion-rp-llama-3.1-8b"
     label: "aion-labs/aion-rp-llama-3.1-8b"
   - id: "alfredpros/codellama-7b-instruct-solidity"
@@ -486,8 +502,10 @@ openrouter:
     label: "anthropic/claude-opus-5-fast"
   - id: "anthropic/claude-opus-5.5"
     label: "anthropic/claude-opus-5.5"
+    structuredOutput: true
   - id: "anthropic/claude-opus-5.5:batch"
     label: "anthropic/claude-opus-5.5:batch"
+    structuredOutput: true
   - id: "anthropic/claude-opus-5:batch"
     label: "anthropic/claude-opus-5:batch"
     structuredOutput: true
@@ -510,8 +528,10 @@ openrouter:
     structuredOutput: true
   - id: "anthropic/claude-sonnet-5.5"
     label: "anthropic/claude-sonnet-5.5"
+    structuredOutput: true
   - id: "anthropic/claude-sonnet-5.5:batch"
     label: "anthropic/claude-sonnet-5.5:batch"
+    structuredOutput: true
   - id: "anthropic/claude-sonnet-5:batch"
     label: "anthropic/claude-sonnet-5:batch"
     structuredOutput: true
@@ -591,6 +611,7 @@ openrouter:
     structuredOutput: true
   - id: "cohere/command-a-plus"
     label: "cohere/command-a-plus"
+    structuredOutput: true
   - id: "cohere/command-r-08-2024"
     label: "cohere/command-r-08-2024"
     structuredOutput: true
@@ -692,12 +713,20 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v4.1-flash:batch"
     label: "deepseek/deepseek-v4.1-flash:batch"
+    structuredOutput: true
+  - id: "dots-studio/dots-3-note-preview:free"
+    label: "dots-studio/dots-3-note-preview:free"
+    structuredOutput: true
   - id: "eleutherai/llemma_7b"
     label: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
     label: "essentialai/rnj-1-instruct"
   - id: "fireworks/ember-1"
     label: "fireworks/ember-1"
+    structuredOutput: true
+  - id: "google/gemini-2.0-flash-001"
+    label: "google/gemini-2.0-flash-001"
+    structuredOutput: true
   - id: "google/gemini-2.0-flash-exp:free"
     label: "google/gemini-2.0-flash-exp:free"
     structuredOutput: true
@@ -1265,13 +1294,9 @@ openrouter:
     label: "nex-agi/nex-n2-pro:free"
   - id: "nex-agi/nex-n2.5-mini"
     label: "nex-agi/nex-n2.5-mini"
-  - id: "nex-agi/nex-n2.5-mini:free"
-    label: "nex-agi/nex-n2.5-mini:free"
     structuredOutput: true
   - id: "nex-agi/nex-n2.5-pro"
     label: "nex-agi/nex-n2.5-pro"
-  - id: "nex-agi/nex-n2.5-pro:free"
-    label: "nex-agi/nex-n2.5-pro:free"
     structuredOutput: true
   - id: "nousresearch/deephermes-3-mistral-24b-preview"
     label: "nousresearch/deephermes-3-mistral-24b-preview"
@@ -1588,28 +1613,40 @@ openrouter:
     structuredOutput: true
   - id: "openai/gpt-6-luna"
     label: "openai/gpt-6-luna"
+    structuredOutput: true
   - id: "openai/gpt-6-luna-pro"
     label: "openai/gpt-6-luna-pro"
+    structuredOutput: true
   - id: "openai/gpt-6-luna-pro:batch"
     label: "openai/gpt-6-luna-pro:batch"
+    structuredOutput: true
   - id: "openai/gpt-6-luna:batch"
     label: "openai/gpt-6-luna:batch"
+    structuredOutput: true
   - id: "openai/gpt-6-sol"
     label: "openai/gpt-6-sol"
+    structuredOutput: true
   - id: "openai/gpt-6-sol-pro"
     label: "openai/gpt-6-sol-pro"
+    structuredOutput: true
   - id: "openai/gpt-6-sol-pro:batch"
     label: "openai/gpt-6-sol-pro:batch"
+    structuredOutput: true
   - id: "openai/gpt-6-sol:batch"
     label: "openai/gpt-6-sol:batch"
+    structuredOutput: true
   - id: "openai/gpt-6.1-sol"
     label: "openai/gpt-6.1-sol"
+    structuredOutput: true
   - id: "openai/gpt-6.1-sol-pro"
     label: "openai/gpt-6.1-sol-pro"
+    structuredOutput: true
   - id: "openai/gpt-6.1-sol-pro:batch"
     label: "openai/gpt-6.1-sol-pro:batch"
+    structuredOutput: true
   - id: "openai/gpt-6.1-sol:batch"
     label: "openai/gpt-6.1-sol:batch"
+    structuredOutput: true
   - id: "openai/gpt-audio"
     label: "openai/gpt-audio"
     structuredOutput: true
@@ -1634,6 +1671,7 @@ openrouter:
     structuredOutput: true
   - id: "openai/gpt-oss-20b:batch"
     label: "openai/gpt-oss-20b:batch"
+    structuredOutput: true
   - id: "openai/gpt-oss-20b:free"
     label: "openai/gpt-oss-20b:free"
   - id: "openai/gpt-oss-safeguard-20b"
@@ -1725,6 +1763,7 @@ openrouter:
     structuredOutput: true
   - id: "perceptron/perceptron-mk1.5"
     label: "perceptron/perceptron-mk1.5"
+    structuredOutput: true
   - id: "perplexity/sonar"
     label: "perplexity/sonar"
   - id: "perplexity/sonar-deep-research"
@@ -1972,8 +2011,10 @@ openrouter:
     structuredOutput: true
   - id: "qwen/qwen3.8-max-prime"
     label: "qwen/qwen3.8-max-prime"
+    structuredOutput: true
   - id: "qwen/qwen3.8-omni-flash"
     label: "qwen/qwen3.8-omni-flash"
+    structuredOutput: true
   - id: "qwen/qwq-32b"
     label: "qwen/qwq-32b"
     structuredOutput: true
@@ -2101,6 +2142,7 @@ openrouter:
     reasoning: true
   - id: "typesafe/jev-router"
     label: "typesafe/jev-router"
+    structuredOutput: true
   - id: "unbiased/pareto"
     label: "unbiased/pareto"
   - id: "undi95/remm-slerp-l2-13b"
@@ -2108,6 +2150,7 @@ openrouter:
     structuredOutput: true
   - id: "upstage/solar-mini4"
     label: "upstage/solar-mini4"
+    structuredOutput: true
   - id: "upstage/solar-pro-3"
     label: "upstage/solar-pro-3"
     structuredOutput: true
@@ -2241,6 +2284,7 @@ openrouter:
     structuredOutput: true
   - id: "z-ai/glm-5.3-prime"
     label: "z-ai/glm-5.3-prime"
+    structuredOutput: true
   - id: "z-ai/glm-5.3:batch"
     label: "z-ai/glm-5.3:batch"
     structuredOutput: true
@@ -2311,7 +2355,7 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v3.2-exp"
     structuredOutput: true
-  - id: "dots-studio/dots-3-note-preview:free"
+  - id: "nex-agi/nex-n2.5-mini:free"
     structuredOutput: true
-  - id: "google/gemini-2.0-flash-001"
+  - id: "nex-agi/nex-n2.5-pro:free"
     structuredOutput: true

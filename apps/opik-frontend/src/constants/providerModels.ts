@@ -139,6 +139,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      label: "Claude Opus 5.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5,
+      label: "Claude Sonnet 5.5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
       label: "Claude Opus 5",
     },
@@ -175,6 +183,22 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Haiku 4.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
+      label: "Claude Opus 4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4,
+      label: "Claude Opus 4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
+      label: "Claude Sonnet 4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7,
+      label: "Claude 3.7 Sonnet",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
       label: "Claude Fable 5",
     },
@@ -189,10 +213,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1,
       label: "Claude Mythos 5.1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW,
-      label: "Claude Mythos Preview",
     },
   ],
 
@@ -740,6 +760,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4.1-flash:batch",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE,
+      label: "dots-studio/dots-3-note-preview:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ELEUTHERAI_LLEMMA_7B,
       label: "eleutherai/llemma_7b",
     },
@@ -750,6 +774,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.FIREWORKS_EMBER_1,
       label: "fireworks/ember-1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_001,
+      label: "google/gemini-2.0-flash-001",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
@@ -1628,16 +1656,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/nex-n2.5-mini",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_MINI_FREE,
-      label: "nex-agi/nex-n2.5-mini:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_PRO,
       label: "nex-agi/nex-n2.5-pro",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_PRO_FREE,
-      label: "nex-agi/nex-n2.5-pro:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW,
@@ -3220,6 +3240,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.1 Flash Lite",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      label: "Gemini 3 Pro Preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
       label: "Gemini 3 Flash Preview",
     },
@@ -3269,6 +3293,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
       label: "Gemini 3.8 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH_CYBER,
+      label: "Gemini 3.8 Flash Cyber",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
@@ -3325,6 +3353,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
       label: "Gemini Omni 1.1 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH_PREVIEW,
+      label: "Gemini Omni 1.1 Flash Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_ROBOTICS_ER_2,

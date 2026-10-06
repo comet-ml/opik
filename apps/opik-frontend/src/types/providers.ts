@@ -109,11 +109,16 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_FABLE_5 = "claude-fable-5",
   CLAUDE_FABLE_5_1 = "claude-fable-5-1",
   CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001",
+  CLAUDE_MYTHOS_5 = "claude-mythos-5",
+  CLAUDE_MYTHOS_5_1 = "claude-mythos-5-1",
+  CLAUDE_MYTHOS_PREVIEW = "claude-mythos-preview",
   CLAUDE_OPUS_4_1 = "claude-opus-4-1-20250805",
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
   CLAUDE_OPUS_4_5 = "claude-opus-4-5-20251101",
   CLAUDE_OPUS_4_6 = "claude-opus-4-6",
+  CLAUDE_OPUS_4_6_20260205 = "claude-opus-4-6-20260205",
   CLAUDE_OPUS_4_7 = "claude-opus-4-7",
+  CLAUDE_OPUS_4_7_20260416 = "claude-opus-4-7-20260416",
   CLAUDE_OPUS_4_8 = "claude-opus-4-8",
   CLAUDE_OPUS_5 = "claude-opus-5",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
@@ -121,11 +126,8 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
-  CLAUDE_MYTHOS_5 = "claude-mythos-5",
-  CLAUDE_MYTHOS_5_1 = "claude-mythos-5-1",
-  CLAUDE_MYTHOS_PREVIEW = "claude-mythos-preview",
-  CLAUDE_OPUS_4_6_20260205 = "claude-opus-4-6-20260205",
-  CLAUDE_OPUS_4_7_20260416 = "claude-opus-4-7-20260416",
+  CLAUDE_OPUS_5_5 = "claude-opus-5-5",
+  CLAUDE_SONNET_5_5 = "claude-sonnet-5-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -909,6 +911,8 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_6_FLASH = "gemini-3.6-flash",
   GEMINI_3_7_FLASH = "gemini-3.7-flash",
   GEMINI_3_8_FLASH = "gemini-3.8-flash",
+  GEMINI_3_8_FLASH_LITE_TTS = "gemini-3.8-flash-lite-tts",
+  GEMINI_3_8_FLASH_TTS = "gemini-3.8-flash-tts",
   GEMINI_FLASH_LATEST_HIGH_RES_EXP = "gemini-flash-latest-high-res-exp",
   GEMINI_OMNI_1_1_FLASH = "gemini-omni-1.1-flash",
   GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
@@ -920,8 +924,6 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_5 = "lyria-3.5",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_3_8_FLASH_LITE_TTS = "gemini-3.8-flash-lite-tts",
-  GEMINI_3_8_FLASH_TTS = "gemini-3.8-flash-tts",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
@@ -943,7 +945,9 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_6_FLASH = "vertex_ai/gemini-3.6-flash",
   VERTEX_AI_GEMINI_3_7_FLASH = "vertex_ai/gemini-3.7-flash",
   VERTEX_AI_GEMINI_3_8_FLASH = "vertex_ai/gemini-3.8-flash",
+  VERTEX_AI_GEMINI_3_8_FLASH_CYBER = "vertex_ai/gemini-3.8-flash-cyber",
   VERTEX_AI_GEMINI_OMNI_1_1_FLASH = "vertex_ai/gemini-omni-1.1-flash",
+  VERTEX_AI_GEMINI_OMNI_1_1_FLASH_PREVIEW = "vertex_ai/gemini-omni-1.1-flash-preview",
   VERTEX_AI_GEMINI_ROBOTICS_ER_2 = "vertex_ai/gemini-robotics-er-2",
 }
 
