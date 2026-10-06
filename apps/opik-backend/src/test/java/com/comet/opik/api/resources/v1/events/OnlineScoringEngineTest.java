@@ -93,12 +93,12 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -2416,9 +2416,10 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    void logUnresolvedEvaluatorArgumentsLogsBothSinksInsideTheMdcScope() {
-        // The backend line needs the same markers to be correlatable, so it must sit inside the scope too.
-        // MDC is thread-local and read at append time, hence asserted during the call rather than after.
+    void logUnresolvedEvaluatorArgumentsScopesTheMdcToTheUserFacingSinkOnly() {
+        // The ClickHouse appender fills the user-facing row's columns from the MDC; the backend line has no
+        // such need, so only one sink is scoped. MDC is thread-local and read at append time, which is why
+        // each sink records it during its own call rather than after.
         var mdc = Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 UserLog.WORKSPACE_ID, UUID.randomUUID().toString(),
@@ -2426,23 +2427,23 @@ class OnlineScoringEngineTest {
                 UserLog.RULE_ID, UUID.randomUUID().toString());
         var userFacingLogger = Mockito.mock(Logger.class);
         var internalLogger = Mockito.mock(Logger.class);
-        Map<String, String> seenByUserFacing = new HashMap<>();
-        Map<String, String> seenByInternal = new HashMap<>();
+        var seenByUserFacing = new AtomicReference<Map<String, String>>();
+        var seenByInternal = new AtomicReference<Map<String, String>>();
         Mockito.doAnswer(invocation -> {
-            seenByUserFacing.putAll(MDC.getCopyOfContextMap());
+            seenByUserFacing.set(MDC.getCopyOfContextMap());
             return null;
         }).when(userFacingLogger).warn(Mockito.anyString(), Mockito.any(Object[].class));
         Mockito.doAnswer(invocation -> {
-            seenByInternal.putAll(MDC.getCopyOfContextMap());
+            seenByInternal.set(MDC.getCopyOfContextMap());
             return null;
         }).when(internalLogger).warn(Mockito.anyString(), Mockito.any(Object[].class));
 
         OnlineScoringEngine.logUnresolvedEvaluatorArguments(userFacingLogger, internalLogger, mdc,
                 "traceId", UUID.randomUUID(), "a-rule", Map.of("plan", "output.execution_plan"));
 
-        assertThat(seenByUserFacing).containsAllEntriesOf(mdc);
-        assertThat(seenByInternal).containsAllEntriesOf(mdc);
-        // And the scope is closed again, so neither leaks onto the next message on this thread.
+        assertThat(seenByUserFacing.get()).containsAllEntriesOf(mdc);
+        assertThat(seenByInternal.get()).isNullOrEmpty();
+        // And the scope is closed again, so it does not leak onto the next message on this thread.
         assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
     }
 

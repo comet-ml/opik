@@ -1544,12 +1544,11 @@ public class OnlineScoringEngine {
                 ? "(none declared)"
                 : renderPairs(reported, omitted);
         var safeRuleName = sanitize(String.valueOf(ruleName));
-        // Both inside the scope so the backend line carries the same markers and stays correlatable. Safe
-        // because the ClickHouse appender binds to the UserFacingLog logger, not to the MDC.
+        // Only the user-facing logger needs the scope: the ClickHouse appender fills its columns from the MDC.
         try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
             userFacingLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
-            internalLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
         }
+        internalLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
     }
 
     /** Mirrors {@link #renderNames}' "and N more" shape for entries that carry their own quoting. */
