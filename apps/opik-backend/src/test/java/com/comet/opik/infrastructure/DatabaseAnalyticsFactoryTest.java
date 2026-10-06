@@ -20,8 +20,8 @@ class DatabaseAnalyticsFactoryTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"UTC", "America/New_York", "America/Argentina/Buenos_Aires", "Etc/GMT+5", ""})
-    @DisplayName("sessionTimezone accepts timezone names")
-    void sessionTimezoneAcceptsTimezoneNames(String sessionTimezone) {
+    @DisplayName("sessionTimezone accepts timezone names, and empty for unset")
+    void sessionTimezoneAcceptsTimezoneNamesAndEmpty(String sessionTimezone) {
         var factory = new DatabaseAnalyticsFactory();
         factory.setSessionTimezone(sessionTimezone);
 
