@@ -68,10 +68,16 @@ describe("PlaygroundPromptOutput", () => {
     ).not.toBeInTheDocument();
   });
 
-  // Editing the prompt marks the previous output stale. The reason is most wanted
-  // exactly then — while correcting the prompt — so it dims rather than vanishing,
-  // as output and chips already do.
-  it("should dim a stale error instead of hiding it", () => {
+  it("should show No runs yet instead of stale output once the prompt is edited", () => {
+    output = { isLoading: false, value: "the answer", stale: true };
+
+    renderOutput();
+
+    expect(screen.getByText("No runs yet")).toBeInTheDocument();
+    expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
+  });
+
+  it("should show No runs yet instead of a stale error once the prompt is edited", () => {
     output = {
       isLoading: false,
       value: null,
@@ -81,31 +87,9 @@ describe("PlaygroundPromptOutput", () => {
 
     renderOutput();
 
-    const tag = screen.getByTestId("playground-output-error");
-    expect(tag).toHaveTextContent("Run failed: ratings not defined");
-    expect(tag).toHaveClass("opacity-50");
-  });
-
-  it("should not dim the error of the current run", () => {
-    output = {
-      isLoading: false,
-      value: null,
-      error: "ratings not defined",
-      stale: false,
-    };
-
-    renderOutput();
-
-    expect(screen.getByTestId("playground-output-error")).not.toHaveClass(
-      "opacity-50",
-    );
-  });
-
-  it("should keep showing stale output from a run that succeeded", () => {
-    output = { isLoading: false, value: "the answer", stale: true };
-
-    renderOutput();
-
-    expect(screen.getByTestId("markdown")).toHaveTextContent("the answer");
+    expect(screen.getByText("No runs yet")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("playground-output-error"),
+    ).not.toBeInTheDocument();
   });
 });

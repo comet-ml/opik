@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
 import mapValues from "lodash/mapValues";
+import isEqual from "fast-deep-equal";
 
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import { restoreMissingConfigKeys } from "@/lib/playground";
@@ -97,6 +98,21 @@ const updateAllStaleStatusesForPromptOutput = (
     },
   };
 };
+
+// Only what a run sends. Library links, message ids and one-off flags also go
+// through updatePrompt, often with no user edit (a reload re-applies the loaded
+// prompt), and must not hide the output.
+const getRunInput = ({
+  model,
+  provider,
+  configs,
+  messages,
+}: PlaygroundPromptType) => ({
+  model,
+  provider,
+  configs,
+  messages: messages.map(({ role, content }) => ({ role, content })),
+});
 
 export type PlaygroundStore = {
   lastActiveProjectId: string | null;
@@ -196,22 +212,26 @@ const usePlaygroundStore = create<PlaygroundStore>()(
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
-          const newPromptMap = {
-            ...state.promptMap,
-            [promptId]: {
-              ...state.promptMap[promptId],
-              ...changes,
-            },
-          };
+          const prompt = state.promptMap[promptId];
+          const updatedPrompt = { ...prompt, ...changes };
+          const hasRunInputChanged = !isEqual(
+            getRunInput(prompt),
+            getRunInput(updatedPrompt),
+          );
 
           return {
             ...state,
-            promptMap: newPromptMap,
-            outputMap: updateAllStaleStatusesForPromptOutput(
-              promptId,
-              state.outputMap,
-              true,
-            ),
+            promptMap: {
+              ...state.promptMap,
+              [promptId]: updatedPrompt,
+            },
+            outputMap: hasRunInputChanged
+              ? updateAllStaleStatusesForPromptOutput(
+                  promptId,
+                  state.outputMap,
+                  true,
+                )
+              : state.outputMap,
           };
         });
       },
