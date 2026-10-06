@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset miguelg:000129_add_failed_status_and_finished_at_to_experiments
+--changeset miguelg:000130_add_failed_status_and_finished_at_to_experiments
 --comment: Add 'failed' experiment status and a finished_at timestamp. A playground run can now be stopped by the user, so 'cancelled' no longer implies a fault and failures need their own status. finished_at records when a run stopped producing items, which 'cancelled' cannot convey because it is written when the stop is requested, not when it takes effect (OPIK-7789)
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}'
