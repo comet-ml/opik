@@ -366,3 +366,94 @@ describe("the reasoning effort a playground run sends", () => {
     },
   );
 });
+
+describe("the error status a failed run reports", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const runAgainst = async (response: Response) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    return result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {} as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+    });
+  };
+
+  const streamOf = (event: object) =>
+    new Response(`data: ${JSON.stringify(event)}\n`, { status: 200 });
+
+  it("reads the status the backend sends with an in-stream error", async () => {
+    const run = await runAgainst(
+      streamOf({ code: 429, message: "Rate limit reached for gpt-4o" }),
+    );
+
+    expect(run.errorStatus).toBe(429);
+    expect(run.opikError).toBe("Rate limit reached for gpt-4o");
+  });
+
+  it("reads the status of an error wrapped in the provider's own envelope", async () => {
+    const run = await runAgainst(
+      streamOf({
+        code: 402,
+        message: JSON.stringify({
+          error: { message: "You exceeded your current quota." },
+        }),
+      }),
+    );
+
+    expect(run.errorStatus).toBe(402);
+    expect(run.providerError).toBe("You exceeded your current quota.");
+  });
+
+  it("falls back to the HTTP status when the body is not an error event", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const run = await runAgainst(
+      new Response("<html>429 Too Many Requests</html>\n", { status: 429 }),
+    );
+
+    expect(run.errorStatus).toBe(429);
+  });
+
+  it("reads a status sent as a string of digits", async () => {
+    const run = await runAgainst(streamOf({ code: "429", message: "slow" }));
+
+    expect(run.errorStatus).toBe(429);
+  });
+
+  it.each([
+    ["a boolean", true],
+    ["an array", [429]],
+    ["a status below the error range", 399],
+    ["a status past the HTTP range", 5000],
+    ["a string that is not a status", "429abc"],
+  ])(
+    "keeps the HTTP status when the event's code is %s",
+    async (_label, code) => {
+      const run = await runAgainst(
+        new Response(`data: ${JSON.stringify({ code, message: "x" })}\n`, {
+          status: 503,
+        }),
+      );
+
+      expect(run.errorStatus).toBe(503);
+    },
+  );
+
+  it("reports no status for a run that succeeds", async () => {
+    const run = await runAgainst(
+      streamOf({ choices: [{ delta: { content: "hello" } }] }),
+    );
+
+    expect(run.errorStatus).toBeNull();
+    expect(run.result).toBe("hello");
+  });
+});
