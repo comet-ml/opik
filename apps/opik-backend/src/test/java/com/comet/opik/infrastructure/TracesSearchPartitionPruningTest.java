@@ -92,7 +92,7 @@ class TracesSearchPartitionPruningTest {
     private static final String LAST_SEARCH = """
             SELECT query
             FROM system.query_log
-            WHERE log_comment LIKE 'find_traces_by_project_id:%'
+            WHERE log_comment LIKE concat(:query_name, ':%')
             AND type = 'QueryFinish'
             AND is_initial_query
             AND query LIKE concat('%', :token, '%')
@@ -215,9 +215,15 @@ class TracesSearchPartitionPruningTest {
         var stats = traceResourceClient.getTraceStats(project.getValue(), null, API_KEY, WORKSPACE_NAME, null,
                 Map.of("search", token, "from_time", FROM_TIME.toString()));
         TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectTraceStatItems(page.content()));
-        assertThat(lastSearch(token))
-                .as("the traces week hint ran, so the page above is not a vacuous pass")
-                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+        // The page re-reads its rows through the cached page-id scalar, so the search runs once.
+        assertThat(lastSearch("find_traces_by_project_id", token))
+                .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
+                .doesNotContain("IN (SELECT id FROM page_ids)");
+        // The list, the count and the stats each render their own search scan.
+        Stream.of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
+                .forEach(queryName -> assertThat(lastSearch(queryName, token))
+                        .as("the traces week hint ran in %s, so the results above are not a vacuous pass", queryName)
+                        .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)"));
     }
 
     /** A trace whose id is minted mid-week, so the partition value is the week's Monday rather than the id's own day. */
@@ -233,12 +239,13 @@ class TracesSearchPartitionPruningTest {
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
-    private String lastSearch(String token) {
+    private String lastSearch(String queryName, String token) {
         return Awaitility.await()
-                .alias("query_log holds the search for " + token)
+                .alias("query_log holds a " + queryName + " search for " + token)
                 .atMost(Duration.ofSeconds(30))
                 .pollInterval(Duration.ofMillis(200))
-                .until(() -> queryOneString(LAST_SEARCH, statement -> statement.bind("token", token)),
+                .until(() -> queryOneString(LAST_SEARCH,
+                        statement -> statement.bind("token", token).bind("query_name", queryName)),
                         Objects::nonNull);
     }
 

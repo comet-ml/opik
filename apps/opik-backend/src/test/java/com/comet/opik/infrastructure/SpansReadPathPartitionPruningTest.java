@@ -144,7 +144,7 @@ class SpansReadPathPartitionPruningTest {
     private static final String LAST_SPAN_SEARCH = """
             SELECT query
             FROM system.query_log
-            WHERE log_comment LIKE 'find_spans_by_project_id:%'
+            WHERE log_comment LIKE concat(:query_name, ':%')
             AND type = 'QueryFinish'
             AND query LIKE concat('%', :token, '%')
             ORDER BY event_time_microseconds DESC
@@ -483,20 +483,28 @@ class SpansReadPathPartitionPruningTest {
         assertThat(page.total()).isEqualTo(expected.size());
         SpanAssertions.assertSpan(page.content(), expected, USER);
         TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectSpanStatItems(expected));
-        assertThat(lastSpanSearch(token))
-                .as("the spans week hint ran, so the page above is not a vacuous pass")
-                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+        // The page re-reads its rows through the cached page-id scalar, so the search runs once.
+        assertThat(lastSpanSearch("find_spans_by_project_id", token))
+                .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
+                .doesNotContain("IN (SELECT id FROM page_ids)");
+        // The list, the count and both stats queries each render their own search scan.
+        Stream.of("find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
+                "get_span_stats_feedback_scores")
+                .forEach(queryName -> assertThat(lastSpanSearch(queryName, token))
+                        .as("the spans week hint ran in %s, so the results above are not a vacuous pass", queryName)
+                        .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)"));
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
-    private String lastSpanSearch(String token) {
+    private String lastSpanSearch(String queryName, String token) {
         return Awaitility.await()
-                .alias("query_log holds the span search for " + token)
+                .alias("query_log holds a " + queryName + " search for " + token)
                 .atMost(Duration.ofSeconds(30))
                 .pollInterval(Duration.ofMillis(200))
                 .until(() -> template.nonTransaction(connection -> Mono.from(connection
                         .createStatement(LAST_SPAN_SEARCH)
                         .bind("token", token)
+                        .bind("query_name", queryName)
                         .execute())
                         .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class)))))
                         .block(), Objects::nonNull);

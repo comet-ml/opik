@@ -1265,7 +1265,6 @@ public class SpanDAO {
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
                     <if(trace_id)> AND trace_id = :trace_id<endif>)
                 <endif>
             ), <endif>feedback_scores_deduped AS (
@@ -1362,7 +1361,6 @@ public class SpanDAO {
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
                     <if(trace_id)> AND trace_id = :trace_id<endif>)
                 <endif>
                 <if(feedback_scores_filters)>
@@ -1679,7 +1677,6 @@ public class SpanDAO {
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
                     <if(trace_id)> AND trace_id = :trace_id<endif>)
                 <endif>
                 <if(feedback_scores_filters)>
@@ -1835,7 +1832,6 @@ public class SpanDAO {
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
                     <if(trace_id)> AND trace_id = :trace_id<endif>)
                 <endif>
                 <if(feedback_scores_filters)>

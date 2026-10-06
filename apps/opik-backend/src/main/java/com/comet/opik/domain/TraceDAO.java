@@ -1795,8 +1795,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM traces
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                    <if(last_received_id)> AND id \\< :last_received_id<endif>)
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
                 <endif>
             ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -2078,8 +2077,7 @@ class TraceDAOImpl implements TraceDAO {
                         FROM traces
                         WHERE workspace_id = :workspace_id AND project_id = :project_id
                         <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                        <if(last_received_id)> AND id \\< :last_received_id<endif>)
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
                     <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
@@ -5495,7 +5493,6 @@ class TraceDAOImpl implements TraceDAO {
                     "limit:" + limit + ":" + criteria);
             var template = newTraceThreadFindTemplate(
                     SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
-            addTracesPartitionedFlag(template);
             template.add("log_comment", logComment);
 
             bindTemplateExcludeFieldVariables(criteria, template);
