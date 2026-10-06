@@ -56,11 +56,24 @@ def _chunk(content="", done=False, **overrides):
                 "prompt_eval_count": 10,
                 "eval_count": 8,
                 "total_duration": 12_323_049_000,
+                "load_duration": 100_000,
+                "prompt_eval_duration": 200_000,
                 "eval_duration": 11_000_000_000,
             }
         )
     payload.update(overrides)
     return ChatResponse(**payload)
+
+
+def _assert_durations_in_metadata_not_usage(span):
+    assert not any(key.endswith("_duration") for key in span.usage)
+    for key, value in {
+        "total_duration": 12_323_049_000,
+        "load_duration": 100_000,
+        "prompt_eval_duration": 200_000,
+        "eval_duration": 11_000_000_000,
+    }.items():
+        assert span.metadata[key] == value
 
 
 @pytest.mark.parametrize(
@@ -213,6 +226,7 @@ def test_ollama_chat__stream__aggregated_into_one_span(fake_backend, monkeypatch
     assert span.name == "chat_stream"
     assert span.output["message"]["content"] == "Blue, due to Rayleigh scattering."
     assert span.usage["prompt_tokens"] == 10
+    _assert_durations_in_metadata_not_usage(span)
 
 
 def test_ollama_chat__stream__two_tracked_clients__each_keeps_its_own_provider(
@@ -506,3 +520,4 @@ def test_ollama_async_chat__stream__aggregated_into_one_span(fake_backend, monke
     assert span.error_info is None
     assert span.output["message"]["content"] == "Blue, due to Rayleigh scattering."
     assert span.usage["prompt_tokens"] == 10
+    _assert_durations_in_metadata_not_usage(span)
