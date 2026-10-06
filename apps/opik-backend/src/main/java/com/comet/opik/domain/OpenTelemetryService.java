@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.client.RedisException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -233,29 +234,34 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
             var otelTraceIdBase64 = base64OtelId(otelTraceId);
 
-            // checks if this key is mapped in redis
             var otelTraceIdRedisKey = redisKey(workspaceId, projectId, otelTraceIdBase64);
-            // A Redis error must not fail the batch: exporters retry a few times and then drop the spans. Treat it
-            // as a miss instead; the cost is that a trace spread across batches may be split into several.
-            var checkId = redisson.getBucket(otelTraceIdRedisKey).getAndExpire(config.getTtl().toJavaDuration())
-                    .onErrorResume(error -> onRedisError("lookup", otelTraceIdRedisKey, error));
+            var ttl = config.getTtl().toJavaDuration();
 
-            return checkId.switchIfEmpty(Mono.defer(() -> {
-                // its an unknown otel trace id, lets create an opik trace id with this span timestamp as we sorted otel
-                // spans by time on previous step, it will be the closest time possible for the actual trace start
-                var opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId.toByteArray(), otelTimestamp);
+            // for an unknown otel trace id, create an opik trace id with this span timestamp as we sorted otel
+            // spans by time on previous step, it will be the closest time possible for the actual trace start
+            var freshOpikTraceId = Mono.fromSupplier(() -> OpenTelemetryMapper
+                    .convertOtelIdToUUIDv7(otelTraceId.toByteArray(), otelTimestamp).toString());
 
+            // A Redis error must not fail the batch: exporters retry a few times and then drop the spans. Fall back
+            // to a fresh id, at the cost of possibly splitting a trace spread across batches. A failed lookup skips
+            // the store, so a mapping that may still exist is never overwritten.
+            var cachedOpikTraceId = redisson.getBucket(otelTraceIdRedisKey).getAndExpire(ttl)
+                    .onErrorResume(RedisException.class,
+                            error -> onRedisError("lookup", otelTraceIdRedisKey, error).then(freshOpikTraceId));
+
+            return cachedOpikTraceId.switchIfEmpty(Mono.defer(() -> freshOpikTraceId.flatMap(opikTraceId -> {
                 log.info("Creating mapping in Redis for otel trace id '{}' -> opik trace id '{}'", otelTraceIdRedisKey,
                         opikTraceId);
                 return redisson.getBucket(otelTraceIdRedisKey)
-                        .set(opikTraceId.toString(), config.getTtl().toJavaDuration())
-                        .onErrorResume(error -> onRedisError("store", otelTraceIdRedisKey, error))
-                        .then(Mono.just(opikTraceId.toString()));
-            })).map(opikTraceId -> Map.entry(otelTraceIdBase64, opikTraceId));
+                        .set(opikTraceId, ttl)
+                        .onErrorResume(RedisException.class,
+                                error -> onRedisError("store", otelTraceIdRedisKey, error))
+                        .thenReturn(opikTraceId);
+            }))).map(opikTraceId -> Map.entry(otelTraceIdBase64, opikTraceId));
         }).collectMap(Map.Entry::getKey, entry -> UUID.fromString((String) entry.getValue()));
     }
 
-    private <T> Mono<T> onRedisError(String operation, String otelTraceIdRedisKey, Throwable error) {
+    private Mono<Void> onRedisError(String operation, String otelTraceIdRedisKey, RedisException error) {
         log.warn("Redis {} failed for otel trace id '{}', continuing without the mapping", operation,
                 otelTraceIdRedisKey, error);
         TRACE_ID_MAPPING_REDIS_ERRORS.add(1, Attributes.of(OPERATION_KEY, operation));
