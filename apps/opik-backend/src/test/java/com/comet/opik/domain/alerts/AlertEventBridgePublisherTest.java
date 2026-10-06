@@ -22,6 +22,7 @@ import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResultEntry;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,6 +43,8 @@ class AlertEventBridgePublisherTest {
     private static final String WORKSPACE_ID = "workspace-id";
     private static final String WORKSPACE_NAME = "workspace-name";
     private static final UUID PROJECT_ID = UUID.randomUUID();
+    // Longer than every backoff of the bounded retry, jitter included
+    private static final Duration RETRY_WINDOW = Duration.ofSeconds(10);
 
     @Mock
     private EventBridgeClient client;
@@ -152,8 +155,10 @@ class AlertEventBridgePublisherTest {
                 .thenThrow(EventBridgeException.builder().statusCode(503).message("unavailable").build());
         var alert = alert(null);
 
-        StepVerifier.create(publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
-                payload(alert, List.of("event-1"), List.of()))).verifyComplete();
+        StepVerifier.withVirtualTime(() -> publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME,
+                AlertEventType.TRACE_COST, payload(alert, List.of("event-1"), List.of())))
+                .thenAwait(RETRY_WINDOW)
+                .verifyComplete();
 
         verify(client, times(3)).putEvents(any(PutEventsRequest.class));
     }
@@ -168,8 +173,10 @@ class AlertEventBridgePublisherTest {
                 .thenReturn(successResponse());
         var alert = alert(null);
 
-        StepVerifier.create(publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
-                payload(alert, List.of("event-1"), List.of()))).verifyComplete();
+        StepVerifier.withVirtualTime(() -> publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME,
+                AlertEventType.TRACE_COST, payload(alert, List.of("event-1"), List.of())))
+                .thenAwait(RETRY_WINDOW)
+                .verifyComplete();
 
         verify(client, times(2)).putEvents(any(PutEventsRequest.class));
     }
