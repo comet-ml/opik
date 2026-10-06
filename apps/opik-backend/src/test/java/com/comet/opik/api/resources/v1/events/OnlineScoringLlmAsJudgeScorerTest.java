@@ -46,6 +46,7 @@ import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.ClientErrorException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -75,8 +76,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -254,7 +257,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     Map.of(),
                     PromptType.MUSTACHE,
                     hasExperimentId ? UUID.randomUUID() : null,
-                    "ws-name-1");
+                    "ws-name-1",
+                    null);
         }
     }
 
@@ -795,7 +799,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var message = new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null, null);
+                    PromptType.MUSTACHE, null, null, null);
             var traceAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
                     .entityId(trace.id())
                     .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
@@ -906,7 +910,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             return new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null, null);
+                    PromptType.MUSTACHE, null, null, null);
         }
     }
 
@@ -1112,7 +1116,172 @@ class OnlineScoringLlmAsJudgeScorerTest {
             return new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null, null);
+                    PromptType.MUSTACHE, null, null, null);
+        }
+    }
+
+    @Nested
+    class TestSuiteJudgeFailureTests {
+
+        private static final String SUITE_EVALUATOR_JSON = """
+                {
+                  "model": { "name": "judge-a" },
+                  "messages": [
+                    { "role": "USER", "content": "Check this output: {{output}}" }
+                  ],
+                  "schema": [
+                    { "name": "assertion_1", "type": "BOOLEAN", "description": "Is polite" },
+                    { "name": "assertion_2", "type": "BOOLEAN", "description": "Is short" }
+                  ],
+                  "variables": {}
+                }
+                """;
+
+        private static final String SUITE_RESPONSE = """
+                {"assertion_1": {"score": true, "reason": "polite"}, "assertion_2": {"score": false, "reason": "long"}}
+                """;
+
+        private void stubJudgeRouting() {
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            lenient().when(llmProviderFactory.getLlmProvider(anyString())).thenReturn(LlmProvider.OPEN_AI);
+            lenient().when(llmProviderFactory.getStructuredOutputStrategy(anyString()))
+                    .thenReturn(new ToolCallingStrategy());
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+        }
+
+        private void stubJudge(String model, Throwable failure) {
+            when(aiProxyService.scoreTrace(any(), argThat(params -> params != null && model.equals(params.name())),
+                    any())).thenThrow(failure);
+        }
+
+        private void stubJudge(String model, String response) {
+            when(aiProxyService.scoreTrace(any(), argThat(params -> params != null && model.equals(params.name())),
+                    any())).thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(response)).build());
+        }
+
+        private List<String> judgedModels(int times) {
+            ArgumentCaptor<LlmAsJudgeModelParameters> captor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
+            verify(aiProxyService, times(times)).scoreTrace(any(), captor.capture(), any());
+            return captor.getAllValues().stream().map(LlmAsJudgeModelParameters::name).toList();
+        }
+
+        @Test
+        void fallsBackToTheNextJudgeWhenTheFirstRejectsTheKey() {
+            var message = suiteMessage(List.of("judge-b", "judge-c"));
+            stubJudgeRouting();
+            stubJudge("judge-a", new ClientErrorException("invalid x-api-key", 401));
+            stubJudge("judge-b", SUITE_RESPONSE);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+            when(feedbackScoreService.scoreBatchOfTraces(scoresCaptor.capture())).thenReturn(Mono.empty());
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any())).thenReturn(Mono.empty());
+
+            scorer.doScore(message).block();
+
+            assertThat(judgedModels(2)).containsExactly("judge-a", "judge-b");
+            assertThat(scoresCaptor.getValue())
+                    .extracting(FeedbackScoreBatchItem::name, item -> item.value().intValue())
+                    .containsExactlyInAnyOrder(
+                            tuple("Is polite", 1),
+                            tuple("Is short", 0));
+            verify(testSuiteAssertionCounterService, times(1))
+                    .decrementAndFinishIfComplete(message.workspaceId(), message.experimentId());
+        }
+
+        @Test
+        void surfacesTheLastRejectionWhenEveryJudgeRejectsTheKey() {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            stubJudge("judge-a", new ClientErrorException("invalid x-api-key", 401));
+            stubJudge("judge-b", new ClientErrorException("Incorrect API key provided", 401));
+
+            assertThatThrownBy(() -> scorer.doScore(message).block())
+                    .isInstanceOf(ClientErrorException.class)
+                    .hasMessage("Incorrect API key provided");
+            assertThat(judgedModels(2)).containsExactly("judge-a", "judge-b");
+            verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
+        }
+
+        @ParameterizedTest(name = "status {0}")
+        @ValueSource(ints = {429, 500, 503})
+        void doesNotFallBackOnATransientFailure(int status) {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            RuntimeException failure = status >= 500
+                    ? new jakarta.ws.rs.ServerErrorException("provider down", status)
+                    : new ClientErrorException("rate limited", status);
+            stubJudge("judge-a", failure);
+
+            assertThatThrownBy(() -> scorer.doScore(message).block()).isSameAs(failure);
+            assertThat(judgedModels(1)).containsExactly("judge-a");
+        }
+
+        @Test
+        void doesNotFallBackWithoutFallbackJudges() {
+            var message = suiteMessage(null);
+            stubJudgeRouting();
+            stubJudge("judge-a", new ClientErrorException("invalid x-api-key", 401));
+
+            assertThatThrownBy(() -> scorer.doScore(message).block()).isInstanceOf(ClientErrorException.class);
+            assertThat(judgedModels(1)).containsExactly("judge-a");
+        }
+
+        @Test
+        void retiredSuiteAssertionIsStoredAsFailedWithTheReasonAndFinishesTheItem() {
+            var message = suiteMessage(List.of("judge-b"));
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+            when(feedbackScoreService.scoreBatchOfTraces(scoresCaptor.capture())).thenReturn(Mono.empty());
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any())).thenReturn(Mono.empty());
+
+            scorer.onRetired(message, new ClientErrorException("Incorrect API key provided", 401)).block();
+
+            assertThat(scoresCaptor.getValue())
+                    .extracting(FeedbackScoreBatchItem::name)
+                    .containsExactly("Is polite", "Is short");
+            assertThat(scoresCaptor.getValue()).allSatisfy(item -> {
+                assertThat(item.id()).isEqualTo(message.trace().id());
+                assertThat(item.value()).isEqualByComparingTo("0");
+                assertThat(item.categoryName()).isEqualTo(TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY);
+                assertThat(item.reason())
+                        .contains("judge-a, judge-b")
+                        .contains("Incorrect API key provided");
+            });
+            verify(testSuiteAssertionCounterService, times(1))
+                    .decrementAndFinishIfComplete(message.workspaceId(), message.experimentId());
+        }
+
+        @Test
+        void retiredOnlineScoringRuleMessageIsLeftAlone() {
+            var message = suiteMessage(null).toBuilder().categoryName(null).build();
+
+            scorer.onRetired(message, new ClientErrorException("invalid x-api-key", 401)).block();
+
+            verifyNoInteractions(feedbackScoreService, testSuiteAssertionCounterService);
+        }
+
+        private TraceToScoreLlmAsJudge suiteMessage(List<String> judgeFallbackModels) {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .name(UUID.randomUUID().toString())
+                    .startTime(Instant.now())
+                    .output(JsonUtils.getJsonNodeFromString("{\"answer\":\"hello\"}"))
+                    .build();
+            return TraceToScoreLlmAsJudge.builder()
+                    .trace(trace)
+                    .ruleId(UUID.randomUUID())
+                    .ruleName("suite-evaluator")
+                    .llmAsJudgeCode(JsonUtils.readValue(SUITE_EVALUATOR_JSON, LlmAsJudgeCode.class))
+                    .workspaceId(UUID.randomUUID().toString())
+                    .userName("user-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .categoryName(TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY)
+                    .scoreNameMapping(Map.of("assertion_1", "Is polite", "assertion_2", "Is short"))
+                    .promptType(PromptType.MUSTACHE)
+                    .experimentId(UUID.randomUUID())
+                    .judgeFallbackModels(judgeFallbackModels)
+                    .build();
         }
     }
 
@@ -1173,7 +1342,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 Map.of(),
                 PromptType.MUSTACHE,
                 experimentId,
-                "ws-name-1");
+                "ws-name-1",
+                null);
     }
 
     /** Silences "unused import" on Span — used implicitly through Flux<Span>. */

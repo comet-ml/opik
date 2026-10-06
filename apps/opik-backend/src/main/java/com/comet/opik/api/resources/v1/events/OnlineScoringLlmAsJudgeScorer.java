@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.attachment.AttachmentInfo;
@@ -30,6 +31,7 @@ import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.utils.HttpStatusRetryability;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -40,9 +42,11 @@ import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.ClientErrorException;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
@@ -51,6 +55,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -58,6 +63,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.LLM_AS_JUDGE;
 import static com.comet.opik.infrastructure.log.LogContextAware.withMdc;
@@ -146,26 +152,94 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
     @Override
     protected Mono<Void> doScore(TraceToScoreLlmAsJudge message) {
+        // Overriding doScore (not processEvent) keeps the post-scoring step inside the chain the
+        // base wraps with the processed-success counter, so a failure there is not counted as processed.
+        return scoreFallingBackToNextJudge(message)
+                .then(finishAssertion(message));
+    }
+
+    private Mono<Void> scoreFallingBackToNextJudge(TraceToScoreLlmAsJudge message) {
+        return super.doScore(message)
+                .onErrorResume(error -> isRejectedByProvider(error)
+                        && CollectionUtils.isNotEmpty(message.judgeFallbackModels()),
+                        error -> {
+                            var next = withNextJudgeModel(message);
+                            log.warn("Judge model '{}' rejected traceId '{}', falling back to judge model '{}': '{}'",
+                                    message.llmAsJudgeCode().model().name(), message.trace().id(),
+                                    next.llmAsJudgeCode().model().name(), error.getMessage());
+                            return scoreFallingBackToNextJudge(next);
+                        });
+    }
+
+    private static boolean isRejectedByProvider(Throwable error) {
+        return error instanceof ClientErrorException clientError
+                && HttpStatusRetryability.isPermanent(clientError.getResponse().getStatus());
+    }
+
+    private static TraceToScoreLlmAsJudge withNextJudgeModel(TraceToScoreLlmAsJudge message) {
+        var fallbackModels = message.judgeFallbackModels();
+        var code = message.llmAsJudgeCode();
+        return message.toBuilder()
+                .llmAsJudgeCode(code.toBuilder()
+                        .model(code.model().toBuilder().name(fallbackModels.getFirst()).build())
+                        .build())
+                .judgeFallbackModels(fallbackModels.subList(1, fallbackModels.size()))
+                .build();
+    }
+
+    private Mono<Void> finishAssertion(TraceToScoreLlmAsJudge message) {
         UUID experimentId = message.experimentId();
-        if (experimentId != null) {
-            // Resolve workspaceName lazily on subscription. ExperimentService.finishExperiments
-            // (reached via decrementAndFinishIfComplete when the assertion counter hits zero) reads
-            // WORKSPACE_NAME from the reactive context; without it the post-scoring chain throws
-            // NoSuchElementException, the message isn't ack'd, and Redis Streams retries the whole
-            // scoring run — re-running the LLM and re-inserting assertion rows.
-            // Overriding doScore (not processEvent) keeps this post-scoring step inside the chain the
-            // base wraps with the processed-success counter, so a failure here is not counted as processed.
-            return super.doScore(message)
-                    .then(Mono.fromCallable(() -> resolveWorkspaceName(message.workspaceId()))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .flatMap(workspaceName -> testSuiteAssertionCounterService
-                                    .decrementAndFinishIfComplete(message.workspaceId(), experimentId)
-                                    .contextWrite(ctx -> ctx
-                                            .put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                                            .put(RequestContext.WORKSPACE_NAME, workspaceName)
-                                            .put(RequestContext.USER_NAME, message.userName()))));
+        if (experimentId == null) {
+            return Mono.empty();
         }
-        return super.doScore(message);
+        // Resolve workspaceName lazily on subscription. ExperimentService.finishExperiments
+        // (reached via decrementAndFinishIfComplete when the assertion counter hits zero) reads
+        // WORKSPACE_NAME from the reactive context; without it the post-scoring chain throws
+        // NoSuchElementException, the message isn't ack'd, and Redis Streams retries the whole
+        // scoring run — re-running the LLM and re-inserting assertion rows.
+        return Mono.fromCallable(() -> resolveWorkspaceName(message.workspaceId()))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(workspaceName -> testSuiteAssertionCounterService
+                        .decrementAndFinishIfComplete(message.workspaceId(), experimentId)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                .put(RequestContext.WORKSPACE_NAME, workspaceName)
+                                .put(RequestContext.USER_NAME, message.userName())));
+    }
+
+    // Without this, a suite assertion the judge never scored leaves its item with no result and the
+    // assertion counter above zero, so the experiment stays "running" forever.
+    @Override
+    protected Mono<Void> onRetired(TraceToScoreLlmAsJudge message, Throwable error) {
+        if (!TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY.equals(message.categoryName())) {
+            return Mono.empty();
+        }
+        var trace = message.trace();
+        var reason = unevaluatedReason(message, error);
+        var unevaluated = Optional.ofNullable(message.llmAsJudgeCode().schema()).orElse(List.of()).stream()
+                .<FeedbackScoreBatchItem>map(assertion -> FeedbackScoreBatchItem.builder()
+                        .id(trace.id())
+                        .projectId(trace.projectId())
+                        .projectName(trace.projectName())
+                        .name(message.scoreNameMapping().getOrDefault(assertion.name(), assertion.name()))
+                        .value(BigDecimal.ZERO)
+                        .reason(reason)
+                        .categoryName(message.categoryName())
+                        .source(ScoreSource.ONLINE_SCORING)
+                        .build())
+                .toList();
+        Mono<Void> storeUnevaluated = unevaluated.isEmpty()
+                ? Mono.empty()
+                : storeScores(unevaluated, trace, message.userName(), message.workspaceId()).then();
+        return storeUnevaluated.then(finishAssertion(message));
+    }
+
+    private static String unevaluatedReason(TraceToScoreLlmAsJudge message, Throwable error) {
+        var judgeModels = Stream.concat(Stream.of(message.llmAsJudgeCode().model().name()),
+                Optional.ofNullable(message.judgeFallbackModels()).orElse(List.of()).stream())
+                .collect(Collectors.joining(", "));
+        return "Not evaluated: the LLM judge failed (judge models: %s). %s".formatted(judgeModels,
+                StringUtils.defaultIfBlank(error.getMessage(), error.getClass().getSimpleName()));
     }
 
     @Override
