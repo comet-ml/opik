@@ -7,6 +7,10 @@
  * Anthropic sampling pair are gated on the model's capabilities instead, and the runner controls
  * (plus Anthropic's max output tokens) fall back to a default rather than hiding, so absence from
  * the config says nothing.
+ *
+ * The plain max-output-tokens sliders check this list too, so it still holds when a config carries
+ * the key. Temperature is left out on purpose: every surface stores it, and listing it would also
+ * mean teaching the Claude sampling choice about it.
  */
 export type ModelConfigParam =
   | "topP"
