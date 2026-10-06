@@ -143,12 +143,15 @@ describe("getNextMessageType", () => {
       generateDefaultLLMPromptMessage({ role: role as LLM_MESSAGE_ROLE }),
     );
 
-  it.each([
-    LLM_MESSAGE_ROLE.user,
-    LLM_MESSAGE_ROLE.assistant,
-    LLM_MESSAGE_ROLE.ai,
-  ])("keeps the %s role for the next message", (role) => {
-    expect(nextRoleAfter(role)).toBe(role);
+  it.each([LLM_MESSAGE_ROLE.user, LLM_MESSAGE_ROLE.assistant])(
+    "keeps the %s role for the next message",
+    (role) => {
+      expect(nextRoleAfter(role)).toBe(role);
+    },
+  );
+
+  it("adds an assistant message, not another ai message, after an ai message", () => {
+    expect(nextRoleAfter(LLM_MESSAGE_ROLE.ai)).toBe(LLM_MESSAGE_ROLE.assistant);
   });
 
   it.each([
