@@ -28,6 +28,7 @@ import {
   AccordionTrigger,
 } from "@/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import { useToast } from "@/ui/use-toast";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 
@@ -86,6 +87,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
+  const { toast } = useToast();
 
   const {
     permissions: { canCreatePrompts, canEditPrompts },
@@ -150,6 +152,11 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPending, selectedPrompt, providedMetadata]);
 
+  const promptLabel =
+    templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT
+      ? "chat prompt"
+      : "prompt";
+
   const hasValidTemplate = template.length > 0;
   const canSaveNewPrompt = !isEdit && name.length > 0 && canCreatePrompts;
   const canSaveExistingPrompt = isEdit && !isPending && Boolean(selectedPrompt);
@@ -184,8 +191,12 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           ...(templateStructure && { templateStructure }),
           ...(promptType && { type: promptType }),
           projectId: activeProjectId ?? undefined,
-          onSuccess: (data) =>
-            onSave(data, selectedPrompt?.name, selectedPrompt?.id),
+          onSuccess: (data) => {
+            toast({
+              description: `Saved new version of ${promptLabel} "${selectedPrompt.name}"`,
+            });
+            onSave(data, selectedPrompt.name, selectedPrompt.id);
+          },
         });
 
         setOpen(false);
@@ -205,6 +216,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
         },
         {
           onSuccess: (data?: PromptWithLatestVersion) => {
+            toast({ description: `Saved new ${promptLabel} "${name}"` });
             if (data?.latest_version)
               onSave(data.latest_version, data.name, data.id);
           },
