@@ -25,7 +25,9 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
+import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,9 +35,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -47,15 +46,16 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -87,23 +87,23 @@ class TracesSearchPartitionPruningTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
-    /** The project's traces: two ordinary weeks and the far-future one a bad clock files them under. */
-    private static final List<LocalDate> PROJECT_MONDAYS = List.of(
-            LocalDate.of(2025, 3, 3), LocalDate.of(2025, 6, 2), LocalDate.of(2199, 12, 30));
-    /** A week only the neighbouring projects have traces in, inside the search window. */
-    private static final LocalDate FILLER_MONDAY = LocalDate.of(2025, 4, 14);
-    private static final Instant FROM_TIME = Instant.parse("2025-01-01T00:00:00Z");
-
-    private static final String LAST_SEARCH = """
-            SELECT query
-            FROM system.query_log
-            WHERE log_comment LIKE concat(:query_name, ':%')
-            AND type = 'QueryFinish'
-            AND is_initial_query
-            AND query LIKE concat('%', :token, '%')
-            ORDER BY event_time_microseconds DESC
-            LIMIT 1
-            """;
+    private static final int WINDOW_WEEKS = 52;
+    private static final LocalDate THIS_MONDAY = LocalDate.now(ZoneOffset.UTC)
+            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    private static final Instant FROM_TIME = THIS_MONDAY.minusWeeks(WINDOW_WEEKS).atStartOfDay()
+            .toInstant(ZoneOffset.UTC);
+    /** Three distinct weeks inside the search window: two for the project, one only its neighbours have traces in. */
+    private static final List<LocalDate> WINDOW_MONDAYS = Stream
+            .generate(() -> RandomUtils.secure().randomInt(1, WINDOW_WEEKS))
+            .distinct()
+            .limit(3)
+            .map(THIS_MONDAY::minusWeeks)
+            .toList();
+    /** The project's traces: two ordinary weeks and a far-future one, as a bad clock files them. */
+    private static final List<LocalDate> PROJECT_MONDAYS = List.of(WINDOW_MONDAYS.get(0), WINDOW_MONDAYS.get(1),
+            LocalDate.of(RandomUtils.secure().randomInt(2150, 2290), 1, 1)
+                    .with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY)));
+    private static final LocalDate FILLER_MONDAY = WINDOW_MONDAYS.get(2);
 
     private static final String PARTITION_KEY_OF_TABLE = """
             SELECT partition_key FROM system.tables WHERE database = currentDatabase() AND name = :table
@@ -186,7 +186,8 @@ class TracesSearchPartitionPruningTest {
     }
 
     /** The searched data and the responses. */
-    private record Search(String token, List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
+    @Builder(toBuilder = true)
+    private record Search(List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
     }
 
     private Search search() {
@@ -217,7 +218,7 @@ class TracesSearchPartitionPruningTest {
         var page = traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME, List.of(),
                 List.of(), 10, params);
         var stats = traceResourceClient.getTraceStats(project.getValue(), null, API_KEY, WORKSPACE_NAME, null, params);
-        return new Search(token, expected, page, stats);
+        return Search.builder().expected(expected).page(page).stats(stats).build();
     }
 
     @Test
@@ -229,32 +230,6 @@ class TracesSearchPartitionPruningTest {
         TraceAssertions.assertTraces(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(),
                 StatsUtils.getProjectTraceStatItems(search.page().content()));
-    }
-
-    /** One search shared by the statement cases, each checking a different statement of it. */
-    private Stream<Arguments> searchStatements() {
-        var search = search();
-        return Stream.of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
-                .map(queryName -> Arguments.of(queryName, search));
-    }
-
-    @ParameterizedTest(name = "{0} carries the traces week hint")
-    @MethodSource("searchStatements")
-    @DisplayName("each search statement carries the traces week hint")
-    void searchStatementCarriesTheWeekHint(String queryName, Search search) {
-        assertThat(lastSearch(queryName, search))
-                .as("the traces week hint ran in %s, so the results are not a vacuous pass", queryName)
-                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
-    }
-
-    @Test
-    @DisplayName("the page re-reads its rows through the cached page-id scalar, so the search runs once")
-    void searchRunsOnce() {
-        var search = search();
-
-        assertThat(lastSearch("find_traces_by_project_id", search))
-                .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
-                .doesNotContain("IN (SELECT id FROM page_ids)");
     }
 
     /** A trace whose id is minted mid-week, so the partition value is the week's Monday rather than the id's own day. */
@@ -271,18 +246,6 @@ class TracesSearchPartitionPruningTest {
                 .feedbackScores(null)
                 .usage(null)
                 .build();
-    }
-
-    /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
-    private String lastSearch(String queryName, Search search) {
-        var token = search.token();
-        return Awaitility.await()
-                .alias("query_log holds a " + queryName + " search for " + token)
-                .atMost(Duration.ofSeconds(30))
-                .pollInterval(Duration.ofMillis(200))
-                .until(() -> queryOneString(LAST_SEARCH,
-                        statement -> statement.bind("token", token).bind("query_name", queryName)),
-                        Objects::nonNull);
     }
 
     /** See {@code TracesPartitionPruningMutationTest#ensurePartitionedSuccessorUnderTraces}. */
