@@ -606,6 +606,7 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
+    @RateLimited
     public Response cancelExperiments(
             @RequestBody(content = @Content(schema = @Schema(implementation = IdsHolder.class))) @NotNull @Valid IdsHolder idsHolder) {
 
