@@ -27,7 +27,7 @@ public class CustomLlmProvider implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        ChatCompletionRequest cleanedRequest = normalizeTokenLimits(cleanModelName(request));
+        ChatCompletionRequest cleanedRequest = normalizeForProvider(cleanModelName(request));
         return openAiClient.chatCompletion(cleanedRequest).execute();
     }
 
@@ -38,7 +38,7 @@ public class CustomLlmProvider implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        ChatCompletionRequest cleanedRequest = normalizeTokenLimits(cleanModelName(request));
+        ChatCompletionRequest cleanedRequest = normalizeForProvider(cleanModelName(request));
         OpenAiStreamingHelper.executeStreamingRequest(openAiClient, cleanedRequest, handleMessage, handleClose,
                 handleError);
     }
@@ -81,7 +81,9 @@ public class CustomLlmProvider implements LlmProviderService {
     // Neither gets the 0 the playground slider allows: OpenAI-style APIs reject it, and Ollama passes it to its runner
     // as the budget. A generic custom server gets the request exactly as sent, since some of them need
     // max_completion_tokens.
-    private ChatCompletionRequest normalizeTokenLimits(ChatCompletionRequest request) {
+    // Bedrock also gets no penalty of 0: the playground seeds 0 for both, AWS does not say every Chat Completions model
+    // accepts the fields, and 0 is the API default anyway, so leaving it out changes nothing for a model that does.
+    private ChatCompletionRequest normalizeForProvider(ChatCompletionRequest request) {
         if (provider == LlmProvider.OLLAMA) {
             return ChatCompletionRequest.builder()
                     .from(request)
@@ -94,6 +96,8 @@ public class CustomLlmProvider implements LlmProviderService {
                     .from(request)
                     .maxCompletionTokens(firstPositiveTokenLimit(request))
                     .maxTokens(null)
+                    .frequencyPenalty(nonZeroOrNull(request.frequencyPenalty()))
+                    .presencePenalty(nonZeroOrNull(request.presencePenalty()))
                     .build();
         }
         return request;
@@ -106,6 +110,10 @@ public class CustomLlmProvider implements LlmProviderService {
 
     private static Integer positiveOrNull(Integer tokens) {
         return tokens != null && tokens > 0 ? tokens : null;
+    }
+
+    private static Double nonZeroOrNull(Double penalty) {
+        return penalty != null && penalty != 0 ? penalty : null;
     }
 
 }

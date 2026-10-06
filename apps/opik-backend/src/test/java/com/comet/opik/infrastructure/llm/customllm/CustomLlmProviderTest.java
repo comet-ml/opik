@@ -126,6 +126,36 @@ class CustomLlmProviderTest {
         assertThat(body.get("max_tokens").asInt()).isEqualTo(4000);
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("penaltyCases")
+    void generateSendsOnlyThePenaltiesTheProviderNeeds(
+            String name, LlmProvider provider, Double penalty, Double expectedPenalty) {
+        var request = ChatCompletionRequest.builder()
+                .from(request(4000, null))
+                .frequencyPenalty(penalty)
+                .presencePenalty(penalty)
+                .build();
+
+        newProvider(provider).generate(request, "workspace-id");
+
+        var body = sentBody();
+        assertThat(body.has("frequency_penalty") ? body.get("frequency_penalty").asDouble() : null)
+                .as("[%s] frequency_penalty", name)
+                .isEqualTo(expectedPenalty);
+        assertThat(body.has("presence_penalty") ? body.get("presence_penalty").asDouble() : null)
+                .as("[%s] presence_penalty", name)
+                .isEqualTo(expectedPenalty);
+    }
+
+    private static Stream<Arguments> penaltyCases() {
+        return Stream.of(
+                arguments("Bedrock gets no penalty of 0", LlmProvider.BEDROCK, 0.0, null),
+                arguments("Bedrock keeps a penalty the user set", LlmProvider.BEDROCK, 0.5, 0.5),
+                arguments("Bedrock gets no penalty when none is set", LlmProvider.BEDROCK, null, null),
+                arguments("Ollama keeps a penalty of 0", LlmProvider.OLLAMA, 0.0, 0.0),
+                arguments("A custom provider keeps a penalty of 0", LlmProvider.CUSTOM_LLM, 0.0, 0.0));
+    }
+
     private static Stream<Arguments> tokenLimitCases() {
         return Stream.of(
                 arguments("Ollama gets the limit as max_tokens", LlmProvider.OLLAMA, 4000, null, 4000, null),
