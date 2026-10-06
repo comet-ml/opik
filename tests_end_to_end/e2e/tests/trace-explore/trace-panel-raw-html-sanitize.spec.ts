@@ -34,6 +34,9 @@ import { LogsPage } from '@e2e/pom/logs.page';
  * reads an element or attribute out of the rendered message.
  */
 
+/** The one href the schema's protocol list allows, asserted to survive intact. */
+const SAFE_HREF = 'https://example.com/cuj-raw-html-sanitize-safe';
+
 /**
  * One assistant answer carrying a marker per class of markup the schema has an
  * opinion about.
@@ -61,9 +64,22 @@ const RAW_HTML_ANSWER = [
   // to the `<details>`, whose own text is both markers run together.
   '<details><summary>SUMMARY_MARKER</summary><p>DETAILS_MARKER</p></details>',
   '',
-  '<img alt="ALT_MARKER" src="/cuj-raw-html-sanitize-probe">',
+  // The handler vector rides on the allowed `<img>`: `defaultSchema` lists
+  // `alt` and `src` for `img` and no event handler anywhere, so this element
+  // must arrive carrying its two allowed attributes and nothing else.
+  '<img alt="ALT_MARKER" src="/cuj-raw-html-sanitize-probe" onerror="alert(\'ONERROR_MARKER\')">',
   '',
   '<span style="color:red">RED_TEXT_MARKER</span>',
+  '',
+  // The protocol vector, deliberately a *pair*. `defaultSchema.protocols.href`
+  // lists http/https/mailto and friends and not `javascript`, so the first
+  // anchor must arrive stripped of its href. The second anchor is what makes
+  // that discriminating: `href` is otherwise passed straight through to the
+  // DOM, so "the javascript: one has no href" could be a renderer that drops
+  // every href — only the safe one surviving beside it rules that out.
+  '<p><a href="javascript:alert(\'JSHREF_MARKER\')">JSLINK_MARKER</a></p>',
+  '',
+  `<p><a href="${SAFE_HREF}">SAFELINK_MARKER</a></p>`,
   '',
   '<table><thead><tr><th>HEAD_MARKER</th></tr></thead>' +
     '<tbody><tr><td>CELL_MARKER</td></tr></tbody></table>',
@@ -104,6 +120,8 @@ const VISIBLE_TEXT_MARKERS = [
   'SUMMARY_MARKER',
   'DETAILS_MARKER',
   'RED_TEXT_MARKER',
+  'JSLINK_MARKER',
+  'SAFELINK_MARKER',
   'HEAD_MARKER',
   'CELL_MARKER',
   'TAIL_MARKER',
@@ -209,7 +227,7 @@ test.describe('Trace Explore — raw HTML in an SDK-logged LLM message', {
   );
 
   test(
-    'Script and inline-style markup is filtered out of the rendered message',
+    'Script, event-handler, javascript: URL and inline-style markup are all filtered out',
     { tag: ['@cap:traces.messages-tab'] },
     async ({ project, sdkClient, testNamespace, page }) => {
       // Registered before the panel is ever opened, so a dialog raised by
@@ -269,6 +287,38 @@ test.describe('Trace Explore — raw HTML in an SDK-logged LLM message', {
         ).not.toHaveAttribute('style');
         await expect(styledSpan).toBeVisible();
         await expect(styledSpan).toHaveText('RED_TEXT_MARKER');
+      });
+
+      await test.step('The event-handler attribute is dropped and the image is not', async () => {
+        // `onerror` is the vector that executes without a click. Asserted
+        // alongside the two attributes the schema *does* allow, so a build that
+        // dropped the whole element — which would also satisfy "no onerror" —
+        // fails here instead of passing quietly.
+        const image = markdown.getByRole('img', { name: 'ALT_MARKER' });
+        await expect(image, 'the <img> itself survives').toHaveCount(1);
+        await expect(image).toHaveAttribute('src', '/cuj-raw-html-sanitize-probe');
+        await expect(
+          image,
+          'no event-handler attribute may reach the DOM',
+        ).not.toHaveAttribute('onerror');
+      });
+
+      await test.step('A javascript: href is dropped and a safe one beside it is kept', async () => {
+        // The pair is the assertion. Both anchors are the same element with the
+        // same allowed attribute; only the protocol differs, so this isolates
+        // `defaultSchema.protocols.href` from "hrefs do not render here".
+        const jsLink = markdown.locator('a').filter({ hasText: /^JSLINK_MARKER$/ });
+        await expect(jsLink, 'the <a> survives as an element').toHaveCount(1);
+        await expect(
+          jsLink,
+          'a javascript: URL must not reach the DOM as an href',
+        ).not.toHaveAttribute('href');
+        await expect(jsLink).toHaveText('JSLINK_MARKER');
+
+        await expect(
+          markdown.locator('a').filter({ hasText: /^SAFELINK_MARKER$/ }),
+          'an allowed-protocol href must survive, or the assertion above proves nothing',
+        ).toHaveAttribute('href', SAFE_HREF);
       });
 
       await test.step('The script element and its text are both gone', async () => {
