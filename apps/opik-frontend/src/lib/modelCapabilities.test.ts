@@ -10,7 +10,7 @@ describe("supportsAudioInput", () => {
       PROVIDER_MODEL_TYPE.GEMINI_3_5_TRANSCRIBE,
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
       PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
-      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_AUDIO_PREVIEW,
+      "azure/gpt-4o-audio-preview-2024-12-17",
     ])("allows audio for %s", (model) => {
       expect(supportsAudioInput(model)).toBe(true);
     });
