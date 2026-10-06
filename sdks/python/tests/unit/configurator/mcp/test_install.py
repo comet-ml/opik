@@ -1261,3 +1261,46 @@ class TestTheSignInIsItsOwnStep:
 
         assert report.sign_in == "failed"
         assert view._sign_in_failed == ("Claude Code",)
+
+
+class TestCodexSignsInWhileBeingAdded:
+    """`codex mcp add` opens the browser sign-in and waits for it."""
+
+    @staticmethod
+    def _run(monkeypatch, result):
+        monkeypatch.setattr(
+            install.mcp_detection,
+            "detect_hosted_mcp_server",
+            lambda **kwargs: "https://www.comet.com/opik/api/v1/mcp",
+        )
+        codex = _target("codex", True, mock.Mock(return_value=result))
+        codex.signs_in_when_added = True
+        monkeypatch.setattr(targets, "HOST_TARGETS", [codex])
+        args = _make_args(host_keys=["codex"])
+        return install.setup_mcp_server(**args), args["view"]
+
+    def test_the_spinner_says_it_is_waiting_for_the_browser(self, monkeypatch):
+        _, view = self._run(
+            monkeypatch,
+            targets.InstallResult("Codex", True, "Added", sign_in_attempted=True),
+        )
+
+        assert view.steps[-2] == (
+            "Adding Opik MCP to codex, waiting for the sign-in in your browser"
+        )
+
+    def test_a_sign_in_that_ran_out_of_time__is_named_for_the_ending(self, monkeypatch):
+        report, _ = self._run(
+            monkeypatch,
+            targets.InstallResult(
+                "Codex",
+                True,
+                "Added",
+                sign_in_attempted=True,
+                sign_in_failed=True,
+            ),
+        )
+
+        assert report.registered == ("codex",)
+        assert report.sign_in == "failed"
+        assert report.sign_in_pending == ("codex",)

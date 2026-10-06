@@ -93,10 +93,59 @@ class TestRichInstallView:
     def test_done__sign_in_needed__is_the_one_thing_it_still_says(self, view):
         installer = view.RichInstallView()
         installer.plan("Opik Cloud", "Hosted server", needs_sign_in=True)
-        with view.console.capture() as capture:
+        with (
+            mock.patch.object(
+                view.interactive_helpers, "is_interactive", return_value=True
+            ),
+            view.console.capture() as capture,
+        ):
             installer.done()
 
         assert "Signing in" in capture.get()
+
+    def test_done__sign_in_needed__without_a_terminal__leaves_it_to_the_next_steps(
+        self, view
+    ):
+        """The hint says every client prompts; Claude Code does not, and the
+        unattended ending names each client's own sign-in command instead."""
+        installer = view.RichInstallView()
+        installer.plan("Opik Cloud", "Hosted server", needs_sign_in=True)
+        with (
+            mock.patch.object(
+                view.interactive_helpers, "is_interactive", return_value=False
+            ),
+            view.console.capture() as capture,
+        ):
+            installer.done()
+
+        assert "Signing in" not in capture.get()
+
+    @pytest.mark.parametrize("interactive", [True, False])
+    def test_done__sign_in_pending__said_once(self, view, interactive):
+        """In a terminal by this block; without one by the next steps instead."""
+        installer = view.RichInstallView()
+        installer.sign_in_failed(["Codex"])
+        with (
+            mock.patch.object(
+                view.interactive_helpers, "is_interactive", return_value=interactive
+            ),
+            view.console.capture() as capture,
+        ):
+            installer.done()
+
+        assert ("codex mcp login opik-mcp" in capture.get()) is interactive
+
+    def test_next_steps__each_client_then_a_new_session(self, view):
+        with view.console.capture() as capture:
+            view.render_next_steps(
+                ["Claude Code: sign in with `claude mcp login opik-mcp`."]
+            )
+
+        out = capture.get()
+        assert "Next steps" in out
+        assert "claude mcp login opik-mcp" in out
+        assert "Start a new session" in out
+        assert out.index("claude mcp login") < out.index("Start a new session")
 
     def test_done__does_not_say_done(self, view):
         """The run goes on to the suggested first prompt, so it is not done yet."""
@@ -682,8 +731,11 @@ class TestTheConfigureEndingLinksTheProject:
 
 
 class TestTheEndingAfterAFailedSignIn:
-    def test_ends_on_the_step_left__not_on_done(self, terminal):
+    def test_ends_on_the_step_left__not_on_done(self, terminal, monkeypatch):
         rich_view, recorder = terminal
+        monkeypatch.setattr(
+            rich_view.interactive_helpers, "is_interactive", lambda: True
+        )
         view = rich_view.RichInstallView()
         view.sign_in_failed(["Claude Code"])
 

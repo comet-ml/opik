@@ -16,6 +16,8 @@ from opik.cli import status_view
 from opik.configurator import consent, opik_rest_helpers
 from opik.configurator import configure as opik_configure, interactive_helpers
 from opik.configurator import mcp as mcp_installer
+from opik.configurator.mcp import spec as mcp_spec
+from opik.configurator.mcp import view as mcp_view
 
 
 #: The lookup only picks which link to print, so it must not stall the ending.
@@ -138,7 +140,15 @@ def _setup_assistants(
         assume_confirmed=mcp_verdict.reason is consent.Reason.REQUESTED,
     )
     # This path does not redirect, so it ends the run itself, if anything was written.
-    if outcome.clients or outcome.skills:
+    if outcome.clients and not interactive:
+        install_view.render_next_steps(
+            mcp_view.next_steps(
+                outcome.registered_clients,
+                hosted=outcome.transport == mcp_spec.McpConnectionMode.REMOTE.value,
+                sign_in_pending=outcome.sign_in_pending,
+            )
+        )
+    elif outcome.clients or outcome.skills:
         install_view.render_restart_note(mcp_installed=bool(outcome.clients))
 
     # `mcp_decision` stays the answer to the question; a skipped picker is

@@ -403,6 +403,63 @@ class TestInstallCodex:
         assert result.succeeded is False
         assert "exit 1" in result.detail
 
+    @staticmethod
+    def _codex_add_times_out(monkeypatch, registered_after):
+        """`codex mcp add` outlives the timeout; `get` answers from ``registered_after``."""
+        monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/codex")
+        add_ran = []
+
+        def run(command, **kwargs):
+            if command[2] == "add":
+                add_ran.append(True)
+                raise subprocess.TimeoutExpired(cmd=command, timeout=60)
+            if command[2] == "get" and add_ran and registered_after is not None:
+                payload = {"name": "opik-mcp", "transport": registered_after}
+                return subprocess.CompletedProcess(
+                    command, 0, stdout=json.dumps(payload), stderr=""
+                )
+            code = 0 if command[2] == "remove" else 1
+            return subprocess.CompletedProcess(command, code, stdout="", stderr="")
+
+        monkeypatch.setattr(targets.subprocess, "run", run)
+
+    def test_install_codex__hosted_sign_in_not_finished__registered_but_pending(
+        self, monkeypatch
+    ):
+        """The add wrote the entry, then waited on a browser nobody used."""
+        self._codex_add_times_out(
+            monkeypatch,
+            registered_after={"type": "streamable_http", "url": REMOTE_SERVER_SPEC.url},
+        )
+
+        result = targets._install_codex(REMOTE_SERVER_SPEC)
+
+        assert result.succeeded is True
+        assert result.sign_in_attempted is True
+        assert result.sign_in_failed is True
+        assert "did not finish" in result.detail
+
+    def test_install_codex__hosted_timed_out_with_nothing_written__fails(
+        self, monkeypatch
+    ):
+        self._codex_add_times_out(monkeypatch, registered_after=None)
+
+        result = targets._install_codex(REMOTE_SERVER_SPEC)
+
+        assert result.succeeded is False
+        assert "did not finish within" in result.detail
+
+    def test_install_codex__local_timed_out__fails(self, monkeypatch):
+        """No sign-in to wait for, so a hang is a failure."""
+        self._codex_add_times_out(
+            monkeypatch,
+            registered_after={"type": "stdio", "command": "/usr/bin/uvx"},
+        )
+
+        result = targets._install_codex(SERVER_SPEC)
+
+        assert result.succeeded is False
+
     def test_install_codex__does_not_leak_api_key_into_detail(self, monkeypatch):
         monkeypatch.setattr(targets.shutil, "which", lambda name: None)
         assert "some-key" not in targets._install_codex(SERVER_SPEC).detail

@@ -7,9 +7,9 @@ the CLI supplies the ``rich`` one, and tests inject a recording double.
 import abc
 import contextlib
 import dataclasses
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
-from opik.configurator.mcp import spec as mcp_spec
+from opik.configurator.mcp import targets as mcp_targets
 
 
 @dataclasses.dataclass
@@ -54,11 +54,70 @@ SIGN_IN_HINT = (
 
 def sign_in_failed_message(client_display_name: str) -> str:
     """What to do about a client that was registered but not signed in."""
-    return (
-        f"{client_display_name} is registered but not signed in. Run "
-        f"`claude mcp login {mcp_spec.SERVER_NAME}` to finish it — until then the server "
-        "contributes no tools."
+    target = next(
+        (
+            target
+            for target in mcp_targets.HOST_TARGETS
+            if target.display_name == client_display_name
+        ),
+        None,
     )
+    finish = (
+        f"Run `{target.sign_in_command}` to finish it"
+        if target is not None and target.sign_in_command
+        else "Sign in from its MCP settings"
+    )
+    return (
+        f"{client_display_name} is registered but not signed in. {finish} — until "
+        "then the server contributes no tools."
+    )
+
+
+def next_steps(
+    registered_clients: Sequence[str],
+    hosted: bool,
+    sign_in_pending: Sequence[str] = (),
+) -> List[str]:
+    """What is left in each client after a run without a terminal, a line each.
+
+    Whoever ran it, often a coding agent, can run these next. Such a run signs
+    nobody in except in Codex, whose `codex mcp add` does it; ``sign_in_pending``
+    names the clients whose sign-in did not finish.
+    """
+    steps = []
+    for key in registered_clients:
+        target = mcp_targets.find_target(key)
+        if target is None:
+            continue
+        name = target.display_name
+        check = f"check with `{target.status_command}`"
+        if not hosted:
+            if target.status_command:
+                steps.append(f"{name}: {check}.")
+        elif key in sign_in_pending and target.sign_in_command:
+            steps.append(
+                f"{name}: the sign-in did not finish. Sign in with "
+                f"`{target.sign_in_command}`, then {check}."
+            )
+        elif target.signs_in_when_added:
+            steps.append(
+                f"{name}: {check} that it is signed in; if not, "
+                f"`{target.sign_in_command}`."
+            )
+        elif target.sign_in_command:
+            # Builds without `claude mcp login` answer it with the group's help
+            # and exit 0, so the in-session route is named as well.
+            older = (
+                " (on older versions, `/mcp` in a session)"
+                if key == "claude-code"
+                else ""
+            )
+            steps.append(
+                f"{name}: sign in with `{target.sign_in_command}`{older}, then {check}."
+            )
+        else:
+            steps.append(f"{name}: sign in from its MCP settings when it asks.")
+    return steps
 
 
 class InstallView(abc.ABC):

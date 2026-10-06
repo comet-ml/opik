@@ -2,9 +2,11 @@
 
 import logging
 import os
+import urllib.parse
 from typing import Dict, List, NamedTuple, Optional, Tuple, TypedDict, cast
 
 import click
+import pydantic
 
 import opik.config as opik_config
 import opik.environment_details as environment_details
@@ -15,9 +17,13 @@ from opik.cli import configure as configure_cli
 from opik.cli import assistants
 from opik.cli import install_view
 from opik.cli import status_view
+from opik.configurator import configure as opik_configure
 from opik.configurator import consent
 from opik.configurator import interactive_helpers
+from opik.configurator import opik_rest_helpers
 from opik.configurator.mcp import handoff as mcp_handoff
+from opik.configurator.mcp import spec as mcp_spec
+from opik.configurator.mcp import view as mcp_view
 from opik.configurator.mcp import status as mcp_status
 from opik.configurator.mcp import targets as mcp_targets
 
@@ -88,6 +94,197 @@ def _opik_cloud_params() -> McpSetupParams:
         "self_hosted_comet": False,
         "check_tls_certificate": opik_config.OpikConfig().check_tls_certificate,
     }
+
+
+#: `--deployment` values, in the order the deployment question lists them.
+_DEPLOYMENT_FLAG_VALUES: Dict[str, interactive_helpers.DeploymentType] = {
+    "cloud": interactive_helpers.DeploymentType.CLOUD,
+    "self-hosted": interactive_helpers.DeploymentType.SELF_HOSTED,
+    "local": interactive_helpers.DeploymentType.LOCAL,
+}
+
+
+def _check_connection_flags(
+    deployment: Optional[interactive_helpers.DeploymentType],
+    url: Optional[str],
+    workspace: Optional[str],
+) -> None:
+    """Refuse a flag combination before the run starts, so a typo is a usage
+    error rather than a failed run in the funnel."""
+    if deployment is None:
+        if url or workspace:
+            raise click.UsageError(
+                "--url and --workspace describe the Opik that --deployment names; "
+                "pass --deployment local or --deployment self-hosted with them."
+            )
+        return
+    if url is not None:
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise click.UsageError(
+                "--url needs a full address, such as http://localhost:5173 or "
+                "https://comet.example.com."
+            )
+        # It would be written into the AI client's config and printed back.
+        if parsed.username is not None or parsed.password is not None:
+            raise click.UsageError(
+                "--url must not carry credentials; the API key comes from OPIK_API_KEY."
+            )
+    if deployment is interactive_helpers.DeploymentType.CLOUD and (url or workspace):
+        # The workspace is the one the user signs in to.
+        raise click.UsageError("--deployment cloud takes no --url or --workspace.")
+    if deployment is interactive_helpers.DeploymentType.LOCAL and workspace:
+        raise click.UsageError(
+            "--deployment local takes no --workspace: a local Opik has one, "
+            f"`{opik_config.OPIK_WORKSPACE_DEFAULT_NAME}`."
+        )
+    if deployment is interactive_helpers.DeploymentType.SELF_HOSTED:
+        if not url:
+            raise click.UsageError(
+                "--deployment self-hosted needs --url, the address of your Comet "
+                "platform."
+            )
+        if not workspace:
+            # Not guessed: an account with several would be read from the wrong one.
+            raise click.UsageError(
+                "--deployment self-hosted needs --workspace, or OPIK_WORKSPACE: the "
+                "segment after /opik/ in your Opik URL."
+            )
+
+
+def _check_tls_for_a_named_opik() -> bool:
+    """Whether to check certificates for an Opik named on the command line.
+
+    A saved "don't check" was made for the saved Opik, and this run may send its
+    API key to another one, so only the environment can turn the check off.
+    """
+    value = os.environ.get("OPIK_CHECK_TLS_CERTIFICATE", "").strip()
+    if not value:
+        return True
+    try:
+        return pydantic.TypeAdapter(bool).validate_python(value)
+    except pydantic.ValidationError:
+        return True
+
+
+def _local_params(url: str, check_tls_certificate: bool) -> McpSetupParams:
+    """An Opik run by the user (open source): no API key, one workspace."""
+    base_url = url_helpers.get_base_url(url)
+    return {
+        "api_key": None,
+        "workspace": opik_config.OPIK_WORKSPACE_DEFAULT_NAME,
+        "base_url": base_url,
+        "api_url": urllib.parse.urljoin(base_url, "api/"),
+        "use_local": True,
+        "self_hosted_comet": False,
+        "check_tls_certificate": check_tls_certificate,
+    }
+
+
+def _self_hosted_params(
+    url: str, workspace: str, check_tls_certificate: bool
+) -> McpSetupParams:
+    """A self-hosted Comet platform, checked before anything is written.
+
+    The API key comes from ``OPIK_API_KEY`` only: a flag would leave it in the
+    shell history and in a coding agent's transcript.
+    """
+    api_key = os.environ.get("OPIK_API_KEY", "").strip()
+    if not api_key:
+        raise click.ClickException(
+            "--deployment self-hosted reads the API key from OPIK_API_KEY, which is "
+            "not set. Set it in the environment and re-run."
+        )
+    base_url = url_helpers.get_base_url(url)
+
+    try:
+        if not opik_rest_helpers.is_api_key_correct(
+            api_key, url=base_url, check_tls_certificate=check_tls_certificate
+        ):
+            raise click.ClickException(f"OPIK_API_KEY is not valid on {base_url}.")
+        if not opik_rest_helpers.is_workspace_name_correct(
+            api_key=api_key,
+            workspace=workspace,
+            url=base_url,
+            check_tls_certificate=check_tls_certificate,
+        ):
+            raise click.ClickException(
+                f"This API key has no workspace `{workspace}` on {base_url}."
+            )
+    except ConnectionError as error:
+        raise click.ClickException(
+            f"Could not check the API key on {base_url}: {error}"
+        ) from error
+
+    return {
+        "api_key": api_key,
+        "workspace": workspace,
+        "base_url": base_url,
+        "api_url": urllib.parse.urljoin(base_url, "opik/api/"),
+        "use_local": False,
+        "self_hosted_comet": True,
+        "check_tls_certificate": check_tls_certificate,
+    }
+
+
+def _flag_params(
+    deployment: interactive_helpers.DeploymentType,
+    url: Optional[str],
+    workspace: Optional[str],
+) -> McpSetupParams:
+    """The connection the flags name, checked before anything is written.
+
+    Asks nothing, so it is how a run without a terminal says which Opik to use.
+    ``configure`` has already refused flags that do not go together.
+    """
+    check_tls_certificate = _check_tls_for_a_named_opik()
+    if deployment is interactive_helpers.DeploymentType.CLOUD:
+        params = _opik_cloud_params()
+        params["check_tls_certificate"] = check_tls_certificate
+        return params
+    if deployment is interactive_helpers.DeploymentType.LOCAL:
+        params = _local_params(
+            url or opik_configure.OPIK_BASE_URL_LOCAL,
+            check_tls_certificate=check_tls_certificate,
+        )
+        # Checked now: the AI client would only find out after the restart.
+        if not opik_rest_helpers.is_instance_active(
+            params["base_url"], check_tls_certificate=check_tls_certificate
+        ):
+            raise click.ClickException(
+                f"No Opik answers at {params['base_url']}. Start it, or pass the "
+                "address it runs at: --url <url>."
+            )
+        return params
+    assert url is not None and workspace is not None  # checked by `configure`
+    return _self_hosted_params(
+        url, workspace, check_tls_certificate=check_tls_certificate
+    )
+
+
+def _deployment_commands(hosts: Tuple[str, ...]) -> str:
+    """The three ways to name an Opik without a terminal, for an error to end on."""
+    clients = " ".join(f"--ai-client {host}" for host in hosts)
+    return (
+        f"    opik mcp configure {clients} --deployment cloud\n"
+        f"    opik mcp configure {clients} --deployment local --url <url>\n"
+        f"    opik mcp configure {clients} --deployment self-hosted --url <url> "
+        "--workspace <workspace>\n\n"
+        "Opik Cloud needs no API key: the AI client signs in in the browser. "
+        "Self-hosted reads the key from OPIK_API_KEY."
+    )
+
+
+def _deployment_name(deployment: Optional[interactive_helpers.DeploymentType]) -> str:
+    """For analytics, in `opik configure`'s vocabulary; empty without the flag."""
+    return "" if deployment is None else deployment.name.lower()
+
+
+def _names_an_opik(saved: opik_config.OpikConfig) -> bool:
+    """Whether anything on this machine says which Opik, key or no key."""
+    return saved.config_file_exists or bool(
+        os.environ.get("OPIK_URL_OVERRIDE", "").strip()
+    )
 
 
 #: The variables that take precedence over ~/.opik.config for which Opik to use.
@@ -186,11 +383,35 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     help="Ask which Opik and workspace to connect to instead of using the ones "
     "saved in ~/.opik.config, which is left unchanged.",
 )
+@click.option(
+    "--deployment",
+    type=click.Choice(list(_DEPLOYMENT_FLAG_VALUES), case_sensitive=False),
+    default=None,
+    help="Which Opik to connect to, instead of the saved one or the question: "
+    "`cloud` (the hosted server; no API key, the AI client signs in in the "
+    "browser), `local` (an Opik you run yourself, at http://localhost:5173 unless "
+    "--url says otherwise) or `self-hosted` (a Comet platform at --url, with the "
+    "API key from OPIK_API_KEY).",
+)
+@click.option(
+    "--url",
+    default=None,
+    help="Where Opik runs, for --deployment local or self-hosted.",
+)
+@click.option(
+    "--workspace",
+    default=None,
+    help="The workspace, for --deployment self-hosted: the segment after /opik/ "
+    "in your Opik URL. Defaults to OPIK_WORKSPACE.",
+)
 def configure(
     local_server: bool,
     hosts: Tuple[str, ...],
     skills_flag: Optional[bool],
     ignore_opik_config: bool,
+    deployment: Optional[str],
+    url: Optional[str],
+    workspace: Optional[str],
 ) -> None:
     """Register the Opik MCP server with your AI client(s).
 
@@ -206,16 +427,30 @@ def configure(
 
         opik mcp configure --ai-client cursor
 
+    With no saved configuration it then uses a local Opik if one answers at
+    http://localhost:5173, and otherwise needs `--deployment` to say which Opik:
+
+        opik mcp configure --ai-client cursor --deployment cloud
+
     By default this uses the Comet-hosted MCP server when your deployment offers
     one, falling back to a local server otherwise. Pass `--local-server` to force
     the local server.
     """
+    deployment_type = (
+        None if deployment is None else _DEPLOYMENT_FLAG_VALUES[deployment]
+    )
+    if deployment_type is interactive_helpers.DeploymentType.SELF_HOSTED:
+        workspace = workspace or os.environ.get("OPIK_WORKSPACE", "").strip() or None
+    _check_connection_flags(deployment_type, url=url, workspace=workspace)
     run_configure(
         local_server=local_server,
         hosts=hosts,
         skills_flag=skills_flag,
         ignore_opik_config=ignore_opik_config,
         invoked_via="direct",
+        deployment=deployment_type,
+        url=url,
+        workspace=workspace,
     )
 
 
@@ -226,20 +461,29 @@ def run_configure(
     skills_flag: Optional[bool],
     ignore_opik_config: bool,
     invoked_via: str,
+    deployment: Optional[interactive_helpers.DeploymentType] = None,
+    url: Optional[str] = None,
+    workspace: Optional[str] = None,
 ) -> None:
     """The `opik mcp configure` flow, also entered from `opik configure`.
 
     `@entry_point` keeps its events reported on that redirect, where analytics
-    would otherwise drop them as a nested SDK call.
+    would otherwise drop them as a nested SDK call. ``deployment``, ``url`` and
+    ``workspace`` are the flags, already checked against each other.
     """
     # Before the first event, so every event of this run carries how it was
     # entered: a redirect from `opik configure` converts differently from a cold
     # run, and the funnel has to tell them apart.
     environment_details.set_run_context(invoked_via=invoked_via)
 
-    saved = None if ignore_opik_config else opik_config.OpikConfig()
-    # With the flag the run starts where a machine with no config does: Cloud, no
-    # key — which is also what its entry event reports.
+    # `--deployment` answers the question the saved config would, so it replaces it.
+    saved = (
+        None
+        if ignore_opik_config or deployment is not None
+        else opik_config.OpikConfig()
+    )
+    # With either flag the run starts where a machine with no config does: Cloud,
+    # no key — which is also what its entry event reports.
     params = _opik_cloud_params() if saved is None else _resolve_setup_params(saved)
 
     # Same reason as `opik configure`: the click frame is what makes this visible.
@@ -255,6 +499,8 @@ def run_configure(
         skills_requested=str(skills_flag),
         local_server=local_server,
         ignore_opik_config=ignore_opik_config,
+        # Empty when the saved config or the question decides.
+        deployment_flag=_deployment_name(deployment),
         # This command reuses an existing Opik configuration, so the account is
         # normally known from the start — this is the MCP funnel's entry point.
         **_identity(params),
@@ -286,7 +532,17 @@ def run_configure(
         if not host_keys and invoked_via == "direct":
             install_view.render_mcp_banner()
 
-        if saved is not None and not _needs_opik_configuration(params):
+        if deployment is not None:
+            stage = "deployment"
+            params = _flag_params(deployment, url=url, workspace=workspace)
+            install_view.render_connection(
+                opik_url=params["base_url"],
+                # Cloud's is the one the user signs in to; a local Opik has one.
+                workspace=params["workspace"] if params["self_hosted_comet"] else None,
+                source="the --deployment flag",
+                change_command=None,
+            )
+        elif saved is not None and not _needs_opik_configuration(params):
             # A redirect from `opik configure` has just shown these settings.
             if invoked_via == "direct":
                 install_view.render_connection(
@@ -295,16 +551,48 @@ def run_configure(
                     workspace=None if params["use_local"] else params["workspace"],
                     source=_saved_source(saved),
                 )
-        else:
-            if not interactive_helpers.is_interactive():
+        elif not interactive_helpers.is_interactive():
+            if saved is None:
+                # `--ignore-opik-config`, which asks, with no terminal to ask in.
                 raise click.ClickException(
                     "`--ignore-opik-config` asks which Opik to connect to, which needs "
-                    "an interactive terminal."
-                    if ignore_opik_config
-                    else "Opik is not configured yet, and configuring it needs an "
-                    "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
-                    "`opik configure`, then re-run this command."
+                    "an interactive terminal. Without one, name it with --deployment: "
+                    "cloud, local or self-hosted."
                 )
+            stage = "deployment"
+            if _names_an_opik(saved):
+                raise click.ClickException(
+                    f"{_saved_source(saved)} names an Opik but no API key, and there "
+                    "is no terminal to ask for one. Set OPIK_API_KEY in the "
+                    "environment and re-run, or name the Opik to connect to:\n\n"
+                    + _deployment_commands(hosts)
+                )
+            # Nothing names an Opik and nobody to ask: a local one that answers is
+            # the one this machine runs.
+            found = _local_params(
+                opik_configure.OPIK_BASE_URL_LOCAL,
+                check_tls_certificate=saved.check_tls_certificate,
+            )
+            if not opik_rest_helpers.is_instance_active(found["base_url"]):
+                raise click.ClickException(
+                    "Opik is not configured on this machine (no ~/.opik.config, no "
+                    "OPIK_API_KEY), no Opik answers at "
+                    f"{opik_configure.OPIK_BASE_URL_LOCAL}, and there is no terminal "
+                    "to ask which one to connect to. Name it:\n\n"
+                    + _deployment_commands(hosts)
+                )
+            params = found
+            install_view.render_connection(
+                opik_url=params["base_url"],
+                workspace=None,
+                source="found running; nothing is saved in ~/.opik.config",
+                change_command=(
+                    "opik mcp configure "
+                    + " ".join(f"--ai-client {host}" for host in hosts)
+                    + " --deployment cloud"
+                ),
+            )
+        else:
             # No usable config (none, one without an API key, or one the flag set
             # aside). The deployment picker comes first; the client picker follows,
             # inside `setup` below, which is the order the onboarding funnel counts
@@ -312,14 +600,12 @@ def run_configure(
             # go to the AI client's config. Cloud needs no API key at all (the
             # hosted server signs in with OAuth).
             stage = "deployment"
-            deployment = configure_cli.ask_for_deployment_type(MCP_DEPLOYMENT_QUESTION)
-            if deployment is interactive_helpers.DeploymentType.CLOUD:
+            answer = configure_cli.ask_for_deployment_type(MCP_DEPLOYMENT_QUESTION)
+            if answer is interactive_helpers.DeploymentType.CLOUD:
                 params = _opik_cloud_params()
             else:
                 stage = "credentials"
-                params = cast(
-                    McpSetupParams, configure_cli.ask_for_connection(deployment)
-                )
+                params = cast(McpSetupParams, configure_cli.ask_for_connection(answer))
                 # A gap before the client picker, which the questions do not leave.
                 click.echo()
             if ignore_opik_config:
@@ -357,6 +643,7 @@ def run_configure(
             error_type=type(exception).__name__,
             interactive=interactive_helpers.is_interactive(),
             ignore_opik_config=ignore_opik_config,
+            deployment_flag=_deployment_name(deployment),
             **_identity(params),
         )
         raise
@@ -405,6 +692,7 @@ def run_configure(
         # with; empty when nothing was offered.
         closing_prompt=handoff.prompt_kind or "",
         ignore_opik_config=ignore_opik_config,
+        deployment_flag=_deployment_name(deployment),
         # Resolved again, not reused: the answers on the way through are what turn
         # an unconfigured run into an attributed one.
         **_identity(params),
@@ -431,6 +719,8 @@ class _Handoff(NamedTuple):
     command: Optional[List[str]] = None
     #: Declined with Ctrl-C rather than `n`, so the ending replaces the prompt line.
     quit_at_offer: bool = False
+    #: What is left to do in each client, for a run without a terminal.
+    next_steps: Tuple[str, ...] = ()
 
 
 def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Handoff:
@@ -446,7 +736,17 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
 
     wrote_config = bool(outcome.registered_clients)
     if not interactive_helpers.is_interactive():
-        return _Handoff(outcome="no_terminal", wrote_config=wrote_config)
+        return _Handoff(
+            outcome="no_terminal",
+            wrote_config=wrote_config,
+            next_steps=tuple(
+                mcp_view.next_steps(
+                    outcome.registered_clients,
+                    hosted=outcome.transport == mcp_spec.McpConnectionMode.REMOTE.value,
+                    sign_in_pending=outcome.sign_in_pending,
+                )
+            ),
+        )
     if len(outcome.registered_clients) != 1:
         return _Handoff(outcome="not_single_client", wrote_config=wrote_config)
     if outcome.sign_in == "failed":
@@ -511,7 +811,9 @@ def _perform_handoff(handoff: _Handoff) -> None:
     if handoff.display_name is None or handoff.prompt is None:
         # No one client to hand over to: tell a run that wrote config to restart
         # its client, unless the sign-in ending already said what is left.
-        if handoff.wrote_config and handoff.outcome != "sign_in_failed":
+        if handoff.outcome == "no_terminal" and handoff.wrote_config:
+            install_view.render_next_steps(handoff.next_steps)
+        elif handoff.wrote_config and handoff.outcome != "sign_in_failed":
             install_view.render_restart_note(mcp_installed=True)
         return
 

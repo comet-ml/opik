@@ -14,13 +14,20 @@ HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
 
 
 def _get_httpx_client(
-    api_key: Optional[str] = None, workspace: Optional[str] = None
+    api_key: Optional[str] = None,
+    workspace: Optional[str] = None,
+    check_tls_certificate: Optional[bool] = None,
 ) -> httpx.Client:
+    """``check_tls_certificate`` defaults to the saved configuration's setting."""
     config_ = config.OpikConfig()
     client = httpx_client.get(
         workspace=workspace,
         api_key=api_key,
-        check_tls_certificate=config_.check_tls_certificate,
+        check_tls_certificate=(
+            config_.check_tls_certificate
+            if check_tls_certificate is None
+            else check_tls_certificate
+        ),
         compress_json_requests=config_.enable_json_request_compression,
         compression_level=config_.request_compression_level,
     )
@@ -28,7 +35,7 @@ def _get_httpx_client(
     return client
 
 
-def is_instance_active(url: str) -> bool:
+def is_instance_active(url: str, check_tls_certificate: Optional[bool] = None) -> bool:
     """
     Returns True if the given Opik URL responds to an HTTP GET request.
 
@@ -39,7 +46,9 @@ def is_instance_active(url: str) -> bool:
         bool: True if the instance responds with HTTP status 200, otherwise False.
     """
     try:
-        with _get_httpx_client() as http_client:
+        with _get_httpx_client(
+            check_tls_certificate=check_tls_certificate
+        ) as http_client:
             response = http_client.get(
                 url=url_helpers.get_is_alive_ping_url(url), timeout=HEALTH_CHECK_TIMEOUT
             )
@@ -50,7 +59,9 @@ def is_instance_active(url: str) -> bool:
         return False
 
 
-def is_api_key_correct(api_key: str, url: str) -> bool:
+def is_api_key_correct(
+    api_key: str, url: str, check_tls_certificate: Optional[bool] = None
+) -> bool:
     """
     Validates if the provided Opik API key is correct by sending a request to the cloud API.
 
@@ -62,7 +73,9 @@ def is_api_key_correct(api_key: str, url: str) -> bool:
     """
 
     try:
-        with _get_httpx_client(api_key) as client:
+        with _get_httpx_client(
+            api_key, check_tls_certificate=check_tls_certificate
+        ) as client:
             response = client.get(url=url_helpers.get_account_details_url(url))
         if response.status_code == 200:
             return True
@@ -76,7 +89,12 @@ def is_api_key_correct(api_key: str, url: str) -> bool:
         raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
 
-def is_workspace_name_correct(api_key: Optional[str], workspace: str, url: str) -> bool:
+def is_workspace_name_correct(
+    api_key: Optional[str],
+    workspace: str,
+    url: str,
+    check_tls_certificate: Optional[bool] = None,
+) -> bool:
     """
     Verifies whether the provided workspace name exists in the user's cloud Opik account.
 
@@ -93,7 +111,9 @@ def is_workspace_name_correct(api_key: Optional[str], workspace: str, url: str) 
         raise ConfigurationError("API key must be set to check workspace name.")
 
     try:
-        with _get_httpx_client(api_key) as client:
+        with _get_httpx_client(
+            api_key, check_tls_certificate=check_tls_certificate
+        ) as client:
             response = client.get(url=url_helpers.get_workspace_list_url(url))
     except httpx.RequestError as e:
         # Raised for network-related errors such as timeouts

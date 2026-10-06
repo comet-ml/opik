@@ -64,6 +64,8 @@ class InstallReport(NamedTuple):
     #: Ctrl-C or Escape at the picker: "stop", so the skill pack must not follow.
     #: Last rather than beside `declined`, to keep positional reads stable.
     cancelled: bool = False
+    #: Registered, but their sign-in did not finish: what the ending names.
+    sign_in_pending: Tuple[str, ...] = ()
 
 
 NOTHING_INSTALLED = InstallReport(registered=())
@@ -242,7 +244,12 @@ def setup_mcp_server(
     for target in selected_targets:
         # Under a spinner: a client's own CLI takes a few seconds to start, and
         # the run would otherwise sit silent after the picker.
-        with display.step(f"Adding Opik MCP to {target.display_name}"):
+        # Codex's add waits on the browser, which the spinner alone does not say.
+        waits_for_sign_in = mcp_targets.signs_in_while_added(target, server_spec)
+        with display.step(
+            f"Adding Opik MCP to {target.display_name}"
+            + (", waiting for the sign-in in your browser" if waits_for_sign_in else "")
+        ):
             result = target.install(server_spec)
             command = (
                 mcp_targets.sign_in_command(target.key, server_spec)
@@ -316,6 +323,11 @@ def setup_mcp_server(
         transport=connection_mode.value,
         sign_in=sign_in,
         stale_tool=stale_tool,
+        sign_in_pending=tuple(
+            target.key
+            for target, result in zip(selected_targets, results)
+            if result.succeeded and result.sign_in_failed
+        ),
     )
 
 

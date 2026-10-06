@@ -5,7 +5,7 @@ class McpServerEnv(TypedDict, total=False):
     """Environment variables opik-mcp reads. Keys present depend on deployment."""
 
     OPIK_API_KEY: str
-    COMET_WORKSPACE: str
+    OPIK_WORKSPACE: str
     COMET_URL_OVERRIDE: str
     OPIK_URL: str
 
@@ -22,10 +22,12 @@ def build_mcp_env(
     the values the user just configured for the SDK.
 
     These are the variables read by opik-mcp's own settings (``OPIK_API_KEY``,
-    ``COMET_WORKSPACE``, ``COMET_URL_OVERRIDE``, ``OPIK_URL``) — note opik-mcp
-    reuses the Comet-platform env names, not the SDK's ``OPIK_`` prefixed ones:
+    ``OPIK_WORKSPACE``, ``COMET_URL_OVERRIDE``, ``OPIK_URL``) — note opik-mcp
+    takes the instance address as ``COMET_URL_OVERRIDE`` or ``OPIK_URL``, not the
+    SDK's ``OPIK_URL_OVERRIDE``. ``COMET_WORKSPACE`` is its deprecated alias for
+    the workspace, which configs written by older SDKs still carry:
 
-    - Cloud: ``OPIK_API_KEY`` + ``COMET_WORKSPACE``.
+    - Cloud: ``OPIK_API_KEY`` + ``OPIK_WORKSPACE``.
     - Self-hosted Comet: also ``COMET_URL_OVERRIDE`` set to the instance base URL;
       opik-mcp derives the Opik REST base as ``COMET_URL_OVERRIDE + "/opik/api"``.
     - Local OSS: ``OPIK_URL`` set to the full Opik REST base (localhost serves
@@ -40,7 +42,7 @@ def build_mcp_env(
         env["OPIK_API_KEY"] = api_key
 
     if workspace is not None:
-        env["COMET_WORKSPACE"] = workspace
+        env["OPIK_WORKSPACE"] = workspace
 
     if self_hosted_comet:
         env["COMET_URL_OVERRIDE"] = base_url.rstrip("/")
