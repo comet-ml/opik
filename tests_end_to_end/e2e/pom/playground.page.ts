@@ -1481,21 +1481,36 @@ export class PlaygroundPage {
   }
 
   // Compared by position, not scrollLeft: with scroll-driven animations the header
-  // never scrolls, it is translated.
+  // never scrolls, it is translated. Cells pair up by column: `data-header-id` is the
+  // column id and `data-cell-id` is `<rowId>_<columnId>`.
   async panelColumnDrift(panel: 'variables' | 'outputs'): Promise<number> {
     return test.step(`measure ${panel} panel header/body column drift`, async () => {
       const half = (h: 'header' | 'body') =>
         panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
-      const headerLefts = await half('header')
-        .locator('thead tr:last-child th')
-        .evaluateAll((cells) => cells.map((c) => c.getBoundingClientRect().left));
-      const bodyLefts = await half('body')
-        .locator('tbody tr[data-row-id]')
-        .first()
-        .locator('td')
-        .evaluateAll((cells) => cells.map((c) => c.getBoundingClientRect().left));
-      expect(bodyLefts).toHaveLength(headerLefts.length);
-      return Math.max(...headerLefts.map((left, i) => Math.abs(left - bodyLefts[i])));
+      const headerLefts = new Map(
+        await half('header')
+          .locator('th[data-header-id]')
+          .evaluateAll((cells) =>
+            cells.map((c) => [c.getAttribute('data-header-id') ?? '', c.getBoundingClientRect().left] as const),
+          ),
+      );
+      const firstRow = half('body').locator('tr[data-row-id]').first();
+      const cellIdPrefix = `${await firstRow.getAttribute('data-row-id')}_`;
+      const bodyLefts = await firstRow.locator('td[data-cell-id]').evaluateAll(
+        (cells, prefix) =>
+          cells.map((c) => {
+            const columnId = (c.getAttribute('data-cell-id') ?? '').slice(prefix.length);
+            return [columnId, c.getBoundingClientRect().left] as const;
+          }),
+        cellIdPrefix,
+      );
+      const headerless = bodyLefts.filter(([columnId]) => !headerLefts.has(columnId));
+
+      expect(bodyLefts.length).toBeGreaterThan(0);
+      expect(headerless).toEqual([]);
+      return Math.max(
+        ...bodyLefts.map(([columnId, left]) => Math.abs(left - (headerLefts.get(columnId) ?? Number.NaN))),
+      );
     });
   }
 
