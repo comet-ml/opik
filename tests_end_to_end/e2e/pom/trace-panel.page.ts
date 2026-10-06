@@ -711,6 +711,62 @@ export class TracePanelPage {
     });
   }
 
+  // --- Messages tab ---
+
+  /**
+   * The Messages tab trigger.
+   *
+   * Rendered only when `detectLLMMessages` claims the selected node's input or
+   * output and rejects neither, so its presence is an assertion in its own
+   * right and not just a step on the way to the panel.
+   */
+  get messagesTab(): Locator {
+    return this.root.getByRole('tab', { name: 'Messages' });
+  }
+
+  /**
+   * The Messages tab's panel.
+   *
+   * Radix mounts only the selected tab's content, so scoping to this keeps an
+   * assertion off the raw JSON the Details tab renders for the same fields —
+   * which would match every text marker whether or not the Messages tab ever
+   * rendered them.
+   */
+  get messagesTabPanel(): Locator {
+    return this.root.getByRole('tabpanel', { name: 'Messages' });
+  }
+
+  /** The header of one rendered conversation turn, by role. */
+  messageRole(role: 'System' | 'User' | 'Assistant'): Locator {
+    return this.messagesTabPanel.getByRole('heading', { name: role, exact: true });
+  }
+
+  /**
+   * The body of one rendered conversation turn, by role.
+   *
+   * The accordion content Radix labels from its trigger, whose accessible name
+   * is just the role for every message the OpenAI mapper produces — only a
+   * `tool` turn carries a second label, and that one is not addressed here.
+   */
+  messageBody(role: 'System' | 'User' | 'Assistant'): Locator {
+    return this.messagesTabPanel.getByRole('region', { name: role, exact: true });
+  }
+
+  /**
+   * The rendered markdown container inside a turn's body.
+   *
+   * `comet-markdown` is a class rather than a testid because `MarkdownPreview`
+   * stamps it on *both* branches it can take — the `ReactMarkdown` one and the
+   * plain `<div class="comet-markdown whitespace-pre-wrap">` it falls back to
+   * when `isStringMarkdown` says no. Matching the class is therefore the one
+   * handle that resolves whichever branch rendered, which is what lets a spec
+   * assert *which* branch it got; the same reason `compare-experiments.page.ts`
+   * and `playground.page.ts` address it this way.
+   */
+  messageMarkdown(role: 'System' | 'User' | 'Assistant'): Locator {
+    return this.messageBody(role).locator('.comet-markdown');
+  }
+
   /** Locator for the Feedback scores tab inside the panel. */
   get feedbackScoresTab(): Locator {
     return this.root.getByRole('tab', { name: 'Feedback scores' });
