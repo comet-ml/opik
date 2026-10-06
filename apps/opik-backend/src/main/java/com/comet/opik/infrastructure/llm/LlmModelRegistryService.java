@@ -224,12 +224,20 @@ public class LlmModelRegistryService {
                     log.warn("Skipping override model with missing id for provider '{}'", provider);
                     return;
                 }
-                existingIds.put(m.id(), m);
+                existingIds.merge(m.id(), m, LlmModelRegistryService::keepReasoningFlag);
             });
 
             result.put(provider, List.copyOf(existingIds.values()));
         });
 
         return result;
+    }
+
+    // The remote copy is re-uploaded only when the sync script finds new models, so it can lag the classpath
+    // file a release ships. Without this, a stale remote entry turns off the reasoning-model param strip.
+    private static LlmModelDefinition keepReasoningFlag(LlmModelDefinition existing, LlmModelDefinition override) {
+        return existing.reasoning() && !override.reasoning()
+                ? override.toBuilder().reasoning(true).build()
+                : override;
     }
 }
