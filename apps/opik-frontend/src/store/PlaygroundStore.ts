@@ -395,7 +395,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
         set((state) => ({ ...state, isRunningMap: {} }));
       },
       settleRun: () => {
-        set((state) => ({ ...state, isRunningMap: {}, isRunInFlight: false }));
+        set((state) => ({
+          ...state,
+          isRunningMap: {},
+          isRunInFlight: false,
+          isResumingRun: false,
+        }));
       },
       setIsResumingRun: (value) => {
         set((state) => ({ ...state, isResumingRun: value }));
