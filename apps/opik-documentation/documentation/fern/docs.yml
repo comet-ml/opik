@@ -1108,6 +1108,9 @@ navigation:
           - page: UUIDv7 ingestion validation
             path: ./docs-v2/self-host/configure/uuid_validation.mdx
             slug: uuid_validation
+          - page: Querying trace data in ClickHouse
+            path: ./docs-v2/self-host/configure/traces_storage.mdx
+            slug: traces_storage
           - page: MCP OAuth
             path: ./docs-v2/self-host/configure/mcp-oauth.mdx
             slug: mcp-oauth

@@ -1,0 +1,80 @@
+---
+title: Querying trace data in ClickHouse
+headline: Querying trace data in ClickHouse | Opik Documentation
+og:title: Querying trace data in ClickHouse — Opik
+og:description: How the traces table stores missing values and timestamps, and how to write
+  ad-hoc SQL, dashboards and BI queries that stay correct.
+og:site_name: Opik Documentation
+subtitle: Missing values, timestamp precision and aggregates on the traces table
+---
+
+The ClickHouse `traces` table no longer uses `Nullable` columns for `end_time`, `duration` and
+`ttft`. A missing value is stored as a sentinel instead, and timestamps are stored at microsecond
+precision.
+
+<Note>
+  The REST API, the SDKs and the Opik UI are unaffected: a missing value is still returned as JSON
+  `null`. This page is for anyone who queries the analytics database **directly with SQL**:
+  dashboards, BI tools, notebooks or saved queries.
+</Note>
+
+## Timestamps are stored at microsecond precision
+
+`start_time`, `end_time` and `created_at` are `DateTime64(6, 'UTC')`; they were `DateTime64(9)`.
+Digits beyond the microsecond are dropped on write. No Opik SDK sends sub-microsecond timestamps, so
+this only matters if you send ISO-8601 timestamps with nanosecond precision yourself: they come back
+truncated to microseconds.
+
+## Missing values are sentinels, not `NULL`
+
+A trace that has not ended, or has no time-to-first-token, stores a sentinel value:
+
+| Column | Missing value is stored as | Old filter | New filter |
+|---|---|---|---|
+| `end_time` | the epoch, `1970-01-01 00:00:00` UTC | `end_time IS NULL` | `end_time = toDateTime64(0, 6)` |
+| `duration` | `NaN` | `duration IS NULL` | `isNaN(duration)` |
+| `ttft` | `NaN` | `ttft IS NULL` | `isNaN(ttft)` |
+
+For "value present", use `end_time != toDateTime64(0, 6)` and `NOT isNaN(x)`.
+
+<Warning>
+  **Old queries don't fail; they return wrong results.** On these columns `IS NULL` matches
+  nothing, `IS NOT NULL` matches everything, and `coalesce(x, ...)` / `ifNull(x, ...)` never
+  substitute. Review every saved query that uses them.
+</Warning>
+
+### Write the epoch as a number
+
+Compare `end_time` with `toDateTime64(0, 6)`, not with the string
+`toDateTime64('1970-01-01 00:00:00', 6)`. ClickHouse reads a timezone-less string in the session's
+timezone, so on a server that does not run in UTC the string names a different instant and matches
+nothing. The number `0` is the epoch in every timezone.
+
+The Opik backend pins its own connections to UTC with `session_timezone`, configurable through
+`ANALYTICS_DB_SESSION_TIMEZONE` (default `UTC`), so the API and UI are correct whatever timezone your
+ClickHouse server uses. Leave it at `UTC`.
+
+## Aggregates on `duration` and `ttft`
+
+ClickHouse aggregates skip `NULL`, but they treat `NaN` differently depending on the function:
+
+| Aggregate | Behavior with `NaN` | What to do |
+|---|---|---|
+| `quantile`, `quantiles`, `median`, `min`, `max` | `NaN` is skipped | Nothing; results are unchanged |
+| `avg`, `sum` | the result becomes `nan` | Use `avgIf(x, NOT isNaN(x))` / `sumIf(x, NOT isNaN(x))` |
+| `count(x)` | `NaN` rows are counted | Use `countIf(NOT isNaN(x))` |
+
+For example, the average duration of finished traces per day:
+
+```sql
+SELECT toDate(start_time) AS day,
+       avgIf(duration, NOT isNaN(duration)) AS avg_duration_ms,
+       countIf(NOT isNaN(duration))         AS finished_traces
+FROM traces
+GROUP BY day
+ORDER BY day
+```
+
+The `If` forms are also correct on deployments that still have the `Nullable` columns, since
+`isNaN(NULL)` is `NULL` and those rows are excluded too. A query written this way works before and
+after the change.
