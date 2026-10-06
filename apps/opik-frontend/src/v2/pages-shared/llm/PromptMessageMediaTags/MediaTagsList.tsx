@@ -145,10 +145,10 @@ const MediaTagsList: React.FC<MediaTagsListProps> = ({
     }
 
     if (type === "video") {
-      return <VideoPreview value={value} />;
+      return <VideoPreview key={value} value={value} />;
     }
 
-    return <AudioPreview value={value} />;
+    return <AudioPreview key={value} value={value} />;
   };
 
   const handleDeleteItem = (value: string) => {
