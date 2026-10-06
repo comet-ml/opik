@@ -138,7 +138,7 @@ public class ChatCompletionService {
             @NonNull LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
         var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId,
-                dropOpenAiReasoningModelParams(modelParameters));
+                dropOpenAiReasoningModelTemperature(modelParameters));
 
         ChatResponse chatResponse;
         try {
@@ -261,7 +261,8 @@ public class ChatCompletionService {
     }
 
     // Saved judge rules keep the temperature they were created with, and the frontend strips it only on save.
-    private LlmAsJudgeModelParameters dropOpenAiReasoningModelParams(LlmAsJudgeModelParameters modelParameters) {
+    private LlmAsJudgeModelParameters dropOpenAiReasoningModelTemperature(
+            LlmAsJudgeModelParameters modelParameters) {
         return modelParameters.temperature() != null
                 && llmProviderFactory.isOpenAiReasoningModel(modelParameters.name())
                         ? modelParameters.toBuilder().temperature(null).build()

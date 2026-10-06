@@ -475,7 +475,7 @@ class LlmProviderFactoryTest {
     @ParameterizedTest
     @CsvSource({"o3, true", "gpt-4o, false", "claude-sonnet-4-6, false", "unknown-model, false"})
     @DisplayName("isOpenAiReasoningModel follows the registry's reasoning flag")
-    void testIsOpenAiReasoningModel_followsRegistryFlag(String model, boolean expected) {
+    void isOpenAiReasoningModelFollowsRegistryFlag(String model, boolean expected) {
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
         var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
                 registryService);
@@ -485,7 +485,7 @@ class LlmProviderFactoryTest {
 
     @Test
     @DisplayName("isOpenAiReasoningModel ignores a reasoning flag on another provider's model")
-    void testIsOpenAiReasoningModel_ignoresOtherProviders() {
+    void isOpenAiReasoningModelIgnoresOtherProviders() {
         var registry = mock(LlmModelRegistryService.class);
         when(registry.findModel("openai/gpt-5-mini")).thenReturn(Optional.of(
                 new LlmModelRegistryService.ModelLookupResult(LlmProvider.OPEN_ROUTER,
