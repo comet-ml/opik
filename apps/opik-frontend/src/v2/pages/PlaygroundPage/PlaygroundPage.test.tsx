@@ -1,11 +1,23 @@
 import React from "react";
-import { render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  MockInstance,
+  vi,
+} from "vitest";
 
 import PlaygroundPage from "./PlaygroundPage";
 import usePlaygroundStore from "@/store/PlaygroundStore";
 import { getDefaultConfigByProvider } from "@/lib/playground";
+import api, {
+  LLM_MODELS_REST_ENDPOINT,
+  PROVIDER_KEYS_REST_ENDPOINT,
+} from "@/api/api";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import {
   COMPOSED_PROVIDER_TYPE,
@@ -16,27 +28,10 @@ import {
 
 const PROJECT_ID = "project-1";
 
-const backend = vi.hoisted(() => ({
-  providerKeys: { isPending: true } as {
-    isPending: boolean;
-    data?: { content: unknown[]; total: number };
-  },
-  registry: { isPending: true, isError: false } as {
-    isPending: boolean;
-    isError: boolean;
-    data?: LlmModelsByProvider;
-  },
-  lastPickedModel: "",
-}));
+const lastPicked = vi.hoisted(() => ({ model: "" }));
 
-vi.mock("@/api/provider-keys/useProviderKeys", () => ({
-  default: () => backend.providerKeys,
-}));
-vi.mock("@/api/llm/useLlmModels", () => ({
-  default: () => ({ ...backend.registry, error: null }),
-}));
 vi.mock("@/hooks/useLastPickedModel", () => ({
-  default: () => [backend.lastPickedModel, vi.fn()],
+  default: () => [lastPicked.model, vi.fn()],
 }));
 vi.mock("@/store/AppStore", () => ({
   default: (selector: (state: { activeWorkspaceName: string }) => unknown) =>
@@ -139,13 +134,7 @@ vi.mock("@/hooks/usePromptVersionLabel", () => ({
 const OPEN_ROUTER = PROVIDER_TYPE.OPEN_ROUTER as COMPOSED_PROVIDER_TYPE;
 
 const OPEN_ROUTER_KEYS = {
-  content: [
-    {
-      id: "key-1",
-      provider: PROVIDER_TYPE.OPEN_ROUTER,
-      ui_composed_provider: OPEN_ROUTER,
-    },
-  ],
+  content: [{ id: "key-1", provider: PROVIDER_TYPE.OPEN_ROUTER }],
   total: 1,
 };
 
@@ -166,28 +155,59 @@ const OPEN_ROUTER_REGISTRY: LlmModelsByProvider = {
   ],
 };
 
-const keysLoaded = () => {
-  backend.providerKeys = { isPending: false, data: OPEN_ROUTER_KEYS };
+type Reply = () => Promise<{ data: unknown }>;
+
+const reply =
+  (data: unknown): Reply =>
+  () =>
+    Promise.resolve({ data });
+
+const fail: Reply = () => Promise.reject(new Error("Service Unavailable"));
+
+const deferredReply = () => {
+  let resolve: (data: unknown) => void = () => {};
+  const response = new Promise<{ data: unknown }>((settle) => {
+    resolve = (data) => settle({ data });
+  });
+
+  return { reply: () => response, resolve };
 };
 
-const registryLoaded = () => {
-  backend.registry = {
-    isPending: false,
-    isError: false,
-    data: OPEN_ROUTER_REGISTRY,
-  };
+const backend: { providerKeys: Reply; registry: Reply } = {
+  providerKeys: reply(OPEN_ROUTER_KEYS),
+  registry: reply(OPEN_ROUTER_REGISTRY),
 };
+
+let apiGet: MockInstance;
+
+const requestsTo = (url: string) =>
+  apiGet.mock.calls.filter(([calledUrl]) => calledUrl === url).length;
+
+// act() flushes React's renders only when it ends, so time moves in short steps: the page has to
+// re-render between timers, as it does in a browser, for remounts and their refetches to happen.
+const advance = async (ms = 0) => {
+  let remaining = ms;
+  do {
+    const step = Math.min(remaining, 100);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(step);
+    });
+    remaining -= step;
+  } while (remaining > 0);
+};
+
+const variantCards = () => screen.queryAllByTestId("playground-variant-card");
 
 const renderPage = () => {
-  const queryClient = new QueryClient();
-  const page = () => (
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  render(
     <QueryClientProvider client={queryClient}>
       <PlaygroundPage />
-    </QueryClientProvider>
+    </QueryClientProvider>,
   );
-  const { rerender } = render(page());
-
-  return { rerender: () => rerender(page()) };
 };
 
 const storedPrompts = () => {
@@ -196,6 +216,7 @@ const storedPrompts = () => {
 };
 
 beforeEach(() => {
+  vi.useFakeTimers();
   localStorage.clear();
   usePlaygroundStore.setState({
     lastActiveProjectId: null,
@@ -203,26 +224,39 @@ beforeEach(() => {
     promptMap: {},
     outputMap: {},
   });
-  backend.providerKeys = { isPending: true };
-  backend.registry = { isPending: true, isError: false };
-  backend.lastPickedModel = "";
+  backend.providerKeys = reply(OPEN_ROUTER_KEYS);
+  backend.registry = reply(OPEN_ROUTER_REGISTRY);
+  lastPicked.model = "";
+  apiGet = vi.spyOn(api, "get").mockImplementation(((url: string) => {
+    if (url === PROVIDER_KEYS_REST_ENDPOINT) return backend.providerKeys();
+    if (url === LLM_MODELS_REST_ENDPOINT) return backend.registry();
+    return Promise.reject(new Error(`Unexpected GET ${url}`));
+  }) as typeof api.get);
+});
+
+afterEach(() => {
+  apiGet.mockRestore();
+  vi.useRealTimers();
 });
 
 describe("PlaygroundPage default prompt", () => {
-  it("waits for the model registry when the provider keys land first, so the last picked model is honoured", () => {
-    backend.lastPickedModel = PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_5;
-    const { rerender } = renderPage();
+  it("waits for the model registry when the provider keys land first, so the last picked model is honoured", async () => {
+    lastPicked.model = PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_5;
+    const registry = deferredReply();
+    backend.registry = registry.reply;
+    renderPage();
 
-    keysLoaded();
-    rerender();
+    await advance();
 
     expect(storedPrompts()).toEqual([]);
+    expect(variantCards()).toHaveLength(0);
 
-    registryLoaded();
-    rerender();
+    registry.resolve(OPEN_ROUTER_REGISTRY);
+    await advance();
 
     const [prompt] = storedPrompts();
     expect(storedPrompts()).toHaveLength(1);
+    expect(variantCards()).toHaveLength(1);
     expect(prompt.model).toBe(PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_5);
     expect(prompt.provider).toBe(OPEN_ROUTER);
     expect(prompt.configs).toEqual(
@@ -233,11 +267,18 @@ describe("PlaygroundPage default prompt", () => {
     );
   });
 
-  it("still creates a default prompt with its provider when the model registry fails to load", () => {
-    keysLoaded();
-    backend.registry = { isPending: false, isError: true };
-
+  it("shows a default prompt with its provider once the model registry has failed, and stops asking for it", async () => {
+    backend.registry = fail;
     renderPage();
+
+    await advance(30_000);
+    const registryRequests = requestsTo(LLM_MODELS_REST_ENDPOINT);
+
+    for (let second = 0; second < 60; second++) {
+      await advance(1_000);
+      expect(variantCards()).toHaveLength(1);
+    }
+    expect(requestsTo(LLM_MODELS_REST_ENDPOINT)).toBe(registryRequests);
 
     const [prompt] = storedPrompts();
     expect(storedPrompts()).toHaveLength(1);
@@ -251,7 +292,21 @@ describe("PlaygroundPage default prompt", () => {
     );
   });
 
-  it("heals a stored prompt that was created without a provider", () => {
+  it("shows the playground once the provider keys have failed, and stops asking for them", async () => {
+    backend.providerKeys = fail;
+    renderPage();
+
+    await advance(1_000);
+    const providerKeyRequests = requestsTo(PROVIDER_KEYS_REST_ENDPOINT);
+
+    for (let second = 0; second < 10; second++) {
+      await advance(1_000);
+      expect(variantCards()).toHaveLength(1);
+    }
+    expect(requestsTo(PROVIDER_KEYS_REST_ENDPOINT)).toBe(providerKeyRequests);
+  });
+
+  it("heals a stored prompt that was created without a provider", async () => {
     usePlaygroundStore.setState({
       lastActiveProjectId: PROJECT_ID,
       promptIds: ["p1"],
@@ -266,10 +321,9 @@ describe("PlaygroundPage default prompt", () => {
         },
       },
     });
-    keysLoaded();
-    registryLoaded();
 
     renderPage();
+    await advance();
 
     const [prompt] = storedPrompts();
     expect(prompt.model).toBe(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O);

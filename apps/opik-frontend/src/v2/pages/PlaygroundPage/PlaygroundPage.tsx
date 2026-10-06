@@ -110,8 +110,11 @@ const PlaygroundPage = () => {
   const lastActiveProjectId = useLastActiveProjectId();
   const setLastActiveProjectId = useSetLastActiveProjectId();
 
-  const { data: providerKeysData, isPending: isPendingProviderKeys } =
-    useProviderKeys({ workspaceName });
+  const {
+    data: providerKeysData,
+    isPending: isPendingProviderKeys,
+    isFetched: isFetchedProviderKeys,
+  } = useProviderKeys({ workspaceName });
 
   const providerKeys: COMPOSED_PROVIDER_TYPE[] = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
@@ -123,13 +126,14 @@ const PlaygroundPage = () => {
   const {
     calculateModelProvider,
     calculateDefaultModel,
-    isPending: isPendingModels,
+    isFetched: isFetchedModels,
   } = useLLMProviderModelsData();
 
-  // The model registry loads alongside the provider keys, and resolving a model's provider needs it:
-  // prompts created or validated before it lands get an empty provider. PlaygroundPrompts creates
-  // the default prompt once both have settled.
-  const isPendingPlaygroundSetup = isPendingProviderKeys || isPendingModels;
+  // Prompts created or validated before the model registry lands get an empty provider, so the
+  // prompts mount only once the keys and the registry have each answered. isFetched, not !isPending:
+  // a query that failed without data goes back to pending whenever a new observer mounts, and the
+  // prompts mount observers of both, so an isPending gate unmounts them and refetches in a loop.
+  const isPendingPlaygroundSetup = !isFetchedProviderKeys || !isFetchedModels;
 
   const resetPrompts = useCallback(() => {
     if (isPendingPlaygroundSetup) {
