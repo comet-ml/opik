@@ -15,6 +15,7 @@ import select
 import signal
 import subprocess
 import sys
+import time
 import unicodedata
 from typing import List, Optional, Tuple
 
@@ -98,16 +99,20 @@ def run(
 
 
 def run_unattended(command: List[str], timeout_seconds: float) -> Optional[int]:
-    """Run ``command`` with a pseudo-terminal nobody types into as its stdin.
+    """Run ``command`` on a pseudo-terminal nobody types into; its exit status.
 
     For a run without a terminal, such as a coding agent's: `claude mcp login`
-    refuses to start unless stdin is one, though all it then waits for is the
-    browser. Returns the exit status, or ``None`` if it cannot run here (Windows
-    has no pseudo-terminal) or does not finish within ``timeout_seconds``.
+    refuses to start unless stdin is one, and opens the browser only when stdout
+    is one too — otherwise it waits for a redirect URL to be pasted. Its output
+    is discarded. ``None`` when it cannot run here (Windows, or no
+    pseudo-terminal to open) or does not finish within ``timeout_seconds``.
     """
     if sys.platform == "win32":
         return None
+    import fcntl
     import pty
+    import struct
+    import termios
 
     try:
         # Fails where none are left to allocate, as in some containers.
@@ -115,18 +120,62 @@ def run_unattended(command: List[str], timeout_seconds: float) -> Optional[int]:
     except OSError:
         return None
     try:
-        return subprocess.run(
+        # A zero-sized terminal can break a client's line layout.
+        fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+        # `Popen`, not `pty.fork`: forking in Python while the spinner's thread
+        # runs can deadlock the child.
+        process = subprocess.Popen(
             command,
             stdin=slave_fd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=timeout_seconds,
-        ).returncode
-    except (OSError, subprocess.TimeoutExpired):
+            stdout=slave_fd,
+            stderr=slave_fd,
+            start_new_session=True,
+        )
+    except OSError:
+        os.close(master_fd)
         return None
     finally:
-        os.close(master_fd)
         os.close(slave_fd)
+
+    try:
+        returncode = _wait_draining(
+            process, master_fd, deadline=time.monotonic() + timeout_seconds
+        )
+    except BaseException:
+        process.kill()
+        process.wait()
+        raise
+    finally:
+        os.close(master_fd)
+    if returncode is None:
+        process.terminate()
+        process.wait()
+    return returncode
+
+
+def _wait_draining(
+    process: "subprocess.Popen[bytes]", master_fd: int, deadline: float
+) -> Optional[int]:
+    """Drop the command's output until it exits; ``None`` at the deadline.
+
+    Read rather than ignored: a full terminal buffer would stop the command.
+    """
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        readable, _, _ = select.select([master_fd], [], [], remaining)
+        if not readable:
+            continue
+        try:
+            data = os.read(master_fd, _CHUNK)
+        except OSError:
+            data = b""  # Linux reports a closed terminal as an error.
+        if not data:
+            try:
+                return process.wait(timeout=max(deadline - time.monotonic(), 0))
+            except subprocess.TimeoutExpired:
+                return None
 
 
 def _can_proxy() -> bool:

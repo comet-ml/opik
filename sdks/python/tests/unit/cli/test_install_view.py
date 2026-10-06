@@ -129,6 +129,7 @@ class TestRichInstallView:
                 view.terminal_session, "run_unattended", return_value=0
             ) as unattended,
             mock.patch.object(view.terminal_session, "run") as handover,
+            mock.patch.object(view.RichInstallView, "step") as step,
         ):
             returncode = view.RichInstallView().sign_in(
                 "Claude Code", ["claude", "mcp", "login", "opik-mcp"]
@@ -139,6 +140,8 @@ class TestRichInstallView:
             ["claude", "mcp", "login", "opik-mcp"], timeout_seconds=60
         )
         handover.assert_not_called()
+        # Said while it waits: otherwise a minute of blank screen.
+        assert "waiting for the sign-in in your browser" in step.call_args.args[0]
 
     def test_done__does_not_say_done(self, view):
         """The run goes on to the suggested first prompt, so it is not done yet."""

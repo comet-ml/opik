@@ -475,10 +475,14 @@ class RichInstallView(mcp_view.InstallView):
     def sign_in(self, client_display_name: str, command: List[str]) -> Optional[int]:
         if not interactive_helpers.is_interactive():
             # Nobody at a terminal, but most likely someone at the browser: a
-            # coding agent running this on their machine.
-            return terminal_session.run_unattended(
-                command, timeout_seconds=mcp_targets.CLIENT_CLI_TIMEOUT_SECONDS
-            )
+            # coding agent running this on their machine, or a person watching it.
+            with self.step(
+                f"Signing in to Opik MCP in {client_display_name}, waiting for the "
+                "sign-in in your browser"
+            ):
+                return terminal_session.run_unattended(
+                    command, timeout_seconds=mcp_targets.CLIENT_CLI_TIMEOUT_SECONDS
+                )
         console.print()
         returncode = terminal_session.run(
             command,

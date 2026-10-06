@@ -240,14 +240,29 @@ class TestOnATerminal:
 
 @pytest.mark.skipif(sys.platform == "win32", reason="no pseudo-terminals")
 class TestUnattended:
-    """`claude mcp login` refuses to start unless stdin is a terminal."""
+    """`claude mcp login` refuses to start unless stdin is a terminal, and opens
+    the browser only when stdout is one."""
 
-    def test_the_command_sees_a_terminal(self):
+    def test_the_command_sees_a_terminal__for_input_and_output(self):
+        """With stdout discarded, `claude mcp login` waited for a pasted URL and
+        never opened the browser."""
         command = [
             sys.executable,
             "-c",
-            "import sys; sys.exit(0 if sys.stdin.isatty() else 3)",
+            "import sys; "
+            "sys.exit(0 if sys.stdin.isatty() and sys.stdout.isatty() else 3)",
         ]
+
+        assert terminal_session.run_unattended(command, timeout_seconds=30) == 0
+
+    def test_its_exit_status_comes_back(self):
+        command = [sys.executable, "-c", "import sys; sys.exit(4)"]
+
+        assert terminal_session.run_unattended(command, timeout_seconds=30) == 4
+
+    def test_a_lot_of_output__does_not_stall_it(self):
+        """Nobody reads that terminal, so the output is drained for it."""
+        command = [sys.executable, "-c", "print('x' * 1_000_000)"]
 
         assert terminal_session.run_unattended(command, timeout_seconds=30) == 0
 
