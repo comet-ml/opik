@@ -178,25 +178,35 @@ class ProjectMetricsConfig(_DashboardModel):
             return self
         if (
             self.breakdown.field in _SPAN_ONLY_BREAKDOWN_FIELDS
-            and self.metric_type in _NON_SPAN_METRIC_TYPES
+            and self.metric_type in _KNOWN_METRIC_TYPES
+            and self.metric_type not in _SPAN_BREAKDOWN_METRIC_TYPES
         ):
             raise exceptions.DashboardValidationError(
                 f"breakdown.field '{self.breakdown.field}' is only supported for span "
-                f"metrics (SPAN_*), got metric_type '{self.metric_type}'"
+                f"metrics ({', '.join(sorted(_SPAN_BREAKDOWN_METRIC_TYPES))}), "
+                f"got metric_type '{self.metric_type}'"
             )
         return self
 
 
-# Mirrors BreakdownField.isCompatibleWith in apps/opik-backend: model, provider and
-# type breakdowns are rejected for trace and thread metrics. Unknown metric types are
-# let through so the SDK keeps working when new metrics are added.
+# Mirrors only the span-only rule of BreakdownField.isCompatibleWith (opik-backend):
+# model, provider and type breakdowns are accepted only for the metrics in its
+# SPAN_METRICS set. Metric types unknown to this SDK are let through so it keeps
+# working when the backend adds new metrics.
 _SPAN_ONLY_BREAKDOWN_FIELDS = frozenset(
     field.value
     for field in (BreakdownField.MODEL, BreakdownField.PROVIDER, BreakdownField.TYPE)
 )
-_NON_SPAN_METRIC_TYPES = frozenset(
-    metric.value for metric in ProjectMetricType if not metric.value.startswith("SPAN_")
+_SPAN_BREAKDOWN_METRIC_TYPES = frozenset(
+    metric.value
+    for metric in (
+        ProjectMetricType.SPAN_COUNT,
+        ProjectMetricType.SPAN_DURATION,
+        ProjectMetricType.SPAN_TOKEN_USAGE,
+        ProjectMetricType.SPAN_FEEDBACK_SCORES,
+    )
 )
+_KNOWN_METRIC_TYPES = frozenset(metric.value for metric in ProjectMetricType)
 
 
 class ProjectStatsCardConfig(_DashboardModel):

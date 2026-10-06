@@ -56,6 +56,8 @@ def test_breakdown_config__non_metadata_field_does_not_require_key():
         types.ProjectMetricType.COST,
         types.ProjectMetricType.TRACE_COUNT,
         types.ProjectMetricType.THREAD_COUNT,
+        types.ProjectMetricType.SPAN_AVERAGE_DURATION,
+        types.ProjectMetricType.SPAN_ERROR_RATE,
     ],
 )
 @pytest.mark.parametrize(
@@ -82,16 +84,21 @@ def test_project_metrics_config__span_only_breakdown_on_non_span_metric__raises(
         (types.ProjectMetricType.SPAN_DURATION, types.BreakdownField.MODEL),
         (types.ProjectMetricType.SPAN_TOKEN_USAGE, types.BreakdownField.PROVIDER),
         (types.ProjectMetricType.SPAN_COUNT, types.BreakdownField.TYPE),
+        (types.ProjectMetricType.SPAN_FEEDBACK_SCORES, types.BreakdownField.MODEL),
         (types.ProjectMetricType.COST, types.BreakdownField.NAME),
         (types.ProjectMetricType.DURATION, types.BreakdownField.TAGS),
         ("SOME_FUTURE_METRIC", types.BreakdownField.MODEL),
     ],
 )
 def test_project_metrics_config__compatible_breakdown__ok(metric_type, field):
-    types.ProjectMetricsConfig(
+    config = types.ProjectMetricsConfig(
         metric_type=metric_type,
         breakdown=types.BreakdownConfig(field=field),
     )
+
+    jsonable = config.to_jsonable()
+    assert jsonable["metricType"] == metric_type
+    assert jsonable["breakdown"] == {"field": field}
 
 
 def test_leaderboard_config__enable_ranking_requires_ranking_metric():
