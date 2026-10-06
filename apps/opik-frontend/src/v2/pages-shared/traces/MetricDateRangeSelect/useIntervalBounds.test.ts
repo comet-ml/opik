@@ -24,6 +24,7 @@ import {
   REANCHOR_INTERVAL,
   useIntervalBounds,
   useIsOnlyWindowBehind,
+  windowQueryMeta,
   windowQueryOptions,
   keepDataWhileWindowMoves,
 } from "./useIntervalBounds";
@@ -618,6 +619,100 @@ describe("useIntervalBounds", () => {
 
       expect(result.current.intervalEnd).toBe(
         now.add(REANCHOR_INTERVAL, "ms").utc().format(),
+      );
+    });
+
+    it("should move the window while another window's request over the same range is in flight", async () => {
+      const fetchWindow = vi.fn<FetchWindow>().mockResolvedValue({});
+      const { result } = renderHook(
+        () => {
+          const intervalWindow = useIntervalBounds(liveCustomRange);
+          const otherWindow = useIntervalBounds(liveCustomRange);
+          useQuery({
+            queryKey: [
+              "window-query",
+              {
+                fromTime: intervalWindow.intervalStart,
+                toTime: intervalWindow.intervalEnd,
+              },
+            ] as const,
+            queryFn: ({ queryKey: [, { toTime }], signal }) =>
+              fetchWindow(toTime, signal),
+            ...windowQueryOptions(
+              intervalWindow.refetchInterval,
+              intervalWindow.selectionKey,
+            ),
+          });
+          useQuery({
+            queryKey: [
+              "other-window-query",
+              { toTime: otherWindow.intervalEnd },
+            ] as const,
+            queryFn: () => new Promise<object>(() => {}),
+            ...windowQueryOptions(
+              otherWindow.refetchInterval,
+              otherWindow.selectionKey,
+            ),
+          });
+          return intervalWindow;
+        },
+        { wrapper: createWrapper() },
+      );
+      await settle();
+
+      tick();
+
+      expect(result.current.intervalEnd).toBe(
+        now.add(REANCHOR_INTERVAL, "ms").utc().format(),
+      );
+    });
+
+    it("should not move the window while an export of its rows is in flight, so the export resolves with them", async () => {
+      let resolveExport: (rows: string[]) => void = () => {};
+      const fetchExport = vi.fn(
+        (toTime: string | undefined) =>
+          new Promise<string[]>(
+            (resolve) =>
+              (resolveExport = (rows) =>
+                resolve(rows.map((row) => `${row}@${toTime}`))),
+          ),
+      );
+      const { result } = renderHook(
+        () => {
+          const intervalWindow = useIntervalBounds(liveCustomRange);
+          const { refetch: refetchExport } = useQuery({
+            queryKey: [
+              "window-export",
+              { toTime: intervalWindow.intervalEnd },
+            ] as const,
+            queryFn: ({ queryKey: [, { toTime }] }) => fetchExport(toTime),
+            enabled: false,
+            meta: windowQueryMeta(intervalWindow.selectionKey),
+          });
+          return { intervalWindow, refetchExport };
+        },
+        { wrapper: createWrapper() },
+      );
+      let exported: string[] | undefined;
+      act(() => {
+        result.current.refetchExport().then(({ data }) => (exported = data));
+      });
+
+      tick();
+      tick();
+      expect(result.current.intervalWindow.intervalEnd).toBe(
+        now.utc().format(),
+      );
+
+      await act(async () => resolveExport(["row"]));
+      expect(exported).toEqual([`row@${now.utc().format()}`]);
+
+      tick();
+      expect(result.current.intervalWindow.intervalEnd).toBe(
+        now
+          .add(3 * REANCHOR_INTERVAL, "ms")
+          .utc()
+          .format(),
       );
     });
 
