@@ -32,10 +32,11 @@ def _response(content="Blue, due to Rayleigh scattering.", done=True, **override
         "message": Message(role="assistant", content=content),
         "prompt_eval_count": 10,
         "eval_count": 8,
-        "total_duration": 1_000_000,
+        # real Ollama durations are nanoseconds and routinely exceed 2**31
+        "total_duration": 12_323_049_000,
         "load_duration": 100_000,
         "prompt_eval_duration": 200_000,
-        "eval_duration": 700_000,
+        "eval_duration": 11_000_000_000,
     }
     payload.update(overrides)
     return ChatResponse(**payload)
@@ -54,8 +55,8 @@ def _chunk(content="", done=False, **overrides):
                 "done_reason": "stop",
                 "prompt_eval_count": 10,
                 "eval_count": 8,
-                "total_duration": 1_000_000,
-                "eval_duration": 700_000,
+                "total_duration": 12_323_049_000,
+                "eval_duration": 11_000_000_000,
             }
         )
     payload.update(overrides)
@@ -135,7 +136,13 @@ def test_ollama_chat__usage_mapped_from_ollama_counters(fake_backend, monkeypatc
     assert usage["completion_tokens"] == 8
     assert usage["total_tokens"] == 18
     # the native counters survive rather than being dropped
-    assert usage["original_usage.eval_duration"] == 700_000
+    assert usage["original_usage.eval_count"] == 8
+    # durations are nanoseconds and would overflow the backend's int usage
+    # values, so they go to metadata instead of usage
+    assert not any(key.endswith("_duration") for key in usage)
+    metadata = fake_backend.trace_trees[0].spans[0].metadata
+    assert metadata["eval_duration"] == 11_000_000_000
+    assert metadata["total_duration"] == 12_323_049_000
 
 
 def test_ollama_chat__async__happyflow(fake_backend, monkeypatch):

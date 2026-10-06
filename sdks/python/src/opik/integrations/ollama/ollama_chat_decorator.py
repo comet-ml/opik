@@ -121,6 +121,11 @@ def _build_usage(result_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     OpenAI-style ``usage`` object, so there is no provider builder to reuse. The
     native counters are passed through as well, so they survive under
     ``original_usage.*`` rather than being dropped.
+
+    The ``*_duration`` fields are deliberately left out. Ollama reports them in
+    nanoseconds, so any call longer than ~2.1s overflows the backend's 32-bit
+    usage values and the whole span batch is rejected. They are still logged in
+    the span metadata.
     """
     prompt_tokens = result_dict.get("prompt_eval_count")
     completion_tokens = result_dict.get("eval_count")
@@ -132,14 +137,7 @@ def _build_usage(result_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
     }
-    for key in (
-        "prompt_eval_count",
-        "eval_count",
-        "prompt_eval_duration",
-        "eval_duration",
-        "total_duration",
-        "load_duration",
-    ):
+    for key in ("prompt_eval_count", "eval_count"):
         value = result_dict.get(key)
         if value is not None:
             usage[key] = value
