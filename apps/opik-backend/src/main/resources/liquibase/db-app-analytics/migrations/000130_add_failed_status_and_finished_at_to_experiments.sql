@@ -11,6 +11,7 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{clu
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS finished_at Nullable(DateTime64(9, 'UTC'));
 
+-- Only finished_at is reverted. Narrowing the Enum8 back to drop 'failed' fails for any experiment
+-- already written with status='failed' (ClickHouse rejects an enum that cannot represent existing
+-- data), and the extra value is harmless when unused, so adding it is intentionally not reverted.
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS finished_at;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' MODIFY COLUMN status Enum8('unknown' = 0, 'running' = 1, 'completed' = 2, 'cancelled' = 3) DEFAULT 'unknown';
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}' MODIFY COLUMN status Enum8('unknown' = 0, 'running' = 1, 'completed' = 2, 'cancelled' = 3);
