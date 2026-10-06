@@ -79,6 +79,7 @@ const PlaygroundPrompts = ({
           hasRegistryModels={hasRegistryModels}
           providerResolver={calculateModelProvider}
           modelResolver={calculateDefaultModel}
+          isDropdownModel={isDropdownModel}
           onRun={
             showPerPromptRunControls && runSingle
               ? () => runSingle(promptId)

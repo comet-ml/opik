@@ -182,6 +182,7 @@ const renderPrompt = (model: string) => {
           .calculateModelProvider
       }
       modelResolver={vi.fn()}
+      isDropdownModel={vi.fn()}
     />,
   );
 };

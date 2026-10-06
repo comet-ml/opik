@@ -186,3 +186,38 @@ describe("PlaygroundStore staleChanges", () => {
     });
   });
 });
+
+const createEmptyPrompt = (id: string): PlaygroundPromptType => ({
+  id,
+  name: "Prompt",
+  messages: [],
+  model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+  provider: PROVIDER_TYPE.OPEN_AI,
+  configs: {},
+});
+
+const promptIds = () => usePlaygroundStore.getState().promptIds;
+
+describe("addPrompt", () => {
+  beforeEach(() => {
+    usePlaygroundStore
+      .getState()
+      .setPromptMap(["a", "b"], {
+        a: createEmptyPrompt("a"),
+        b: createEmptyPrompt("b"),
+      });
+  });
+
+  it("inserts the prompt at the given position", () => {
+    usePlaygroundStore.getState().addPrompt(createEmptyPrompt("copy-of-a"), 1);
+
+    expect(promptIds()).toEqual(["a", "copy-of-a", "b"]);
+    expect(usePlaygroundStore.getState().promptMap["copy-of-a"]).toBeDefined();
+  });
+
+  it("appends the prompt when no position is given", () => {
+    usePlaygroundStore.getState().addPrompt(createEmptyPrompt("c"));
+
+    expect(promptIds()).toEqual(["a", "b", "c"]);
+  });
+});
