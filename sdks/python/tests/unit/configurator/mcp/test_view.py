@@ -98,19 +98,25 @@ class TestTargetResult:
 class TestNextSteps:
     """What an unattended run leaves for each client, read by whoever ran it."""
 
-    def test_hosted__claude_code_signs_in_with_its_own_command(self):
+    def test_hosted__claude_code_not_signed_in__a_step_for_the_user(self):
+        """`claude mcp login` refuses to run without a terminal, so an agent
+        cannot run it; `/mcp` also covers builds without the command."""
         [step] = mcp_view.next_steps(["claude-code"], hosted=True)
 
         assert step.startswith("Claude Code:")
-        assert "`claude mcp login opik-mcp`" in step
-        # Older builds answer that with the group's help and exit 0.
+        assert "from a terminal with `claude mcp login opik-mcp`" in step
         assert "`/mcp`" in step
         assert "`claude mcp list`" in step
 
-    def test_hosted__codex_checks_first_since_its_add_signs_in(self):
-        [step] = mcp_view.next_steps(["codex"], hosted=True)
+    @pytest.mark.parametrize(
+        "client, check",
+        [("claude-code", "claude mcp list"), ("codex", "codex mcp list")],
+    )
+    def test_hosted__signed_in_by_the_run__only_a_check(self, client, check):
+        [step] = mcp_view.next_steps([client], hosted=True, signed_in=[client])
 
-        assert step.index("codex mcp list") < step.index("codex mcp login opik-mcp")
+        assert f"signed in; check with `{check}`" in step
+        assert "login" not in step
 
     def test_hosted__a_client_without_a_cli_signs_in_from_its_settings(self):
         [step] = mcp_view.next_steps(["cursor"], hosted=True)
@@ -125,11 +131,18 @@ class TestNextSteps:
         assert "`opencode mcp auth opik-mcp`" in step
         assert "`opencode mcp list`" in step
 
-    def test_hosted__a_sign_in_that_did_not_finish_comes_first(self):
-        [step] = mcp_view.next_steps(["codex"], hosted=True, sign_in_pending=["codex"])
+    @pytest.mark.parametrize(
+        "client, command",
+        [
+            ("codex", "codex mcp login opik-mcp"),
+            ("claude-code", "claude mcp login opik-mcp"),
+        ],
+    )
+    def test_hosted__a_sign_in_that_did_not_finish_comes_first(self, client, command):
+        [step] = mcp_view.next_steps([client], hosted=True, sign_in_pending=[client])
 
-        assert "did not finish" in step
-        assert step.index("codex mcp login opik-mcp") < step.index("codex mcp list")
+        assert "the sign-in did not finish" in step
+        assert step.index(command) < step.index("mcp list")
 
     def test_local__nothing_to_sign_in_to(self):
         steps = mcp_view.next_steps(

@@ -77,12 +77,13 @@ def next_steps(
     registered_clients: Sequence[str],
     hosted: bool,
     sign_in_pending: Sequence[str] = (),
+    signed_in: Sequence[str] = (),
 ) -> List[str]:
     """What is left in each client after a run without a terminal, a line each.
 
-    Whoever ran it, often a coding agent, can run these next. Such a run signs
-    nobody in except in Codex, whose `codex mcp add` does it; ``sign_in_pending``
-    names the clients whose sign-in did not finish.
+    Read by whoever ran it, often a coding agent. ``signed_in`` and
+    ``sign_in_pending`` are the clients this run signed in, and those whose
+    sign-in it started but that did not finish.
     """
     steps = []
     for key in registered_clients:
@@ -91,29 +92,27 @@ def next_steps(
             continue
         name = target.display_name
         check = f"check with `{target.status_command}`"
+        sign_in = (
+            "the sign-in did not finish. Sign in"
+            if key in sign_in_pending
+            else "sign in"
+        )
         if not hosted:
             if target.status_command:
                 steps.append(f"{name}: {check}.")
-        elif key in sign_in_pending and target.sign_in_command:
+        elif key in signed_in:
+            steps.append(f"{name}: signed in; {check}.")
+        elif key == "claude-code":
+            # `claude mcp login` refuses to run without a terminal, so an agent
+            # cannot run it: this one is for the user.
             steps.append(
-                f"{name}: the sign-in did not finish. Sign in with "
-                f"`{target.sign_in_command}`, then {check}."
-            )
-        elif target.signs_in_when_added:
-            steps.append(
-                f"{name}: {check} that it is signed in; if not, "
-                f"`{target.sign_in_command}`."
+                f"{name}: {sign_in} from a terminal with "
+                f"`{target.sign_in_command}`, or with `/mcp` in a Claude Code "
+                f"session; then {check}."
             )
         elif target.sign_in_command:
-            # Builds without `claude mcp login` answer it with the group's help
-            # and exit 0, so the in-session route is named as well.
-            older = (
-                " (on older versions, `/mcp` in a session)"
-                if key == "claude-code"
-                else ""
-            )
             steps.append(
-                f"{name}: sign in with `{target.sign_in_command}`{older}, then {check}."
+                f"{name}: {sign_in} with `{target.sign_in_command}`, then {check}."
             )
         else:
             steps.append(f"{name}: sign in from its MCP settings when it asks.")

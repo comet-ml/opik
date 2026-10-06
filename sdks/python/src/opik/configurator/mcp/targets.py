@@ -8,7 +8,6 @@ import subprocess
 import sys
 from typing import Any, Callable, Dict, Final, List, Optional
 
-from opik.configurator import interactive_helpers
 from opik.configurator.mcp import json_config
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp.spec import SERVER_NAME
@@ -313,15 +312,13 @@ def sign_in_command(
 
     Only Claude Code: Codex signs in inside `codex mcp add`, and the GUI clients
     prompt on first use. Only for the hosted server — a local one carries the API
-    key — and only with a terminal, since a coding agent or CI has no browser.
-    Run separately from the install so the caller can show progress for the
-    install and hand the terminal over for the sign-in.
+    key. Also without a terminal: a coding agent runs on the user's machine,
+    where the browser opens. Run separately from the install so the caller can
+    show progress for the install, then run the sign-in its own way.
     """
     if target_key != "claude-code":
         return None
     if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
-        return None
-    if not interactive_helpers.is_interactive():
         return None
     claude_executable = shutil.which("claude")
     if claude_executable is None or not _claude_supports_mcp_login(claude_executable):

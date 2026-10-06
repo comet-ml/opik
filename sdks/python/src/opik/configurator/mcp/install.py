@@ -66,6 +66,8 @@ class InstallReport(NamedTuple):
     cancelled: bool = False
     #: Registered, but their sign-in did not finish: what the ending names.
     sign_in_pending: Tuple[str, ...] = ()
+    #: Registered and signed in by this run.
+    signed_in: Tuple[str, ...] = ()
 
 
 NOTHING_INSTALLED = InstallReport(registered=())
@@ -327,6 +329,13 @@ def setup_mcp_server(
             target.key
             for target, result in zip(selected_targets, results)
             if result.succeeded and result.sign_in_failed
+        ),
+        signed_in=tuple(
+            target.key
+            for target, result in zip(selected_targets, results)
+            if result.succeeded
+            and result.sign_in_attempted
+            and not result.sign_in_failed
         ),
     )
 

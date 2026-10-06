@@ -1163,12 +1163,13 @@ class TestUnattendedEnding:
     """Without a terminal, the run ends on what is left in each client."""
 
     @staticmethod
-    def _end(registered, transport, sign_in_pending=()):
+    def _end(registered, transport, sign_in_pending=(), signed_in=()):
         outcome = assistants.NOTHING_DONE._replace(
             clients=len(registered),
             registered_clients=tuple(registered),
             transport=transport,
             sign_in_pending=tuple(sign_in_pending),
+            signed_in=tuple(signed_in),
         )
         with (
             patch.object(
@@ -1195,6 +1196,12 @@ class TestUnattendedEnding:
 
         assert "codex mcp list" in out
         assert "codex mcp login opik-mcp" in out
+
+    def test_hosted_claude_code__signed_in_during_the_run(self):
+        out = self._end(["claude-code"], "remote", signed_in=["claude-code"])
+
+        assert "Claude Code: signed in; check with `claude mcp list`" in out
+        assert "login" not in out
 
     def test_hosted_codex__a_sign_in_that_ran_out_of_time(self):
         out = self._end(["codex"], "remote", sign_in_pending=["codex"])

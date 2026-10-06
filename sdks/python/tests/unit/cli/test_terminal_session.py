@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 
 import pytest
 
@@ -235,3 +236,35 @@ class TestOnATerminal:
 
         assert self._run(screen, "sleep 0.3; printf 'Starting auth\\nDone.\\n'") == 0
         assert stdin_fd not in watched[-1]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="no pseudo-terminals")
+class TestUnattended:
+    """`claude mcp login` refuses to start unless stdin is a terminal."""
+
+    def test_the_command_sees_a_terminal(self):
+        command = [
+            sys.executable,
+            "-c",
+            "import sys; sys.exit(0 if sys.stdin.isatty() else 3)",
+        ]
+
+        assert terminal_session.run_unattended(command, timeout_seconds=30) == 0
+
+    def test_its_exit_status_comes_back(self):
+        command = [sys.executable, "-c", "import sys; sys.exit(4)"]
+
+        assert terminal_session.run_unattended(command, timeout_seconds=30) == 4
+
+    def test_one_that_outlives_the_timeout__is_stopped(self):
+        command = [sys.executable, "-c", "import time; time.sleep(30)"]
+        started = time.monotonic()
+
+        assert terminal_session.run_unattended(command, timeout_seconds=0.5) is None
+        assert time.monotonic() - started < 10
+
+
+def test_unattended__on_windows__does_not_run(monkeypatch):
+    monkeypatch.setattr(terminal_session.sys, "platform", "win32")
+
+    assert terminal_session.run_unattended(["claude"], timeout_seconds=1) is None

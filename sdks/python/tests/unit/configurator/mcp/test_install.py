@@ -1255,6 +1255,8 @@ class TestTheSignInIsItsOwnStep:
         report, _ = self._run(monkeypatch, returncode=0)
 
         assert report.sign_in == "succeeded"
+        assert report.signed_in == ("claude-code",)
+        assert report.sign_in_pending == ()
 
     def test_a_sign_in_that_failed__is_reported_as_failed(self, monkeypatch):
         report, view = self._run(monkeypatch, returncode=1)

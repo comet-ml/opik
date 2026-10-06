@@ -2,7 +2,6 @@ import json
 import pathlib
 import subprocess
 
-import pytest
 from unittest import mock
 
 from opik.configurator.mcp import spec as mcp_spec
@@ -658,12 +657,6 @@ Commands:
 """
 
 
-@pytest.fixture
-def interactive(monkeypatch):
-    """A terminal, which the sign-in requires. Pytest runs with stdin detached."""
-    monkeypatch.setattr(targets.interactive_helpers, "is_interactive", lambda: True)
-
-
 def _fake_claude_cli(monkeypatch, help_output, login_returncode=0):
     """Record every `claude` invocation, answering help and login as scripted."""
     recorded = []
@@ -686,7 +679,7 @@ def _fake_claude_cli(monkeypatch, help_output, login_returncode=0):
 LOGIN = ["/usr/bin/claude", "mcp", "login", "opik-mcp"]
 
 
-def test_install_claude_code__registers_without_signing_in(monkeypatch, interactive):
+def test_install_claude_code__registers_without_signing_in(monkeypatch):
     """The sign-in is its own step, run by the caller once the install is done."""
     recorded = _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
 
@@ -696,14 +689,14 @@ def test_install_claude_code__registers_without_signing_in(monkeypatch, interact
     assert not any(command[1:3] == ["mcp", "login"] for command in recorded)
 
 
-def test_sign_in_command__hosted_claude_code__is_its_login(monkeypatch, interactive):
+def test_sign_in_command__hosted_claude_code__is_its_login(monkeypatch):
     _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
 
     assert targets.sign_in_command("claude-code", REMOTE_SERVER_SPEC) == LOGIN
 
 
 def test_sign_in_command__local_server__has_nothing_to_sign_in_to(
-    monkeypatch, interactive
+    monkeypatch,
 ):
     """A uvx server carries the API key already."""
     _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
@@ -712,7 +705,7 @@ def test_sign_in_command__local_server__has_nothing_to_sign_in_to(
 
 
 def test_sign_in_command__older_client_without_login__has_none(
-    monkeypatch, interactive
+    monkeypatch,
 ):
     """`claude mcp login` is recent, so an older build must not be handed it."""
     _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITHOUT_LOGIN)
@@ -720,7 +713,7 @@ def test_sign_in_command__older_client_without_login__has_none(
     assert targets.sign_in_command("claude-code", REMOTE_SERVER_SPEC) is None
 
 
-def test_sign_in_command__other_clients__have_none(monkeypatch, interactive):
+def test_sign_in_command__other_clients__have_none(monkeypatch):
     """Codex signs in inside its add; the GUI clients prompt on first use."""
     _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
 
@@ -728,7 +721,7 @@ def test_sign_in_command__other_clients__have_none(monkeypatch, interactive):
         assert targets.sign_in_command(key, REMOTE_SERVER_SPEC) is None
 
 
-def test_sign_in_command__help_cli_breaks__has_none(monkeypatch, interactive):
+def test_sign_in_command__help_cli_breaks__has_none(monkeypatch):
     monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/claude")
 
     def fake_run(command, **kwargs):
@@ -765,9 +758,14 @@ def test_claude_supports_mcp_login__help_exits_non_zero__false(monkeypatch):
     assert targets._claude_supports_mcp_login("/usr/bin/claude") is False
 
 
-def test_sign_in_command__no_terminal__has_none(monkeypatch):
-    """`--ai-client` runs are coding agents and CI; a browser there helps nobody."""
+def test_sign_in_command__no_terminal__still_signs_in(monkeypatch):
+    """A coding agent runs on the user's machine, where the browser opens; the
+    view runs the login on a pseudo-terminal of its own."""
     _fake_claude_cli(monkeypatch, CLAUDE_MCP_HELP_WITH_LOGIN)
-    monkeypatch.setattr(targets.interactive_helpers, "is_interactive", lambda: False)
 
-    assert targets.sign_in_command("claude-code", REMOTE_SERVER_SPEC) is None
+    assert targets.sign_in_command("claude-code", REMOTE_SERVER_SPEC) == [
+        "/usr/bin/claude",
+        "mcp",
+        "login",
+        "opik-mcp",
+    ]

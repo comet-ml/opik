@@ -135,6 +135,27 @@ class TestRichInstallView:
 
         assert ("codex mcp login opik-mcp" in capture.get()) is interactive
 
+    def test_sign_in__without_a_terminal__runs_on_a_pseudo_terminal(self, view):
+        """An agent's shell has no terminal, but the user's browser is there."""
+        with (
+            mock.patch.object(
+                view.interactive_helpers, "is_interactive", return_value=False
+            ),
+            mock.patch.object(
+                view.terminal_session, "run_unattended", return_value=0
+            ) as unattended,
+            mock.patch.object(view.terminal_session, "run") as handover,
+        ):
+            returncode = view.RichInstallView().sign_in(
+                "Claude Code", ["claude", "mcp", "login", "opik-mcp"]
+            )
+
+        assert returncode == 0
+        unattended.assert_called_once_with(
+            ["claude", "mcp", "login", "opik-mcp"], timeout_seconds=60
+        )
+        handover.assert_not_called()
+
     def test_next_steps__each_client_then_a_new_session(self, view):
         with view.console.capture() as capture:
             view.render_next_steps(

@@ -18,6 +18,7 @@ from opik.cli import selector
 from opik.cli import terminal_session
 from opik.configurator import configure as opik_configure
 from opik.configurator import interactive_helpers
+from opik.configurator.mcp import targets as mcp_targets
 from opik.configurator.mcp import view as mcp_view
 from opik.configurator.skills import install as skills_install
 from opik.configurator.skills import roots as skills_roots
@@ -476,6 +477,16 @@ class RichInstallView(mcp_view.InstallView):
             yield
 
     def sign_in(self, client_display_name: str, command: List[str]) -> Optional[int]:
+        if not interactive_helpers.is_interactive():
+            # Nobody at a terminal, but most likely someone at the browser: a
+            # coding agent running this on their machine.
+            with self.step(
+                f"Signing in to Opik MCP in {client_display_name}, waiting for the "
+                "sign-in in your browser"
+            ):
+                return terminal_session.run_unattended(
+                    command, timeout_seconds=mcp_targets.CLIENT_CLI_TIMEOUT_SECONDS
+                )
         console.print()
         returncode = terminal_session.run(
             command,

@@ -744,6 +744,7 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
                     outcome.registered_clients,
                     hosted=outcome.transport == mcp_spec.McpConnectionMode.REMOTE.value,
                     sign_in_pending=outcome.sign_in_pending,
+                    signed_in=outcome.signed_in,
                 )
             ),
         )
