@@ -21,7 +21,9 @@ class AwsModuleTest {
                 Arguments.of(ARN_BUS, null, Optional.of(Region.EU_WEST_1)),
                 Arguments.of(ARN_BUS, "", Optional.of(Region.EU_WEST_1)),
                 Arguments.of("opik-alerts", "us-east-2", Optional.of(Region.US_EAST_2)),
-                Arguments.of("opik-alerts", null, Optional.empty()));
+                Arguments.of("opik-alerts", null, Optional.empty()),
+                Arguments.of("arn:aws:events", null, Optional.empty()),
+                Arguments.of(null, null, Optional.empty()));
     }
 
     @ParameterizedTest

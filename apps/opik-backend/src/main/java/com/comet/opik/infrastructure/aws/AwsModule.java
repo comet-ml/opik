@@ -10,7 +10,6 @@ import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
-import software.amazon.awssdk.arns.Arn;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.awscore.retry.AwsRetryStrategy;
@@ -98,9 +97,6 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
             return Optional.of(Region.of(config.getRegion()));
         }
 
-        return Optional.ofNullable(config.getEventBus())
-                .filter(bus -> bus.startsWith("arn:"))
-                .flatMap(bus -> Arn.fromString(bus).region())
-                .map(Region::of);
+        return config.getEventBusArnRegion().map(Region::of);
     }
 }
