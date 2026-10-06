@@ -317,6 +317,39 @@ export interface SpanRef {
 }
 
 /**
+ * One span with every field an SDK tracker writes onto it.
+ *
+ * Distinct from the three narrower span shapes above, and deliberately so: a
+ * spec about an `opik.integrations.*` tracker is asserting that ONE call
+ * produced ONE span carrying a consistent set of facts — its type and tags, the
+ * provider and model it recorded, the usage it mapped, the output it folded a
+ * stream into, and the parent it attached itself to. `SpanRef` has the parent
+ * but no payload, `SpanCostRef` has the model and usage but no parent or type,
+ * and `getSpanPayload` has the type and output but needs an id the caller does
+ * not have yet. Reading three shapes per span would also triple the requests
+ * against a shared cloud workspace's rate limit.
+ *
+ * Every field is `| null` rather than optional for the reason the shapes above
+ * give: an absent `usage` map and an empty one are different answers, and a
+ * tracker that stopped recording a provider must not read as one that recorded
+ * an empty string.
+ */
+export interface TrackedSpanRef {
+  id: string;
+  name: string;
+  traceId: string;
+  parentSpanId: string | null;
+  type: string | null;
+  tags: string[] | null;
+  model: string | null;
+  provider: string | null;
+  usage: Record<string, number> | null;
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+}
+
+/**
  * One span of an OTLP export, in the vocabulary the caller thinks in: a name and
  * a flat attribute map.
  *
@@ -3502,6 +3535,43 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         name: s.name ?? '',
         traceId: String(s.traceId ?? ''),
         parentSpanId: s.parentSpanId ? String(s.parentSpanId) : null,
+      }));
+    },
+
+    /**
+     * Every span in a project, with the whole set of fields a tracker writes.
+     *
+     * Project-wide and unfiltered on purpose. A spec about an integration
+     * tracker is asserting the span population a sequence of calls produced —
+     * most sharply, that a STREAMED call produced one span and not one per
+     * chunk — and a read narrowed to the spans it expected could not see an
+     * extra one. `projectId` is mandatory for the reason `listSpanRefs` gives:
+     * without it the backend answers over the Default Project, which reads
+     * identically to "the tracker wrote nothing".
+     */
+    async listTrackedSpans(args: { projectId: string }): Promise<TrackedSpanRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            page,
+            size: 100,
+          }),
+        100,
+      );
+      return content.map((s) => ({
+        id: String(s.id ?? ''),
+        name: s.name ?? '',
+        traceId: String(s.traceId ?? ''),
+        parentSpanId: s.parentSpanId ? String(s.parentSpanId) : null,
+        type: s.type ?? null,
+        tags: s.tags ?? null,
+        model: s.model ?? null,
+        provider: s.provider ?? null,
+        usage: s.usage ?? null,
+        input: (s.input ?? null) as Record<string, unknown> | null,
+        output: (s.output ?? null) as Record<string, unknown> | null,
+        metadata: (s.metadata ?? null) as Record<string, unknown> | null,
       }));
     },
 

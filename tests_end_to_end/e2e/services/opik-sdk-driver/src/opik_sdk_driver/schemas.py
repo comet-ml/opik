@@ -787,3 +787,69 @@ class StreamReadsRequest(BaseModel):
 class StreamReadsResponse(BaseModel):
     traces: list[StreamReadResult] = []
     spans: list[StreamReadResult] = []
+
+
+class OllamaChatCall(BaseModel):
+    """One `chat()` call the ollama-integration route is to make.
+
+    Each field selects a branch of `track_ollama` that is reached no other way,
+    so a caller describes the call rather than the assertion:
+
+    - `stream` takes the aggregator path, where the decorator folds a chunk
+      sequence into one span instead of ending the span on a `ChatResponse`.
+    - `use_async` swaps `ollama.Client` for `ollama.AsyncClient`, which the
+      decorator wraps through a separate stream wrapper.
+    - `provider` overrides the `ollama` default recorded on every span.
+    - `parent_name`, when set, makes the call from inside an `@opik.track`
+      function, so the chat span has a parent to be attached to.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Echoed back so a caller can match a result to its call without relying on
+    # order, the same reason `StreamReadShape` carries `key`.
+    label: str
+    stream: bool = False
+    use_async: bool = False
+    provider: str | None = None
+    parent_name: str | None = None
+
+
+class OllamaChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # Echoed by the mock responder onto every chunk, and read back off the span
+    # by the caller — so a tracker that stopped recording the requested model
+    # fails rather than matching a hardcoded name.
+    model: str
+    prompt: str
+    calls: list[OllamaChatCall]
+    workspace: str | None = None
+
+
+class OllamaChatResult(BaseModel):
+    label: str
+    # What the caller's own `chat()` returned, aggregated for a streamed call.
+    # The tracker must not change it: a wrapper that swallowed the last chunk
+    # would be invisible in Opik and obvious here.
+    content: str
+    model: str
+    # How many chunks a streamed call yielded, and 0 for a non-streamed one.
+    # Load-bearing: "the streamed call produced ONE span" is only a claim about
+    # aggregation if the stream really arrived in several chunks, and a caller
+    # that could not see this would pass identically against a one-chunk mock.
+    chunk_count: int
+
+
+class OllamaChatResponse(BaseModel):
+    """What the calls returned, plus the facts that live only in the process.
+
+    `double_track_is_noop` is the `opik_tracked` guard: `track_ollama` called
+    twice on one client must return the same object with the same bound `chat`,
+    and a second wrap would be invisible from the outside except as doubled
+    spans — which is a weaker and much slower way to observe it.
+    """
+
+    double_track_is_noop: bool
+    calls: list[OllamaChatResult]

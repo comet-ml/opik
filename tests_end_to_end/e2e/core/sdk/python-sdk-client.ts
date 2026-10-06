@@ -464,6 +464,50 @@ export interface PythonSdkClient {
      */
     conversation: Array<Record<string, unknown>>;
   }>;
+  /**
+   * Drive `opik.integrations.ollama.track_ollama` through a sequence of
+   * `chat()` calls against a mock `/api/chat` the bridge serves itself.
+   *
+   * One call rather than one per `chat()`, because the facts under test do not
+   * survive being split: the `opik_tracked` guard needs two `track_ollama`
+   * calls on the SAME client object, and the nested case needs an
+   * `@opik.track` frame around one of the calls. See the route's own header.
+   *
+   * Returns only what lives in the bridge's process — what each call returned,
+   * and whether the double-wrap was a no-op. The spans the tracker wrote are
+   * the caller's to read back over REST, which is where a wrong provider,
+   * model, usage key or parent is observable.
+   */
+  trackedOllamaChats(args: {
+    project_name: string;
+    /** Echoed by the mock onto every chunk, so the span's `model` is this value. */
+    model: string;
+    prompt: string;
+    calls: Array<{
+      /** Echoed back, so a result is matched to its call and not to its position. */
+      label: string;
+      stream?: boolean;
+      use_async?: boolean;
+      /** Overrides the `ollama` default `track_ollama` records on the span. */
+      provider?: string;
+      /** Makes the call from inside an `@opik.track` function of this name. */
+      parent_name?: string;
+    }>;
+    workspace?: string;
+  }): Promise<{
+    double_track_is_noop: boolean;
+    calls: Array<{
+      label: string;
+      content: string;
+      model: string;
+      /**
+       * Chunks a streamed call yielded; 0 for a non-streamed one. Asserted, not
+       * decoration: "the streamed call produced one span" only means
+       * aggregation happened if the stream really arrived in pieces.
+       */
+      chunk_count: number;
+    }>;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -799,6 +843,21 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         scores: Array<{ name: string; value: number; reason: string | null }>;
         conversation: Array<Record<string, unknown>>;
       }>('POST', '/threads/evaluate', args, { timeoutMs: 150_000 });
+    },
+    async trackedOllamaChats(args) {
+      // One request makes every call in the sequence and then flushes the
+      // tracker, so the budget covers all of them plus the upload — which is
+      // rate-limited on a shared cloud workspace, where a 429 makes the SDK
+      // back off. The provider itself is local and instant.
+      return request<{
+        double_track_is_noop: boolean;
+        calls: Array<{
+          label: string;
+          content: string;
+          model: string;
+          chunk_count: number;
+        }>;
+      }>('POST', '/integrations/ollama/chat', args, { timeoutMs: 150_000 });
     },
   };
 }
