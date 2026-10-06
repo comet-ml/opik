@@ -234,7 +234,7 @@ client = track_ollama(ollama.Client(host="http://gpu-box:11434"), provider="olla
 
 ## Cost Tracking
 
-Opik logs prompt, completion and total tokens whenever Ollama reports token counts, so you can follow token usage per trace and per project. Models running on your own Ollama server have no per-token price, so Opik doesn't estimate a cost for these spans.
+Opik logs prompt, completion and total tokens whenever Ollama reports token counts, so you can follow token usage per trace and per project. With the default `ollama` provider, Opik doesn't estimate a cost for these spans, because models running on your own Ollama server have no per-token price.
 
 ## Supported Methods
 
