@@ -288,6 +288,22 @@ areas:
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       score-reason-render:    { covered: true,  tier: t2-cuj, note: "how a feedback score's `reason` is RENDERED in the trace panel,  where an LLM judge's reason became newline-joined text instead of a Python list literal: the parser has SDK unit tests, the display half had nothing. Asserted as rendered text (innerText through the reason tooltip), so a collapsed newline fails; the empty-list sentinel is the single-line control beside it." }
       toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "the Spans toggle and paging the table it renders: 130 seeded spans read back as an exact set through offset paging, through the /spans/search cursor and through the rendered table, plus a span whose UUIDv7 id embeds mid-2200 used as the cursor. Also the four KPI cards above the Spans table — count, error rate, avg duration and total cost — and their period-over-period deltas, asserted against the kpi-cards read for both periods" }
+      # New for 2.2.90, from opik#8685's harvest (pending/8685.yaml).
+      #
+      # The Logs page's OPEN-ENDED window: every date-range preset ends today,
+      # so `calculateIntervalStartAndEnd` returns `intervalEnd: undefined` and
+      # the page sends no `interval_end` — a branch on which the read has no
+      # upper id bound and a far-future UUIDv7 id counts in the current period.
+      #
+      # Its own key rather than folded into a neighbour. `toggle-spans-view`
+      # already carries the Spans KPI cards, but it names the Spans toggle and a
+      # window that ends now: its spec sends no `interval_end` yet seeds only
+      # past rows, so the branch is never observable there, and the key says
+      # nothing about the Traces or Threads tabs. `list-traces` names the
+      # table's listing, ordering and count — not the cards above it, and not
+      # their agreement with the footer, which is the regression here. Folding
+      # this under either would retire the question permanently.
+      logs-open-ended-window: { covered: false, note: "A date-range preset ending today sends no interval_end, on the kpi-cards read and on the chart's metrics read alike: the KPI cards, their period-over-period deltas and the table footer then report one population including a row whose UUIDv7 id instant is mid-2200, on the Traces, Spans and Threads tabs. Pinned against the same seed read with interval_end = now, where every current-period number differs and the prior period is identical" }
       filter-traces:          { covered: true,  tier: t2-cuj }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
@@ -494,6 +510,7 @@ areas:
       - playground/playground-failed-run-output.spec.ts
       - playground/playground-metric-selection.spec.ts
       - playground/playground-model-parameters.spec.ts
+      - playground/playground-openrouter-model-parameters.spec.ts
       - playground/playground-per-column-run.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-reset.spec.ts
@@ -874,6 +891,15 @@ areas:
       delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
       queue-configuration-tab: { covered: false }
       add-traces-to-queue:     { covered: true,  tier: t2-cuj }
+      # New for 2.2.90, from opik#8687's harvest (pending/8687.yaml).
+      #
+      # Both name the AUTOMATED fill, which is what #8687 turned on by default.
+      # `add-traces-to-queue` and `create-queue` above are already covered by
+      # the manual-add and config round-trip specs, and neither says anything
+      # about automation: a queue that stopped filling itself would leave both
+      # green. Folding these under them would retire the question permanently.
+      automated-queue-fill:    { covered: false, note: "A feedback score matching the queue's condition routes its trace in with source 'automated', and a non-matching score keeps its trace out" }
+      automation-max-items:    { covered: false, note: "max_items_in_queue caps automated adds (deterministically, lowest ids first) while a manual add still bypasses the ceiling; the list's Automation cell reads 'Cap reached'" }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
       export-annotated-data:   { covered: false }
 

@@ -54,7 +54,7 @@ export const getOpenAIVisibleControls = ({
     configs,
     openAiPipelineMode,
   );
-  const showPenalties = supportsPenaltyParams(model);
+  const showPenalties = supportsPenaltyParams(model, openAiPipelineMode);
 
   return {
     temperature: !isUndefined(temperature),
