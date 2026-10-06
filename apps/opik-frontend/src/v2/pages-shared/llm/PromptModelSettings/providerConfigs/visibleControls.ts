@@ -203,6 +203,8 @@ export const hasVisibleControls = (
         }),
       );
     case PROVIDER_TYPE.CUSTOM:
+    case PROVIDER_TYPE.OLLAMA:
+    case PROVIDER_TYPE.BEDROCK:
       return true;
     default:
       return false;

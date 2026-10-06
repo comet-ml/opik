@@ -441,6 +441,28 @@ class LlmProviderFactoryTest {
         assertThat(clientConfig.workspaceId()).isEqualTo(workspaceId);
     }
 
+    @ParameterizedTest
+    @EnumSource(value = LlmProvider.class, names = {"CUSTOM_LLM", "BEDROCK", "OLLAMA"})
+    @DisplayName("getClientApiConfig carries the key's own provider type for custom-llm/ models")
+    void testGetClientApiConfig_carriesTheKeysProviderType(LlmProvider keyProvider) {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        String workspaceId = UUID.randomUUID().toString();
+        String model = "custom-llm/my-provider/llama3.2";
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
+                        .provider(keyProvider)
+                        .providerName("my-provider")
+                        .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
+                        .baseUrl("http://localhost:11434/v1")
+                        .configuration(Map.of("models", model))
+                        .build()));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        assertThat(llmProviderFactory.getLlmProvider(model)).isEqualTo(LlmProvider.CUSTOM_LLM);
+        assertThat(llmProviderFactory.getClientApiConfig(workspaceId, model).provider()).isEqualTo(keyProvider);
+    }
+
     // ========== Structured Output Strategy Tests ==========
 
     @Test
