@@ -130,21 +130,26 @@ class CustomLlmProviderTest {
     @MethodSource("penaltyCases")
     void generateSendsOnlyThePenaltiesTheProviderNeeds(
             String name, LlmProvider provider, Double penalty, Double expectedPenalty) {
-        var request = ChatCompletionRequest.builder()
-                .from(request(4000, null))
-                .frequencyPenalty(penalty)
-                .presencePenalty(penalty)
-                .build();
+        newProvider(provider).generate(penaltyRequest(penalty), "workspace-id");
 
-        newProvider(provider).generate(request, "workspace-id");
+        assertPenalties(name, sentBody(), expectedPenalty);
+    }
 
-        var body = sentBody();
-        assertThat(body.has("frequency_penalty") ? body.get("frequency_penalty").asDouble() : null)
-                .as("[%s] frequency_penalty", name)
-                .isEqualTo(expectedPenalty);
-        assertThat(body.has("presence_penalty") ? body.get("presence_penalty").asDouble() : null)
-                .as("[%s] presence_penalty", name)
-                .isEqualTo(expectedPenalty);
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("penaltyCases")
+    void generateStreamSendsOnlyThePenaltiesTheProviderNeeds(
+            String name, LlmProvider provider, Double penalty, Double expectedPenalty) throws Exception {
+        wireMock.stubFor(post(urlEqualTo(COMPLETIONS_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "text/event-stream")
+                .withBody(COMPLETION_STREAM)));
+        var done = new CompletableFuture<Void>();
+
+        newProvider(provider).generateStream(penaltyRequest(penalty), "workspace-id",
+                response -> {
+                }, () -> done.complete(null), done::completeExceptionally);
+        done.get(10, TimeUnit.SECONDS);
+
+        assertPenalties(name, sentBody(), expectedPenalty);
     }
 
     private static Stream<Arguments> penaltyCases() {
@@ -205,10 +210,27 @@ class CustomLlmProviderTest {
                 .build();
     }
 
+    private ChatCompletionRequest penaltyRequest(Double penalty) {
+        return ChatCompletionRequest.builder()
+                .from(request(4000, null))
+                .frequencyPenalty(penalty)
+                .presencePenalty(penalty)
+                .build();
+    }
+
     private JsonNode sentBody() {
         var requests = wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH)));
         assertThat(requests).hasSize(1);
         return JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString());
+    }
+
+    private void assertPenalties(String name, JsonNode body, Double expectedPenalty) {
+        assertThat(body.has("frequency_penalty") ? body.get("frequency_penalty").asDouble() : null)
+                .as("[%s] frequency_penalty", name)
+                .isEqualTo(expectedPenalty);
+        assertThat(body.has("presence_penalty") ? body.get("presence_penalty").asDouble() : null)
+                .as("[%s] presence_penalty", name)
+                .isEqualTo(expectedPenalty);
     }
 
     private void assertTokenLimit(
