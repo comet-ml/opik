@@ -351,13 +351,15 @@ without asking, `--no-skills` skips it.
 
 Credentials come from `~/.opik.config`, or from `OPIK_API_KEY` and
 `OPIK_WORKSPACE` already in the environment, such as a CI secret — do not paste
-the key into the command line. With neither, and no `--deployment`, it uses a
-local Opik that answers at `http://localhost:5173`.
+the key into the command line. A saved Opik that needs a key and has none stops
+and asks for `OPIK_API_KEY`. With no `~/.opik.config`, no `OPIK_URL_OVERRIDE`
+or `OPIK_API_KEY`, and no `--deployment`, it uses a local Opik that answers at
+`http://localhost:5173`.
 
-`--deployment` names the Opik instead, and sets the saved configuration aside
-for that run. `cloud` needs no API key: the client signs in in the browser.
-`self-hosted` reads the key from `OPIK_API_KEY` only, and the workspace from
-`--workspace` or `OPIK_WORKSPACE`.
+`--deployment` picks which Opik to connect to instead, and sets the saved
+configuration aside for that run. `cloud` needs no API key: the client signs in
+through the browser. `self-hosted` reads the key from `OPIK_API_KEY` only, and
+the workspace from `--workspace` or `OPIK_WORKSPACE`.
 
 ```bash
 uvx opik mcp configure --ai-client cursor --deployment cloud
