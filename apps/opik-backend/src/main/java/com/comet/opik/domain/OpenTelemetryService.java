@@ -9,6 +9,11 @@ import com.comet.opik.infrastructure.OpenTelemetryConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import com.google.protobuf.ByteString;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.opentelemetry.proto.trace.v1.Span;
 import jakarta.inject.Inject;
@@ -42,6 +47,13 @@ public interface OpenTelemetryService {
 @RequiredArgsConstructor
 @Slf4j
 class OpenTelemetryServiceImpl implements OpenTelemetryService {
+
+    private static final Meter METER = GlobalOpenTelemetry.get().getMeter("opik.otel");
+    private static final AttributeKey<String> OPERATION_KEY = AttributeKey.stringKey("operation");
+    private static final LongCounter TRACE_ID_MAPPING_REDIS_ERRORS = METER
+            .counterBuilder("opik.otel.trace_id_mapping.redis_errors")
+            .setDescription("Redis errors while mapping OTel trace ids to Opik trace ids (tagged by operation)")
+            .build();
 
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
@@ -223,7 +235,10 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
             // checks if this key is mapped in redis
             var otelTraceIdRedisKey = redisKey(workspaceId, projectId, otelTraceIdBase64);
-            var checkId = redisson.getBucket(otelTraceIdRedisKey).getAndExpire(config.getTtl().toJavaDuration());
+            // A Redis error must not fail the batch: exporters retry a few times and then drop the spans. Treat it
+            // as a miss instead; the cost is that a trace spread across batches may be split into several.
+            var checkId = redisson.getBucket(otelTraceIdRedisKey).getAndExpire(config.getTtl().toJavaDuration())
+                    .onErrorResume(error -> onRedisError("lookup", otelTraceIdRedisKey, error));
 
             return checkId.switchIfEmpty(Mono.defer(() -> {
                 // its an unknown otel trace id, lets create an opik trace id with this span timestamp as we sorted otel
@@ -234,8 +249,16 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                         opikTraceId);
                 return redisson.getBucket(otelTraceIdRedisKey)
                         .set(opikTraceId.toString(), config.getTtl().toJavaDuration())
+                        .onErrorResume(error -> onRedisError("store", otelTraceIdRedisKey, error))
                         .then(Mono.just(opikTraceId.toString()));
             })).map(opikTraceId -> Map.entry(otelTraceIdBase64, opikTraceId));
         }).collectMap(Map.Entry::getKey, entry -> UUID.fromString((String) entry.getValue()));
+    }
+
+    private <T> Mono<T> onRedisError(String operation, String otelTraceIdRedisKey, Throwable error) {
+        log.warn("Redis {} failed for otel trace id '{}', continuing without the mapping", operation,
+                otelTraceIdRedisKey, error);
+        TRACE_ID_MAPPING_REDIS_ERRORS.add(1, Attributes.of(OPERATION_KEY, operation));
+        return Mono.empty();
     }
 }
