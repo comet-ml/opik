@@ -149,22 +149,25 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     @WithSpan
     public CompletableFuture<List<String>> explainQueryTree(@NonNull FreeFormSqlAccount account,
             @NonNull String workspaceId, @NonNull String projectId, @NonNull String query) {
-        var settings = new QuerySettings()
-                .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
-                .serverSetting(SETTING_PROJECT_ID, projectId);
-        return clientFor(account).queryRecords(EXPLAIN_QUERY_TREE_PREFIX + query, settings)
-                .thenApply(FreeFormSqlQueryDAOImpl::readNodeLabels);
+        return explain(account, workspaceId, projectId, EXPLAIN_QUERY_TREE_PREFIX + query);
     }
 
     @Override
     @WithSpan
     public CompletableFuture<String> explainPlan(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
             @NonNull String projectId, @NonNull String query) {
+        return explain(account, workspaceId, projectId, EXPLAIN_PLAN_PREFIX + query)
+                .thenApply(lines -> String.join("\n", lines));
+    }
+
+    /** Runs an EXPLAIN under the settings {@link #execute} sends, one output line per element. */
+    private CompletableFuture<List<String>> explain(FreeFormSqlAccount account, String workspaceId, String projectId,
+            String explainQuery) {
         var settings = new QuerySettings()
                 .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
                 .serverSetting(SETTING_PROJECT_ID, projectId);
-        return clientFor(account).queryRecords(EXPLAIN_PLAN_PREFIX + query, settings)
-                .thenApply(records -> String.join("\n", readNodeLabels(records)));
+        return clientFor(account).queryRecords(explainQuery, settings)
+                .thenApply(FreeFormSqlQueryDAOImpl::readNodeLabels);
     }
 
     @Override

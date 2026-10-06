@@ -1,7 +1,8 @@
 package com.comet.opik.domain;
 
+import com.google.common.base.Preconditions;
 import lombok.Builder;
-import lombok.NonNull;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * A table read that the post-run check could not show to be under a row policy, and why ({@link FreeFormSqlPolicyCheck}).
@@ -10,12 +11,11 @@ import lombok.NonNull;
  * @param reason why the read could not be shown to be covered
  */
 @Builder(toBuilder = true)
-record FreeFormSqlPolicyViolation(@NonNull String table, @NonNull String reason) {
+record FreeFormSqlPolicyViolation(String table, String reason) {
 
     FreeFormSqlPolicyViolation {
-        if (reason.isBlank()) {
-            throw new IllegalArgumentException("reason must not be blank");
-        }
+        Preconditions.checkArgument(table != null, "table must not be null; it is empty when no log entry was found");
+        Preconditions.checkArgument(StringUtils.isNotBlank(reason), "reason must not be blank");
     }
 
     /** No log entry for the query, run as its account, was found, so no read could be checked. */
