@@ -6,6 +6,7 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
@@ -50,6 +51,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -84,7 +86,6 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
@@ -457,8 +458,16 @@ class SpansReadPathPartitionPruningTest {
         return KpiCardResponse.KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
     }
 
-    @Test
-    void spanSearchBoundedToTheProjectsWeeksReturnsEveryMatch() {
+    /** The searched spans and the responses, created once and shared by the span search tests below. */
+    private record SpanSearch(String token, List<Span> expected, Span.SpanPage page, ProjectStats stats) {
+    }
+
+    private SpanSearch spanSearch;
+
+    private synchronized SpanSearch spanSearch() {
+        if (spanSearch != null) {
+            return spanSearch;
+        }
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
         var token = RandomStringUtils.secure().nextAlphanumeric(12);
         var fromTime = THIS_MONDAY.minusWeeks(10).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
@@ -475,25 +484,38 @@ class SpansReadPathPartitionPruningTest {
                 .sorted(Comparator.comparing(Span::id).reversed())
                 .toList();
         spanResourceClient.batchCreateSpans(expected, API_KEY, WORKSPACE_NAME);
-
         var page = spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, projectName, null, 1, 10, null, null, null,
                 null, null, fromTime, null, token);
         var stats = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
                 Map.of("search", token, "from_time", fromTime));
+        spanSearch = new SpanSearch(token, expected, page, stats);
+        return spanSearch;
+    }
 
-        assertThat(page.total()).isEqualTo(expected.size());
-        SpanAssertions.assertSpan(page.content(), expected, USER);
-        TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectSpanStatItems(expected));
+    @Test
+    void spanSearchBoundedToTheProjectsWeeksReturnsEveryMatch() {
+        var search = spanSearch();
+
+        assertThat(search.page().total()).isEqualTo(search.expected().size());
+        SpanAssertions.assertSpan(search.page().content(), search.expected(), USER);
+        TraceAssertions.assertStats(search.stats().stats(), StatsUtils.getProjectSpanStatItems(search.expected()));
+    }
+
+    @ParameterizedTest(name = "{0} carries the spans week hint")
+    @ValueSource(strings = {"find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
+            "get_span_stats_feedback_scores"})
+    void spanSearchStatementCarriesTheWeekHint(String queryName) {
+        assertThat(lastSpanSearch(queryName, spanSearch().token()))
+                .as("the spans week hint ran in %s, so the results are not a vacuous pass", queryName)
+                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+    }
+
+    @Test
+    void spanSearchRunsOnce() {
         // The page re-reads its rows through the cached page-id scalar, so the search runs once.
-        assertThat(lastSpanSearch("find_spans_by_project_id", token))
+        assertThat(lastSpanSearch("find_spans_by_project_id", spanSearch().token()))
                 .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
                 .doesNotContain("IN (SELECT id FROM page_ids)");
-        // The list, the count and both stats queries each render their own search scan.
-        assertSoftly(softly -> Stream.of("find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
-                "get_span_stats_feedback_scores")
-                .forEach(queryName -> softly.assertThat(lastSpanSearch(queryName, token))
-                        .as("the spans week hint ran in %s, so the results above are not a vacuous pass", queryName)
-                        .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)")));
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -32,6 +33,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -59,7 +62,6 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 /**
  * A trace search reads the large text columns of every part its id-range admits. On the weekly-partitioned
@@ -181,9 +183,16 @@ class TracesSearchPartitionPruningTest {
         network.close();
     }
 
-    @Test
-    @DisplayName("a search bounded to the project's own weeks still returns its matches in every week")
-    void searchBoundedToTheProjectsWeeksReturnsEveryMatch() {
+    /** The searched data and the responses, created once and shared by the tests below. */
+    private record Search(String token, List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
+    }
+
+    private Search search;
+
+    private synchronized Search search() {
+        if (search != null) {
+            return search;
+        }
         var token = RandomStringUtils.secure().nextAlphanumeric(12);
         // Sorted, so the middle project sits between the other two in the (workspace_id, project_id, id) key.
         var projects = Stream.generate(() -> "project-" + RandomStringUtils.secure().nextAlphanumeric(16))
@@ -207,25 +216,40 @@ class TracesSearchPartitionPruningTest {
         Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .until(() -> traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME,
                         List.of(), List.of(), 10, Map.of()).total() == expected.size());
-
+        var params = Map.of("search", token, "from_time", FROM_TIME.toString());
         var page = traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME, List.of(),
-                List.of(), 10, Map.of("search", token, "from_time", FROM_TIME.toString()));
+                List.of(), 10, params);
+        var stats = traceResourceClient.getTraceStats(project.getValue(), null, API_KEY, WORKSPACE_NAME, null, params);
+        search = new Search(token, expected, page, stats);
+        return search;
+    }
 
-        assertThat(page.total()).isEqualTo(expected.size());
-        TraceAssertions.assertTraces(page.content(), expected, USER);
-        var stats = traceResourceClient.getTraceStats(project.getValue(), null, API_KEY, WORKSPACE_NAME, null,
-                Map.of("search", token, "from_time", FROM_TIME.toString()));
-        TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectTraceStatItems(page.content()));
-        // The page re-reads its rows through the cached page-id scalar, so the search runs once.
-        assertThat(lastSearch("find_traces_by_project_id", token))
+    @Test
+    @DisplayName("a search bounded to the project's own weeks still returns its matches in every week")
+    void searchBoundedToTheProjectsWeeksReturnsEveryMatch() {
+        var search = search();
+
+        assertThat(search.page().total()).isEqualTo(search.expected().size());
+        TraceAssertions.assertTraces(search.page().content(), search.expected(), USER);
+        TraceAssertions.assertStats(search.stats().stats(),
+                StatsUtils.getProjectTraceStatItems(search.page().content()));
+    }
+
+    @ParameterizedTest(name = "{0} carries the traces week hint")
+    @ValueSource(strings = {"find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans"})
+    @DisplayName("each search statement carries the traces week hint")
+    void searchStatementCarriesTheWeekHint(String queryName) {
+        assertThat(lastSearch(queryName, search().token()))
+                .as("the traces week hint ran in %s, so the results are not a vacuous pass", queryName)
+                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+    }
+
+    @Test
+    @DisplayName("the page re-reads its rows through the cached page-id scalar, so the search runs once")
+    void searchRunsOnce() {
+        assertThat(lastSearch("find_traces_by_project_id", search().token()))
                 .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
                 .doesNotContain("IN (SELECT id FROM page_ids)");
-        // The list, the count and the stats each render their own search scan.
-        assertSoftly(softly -> Stream
-                .of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
-                .forEach(queryName -> softly.assertThat(lastSearch(queryName, token))
-                        .as("the traces week hint ran in %s, so the results above are not a vacuous pass", queryName)
-                        .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)")));
     }
 
     /** A trace whose id is minted mid-week, so the partition value is the week's Monday rather than the id's own day. */
