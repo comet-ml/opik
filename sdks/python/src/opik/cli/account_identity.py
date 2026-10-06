@@ -33,9 +33,9 @@ Three rules, so that none of this is ever something a user feels:
 
 - **Nothing is looked up when nothing would be reported.** This is work done for
   analytics, so `OPIK_ANALYTICS_ENABLE=false` switches it off too.
-- **Cloud only, and bounded.** `account-details` does not exist on a self-hosted or
-  local Opik, and no configure run should spend a timeout on an answer that cannot
-  exist there.
+- **Never local, and bounded.** Cloud and self-hosted Comet serve
+  `account-details`. A local Opik is never asked, and an open source self-hosted one,
+  which has no accounts, answers 404 once and is then reported as `none_expected`.
 - **Failure is silent, and countable.** Every path reports `identity_lookup`, so an
   unattributed run says which reason it was rather than being an absence someone has
   to guess at.
@@ -57,7 +57,7 @@ import hashlib
 import logging
 import pathlib
 import uuid
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Set, Tuple
 
 import httpx
 
@@ -94,6 +94,9 @@ class _Account:
 # Keyed by `(key digest, base url)`: recognising a key we already resolved needs no
 # more than its digest, so the process never holds a credential to do it.
 _RESOLVED: Dict[Tuple[str, str], Optional[_Account]] = {}
+
+# Base URLs that answered account-details with a 404: an open source Opik.
+_NOT_SERVED: Set[str] = set()
 
 
 def event_properties(
@@ -133,7 +136,7 @@ def _properties(
     if workspace is not None:
         properties["workspace"] = workspace
     if config_.api_key:
-        # Reported whatever the deployment: a self-hosted install resolves no login,
+        # Reported whatever the deployment: an open source install resolves no login,
         # but its key still meets the MCP server's digest of the same key.
         properties["api_key_sha256"] = _digest(config_.api_key)
 
@@ -149,10 +152,12 @@ def _resolve(config_: opik_config.OpikConfig) -> Tuple[Optional[_Account], str]:
     # Asked before the credential, because the two answers mean opposite things: a
     # missing key is a run that has not got there yet, while a deployment with no
     # accounts is one that can never be attributed at all.
-    if not config_.is_cloud_installation:
-        # No account-details endpoint on a self-hosted Opik, and no accounts at all
-        # on the open source one. Unattributable by construction, not a gap to close
-        # - which is what the MCP server means by this value too.
+    if config_.is_localhost_installation or (
+        not config_.is_cloud_installation and not config_.api_key
+    ):
+        # No accounts on a local Opik, nor on an open source one, which has no key
+        # either. Unattributable by construction, not a gap to close - which is what
+        # the MCP server means by this value too.
         return None, "none_expected"
 
     if not config_.api_key:
@@ -160,7 +165,12 @@ def _resolve(config_: opik_config.OpikConfig) -> Tuple[Optional[_Account], str]:
         # this is the ordinary state of a first-ever run rather than a failure.
         return None, "no_credential"
 
-    account = _fetch(config_.api_key, url_helpers.get_base_url(config_.url_override))
+    base_url = url_helpers.get_base_url(config_.url_override)
+    account = _fetch(config_.api_key, base_url)
+    if not config_.is_cloud_installation and base_url in _NOT_SERVED:
+        # The open source Opik. Cloud always serves account-details, so a 404 there
+        # is a passing fault: a miss.
+        return None, "none_expected"
     if account is None or not account.user_name:
         return account, "miss"
 
@@ -206,9 +216,9 @@ def _fetch(api_key: str, base_url: str) -> Optional[_Account]:
     configures several accounts never accumulates credentials in memory - it holds
     only what it needs to recognise a key it has already resolved.
 
-    TLS is always verified, matching the analytics sender: `check_tls_certificate`
-    exists for a self-hosted deployment's own certificate, and this only ever calls
-    Comet's cloud host.
+    TLS is always verified, matching the analytics sender and the MCP server, so both
+    report the same for one host: a self-hosted deployment whose certificate does not
+    verify is a miss.
     """
     cache_key = (_digest(api_key), base_url)
     if cache_key in _RESOLVED:
@@ -236,6 +246,8 @@ def _request(api_key: str, base_url: str) -> Optional[_Account]:
 
         if response.status_code != 200:
             LOGGER.debug("account-details returned %s", response.status_code)
+            if response.status_code == 404:
+                _NOT_SERVED.add(base_url)
             return None
 
         body = response.json()
