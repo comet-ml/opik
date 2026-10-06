@@ -9,6 +9,7 @@ import com.comet.opik.api.Visibility;
 import com.comet.opik.domain.DatasetItemUploadSupport.BatchAccumulator;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,8 +44,8 @@ import java.util.UUID;
  * Processes JSON / JSONL files for dataset items.
  *
  * <p>Mirrors {@link CsvDatasetItemProcessor} via shared {@link DatasetItemUploadSupport}:
- * synchronously buffers the upload to a temp file, validates the head, verifies that the
- * dataset exists, flips the dataset status to {@code PROCESSING}, returns 202 to the
+ * synchronously buffers the upload to a temp file, verifies that the dataset exists,
+ * validates the file's structure, flips the dataset status to {@code PROCESSING}, returns 202 to the
  * caller, then streams the file element-by-element on the {@code boundedElastic}
  * scheduler, flushing batches through {@link DatasetItemService#saveBatch(UUID, List)}.
  *
@@ -70,8 +71,8 @@ public class JsonDatasetItemProcessor {
     private final @NonNull IdGenerator idGenerator;
 
     /**
-     * Buffers an uploaded JSON/JSONL file, validates the head, verifies that the
-     * dataset exists, then processes the remainder asynchronously.
+     * Buffers an uploaded JSON/JSONL file, verifies that the dataset exists, validates the
+     * file's structure, then processes the remainder asynchronously.
      *
      * @param inputStream    file input stream from the multipart upload
      * @param datasetId      dataset to write items to
@@ -79,7 +80,7 @@ public class JsonDatasetItemProcessor {
      * @param userName       user name
      * @param visibility     visibility setting
      * @param format         file format ({@code JSON} array or {@code JSONL})
-     * @throws BadRequestException                       if buffering fails or the head fails shape validation
+     * @throws BadRequestException                       if buffering fails or the file fails structure validation
      * @throws jakarta.ws.rs.NotFoundException           if the dataset does not exist in the workspace
      */
     public void processUploadedJson(InputStream inputStream, UUID datasetId, String workspaceId,
@@ -96,8 +97,15 @@ public class JsonDatasetItemProcessor {
         }
 
         try {
-            validateHead(tempFile, format);
+            // Cheap lookup first so a missing/inaccessible dataset doesn't pay for the full-file parse
             uploadSupport.verifyDatasetExists(datasetId, workspaceId, visibility);
+            try {
+                validateStructure(tempFile, format);
+            } catch (BadRequestException e) {
+                // Same terminal state as an async failure, so the UI shows the failed-import banner
+                uploadSupport.markFailed(datasetId, workspaceId);
+                throw e;
+            }
             uploadSupport.markProcessing(datasetId, workspaceId);
         } catch (Exception e) {
             uploadSupport.deleteTempFile(tempFile);
@@ -112,10 +120,11 @@ public class JsonDatasetItemProcessor {
     }
 
     /**
-     * Validates the file head synchronously so obvious shape errors surface as 400
-     * before the request thread releases.
+     * Validates the whole file's syntax and top-level item shape synchronously so malformed
+     * files surface as 400 instead of a 202 followed by a silent async failure. Row-level
+     * checks (reserved-field types) still happen during async processing.
      */
-    private void validateHead(Path tempFile, JsonUploadFormat format) {
+    private void validateStructure(Path tempFile, JsonUploadFormat format) {
         ObjectMapper mapper = JsonUtils.getMapper();
         try (BOMInputStream bomStream = BOMInputStream.builder()
                 .setInputStream(Files.newInputStream(tempFile))
@@ -132,40 +141,54 @@ public class JsonDatasetItemProcessor {
                         throw new BadRequestException(
                                 "JSON file must contain a top-level array of objects");
                     }
-                    JsonToken second = parser.nextToken();
-                    if (second == JsonToken.END_ARRAY) {
-                        throw new BadRequestException("JSON file contains no items");
+                    long index = 0;
+                    JsonToken token;
+                    while ((token = parser.nextToken()) != JsonToken.END_ARRAY) {
+                        if (token == null) {
+                            throw new BadRequestException("JSON file is truncated: the top-level array is not closed");
+                        }
+                        if (token != JsonToken.START_OBJECT) {
+                            throw new BadRequestException(
+                                    "JSON array element at index %d is not an object".formatted(index));
+                        }
+                        parser.skipChildren();
+                        index++;
                     }
-                    if (second != JsonToken.START_OBJECT) {
-                        throw new BadRequestException(
-                                "JSON array must contain only objects; first element is not an object");
+                    if (index == 0) {
+                        throw new BadRequestException("JSON file contains no items");
                     }
                 }
             } else {
                 try (BufferedReader br = new BufferedReader(reader)) {
+                    long lineNumber = 0;
+                    boolean hasItems = false;
                     String line;
                     while ((line = br.readLine()) != null) {
+                        lineNumber++;
                         if (line.isBlank()) {
                             continue;
                         }
-                        JsonNode node;
-                        try {
-                            node = mapper.readTree(line);
-                        } catch (IOException e) {
-                            throw new BadRequestException(
-                                    "First non-blank line is not valid JSON: %s".formatted(e.getMessage()));
+                        try (JsonParser lineParser = mapper.getFactory().createParser(line)) {
+                            if (lineParser.nextToken() != JsonToken.START_OBJECT) {
+                                throw new BadRequestException(
+                                        "JSONL line %d is not a JSON object".formatted(lineNumber));
+                            }
+                            lineParser.skipChildren();
+                        } catch (JsonProcessingException e) {
+                            throw new BadRequestException("JSONL line %d is not valid JSON: %s"
+                                    .formatted(lineNumber, e.getOriginalMessage()));
                         }
-                        if (node == null || !node.isObject()) {
-                            throw new BadRequestException(
-                                    "JSONL first non-blank line must be a JSON object");
-                        }
-                        return;
+                        hasItems = true;
                     }
-                    throw new BadRequestException("JSON file contains no items");
+                    if (!hasItems) {
+                        throw new BadRequestException("JSON file contains no items");
+                    }
                 }
             }
+        } catch (JsonProcessingException e) {
+            throw new BadRequestException("JSON file is not valid JSON: %s".formatted(e.getOriginalMessage()));
         } catch (IOException e) {
-            log.error("Failed to validate JSON head", e);
+            log.error("Failed to validate JSON file", e);
             throw new BadRequestException("Failed to read JSON file");
         }
     }

@@ -36,6 +36,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -449,6 +450,31 @@ class DatasetsCsvUploadResourceTest {
                                 "What is 2+2?","4","4"
                                 """,
                         "Empty first header"));
+    }
+
+    @ParameterizedTest
+    @DisplayName("Upload CSV file with duplicate headers - should return 400 Bad Request")
+    @ValueSource(strings = {
+            "input,input,expected_output\na,b,c\n",
+            "input,Input,expected_output\na,b,c\n",
+            "input, input ,expected_output\na,b,c\n"})
+    void uploadCsvFile__duplicateHeaders(String csvContent) {
+        Dataset dataset = buildDataset().toBuilder()
+                .id(null)
+                .createdBy(null)
+                .lastUpdatedBy(null)
+                .build();
+
+        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class)).contains("duplicate column header");
+        }
+
+        assertThat(getDatasetItems(createdDatasetId)).isEmpty();
+        assertThat(datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE).status())
+                .isEqualTo(DatasetStatus.FAILED);
     }
 
     private Response uploadCsvFile(UUID datasetId, String csvContent) {
