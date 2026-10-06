@@ -510,6 +510,7 @@ areas:
       - playground/playground-failed-run-output.spec.ts
       - playground/playground-metric-selection.spec.ts
       - playground/playground-model-parameters.spec.ts
+      - playground/playground-openrouter-model-parameters.spec.ts
       - playground/playground-per-column-run.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-reset.spec.ts
