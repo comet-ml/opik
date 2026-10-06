@@ -1053,7 +1053,18 @@ class TraceDAOImpl implements TraceDAO {
      * project's items (OPIK-5592).
      */
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
+            WITH <if(spans_partitioned)>span_weeks AS (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <elseif(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <else>
+                <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                <endif>
+            ), <endif><if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
                 FROM traces
                 WHERE workspace_id = :workspace_id
@@ -1237,6 +1248,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
+                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
             ),
             span_feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -1385,6 +1397,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
+                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
@@ -4563,6 +4576,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = newTraceThreadFindTemplate(
                     SELECT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
             addTracesPartitionedFlag(template);
+            addSpansPartitionedFlag(template);
 
             bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
 
@@ -5493,6 +5507,8 @@ class TraceDAOImpl implements TraceDAO {
                     "limit:" + limit + ":" + criteria);
             var template = newTraceThreadFindTemplate(
                     SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
+            addTracesPartitionedFlag(template);
+            addSpansPartitionedFlag(template);
             template.add("log_comment", logComment);
 
             bindTemplateExcludeFieldVariables(criteria, template);

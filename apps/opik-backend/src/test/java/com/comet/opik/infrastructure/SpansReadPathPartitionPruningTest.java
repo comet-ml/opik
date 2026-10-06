@@ -12,6 +12,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -486,6 +487,47 @@ class SpansReadPathPartitionPruningTest {
         assertThat(lastStatement("AlertMetrics_getTotalCost", projectId.toString()))
                 .as("the spans week hint ran, so the total is not a vacuous pass")
                 .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
+    }
+
+    private Stream<Arguments> traceListReads() {
+        return Stream.of(
+                arguments("find_traces_by_project_id",
+                        (Function<String, List<Trace>>) projectName -> traceResourceClient
+                                .getByProjectName(projectName, API_KEY, WORKSPACE_NAME)),
+                arguments("find_trace_stream", (Function<String, List<Trace>>) projectName -> traceResourceClient
+                        .getStreamAndAssertContent(API_KEY, WORKSPACE_NAME,
+                                TraceSearchStreamRequest.builder().projectName(projectName).build())));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("traceListReads")
+    void traceListAggregatesAFarFutureSpanOfItsTrace(String queryName, Function<String, List<Trace>> read) {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .projectName(projectName)
+                .startTime(now)
+                .feedbackScores(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+        // The spans reads are keyed by trace id, so the far-future week must come from the span-weeks pre-pass.
+        spanResourceClient.batchCreateSpans(List.of(
+                newSpan(now, traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("1.25")).build(),
+                newSpan(Instant.parse("2201-08-30T03:18:08Z"), traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("2.5")).build()),
+                API_KEY, WORKSPACE_NAME);
+
+        var actual = read.apply(projectName);
+
+        assertThat(actual).singleElement().satisfies(trace -> {
+            assertThat(trace.spanCount()).isEqualTo(2);
+            assertThat(trace.totalEstimatedCost()).isEqualByComparingTo("3.75");
+        });
+        assertThat(lastStatement(queryName, projectId.toString()))
+                .as("the spans week hint ran, so the aggregates are not a vacuous pass")
+                .contains("FROM span_weeks");
     }
 
     private static KpiCardResponse.KpiMetric kpi(KpiCardResponse.KpiMetricType type, Double current,
