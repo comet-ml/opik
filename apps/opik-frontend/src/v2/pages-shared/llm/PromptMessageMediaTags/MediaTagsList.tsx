@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Music, Image, Video, CircleX } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Tag } from "@/ui/tag";
@@ -26,6 +26,65 @@ const isHttpUrl = (value: string): boolean => {
   } catch {
     return false;
   }
+};
+
+const VideoPreview: React.FC<{ value: string }> = ({ value }) => {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="flex max-w-[240px] flex-col gap-2">
+        <p className="comet-body-s text-muted-foreground">
+          Video preview failed
+        </p>
+        <p className="comet-body-xs truncate text-muted-foreground">
+          {value.substring(0, 50)}...
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex max-w-[240px] flex-col gap-2">
+      <video
+        src={value}
+        controls
+        preload="metadata"
+        className="max-h-24 rounded border object-contain"
+        onError={() => setFailed(true)}
+      >
+        Your browser does not support video playback.
+      </video>
+    </div>
+  );
+};
+
+const AudioPreview: React.FC<{ value: string }> = ({ value }) => {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="flex w-[320px] flex-col gap-2">
+        <p className="comet-body-s text-muted-foreground">
+          Audio preview failed
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex w-[320px] flex-col gap-2">
+      <audio
+        src={value}
+        controls
+        preload="metadata"
+        className="h-10 w-full"
+        onError={() => setFailed(true)}
+      >
+        Your browser does not support audio playback.
+      </audio>
+    </div>
+  );
 };
 
 const MediaTagsList: React.FC<MediaTagsListProps> = ({
@@ -86,52 +145,10 @@ const MediaTagsList: React.FC<MediaTagsListProps> = ({
     }
 
     if (type === "video") {
-      return (
-        <div className="flex max-w-[240px] flex-col gap-2">
-          <video
-            src={value}
-            controls
-            preload="metadata"
-            className="max-h-24 rounded border object-contain"
-            onError={(event) => {
-              const parent = event.currentTarget.parentElement;
-              if (parent) {
-                parent.innerHTML = `
-                  <p class="comet-body-s text-muted-foreground">Video preview failed</p>
-                  <p class="comet-body-xs truncate text-muted-foreground">${value.substring(
-                    0,
-                    50,
-                  )}...</p>
-                `;
-              }
-            }}
-          >
-            Your browser does not support video playback.
-          </video>
-        </div>
-      );
+      return <VideoPreview value={value} />;
     }
 
-    return (
-      <div className="flex w-[320px] flex-col gap-2">
-        <audio
-          src={value}
-          controls
-          preload="metadata"
-          className="h-10 w-full"
-          onError={(event) => {
-            const parent = event.currentTarget.parentElement;
-            if (parent) {
-              parent.innerHTML = `
-                <p class="comet-body-s text-muted-foreground">Audio preview failed</p>
-              `;
-            }
-          }}
-        >
-          Your browser does not support audio playback.
-        </audio>
-      </div>
-    );
+    return <AudioPreview value={value} />;
   };
 
   const handleDeleteItem = (value: string) => {
