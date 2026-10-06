@@ -107,4 +107,6 @@ def test_process__feedback_scores_batch__evaluator_revision_reaches_request_body
     assert request.url.path == path
     (score,) = json.loads(request.content)["scores"]
     assert score[id_key] == "entity-id"
-    assert score.get("evaluator_revision") == evaluator_revision
+    # An unset revision goes out as an explicit null, like reason and category_name.
+    assert "evaluator_revision" in score
+    assert score["evaluator_revision"] == evaluator_revision
