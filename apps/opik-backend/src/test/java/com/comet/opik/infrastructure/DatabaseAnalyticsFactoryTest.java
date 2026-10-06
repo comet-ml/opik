@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory.ParsedQueryParameters;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -13,6 +15,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("DatabaseAnalyticsFactory.parseQueryParameters")
 class DatabaseAnalyticsFactoryTest {
+
+    private static final Validator VALIDATOR = Validation.buildDefaultValidatorFactory().getValidator();
+
+    @ParameterizedTest
+    @ValueSource(strings = {"UTC", "America/New_York", "America/Argentina/Buenos_Aires", "Etc/GMT+5", ""})
+    @DisplayName("sessionTimezone accepts timezone names")
+    void sessionTimezoneAcceptsTimezoneNames(String sessionTimezone) {
+        var factory = new DatabaseAnalyticsFactory();
+        factory.setSessionTimezone(sessionTimezone);
+
+        assertThat(VALIDATOR.validateProperty(factory, "sessionTimezone")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"UTC,async_insert=0", "UTC&compress=0", "UTC readonly=1"})
+    @DisplayName("sessionTimezone rejects values that would inject further settings")
+    void sessionTimezoneRejectsSettingInjection(String sessionTimezone) {
+        var factory = new DatabaseAnalyticsFactory();
+        factory.setSessionTimezone(sessionTimezone);
+
+        assertThat(VALIDATOR.validateProperty(factory, "sessionTimezone")).hasSize(1);
+    }
 
     @ParameterizedTest
     @NullAndEmptySource

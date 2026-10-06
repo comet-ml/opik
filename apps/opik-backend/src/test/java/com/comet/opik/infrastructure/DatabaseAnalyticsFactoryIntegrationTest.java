@@ -333,6 +333,8 @@ class DatabaseAnalyticsFactoryIntegrationTest {
         // (Instant.EPOCH), while its SQL compares against a timezone-less literal resolved in the session timezone.
         return Stream.of(
                 Arguments.of("non-UTC session, field unset: the literal is not the epoch", null, false),
+                Arguments.of("non-UTC session, field empty: the literal is not the epoch", "", false),
+                Arguments.of("non-UTC session, field blank: the literal is not the epoch", "   ", false),
                 Arguments.of("non-UTC session, field UTC: the literal is the epoch", "UTC", true));
     }
 
@@ -341,7 +343,9 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     void epochSentinelLiteralMatchesTheAbsoluteEpoch(String name, String sessionTimezone, boolean expected) {
         var factory = factoryWith("custom_http_params=session_timezone=America/New_York");
         factory.setSessionTimezone(sessionTimezone);
-        var sql = "SELECT toDateTime64('1970-01-01 00:00:00', 6) = toDateTime64(0, 6) AS matches";
+        var sql = """
+                SELECT toDateTime64('1970-01-01 00:00:00', 6) = toDateTime64(0, 6) AS matches
+                """;
 
         var r2dbcMatches = Mono.usingWhen(
                 factory.build().create(),

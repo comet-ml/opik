@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -76,9 +77,10 @@ public class DatabaseAnalyticsFactory {
      * {@code toDateTime64('1970-01-01 00:00:00', 6)} resolve to the same instant the Java side binds
      * ({@code Instant.EPOCH}), whatever timezone the ClickHouse server runs in. Same semantics as
      * {@link #asyncInsertBusyTimeoutMaxMs}; unset on the readonly free-form SQL factory, whose {@code readonly=1}
-     * user rejects it.
+     * user rejects it. Restricted to timezone-name characters so a value cannot inject further settings into the
+     * {@code custom_http_params} chain.
      */
-    private String sessionTimezone;
+    private @Pattern(regexp = "[A-Za-z0-9_+\\-/]*") String sessionTimezone;
 
     /**
      * Cadence (ms) for {@code http_headers_progress_interval_ms}, the server-side throttle on
