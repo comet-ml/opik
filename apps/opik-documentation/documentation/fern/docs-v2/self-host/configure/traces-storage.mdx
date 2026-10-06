@@ -39,6 +39,10 @@ A trace that has not ended, or has no time-to-first-token, stores a sentinel val
 
 For "value present", use `end_time != toDateTime64(0, 6)` and `NOT isNaN(x)`.
 
+`duration` is computed from both timestamps, so it is `NaN` whenever either `start_time` or `end_time`
+is the epoch. To select traces with a duration, filter on `NOT isNaN(duration)` rather than on
+`end_time` alone.
+
 <Warning>
   **Old queries don't fail; they return wrong results.** On these columns `IS NULL` matches
   nothing, `IS NOT NULL` matches everything, and `coalesce(x, ...)` / `ifNull(x, ...)` never
