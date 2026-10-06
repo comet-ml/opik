@@ -211,7 +211,7 @@ print(response.message.tool_calls)
 
 ### Thinking models
 
-For models that support thinking, such as Qwen 3 or DeepSeek-R1, pass `think=True` (gpt-oss takes a level such as `"high"` instead). The reasoning is logged in the output as `message.thinking`, next to the final answer:
+For models that support thinking, such as Qwen 3 or DeepSeek-R1, pass `think=True`. The reasoning is logged in the output as `message.thinking`, next to the final answer:
 
 ```python
 response = client.chat(
