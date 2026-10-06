@@ -258,6 +258,17 @@ class TestUnattended:
         assert terminal_session.run_unattended(command, timeout_seconds=0.5) is None
         assert time.monotonic() - started < 10
 
+    def test_no_pseudo_terminal_to_be_had__does_not_run(self, monkeypatch):
+        """The sign-in is then left for later, not a crash."""
+        import pty
+
+        def no_pseudo_terminals_left():
+            raise OSError("out of pty devices")
+
+        monkeypatch.setattr(pty, "openpty", no_pseudo_terminals_left)
+
+        assert terminal_session.run_unattended(["claude"], timeout_seconds=1) is None
+
 
 def test_unattended__on_windows__does_not_run(monkeypatch):
     monkeypatch.setattr(terminal_session.sys, "platform", "win32")

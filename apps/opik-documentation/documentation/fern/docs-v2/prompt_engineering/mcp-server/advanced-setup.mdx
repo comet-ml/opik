@@ -345,15 +345,19 @@ writes nothing unless you name the client:
 uvx opik mcp configure --ai-client cursor --skills
 ```
 
+`--ai-client` takes `claude-code` (or `claude`), `cursor`, `vscode`, `codex`,
+`opencode`, or `all`; repeat it for several. `--skills` installs the skill pack
+without asking, `--no-skills` skips it.
+
 Credentials come from `~/.opik.config`, or from `OPIK_API_KEY` and
 `OPIK_WORKSPACE` already in the environment, such as a CI secret — do not paste
-the key into the command line. `--ai-client` takes `claude-code` (or `claude`),
-`cursor`, `vscode`, `codex`, `opencode`, or `all`; repeat it for several.
-`--skills` installs the skill pack without asking, `--no-skills` skips it.
+the key into the command line. With neither, and no `--deployment`, it uses a
+local Opik that answers at `http://localhost:5173`.
 
-With neither, it uses a local Opik that answers at `http://localhost:5173`, or
-the one `--deployment` names. `cloud` needs no API key: the client signs in in
-the browser.
+`--deployment` names the Opik instead, and sets the saved configuration aside
+for that run. `cloud` needs no API key: the client signs in in the browser.
+`self-hosted` reads the key from `OPIK_API_KEY` only, and the workspace from
+`--workspace` or `OPIK_WORKSPACE`.
 
 ```bash
 uvx opik mcp configure --ai-client cursor --deployment cloud

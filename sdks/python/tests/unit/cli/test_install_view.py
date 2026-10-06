@@ -775,7 +775,7 @@ class TestTheSavedConnection:
             ),
             rich_view.console.capture() as capture,
         ):
-            rich_view.render_connection(*args)
+            rich_view.render_connection(*args, hosts=())
         return [line.rstrip() for line in capture.get().splitlines()]
 
     def test_saved__the_opik__its_workspace__and_where_they_came_from(self):

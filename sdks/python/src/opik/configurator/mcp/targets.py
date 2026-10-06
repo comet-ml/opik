@@ -392,8 +392,8 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         result = _run_client_cli(command, label="codex mcp add")
     except _CliUnavailable as error:
         # For the hosted server `codex mcp add` writes the entry, then waits for the
-        # browser sign-in. One nobody finished in time leaves a registered server
-        # that `codex mcp login` completes, not a failed install.
+        # browser sign-in. If nobody finishes it in time, the server is still
+        # registered and `codex mcp login` completes it: not a failed install.
         if (
             isinstance(error, _CliTimedOut)
             and isinstance(server_spec, mcp_spec.RemoteServerSpec)

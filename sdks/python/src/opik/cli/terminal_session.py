@@ -109,7 +109,11 @@ def run_unattended(command: List[str], timeout_seconds: float) -> Optional[int]:
         return None
     import pty
 
-    master_fd, slave_fd = pty.openpty()
+    try:
+        # Fails where none are left to allocate, as in some containers.
+        master_fd, slave_fd = pty.openpty()
+    except OSError:
+        return None
     try:
         return subprocess.run(
             command,

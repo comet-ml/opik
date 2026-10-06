@@ -385,6 +385,7 @@ class TestTheSavedOpikConfiguration:
             opik_url="https://www.comet.com/",
             workspace="acme-ai",
             source="your Opik configuration",
+            hosts=(),
         )
         assert run.setup.call_args.args[0]["api_key"] == "key"
 
@@ -887,6 +888,16 @@ class TestDeploymentFlag:
         assert run.params["api_key"] is None
         assert run.params["use_local"] is False
 
+    def test_checks_certificates_even_if_the_saved_opik_did_not(self):
+        """The saved setting was for the saved Opik, not the one named now."""
+        run = _run_unattended(
+            ["--deployment", "cloud"],
+            saved=_config(api_key="saved-key", check_tls_certificate=False),
+        )
+
+        assert run.result.exit_code == 0, run.result.output
+        assert run.params["check_tls_certificate"] is True
+
     @pytest.mark.parametrize(
         "args",
         [
@@ -899,6 +910,11 @@ class TestDeploymentFlag:
             ["--deployment", "self-hosted", "--workspace", "ws"],
             # Parsed as given, it reported a down Opik at `localhost:///`.
             ["--deployment", "local", "--url", "localhost:5173"],
+            # No host: it failed later, as a connection error.
+            ["--deployment", "local", "--url", "http://"],
+            # From an unset variable, say: it was taken for no --url at all.
+            ["--deployment", "local", "--url", ""],
+            ["--deployment", "cloud", "--workspace", ""],
         ],
     )
     def test_flags_that_do_not_go_together__refused_before_the_run_starts(self, args):
@@ -976,11 +992,13 @@ class TestUnattendedWithoutConfig:
         assert run.result.exit_code == 0, run.result.output
         assert run.params["use_local"] is True
         assert run.params["api_url"] == "http://localhost:5173/api/"
-        # Said, with the way to pick another.
+        # Said, with the way to pick another — the client included, which a run
+        # without a terminal cannot do without.
         assert "localhost:5173" in run.result.output
-        assert "--deployment <cloud|local|self-hosted>" in " ".join(
-            run.result.output.split()
-        )
+        assert (
+            "opik mcp configure --ai-client claude-code "
+            "--deployment <cloud|local|self-hosted>"
+        ) in " ".join(run.result.output.split())
 
     def test_nothing_answering__lists_each_deployment_with_the_named_client(self):
         run = _run_unattended([], local_opik_answers=False)

@@ -102,14 +102,18 @@ def _check_connection_flags(
     usage error rather than a failed run in the funnel."""
     local = interactive_helpers.DeploymentType.LOCAL
     self_hosted = interactive_helpers.DeploymentType.SELF_HOSTED
-    if url and deployment not in (local, self_hosted):
+    # `is not None`: an empty value, from an unset variable say, is a mistake to
+    # report, not the default address.
+    if url is not None and deployment not in (local, self_hosted):
         raise click.UsageError("--url goes with --deployment local or self-hosted.")
-    if workspace and deployment is not self_hosted:
+    if workspace is not None and deployment is not self_hosted:
         raise click.UsageError("--workspace goes with --deployment self-hosted.")
-    if url and urllib.parse.urlsplit(url).scheme not in ("http", "https"):
-        raise click.UsageError(
-            "--url needs a full address, such as http://localhost:5173."
-        )
+    if url is not None:
+        address = urllib.parse.urlsplit(url)
+        if address.scheme not in ("http", "https") or not address.hostname:
+            raise click.UsageError(
+                "--url needs a full address, such as http://localhost:5173."
+            )
     if deployment is self_hosted and not (url and workspace):
         # Not guessed: an account with several would be read from the wrong one.
         raise click.UsageError(
@@ -425,6 +429,7 @@ def run_configure(
                     # A local deployment has the one workspace, `default`.
                     workspace=None if params["use_local"] else params["workspace"],
                     source=_saved_source(saved),
+                    hosts=hosts,
                 )
         elif not interactive_helpers.is_interactive():
             if saved is None:
@@ -462,6 +467,7 @@ def run_configure(
                 opik_url=params["base_url"],
                 workspace=None,
                 source="found running; nothing is saved",
+                hosts=hosts,
             )
         else:
             # No usable config (none, one without an API key, or one the flag set
@@ -481,10 +487,12 @@ def run_configure(
                 )
                 # A gap before the client picker, which the questions do not leave.
                 click.echo()
-            if ignore_opik_config:
-                # A saved "don't check certificates" was made for the saved Opik; this
-                # run connects to another one, and sends it the API key to verify.
-                params["check_tls_certificate"] = True
+
+        if saved is None:
+            # `--ignore-opik-config` or `--deployment`. A saved "don't check
+            # certificates" was made for the saved Opik; this run connects to
+            # another one, and may send it the API key to verify.
+            params["check_tls_certificate"] = True
 
         # Installed unless refused: the pack is what teaches the client to use the
         # server just registered.

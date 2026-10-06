@@ -266,7 +266,9 @@ def render_mcp_banner() -> None:
     )
 
 
-def render_connection(opik_url: str, workspace: Optional[str], source: str) -> None:
+def render_connection(
+    opik_url: str, workspace: Optional[str], source: str, hosts: Sequence[str]
+) -> None:
     """Which saved Opik the AI client is being connected to, from where, and how
     to choose another.
 
@@ -292,7 +294,12 @@ def render_connection(opik_url: str, workspace: Optional[str], source: str) -> N
                     # The flag asks, which needs a terminal.
                     "opik mcp configure --ignore-opik-config"
                     if interactive_helpers.is_interactive()
-                    else "opik mcp configure --deployment <cloud|local|self-hosted>",
+                    # The clients again: without a terminal there is no picker.
+                    else " ".join(
+                        ["opik mcp configure"]
+                        + [f"--ai-client {host}" for host in hosts]
+                        + ["--deployment <cloud|local|self-hosted>"]
+                    ),
                     _CODE_STYLE,
                 ),
             ),
