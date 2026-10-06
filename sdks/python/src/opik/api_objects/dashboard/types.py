@@ -172,6 +172,32 @@ class ProjectMetricsConfig(_DashboardModel):
     usage_metrics: Optional[List[str]] = None
     breakdown: Optional[BreakdownConfig] = None
 
+    @pydantic.model_validator(mode="after")
+    def _check_breakdown_compatibility(self) -> "ProjectMetricsConfig":
+        if self.breakdown is None:
+            return self
+        if (
+            self.breakdown.field in _SPAN_ONLY_BREAKDOWN_FIELDS
+            and self.metric_type in _NON_SPAN_METRIC_TYPES
+        ):
+            raise exceptions.DashboardValidationError(
+                f"breakdown.field '{self.breakdown.field}' is only supported for span "
+                f"metrics (SPAN_*), got metric_type '{self.metric_type}'"
+            )
+        return self
+
+
+# Mirrors BreakdownField.isCompatibleWith in apps/opik-backend: model, provider and
+# type breakdowns are rejected for trace and thread metrics. Unknown metric types are
+# let through so the SDK keeps working when new metrics are added.
+_SPAN_ONLY_BREAKDOWN_FIELDS = frozenset(
+    field.value
+    for field in (BreakdownField.MODEL, BreakdownField.PROVIDER, BreakdownField.TYPE)
+)
+_NON_SPAN_METRIC_TYPES = frozenset(
+    metric.value for metric in ProjectMetricType if not metric.value.startswith("SPAN_")
+)
+
 
 class ProjectStatsCardConfig(_DashboardModel):
     source: str = TraceDataType.TRACES.value
