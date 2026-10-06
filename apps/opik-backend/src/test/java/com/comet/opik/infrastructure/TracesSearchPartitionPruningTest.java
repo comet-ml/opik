@@ -51,6 +51,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -259,8 +260,12 @@ class TracesSearchPartitionPruningTest {
     /** A trace whose id is minted mid-week, so the partition value is the week's Monday rather than the id's own day. */
     private Trace newTrace(String projectName, LocalDate monday, String token) {
         var idAt = monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC);
+        // ClickHouse keeps microseconds, and the CI JVM clock has nanoseconds.
+        var startTime = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         return factory.manufacturePojo(Trace.class).toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(idAt.toEpochMilli()))
+                .startTime(startTime)
+                .endTime(startTime.plusMillis(100))
                 .projectName(projectName)
                 .name("searchable-" + token)
                 .feedbackScores(null)
