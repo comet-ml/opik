@@ -119,9 +119,15 @@ const PlaygroundPrompt = ({
   const selectedChatPromptVersionId = prompt?.loadedChatPromptVersionId;
 
   const handleChatPromptMessagesLoaded = useCallback(
-    (newMessages: LLMMessage[], promptName: string) => {
+    (newMessages: LLMMessage[], promptName: string, versionId: string) => {
       setLastImportedPromptName(promptName);
-      updatePrompt(promptId, { messages: newMessages });
+      // Pinning the version keeps a newer library version from being applied
+      // over unsaved edits later.
+      updatePrompt(promptId, {
+        messages: newMessages,
+        loadedChatPromptVersionId: versionId,
+        appliedChatPromptVersionId: versionId,
+      });
     },
     [promptId, updatePrompt],
   );
@@ -130,6 +136,7 @@ const PlaygroundPrompt = ({
     updatePrompt(promptId, {
       loadedChatPromptId: undefined,
       loadedChatPromptVersionId: undefined,
+      appliedChatPromptVersionId: undefined,
     });
   }, [promptId, updatePrompt]);
 
@@ -142,6 +149,7 @@ const PlaygroundPrompt = ({
   } = useLoadChatPrompt({
     selectedChatPromptId,
     selectedChatPromptVersionId,
+    appliedChatPromptVersionId: prompt?.appliedChatPromptVersionId,
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
     onPromptUnavailable: handleChatPromptUnavailable,
@@ -307,6 +315,7 @@ const PlaygroundPrompt = ({
       updatePrompt(promptId, {
         loadedChatPromptId: loadedPromptId,
         loadedChatPromptVersionId: loadedVersionId,
+        appliedChatPromptVersionId: undefined,
       });
     },
     [promptId, updatePrompt],
@@ -511,6 +520,7 @@ const PlaygroundPrompt = ({
             updatePrompt(promptId, {
               loadedChatPromptId: savedPromptId,
               loadedChatPromptVersionId: version.id,
+              appliedChatPromptVersionId: version.id,
             });
 
             const newChatPromptKey = `${savedPromptId}-${version.id}`;
