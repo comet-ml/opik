@@ -56,6 +56,8 @@ export * from "./AnnotationQueueItemsPublic.js";
 export * from "./AnnotationQueuePagePublic.js";
 export * from "./AnnotationQueuePublic.js";
 export * from "./AnnotationQueuePublicScope.js";
+export * from "./AnnotationQueueReference.js";
+export * from "./AnnotationQueueReferencePublic.js";
 export * from "./AnnotationQueueReviewer.js";
 export * from "./AnnotationQueueReviewerPublic.js";
 export * from "./AnnotationQueueScope.js";
