@@ -26,7 +26,9 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.lang.reflect.Method;
 import java.security.KeyPairGenerator;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +47,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockingDetails;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Vertex AI client generator")
@@ -541,9 +545,13 @@ class VertexAIClientGeneratorTest {
 
         private static final String STREAM_GENERATE_CONTENT_PATH = ".*:streamGenerateContent";
 
-        private static final String EXPECTED_CUT_OFF_MESSAGE = "Vertex AI used up the max output tokens limit "
+        private static final String EXPECTED_CUT_OFF_MESSAGE = "Vertex AI used up the max output tokens limit (1024) "
                 + "before writing any answer. Thinking tokens count toward this limit, so raise Max output tokens "
                 + "and run again";
+
+        private static final String EXPECTED_CUT_OFF_MESSAGE_WITHOUT_A_LIMIT = "Vertex AI used up the max output "
+                + "tokens limit before writing any answer. Thinking tokens count toward this limit, so raise Max "
+                + "output tokens and run again";
 
         private static final String CUT_OFF_BEFORE_ANY_TEXT = """
                 {
@@ -618,8 +626,8 @@ class VertexAIClientGeneratorTest {
 
         private static Stream<Arguments> cutOffMessages() {
             return Stream.of(
-                    Arguments.of(1024, EXPECTED_CUT_OFF_MESSAGE + ", max output tokens '1024'"),
-                    Arguments.of(null, EXPECTED_CUT_OFF_MESSAGE));
+                    Arguments.of(1024, EXPECTED_CUT_OFF_MESSAGE),
+                    Arguments.of(null, EXPECTED_CUT_OFF_MESSAGE_WITHOUT_A_LIMIT));
         }
 
         @ParameterizedTest(name = "max_completion_tokens {0}")
@@ -643,7 +651,7 @@ class VertexAIClientGeneratorTest {
 
             assertThat(outcome.error())
                     .isInstanceOf(InvalidRequestException.class)
-                    .hasMessage(EXPECTED_CUT_OFF_MESSAGE + ", max output tokens '1024'");
+                    .hasMessage(EXPECTED_CUT_OFF_MESSAGE);
             assertThat(outcome.closed()).isFalse();
             assertThat(outcome.content()).isEmpty();
         }
@@ -668,6 +676,28 @@ class VertexAIClientGeneratorTest {
             assertThat(outcome.error()).isNull();
             assertThat(outcome.closed()).isTrue();
             assertThat(outcome.content()).isEqualTo("The answer is");
+        }
+
+        private static Stream<Method> streamingCallbacks() {
+            return Arrays.stream(StreamingChatResponseHandler.class.getMethods());
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("streamingCallbacks")
+        @DisplayName("the cut-off check passes every streaming callback on to the wrapped handler")
+        void cutOffCheckForwardsEveryStreamingCallback(Method callback) throws Exception {
+            var delegate = mock(StreamingChatResponseHandler.class);
+            var handler = LlmProviderVertexAI.failingWhenCutOffBeforeAnswering(request(MODEL, null, null), delegate);
+            var arguments = Arrays.stream(callback.getParameterTypes())
+                    .map(type -> type == String.class ? "text" : mock(type))
+                    .toArray();
+
+            callback.invoke(handler, arguments);
+
+            assertThat(mockingDetails(delegate).getInvocations()).singleElement().satisfies(invocation -> {
+                assertThat(invocation.getMethod()).isEqualTo(callback);
+                assertThat(invocation.getArguments()).containsExactly(arguments);
+            });
         }
 
         private record StreamOutcome(String content, boolean closed, Throwable error) {

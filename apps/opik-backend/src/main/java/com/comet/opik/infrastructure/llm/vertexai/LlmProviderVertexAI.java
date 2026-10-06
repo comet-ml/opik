@@ -9,6 +9,13 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.exception.InvalidRequestException;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.CompleteToolCall;
+import dev.langchain4j.model.chat.response.PartialResponse;
+import dev.langchain4j.model.chat.response.PartialResponseContext;
+import dev.langchain4j.model.chat.response.PartialThinking;
+import dev.langchain4j.model.chat.response.PartialThinkingContext;
+import dev.langchain4j.model.chat.response.PartialToolCall;
+import dev.langchain4j.model.chat.response.PartialToolCallContext;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
@@ -30,8 +37,8 @@ import java.util.function.Consumer;
 @Slf4j
 public class LlmProviderVertexAI implements LlmProviderService {
 
-    static final String CUT_OFF_BEFORE_ANSWERING = "Vertex AI used up the max output tokens limit before writing any "
-            + "answer. Thinking tokens count toward this limit, so raise Max output tokens and run again";
+    private static final String CUT_OFF_BEFORE_ANSWERING = "Vertex AI used up the max output tokens limit%s before "
+            + "writing any answer. Thinking tokens count toward this limit, so raise Max output tokens and run again";
 
     private final @NonNull VertexAIClientGenerator llmProviderClientGenerator;
     private final @NonNull LlmProviderClientApiConfig config;
@@ -129,17 +136,51 @@ public class LlmProviderVertexAI implements LlmProviderService {
     // InvalidRequestException is non-retriable, so the cut-off is not re-run (and re-billed) by the retry policy,
     // and it is classified as a 400 on both the streaming and the non-streaming path.
     private static InvalidRequestException cutOffBeforeAnswering(ChatCompletionRequest request) {
-        return new InvalidRequestException(VertexAIClientGenerator.maxOutputTokens(request)
-                .map(limit -> CUT_OFF_BEFORE_ANSWERING + ", max output tokens '%s'".formatted(limit))
-                .orElse(CUT_OFF_BEFORE_ANSWERING));
+        var limit = VertexAIClientGenerator.maxOutputTokens(request).map(" (%s)"::formatted).orElse("");
+        return new InvalidRequestException(CUT_OFF_BEFORE_ANSWERING.formatted(limit));
     }
 
-    private static StreamingChatResponseHandler failingWhenCutOffBeforeAnswering(ChatCompletionRequest request,
+    static StreamingChatResponseHandler failingWhenCutOffBeforeAnswering(ChatCompletionRequest request,
             StreamingChatResponseHandler delegate) {
         return new StreamingChatResponseHandler() {
             @Override
             public void onPartialResponse(String partialResponse) {
                 delegate.onPartialResponse(partialResponse);
+            }
+
+            @Override
+            public void onPartialResponse(PartialResponse partialResponse, PartialResponseContext context) {
+                delegate.onPartialResponse(partialResponse, context);
+            }
+
+            @Override
+            public void onPartialThinking(PartialThinking partialThinking) {
+                delegate.onPartialThinking(partialThinking);
+            }
+
+            @Override
+            public void onPartialThinking(PartialThinking partialThinking, PartialThinkingContext context) {
+                delegate.onPartialThinking(partialThinking, context);
+            }
+
+            @Override
+            public void onPartialToolCall(PartialToolCall partialToolCall) {
+                delegate.onPartialToolCall(partialToolCall);
+            }
+
+            @Override
+            public void onPartialToolCall(PartialToolCall partialToolCall, PartialToolCallContext context) {
+                delegate.onPartialToolCall(partialToolCall, context);
+            }
+
+            @Override
+            public void onCompleteToolCall(CompleteToolCall completeToolCall) {
+                delegate.onCompleteToolCall(completeToolCall);
+            }
+
+            @Override
+            public void onUnmappedRawEvent(Object rawEvent) {
+                delegate.onUnmappedRawEvent(rawEvent);
             }
 
             @Override

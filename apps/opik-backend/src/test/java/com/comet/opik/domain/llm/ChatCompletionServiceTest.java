@@ -611,8 +611,9 @@ class ChatCompletionServiceTest {
                             "credit balance is too low"),
                     Arguments.of(
                             "Vertex AI reply cut off before writing any text",
-                            new InvalidRequestException("Vertex AI used up the max output tokens limit before "
-                                    + "writing any answer, max output tokens '1024'"),
+                            new InvalidRequestException("Vertex AI used up the max output tokens limit (1024) "
+                                    + "before writing any answer. Thinking tokens count toward this limit, so raise "
+                                    + "Max output tokens and run again"),
                             400,
                             "Vertex AI used up the max output tokens limit"),
                     Arguments.of(
