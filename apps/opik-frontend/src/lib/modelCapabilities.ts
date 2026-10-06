@@ -148,15 +148,22 @@ export const supportsImageInput = (model?: string | null): boolean => {
   return false;
 };
 
+const SNAPSHOT_DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;
+
 const baseModelName = (modelName: string) => {
   const normalized = normalizeModelName(modelName);
-  return normalized.slice(normalized.lastIndexOf("/") + 1).split(":")[0];
+  return normalized
+    .slice(normalized.lastIndexOf("/") + 1)
+    .split(":")[0]
+    .replace(SNAPSHOT_DATE_SUFFIX, "");
 };
 
 // The pricing data flags audio under only some of a model's names:
-// gemini-2.5-flash has no flag while gemini/gemini-2.5-flash does. An exact-name
-// lookup like supportsImageInput's would block audio on models that accept it,
-// so support is pooled across every provider-prefixed name of the same model.
+// gemini-2.5-flash has no flag while gemini/gemini-2.5-flash does, and
+// gpt-4o-audio-preview is listed only as dated snapshots like
+// gpt-4o-audio-preview-2024-12-17. An exact-name lookup like supportsImageInput's
+// would block audio on models that accept it, so support is pooled across every
+// provider-prefixed and dated name of the same model.
 // An explicit false under any name still wins: one stray flag
 // (replicate/openai/gpt-4o) would otherwise allow audio on gpt-4o, which takes none.
 const audioBaseNames = (flag: boolean) =>

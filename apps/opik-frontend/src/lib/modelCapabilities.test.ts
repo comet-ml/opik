@@ -15,6 +15,12 @@ describe("supportsAudioInput", () => {
       expect(supportsAudioInput(model)).toBe(true);
     });
 
+    it("allows audio for a name the data flags only under dated snapshots", () => {
+      expect(
+        supportsAudioInput(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_AUDIO_PREVIEW),
+      ).toBe(true);
+    });
+
     it("ignores a provider suffix after a colon", () => {
       expect(
         supportsAudioInput(
