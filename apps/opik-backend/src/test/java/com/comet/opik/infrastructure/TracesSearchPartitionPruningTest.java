@@ -59,6 +59,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 /**
  * A trace search reads the large text columns of every part its id-range admits. On the weekly-partitioned
@@ -220,10 +221,11 @@ class TracesSearchPartitionPruningTest {
                 .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
                 .doesNotContain("IN (SELECT id FROM page_ids)");
         // The list, the count and the stats each render their own search scan.
-        Stream.of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
-                .forEach(queryName -> assertThat(lastSearch(queryName, token))
+        assertSoftly(softly -> Stream
+                .of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
+                .forEach(queryName -> softly.assertThat(lastSearch(queryName, token))
                         .as("the traces week hint ran in %s, so the results above are not a vacuous pass", queryName)
-                        .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)"));
+                        .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)")));
     }
 
     /** A trace whose id is minted mid-week, so the partition value is the week's Monday rather than the id's own day. */

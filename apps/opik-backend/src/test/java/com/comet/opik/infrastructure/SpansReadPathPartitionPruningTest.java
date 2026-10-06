@@ -84,6 +84,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
@@ -488,11 +489,11 @@ class SpansReadPathPartitionPruningTest {
                 .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
                 .doesNotContain("IN (SELECT id FROM page_ids)");
         // The list, the count and both stats queries each render their own search scan.
-        Stream.of("find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
+        assertSoftly(softly -> Stream.of("find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
                 "get_span_stats_feedback_scores")
-                .forEach(queryName -> assertThat(lastSpanSearch(queryName, token))
+                .forEach(queryName -> softly.assertThat(lastSpanSearch(queryName, token))
                         .as("the spans week hint ran in %s, so the results above are not a vacuous pass", queryName)
-                        .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)"));
+                        .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)")));
     }
 
     /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
