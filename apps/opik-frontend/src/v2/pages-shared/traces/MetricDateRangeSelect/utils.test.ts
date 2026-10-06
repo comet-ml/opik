@@ -5,6 +5,7 @@ import {
   calculateIntervalBounds,
   calculateIntervalStartAndEnd,
   isLiveDateRange,
+  parseDateRangeFromState,
   reanchorIntervalBounds,
 } from "./utils";
 import {
@@ -501,5 +502,40 @@ describe("isLiveDateRange", () => {
     vi.setSystemTime(time.toDate());
 
     expect(isLiveDateRange(dateRange)).toBe(expected);
+  });
+});
+
+describe("parseDateRangeFromState", () => {
+  const minDate = new Date(2025, 0, 1);
+  const maxDate = new Date(2026, 11, 31);
+  const fallback = PRESET_DATE_RANGES.past30days;
+
+  it.each<[string, string]>([
+    ["a start after the end", "2026-10-07,2026-10-06"],
+    ["an impossible start date", "2026-13-45,2026-10-06"],
+    ["an impossible end date", "2026-10-01,2026-02-30"],
+  ])("should fall back to the default preset for %s", (_, value) => {
+    expect(
+      parseDateRangeFromState(value, minDate, maxDate, "past30days"),
+    ).toEqual(fallback);
+  });
+
+  it.each<[string, string, Date, Date]>([
+    [
+      "a range of several days",
+      "2026-10-01,2026-10-06",
+      new Date(2026, 9, 1),
+      new Date(2026, 9, 6),
+    ],
+    [
+      "a single day",
+      "2026-10-06,2026-10-06",
+      new Date(2026, 9, 6),
+      new Date(2026, 9, 6),
+    ],
+  ])("should keep %s", (_, value, from, to) => {
+    expect(
+      parseDateRangeFromState(value, minDate, maxDate, "past30days"),
+    ).toEqual({ from, to });
   });
 });

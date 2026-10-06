@@ -7,6 +7,7 @@ import {
   DateRangeSerializedValue,
 } from "@/shared/DateRangeSelect";
 import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import isEqual from "lodash/isEqual";
 import {
   DATE_RANGE_PRESET_ALLTIME,
@@ -15,12 +16,15 @@ import {
   MAX_METRICS_DATE,
 } from "./constants";
 
+dayjs.extend(customParseFormat);
+
 export const serializeDateForURL = (date: Date): string => {
   return dayjs(date).format("YYYY-MM-DD");
 };
 
+// Strict, so an impossible date such as 2026-13-45 is rejected instead of rolling over into 2027.
 export const parseDateFromState = (dateString: string): Date => {
-  return dayjs(dateString, "YYYY-MM-DD").toDate();
+  return dayjs(dateString, "YYYY-MM-DD", true).toDate();
 };
 
 export const serializeDateRange = (range: DateRangeValue): string => {
@@ -60,7 +64,11 @@ export const parseDateRangeFromState = (
 
     const parsedRange = { from, to };
 
-    if (dayjs(from).isBefore(minDate) || dayjs(to).isAfter(maxDate)) {
+    if (
+      dayjs(from).isBefore(minDate) ||
+      dayjs(to).isAfter(maxDate) ||
+      dayjs(from).isAfter(to)
+    ) {
       return PRESET_DATE_RANGES[defaultValue];
     }
 
