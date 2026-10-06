@@ -24,6 +24,7 @@ import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
   useIsOnlyWindowBehind,
+  windowQueryMeta,
   windowQueryOptions,
   DATE_RANGE_PRESET_ALLTIME,
   IntervalWindow,
@@ -902,6 +903,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     {
       enabled: false,
       refetchOnMount: "always",
+      meta: windowQueryMeta(selectionKey),
     },
   );
 
