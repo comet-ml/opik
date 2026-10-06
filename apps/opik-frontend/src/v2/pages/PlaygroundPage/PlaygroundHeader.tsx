@@ -25,6 +25,7 @@ import {
   useClearCreatedExperiments,
   useCreatedExperiments,
   useIsRunning,
+  useIsResumingRun,
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
@@ -69,6 +70,7 @@ const PlaygroundHeader = ({
   const resetOutputMap = useResetOutputMap();
   const setExperimentName = useSetExperimentName();
   const isRunning = useIsRunning();
+  const isResumingRun = useIsResumingRun();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
   const filters = useDatasetFilters();
@@ -151,6 +153,7 @@ const PlaygroundHeader = ({
   const hasNoDatasetItems = isExperimentMode && datasetItemsTotal === 0;
 
   const isRunDisabled =
+    isResumingRun ||
     !allPromptsHaveModels ||
     !allMessagesNotEmpty ||
     hasMediaCompatibilityIssues ||

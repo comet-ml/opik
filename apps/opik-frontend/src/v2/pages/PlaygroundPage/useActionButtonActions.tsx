@@ -35,7 +35,8 @@ import usePlaygroundStore, {
   useClearCreatedExperiments,
   useIsRunning,
   useSetAllRunning,
-  useClearRunningMap,
+  useSetIsResumingRun,
+  useSettleRun,
   useSetPromptRunning,
   useSetProgress,
   useSetProgressPhase,
@@ -113,7 +114,8 @@ const useActionButtonActions = ({
 
   const isRunning = useIsRunning();
   const setAllRunning = useSetAllRunning();
-  const clearRunningMap = useClearRunningMap();
+  const settleRun = useSettleRun();
+  const setIsResumingRun = useSetIsResumingRun();
   const setPromptRunning = useSetPromptRunning();
   const isToStopRef = useRef(false);
   const setCreatedExperiments = useSetCreatedExperiments();
@@ -200,10 +202,10 @@ const useActionButtonActions = ({
   const resetState = useCallback(() => {
     resetOutputMap();
     abortControllersRef.current.clear();
-    clearRunningMap();
+    settleRun();
     clearCreatedExperiments();
     resetProgress();
-  }, [resetOutputMap, clearCreatedExperiments, clearRunningMap, resetProgress]);
+  }, [resetOutputMap, clearCreatedExperiments, settleRun, resetProgress]);
 
   const cancelBackendRun = useCallback(
     (promptIds?: string[]) => {
@@ -220,19 +222,36 @@ const useActionButtonActions = ({
       setIsRunInFlight(false);
       cancelExperimentRun({ experimentIds });
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
+      queryClient.invalidateQueries({ queryKey: ["experiment"] });
+      queryClient.invalidateQueries({ queryKey: [COMPARE_EXPERIMENTS_KEY] });
     },
     [isBackendRun, cancelExperimentRun, setIsRunInFlight, queryClient],
   );
 
+  /**
+   * Leaving the page, as opposed to stopping the run. A server-side run outlives it, so cancelling
+   * here would end the run, and clearing the in-flight flag would stop the sidebar watching for it.
+   */
+  const stopWatching = useCallback(() => {
+    abortControllersRef.current.forEach(({ controller }) => controller.abort());
+    abortControllersRef.current.clear();
+    // The poll is a timeout chain and outlives the page; left running it settles the run here.
+    isToStopRef.current = true;
+
+    if (!isBackendRun) {
+      settleRun();
+    }
+  }, [settleRun, isBackendRun]);
+
   const stopAll = useCallback(() => {
     announcePendingRef.current = false;
     scopedAnnounceRef.current.clear();
-    clearRunningMap();
+    settleRun();
     isToStopRef.current = true;
     abortControllersRef.current.forEach(({ controller }) => controller.abort());
     abortControllersRef.current.clear();
     cancelBackendRun();
-  }, [clearRunningMap, cancelBackendRun]);
+  }, [settleRun, cancelBackendRun]);
 
   const stopSingle = useCallback(
     (promptId: string) => {
@@ -301,28 +320,27 @@ const useActionButtonActions = ({
   const handlePollTimeout = useCallback(
     (description: string) => {
       announcePendingRef.current = false;
-      setIsRunInFlight(false);
-      clearRunningMap();
+      settleRun();
       isToStopRef.current = false;
       resetProgress();
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
       queryClient.invalidateQueries({ queryKey: [COMPARE_EXPERIMENTS_KEY] });
       toast({ title: "Still running", description });
     },
-    [clearRunningMap, resetProgress, queryClient, toast, setIsRunInFlight],
+    [settleRun, resetProgress, queryClient, toast],
   );
 
   const finishPollScope = useCallback(
     (scope?: PollScope) => {
-      setIsRunInFlight(false);
       if (scope?.scopedPromptIds) {
+        setIsRunInFlight(false);
         scope.scopedPromptIds.forEach((id) => setPromptRunning(id, false));
       } else {
-        clearRunningMap();
+        settleRun();
         isToStopRef.current = false;
       }
     },
-    [clearRunningMap, setPromptRunning, setIsRunInFlight],
+    [settleRun, setPromptRunning, setIsRunInFlight],
   );
 
   const handlePollError = useCallback(
@@ -332,20 +350,23 @@ const useActionButtonActions = ({
       description: string,
       onUnscopedCleanup?: () => void,
     ) => {
+      // A cancelled poll means this tab stopped watching, not that the run stopped. Both paths
+      // that abort it already settle the run; doing it here too ends a live one.
+      if (axios.isCancel(error)) {
+        return;
+      }
+
       const isScoped = !!scope?.scopedPromptIds;
       finishPollScope(scope);
       if (!isScoped) {
         onUnscopedCleanup?.();
       }
-      // Stopping a run aborts the poll's own request, which is not a failure to report. These are
-      // all axios calls, so a stop surfaces as CanceledError rather than AbortError.
-      if (!axios.isCancel(error)) {
-        toast({
-          title: "Error",
-          description,
-          variant: "destructive",
-        });
-      }
+
+      toast({
+        title: "Error",
+        description,
+        variant: "destructive",
+      });
     },
     [finishPollScope, toast],
   );
@@ -645,7 +666,7 @@ const useActionButtonActions = ({
         announceExperiments: experiments,
       });
     } catch {
-      clearRunningMap();
+      settleRun();
       isToStopRef.current = false;
     }
   }, [
@@ -655,7 +676,7 @@ const useActionButtonActions = ({
     versionHash,
     resetState,
     setAllRunning,
-    clearRunningMap,
+    settleRun,
     promptIds,
     promptMap,
     runExperimentExecution,
@@ -706,7 +727,7 @@ const useActionButtonActions = ({
       () => {
         logProcessor.finishLogging();
 
-        clearRunningMap();
+        settleRun();
         isToStopRef.current = false;
         abortControllersRef.current.clear();
       },
@@ -714,7 +735,7 @@ const useActionButtonActions = ({
   }, [
     resetState,
     setAllRunning,
-    clearRunningMap,
+    settleRun,
     createCombinations,
     processCombination,
     logProcessorHandlers,
@@ -885,17 +906,30 @@ const useActionButtonActions = ({
     if (entries.length === 0 || runTotalItems === 0) return;
 
     hasResumedRef.current = true;
+    // Set before the round-trip, not after: until it answers, the page knows a run exists but not
+    // whether it is still going, and offering Run in that window starts a second one alongside it.
+    setIsResumingRun(true);
     const experimentIds = entries.map(([, experimentId]) => experimentId);
 
     (async () => {
       try {
+        // Through the cache the cells and the sidebar already share, so resuming does not read
+        // the same experiments a second time.
         const experiments = await Promise.all(
           experimentIds.map((experimentId) =>
-            getExperimentById({}, { experimentId }),
+            queryClient.fetchQuery({
+              queryKey: ["experiment", { experimentId }],
+              queryFn: (context) =>
+                getExperimentById(context, { experimentId }),
+            }),
           ),
         );
 
         if (experiments.every((exp) => isExperimentTerminal(exp?.status))) {
+          // Finished while we were away. The per-prompt running state is not cleared by leaving,
+          // and survives navigating back, so without this the page returns offering Stop for a
+          // run that is already over.
+          settleRun();
           return;
         }
 
@@ -915,10 +949,15 @@ const useActionButtonActions = ({
       } catch {
         // A run we cannot read the status of is one we cannot resume; the cells still fill in on
         // their own, so leaving the page idle is better than a progress bar that never moves.
+      } finally {
+        setIsResumingRun(false);
       }
     })();
   }, [
     datasetId,
+    queryClient,
+    setIsResumingRun,
+    settleRun,
     setPromptRunning,
     setProgress,
     setProgressPhase,
@@ -931,6 +970,7 @@ const useActionButtonActions = ({
     runAll,
     runSingle,
     stopAll,
+    stopWatching,
     stopSingle,
   };
 };
