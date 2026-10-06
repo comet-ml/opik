@@ -45,6 +45,7 @@ import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -455,27 +456,16 @@ class SpansReadPathPartitionPruningTest {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var now = Instant.now();
-        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
-                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
-                .projectName(projectName)
-                .startTime(now)
-                .endTime(now.plusMillis(100))
-                .feedbackScores(null)
-                .build(), API_KEY, WORKSPACE_NAME);
         // The alert window bounds trace_id only, so the far-future week must come from the span-weeks pre-pass.
-        spanResourceClient.batchCreateSpans(List.of(
-                newSpan(now, traceId).toBuilder().projectName(projectName)
-                        .totalEstimatedCost(new BigDecimal("1.25")).build(),
-                newSpan(Instant.parse("2201-08-30T03:18:08Z"), traceId).toBuilder().projectName(projectName)
-                        .totalEstimatedCost(new BigDecimal("2.5")).build()),
-                API_KEY, WORKSPACE_NAME);
+        var spans = createTraceWithAFarFutureSpan(projectName, now);
+        var expected = totalCost(spans);
 
         var actual = projectMetricsDAO.getTotalCost(List.of(projectId), now.minus(Duration.ofHours(1)), null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER))
                 .block();
 
-        assertThat(actual).isEqualByComparingTo("3.75");
+        assertThat(actual).isEqualByComparingTo(expected);
     }
 
     /** Each read takes the project name and the trace id, and returns the traces it read. */
@@ -495,48 +485,80 @@ class SpansReadPathPartitionPruningTest {
     void traceAggregatesAFarFutureSpanOfItsTrace(String queryName, BiFunction<String, UUID, List<Trace>> read) {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
         projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        var now = Instant.now();
+        // The spans reads are keyed by trace id, so the far-future week must come from the span-weeks pre-pass.
+        var spans = createTraceWithAFarFutureSpan(projectName, Instant.now());
+        var expected = new TraceAggregates(spans.size(), totalCost(spans));
+
+        var actual = read.apply(projectName, spans.getFirst().traceId()).stream()
+                .map(trace -> new TraceAggregates(trace.spanCount(), trace.totalEstimatedCost()))
+                .toList();
+
+        assertThat(actual)
+                .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
+                        .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                        .build())
+                .containsExactly(expected);
+    }
+
+    /** The span aggregates a trace read reports. */
+    private record TraceAggregates(int spanCount, BigDecimal totalEstimatedCost) {
+    }
+
+    /** A trace at {@code now} with one span beside it and one a bad clock files under a far-future week. */
+    private List<Span> createTraceWithAFarFutureSpan(String projectName, Instant now) {
         var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
                 .projectName(projectName)
                 .startTime(now)
+                .endTime(now.plusMillis(100))
                 .feedbackScores(null)
                 .build(), API_KEY, WORKSPACE_NAME);
-        // The spans reads are keyed by trace id, so the far-future week must come from the span-weeks pre-pass.
-        spanResourceClient.batchCreateSpans(List.of(
-                newSpan(now, traceId).toBuilder().projectName(projectName)
-                        .totalEstimatedCost(new BigDecimal("1.25")).build(),
-                newSpan(Instant.parse("2201-08-30T03:18:08Z"), traceId).toBuilder().projectName(projectName)
-                        .totalEstimatedCost(new BigDecimal("2.5")).build()),
-                API_KEY, WORKSPACE_NAME);
+        var spans = Stream.of(now, farFutureInstant())
+                .map(idAt -> newSpan(idAt, traceId).toBuilder()
+                        .projectName(projectName)
+                        .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomInt(1, 100_000), 2))
+                        .build())
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+        return spans;
+    }
 
-        var actual = read.apply(projectName, traceId);
+    private static BigDecimal totalCost(List<Span> spans) {
+        return spans.stream().map(Span::totalEstimatedCost).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 
-        assertThat(actual).singleElement().satisfies(trace -> {
-            assertThat(trace.spanCount()).isEqualTo(2);
-            assertThat(trace.totalEstimatedCost()).isEqualByComparingTo("3.75");
-        });
+    /** Past every real clock, short of where {@code id_at} saturates. */
+    private static Instant farFutureInstant() {
+        return LocalDate.of(RandomUtils.secure().randomInt(2150, 2290), 1, 1)
+                .plusDays(RandomUtils.secure().randomInt(0, 365))
+                .atTime(12, 0)
+                .toInstant(ZoneOffset.UTC);
     }
 
     @Test
     void spanStatsCountSpansInEveryWeekWithoutASearch() {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var fromTime = THIS_MONDAY.minusWeeks(10).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
-        // Two ordinary weeks and the far-future one a bad clock files spans under.
-        var expected = Stream.of(THIS_MONDAY.minusWeeks(5), THIS_MONDAY, LocalDate.of(2199, 12, 30))
-                .map(monday -> newSpan(monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC),
-                        ID_GENERATOR.generateId()).toBuilder()
+        var windowWeeks = RandomUtils.secure().randomInt(2, 20);
+        var fromTime = THIS_MONDAY.minusWeeks(windowWeeks).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
+        // Two ordinary weeks inside the window and the far-future one a bad clock files spans under.
+        var ordinary = Stream.generate(() -> THIS_MONDAY.minusWeeks(RandomUtils.secure().randomInt(0, windowWeeks)))
+                .distinct()
+                .limit(2)
+                .map(monday -> monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC));
+        var spans = Stream.concat(ordinary, Stream.of(farFutureInstant()))
+                .map(idAt -> newSpan(idAt, ID_GENERATOR.generateId()).toBuilder()
                         .projectName(projectName)
                         .duration(null)
                         .totalEstimatedCost(null)
                         .build())
                 .toList();
-        spanResourceClient.batchCreateSpans(expected, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+        var expected = StatsUtils.getProjectSpanStatItems(spans);
 
-        var stats = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
+        var actual = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
                 Map.of("from_time", fromTime));
 
-        TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectSpanStatItems(expected));
+        TraceAssertions.assertStats(actual.stats(), expected);
     }
 
     private static KpiCardResponse.KpiMetric kpi(KpiCardResponse.KpiMetricType type, Double current,
