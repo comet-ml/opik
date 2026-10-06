@@ -58,7 +58,6 @@ Go to the chart folder, set VERSION you want to install and run helm install
 
 ```bash
 cd deployment/helm_chart/opik
-helm repo add bitnami https://charts.bitnami.com/bitnami
 helm dependency build
 VERSION=0.1.0
 helm upgrade --install opik -n opik --create-namespace -f values.yaml \
@@ -92,6 +91,8 @@ Call opik api on http://localhost:5173/api
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
+| altinity-clickhouse-operator.crdHook.image.repository | string | `"alpine/kubectl"` |  |
+| altinity-clickhouse-operator.crdHook.image.tag | string | `"1.35.0"` |  |
 | altinity-clickhouse-operator.enabled | bool | `true` |  |
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
