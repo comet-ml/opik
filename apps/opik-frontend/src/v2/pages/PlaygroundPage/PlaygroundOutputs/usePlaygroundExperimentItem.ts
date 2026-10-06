@@ -4,12 +4,7 @@ import get from "lodash/get";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useExperimentById from "@/api/datasets/useExperimentById";
 import useAppStore from "@/store/AppStore";
-import {
-  useDatasetFilters,
-  useDatasetPage,
-  useDatasetSize,
-} from "@/store/PlaygroundStore";
-import { transformDataColumnFilters } from "@/lib/filters";
+import { useDatasetPage, useDatasetSize } from "@/store/PlaygroundStore";
 import { EXPERIMENT_STATUS, Experiment } from "@/types/datasets";
 
 const REFETCH_INTERVAL = 1000;
@@ -46,16 +41,15 @@ const EMPTY_ITEM: PlaygroundExperimentItem = {
 /**
  * What a server-side run produced for one cell, read back from the experiment items.
  *
- * The query is scoped to the same page and filters as the dataset table rather than to the whole
- * dataset: a run now covers every matching item, so asking for all of them — untruncated, on every
- * poll — would grow with the dataset while the user can only ever see one page of it.
+ * Scoped to the table's page rather than the whole dataset a run now covers, and keyed so every
+ * cell in a column shares one request.
  *
- * Every cell in a column shares the query key, so they share one request; polling stops once each
- * cell's own row has an item, since a cell still waiting keeps its own interval alive.
+ * The table's filters are deliberately not passed: this endpoint returns only what the run
+ * processed anyway, and has no field for a dataset column — sending one matched nothing, so every
+ * row of a filtered run read as never run.
  *
- * A row the run never reached would otherwise wait for ever — stopping a run leaves its unprocessed
- * items without an experiment item, and nothing will ever write one. The run's own finish stamp is
- * the second stop condition: past it, a row with no item never had one coming.
+ * Polling stops once the row has its item, or once the run's finish stamp says none is coming.
+ * Without that second condition a row the run never reached waits for ever.
  */
 export default function usePlaygroundExperimentItem(
   experimentId: string | undefined,
@@ -65,12 +59,6 @@ export default function usePlaygroundExperimentItem(
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const page = useDatasetPage();
   const size = useDatasetSize();
-  const datasetFilters = useDatasetFilters();
-
-  const filters = useMemo(
-    () => transformDataColumnFilters(datasetFilters),
-    [datasetFilters],
-  );
 
   // Polling stops at the stamp — a finished run has nothing left to report.
   const { data: experiment, dataUpdatedAt: experimentReadAt } =
@@ -103,7 +91,6 @@ export default function usePlaygroundExperimentItem(
       workspaceName,
       datasetId,
       experimentsIds: experimentId ? [experimentId] : [],
-      filters,
       page,
       size,
       truncate: false,

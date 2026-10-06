@@ -18,6 +18,10 @@ public enum ExperimentStatus {
     @JsonValue
     private final String value;
 
+    public boolean isTerminal() {
+        return this != RUNNING;
+    }
+
     @JsonCreator
     public static ExperimentStatus fromString(String value) {
         return Arrays.stream(values())
