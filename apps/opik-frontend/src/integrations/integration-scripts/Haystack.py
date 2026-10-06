@@ -15,7 +15,7 @@ from opik.integrations.haystack import OpikConnector  # HIGHLIGHTED_LINE
 pipe = Pipeline()
 pipe.add_component("tracer", OpikConnector("Chat example"))  # HIGHLIGHTED_LINE
 pipe.add_component("prompt_builder", ChatPromptBuilder())
-pipe.add_component("llm", OpenAIChatGenerator(model="gpt-3.5-turbo"))
+pipe.add_component("llm", OpenAIChatGenerator(model="gpt-5.6-terra"))
 pipe.connect("prompt_builder.prompt", "llm.messages")
 messages = [
     ChatMessage.from_user("Write a haiku about AI engineering."),

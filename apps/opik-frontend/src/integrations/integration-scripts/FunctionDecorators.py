@@ -23,7 +23,7 @@ def retrieve_context(input_text):
 def generate_response(input_text, context):
     full_prompt = f"If the user asks a question that is not specific, use the context to provide a relevant response.\nContext: {', '.join(context)}\nUser: {input_text}\nAI:"
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo", messages=[{"role": "user", "content": full_prompt}]
+        model="gpt-5.6-terra", messages=[{"role": "user", "content": full_prompt}]
     )
     return response.choices[0].message.content
 

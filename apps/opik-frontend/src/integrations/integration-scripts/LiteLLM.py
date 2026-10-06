@@ -6,7 +6,7 @@ configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 litellm.callbacks = [OpikLogger()]  # HIGHLIGHTED_LINE
 response = litellm.completion(
-    model="gpt-3.5-turbo",
+    model="gpt-5.6-terra",
     messages=[{"role": "user", "content": "Write a haiku about AI engineering."}],
 )
 print(response.choices[0].message.content)
