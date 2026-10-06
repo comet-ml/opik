@@ -49,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -629,6 +630,7 @@ class ExperimentExecutionServiceTest {
                     .toList());
             when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
             stubExperimentCreate();
+            when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
             assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
@@ -640,6 +642,12 @@ class ExperimentExecutionServiceTest {
                     .hasMessageContaining("1,000");
 
             verify(itemPublisher, never()).publish(any(), any(), anyBoolean());
+
+            // The records exist by this point; left alone they would read as running for ever.
+            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+            verify(experimentService, atLeastOnce()).update(any(UUID.class), captor.capture());
+            assertThat(captor.getAllValues())
+                    .allSatisfy(update -> assertThat(update.status()).isEqualTo(ExperimentStatus.FAILED));
         }
 
         @Test
@@ -662,6 +670,17 @@ class ExperimentExecutionServiceTest {
     @Nested
     @DisplayName("Cancellation")
     class Cancellation {
+
+        // Cancelling reads each experiment first, to leave the ones that already finished alone.
+        @BeforeEach
+        void stubStillRunning() {
+            lenient().when(experimentService.getById(any(UUID.class)))
+                    .thenAnswer(invocation -> Mono.just(Experiment.builder()
+                            .id(invocation.getArgument(0))
+                            .datasetName("dataset")
+                            .status(ExperimentStatus.RUNNING)
+                            .build()));
+        }
 
         @Test
         void cancelMarksTheExperimentsAndStopsThem() {
@@ -691,6 +710,30 @@ class ExperimentExecutionServiceTest {
             verify(experimentService, times(2)).update(any(UUID.class), captor.capture());
             assertThat(captor.getAllValues())
                     .allSatisfy(update -> assertThat(update.status()).isEqualTo(ExperimentStatus.CANCELLED));
+        }
+
+        // A prompt that completes before its siblings keeps its Stop button until the whole run
+        // settles, so cancelling something already finished is one click away.
+        @Test
+        void cancelLeavesAnAlreadyFinishedExperimentAlone() {
+            var finished = UUID.randomUUID();
+
+            when(experimentService.getById(finished)).thenReturn(Mono.just(Experiment.builder()
+                    .id(finished)
+                    .datasetName("dataset")
+                    .status(ExperimentStatus.COMPLETED)
+                    .build()));
+
+            service.cancel(Set.of(finished))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER_NAME)
+                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                    .block();
+
+            verify(experimentService, never()).update(eq(finished), any());
+            verify(cancellationService, never()).cancel(any(), any());
+            verify(cancellationService, never()).purgeQueued(any(), any(UUID.class));
         }
 
         // Purging the last of an experiment's queued items leaves no message to reach a consumer, so
