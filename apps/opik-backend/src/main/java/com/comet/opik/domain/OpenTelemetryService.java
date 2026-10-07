@@ -49,10 +49,11 @@ public interface OpenTelemetryService {
 @Slf4j
 class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
-    private static final Meter METER = GlobalOpenTelemetry.get().getMeter("opik.otel");
+    private static final String OTEL_METRICS_SCOPE = "opik.otel";
+    private static final Meter METER = GlobalOpenTelemetry.get().getMeter(OTEL_METRICS_SCOPE);
     private static final AttributeKey<String> OPERATION_KEY = AttributeKey.stringKey("operation");
     private static final LongCounter TRACE_ID_MAPPING_REDIS_ERRORS = METER
-            .counterBuilder("opik.otel.trace_id_mapping.redis_errors")
+            .counterBuilder(OTEL_METRICS_SCOPE + ".trace_id_mapping.redis_errors")
             .setDescription("Redis errors while mapping OTel trace ids to Opik trace ids (tagged by operation)")
             .build();
 
@@ -262,8 +263,8 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     }
 
     private Mono<Void> onRedisError(String operation, String otelTraceIdRedisKey, RedisException error) {
-        log.warn("Redis {} failed for otel trace id '{}', continuing without the mapping", operation,
-                otelTraceIdRedisKey, error);
+        log.warn("Redis operation failed, continuing without the mapping, operation '{}', otelTraceIdRedisKey '{}'",
+                operation, otelTraceIdRedisKey, error);
         TRACE_ID_MAPPING_REDIS_ERRORS.add(1, Attributes.of(OPERATION_KEY, operation));
         return Mono.empty();
     }
