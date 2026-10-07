@@ -1097,7 +1097,7 @@ def test_update__item_without_usable_id__raises_with_item_in_message(label, item
 
     with pytest.raises(
         opik_exceptions.DatasetItemUpdateOperationRequiresItemId,
-        match=r"Missing id for test suite item to update: .*'data'.*",
+        match=r"^Missing id for test suite item to update: \{.*'data'",
     ):
         suite.update([item])
 
