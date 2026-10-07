@@ -18,6 +18,7 @@ import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -135,7 +137,7 @@ class ExperimentExecutionServiceTest {
     class EmptyDataset {
 
         @Test
-        void createAndExecuteWhenNoDatasetItemsReturnsZeroTotalItems() {
+        void createAndExecuteWhenNoDatasetItemsRejectsWithoutCreatingExperiments() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
                     .datasetId(UUID.randomUUID())
@@ -143,15 +145,13 @@ class ExperimentExecutionServiceTest {
                     .build();
 
             stubDatasetItems(List.of());
-            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
-            stubExperimentCreate();
-            stubFinishExperiments();
-            lenient().when(experimentService.update(any(UUID.class), any()))
-                    .thenReturn(Mono.empty());
 
-            var response = executeRequest(request);
+            assertThatThrownBy(() -> executeRequest(request))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessage("Dataset 'test-dataset' has no items. Add items to it before running an experiment");
 
-            assertThat(response.totalItems()).isZero();
+            verify(experimentService, never()).create(any(Experiment.class));
+            verify(itemPublisher, never()).publish(any(), any());
         }
     }
 
