@@ -39,4 +39,34 @@ test.describe('Playground — message editor cursor', { tag: ['@t3-nightly', '@a
       });
     },
   );
+
+  test(
+    'opening the Playground focuses the first message, and + Message focuses the new one',
+    { tag: ['@cap:playground.compose-run-prompt'] },
+    async ({ page, project, providerKeys, testNamespace }) => {
+      const playground = new PlaygroundPage(page, project.id);
+
+      await test.step('Give the workspace a provider so the Playground mounts', async () => {
+        await providerKeys.createUnreachable({ providerName: `${testNamespace}-unreachable` });
+      });
+
+      await test.step('Open the Playground', async () => {
+        await playground.goto();
+        await playground.waitForReady();
+      });
+
+      await test.step('Typing right away lands in the first message', async () => {
+        await expect(playground.messageEditor(0, 0)).toBeFocused();
+        await page.keyboard.type('Hello');
+        expect(await playground.messageBodies()).toEqual(['Hello']);
+      });
+
+      await test.step('+ Message moves the cursor into the new message', async () => {
+        await playground.addMessage(0);
+        await expect(playground.messageEditor(0, 1)).toBeFocused();
+        await page.keyboard.type('World');
+        expect(await playground.messageBodies()).toEqual(['Hello', 'World']);
+      });
+    },
+  );
 });
