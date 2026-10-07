@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { hasVisibleControls } from "./visibleControls";
+import {
+  createSupports,
+  getOpenAIVisibleControls,
+  hasVisibleControls,
+} from "./visibleControls";
 import {
   OPTIMIZATION_UNSUPPORTED_PARAMS,
   RULE_UNSUPPORTED_PARAMS,
 } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import {
+  LLMOpenAIConfigsType,
+  OpenAiPipelineMode,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 
 const ANTHROPIC_CONFIG = {
   temperature: 0.4,
@@ -131,5 +140,66 @@ describe("hasVisibleControls", () => {
     PROVIDER_TYPE.BEDROCK,
   ])("is false for %s, which has no panel", (provider) => {
     expect(hasVisibleControls(provider, "", {})).toBe(false);
+  });
+});
+
+describe("the OpenAI penalty sliders", () => {
+  const OPENAI_CONFIG: LLMOpenAIConfigsType = {
+    temperature: 0.4,
+    maxCompletionTokens: 4000,
+    topP: 1,
+    frequencyPenalty: 0.5,
+    presencePenalty: 0.3,
+  };
+
+  const penalties = (mode?: OpenAiPipelineMode) => {
+    const { frequencyPenalty, presencePenalty } = getOpenAIVisibleControls({
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      configs: OPENAI_CONFIG,
+      supports: createSupports(),
+      openAiPipelineMode: mode,
+    });
+    return { frequencyPenalty, presencePenalty };
+  };
+
+  it("are hidden on a Responses API key", () => {
+    expect(penalties("responses_api")).toEqual({
+      frequencyPenalty: false,
+      presencePenalty: false,
+    });
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "are shown when the mode is %s",
+    (mode) => {
+      expect(penalties(mode)).toEqual({
+        frequencyPenalty: true,
+        presencePenalty: true,
+      });
+    },
+  );
+
+  // Throttling is hidden so that the only controls left are the ones the config carries.
+  const anyVisible = (
+    configs: Partial<LLMOpenAIConfigsType>,
+    mode?: OpenAiPipelineMode,
+  ) =>
+    hasVisibleControls(
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_MODEL_TYPE.GPT_4O,
+      configs,
+      OPTIMIZATION_UNSUPPORTED_PARAMS,
+      mode,
+    );
+
+  it("leave the other controls visible on a Responses API key", () => {
+    expect(anyVisible(OPENAI_CONFIG, "responses_api")).toBe(true);
+  });
+
+  it("leave nothing to show when the config holds only penalties on a Responses API key", () => {
+    const onlyPenalties = { frequencyPenalty: 0.5, presencePenalty: 0.3 };
+
+    expect(anyVisible(onlyPenalties, "responses_api")).toBe(false);
+    expect(anyVisible(onlyPenalties, "chat_completions_api")).toBe(true);
   });
 });

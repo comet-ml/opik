@@ -217,6 +217,10 @@ data:
         }
         {{- end }}
 
+        location ^~ {{ $rootPath }}/api/v1/internal/ {
+          deny all;
+        }
+
         location {{ $rootPath }}/api/ {
           try_files /dev/null @api;
         }
