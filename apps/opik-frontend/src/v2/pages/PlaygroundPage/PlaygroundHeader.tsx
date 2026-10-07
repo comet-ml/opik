@@ -8,7 +8,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import RunExperimentControl from "@/v2/pages/PlaygroundPage/RunExperimentControl";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { hasUnsupportedMedia } from "@/lib/playground";
+import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
@@ -137,10 +137,7 @@ const PlaygroundHeader = ({
   );
 
   const allMessagesNotEmpty = useMemo(
-    () =>
-      Object.values(promptMap).every((p) =>
-        p.messages.every((m) => m.content?.length > 0),
-      ),
+    () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
   );
 

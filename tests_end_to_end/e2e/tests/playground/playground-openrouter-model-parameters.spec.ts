@@ -178,7 +178,7 @@ test.describe(
                 body: 'data: [DONE]\n\n',
               }),
           );
-          await playground.fillFirstMessage('Reply with the single word OK.');
+          await playground.fillUserMessage('Reply with the single word OK.');
         });
 
         await test.step('With Max tokens at 0, the body has no max_tokens', async () => {

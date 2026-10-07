@@ -40,7 +40,7 @@ test.describe(
         });
 
         await test.step('Enter text in the message area', async () => {
-          await playground.editFirstMessage(promptText);
+          await playground.editUserMessage(promptText);
         });
 
         await test.step('Save prompt to library as a new prompt', async () => {
