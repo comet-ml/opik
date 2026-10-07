@@ -12,7 +12,7 @@ def test_build_mcp_env__cloud__api_key_and_workspace_only():
     )
     assert result == {
         "OPIK_API_KEY": "some-key",
-        "COMET_WORKSPACE": "my-workspace",
+        "OPIK_WORKSPACE": "my-workspace",
     }
 
 
@@ -27,7 +27,7 @@ def test_build_mcp_env__self_hosted_comet__url_override_is_base_url():
     )
     assert result == {
         "OPIK_API_KEY": "some-key",
-        "COMET_WORKSPACE": "my-workspace",
+        "OPIK_WORKSPACE": "my-workspace",
         "COMET_URL_OVERRIDE": "https://opik.acme.com",
     }
 
@@ -42,7 +42,7 @@ def test_build_mcp_env__local__opik_url_is_api_url_without_api_key():
         self_hosted_comet=False,
     )
     assert result == {
-        "COMET_WORKSPACE": "default",
+        "OPIK_WORKSPACE": "default",
         "OPIK_URL": "http://localhost:5173/api/",
     }
 
@@ -56,4 +56,4 @@ def test_build_mcp_env__workspace_passed_verbatim__not_lowercased():
         use_local=False,
         self_hosted_comet=False,
     )
-    assert result["COMET_WORKSPACE"] == "Mixed-Case-WS"
+    assert result["OPIK_WORKSPACE"] == "Mixed-Case-WS"
