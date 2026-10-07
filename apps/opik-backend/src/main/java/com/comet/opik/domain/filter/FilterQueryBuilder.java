@@ -571,6 +571,7 @@ public class FilterQueryBuilder {
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.ID, ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.TAGS, TAGS_DB)
                     .put(ExperimentsComparisonValidKnownField.SOURCE, SOURCE_DB)
                     .put(ExperimentsComparisonValidKnownField.TRACE_ID, TRACE_ID_DB)
                     .put(ExperimentsComparisonValidKnownField.SPAN_ID, SPAN_ID_DB)
@@ -751,6 +752,7 @@ public class FilterQueryBuilder {
 
         map.put(FilterStrategy.DATASET_ITEM, Set.of(
                 DatasetItemField.ID,
+                ExperimentsComparisonValidKnownField.TAGS,
                 DatasetItemField.DATA,
                 DatasetItemField.FULL_DATA,
                 DatasetItemField.SOURCE,

@@ -6,6 +6,7 @@ import { Filter, Filters } from "@/types/filters";
 import { DatasetItemColumn } from "@/types/datasets";
 import {
   COLUMN_DATA_ID,
+  COLUMN_TAGS_ID,
   COLUMN_EXPERIMENT_IDS,
   COLUMN_TYPE,
   DYNAMIC_COLUMN_TYPE,
@@ -396,7 +397,7 @@ export const buildDatasetFilterColumns = (
     ...(includeId ? [{ id: "id", label: "ID", type: COLUMN_TYPE.string }] : []),
     ...dataFilterColumns,
     {
-      id: "tags",
+      id: COLUMN_TAGS_ID,
       label: "Tags",
       type: COLUMN_TYPE.list,
       iconType: "tags" as const,
