@@ -428,7 +428,11 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       },
       addLastRunExperiments: (run) => {
         set((state) => {
-          if (!run.experiments.length) return state;
+          // A stopped run can still report experiments after the box is back,
+          // and by then the user may have given the box another name.
+          if (!run.experiments.length || state.experimentName !== run.name) {
+            return state;
+          }
 
           const current = state.lastRun;
           // A run reports its experiments as each one is created, and prompts

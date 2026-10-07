@@ -128,6 +128,32 @@ describe("PlaygroundStore last run", () => {
     });
   });
 
+  it("ignores experiments reported after the box was renamed", () => {
+    setUp("foo");
+    const register = beginExperimentRun(DATASET_ID);
+    const map = { p1: "e1", p2: "e2" };
+    register([{ id: "e1" }], map);
+
+    state().applyLastRunRename("bar", ["e1"]);
+    register([{ id: "e1" }, { id: "e2" }], map);
+
+    expect(state().lastRun).toEqual({
+      name: "bar",
+      datasetId: DATASET_ID,
+      experiments: [{ id: "e1", index: 0 }],
+    });
+  });
+
+  it("ignores experiments reported after the name was changed directly", () => {
+    setUp("foo");
+    const register = beginExperimentRun(DATASET_ID);
+
+    state().setExperimentName("bar");
+    register([{ id: "e1" }], { p1: "e1" });
+
+    expect(state().lastRun).toBeNull();
+  });
+
   describe("applyLastRunRename", () => {
     it("moves the box and the run to the new name", () => {
       setUp("foo");
