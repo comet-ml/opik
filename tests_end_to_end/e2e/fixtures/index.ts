@@ -1,4 +1,4 @@
-export { test, expect } from './moved-trace-threads.fixture';
+export { test, expect } from './suite-item-nav.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -342,4 +342,9 @@ export type {
   MovedTraceThreadsRef,
   MovedTraceThreadsFixtures,
 } from './moved-trace-threads.fixture';
+export type {
+  SuiteNavItem,
+  SuiteItemNavRef,
+  SuiteItemNavFixtures,
+} from './suite-item-nav.fixture';
 export type { ProjectRef } from '../core/backend';
