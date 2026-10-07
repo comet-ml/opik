@@ -758,6 +758,13 @@ redis:
 
 altinity-clickhouse-operator:
   enabled: true
+  # The operator chart's CRD-install hook defaults to bitnami/kubectl:latest. Pin it to the
+  # same official kubectl image this chart uses elsewhere (the hook only runs `kubectl apply`
+  # via /bin/sh), so no Bitnami image is pulled.
+  crdHook:
+    image:
+      repository: alpine/kubectl
+      tag: "1.35.0"
   metrics:
     enabled: false
   serviceMonitor:
