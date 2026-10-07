@@ -484,6 +484,10 @@ test.describe(
               timeout: 60_000,
             })
             .toBe(allCount);
+          // The footer comes from the listing's envelope and can be right while
+          // the body is still painting, so the row COUNT is settled with an
+          // auto-retrying assertion before the ids are read once.
+          await expect(logs.traceRows, 'the table body paints every row').toHaveCount(allCount);
           expect(
             sorted(await logs.readRowIdsOnPage()),
             'and renders exactly the seeded traces',
@@ -518,6 +522,10 @@ test.describe(
             })
             .toBe(apiAnswer.total);
 
+          await expect(
+            logs.traceRows,
+            'the table body repaints down to the searched population',
+          ).toHaveCount(apiAnswer.total);
           const rendered = sorted(await logs.readRowIdsOnPage());
           expect(
             rendered,
@@ -557,6 +565,10 @@ test.describe(
               timeout: 60_000,
             })
             .toBe(allCount);
+          await expect(
+            logs.traceRows,
+            'the table body repaints back up to the whole population',
+          ).toHaveCount(allCount);
           expect(
             sorted(await logs.readRowIdsOnPage()),
             'and every seeded trace is back, so the search narrowed rather than deleted',

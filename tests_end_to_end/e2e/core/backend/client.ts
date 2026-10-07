@@ -3599,14 +3599,23 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * identically to "the tracker wrote nothing".
      */
     async listTrackedSpans(args: { projectId: string }): Promise<TrackedSpanRef[]> {
-      const content = await fetchAllPages(
-        (page) =>
-          opik.api.spans.getSpansByProject({
-            projectId: args.projectId,
-            page,
-            size: 100,
-          }),
-        100,
+      // `withRateLimitRetry`, for the reason `listSpanIdsPage` takes it: paging
+      // a whole project is a burst of reads against a per-workspace limit
+      // (`getSpans:{workspaceId}`), and this is the method a spec polls while
+      // waiting for a seed to become queryable — so on a shared cloud workspace
+      // it is the likeliest caller to meet a 429. Unretried, that 429 surfaces
+      // from inside the caller's `expect.poll` and fails the test outright,
+      // which reads exactly like the spans never arriving.
+      const content = await withRateLimitRetry(() =>
+        fetchAllPages(
+          (page) =>
+            opik.api.spans.getSpansByProject({
+              projectId: args.projectId,
+              page,
+              size: 100,
+            }),
+          100,
+        ),
       );
       return content.map((s) => ({
         id: String(s.id ?? ''),

@@ -217,7 +217,7 @@ test.describe(
                     'one span per tracked call — before opik#8518 the four early-exit ' +
                     'shapes contributed none at all',
                   timeout: VISIBLE_TIMEOUT_MS,
-                  intervals: [2_000, 2_000, 5_000],
+                  intervals: [2_000, 3_000, 5_000],
                 },
               )
               .toBe(SHAPES.length);
@@ -345,7 +345,7 @@ test.describe(
                 {
                   message: 'one span per tracked call before the browser is opened',
                   timeout: VISIBLE_TIMEOUT_MS,
-                  intervals: [2_000, 2_000, 5_000],
+                  intervals: [2_000, 3_000, 5_000],
                 },
               )
               .toBe(SHAPES.length);
@@ -378,6 +378,14 @@ test.describe(
               timeout: 60_000,
             })
             .toBe(SHAPES.length);
+          // The footer comes from the listing's envelope, so it can be right
+          // while the table body is still painting. Settle on the row COUNT
+          // with an auto-retrying locator assertion before reading the ids
+          // once — otherwise a slow render reads as a wrong row set.
+          await expect(
+            logs.traceRows,
+            'the table body paints one row per trace',
+          ).toHaveCount(SHAPES.length);
           expect(
             (await logs.readRowIdsOnPage()).sort(),
             'the rendered rows are exactly the traces the six calls wrote',
@@ -393,17 +401,23 @@ test.describe(
               cell,
               `exactly one duration cell for '${label}'`,
             ).toHaveCount(1);
-            const text = ((await cell.textContent()) ?? '').trim();
             // A number with a unit, which is what a closed trace renders. "NA"
             // is the literal the cell shows for a null duration, i.e. a span
             // that was opened and never ended — so matching a number here is
             // the same assertion as the API-level `not.toBeNull()`, made where
             // a user would actually notice it.
-            expect(
-              text,
+            //
+            // An auto-retrying `toHaveText` rather than a one-shot
+            // `textContent()`: the cell is painted from the same fetch the
+            // footer came from, so a read taken the instant the row appears can
+            // catch it empty — and an empty cell is not "NA", so a one-shot
+            // read would fail for timing with a message about the wrong thing.
+            await expect(
+              cell,
               `the duration cell for '${label}'${isEarlyExit ? ' (an early exit)' : ' (a control)'} ` +
                 'shows an elapsed time, not "NA"',
-            ).toMatch(/^\d+(\.\d+)?\s*\S+$/);
+            ).toHaveText(/^\d+(\.\d+)?\s*\S+$/);
+            const text = ((await cell.textContent()) ?? '').trim();
             expect(text, 'and is not the null sentinel').not.toBe('NA');
           }
         });
