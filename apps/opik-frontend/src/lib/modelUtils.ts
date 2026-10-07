@@ -1,4 +1,3 @@
-import isPlainObject from "lodash/isPlainObject";
 import {
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
