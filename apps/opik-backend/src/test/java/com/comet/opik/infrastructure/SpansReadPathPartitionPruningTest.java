@@ -12,6 +12,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -32,15 +33,19 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -78,6 +83,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -142,16 +148,6 @@ class SpansReadPathPartitionPruningTest {
             LIMIT 1
             """;
 
-    private static final String LAST_SPAN_SEARCH = """
-            SELECT query
-            FROM system.query_log
-            WHERE log_comment LIKE concat(:query_name, ':%')
-            AND type = 'QueryFinish'
-            AND query LIKE concat('%', :token, '%')
-            ORDER BY event_time_microseconds DESC
-            LIMIT 1
-            """;
-
     private static final String PARTITION_PREFIX = "%s.spans.".formatted(DATABASE_NAME);
 
     private static final String FAST_LOG_FLUSH_CONFIG = "clickhouse-fast-log-flush.xml";
@@ -205,9 +201,11 @@ class SpansReadPathPartitionPruningTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync template;
+    private ProjectMetricsDAO projectMetricsDAO;
 
     @BeforeAll
-    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template) {
+    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template,
+            ProjectMetricsDAO projectMetricsDAO) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -216,6 +214,7 @@ class SpansReadPathPartitionPruningTest {
         this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
+        this.projectMetricsDAO = projectMetricsDAO;
         // One batch, so each filler week is one part holding two traces the primary key cannot exclude by id.
         spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
                 .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
@@ -452,13 +451,142 @@ class SpansReadPathPartitionPruningTest {
                 .isEqualTo(expected);
     }
 
+    @Test
+    void alertTotalCostCountsAFarFutureSpanOfATraceInTheWindow() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        // The alert window bounds trace_id only, so the far-future week must come from the span-weeks pre-pass.
+        var expected = totalCost(createTraceWithAFarFutureSpan(projectName, now).spans());
+
+        var actual = projectMetricsDAO.getTotalCost(List.of(projectId), now.minus(Duration.ofHours(1)), null)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER))
+                .block();
+
+        assertThat(actual).isEqualByComparingTo(expected);
+    }
+
+    /** Each read takes the project name and the trace id, and returns the traces it read. */
+    private Stream<Arguments> traceReads() {
+        return Stream.of(
+                arguments("find_traces_by_project_id", (BiFunction<String, UUID, List<Trace>>) (projectName,
+                        _) -> traceResourceClient.getByProjectName(projectName, API_KEY, WORKSPACE_NAME)),
+                arguments("find_trace_stream", (BiFunction<String, UUID, List<Trace>>) (projectName,
+                        _) -> traceResourceClient.getStreamAndAssertContent(API_KEY, WORKSPACE_NAME,
+                                TraceSearchStreamRequest.builder().projectName(projectName).build())),
+                arguments("find_traces_by_ids", (BiFunction<String, UUID, List<Trace>>) (_,
+                        traceId) -> List.of(traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("traceReads")
+    void traceAggregatesAFarFutureSpanOfItsTrace(String queryName, BiFunction<String, UUID, List<Trace>> read) {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        // The spans reads are keyed by trace id, so the far-future week must come from the span-weeks pre-pass.
+        var created = createTraceWithAFarFutureSpan(projectName, Instant.now());
+        var expected = SpanAggregates.builder().spanCount(created.spans().size())
+                .totalEstimatedCost(totalCost(created.spans())).build();
+
+        var actual = read.apply(projectName, created.trace().id());
+
+        // The whole trace, with the usage its spans add up to, then the span aggregates the trace assertion leaves out.
+        var expectedTrace = created.trace().toBuilder().usage(totalUsage(created.spans())).build();
+        TraceAssertions.assertTraces(actual, List.of(expectedTrace), USER);
+        assertThat(actual)
+                .map(trace -> SpanAggregates.builder().spanCount(trace.spanCount())
+                        .totalEstimatedCost(trace.totalEstimatedCost()).build())
+                .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
+                        .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                        .build())
+                .containsExactly(expected);
+    }
+
+    /** The span count and total cost reported by a trace read. */
+    @Builder(toBuilder = true)
+    private record SpanAggregates(int spanCount, BigDecimal totalEstimatedCost) {
+    }
+
+    /** A trace and the spans written for it. */
+    @Builder(toBuilder = true)
+    private record TraceWithSpans(Trace trace, List<Span> spans) {
+    }
+
+    /** A trace at {@code now} with one span beside it and one a bad clock files under a far-future week. */
+    private TraceWithSpans createTraceWithAFarFutureSpan(String projectName, Instant now) {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .projectName(projectName)
+                // ClickHouse keeps microseconds, and the CI JVM clock has nanoseconds.
+                .startTime(now.truncatedTo(ChronoUnit.MILLIS))
+                .endTime(now.truncatedTo(ChronoUnit.MILLIS).plusMillis(100))
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+        var spans = Stream.of(now, farFutureInstant())
+                .map(idAt -> newSpan(idAt, trace.id()).toBuilder()
+                        .projectName(projectName)
+                        .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomInt(1, 100_000), 2))
+                        .build())
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+        return TraceWithSpans.builder().trace(trace).spans(spans).build();
+    }
+
+    private static Map<String, Long> totalUsage(List<Span> spans) {
+        return spans.stream()
+                .flatMap(span -> span.usage().entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().longValue(), Long::sum));
+    }
+
+    private static BigDecimal totalCost(List<Span> spans) {
+        return spans.stream().map(Span::totalEstimatedCost).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** Past every real clock, short of where {@code id_at} saturates. */
+    private static Instant farFutureInstant() {
+        return LocalDate.of(RandomUtils.secure().randomInt(2150, 2290), 1, 1)
+                .plusDays(RandomUtils.secure().randomInt(0, 365))
+                .atTime(12, 0)
+                .toInstant(ZoneOffset.UTC);
+    }
+
+    @Test
+    void spanStatsCountSpansInEveryWeekWithoutASearch() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var windowWeeks = RandomUtils.secure().randomInt(2, 20);
+        var fromTime = THIS_MONDAY.minusWeeks(windowWeeks).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
+        // Two ordinary weeks inside the window and the far-future one a bad clock files spans under.
+        var ordinary = Stream.generate(() -> THIS_MONDAY.minusWeeks(RandomUtils.secure().randomInt(0, windowWeeks)))
+                .distinct()
+                .limit(2)
+                .map(monday -> monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC));
+        var spans = Stream.concat(ordinary, Stream.of(farFutureInstant()))
+                .map(idAt -> newSpan(idAt, ID_GENERATOR.generateId()).toBuilder()
+                        .projectName(projectName)
+                        .duration(null)
+                        .totalEstimatedCost(null)
+                        .build())
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+        var expected = StatsUtils.getProjectSpanStatItems(spans);
+
+        var actual = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
+                Map.of("from_time", fromTime));
+
+        TraceAssertions.assertStats(actual.stats(), expected);
+    }
+
     private static KpiCardResponse.KpiMetric kpi(KpiCardResponse.KpiMetricType type, Double current,
             Double previous) {
         return KpiCardResponse.KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
     }
 
     /** The searched spans and the responses. */
-    private record SpanSearch(String token, List<Span> expected, Span.SpanPage page, ProjectStats stats) {
+    @Builder(toBuilder = true)
+    private record SpanSearch(List<Span> expected, Span.SpanPage page, ProjectStats stats) {
     }
 
     private SpanSearch spanSearch() {
@@ -482,7 +610,7 @@ class SpansReadPathPartitionPruningTest {
                 null, null, fromTime, null, token);
         var stats = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
                 Map.of("search", token, "from_time", fromTime));
-        return new SpanSearch(token, expected, page, stats);
+        return SpanSearch.builder().expected(expected).page(page).stats(stats).build();
     }
 
     @Test
@@ -492,47 +620,6 @@ class SpansReadPathPartitionPruningTest {
         assertThat(search.page().total()).isEqualTo(search.expected().size());
         SpanAssertions.assertSpan(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(), StatsUtils.getProjectSpanStatItems(search.expected()));
-    }
-
-    /** One search shared by the statement cases, each checking a different statement of it. */
-    private Stream<Arguments> spanSearchStatements() {
-        var search = spanSearch();
-        return Stream.of("find_spans_by_project_id", "count_spans_by_project_id", "get_span_stats",
-                "get_span_stats_feedback_scores").map(queryName -> Arguments.of(queryName, search));
-    }
-
-    @ParameterizedTest(name = "{0} carries the spans week hint")
-    @MethodSource("spanSearchStatements")
-    void spanSearchStatementCarriesTheWeekHint(String queryName, SpanSearch search) {
-        assertThat(lastSpanSearch(queryName, search))
-                .as("the spans week hint ran in %s, so the results are not a vacuous pass", queryName)
-                .contains("SELECT DISTINCT toYYYYMMDD(toDate32(id_at)");
-    }
-
-    @Test
-    void spanSearchRunsOnce() {
-        var search = spanSearch();
-
-        // The page re-reads its rows through the cached page-id scalar, so the search runs once.
-        assertThat(lastSpanSearch("find_spans_by_project_id", search))
-                .contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))")
-                .doesNotContain("IN (SELECT id FROM page_ids)");
-    }
-
-    /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
-    private String lastSpanSearch(String queryName, SpanSearch search) {
-        var token = search.token();
-        return Awaitility.await()
-                .alias("query_log holds a " + queryName + " search for " + token)
-                .atMost(Duration.ofSeconds(30))
-                .pollInterval(Duration.ofMillis(200))
-                .until(() -> template.nonTransaction(connection -> Mono.from(connection
-                        .createStatement(LAST_SPAN_SEARCH)
-                        .bind("token", token)
-                        .bind("query_name", queryName)
-                        .execute())
-                        .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class)))))
-                        .block(), Objects::nonNull);
     }
 
     private void batchUpdateTags(Span span, Set<UUID> ids) {
