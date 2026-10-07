@@ -1,0 +1,115 @@
+import { test, expect } from '@e2e/fixtures';
+import { LogsPage } from '@e2e/pom/logs.page';
+import { ProjectDashboardsPage } from '@e2e/pom/project-dashboards.page';
+import { SidebarNav } from '@e2e/pom/sidebar.page';
+
+/**
+ * Logs filter chips are remembered per project for the browser tab and restored
+ * whenever the Logs URL carries no filter param (OPIK-8704). The sidebar's
+ * "Logs" item navigates to a bare /logs URL, which is what exercises it.
+ *
+ * The tagged subset (2 of 3) is what makes each assertion meaningful: an
+ * unrestored filter shows all three rows, so the row count tells restored from
+ * dropped.
+ */
+test.describe('Logs filter persistence', { tag: ['@t2-cuj', '@area:traces'] }, () => {
+  test(
+    'Filters are restored when returning to Logs from another page via the sidebar',
+    { tag: ['@cap:traces.filter-persistence'] },
+    async ({ filterableTraces, project, page }) => {
+      const logs = new LogsPage(page);
+      const sidebar = new SidebarNav(page);
+      const { all, sharedTag } = filterableTraces;
+      const tagged = all.filter((t) => t.tags.includes(sharedTag));
+
+      await test.step(`Open Traces and filter by tag "${sharedTag}"`, async () => {
+        await logs.gotoTraces(project.id);
+        await logs.waitForReady();
+        await expect(logs.traceRows).toHaveCount(all.length);
+        await logs.applyFilter('tags', sharedTag);
+        await expect(logs.traceRows).toHaveCount(tagged.length);
+      });
+
+      await test.step('Leave for the project Dashboards page', async () => {
+        await sidebar.navigateTo('Dashboards');
+        await new ProjectDashboardsPage(page, project.id).waitForReady();
+      });
+
+      await test.step('Return via the sidebar and verify the filter is restored', async () => {
+        await sidebar.navigateTo('Logs');
+        await logs.waitForUrlFilters('traces', (fs) =>
+          fs.some((f) => f.field === 'tags' && f.value === sharedTag),
+        );
+        await expect(logs.filterChip('tags')).toBeVisible();
+        await expect(logs.clearAllFiltersButton).toBeVisible();
+        await expect(logs.traceRows).toHaveCount(tagged.length);
+        for (const trace of tagged) {
+          await expect(logs.traceRow(trace.id)).toBeVisible();
+        }
+      });
+    },
+  );
+
+  test(
+    'Filters stay applied when clicking Logs in the sidebar while already on Logs',
+    { tag: ['@cap:traces.filter-persistence'] },
+    async ({ filterableTraces, project, page }) => {
+      const logs = new LogsPage(page);
+      const sidebar = new SidebarNav(page);
+      const { all, sharedTag } = filterableTraces;
+      const tagged = all.filter((t) => t.tags.includes(sharedTag));
+
+      await test.step(`Open Traces and filter by tag "${sharedTag}"`, async () => {
+        await logs.gotoTraces(project.id);
+        await logs.waitForReady();
+        await expect(logs.traceRows).toHaveCount(all.length);
+        await logs.applyFilter('tags', sharedTag);
+        await logs.waitForUrlFilters('traces', (fs) =>
+          fs.some((f) => f.field === 'tags' && f.value === sharedTag),
+        );
+        await expect(logs.traceRows).toHaveCount(tagged.length);
+      });
+
+      await test.step('Click Logs in the sidebar and verify the filter is still applied', async () => {
+        await sidebar.navigateTo('Logs');
+        await logs.waitForUrlFilters('traces', (fs) =>
+          fs.some((f) => f.field === 'tags' && f.value === sharedTag),
+        );
+        await expect(logs.filterChip('tags')).toBeVisible();
+        await expect(logs.traceRows).toHaveCount(tagged.length);
+      });
+    },
+  );
+
+  test(
+    'A new browser tab starts without the filters remembered by another tab',
+    { tag: ['@cap:traces.filter-persistence'] },
+    async ({ filterableTraces, project, page, context }) => {
+      const logs = new LogsPage(page);
+      const { all, sharedTag } = filterableTraces;
+      const tagged = all.filter((t) => t.tags.includes(sharedTag));
+
+      await test.step(`Filter by tag "${sharedTag}" in the first tab`, async () => {
+        await logs.gotoTraces(project.id);
+        await logs.waitForReady();
+        await expect(logs.traceRows).toHaveCount(all.length);
+        await logs.applyFilter('tags', sharedTag);
+        await logs.waitForUrlFilters('traces', (fs) =>
+          fs.some((f) => f.field === 'tags' && f.value === sharedTag),
+        );
+        await expect(logs.traceRows).toHaveCount(tagged.length);
+      });
+
+      await test.step('Open Logs in a new tab and verify nothing is restored', async () => {
+        const newTab = await context.newPage();
+        const newTabLogs = new LogsPage(newTab);
+        await newTabLogs.gotoTraces(project.id);
+        await newTabLogs.waitForReady();
+        await expect(newTabLogs.traceRows).toHaveCount(all.length);
+        expect(await newTabLogs.readUrlFilters('traces')).toBeNull();
+        await expect(newTabLogs.clearAllFiltersButton).toBeHidden();
+        await newTab.close();
+      });
+    },
+  );
+});

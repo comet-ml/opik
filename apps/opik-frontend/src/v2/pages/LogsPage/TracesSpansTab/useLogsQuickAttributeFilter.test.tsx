@@ -32,10 +32,22 @@ const readFilters = (key: string) => {
 const readPinned = (tableId: string) =>
   JSON.parse(localStorage.getItem(`chips:pinnedConfig:${tableId}`) ?? "null");
 
+const PROJECT_ID = "p1";
+
+const readRemembered = (urlKey: string, projectId = PROJECT_ID) => {
+  const raw = sessionStorage.getItem(`logs-filters:${projectId}:${urlKey}`);
+  return raw ? JSON.parse(raw) : undefined;
+};
+
 const setup = (type: TRACE_DATA_TYPE) => {
   const onLogsTypeChange = vi.fn();
   const { result } = renderHook(
-    () => useLogsQuickAttributeFilter({ type, onLogsTypeChange }),
+    () =>
+      useLogsQuickAttributeFilter({
+        type,
+        projectId: PROJECT_ID,
+        onLogsTypeChange,
+      }),
     { wrapper },
   );
   return { result, onLogsTypeChange };
@@ -44,6 +56,7 @@ const setup = (type: TRACE_DATA_TYPE) => {
 describe("useLogsQuickAttributeFilter", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     vi.mocked(trackEvent).mockClear();
     setUrl({});
   });
@@ -70,6 +83,21 @@ describe("useLogsQuickAttributeFilter", () => {
       expect(readFilters("spans_filters")).toBeUndefined();
       expect(onLogsTypeChange).not.toHaveBeenCalled();
       expect(readPinned("logs.traces")).toContain("custom");
+    });
+
+    it("remembers the filters for this project under the traces key", async () => {
+      const { result } = setup(TRACE_DATA_TYPE.traces);
+
+      await act(async () => {
+        result.current.filter("input", "query", "hello");
+      });
+
+      expect(readRemembered("traces_filters")).toEqual(
+        readFilters("traces_filters"),
+      );
+      expect(readRemembered("traces_filters")).toHaveLength(1);
+      expect(readRemembered("spans_filters")).toBeUndefined();
+      expect(readRemembered("traces_filters", "other")).toBeUndefined();
     });
 
     it("hides span-only attributes", () => {
@@ -103,6 +131,10 @@ describe("useLogsQuickAttributeFilter", () => {
       ]);
       expect(readFilters("traces_filters")).toBeUndefined();
       expect(onLogsTypeChange).toHaveBeenCalledWith(LOGS_TYPE.spans);
+      expect(readRemembered("spans_filters")).toEqual(
+        readFilters("spans_filters"),
+      );
+      expect(readRemembered("traces_filters")).toBeUndefined();
       expect(readPinned("logs.spans")).toContain("custom");
       expect(trackEvent).toHaveBeenCalledWith(OpikEvent.QUICK_FILTER_APPLIED, {
         data_type: TRACE_DATA_TYPE.spans,
@@ -140,6 +172,7 @@ describe("useLogsQuickAttributeFilter", () => {
       const filters = readFilters("spans_filters");
       expect(filters).toHaveLength(2);
       expect(filters[0]).toEqual(existing[0]);
+      expect(readRemembered("spans_filters")).toEqual(filters);
       expect(onLogsTypeChange).toHaveBeenCalledTimes(2);
       expect(onLogsTypeChange).toHaveBeenLastCalledWith(LOGS_TYPE.spans);
       expect(trackEvent).toHaveBeenCalledTimes(2);
@@ -159,6 +192,9 @@ describe("useLogsQuickAttributeFilter", () => {
       });
 
       expect(readFilters("traces_filters")).toHaveLength(1);
+      expect(readRemembered("traces_filters")).toEqual(
+        readFilters("traces_filters"),
+      );
       expect(onLogsTypeChange).toHaveBeenCalledWith(LOGS_TYPE.traces);
     });
   });
@@ -172,6 +208,7 @@ describe("useLogsQuickAttributeFilter", () => {
     });
 
     expect(readFilters("traces_filters")).toBeUndefined();
+    expect(readRemembered("traces_filters")).toBeUndefined();
     expect(onLogsTypeChange).not.toHaveBeenCalled();
     expect(trackEvent).not.toHaveBeenCalled();
   });

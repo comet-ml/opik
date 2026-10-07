@@ -13,3 +13,9 @@ export const LOGS_DEFAULT_PINNED_CHIPS: Record<TRACE_DATA_TYPE, string[]> = {
 
 export const getLogsFiltersUrlKey = (type: TRACE_DATA_TYPE) =>
   `${type}_filters`;
+
+export const getLogsFiltersMemoryKey = (projectId: string, urlKey: string) =>
+  `logs-filters:${projectId}:${urlKey}`;
+
+export const getLogsEnvironmentMemoryKey = (projectId: string) =>
+  `logs-environment:${projectId}`;

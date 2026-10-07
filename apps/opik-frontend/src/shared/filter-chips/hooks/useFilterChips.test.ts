@@ -19,7 +19,7 @@ vi.mock("use-local-storage-state", () => ({
   default: vi.fn(() => [mockPinnedIds, setPinnedIds]),
 }));
 
-import useFilterChips from "./useFilterChips";
+import useFilterChips, { FilterChipsPersistence } from "./useFilterChips";
 
 const booleanDef: ChipDefinition = {
   id: "with_errors",
@@ -59,6 +59,7 @@ const setup = (overrides?: {
   definitions?: ChipDefinition[];
   defaultPinned?: string[];
   onChange?: () => void;
+  persistence?: FilterChipsPersistence;
 }) => {
   mockRawFilters = overrides?.raw;
   mockPinnedIds = overrides?.pinned;
@@ -69,9 +70,15 @@ const setup = (overrides?: {
       definitions: overrides?.definitions ?? DEFINITIONS,
       defaultPinned: overrides?.defaultPinned ?? [],
       onChange: overrides?.onChange,
+      persistence: overrides?.persistence,
     }),
   );
 };
+
+const makePersistence = (saved?: Filter[]) => ({
+  load: vi.fn(() => saved),
+  save: vi.fn(),
+});
 
 const f = (overrides: Partial<Filter>): Filter => ({
   id: overrides.id ?? "f",
@@ -388,6 +395,133 @@ describe("useFilterChips", () => {
       ];
       rerender();
       expect(onChange).toHaveBeenCalled();
+    });
+  });
+
+  describe("persistence", () => {
+    const llm = f({
+      field: "type",
+      operator: "=",
+      value: "llm",
+      type: COLUMN_TYPE.category,
+    });
+    const tool = f({
+      field: "type",
+      operator: "=",
+      value: "tool",
+      type: COLUMN_TYPE.category,
+    });
+
+    describe("restore", () => {
+      it("writes saved filters to the URL when the param is absent", () => {
+        const persistence = makePersistence([llm]);
+        setup({ persistence });
+        expect(setRawFilters).toHaveBeenCalledOnce();
+        expect(setRawFilters).toHaveBeenCalledWith([llm]);
+      });
+
+      it("does not restore when the URL has filters", () => {
+        const persistence = makePersistence([llm]);
+        setup({ raw: [tool], persistence });
+        expect(persistence.load).not.toHaveBeenCalled();
+        expect(setRawFilters).not.toHaveBeenCalled();
+      });
+
+      it("does not restore when the URL param is an explicit empty list", () => {
+        const persistence = makePersistence([llm]);
+        setup({ raw: [], persistence });
+        expect(setRawFilters).not.toHaveBeenCalled();
+      });
+
+      it("does not restore when nothing is saved", () => {
+        setup({ persistence: makePersistence(undefined) });
+        expect(setRawFilters).not.toHaveBeenCalled();
+      });
+
+      it("does not restore an empty saved list", () => {
+        setup({ persistence: makePersistence([]) });
+        expect(setRawFilters).not.toHaveBeenCalled();
+      });
+
+      it("restores again when the param disappears without a remount", () => {
+        const persistence = makePersistence([llm]);
+        const { rerender } = setup({ raw: [tool], persistence });
+        expect(setRawFilters).not.toHaveBeenCalled();
+
+        mockRawFilters = undefined;
+        rerender();
+        expect(setRawFilters).toHaveBeenCalledWith([llm]);
+      });
+
+      it("never saves on its own", () => {
+        const persistence = makePersistence([llm]);
+        setup({ persistence });
+        expect(persistence.save).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("save", () => {
+      it("saves the next filters on applyValue", () => {
+        const persistence = makePersistence();
+        const { result } = setup({ persistence });
+        act(() => result.current.applyValue("type", { value: "llm" }));
+        const next = setRawFilters.mock.calls[0][0](undefined);
+        expect(persistence.save).toHaveBeenCalledWith(next);
+        expect(next).toHaveLength(1);
+      });
+
+      it("saves undefined on clearValue of the last chip", () => {
+        const persistence = makePersistence();
+        const { result } = setup({ raw: [llm], persistence });
+        act(() => result.current.clearValue("type"));
+        setRawFilters.mock.calls[0][0]([llm]);
+        expect(persistence.save).toHaveBeenCalledWith(undefined);
+      });
+
+      it("saves undefined on clearAll", () => {
+        const persistence = makePersistence();
+        const { result } = setup({ raw: [llm], persistence });
+        act(() => result.current.clearAll());
+        setRawFilters.mock.calls[0][0]([llm]);
+        expect(persistence.save).toHaveBeenCalledWith(undefined);
+      });
+
+      it("saves undefined on unpinChip of the last chip", () => {
+        const persistence = makePersistence();
+        const { result } = setup({ raw: [llm], persistence });
+        act(() => result.current.unpinChip("type"));
+        setRawFilters.mock.calls[0][0]([llm]);
+        expect(persistence.save).toHaveBeenCalledWith(undefined);
+      });
+
+      it("keeps remaining chips when one of several is cleared", () => {
+        const persistence = makePersistence();
+        const errors = f({
+          field: "error_info",
+          operator: "is_not_empty",
+          type: COLUMN_TYPE.errors,
+        });
+        const { result } = setup({ raw: [llm, errors], persistence });
+        act(() => result.current.clearValue("type"));
+        const next = setRawFilters.mock.calls[0][0]([llm, errors]);
+        expect(persistence.save).toHaveBeenCalledWith(next);
+        expect(next).toHaveLength(1);
+        expect(next[0]).toMatchObject({ field: "error_info" });
+      });
+
+      it("does not save on pinChip", () => {
+        const persistence = makePersistence();
+        const { result } = setup({ persistence });
+        act(() => result.current.pinChip("type"));
+        expect(persistence.save).not.toHaveBeenCalled();
+      });
+    });
+
+    it("behaves as before when persistence is not passed", () => {
+      const { result } = setup();
+      act(() => result.current.applyValue("type", { value: "llm" }));
+      expect(setRawFilters).toHaveBeenCalledOnce();
+      expect(setRawFilters.mock.calls[0][0](undefined)).toHaveLength(1);
     });
   });
 

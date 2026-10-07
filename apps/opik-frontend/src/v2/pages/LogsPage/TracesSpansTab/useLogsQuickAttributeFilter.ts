@@ -5,6 +5,7 @@ import { Filter } from "@/types/filters";
 import { JsonValue } from "@/types/shared";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+import { createSessionStorageMemory } from "@/lib/sessionStorageMemory";
 import {
   QuickAttributeFilterApi,
   QuickFilterSection,
@@ -19,6 +20,7 @@ import { getPinnedChipsStorageKey } from "@/shared/filter-chips/hooks/useFilterC
 import {
   LOGS_DEFAULT_PINNED_CHIPS,
   LOGS_TABLE_ID,
+  getLogsFiltersMemoryKey,
   getLogsFiltersUrlKey,
 } from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 
@@ -49,20 +51,30 @@ const usePinChip = (type: TRACE_DATA_TYPE) => {
 
 type UseLogsQuickAttributeFilterArgs = {
   type: TRACE_DATA_TYPE;
+  projectId: string;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
 };
 
 export const useLogsQuickAttributeFilter = ({
   type,
+  projectId,
   onLogsTypeChange,
 }: UseLogsQuickAttributeFilterArgs): QuickAttributeFilterApi => {
   const [spanId] = useQueryParam("span", StringParam);
   const entityType = spanId ? TRACE_DATA_TYPE.spans : TRACE_DATA_TYPE.traces;
+  const filtersUrlKey = getLogsFiltersUrlKey(entityType);
 
   const [, setFilters] = useQueryParam<Filter[] | undefined>(
-    getLogsFiltersUrlKey(entityType),
+    filtersUrlKey,
     JsonParam,
     { updateType: "replaceIn" },
+  );
+  const filtersMemory = useMemo(
+    () =>
+      createSessionStorageMemory<Filter[]>(
+        getLogsFiltersMemoryKey(projectId, filtersUrlKey),
+      ),
+    [projectId, filtersUrlKey],
   );
   const pinTraceChip = usePinChip(TRACE_DATA_TYPE.traces);
   const pinSpanChip = usePinChip(TRACE_DATA_TYPE.spans);
@@ -78,13 +90,15 @@ export const useLogsQuickAttributeFilter = ({
       const target = resolveQuickFilterTarget(section, entityType, path);
       if (!target) return;
 
-      setFilters((current) =>
-        addQuickFilter(
+      setFilters((current) => {
+        const next = addQuickFilter(
           Array.isArray(current) ? current : [],
           target,
           stringifyFilterValue(value),
-        ),
-      );
+        );
+        filtersMemory.save(next);
+        return next;
+      });
 
       if (entityType === TRACE_DATA_TYPE.spans) {
         pinSpanChip(target.chipId);
@@ -104,7 +118,15 @@ export const useLogsQuickAttributeFilter = ({
         table_id: LOGS_TABLE_ID[entityType],
       });
     },
-    [entityType, type, setFilters, pinSpanChip, pinTraceChip, onLogsTypeChange],
+    [
+      entityType,
+      type,
+      setFilters,
+      filtersMemory,
+      pinSpanChip,
+      pinTraceChip,
+      onLogsTypeChange,
+    ],
   );
 
   const hint = entityType === type ? undefined : REDIRECT_HINT[entityType];

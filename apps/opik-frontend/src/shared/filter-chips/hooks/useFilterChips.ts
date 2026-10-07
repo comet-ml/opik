@@ -26,12 +26,18 @@ type WriteValuesAnalytics =
   | { kind: "remove"; id: string; source: FilterRemovedSource }
   | { kind: "clear_all" };
 
+export interface FilterChipsPersistence {
+  load: () => Filter[] | undefined;
+  save: (filters: Filter[] | undefined) => void;
+}
+
 interface UseFilterChipsArgs {
   tableId: string;
   urlKey: string;
   definitions: ChipDefinition[];
   defaultPinned: string[];
   onChange?: () => void;
+  persistence?: FilterChipsPersistence;
 }
 
 interface UseFilterChipsResult {
@@ -62,6 +68,7 @@ const useFilterChips = ({
   definitions,
   defaultPinned,
   onChange,
+  persistence,
 }: UseFilterChipsArgs): UseFilterChipsResult => {
   const [pinnedIds = defaultPinned, setPinnedIds] = useLocalStorageState<
     string[]
@@ -72,6 +79,13 @@ const useFilterChips = ({
     JsonParam,
     { updateType: "replaceIn" },
   );
+
+  // Re-runs on every URL change: re-clicking the current page's link doesn't remount it.
+  useEffect(() => {
+    if (!persistence || rawFilters !== undefined) return;
+    const saved = persistence.load();
+    if (saved && saved.length > 0) setRawFilters(saved);
+  }, [persistence, rawFilters, setRawFilters]);
 
   const urlFilters: Filter[] = useMemo(
     () => (Array.isArray(rawFilters) ? rawFilters : EMPTY_FILTERS),
@@ -152,10 +166,12 @@ const useFilterChips = ({
         }
 
         const nextFilters = chipsToFilters(definitions, nextValues);
-        return nextFilters.length > 0 ? nextFilters : undefined;
+        const next = nextFilters.length > 0 ? nextFilters : undefined;
+        persistence?.save(next);
+        return next;
       });
     },
-    [definitions, setRawFilters, analytics],
+    [definitions, setRawFilters, analytics, persistence],
   );
 
   const previousFiltersRef = useRef(filters);

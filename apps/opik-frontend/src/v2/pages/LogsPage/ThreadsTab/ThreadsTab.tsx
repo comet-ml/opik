@@ -87,6 +87,9 @@ import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
+import { createSessionStorageMemory } from "@/lib/sessionStorageMemory";
+import { Filter } from "@/types/filters";
+import { getLogsFiltersMemoryKey } from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
 import {
@@ -528,6 +531,14 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return compact(THREAD_CHIP_ORDER.map((id) => byId[id]));
   }, [projectId, threadScoreOptions]);
 
+  const threadFiltersMemory = useMemo(
+    () =>
+      createSessionStorageMemory<Filter[]>(
+        getLogsFiltersMemoryKey(projectId, "threads_filters"),
+      ),
+    [projectId],
+  );
+
   const {
     chipsPinned: threadChipsPinned,
     chipsUnpinned: threadChipsUnpinned,
@@ -548,6 +559,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     definitions: threadChipDefinitions,
     defaultPinned: THREAD_DEFAULT_PINNED_CHIPS,
     onChange: handleChipFiltersChange,
+    persistence: threadFiltersMemory,
   });
 
   const { addTag: addThreadTagFilter } = useTagsChipActions({

@@ -52,18 +52,18 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import {
-  ENVIRONMENT_UNTAGGED_VALUE,
-  generateEnvironmentFilter,
-} from "@/lib/filters";
-import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
+import { generateEnvironmentFilter } from "@/lib/filters";
+import { createSessionStorageMemory } from "@/lib/sessionStorageMemory";
+import { Filter } from "@/types/filters";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
 import { useLogsQuickAttributeFilter } from "@/v2/pages/LogsPage/TracesSpansTab/useLogsQuickAttributeFilter";
+import { useLogsEnvironment } from "@/v2/pages/LogsPage/TracesSpansTab/useLogsEnvironment";
 import {
   LOGS_DEFAULT_PINNED_CHIPS,
   LOGS_TABLE_ID,
+  getLogsFiltersMemoryKey,
   getLogsFiltersUrlKey,
 } from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
@@ -583,14 +583,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [environment = "", setEnvironment] = useQueryParam(
-    "environment",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
@@ -623,23 +615,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const { data: environmentsData } = useEnvironmentsList();
-
-  const envList = environmentsData?.content;
-
-  const envIsValid = (() => {
-    if (!environment) return null;
-    if (environment === ENVIRONMENT_UNTAGGED_VALUE) return true;
-    if (!envList) return null;
-    return envList.some((e) => e.name === environment);
-  })();
+  const { environment, envIsValid, changeEnvironment } =
+    useLogsEnvironment(projectId);
 
   useEffect(() => {
-    if (envIsValid === false) {
-      setEnvironment(undefined);
-      setPage(1);
-    }
-  }, [envIsValid, setEnvironment, setPage]);
+    if (envIsValid === false) setPage(1);
+  }, [envIsValid, setPage]);
 
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
@@ -754,6 +735,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const defaultPinned = LOGS_DEFAULT_PINNED_CHIPS[type];
   const tableId = LOGS_TABLE_ID[type];
   const filtersUrlKey = getLogsFiltersUrlKey(type);
+  const filtersMemoryKey = getLogsFiltersMemoryKey(projectId, filtersUrlKey);
+  const filtersMemory = useMemo(
+    () => createSessionStorageMemory<Filter[]>(filtersMemoryKey),
+    [filtersMemoryKey],
+  );
 
   const {
     chipsPinned,
@@ -775,6 +761,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     definitions: chipDefinitions,
     defaultPinned,
     onChange: handleChipFiltersChange,
+    persistence: filtersMemory,
   });
 
   const { addTag: addTagFilter } = useTagsChipActions({
@@ -786,6 +773,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const quickAttributeFilterApi = useLogsQuickAttributeFilter({
     type,
+    projectId,
     onLogsTypeChange,
   });
 
@@ -933,9 +921,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const handleClearFilters = useCallback(() => {
     setSearch("");
     clearAllChips();
-    setEnvironment(undefined);
+    changeEnvironment("");
     setPage(1);
-  }, [setSearch, clearAllChips, setEnvironment, setPage]);
+  }, [setSearch, clearAllChips, changeEnvironment, setPage]);
 
   const rows: Array<Span | Trace> = useMemo(
     () => uniqBy(data?.content ?? [], "id"),
@@ -1489,7 +1477,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <EnvironmentFilterSelect
             value={environment ?? ""}
             onChange={(next) => {
-              setEnvironment(next || undefined);
+              changeEnvironment(next);
               setPage(1);
             }}
           />
