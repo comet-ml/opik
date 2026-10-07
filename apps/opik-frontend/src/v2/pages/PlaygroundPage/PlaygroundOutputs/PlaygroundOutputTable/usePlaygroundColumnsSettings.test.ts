@@ -3,12 +3,15 @@ import { act, renderHook } from "@testing-library/react";
 
 import usePlaygroundColumnsSettings from "./usePlaygroundColumnsSettings";
 
-const COLUMNS = ["variables.question", "variables.answer", "tags"];
+const COLUMN_IDS = ["variables.question", "variables.answer", "tags"];
 
-const renderSettings = (datasetId: string, columnIds: string[] = COLUMNS) =>
-  renderHook(({ id, ids }) => usePlaygroundColumnsSettings(id, ids), {
-    initialProps: { id: datasetId, ids: columnIds },
-  });
+const renderSettings = (datasetId: string, columnIds: string[] = COLUMN_IDS) =>
+  renderHook(
+    ({ id, columnIds }) => usePlaygroundColumnsSettings(id, columnIds),
+    {
+      initialProps: { id: datasetId, columnIds },
+    },
+  );
 
 describe("usePlaygroundColumnsSettings", () => {
   beforeEach(() => {
@@ -18,7 +21,7 @@ describe("usePlaygroundColumnsSettings", () => {
   it("should show every column of a dataset nobody has customized", () => {
     const { result } = renderSettings("dataset-a");
 
-    expect(result.current.selectedColumns).toEqual(COLUMNS);
+    expect(result.current.selectedColumns).toEqual(COLUMN_IDS);
     expect(result.current.columnsOrder).toEqual([]);
   });
 
@@ -29,10 +32,10 @@ describe("usePlaygroundColumnsSettings", () => {
 
     expect(result.current.selectedColumns).toEqual(["variables.answer"]);
 
-    rerender({ id: "dataset-b", ids: COLUMNS });
-    expect(result.current.selectedColumns).toEqual(COLUMNS);
+    rerender({ id: "dataset-b", columnIds: COLUMN_IDS });
+    expect(result.current.selectedColumns).toEqual(COLUMN_IDS);
 
-    rerender({ id: "dataset-a", ids: COLUMNS });
+    rerender({ id: "dataset-a", columnIds: COLUMN_IDS });
     expect(result.current.selectedColumns).toEqual(["variables.answer"]);
   });
 
@@ -50,7 +53,10 @@ describe("usePlaygroundColumnsSettings", () => {
     const { result, rerender } = renderSettings("dataset-a");
     act(() => result.current.setSelectedColumns(["variables.answer", "tags"]));
 
-    rerender({ id: "dataset-a", ids: [...COLUMNS, "variables.context"] });
+    rerender({
+      id: "dataset-a",
+      columnIds: [...COLUMN_IDS, "variables.context"],
+    });
 
     expect(result.current.selectedColumns).toEqual([
       "variables.answer",
@@ -63,9 +69,9 @@ describe("usePlaygroundColumnsSettings", () => {
     const { result, rerender } = renderSettings("dataset-a");
     act(() => result.current.setSelectedColumns(["variables.answer", "tags"]));
 
-    rerender({ id: "dataset-a", ids: ["variables.answer", "tags"] });
+    rerender({ id: "dataset-a", columnIds: ["variables.answer", "tags"] });
     act(() => result.current.setSelectedColumns(["variables.answer"]));
-    rerender({ id: "dataset-a", ids: COLUMNS });
+    rerender({ id: "dataset-a", columnIds: COLUMN_IDS });
 
     expect(result.current.selectedColumns).toEqual(["variables.answer"]);
   });
@@ -77,7 +83,7 @@ describe("usePlaygroundColumnsSettings", () => {
     act(() => result.current.setColumnsOrder(order));
     expect(result.current.columnsOrder).toEqual(order);
 
-    rerender({ id: "dataset-b", ids: COLUMNS });
+    rerender({ id: "dataset-b", columnIds: COLUMN_IDS });
     expect(result.current.columnsOrder).toEqual([]);
   });
 
