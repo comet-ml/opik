@@ -15,7 +15,7 @@ import {
 
 const POLL_INTERVAL_MS = 10000;
 
-const MAX_WATCH_AGE_MS = 60 * 60 * 1000;
+const MAX_WATCH_AGE_MS = 6 * 60 * 60 * 1000;
 
 const watchedTooLong = (experiment: Experiment | undefined) => {
   if (!experiment?.created_at) return false;
@@ -35,7 +35,7 @@ type PlaygroundNavBadgeProps = {
  * polling stops the moment it unmounts, so nothing else is in a position to notice. This watches
  * from the sidebar instead, and only while a run is actually in flight and the playground is
  * elsewhere: experiment ids outlive the run that made them, and watching those would mean polling
- * for ever on behalf of a run that ended long ago.
+ * forever on behalf of a run that ended long ago.
  */
 const PlaygroundNavBadge: React.FC<PlaygroundNavBadgeProps> = ({
   collapsed,
