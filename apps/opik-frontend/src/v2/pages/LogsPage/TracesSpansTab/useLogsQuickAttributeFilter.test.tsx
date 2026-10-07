@@ -35,7 +35,9 @@ const readPinned = (tableId: string) =>
 const PROJECT_ID = "p1";
 
 const readRemembered = (urlKey: string, projectId = PROJECT_ID) => {
-  const raw = sessionStorage.getItem(`logs-filters:${projectId}:${urlKey}`);
+  const raw = sessionStorage.getItem(
+    `logs-filters:admin:${projectId}:${urlKey}`,
+  );
   return raw ? JSON.parse(raw) : undefined;
 };
 
@@ -192,7 +194,7 @@ describe("useLogsQuickAttributeFilter", () => {
         },
       ];
       sessionStorage.setItem(
-        `logs-filters:${PROJECT_ID}:spans_filters`,
+        `logs-filters:admin:${PROJECT_ID}:spans_filters`,
         JSON.stringify(remembered),
       );
       setUrl({ trace: "t1", span: "s1" });

@@ -150,10 +150,11 @@ const useFilterChips = ({
       track?: WriteValuesAnalytics,
     ) => {
       setRawFilters((prevRaw) => {
-        const prevValues = sanitizeFilters(
-          Array.isArray(prevRaw) ? prevRaw : EMPTY_FILTERS,
-          definitions,
-        ).values;
+        // An edit before the restore effect has run must build on the remembered filters.
+        const prevFilters = Array.isArray(prevRaw)
+          ? prevRaw
+          : memory?.load() ?? EMPTY_FILTERS;
+        const prevValues = sanitizeFilters(prevFilters, definitions).values;
         const nextValues = updater(prevValues);
 
         switch (track?.kind) {

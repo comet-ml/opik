@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import { ENVIRONMENT_UNTAGGED_VALUE } from "@/lib/filters";
+import useAppStore from "@/store/AppStore";
 import { useLogsEnvironment } from "./useLogsEnvironment";
 
 let mockEnvironments: Array<{ name: string }> | undefined;
@@ -20,7 +21,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
   </QueryParamProvider>
 );
 
-const MEMORY_KEY = "logs-environment:p1";
+const MEMORY_KEY = "logs-environment:admin:p1";
 
 const setUrl = (params: Record<string, string>) => {
   const search = new URLSearchParams(params).toString();
@@ -91,8 +92,24 @@ describe("useLogsEnvironment", () => {
       expect(readRemembered()).toBe("prod");
     });
 
+    it("does not restore another user's remembered environment", () => {
+      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      const original = useAppStore.getState().user;
+      useAppStore.getState().setUser({ ...original, userName: "alice" });
+      try {
+        const { result } = setup();
+        expect(result.current.environment).toBe("");
+        expect(readUrlEnvironment()).toBeNull();
+      } finally {
+        useAppStore.getState().setUser(original);
+      }
+    });
+
     it("does not restore another project's environment", () => {
-      sessionStorage.setItem("logs-environment:other", JSON.stringify("prod"));
+      sessionStorage.setItem(
+        "logs-environment:admin:other",
+        JSON.stringify("prod"),
+      );
       const { result } = setup();
 
       expect(result.current.environment).toBe("");
@@ -148,6 +165,32 @@ describe("useLogsEnvironment", () => {
       expect(result.current.envIsValid).toBeNull();
       expect(readUrlEnvironment()).toBeNull();
     });
+
+    it.each([
+      ["an object", { name: "prod" }],
+      ["an array", ["prod"]],
+    ])(
+      "ignores and clears a remembered value that is %s, without looping",
+      async (_label, stored) => {
+        sessionStorage.setItem(MEMORY_KEY, JSON.stringify(stored));
+        let renders = 0;
+        const { result } = renderHook(
+          () => {
+            renders += 1;
+            return useLogsEnvironment("p1", { canRestore: true });
+          },
+          { wrapper },
+        );
+
+        await waitFor(() =>
+          expect(sessionStorage.getItem(MEMORY_KEY)).toBeNull(),
+        );
+        expect(result.current.environment).toBe("");
+        expect(result.current.envIsValid).toBeNull();
+        expect(readUrlEnvironment()).toBeNull();
+        expect(renders).toBeLessThan(5);
+      },
+    );
 
     it("clears an invalid environment that arrived in the URL", async () => {
       setUrl({ environment: "deleted-env" });

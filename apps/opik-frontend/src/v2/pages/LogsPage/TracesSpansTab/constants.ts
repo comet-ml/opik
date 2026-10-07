@@ -16,8 +16,13 @@ export const THREADS_FILTERS_URL_KEY = "threads_filters";
 export const getLogsFiltersUrlKey = (type: TRACE_DATA_TYPE) =>
   `${type}_filters`;
 
-export const getLogsFiltersMemoryKey = (projectId: string, urlKey: string) =>
-  `logs-filters:${projectId}:${urlKey}`;
+export const getLogsFiltersMemoryKey = (
+  userName: string,
+  projectId: string,
+  urlKey: string,
+) => `logs-filters:${userName}:${projectId}:${urlKey}`;
 
-export const getLogsEnvironmentMemoryKey = (projectId: string) =>
-  `logs-environment:${projectId}`;
+export const getLogsEnvironmentMemoryKey = (
+  userName: string,
+  projectId: string,
+) => `logs-environment:${userName}:${projectId}`;

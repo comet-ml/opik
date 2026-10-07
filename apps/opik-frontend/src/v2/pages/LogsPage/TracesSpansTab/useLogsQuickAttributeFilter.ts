@@ -4,6 +4,7 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { Filter } from "@/types/filters";
 import { JsonValue } from "@/types/shared";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { createSessionStorageMemory } from "@/lib/sessionStorageMemory";
 import {
@@ -69,12 +70,13 @@ export const useLogsQuickAttributeFilter = ({
     JsonParam,
     { updateType: "replaceIn" },
   );
+  const userName = useLoggedInUserNameOrOpenSourceDefaultUser();
   const filtersMemory = useMemo(
     () =>
       createSessionStorageMemory<Filter[]>(
-        getLogsFiltersMemoryKey(projectId, filtersUrlKey),
+        getLogsFiltersMemoryKey(userName, projectId, filtersUrlKey),
       ),
-    [projectId, filtersUrlKey],
+    [userName, projectId, filtersUrlKey],
   );
   const pinTraceChip = usePinChip(TRACE_DATA_TYPE.traces);
   const pinSpanChip = usePinChip(TRACE_DATA_TYPE.spans);

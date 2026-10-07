@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import { ENVIRONMENT_UNTAGGED_VALUE } from "@/lib/filters";
 import { createSessionStorageMemory } from "@/lib/sessionStorageMemory";
@@ -21,16 +22,20 @@ export const useLogsEnvironment = (
   );
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
 
+  const userName = useLoggedInUserNameOrOpenSourceDefaultUser();
   const memory = useMemo(
     () =>
       createSessionStorageMemory<string>(
-        getLogsEnvironmentMemoryKey(projectId),
+        getLogsEnvironmentMemoryKey(userName, projectId),
       ),
-    [projectId],
+    [userName, projectId],
   );
 
   // Read on every render: the first render is already restored, and a forgotten value stays gone.
-  const environment = urlEnvironment || (canRestore ? memory.load() ?? "" : "");
+  const saved: unknown = memory.load();
+  const savedIsMalformed = saved !== undefined && typeof saved !== "string";
+  const savedEnvironment = typeof saved === "string" ? saved : "";
+  const environment = urlEnvironment || (canRestore ? savedEnvironment : "");
 
   const { data: environmentsData } = useEnvironmentsList();
   const envList = environmentsData?.content;
@@ -48,6 +53,10 @@ export const useLogsEnvironment = (
       setEnvironment(environment);
     }
   }, [urlEnvironment, environment, envIsValid, setEnvironment]);
+
+  useEffect(() => {
+    if (savedIsMalformed) memory.save(undefined);
+  }, [savedIsMalformed, memory]);
 
   useEffect(() => {
     if (envIsValid !== false) return;

@@ -521,6 +521,32 @@ describe("useFilterChips", () => {
         expect(readRemembered()).toEqual(next);
       });
 
+      it("builds on remembered filters when edited before the restore reaches the URL", () => {
+        remember([llm]);
+        const { result } = setup({ persistKey: PERSIST_KEY });
+        act(() =>
+          result.current.applyValue("duration", { mode: "atLeast", min: 5 }),
+        );
+        const next = setRawFilters.mock.lastCall![0](undefined);
+        expect(next).toHaveLength(2);
+        expect(next).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ field: "type", value: "llm" }),
+            expect.objectContaining({ field: "duration" }),
+          ]),
+        );
+        expect(readRemembered()).toEqual(next);
+      });
+
+      it("clearAll clears remembered filters even before they reach the URL", () => {
+        remember([llm]);
+        const { result } = setup({ persistKey: PERSIST_KEY });
+        act(() => result.current.clearAll());
+        const next = setRawFilters.mock.lastCall![0](undefined);
+        expect(next).toBeUndefined();
+        expect(readRemembered()).toBeUndefined();
+      });
+
       it("forgets on clearValue of the last chip", () => {
         remember([llm]);
         const { result } = setup({ raw: [llm], persistKey: PERSIST_KEY });
