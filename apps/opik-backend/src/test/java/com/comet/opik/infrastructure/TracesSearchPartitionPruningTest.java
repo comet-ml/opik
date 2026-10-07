@@ -283,9 +283,11 @@ class TracesSearchPartitionPruningTest {
         // A time-bounded thread list joins trace_threads, whose rows closing a thread writes.
         seeded.expected().forEach(trace -> traceResourceClient.closeTraceThread(trace.threadId(), null,
                 seeded.projectName(), API_KEY, WORKSPACE_NAME));
-        // One thread per trace; the page lists the most recently closed first.
-        var expected = seeded.expected().reversed().stream()
+        // One thread per trace. Closes can share a timestamp, which the page then orders by its own tie-breakers,
+        // so pages are compared by thread id rather than by close order.
+        var expected = seeded.expected().stream()
                 .map(trace -> expectedThread(trace, seeded.projectId()))
+                .sorted(Comparator.comparing(TraceThread::id))
                 .toList();
         var page = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .until(() -> traceResourceClient.getTraceThreads(null, seeded.projectName(), API_KEY, WORKSPACE_NAME,
@@ -303,6 +305,10 @@ class TracesSearchPartitionPruningTest {
                 .searchOnlyPage(searchOnlyPage)
                 .stats(stats)
                 .build();
+    }
+
+    private static List<TraceThread> byId(List<TraceThread> threads) {
+        return threads.stream().sorted(Comparator.comparing(TraceThread::id)).toList();
     }
 
     private static TraceThread expectedThread(Trace trace, UUID projectId) {
@@ -350,9 +356,9 @@ class TracesSearchPartitionPruningTest {
         var search = threadSearch();
 
         assertThat(search.page().total()).isEqualTo(search.expected().size());
-        TraceAssertions.assertThreads(search.expected(), search.page().content());
+        TraceAssertions.assertThreads(search.expected(), byId(search.page().content()));
         assertThat(search.searchOnlyPage().total()).isEqualTo(search.expected().size());
-        TraceAssertions.assertThreads(search.expected(), search.searchOnlyPage().content());
+        TraceAssertions.assertThreads(search.expected(), byId(search.searchOnlyPage().content()));
         TraceAssertions.assertStats(search.stats().stats(),
                 StatsUtils.getProjectThreadStatItems(search.traces(), List.of(), null));
     }
