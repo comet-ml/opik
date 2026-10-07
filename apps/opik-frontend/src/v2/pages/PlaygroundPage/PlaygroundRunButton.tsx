@@ -6,6 +6,7 @@ import { Button } from "@/ui/button";
 import {
   useDatasetType,
   useIsPromptRunning,
+  useIsResumingRun,
   usePromptById,
   useDatasetItemsTotal,
 } from "@/store/PlaygroundStore";
@@ -28,6 +29,8 @@ const PlaygroundRunButton = ({
 }: PlaygroundRunButtonProps) => {
   const prompt = usePromptById(promptId);
   const isPromptRunning = useIsPromptRunning(promptId);
+  const isResumingRun = useIsResumingRun();
+
   const { datasetId, itemsTotal } = usePlaygroundDataset();
   const datasetType = useDatasetType();
   const datasetItemsTotal = useDatasetItemsTotal();
@@ -38,6 +41,7 @@ const PlaygroundRunButton = ({
   // Zero rows is a real state, not a loading one: a filter can exclude everything
   const hasNoDatasetItems = !!datasetId && datasetItemsTotal === 0;
   const isPromptRunDisabled =
+    isResumingRun ||
     !prompt?.model ||
     hasUnrunnableMessages ||
     hasMediaCompatibilityIssue ||

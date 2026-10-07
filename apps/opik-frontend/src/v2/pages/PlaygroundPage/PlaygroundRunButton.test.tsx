@@ -18,11 +18,14 @@ let playgroundDataset: { datasetId: string | null; itemsTotal?: number } = {
 };
 let datasetItemsTotal: number | null = null;
 
+let isResumingRun = false;
+
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
   useIsPromptRunning: () => false,
   useDatasetType: () => datasetType,
   useDatasetItemsTotal: () => datasetItemsTotal,
+  useIsResumingRun: () => isResumingRun,
 }));
 
 vi.mock("@/hooks/usePlaygroundDataset", () => ({
@@ -77,6 +80,7 @@ beforeEach(() => {
   datasetType = null;
   playgroundDataset = { datasetId: null };
   datasetItemsTotal = null;
+  isResumingRun = false;
 });
 
 describe("PlaygroundRunButton", () => {
@@ -211,6 +215,28 @@ describe("PlaygroundRunButton", () => {
       renderButton();
 
       expect(getRunButton()).toBeEnabled();
+    });
+  });
+
+  // A reopened page does not yet know whether its run is still going. Starting one here in that
+  // window would run alongside it, and the resume then drops the result.
+  describe("while the page is picking a run back up", () => {
+    beforeEach(() => {
+      isResumingRun = true;
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+    });
+
+    it("should disable Run on a prompt that is otherwise runnable", () => {
+      renderButton();
+
+      expect(getRunButton()).toBeDisabled();
+    });
+
+    it("should not call onRun when clicked in that window", () => {
+      renderButton();
+      fireEvent.click(getRunButton());
+
+      expect(onRun).not.toHaveBeenCalled();
     });
   });
 
