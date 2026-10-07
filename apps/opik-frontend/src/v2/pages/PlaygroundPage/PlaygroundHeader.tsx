@@ -136,21 +136,21 @@ const PlaygroundHeader = ({
     [promptMap],
   );
 
-  const allMessagesNotEmpty = useMemo(
+  const allMessagesRunnable = useMemo(
     () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
   );
 
   const isRunDisabled =
     !allPromptsHaveModels ||
-    !allMessagesNotEmpty ||
+    !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
     (isExperimentMode && !datasetName);
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
       return "Please select an LLM model for your prompts";
-    if (!allMessagesNotEmpty)
+    if (!allMessagesRunnable)
       return "Some messages are empty. Please add some text to proceed";
     if (hasMediaCompatibilityIssues)
       return "Some prompts contain media but the selected model doesn't support media input";
@@ -159,7 +159,7 @@ const PlaygroundHeader = ({
     return null;
   }, [
     allPromptsHaveModels,
-    allMessagesNotEmpty,
+    allMessagesRunnable,
     hasMediaCompatibilityIssues,
     isExperimentMode,
     datasetName,

@@ -256,7 +256,7 @@ export const generateDefaultPrompt = ({
   };
 };
 
-const isEmptyMessage = (message: LLMMessage) =>
+export const isEmptyMessage = (message: LLMMessage) =>
   !message.content || message.content.length === 0;
 
 // The default prompt starts with a System message, and leaving it blank means "no system
