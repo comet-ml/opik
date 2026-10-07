@@ -486,6 +486,7 @@ const PlaygroundPrompt = ({
           jsonTreeData={datasetSampleData}
           hidePromptActions={false}
           improvePromptConfig={improvePromptConfig}
+          shiftEnterInsertsNewline
         />
       </div>
 
