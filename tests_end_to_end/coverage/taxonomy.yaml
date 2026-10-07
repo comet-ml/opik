@@ -305,6 +305,29 @@ areas:
       # this under either would retire the question permanently.
       logs-open-ended-window: { covered: false, note: "A date-range preset ending today sends no interval_end, on the kpi-cards read and on the chart's metrics read alike: the KPI cards, their period-over-period deltas and the table footer then report one population including a row whose UUIDv7 id instant is mid-2200, on the Traces, Spans and Threads tabs. Pinned against the same seed read with interval_end = now, where every current-period number differs and the prior period is identical" }
       filter-traces:          { covered: true,  tier: t2-cuj }
+      # New for 2.2.94, from the release pass's own exploration of opik#8797.
+      #
+      # Where the trace panel's tree puts a span whose `parent_span_id` names a
+      # span that is NOT in the loaded set. `TraceTreeViewer` attached such a
+      # span to nothing and rendered it nowhere, while "Spans (n)" went on
+      # counting it — a panel that says five and shows four, with no error.
+      #
+      # Its own key rather than folded into `span-tree-expand`, which the
+      # exploration's candidate came closest to. That key is the tree's
+      # expand/collapse behaviour over a connected hierarchy, and it is already
+      # `covered: true` — carried by trace-spans-depth.spec.ts and by
+      # span-read-mapping-and-parent-guard.spec.ts, BOTH of which seed fully
+      # connected trees and so have no orphan to lose. Folding this under it
+      # would retire the question permanently while nothing had tested it. Not
+      # `toggle-spans-view` either, which the candidate proposed: that names the
+      # Logs page's Spans TAB and the table it pages, a different surface from
+      # the panel's span tree.
+      #
+      # Deliberately names the tree's SHAPE and not the hidden-spans toggle. The
+      # eye control is driven here only because the two tree modes are the two
+      # code paths the fix unified; what a reader should take from this key is
+      # that an unresolvable parent lands at the trace root, in both modes.
+      orphan-span-at-trace-root: { covered: false, note: "A span whose parent_span_id names an id that was never written renders at the TRACE root rather than vanishing, in both tree modes, with the Spans (n) label agreeing with the tree in each. Asserted as a depth map over the whole tree read from each node's paddingLeft (the row element is absolute left-0, so every node reports the same bounding-box x and a position-based measure would find the whole tree at depth 0), compared whole so a missing node — the regression — an extra node, and a tree flattened to the root all fail distinctly. The fixture proves it can discriminate before the browser opens: it asserts over the API that the server stored the dangling parent VERBATIM, since a backend that nulled it would make the orphan an ordinary second root span and the tree builder would never reach the branch under test. Show-all is the discriminating half — pre-fix, excludeHiddenSpans blanked a missing parent as a side effect, so hide mode reached the root anyway; the hiding test guards that removed side effect, plus the re-parenting of a hidden span's child to its nearest visible ancestor, and the round trip back through the toggle. Not covered: an orphan whose own parent chain is several unwritten levels deep, and the tree's search/filter modes" }
       # New for 2.2.93, from the release pass's own exploration of opik#8767.
       #
       # The Logs page's "Search by anything" box and the `search` param behind
@@ -476,6 +499,27 @@ areas:
       turn-order-io:           { covered: true,  tier: t1-smoke }
       thread-feedback-score:   { covered: true,  tier: t2-cuj }
       thread-actions-panel:    { covered: false }
+      # New for 2.2.94, from the release pass's own exploration of opik#8778.
+      #
+      # The Threads tab's "Search by anything" box and the `search` param behind
+      # it — `ThreadDAO`'s own clause, `ilike` over a thread's `thread_id` and
+      # `id` plus the `input` and `output` of the traces it aggregates — and the
+      # week pre-pass opik#8778 put in front of it
+      # (`traces_partitioned && search_text`), which no other combination of
+      # parameters reaches.
+      #
+      # Its own key, and NOT `list-threads`, which the exploration's candidate
+      # reached for. That key is the Threads table listing seeded conversations
+      # and is already `covered: true` at t1 — folding search under it would
+      # retire the question permanently while nothing had tested it. Not
+      # `traces.free-text-search` either, though it is the direct sibling: that
+      # key's note names thread search as explicitly NOT covered, because this is
+      # a third clause over different columns on a different endpoint, and its
+      # `@area:` is traces rather than threads.
+      #
+      # The capability is in the `threads` area even though the spec lives in
+      # trace-explore/ — that is this area's `spec_dir`, shared with traces.
+      free-text-search:        { covered: false, note: "Free-text `search` over threads, asserted as EXACTNESS rather than membership on a seeded 12-thread project (7 carrying one marker in their trace's input and a DIFFERENT marker in its output, 5 decoys carrying neither, one trace and one usage-carrying llm span per thread): the thread-id SET and the envelope's `total` both pinned, each marker asserted separately because each sits on one column only — so a clause that lost `input` or `output` fails one step and passes the other — each thread's own per-column token resolving to exactly its one thread, /traces/threads/stats agreeing with the listing under each search and without one (an independently written query, read through numericStat so an empty stats list cannot pass as a zero), and a trace NAME searched as the negative control, which must return nothing because the thread clause does not read it. The fixture proves it can discriminate before writing: the clause matches `thread_id`, and the ids are built from the run prefix and the test's own title, so it asserts no marker occurs in any thread id and that each token occurs in exactly one thread's searchable text. Searched rows are also asserted to still carry number_of_messages, duration, total_estimated_cost and usage, since the right ids with empty aggregates is a blank table no count assertion would notice. The UI half types into the box and asserts the footer total, the rendered row set and every decoy's absence against the API's answer for the same term, then that clearing it restores the project; and pins, as the one place two numbers on this page legitimately disagree, that the KPI count card above the table does NOT narrow — `useProjectKpiCards` takes the chip filters and the window and no `search`, so it stays a project-level overview while the footer is the searched total. NOT covered, and not claimed: the week bound itself — the Threads tab excludes the `alltime` preset so its read is always windowed, and an environment running UUIDv7 validation in reject mode with a sub-week window (staging: PT24H) refuses backdated ids, so every row is seeded at `now`; driving the bound needs uuidValidation.auditOnly=true. Also not covered: search composed with a thread filter chip, and a multi-turn thread's aggregate under a search" }
       thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'" }
 
     visual:
@@ -724,6 +768,22 @@ areas:
       version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache; also API-level, the single version a multi-batch insert cuts whatever its num_threads or its compression arm, and the v1/v2 pair either side of a rejected insert; plus the counters a single non-JSON-native item cuts (one version, itemsAdded 1, itemsModified 0) and the absence of any second version once the repeat insert deduplicates" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
+      # New for 2.2.94, from the release pass's own exploration of opik#8605.
+      #
+      # The create sidebar's "Upload a file" mode and the two endpoints behind it
+      # — `/datasets/items/from-csv` and `/datasets/items/from-json` — including
+      # the SYNCHRONOUS validation opik#8605 added. No spec in the estate
+      # uploaded a file before this one.
+      #
+      # Its own key rather than folded into `create-dataset-ui`, which the
+      # exploration's candidate reached for. That key is the sidebar's SDK mode —
+      # type a name, submit — and it is already `covered: true` at t1 from
+      # dataset-crud-smoke.spec.ts, so folding the upload path under it would
+      # retire the question permanently while nothing had driven a file through
+      # either endpoint. The two share a sidebar component and nothing else: the
+      # upload mode has a dropzone, a derived name, a second request after the
+      # create, and a validation surface of its own.
+      upload-file-items:      { covered: false, note: "A file uploaded through the Create dataset -> Upload a file sidebar, asserted on the three malformed shapes opik#8605 made synchronous plus a valid CSV as the control: a CSV whose headers differ only in case (the parser folds case, so it would have merged them), a JSON array with a syntax error in its SECOND element, and a JSONL with a non-object on its SECOND line — each malformed PAST the point the old head-only validation looked at, which is what makes them regression tests rather than smoke tests. Three independent facts per case, since any one can be right while the flow is broken: the response status (400 for each malformed file, 202 for the valid one — the only place 'synchronously' is observable rather than inferred); what the user is told, as the error toast carrying the server's own sentence AND the load-bearing negative that NO 'is ready to use' toast was raised, read through the shared toast recorder because Radix dismisses a toast in ~5s and a live locator cannot tell 'never raised' from 'already gone'; and what is stored, 0 items against the valid file's 2. Also pins the fix's other UI half, that a refused upload opens the dataset it created instead of claiming success. Self-seeding: the fixture writes its own four files, named inside the run prefix because the sidebar derives the dataset name from the FILE name and a dataset named otherwise escapes the teardown sweep. NOT covered, and deliberately not: the failed-import banner. opik#8605's final commit dropped the synchronous markFailed on purpose (it could overwrite a still-processing upload and left healthy datasets FAILED after one bad file), so a 400 leaves the dataset at status unknown with no banner — the banner belongs to a row-level failure during ASYNC processing (a JSONL whose id is not a UUID), which is a separate flow. Also not covered: a client-side rejection (wrong extension, over the size cap), drag-and-drop as opposed to the file picker, the 2000MB cap, and the 409 name collision the exploration saw produce no feedback at all" }
       # New for 2.2.86, from the release pass's own exploration of opik#8607.
       #
       # A dataset's last-experiment bookkeeping (most_recent_experiment_at,
