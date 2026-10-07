@@ -8,9 +8,24 @@ og:site_name: Opik Documentation
 subtitle: Missing values, timestamp precision and aggregates on the traces table
 ---
 
-The ClickHouse `traces` table no longer uses `Nullable` columns for `end_time`, `duration` and
-`ttft`. A missing value is stored as a sentinel instead, and timestamps are stored at microsecond
-precision.
+After the traces cutover, the ClickHouse `traces` table no longer uses `Nullable` columns for
+`end_time`, `duration` and `ttft`. A missing value is stored as a sentinel instead, and timestamps
+are stored at microsecond precision.
+
+<Warning>
+  **This page applies only once your installation has completed the traces cutover**, which most
+  deployments have not yet done. Until then the columns are still `Nullable` and the usual `NULL`
+  patterns are correct. To see which one you have, check the column types:
+
+  ```sql
+  SELECT name, type FROM system.columns
+  WHERE database = 'opik' AND table = 'traces' AND name IN ('end_time', 'duration', 'ttft')
+  ```
+
+  `Nullable(...)` means the cutover has not run yet. For the cutover itself, see the
+  [traces cutover runbook](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/data-migrations/traces-local-v2-cutover/README.md)
+  and the `clickhouse-traces-topology` entry in [troubleshooting](/self-host/troubleshooting).
+</Warning>
 
 <Note>
   The REST API, the SDKs and the Opik UI are unaffected: a missing value is still returned as JSON
