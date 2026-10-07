@@ -114,10 +114,12 @@ const PlaygroundOutputs = ({
   // keys, and sampling only the first row would hide the others' from the picker.
   const datasetSample = useMemo(() => {
     if (datasetItems.length === 0) return null;
-    return datasetItems.reduce<JsonObject>(
-      (acc, item) => ({ ...(item.data as JsonObject), ...acc }),
-      {},
-    );
+    return datasetItems.reduce<JsonObject>((acc, item) => {
+      Object.entries(item.data as JsonObject).forEach(([key, value]) => {
+        if (!(key in acc)) acc[key] = value;
+      });
+      return acc;
+    }, {});
   }, [datasetItems]);
 
   useEffect(() => {
