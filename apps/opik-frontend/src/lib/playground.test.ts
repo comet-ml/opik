@@ -6,6 +6,7 @@ import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
   hasUnsupportedMedia,
+  isEmptyMessage,
   restoreMissingConfigKeys,
 } from "@/lib/playground";
 import {
@@ -502,6 +503,22 @@ describe("generateDefaultPrompt", () => {
   });
 });
 
+describe("isEmptyMessage", () => {
+  it.each([
+    ["an empty string", userMessage("")],
+    ["an empty part list", userMessage([])],
+  ])("treats %s as empty", (_, message) => {
+    expect(isEmptyMessage(message)).toBe(true);
+  });
+
+  it.each([
+    ["text", userMessage("Hello")],
+    ["a list of parts", imageMessage],
+  ])("treats %s as content", (_, message) => {
+    expect(isEmptyMessage(message)).toBe(false);
+  });
+});
+
 describe("dropEmptySystemMessages", () => {
   it("drops a system message with no text", () => {
     expect(
@@ -533,5 +550,13 @@ describe("canRunMessages", () => {
 
   it("blocks a run when only an empty system message is left", () => {
     expect(canRunMessages([systemMessage("")])).toBe(false);
+  });
+
+  it("allows a run with an empty system message and a user message with an image", () => {
+    expect(canRunMessages([systemMessage([]), imageMessage])).toBe(true);
+  });
+
+  it("blocks a run while a user message has no parts", () => {
+    expect(canRunMessages([systemMessage(""), userMessage([])])).toBe(false);
   });
 });
