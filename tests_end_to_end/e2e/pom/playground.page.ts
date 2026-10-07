@@ -328,6 +328,18 @@ export class PlaygroundPage {
     return this.page.getByTestId('playground-experiment-name-editor');
   }
 
+  lastRunSummary(): Locator {
+    return this.page.getByTestId('playground-last-run-summary');
+  }
+
+  lastRunExperimentLink(name: string): Locator {
+    return this.lastRunSummary().getByRole('link', { name, exact: true });
+  }
+
+  lastRunCompareLink(): Locator {
+    return this.lastRunSummary().getByRole('link', { name: 'Compare results' });
+  }
+
   /** Open the "Run experiment" entry menu (when no suite/dataset is loaded). */
   async clickRunExperiment(): Promise<void> {
     return test.step('click Run experiment', async () => {
