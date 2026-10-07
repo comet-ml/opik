@@ -137,6 +137,8 @@ export const useDashboardPersistence = ({
       refetch().then(({ data }) => {
         if (!data?.config) return;
         lastSavedConfigRef.current = data.config;
+        // The store still holds the pre-update state; don't let the autosave cleanup flush it over the server copy.
+        externalReloadRef.current = true;
         setResolvedConfig(data.config);
       });
     };
@@ -149,6 +151,7 @@ export const useDashboardPersistence = ({
   }, [refetch]);
 
   const lastSavedConfigRef = useRef<DashboardState | null>(null);
+  const externalReloadRef = useRef(false);
   const [saveStatus, setSaveStatus] = useState<DashboardSaveStatus>("idle");
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -238,7 +241,9 @@ export const useDashboardPersistence = ({
       unsubscribe();
       debouncedSave.cancel();
       const state = useDashboardStore.getState();
-      if (state.lastModified !== 0) {
+      const externalReload = externalReloadRef.current;
+      externalReloadRef.current = false;
+      if (!externalReload && state.lastModified !== 0) {
         const config = state.getDashboard();
         if (isDashboardChanged(config, lastSavedConfigRef.current)) {
           performSave(dashboardId, config);
