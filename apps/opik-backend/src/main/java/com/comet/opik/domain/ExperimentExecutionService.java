@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -91,7 +92,8 @@ public class ExperimentExecutionService {
                     ? request.projectName()
                     : experimentExecutionConfig.getDefaultProjectName();
 
-            return fetchDatasetExecutionPolicyReactive(request.datasetId(), request.versionHash())
+            return requireDatasetItems(request)
+                    .then(fetchDatasetExecutionPolicyReactive(request.datasetId(), request.versionHash()))
                     .flatMap(optPolicy -> {
                         ExecutionPolicy datasetExecutionPolicy = optPolicy.orElse(null);
                         return createExperiments(request, projectName)
@@ -191,6 +193,21 @@ public class ExperimentExecutionService {
                 .datasetVersion(request.versionHash())
                 .build();
         return datasetItemService.getItems(streamRequest, List.of());
+    }
+
+    private Mono<Void> requireDatasetItems(ExperimentExecutionRequest request) {
+        var firstItemRequest = DatasetItemStreamRequest.builder()
+                .datasetName(request.datasetName())
+                .datasetVersion(request.versionHash())
+                .steamLimit(1)
+                .build();
+        return datasetItemService.getItems(firstItemRequest, List.of())
+                .hasElements()
+                .filter(Boolean::booleanValue)
+                .switchIfEmpty(Mono.error(() -> new BadRequestException(
+                        "Dataset '%s' has no items. Add items to it before running an experiment"
+                                .formatted(request.datasetName()))))
+                .then();
     }
 
     private Mono<Optional<ExecutionPolicy>> fetchDatasetExecutionPolicyReactive(UUID datasetId, String versionHash) {

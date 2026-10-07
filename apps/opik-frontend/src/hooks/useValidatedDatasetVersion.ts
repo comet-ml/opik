@@ -11,6 +11,7 @@ interface UseValidatedDatasetVersionReturn {
   versionName: string | undefined;
   versionId: string | undefined;
   versionHash: string | undefined;
+  itemsTotal: number | undefined;
   setVersionKey: (key: string | null) => void;
 }
 
@@ -47,6 +48,7 @@ export const useValidatedDatasetVersion =
         versionName: undefined,
         versionId: undefined,
         versionHash: undefined,
+        itemsTotal: undefined,
         setVersionKey: setStoredKey,
       };
     }
@@ -59,6 +61,7 @@ export const useValidatedDatasetVersion =
         versionName: undefined,
         versionId: undefined,
         versionHash: undefined,
+        itemsTotal: undefined,
         setVersionKey: setStoredKey,
       };
     }
@@ -68,6 +71,7 @@ export const useValidatedDatasetVersion =
       versionName: version.version_name,
       versionId: version.id,
       versionHash: version.version_hash,
+      itemsTotal: version.items_total,
       setVersionKey: setStoredKey,
     };
   };

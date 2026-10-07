@@ -41,6 +41,7 @@ interface PlaygroundHeaderProps {
   datasetId: string | null;
   datasetName: string | null;
   versionName?: string;
+  versionItemsTotal?: number;
   onChangeDatasetId: (id: string | null) => void;
   onReset: () => void;
   onRunAll: () => void;
@@ -54,6 +55,7 @@ const PlaygroundHeader = ({
   datasetId,
   datasetName,
   versionName,
+  versionItemsTotal,
   onChangeDatasetId,
   onReset,
   onRunAll,
@@ -144,11 +146,16 @@ const PlaygroundHeader = ({
     [promptMap],
   );
 
+  const isDatasetEmpty = isExperimentMode && versionItemsTotal === 0;
+  const experimentTarget =
+    currentDatasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
+
   const isRunDisabled =
     !allPromptsHaveModels ||
     !allMessagesNotEmpty ||
     hasMediaCompatibilityIssues ||
-    (isExperimentMode && !datasetName);
+    (isExperimentMode && !datasetName) ||
+    isDatasetEmpty;
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
@@ -159,6 +166,8 @@ const PlaygroundHeader = ({
       return "Some prompts contain media but the selected model doesn't support media input";
     if (isExperimentMode && !datasetName)
       return "Your dataset has been removed. Select another one";
+    if (isDatasetEmpty)
+      return `This ${experimentTarget} is empty. Add items to run an experiment`;
     return null;
   }, [
     allPromptsHaveModels,
@@ -166,6 +175,8 @@ const PlaygroundHeader = ({
     hasMediaCompatibilityIssues,
     isExperimentMode,
     datasetName,
+    isDatasetEmpty,
+    experimentTarget,
   ]);
 
   // Keyboard shortcut: Shift+Enter to run all
@@ -247,8 +258,6 @@ const PlaygroundHeader = ({
 
     const hasRunExperiment = isExperimentMode && createdExperiments.length > 0;
     const label = hasRunExperiment ? "Re-run" : "Run";
-    const experimentTarget =
-      currentDatasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
     const tooltip =
       runDisabledReason ??
       (isExperimentMode
