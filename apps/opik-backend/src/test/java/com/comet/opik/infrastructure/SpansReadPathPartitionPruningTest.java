@@ -6,6 +6,7 @@ import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.AlertType;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -555,12 +556,19 @@ class SpansReadPathPartitionPruningTest {
                                 .build()))
                         .build()))
                 .build();
-        alertResourceClient.createAlert(alert, API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+        var alertId = alertResourceClient.createAlert(alert, API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
 
-        var body = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
-                .until(() -> wireMock.server().findAll(postRequestedFor(urlEqualTo(webhookPath))),
-                        requests -> !requests.isEmpty())
-                .getFirst().getBodyAsString();
+        String body;
+        try {
+            body = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
+                    .until(() -> wireMock.server().findAll(postRequestedFor(urlEqualTo(webhookPath))),
+                            requests -> !requests.isEmpty())
+                    .getFirst().getBodyAsString();
+        } finally {
+            // The scheduler re-fires an enabled alert on every run, so it must not outlive this test.
+            alertResourceClient.deleteAlertBatch(BatchDelete.builder().ids(Set.of(alertId)).build(), API_KEY,
+                    WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+        }
         @SuppressWarnings("unchecked")
         WebhookEvent<Map<String, Object>> event = JsonUtils.readValue(body, WebhookEvent.class);
         var metadata = (List<?>) event.getPayload().get("metadata");
