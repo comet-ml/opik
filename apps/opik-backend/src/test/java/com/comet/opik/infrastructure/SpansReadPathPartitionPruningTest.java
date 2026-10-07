@@ -491,14 +491,22 @@ class SpansReadPathPartitionPruningTest {
         var intervalStart = seeded.now().minus(Duration.ofHours(1));
         var intervalEnd = openEnded ? null : Instant.now();
 
+        var requestedAt = Instant.now();
         var response = projectResourceClient.getKpiCards(seeded.projectId(), KpiCardRequest.builder()
                 .entityType(KpiCardRequest.EntityType.THREADS)
                 .intervalStart(intervalStart)
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
-        // The card also reads the period before the window, as long as the window, up to the server's now when open.
-        var priorStart = intervalStart.minus(Duration.between(intervalStart,
-                Objects.requireNonNullElseGet(intervalEnd, Instant::now)));
+        var respondedAt = Instant.now();
+        // The card also reads the period before the window, as long as the window. When open, the server sizes it
+        // with its own now, somewhere between these two instants, so a Monday boundary between them makes either
+        // week set right.
+        var expectedWeekSets = Stream.of(requestedAt, respondedAt)
+                .map(now -> seeded.weeksRead(
+                        intervalStart
+                                .minus(Duration.between(intervalStart, Objects.requireNonNullElse(intervalEnd, now))),
+                        intervalEnd))
+                .collect(Collectors.toSet());
 
         assertThat(response.stats())
                 .filteredOn(stat -> stat.type() == KpiCardResponse.KpiMetricType.TOTAL_COST)
@@ -506,7 +514,7 @@ class SpansReadPathPartitionPruningTest {
                 .satisfies(stat -> assertThat(stat.currentValue()).isCloseTo(openEnded ? 3.75 : 1.25,
                         within(1e-6)));
         assertThat(spansPartitionsRead("KpiCards_getThreadKpiCards", seeded.projectId()))
-                .containsExactlyInAnyOrderElementsOf(seeded.weeksRead(priorStart, intervalEnd));
+                .isIn(expectedWeekSets);
     }
 
     private record SeededThread(UUID projectId, Instant now, Set<String> spanWeeks) {
