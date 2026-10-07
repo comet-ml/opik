@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO;
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.LwdStat;
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.PartitionStat;
+import com.comet.opik.infrastructure.metrics.PartitionRange;
 import io.dropwizard.jobs.Job;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -25,11 +26,10 @@ import reactor.util.function.Tuple2;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.ToLongFunction;
@@ -47,6 +47,10 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * on every OTel collection. Instances that fail to acquire the lock clear their snapshot so they
  * stop reporting — this keeps exactly one series per (table, partition) and lets partitions that
  * age out drop from Prometheus instead of lingering as stale values.
+ *
+ * <p>Out-of-range weekly partitions (far-future or before {@code inRangeFrom}) are folded into one
+ * series per table per side by {@link PartitionRange}, so the series count stays bounded however many
+ * junk partitions a table carries. The partition count is computed before folding and stays exact.
  */
 @Singleton
 @Slf4j
@@ -57,10 +61,16 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
 
     private static final AttributeKey<String> TABLE_KEY = stringKey("table");
     private static final AttributeKey<String> PARTITION_KEY = stringKey("partition");
+    private static final AttributeKey<String> RANGE_KEY = stringKey("range");
 
+    /** {@code partitionCounts}: exact distinct partitions per table, then per range. */
     @Builder(toBuilder = true)
-    private record Snapshot(List<PartitionStat> partitionStats, List<LwdStat> lwdStats) {
+    private record Snapshot(
+            Map<String, Map<String, Long>> partitionCounts,
+            List<PartitionStat> partitionStats,
+            List<LwdStat> lwdStats) {
         private static final Snapshot EMPTY = Snapshot.builder()
+                .partitionCounts(Map.of())
                 .partitionStats(List.of())
                 .lwdStats(List.of())
                 .build();
@@ -85,17 +95,19 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
 
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.clickhouse");
 
-        // Aggregated one series per table (partition count is the only non-per-partition metric).
+        // Aggregated one series per table (partition counts are the only non-per-partition metrics).
         meter.gaugeBuilder("opik.clickhouse.partition.count").ofLongs()
                 .setDescription("Number of active partitions per table")
-                .buildWithCallback(measurement -> {
-                    Map<String, Set<String>> partitionsByTable = new HashMap<>();
-                    for (PartitionStat stat : snapshot.get().partitionStats()) {
-                        partitionsByTable.computeIfAbsent(stat.table(), key -> new HashSet<>()).add(stat.partition());
-                    }
-                    partitionsByTable.forEach((table, partitions) -> measurement.record(partitions.size(),
-                            Attributes.of(TABLE_KEY, table)));
-                });
+                .buildWithCallback(measurement -> snapshot.get().partitionCounts()
+                        .forEach((table, byRange) -> measurement.record(
+                                byRange.values().stream().mapToLong(Long::longValue).sum(),
+                                Attributes.of(TABLE_KEY, table))));
+        meter.gaugeBuilder("opik.clickhouse.partition.range_count").ofLongs()
+                .setDescription("Number of active partitions per table by range "
+                        + "(in_range, out_of_range_future, out_of_range_past)")
+                .buildWithCallback(measurement -> snapshot.get().partitionCounts()
+                        .forEach((table, byRange) -> byRange.forEach((range, count) -> measurement.record(count,
+                                Attributes.of(TABLE_KEY, table, RANGE_KEY, range)))));
 
         // Per-(table, partition) series sourced from system.parts.
         registerPartitionGauge(meter, "opik.clickhouse.partition.size_bytes",
@@ -170,12 +182,16 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     }
 
     private void updateSnapshot(Tuple2<List<PartitionStat>, List<LwdStat>> result) {
+        var range = PartitionRange.of(config.getInRangeFrom(), LocalDate.now(ZoneOffset.UTC));
+        var partitionStats = range.group(result.getT1());
+        var lwdStats = range.groupLwd(result.getT2());
         snapshot.set(Snapshot.builder()
-                .partitionStats(result.getT1())
-                .lwdStats(result.getT2())
+                .partitionCounts(range.countByRange(result.getT1()))
+                .partitionStats(partitionStats)
+                .lwdStats(lwdStats)
                 .build());
-        log.debug("ClickHouse partition metrics refreshed: '{}' partitions, '{}' LWD partitions",
-                result.getT1().size(), result.getT2().size());
+        log.debug("ClickHouse partition metrics refreshed: '{}' partitions as '{}' series, '{}' LWD series",
+                result.getT1().size(), partitionStats.size(), lwdStats.size());
     }
 
     private void registerPartitionGauge(Meter meter, String name, String description,

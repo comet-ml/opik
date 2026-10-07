@@ -38,6 +38,7 @@ public interface ClickHousePartitionMetricsDAO {
 
     Mono<List<PartitionStat>> getPartitionStats();
 
+    /** LWD-masked row counts per partition. A table whose scan fails contributes no stats; the others are unaffected. */
     Mono<List<LwdStat>> getLwdRowCounts(List<String> tables);
 }
 
@@ -142,7 +143,16 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                                     .table(table)
                                     .partition(row.get("partition_id", String.class))
                                     .lwdRows(row.get("lwd_rows", Long.class))
-                                    .build()));
+                                    .build()))
+                            // Collected per table so a failure (missing table, timeout) drops only this
+                            // table's series, never a partial result or the other tables' series.
+                            .collectList()
+                            .onErrorResume(exception -> {
+                                log.warn("ClickHouse partition metrics: LWD row-count scan failed for table '{}'",
+                                        table, exception);
+                                return Mono.just(List.of());
+                            })
+                            .flatMapIterable(stats -> stats);
                 })
                 .collectList();
     }

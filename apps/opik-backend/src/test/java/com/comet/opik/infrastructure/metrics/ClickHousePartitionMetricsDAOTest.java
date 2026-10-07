@@ -162,6 +162,37 @@ class ClickHousePartitionMetricsDAOTest {
         });
     }
 
+    @Test
+    void lwdScanFailureOnOneTableLeavesOtherTablesReporting() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(),
+                randomName("user"));
+        var projectName = randomName("project");
+        var traceId = traceResourceClient.createTrace(
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(null)
+                        .projectName(projectName)
+                        .projectId(null)
+                        .startTime(Instant.now())
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build(),
+                apiKey, workspaceName);
+        traceResourceClient.deleteTrace(traceId, workspaceName, apiKey);
+
+        // A table named in lwdTables that doesn't exist (UNKNOWN_TABLE), e.g. spans_local before the
+        // wrap, must drop only its own series: traces reports exactly what it reports on its own.
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(() -> {
+            var expected = partitionMetricsDAO.getLwdRowCounts(List.of("traces")).block();
+            assertThat(expected).isNotEmpty();
+
+            var actual = partitionMetricsDAO.getLwdRowCounts(List.of("missing_table", "traces")).block();
+
+            assertThat(actual).isEqualTo(expected);
+        });
+    }
+
     private PartitionStat tracesStat() {
         return partitionMetricsDAO.getPartitionStats().block().stream()
                 .filter(stat -> stat.table().equals("traces"))

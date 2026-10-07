@@ -537,6 +537,7 @@ Call opik api on http://localhost:5173/api
 | nameOverride | string | `"opik"` |  |
 | nodeSelector | object | `{}` |  |
 | partitionMetrics.enabled | bool | `false` |  |
+| partitionMetrics.inRangeFrom | string | `"2024-01-01"` |  |
 | partitionMetrics.interval | string | `"5m"` |  |
 | partitionMetrics.lwdTables | string | `"traces,spans"` |  |
 | redis.architecture | string | `"standalone"` |  |
