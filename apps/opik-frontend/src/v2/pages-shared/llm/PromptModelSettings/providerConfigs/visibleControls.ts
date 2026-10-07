@@ -58,7 +58,9 @@ export const getOpenAIVisibleControls = ({
 
   return {
     temperature: !isUndefined(temperature),
-    maxCompletionTokens: !isUndefined(configs.maxCompletionTokens),
+    maxCompletionTokens:
+      supports("maxCompletionTokens") &&
+      !isUndefined(configs.maxCompletionTokens),
     topP: supports("topP") && !isUndefined(topP),
     frequencyPenalty: showPenalties && !isUndefined(configs.frequencyPenalty),
     presencePenalty: showPenalties && !isUndefined(configs.presencePenalty),
@@ -99,7 +101,9 @@ const getGeminiFamilyVisibleControls = (
 
   return {
     temperature: !isUndefined(temperature),
-    maxCompletionTokens: !isUndefined(configs.maxCompletionTokens),
+    maxCompletionTokens:
+      supports("maxCompletionTokens") &&
+      !isUndefined(configs.maxCompletionTokens),
     topP: supports("topP") && !isUndefined(topP),
     thinkingLevel: showThinkingLevel,
     throttling: supports("throttling"),
@@ -203,6 +207,8 @@ export const hasVisibleControls = (
         }),
       );
     case PROVIDER_TYPE.CUSTOM:
+    case PROVIDER_TYPE.OLLAMA:
+    case PROVIDER_TYPE.BEDROCK:
       return true;
     default:
       return false;

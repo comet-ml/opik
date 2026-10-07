@@ -8,7 +8,6 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import {
-  ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND,
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
@@ -152,12 +151,28 @@ const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
 const isVertexModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean =>
   typeof model === "string" && model.startsWith("vertex_ai/");
 
-const GEMINI_3_GENERATION = /^gemini-3(?:[.-]|$)/;
+// An allow-list, so a Gemini generation newer than this list gets no sampling sliders until someone
+// checks it: Google asks to keep every Gemini 3 model at its default temperature, and the aliases,
+// Omni and Robotics ER ids all resolve to Gemini 3-era models. Only native ids are gated — OpenRouter's
+// google/gemini-* and gemma-* fall through, since nothing here describes them.
+const SAMPLING_CAPABLE_GEMINI_GENERATIONS =
+  /^gemini-(?:1\.0|1\.5|2\.0|2\.5)(?:-|$)/;
+const SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS: ReadonlySet<string> = new Set([
+  "gemini-pro-vision",
+]);
 
 export const supportsGeminiSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  !GEMINI_3_GENERATION.test((model ?? "").replace(/^vertex_ai\//, ""));
+): boolean => {
+  const id = (model ?? "").replace(/^vertex_ai\//, "");
+  if (!id.startsWith("gemini-")) {
+    return true;
+  }
+  return (
+    SAMPLING_CAPABLE_GEMINI_GENERATIONS.test(id) ||
+    SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS.has(id)
+  );
+};
 
 /**
  * Checks if a Gemini model supports thinking level parameter
@@ -456,9 +471,51 @@ export const supportsSamplingParams = (
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean =>
-  ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND &&
   !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.thinkingEffortOptions;
+
+export const getDefaultThinkingEffort = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): AnthropicThinkingEffort =>
+  ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.defaultThinkingEffort ?? "high";
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  isPlainObject(value) ? (value as Record<string, unknown>) : {};
+
+/**
+ * The effort a config holds under custom_parameters.output_config, which is where the request
+ * carries it. Surfaces that store the request shape and load it back (a saved optimization run, an
+ * evaluator rule) have only this copy.
+ */
+export const getNestedThinkingEffort = (
+  customParameters: unknown,
+): AnthropicThinkingEffort | undefined => {
+  const effort = asRecord(asRecord(customParameters).output_config).effort;
+  return typeof effort === "string"
+    ? (effort as AnthropicThinkingEffort)
+    : undefined;
+};
+
+// Keeps every other key, inside output_config too, so fields no form control shows survive a save.
+export const withThinkingEffort = (
+  customParameters: unknown,
+  effort: AnthropicThinkingEffort | undefined,
+): Record<string, unknown> | undefined => {
+  const params = asRecord(customParameters);
+  // Rebuilding a non-object output_config would turn it into a valid effort-only one and hide the
+  // backend's 400, so a malformed value is sent as it is.
+  if (params.output_config != null && !isPlainObject(params.output_config)) {
+    return Object.keys(params).length > 0 ? params : undefined;
+  }
+  const outputConfig = omit(asRecord(params.output_config), "effort");
+  const nextOutputConfig = effort ? { ...outputConfig, effort } : outputConfig;
+  const next =
+    Object.keys(nextOutputConfig).length > 0
+      ? { ...omit(params, "output_config"), output_config: nextOutputConfig }
+      : omit(params, "output_config");
+  return Object.keys(next).length > 0 ? next : undefined;
+};
 
 export const getAnthropicThinkingEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
@@ -578,7 +635,7 @@ export const updateProviderConfig = <
       next.thinkingEffort !== undefined &&
       !effortOptions.some((o) => o.value === next.thinkingEffort)
     ) {
-      next.thinkingEffort = "high";
+      next.thinkingEffort = getDefaultThinkingEffort(params.model);
       changed = true;
     }
 
@@ -721,6 +778,7 @@ export const supportsPenaltyParams = (
 export type EffortParams = {
   reasoningEffort?: OpenAIReasoningEffort;
   thinkingEffort?: AnthropicThinkingEffort;
+  custom_parameters?: unknown;
 };
 
 /**
@@ -728,12 +786,15 @@ export type EffortParams = {
  * {@link resolveSamplingParams} for the effort dropdowns.
  *
  * Unlike the sampling pair this does substitute a default, because the dropdown has no empty state:
- * it renders "High" for a config holding nothing, which is also what a fresh config is seeded with.
- * Resolving to that same value is what stops the control claiming an effort the request never
- * carries — a model change into a reasoning model leaves the config's effort unset, and the
- * provider would then apply its own default rather than the high the panel showed.
+ * it renders the model's default for a config holding nothing, which is also what a fresh config is
+ * seeded with. Resolving to that same value is what stops the control claiming an effort the request
+ * never carries — a model change into a reasoning model leaves the config's effort unset, and the
+ * provider would then apply its own default rather than the one the panel showed.
  *
- * "high" is offered by every model in both capability maps, so it is always a valid substitute.
+ * The OpenAI default is "high", which every reasoning row offers. The Anthropic one is the model's
+ * own (medium on Opus 5.5). An Anthropic effort under custom_parameters counts as stored too: the
+ * flat one wins when the model offers it, else the nested one does, so a reloaded request shape
+ * shows the level it will send and a stale flat value cannot override a valid nested one.
  */
 export const resolveEffort = (
   model: PROVIDER_MODEL_TYPE | "",
@@ -763,11 +824,11 @@ export const resolveEffort = (
     if (options.length === 0) {
       return {};
     }
-    return {
-      thinkingEffort: options.some((o) => o.value === configs.thinkingEffort)
-        ? configs.thinkingEffort
-        : "high",
-    };
+    const stored = [
+      configs.thinkingEffort,
+      getNestedThinkingEffort(configs.custom_parameters),
+    ].find((effort) => options.some((o) => o.value === effort));
+    return { thinkingEffort: stored ?? getDefaultThinkingEffort(model) };
   }
 
   return { ...configs };
@@ -855,11 +916,24 @@ export const sanitizeConfigForRequest = (
       configs as EffortParams,
       openAiPipelineMode,
     );
-    for (const key of ["reasoningEffort", "thinkingEffort"] as const) {
-      if (effort[key] === undefined) {
-        delete sanitized[key];
+    if (effort.reasoningEffort === undefined) {
+      delete sanitized.reasoningEffort;
+    } else {
+      sanitized.reasoningEffort = effort.reasoningEffort;
+    }
+
+    // Anthropic reads output_config.effort, and a flat thinking_effort is one more unknown top-level
+    // field the backend's ChatCompletionRequest drops, so the effort travels in custom_parameters.
+    delete sanitized.thinkingEffort;
+    if (provider === PROVIDER_TYPE.ANTHROPIC) {
+      const customParameters = withThinkingEffort(
+        sanitized.custom_parameters,
+        effort.thinkingEffort,
+      );
+      if (customParameters) {
+        sanitized.custom_parameters = customParameters;
       } else {
-        sanitized[key] = effort[key];
+        delete sanitized.custom_parameters;
       }
     }
   }

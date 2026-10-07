@@ -465,8 +465,9 @@ export class PlaygroundPage {
 
   // ── per-column run / stop ───────────────────────────────────────────────
   //
-  // `PlaygroundRunButton` is mounted per variant, and in experiment mode (a
-  // dataset or suite loaded) it renders inside the variant card — in free mode
+  // `PlaygroundRunButton` is mounted per variant, but only once there are two
+  // or more; with one, it would duplicate the header's Run. In experiment mode
+  // (a dataset or suite loaded) it renders inside the variant card — in free mode
   // the same component renders under the OUTPUT column instead, which is why
   // these are scoped to the card rather than looked up page-wide. It carries no
   // testid and its label swaps between Run and Stop with the variant's own
@@ -1328,6 +1329,20 @@ export class PlaygroundPage {
    */
   sliderInput(controlId: string): Locator {
     return this.page.getByTestId(`${controlId}-input`);
+  }
+
+  /** The Thinking effort dropdown. Its text is the effort the panel claims. */
+  thinkingEffortSelect(): Locator {
+    return this.modelParametersPanel().getByLabel('Thinking effort');
+  }
+
+  /** Pick a Thinking effort by its displayed label. */
+  async selectThinkingEffort(label: string): Promise<void> {
+    return test.step(`select thinking effort "${label}"`, async () => {
+      await this.thinkingEffortSelect().click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+      await expect(this.thinkingEffortSelect()).toHaveText(label);
+    });
   }
 
   /** Type a prompt into variant 0's first message row. */

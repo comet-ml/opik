@@ -32,10 +32,11 @@ def _response(content="Blue, due to Rayleigh scattering.", done=True, **override
         "message": Message(role="assistant", content=content),
         "prompt_eval_count": 10,
         "eval_count": 8,
-        "total_duration": 1_000_000,
+        # real Ollama durations are nanoseconds and routinely exceed 2**31
+        "total_duration": 12_323_049_000,
         "load_duration": 100_000,
         "prompt_eval_duration": 200_000,
-        "eval_duration": 700_000,
+        "eval_duration": 11_000_000_000,
     }
     payload.update(overrides)
     return ChatResponse(**payload)
@@ -54,12 +55,25 @@ def _chunk(content="", done=False, **overrides):
                 "done_reason": "stop",
                 "prompt_eval_count": 10,
                 "eval_count": 8,
-                "total_duration": 1_000_000,
-                "eval_duration": 700_000,
+                "total_duration": 12_323_049_000,
+                "load_duration": 100_000,
+                "prompt_eval_duration": 200_000,
+                "eval_duration": 11_000_000_000,
             }
         )
     payload.update(overrides)
     return ChatResponse(**payload)
+
+
+def _assert_durations_in_metadata_not_usage(span):
+    assert not any(key.endswith("_duration") for key in span.usage)
+    for key, value in {
+        "total_duration": 12_323_049_000,
+        "load_duration": 100_000,
+        "prompt_eval_duration": 200_000,
+        "eval_duration": 11_000_000_000,
+    }.items():
+        assert span.metadata[key] == value
 
 
 @pytest.mark.parametrize(
@@ -135,7 +149,13 @@ def test_ollama_chat__usage_mapped_from_ollama_counters(fake_backend, monkeypatc
     assert usage["completion_tokens"] == 8
     assert usage["total_tokens"] == 18
     # the native counters survive rather than being dropped
-    assert usage["original_usage.eval_duration"] == 700_000
+    assert usage["original_usage.eval_count"] == 8
+    # durations are nanoseconds and would overflow the backend's int usage
+    # values, so they go to metadata instead of usage
+    assert not any(key.endswith("_duration") for key in usage)
+    metadata = fake_backend.trace_trees[0].spans[0].metadata
+    assert metadata["eval_duration"] == 11_000_000_000
+    assert metadata["total_duration"] == 12_323_049_000
 
 
 def test_ollama_chat__async__happyflow(fake_backend, monkeypatch):
@@ -206,6 +226,7 @@ def test_ollama_chat__stream__aggregated_into_one_span(fake_backend, monkeypatch
     assert span.name == "chat_stream"
     assert span.output["message"]["content"] == "Blue, due to Rayleigh scattering."
     assert span.usage["prompt_tokens"] == 10
+    _assert_durations_in_metadata_not_usage(span)
 
 
 def test_ollama_chat__stream__two_tracked_clients__each_keeps_its_own_provider(
@@ -499,3 +520,124 @@ def test_ollama_async_chat__stream__aggregated_into_one_span(fake_backend, monke
     assert span.error_info is None
     assert span.output["message"]["content"] == "Blue, due to Rayleigh scattering."
     assert span.usage["prompt_tokens"] == 10
+    _assert_durations_in_metadata_not_usage(span)
+
+
+def test_ollama_chat__positional_arguments__logged_like_keywords(
+    fake_backend, monkeypatch
+):
+    client = ollama.Client()
+    wrapped = track_ollama(client)
+    monkeypatch.setattr(client, "_request", lambda *a, **kw: _response())
+
+    messages = [{"role": "user", "content": "hi"}]
+    wrapped.chat(MODEL, messages)
+    opik.flush_tracker()
+
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.input == {"messages": messages}
+    assert span.model == MODEL
+    # defaults the caller didn't pass (stream, think, format, ...) aren't logged
+    assert "think" not in span.metadata
+    assert "stream" not in span.metadata
+
+
+def test_ollama_chat__positional_arguments__uninspectable_signature__still_logged_as_ollama(
+    fake_backend, monkeypatch
+):
+    client = ollama.Client()
+    wrapped = track_ollama(client)
+    monkeypatch.setattr(client, "_request", lambda *a, **kw: _response())
+
+    def _no_signature(func):
+        raise ValueError("no signature found")
+
+    monkeypatch.setattr("inspect.signature", _no_signature)
+
+    wrapped.chat(MODEL, messages=[{"role": "user", "content": "hi"}])
+    opik.flush_tracker()
+
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.input == {"messages": [{"role": "user", "content": "hi"}]}
+    assert span.metadata["created_from"] == "ollama"
+    assert span.metadata["type"] == "ollama_chat"
+
+
+def test_ollama_chat__function_tool__logged_as_json_schema(fake_backend, monkeypatch):
+    def get_weather(city: str) -> str:
+        """Get the current weather for a city.
+
+        Args:
+          city: The name of the city
+        """
+        return "sunny"
+
+    client = ollama.Client()
+    wrapped = track_ollama(client)
+    monkeypatch.setattr(client, "_request", lambda *a, **kw: _response())
+
+    wrapped.chat(
+        model=MODEL,
+        messages=[{"role": "user", "content": "weather in Paris?"}],
+        tools=[get_weather],
+    )
+    opik.flush_tracker()
+
+    (tool,) = fake_backend.trace_trees[0].spans[0].input["tools"]
+    assert tool["type"] == "function"
+    assert tool["function"]["name"] == "get_weather"
+    assert tool["function"]["description"] == "Get the current weather for a city."
+    assert "city" in tool["function"]["parameters"]["properties"]
+
+
+def test_ollama_async_chat__stream__positional_arguments__logged_like_keywords(
+    fake_backend, monkeypatch
+):
+    client = ollama.AsyncClient()
+    wrapped = track_ollama(client)
+
+    async def _request(*args, **kwargs):
+        async def _gen():
+            yield _chunk(content="Blue.")
+            yield _chunk(content="", done=True)
+
+        return _gen()
+
+    monkeypatch.setattr(client, "_request", _request)
+
+    messages = [{"role": "user", "content": "Why is the sky blue?"}]
+
+    async def drive():
+        stream = await wrapped.chat(MODEL, messages, stream=True)
+        return [chunk async for chunk in stream]
+
+    asyncio.run(drive())
+    opik.flush_tracker()
+
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.name == "chat_stream"
+    assert span.input == {"messages": messages}
+    assert span.model == MODEL
+    assert span.output["message"]["content"] == "Blue."
+
+
+def test_ollama_chat__unconvertible_tool__logged_by_name(fake_backend, monkeypatch):
+    def broken_tool(city):  # no type hints or docstring to build a schema from
+        return city
+
+    client = ollama.Client()
+    wrapped = track_ollama(client)
+    monkeypatch.setattr(client, "_request", lambda *a, **kw: _response())
+    monkeypatch.setattr(
+        "ollama._utils.convert_function_to_tool",
+        lambda func: (_ for _ in ()).throw(ValueError("cannot convert")),
+    )
+
+    wrapped.chat(
+        model=MODEL,
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[broken_tool],
+    )
+    opik.flush_tracker()
+
+    assert fake_backend.trace_trees[0].spans[0].input["tools"] == ["broken_tool"]

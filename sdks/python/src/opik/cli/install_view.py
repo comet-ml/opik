@@ -8,7 +8,7 @@ import contextlib
 import pathlib
 import re
 import urllib.parse
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator, List, Optional, Sequence, Tuple
 
 import click
 import rich.console
@@ -17,6 +17,8 @@ from rich import control, padding, table, text
 from opik.cli import selector
 from opik.cli import terminal_session
 from opik.configurator import configure as opik_configure
+from opik.configurator import interactive_helpers
+from opik.configurator.mcp import targets as mcp_targets
 from opik.configurator.mcp import view as mcp_view
 from opik.configurator.skills import install as skills_install
 from opik.configurator.skills import roots as skills_roots
@@ -264,7 +266,9 @@ def render_mcp_banner() -> None:
     )
 
 
-def render_connection(opik_url: str, workspace: Optional[str], source: str) -> None:
+def render_connection(
+    opik_url: str, workspace: Optional[str], source: str, hosts: Sequence[str]
+) -> None:
     """Which saved Opik the AI client is being connected to, from where, and how
     to choose another.
 
@@ -286,7 +290,18 @@ def render_connection(opik_url: str, workspace: Optional[str], source: str) -> N
         padding.Padding(
             text.Text.assemble(
                 ("To change the MCP connection config: ", "dim"),
-                ("opik mcp configure --ignore-opik-config", _CODE_STYLE),
+                (
+                    # The flag asks, which needs a terminal.
+                    "opik mcp configure --ignore-opik-config"
+                    if interactive_helpers.is_interactive()
+                    # The clients again: without a terminal there is no picker.
+                    else " ".join(
+                        ["opik mcp configure"]
+                        + [f"--ai-client {host}" for host in hosts]
+                        + ["--deployment <cloud|local|self-hosted>"]
+                    ),
+                    _CODE_STYLE,
+                ),
             ),
             _FIELDS_INDENT,
         )
@@ -406,6 +421,19 @@ def render_restart_note(mcp_installed: bool) -> None:
     )
 
 
+def render_next_steps(steps: Sequence[str]) -> None:
+    """The ending for a run without a terminal, often read by the coding agent
+    that ran it: what is left in each client, then a new session to load it."""
+    console.print()
+    console.print(text.Text("Next steps", style="bold"))
+    for step in [
+        *steps,
+        'Start a new session in your AI client, then ask it to "list my Opik '
+        'projects via Opik MCP".',
+    ]:
+        console.print(padding.Padding(_emphasize(step), (0, 0, 0, 2)))
+
+
 def render_note(message: str, hint: Optional[str] = None) -> None:
     """A line the user should notice but does not have to act on, plus its fix."""
     console.print(_emphasize(message, base="yellow"))
@@ -445,6 +473,16 @@ class RichInstallView(mcp_view.InstallView):
             yield
 
     def sign_in(self, client_display_name: str, command: List[str]) -> Optional[int]:
+        if not interactive_helpers.is_interactive():
+            # Nobody at a terminal, but most likely someone at the browser: a
+            # coding agent running this on their machine, or a person watching it.
+            with self.step(
+                f"Signing in to Opik MCP in {client_display_name}, waiting for the "
+                "sign-in in your browser"
+            ):
+                return terminal_session.run_unattended(
+                    command, timeout_seconds=mcp_targets.CLIENT_CLI_TIMEOUT_SECONDS
+                )
         console.print()
         returncode = terminal_session.run(
             command,
@@ -533,8 +571,11 @@ class RichInstallView(mcp_view.InstallView):
     def done(self) -> None:
         """Close the run with anything the user still has to do, if there is any.
 
-        No "Done": the run goes on to the suggested first prompt.
+        No "Done": the run goes on to the suggested first prompt. Without a terminal
+        the run ends on each client's next step instead (`render_next_steps`).
         """
+        if not interactive_helpers.is_interactive():
+            return
         if self._sign_in_failed:
             console.print()
             console.print(

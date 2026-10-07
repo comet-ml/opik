@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import omit from "lodash/omit";
 import {
   getAnthropicThinkingEffortOptions,
+  getDefaultThinkingEffort,
   getDefaultThinkingLevel,
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
@@ -2079,15 +2080,16 @@ describe("an OpenAI reasoning model reached through another provider", () => {
   });
 });
 
-describe("Anthropic request contract while the backend drops thinking effort", () => {
+describe("Anthropic request contract", () => {
   const FULL_CONFIG: LLMAnthropicConfigsType = {
     temperature: 0.7,
     maxCompletionTokens: 4000,
     topP: 0.9,
-    thinkingEffort: "high",
+    thinkingEffort: "low",
     throttling: 0,
     maxConcurrentRequests: 5,
   };
+  const ADAPTIVE = "adaptive" as unknown as AnthropicThinkingEffort;
   const LOW_TO_MAX: AnthropicThinkingEffort[] = [
     "low",
     "medium",
@@ -2102,32 +2104,37 @@ describe("Anthropic request contract while the backend drops thinking effort", (
     "max",
   ];
 
-  it.each(Object.keys(ANTHROPIC_MODEL_CAPABILITIES))(
-    "offers no effort control for %s",
-    (model) => {
+  it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort[]]>([
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW, LOW_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, ["low", "medium", "high"]],
+  ])(
+    "offers %s exactly the effort levels Anthropic accepts",
+    (model, levels) => {
+      expect(supportsAnthropicThinkingEffort(model)).toBe(true);
       expect(
-        supportsAnthropicThinkingEffort(model as PROVIDER_MODEL_TYPE),
-      ).toBe(false);
-      expect(
-        getAnthropicThinkingEffortOptions(model as PROVIDER_MODEL_TYPE),
-      ).toEqual([]);
+        getAnthropicThinkingEffortOptions(model).map((o) => o.value),
+      ).toEqual(levels);
     },
   );
 
-  it("clears an adaptive effort persisted on Opus 4.6", () => {
-    const config: LLMAnthropicConfigsType = {
-      temperature: 0.5,
-      maxCompletionTokens: 4000,
-      thinkingEffort: "adaptive" as unknown as AnthropicThinkingEffort,
-    };
-
-    const result = updateProviderConfig(config, {
-      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-      provider: ANTHROPIC,
-    });
-
-    expect(result?.thinkingEffort).toBeUndefined();
-    expect(result?.temperature).toBe(0.5);
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7,
+  ])("offers no effort control for %s, which takes none", (model) => {
+    expect(supportsAnthropicThinkingEffort(model)).toBe(false);
+    expect(getAnthropicThinkingEffortOptions(model)).toEqual([]);
   });
 
   it("never lists adaptive, which is a thinking mode rather than an effort level", () => {
@@ -2138,36 +2145,117 @@ describe("Anthropic request contract while the backend drops thinking effort", (
     }
   });
 
-  it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort[]]>([
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
-    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
-  ])(
-    "keeps the effort levels %s accepts in its capability row",
-    (model, levels) => {
-      expect(
-        ANTHROPIC_MODEL_CAPABILITIES[model]?.thinkingEffortOptions,
-      ).toEqual(levels);
-    },
-  );
-
-  it("sends Sonnet 5 no sampling params and no effort", () => {
-    expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
-        ...FULL_CONFIG,
-      }),
-    ).toEqual({
-      maxCompletionTokens: 4000,
-      throttling: 0,
-      maxConcurrentRequests: 5,
-    });
+  it("labels high without claiming it is the provider default", () => {
+    const high = getAnthropicThinkingEffortOptions(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    ).find((o) => o.value === "high");
+    expect(high?.label).toBe("High");
   });
 
-  it("sends Sonnet 4.6 temperature alone and no effort", () => {
+  it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort]>([
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
+  ])("defaults %s to Anthropic's own default, %s", (model, effort) => {
+    expect(getDefaultThinkingEffort(model)).toBe(effort);
+    expect(resolveEffort(model, {})).toEqual({ thinkingEffort: effort });
+  });
+
+  it("coerces an adaptive effort to the model default when switching to Opus 4.7", () => {
+    const result = updateProviderConfig(
+      { maxCompletionTokens: 4000, thinkingEffort: ADAPTIVE },
+      { model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, provider: ANTHROPIC },
+    );
+    expect(result?.thinkingEffort).toBe("high");
+  });
+
+  it("coerces an effort Opus 5.5 does not take to its medium default", () => {
+    const result = updateProviderConfig(
+      { maxCompletionTokens: 4000, thinkingEffort: ADAPTIVE },
+      { model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, provider: ANTHROPIC },
+    );
+    expect(result?.thinkingEffort).toBe("medium");
+  });
+
+  it("keeps a valid thinkingEffort across model switches", () => {
+    const result = updateProviderConfig(
+      { maxCompletionTokens: 4000, thinkingEffort: "medium" },
+      { model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, provider: ANTHROPIC },
+    );
+    expect(result?.thinkingEffort).toBe("medium");
+  });
+
+  it("coerces xhigh when switching to Sonnet 4.6, which tops out at max", () => {
+    const result = updateProviderConfig(
+      { maxCompletionTokens: 4000, thinkingEffort: "xhigh" },
+      { model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, provider: ANTHROPIC },
+    );
+    expect(result?.thinkingEffort).toBe("high");
+  });
+
+  it("keeps a stored thinkingEffort the model offers", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        thinkingEffort: "xhigh",
+      }),
+    ).toEqual({ thinkingEffort: "xhigh" });
+  });
+
+  it("falls back to the model default for a thinkingEffort the model does not offer", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        thinkingEffort: ADAPTIVE,
+      }),
+    ).toEqual({ thinkingEffort: "high" });
+  });
+
+  it("reads an effort found only under custom_parameters as stored", () => {
+    // A saved optimization run reloads the request shape, which carries no flat thinkingEffort.
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        custom_parameters: { output_config: { effort: "low" } },
+      }),
+    ).toEqual({ thinkingEffort: "low" });
+  });
+
+  it("lets the flat effort the panel just set win over a nested one", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        thinkingEffort: "max",
+        custom_parameters: { output_config: { effort: "low" } },
+      }),
+    ).toEqual({ thinkingEffort: "max" });
+  });
+
+  it("skips a flat effort the model does not offer for a valid nested one", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        thinkingEffort: ADAPTIVE,
+        custom_parameters: { output_config: { effort: "low" } },
+      }),
+    ).toEqual({ thinkingEffort: "low" });
+  });
+
+  it("falls back to the model default when neither stored effort is offered", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        thinkingEffort: ADAPTIVE,
+        custom_parameters: { output_config: { effort: "xhigh" } },
+      }),
+    ).toEqual({ thinkingEffort: "high" });
+  });
+
+  it("sends the valid nested effort rather than replacing it over a stale flat one", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        maxCompletionTokens: 4000,
+        thinkingEffort: ADAPTIVE,
+        custom_parameters: { output_config: { effort: "low" } },
+      }).custom_parameters,
+    ).toEqual({ output_config: { effort: "low" } });
+  });
+
+  it("sends Sonnet 4.6 temperature alone and its effort under custom_parameters", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
         ...FULL_CONFIG,
@@ -2177,16 +2265,121 @@ describe("Anthropic request contract while the backend drops thinking effort", (
       maxCompletionTokens: 4000,
       throttling: 0,
       maxConcurrentRequests: 5,
+      custom_parameters: { output_config: { effort: "low" } },
     });
   });
 
-  it("drops an adaptive effort persisted on Opus 4.6 from the request", () => {
+  it("sends Sonnet 5 no sampling params and its xhigh effort", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        ...FULL_CONFIG,
+        thinkingEffort: "xhigh",
+      }),
+    ).toEqual({
+      maxCompletionTokens: 4000,
+      throttling: 0,
+      maxConcurrentRequests: 5,
+      custom_parameters: { output_config: { effort: "xhigh" } },
+    });
+  });
+
+  it("replaces an adaptive effort persisted on Opus 4.6 with the default", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, {
         maxCompletionTokens: 4000,
         thinkingEffort: "adaptive",
       }),
+    ).toEqual({
+      maxCompletionTokens: 4000,
+      temperature: 0,
+      custom_parameters: { output_config: { effort: "high" } },
+    });
+  });
+
+  it("keeps the other custom_parameters, inside output_config too", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        maxCompletionTokens: 4000,
+        thinkingEffort: "low",
+        custom_parameters: {
+          thinking: { type: "adaptive" },
+          output_config: { format: "x", effort: "max" },
+        },
+      }).custom_parameters,
+    ).toEqual({
+      thinking: { type: "adaptive" },
+      output_config: { format: "x", effort: "low" },
+    });
+  });
+
+  it.each([
+    ["a string", "json"],
+    ["an array", ["x"]],
+    ["a number", 3],
+  ])(
+    "leaves %s output_config untouched for the backend to reject",
+    (_, outputConfig) => {
+      expect(
+        sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+          maxCompletionTokens: 4000,
+          thinkingEffort: "low",
+          custom_parameters: {
+            thinking: { type: "adaptive" },
+            output_config: outputConfig,
+          },
+        }).custom_parameters,
+      ).toEqual({
+        thinking: { type: "adaptive" },
+        output_config: outputConfig,
+      });
+    },
+  );
+
+  it("treats a null output_config as absent", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        maxCompletionTokens: 4000,
+        thinkingEffort: "low",
+        custom_parameters: { output_config: null },
+      }).custom_parameters,
+    ).toEqual({ output_config: { effort: "low" } });
+  });
+
+  it("removes an effort from a model that takes none", () => {
+    // A reloaded optimization run can carry the nested copy onto a model switched to Haiku.
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, {
+        maxCompletionTokens: 4000,
+        thinkingEffort: "high",
+        custom_parameters: { output_config: { effort: "high" } },
+      }),
     ).toEqual({ maxCompletionTokens: 4000, temperature: 0 });
+  });
+
+  it("never sends a flat thinking_effort", () => {
+    for (const model of Object.keys(
+      ANTHROPIC_MODEL_CAPABILITIES,
+    ) as PROVIDER_MODEL_TYPE[]) {
+      expect(
+        sanitizeConfigForRequest(model, { ...FULL_CONFIG }),
+      ).not.toHaveProperty("thinkingEffort");
+    }
+  });
+
+  it("sends the effort the dropdown displays", () => {
+    for (const model of Object.keys(
+      ANTHROPIC_MODEL_CAPABILITIES,
+    ) as PROVIDER_MODEL_TYPE[]) {
+      const sent = sanitizeConfigForRequest(model, {
+        maxCompletionTokens: 4000,
+      }).custom_parameters as
+        | { output_config?: { effort?: string } }
+        | undefined;
+
+      expect(sent?.output_config?.effort).toBe(
+        resolveEffort(model, {}).thinkingEffort,
+      );
+    }
   });
 });
 
@@ -2238,6 +2431,16 @@ describe("Gemini and Vertex AI request contract", () => {
       request: { ...BASE_REQUEST, ...THINKING },
     },
     {
+      model: PROVIDER_MODEL_TYPE.GEMINI_FLASH_LATEST_HIGH_RES_EXP,
+      sampling: {},
+      request: BASE_REQUEST,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_ROBOTICS_ER_2,
+      sampling: {},
+      request: BASE_REQUEST,
+    },
+    {
       model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
       sampling: SAMPLING,
       request: { ...BASE_REQUEST, ...SAMPLING, ...THINKING },
@@ -2269,17 +2472,47 @@ describe("Gemini and Vertex AI request contract", () => {
     PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH,
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.GEMINI_FLASH_LATEST_HIGH_RES_EXP,
+    PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH,
+    PROVIDER_MODEL_TYPE.GEMINI_OMNI_FLASH_PREVIEW,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_ROBOTICS_ER_2,
   ])("takes no sampling params on %s", (model) => {
     expect(supportsGeminiSamplingParams(model)).toBe(false);
   });
 
+  it.each(["gemini-4-flash", "vertex_ai/gemini-4-pro", "gemini-30-flash"])(
+    "takes no sampling params on %s, a generation nobody has checked yet",
+    (model) => {
+      expect(supportsGeminiSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(
+        false,
+      );
+    },
+  );
+
   it.each([
-    "gemini-30-flash",
-    "vertex_ai/gemini-30-flash",
     PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
-    PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
+    PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.GEMINI_1_5_PRO_LATEST,
+    PROVIDER_MODEL_TYPE.GEMINI_1_0_PRO,
+    PROVIDER_MODEL_TYPE.GEMINI_PRO_VISION,
+    "gemini-2.5",
+    "vertex_ai/gemini-1.5",
   ])("keeps sampling params on %s", (model) => {
+    expect(supportsGeminiSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
+    PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
+    PROVIDER_MODEL_TYPE.GPT_4O,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5,
+    "custom-llm/gw/gemini-4-flash",
+  ])("leaves %s alone, since it is not a native Gemini id", (model) => {
     expect(supportsGeminiSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(
       true,
     );

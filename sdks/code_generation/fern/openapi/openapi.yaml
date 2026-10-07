@@ -431,6 +431,33 @@ paths:
         "501":
           description: "Agent Insights is disabled, or Custom Charts is not enabled\
             \ for this workspace"
+  /v1/internal/usage/projects:
+    post:
+      tags:
+      - System usage
+      summary: Find projects across workspaces by ids or name
+      description: "Find projects across the given workspaces, optionally narrowed\
+        \ by project ids or a case-insensitive name substring. Unknown or deleted\
+        \ projects are omitted."
+      operationId: findUsageProjects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsageProjectsRequest"
+      responses:
+        "200":
+          description: UsageProjectsResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageProjectsResponse"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -9932,6 +9959,53 @@ components:
           type: string
           description: Restrict query to this project. Omit to query the whole workspace.
           format: uuid
+    UsageProjectsResponse:
+      type: object
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceProjectName"
+    WorkspaceProjectName:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    UsageProjectsRequest:
+      required:
+      - workspace_ids
+      type: object
+      properties:
+        workspace_ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
+        project_ids:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
+        limit:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
     BiInformation:
       type: object
       properties:
@@ -9964,6 +10038,8 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
         user:
           type: string
         count:
