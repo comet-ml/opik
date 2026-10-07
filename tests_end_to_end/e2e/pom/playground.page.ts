@@ -184,7 +184,7 @@ export class PlaygroundPage {
   }
 
   /**
-   * The name currently held for the next run, read out of the editor itself.
+   * The name currently in the field, read out of the editor itself.
    *
    * Read from the input rather than the idle span because the span falls back
    * to the "Auto-generated name" placeholder, which is indistinguishable from a
@@ -318,7 +318,7 @@ export class PlaygroundPage {
     });
   }
 
-  /** The "Creates: {name}_a  +N more" preview; absent while no name is set. */
+  /** The "Creates: {name}_a  +N more" preview ("Created:" once run); absent while no name is set. */
   experimentNamePreview(): Locator {
     return this.page.getByTestId('playground-experiment-name-preview');
   }

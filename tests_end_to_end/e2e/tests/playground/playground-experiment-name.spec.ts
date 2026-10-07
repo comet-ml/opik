@@ -11,7 +11,10 @@ import { ExperimentsPage } from '@e2e/pom/experiments.page';
  * One name for the whole run, not one per variant: the user types a name, and
  * `buildExperimentName` appends the variant's own letter (`_a`, `_b`, …), so a
  * two-variant run creates two experiments under one typed name. After the run
- * the field advances itself to `{name}_02` so a re-run does not collide.
+ * the field keeps that name and stands for the run it just made: committing a
+ * new name there renames that run's experiments, and running again with the
+ * field untouched takes the next suffix (`{name}_02`) so a re-run does not
+ * collide.
  *
  * `playground-smoke.spec.ts` already covers running against a dataset, but it
  * matches the experiment it created by `datasetId`, explicitly "since the name
@@ -104,11 +107,18 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
       testNamespace,
       page,
     }) => {
-      test.setTimeout(240_000);
+      test.setTimeout(360_000);
 
       const runName = `${testNamespace}-run`;
       const nameA = `${runName}_a`;
       const nameB = `${runName}_b`;
+      const renamed = `${testNamespace}-renamed`;
+      const finalNames = [
+        `${renamed}_a`,
+        `${renamed}_b`,
+        `${renamed}_02_a`,
+        `${renamed}_02_b`,
+      ].sort();
       // A literal only variant B's prompt carries, so that B's experiment POST
       // is identifiable as B's no matter which order the two POSTs land in.
       const variantBMarker = 'second-variant-marker';
@@ -185,23 +195,18 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         await expect(toast).toContainText(nameB);
       });
 
-      await test.step('The field advances itself so a re-run cannot collide', async () => {
-        // The whole reason the suggestion exists: re-running with the field
-        // untouched would otherwise post `{runName}_a` a second time, and two
-        // experiments under one name are indistinguishable in the list.
-        expect(await playground.readExperimentName()).toBe(`${runName}_02`);
-        await expect(playground.experimentNamePreview()).toContainText(
-          `Creates: ${runName}_02_a`,
-        );
+      await test.step('The field keeps the name of the run it just made', async () => {
+        expect(await playground.readExperimentName()).toBe(runName);
+        await expect(playground.experimentNamePreview()).toContainText(`Created: ${nameA}`);
       });
 
-      const experiments = await test.step('The dataset carries exactly those two experiments', async () => {
-        const listExperiments = listerRegistering(
-          backendClient,
-          dataset.id,
-          registerExperimentCleanup,
-        );
+      const listExperiments = listerRegistering(
+        backendClient,
+        dataset.id,
+        registerExperimentCleanup,
+      );
 
+      const experiments = await test.step('The dataset carries exactly those two experiments', async () => {
         // The full set for this dataset, not a `find()` of the two expected
         // names: a run that also wrote a third, auto-named experiment would
         // satisfy a lookup-by-name and is exactly the regression worth failing
@@ -221,6 +226,45 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         await experimentsPage.goto(project.id);
         await experimentsPage.waitForReady();
         for (const experiment of experiments) {
+          await experimentsPage.expectExperimentNameInList(experiment.id, experiment.name);
+        }
+      });
+
+      await test.step('Back in the Playground, a new name renames that run', async () => {
+        // Coming back is a fresh page load, so this also covers a reload.
+        await playground.goto();
+        await playground.waitForReady();
+        await playground.waitForRunReady({ expectedRows: 3 });
+        await expect(playground.experimentNameEditor()).toContainText(runName);
+        await playground.setExperimentName(renamed);
+        await expect
+          .poll(async () => (await listExperiments()).map((e) => e.name).sort(), {
+            timeout: 60_000,
+            intervals: [500, 1000, 2000, 5000],
+          })
+          .toEqual([`${renamed}_a`, `${renamed}_b`]);
+      });
+
+      await test.step('Running again untouched takes the next suffix', async () => {
+        await playground.clickReRun();
+        await expect
+          .poll(() => posted.length, { timeout: 180_000, intervals: [500, 1000, 2000] })
+          .toBeGreaterThanOrEqual(4);
+        await playground.waitForRunSettled();
+        expect(await playground.readExperimentName()).toBe(`${renamed}_02`);
+        await expect
+          .poll(async () => (await listExperiments()).map((e) => e.name).sort(), {
+            timeout: 60_000,
+            intervals: [500, 1000, 2000, 5000],
+          })
+          .toEqual(finalNames);
+      });
+
+      await test.step('The Experiments page shows the renamed and the new names', async () => {
+        const experimentsPage = new ExperimentsPage(page);
+        await experimentsPage.goto(project.id);
+        await experimentsPage.waitForReady();
+        for (const experiment of await listExperiments()) {
           await experimentsPage.expectExperimentNameInList(experiment.id, experiment.name);
         }
       });
@@ -289,7 +333,7 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         expect(posted[0].name).toBeUndefined();
       });
 
-      await test.step('The field stays empty — an unset name has nothing to advance', async () => {
+      await test.step('The field stays empty — an auto-named run has no name to show', async () => {
         // Before the backend poll below, for the same reason as the sibling
         // test: the toast lives for Radix's 5s default.
         await playground.waitForRunSettled();
