@@ -5,13 +5,17 @@ import mapValues from "lodash/mapValues";
 
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import { restoreMissingConfigKeys } from "@/lib/playground";
-import { buildExperimentName } from "@/lib/experiments";
+import {
+  buildExperimentName,
+  suggestNextExperimentName,
+} from "@/lib/experiments";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
+import invert from "lodash/invert";
 
 interface PlaygroundOutput {
   isLoading: boolean;
@@ -118,6 +122,7 @@ export type PlaygroundStore = {
   progressPhase: "running" | "evaluating" | null;
   experimentName: string | null;
   lastSuggestedExperimentName: string | null;
+  lastRun: PlaygroundLastRun | null;
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
   scoresByDatasetId: Record<string, string[] | null>;
@@ -154,7 +159,9 @@ export type PlaygroundStore = {
   setAllRunning: (running: boolean) => void;
   clearRunningMap: () => void;
   setExperimentName: (name: string | null) => void;
-  setSuggestedExperimentName: (name: string) => void;
+  startExperimentRun: (datasetId: string | undefined) => void;
+  addLastRunExperiments: (run: PlaygroundLastRun) => void;
+  applyLastRunRename: (name: string, renamedIds: string[]) => void;
   setDatasetFilters: (filters: Filters) => void;
   setDatasetPage: (page: number) => void;
   setDatasetSize: (size: number) => void;
@@ -167,6 +174,20 @@ export type PlaygroundStore = {
   setExperimentByPromptId: (map: Record<string, string>) => void;
   setScoresForDataset: (datasetId: string, ruleIds: string[] | null) => void;
 };
+
+export type PlaygroundLastRun = {
+  name: string | null;
+  datasetId: string;
+  experiments: { id: string; index: number }[];
+};
+
+// The selected dataset lives in its own localStorage key that other tabs can
+// change, so a run kept for another dataset must not be renamed from this box.
+const selectLastRun = (
+  state: Pick<PlaygroundStore, "lastRun">,
+  datasetId: string | undefined,
+) =>
+  datasetId && state.lastRun?.datasetId === datasetId ? state.lastRun : null;
 
 const usePlaygroundStore = create<PlaygroundStore>()(
   persist(
@@ -190,6 +211,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       progressPhase: null,
       experimentName: null,
       lastSuggestedExperimentName: null,
+      lastRun: null,
       datasetType: null,
       experimentByPromptId: {},
       scoresByDatasetId: {},
@@ -382,14 +404,71 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           ...state,
           experimentName: name,
           lastSuggestedExperimentName: null,
+          lastRun: null,
         }));
       },
-      setSuggestedExperimentName: (name) => {
-        set((state) => ({
-          ...state,
-          experimentName: name,
-          lastSuggestedExperimentName: name,
-        }));
+      startExperimentRun: (datasetId) => {
+        set((state) => {
+          const lastRun = selectLastRun(state, datasetId);
+          if (!lastRun?.name || state.experimentName !== lastRun.name) {
+            return { ...state, lastRun: null };
+          }
+
+          const nextName = suggestNextExperimentName(
+            lastRun.name,
+            state.lastSuggestedExperimentName,
+          );
+          return {
+            ...state,
+            experimentName: nextName,
+            lastSuggestedExperimentName: nextName,
+            lastRun: null,
+          };
+        });
+      },
+      addLastRunExperiments: (run) => {
+        set((state) => {
+          if (!run.experiments.length) return state;
+
+          const current = state.lastRun;
+          // A run reports its experiments as each one is created, and prompts
+          // run side by side share one name, so this adds to the run.
+          const existing =
+            current?.name === run.name && current.datasetId === run.datasetId
+              ? current.experiments
+              : [];
+          const existingIds = new Set(existing.map((e) => e.id));
+
+          return {
+            ...state,
+            lastRun: {
+              ...run,
+              experiments: [
+                ...existing,
+                ...run.experiments.filter((e) => !existingIds.has(e.id)),
+              ],
+            },
+          };
+        });
+      },
+      applyLastRunRename: (name, renamedIds) => {
+        set((state) => {
+          if (!state.lastRun) return state;
+
+          const renamed = new Set(renamedIds);
+          const experiments = state.lastRun.experiments.filter((e) =>
+            renamed.has(e.id),
+          );
+          // A run started while the rename was in flight now owns the box.
+          if (!experiments.length) return state;
+
+          return {
+            ...state,
+            experimentName: name,
+            lastSuggestedExperimentName: null,
+            lastRun: { ...state.lastRun, name, experiments },
+          };
+        });
       },
       setDatasetFilters: (filters) => {
         set((state) => {
@@ -672,8 +751,11 @@ export const useSetExperimentName = () =>
 export const useLastSuggestedExperimentName = () =>
   usePlaygroundStore((state) => state.lastSuggestedExperimentName);
 
-export const useSetSuggestedExperimentName = () =>
-  usePlaygroundStore((state) => state.setSuggestedExperimentName);
+export const useLastRun = (datasetId: string | undefined) =>
+  usePlaygroundStore((state) => selectLastRun(state, datasetId));
+
+export const useApplyLastRunRename = () =>
+  usePlaygroundStore((state) => state.applyLastRunRename);
 
 export const useDatasetFilters = () =>
   usePlaygroundStore((state) => state.datasetFilters);
@@ -752,5 +834,27 @@ export const getExperimentNamesForPrompts = (
   ids: string[],
 ): Record<string, string | undefined> =>
   Object.fromEntries(ids.map((id) => [id, getExperimentNameForPrompt(id)]));
+
+export const beginExperimentRun = (datasetId: string | undefined) => {
+  usePlaygroundStore.getState().startExperimentRun(datasetId);
+  const { experimentName, promptIds } = usePlaygroundStore.getState();
+
+  return (
+    created: { id: string }[],
+    experimentIdByPromptId: Record<string, string>,
+  ) => {
+    if (!datasetId) return;
+
+    const promptIdByExperimentId = invert(experimentIdByPromptId);
+    usePlaygroundStore.getState().addLastRunExperiments({
+      name: experimentName,
+      datasetId,
+      experiments: created.map(({ id }) => ({
+        id,
+        index: promptIds.indexOf(promptIdByExperimentId[id]),
+      })),
+    });
+  };
+};
 
 export default usePlaygroundStore;

@@ -4,6 +4,7 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import PlaygroundExperimentName from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundExperimentName";
 import PlaygroundProgressIndicator from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
 import { useIsRunning } from "@/store/PlaygroundStore";
+import { toPlainDatasetId } from "@/utils/datasetVersionStorage";
 
 interface PlaygroundExperimentOutputActionsProps {
   datasetId: string | null;
@@ -38,7 +39,7 @@ const PlaygroundExperimentOutputActions = ({
         </div>
       ) : (
         <div className="flex items-center justify-between bg-gray-100 py-3 pl-2 pr-4">
-          <PlaygroundExperimentName />
+          <PlaygroundExperimentName datasetId={toPlainDatasetId(datasetId)} />
           <div className="shrink-0">
             <DataTablePagination
               page={page}
