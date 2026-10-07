@@ -148,6 +148,7 @@ const PlaygroundOutputs = ({
               />
             )}
             <PlaygroundOutputTable
+              datasetId={parsedDatasetId!}
               promptIds={promptIds}
               datasetItems={datasetItems}
               datasetColumns={datasetColumns}

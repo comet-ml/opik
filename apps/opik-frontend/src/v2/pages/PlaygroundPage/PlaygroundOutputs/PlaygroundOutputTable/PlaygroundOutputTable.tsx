@@ -11,7 +11,7 @@ import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { COLUMN_TYPE, ColumnData, ROW_HEIGHT } from "@/types/shared";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, sortColumnsByOrder } from "@/lib/table";
 import { getAlphabetLetter } from "@/lib/utils";
 import PlaygroundOutputCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputCell";
 import PlaygroundOutputColumnHeader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputColumnHeader";
@@ -20,6 +20,10 @@ import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { useIncrementalDatasetHydration } from "@/v2/pages/PlaygroundPage/useIncrementalDatasetHydration";
 import PlaygroundTagsCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundTagsCell";
+import usePlaygroundColumnsSettings, {
+  getVariableColumnId,
+  TAGS_COLUMN_ID,
+} from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/usePlaygroundColumnsSettings";
 
 type PlaygroundOutputTableData = {
   variables: { [key: string]: string };
@@ -27,6 +31,7 @@ type PlaygroundOutputTableData = {
 };
 
 interface PlaygroundOutputTableProps {
+  datasetId: string;
   datasetItems: DatasetItem[];
   datasetColumns: DatasetItemColumn[];
   promptIds: string[];
@@ -41,6 +46,7 @@ const MIN_LEFT_WIDTH = "10%";
 const MAX_LEFT_WIDTH = "90%";
 
 const PlaygroundOutputTable = ({
+  datasetId,
   datasetItems,
   promptIds,
   datasetColumns,
@@ -78,12 +84,11 @@ const PlaygroundOutputTable = ({
     }));
   }, [hydratedDatasetItems, isLoadingDatasetItems]);
 
-  const leftColumns = useMemo(() => {
+  const inputColumnsData = useMemo(() => {
     if (isEmpty(datasetColumns)) {
       return [];
     }
 
-    const retVal: ColumnDef<PlaygroundOutputTableData>[] = [];
     const explainer =
       EXPLAINERS_MAP[
         EXPLAINER_ID.how_do_i_use_the_test_suite_in_the_playground
@@ -92,14 +97,11 @@ const PlaygroundOutputTable = ({
     const inputColumns = [...datasetColumns]
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map(
-        (c, i) =>
+        (c) =>
           ({
-            id: `variables.${c.name}`,
+            id: getVariableColumnId(c.name),
             label: c.name,
             type: mapDynamicColumnTypesToColumnType(c.types),
-            customMeta: {
-              showIndex: i === 0,
-            },
             accessorFn: (row) => get(row, ["variables", c.name], ""),
             cell: PlaygroundVariableCell as never,
             explainer: {
@@ -110,7 +112,7 @@ const PlaygroundOutputTable = ({
       );
 
     inputColumns.push({
-      id: "tags",
+      id: TAGS_COLUMN_ID,
       label: "Tags",
       type: COLUMN_TYPE.list,
       iconType: "tags",
@@ -118,15 +120,36 @@ const PlaygroundOutputTable = ({
       cell: PlaygroundTagsCell as never,
     } as ColumnData<PlaygroundOutputTableData>);
 
-    retVal.push(
-      ...convertColumnDataToColumn<
-        PlaygroundOutputTableData,
-        PlaygroundOutputTableData
-      >(inputColumns, {}),
-    );
-
-    return retVal;
+    return inputColumns;
   }, [datasetColumns]);
+
+  const inputColumnIds = useMemo(
+    () => inputColumnsData.map(({ id }) => id),
+    [inputColumnsData],
+  );
+
+  const { selectedColumns, columnsOrder } = usePlaygroundColumnsSettings(
+    datasetId,
+    inputColumnIds,
+  );
+
+  const leftColumns = useMemo(() => {
+    const firstVisibleColumnId = sortColumnsByOrder(
+      inputColumnsData,
+      columnsOrder,
+    ).find(({ id }) => selectedColumns.includes(id))?.id;
+
+    return convertColumnDataToColumn<
+      PlaygroundOutputTableData,
+      PlaygroundOutputTableData
+    >(
+      inputColumnsData.map((column) => ({
+        ...column,
+        customMeta: { showIndex: column.id === firstVisibleColumnId },
+      })),
+      { columnsOrder, selectedColumns },
+    );
+  }, [inputColumnsData, columnsOrder, selectedColumns]);
 
   const rightColumns = useMemo(() => {
     if (promptIds.length === 0) {
