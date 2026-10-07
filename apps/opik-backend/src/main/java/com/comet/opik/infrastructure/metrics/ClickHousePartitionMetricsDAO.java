@@ -29,7 +29,7 @@ public interface ClickHousePartitionMetricsDAO {
 
     @Builder(toBuilder = true)
     record PartitionStat(String table, String partition, long parts, long rows, long bytes,
-            long maxPartBytes, long lastActivityEpochSeconds) {
+            long maxPartBytes, long lastActivityEpochSeconds, long coldBytes, long ttlMoveDueParts) {
     }
 
     @Builder(toBuilder = true)
@@ -52,8 +52,15 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
      * r2dbc driver maps them to {@code Long} (raw {@code sum}/{@code count} yield UInt64). The
      * partition key uses {@code partition_id} so it aligns with the {@code _partition_id} virtual
      * column used by the LWD query.
+     *
+     * <p>Tier storage: {@code cold_bytes} is what sits on object-storage disks, and
+     * {@code ttl_move_due_parts} counts parts whose move TTL has expired but which are still on a
+     * local disk (a backlog that should drain). Future-dated weekly partitions are excluded from the
+     * backlog: an {@code id_at} past 2106 wraps the 32-bit TTL time into the past, but ClickHouse
+     * never moves those parts, so counting them would report a backlog that cannot drain.
      */
     private static final String PARTITION_STATS_SQL = """
+            WITH (SELECT groupArray(name) FROM system.disks WHERE type = 'ObjectStorage') AS object_storage_disks
             SELECT
                 table AS table_name,
                 partition_id AS partition_id,
@@ -61,7 +68,12 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                 toInt64(sum(rows)) AS rows,
                 toInt64(sum(bytes_on_disk)) AS bytes,
                 toInt64(max(bytes_on_disk)) AS max_part_bytes,
-                toInt64(toUnixTimestamp(max(modification_time))) AS last_activity
+                toInt64(toUnixTimestamp(max(modification_time))) AS last_activity,
+                toInt64(sumIf(bytes_on_disk, has(object_storage_disks, disk_name))) AS cold_bytes,
+                toInt64(countIf(NOT has(object_storage_disks, disk_name)
+                    AND notEmpty(move_ttl_info.max) AND now() >= arrayMax(move_ttl_info.max)
+                    AND NOT (match(partition_id, '^[0-9]{8}$') AND partition_id > formatDateTime(now(), '%Y%m%d'))
+                )) AS ttl_move_due_parts
             FROM system.parts
             WHERE database = :database_name AND active
             GROUP BY table, partition_id
@@ -123,6 +135,8 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                         .bytes(row.get("bytes", Long.class))
                         .maxPartBytes(row.get("max_part_bytes", Long.class))
                         .lastActivityEpochSeconds(row.get("last_activity", Long.class))
+                        .coldBytes(row.get("cold_bytes", Long.class))
+                        .ttlMoveDueParts(row.get("ttl_move_due_parts", Long.class))
                         .build()))
                 .collectList();
     }

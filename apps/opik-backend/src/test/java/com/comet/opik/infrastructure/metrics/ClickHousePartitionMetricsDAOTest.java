@@ -140,6 +140,9 @@ class ClickHousePartitionMetricsDAOTest {
             assertThat(traces.parts()).isPositive();
             assertThat(traces.lastActivityEpochSeconds())
                     .isGreaterThan(Instant.now().minusSeconds(600).getEpochSecond());
+            // The test ClickHouse has no object-storage disk, so nothing is cold and nothing is due to move.
+            assertThat(traces.coldBytes()).isZero();
+            assertThat(traces.ttlMoveDueParts()).isZero();
         });
 
         // Delete a subset through the trace API — the same path prod uses, which issues a
