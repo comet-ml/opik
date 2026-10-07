@@ -3,8 +3,14 @@ import { Pause, Play } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
-import { useIsPromptRunning, usePromptById } from "@/store/PlaygroundStore";
+import {
+  useIsPromptRunning,
+  useIsResumingRun,
+  usePromptById,
+  useDatasetItemsTotal,
+} from "@/store/PlaygroundStore";
 import { hasUnsupportedMedia } from "@/lib/playground";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 
 interface PlaygroundRunButtonProps {
   promptId: string;
@@ -21,13 +27,22 @@ const PlaygroundRunButton = ({
 }: PlaygroundRunButtonProps) => {
   const prompt = usePromptById(promptId);
   const isPromptRunning = useIsPromptRunning(promptId);
+  const isResumingRun = useIsResumingRun();
+
+  const { datasetId } = usePlaygroundDataset();
+  const datasetItemsTotal = useDatasetItemsTotal();
 
   const hasEmptyMessages = prompt?.messages.some(
     (m) => !m.content || m.content.length === 0,
   );
   const hasMediaCompatibilityIssue = !!prompt && hasUnsupportedMedia(prompt);
+  const hasNoDatasetItems = !!datasetId && datasetItemsTotal === 0;
   const isPromptRunDisabled =
-    !prompt?.model || !!hasEmptyMessages || hasMediaCompatibilityIssue;
+    isResumingRun ||
+    !prompt?.model ||
+    !!hasEmptyMessages ||
+    hasMediaCompatibilityIssue ||
+    hasNoDatasetItems;
 
   let promptRunDisabledReason: string | null = null;
   if (!prompt?.model) {
@@ -38,6 +53,8 @@ const PlaygroundRunButton = ({
   } else if (hasMediaCompatibilityIssue) {
     promptRunDisabledReason =
       "This prompt contains media but the selected model doesn't support media input";
+  } else if (hasNoDatasetItems) {
+    promptRunDisabledReason = "No dataset items match the current filters";
   }
 
   return (
