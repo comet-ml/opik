@@ -295,6 +295,9 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
 
       const playground = new PlaygroundPage(page, project.id);
       const posted = collectExperimentPosts(page);
+      // Recorded rather than read live: the generated name is only known after
+      // the backend poll below, and Radix has dismissed the toast by then.
+      await playground.startRecordingToasts();
 
       await test.step('Open the Playground on the seeded dataset', async () => {
         await playground.goto();
@@ -332,16 +335,13 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         expect(posted[0].name).toBeUndefined();
       });
 
-      await test.step('The field stays empty — an auto-named run has no name to show', async () => {
-        // Before the backend poll below, for the same reason as the sibling
-        // test: the toast lives for Radix's 5s default.
+      await test.step('The field holds no typed name and previews nothing', async () => {
         await playground.waitForRunSettled();
-        await expect(playground.completionToast()).toContainText('1 experiment created');
         expect(await playground.readExperimentName()).toBe('');
         await expect(playground.experimentNamePreview()).toBeHidden();
       });
 
-      await test.step('The experiment landed under a generated name', async () => {
+      const experiment = await test.step('The experiment landed under a generated name', async () => {
         // This is the one experiment in the spec that the run-prefix sweep in
         // `global-teardown.ts` can never reach: the whole point of the test is
         // that the server named it, so its name carries no run prefix to match
@@ -364,6 +364,15 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         // The generated names are `<adjective>_<noun>_<digits>`; anything
         // carrying the run namespace would mean a name was composed and sent.
         expect(experiment.name).not.toContain(testNamespace);
+        return experiment;
+      });
+
+      await test.step('The field and the toast show that generated name', async () => {
+        await expect(playground.experimentNameEditor()).toContainText(experiment.name);
+        await expect(playground.experimentNameEditor()).not.toContainText('Auto-generated name');
+        await expect
+          .poll(() => playground.recordedRunCompletionToasts(), { timeout: 10_000 })
+          .toEqual([expect.stringContaining(`1 experiment created: ${experiment.name}`)]);
       });
     },
   );

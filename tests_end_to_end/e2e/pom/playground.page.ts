@@ -187,9 +187,10 @@ export class PlaygroundPage {
    * The name currently in the field, read out of the editor itself.
    *
    * Read from the input rather than the idle span because the span falls back
-   * to the "Auto-generated name" placeholder, which is indistinguishable from a
-   * run genuinely named that. `Escape` leaves edit mode without saving — a
-   * plain click-away would blur, and blur saves.
+   * to a placeholder — "Auto-generated name", or after an auto-named run the
+   * name the server chose — which is indistinguishable from a typed name.
+   * `Escape` leaves edit mode without saving — a plain click-away would blur,
+   * and blur saves.
    */
   async readExperimentName(): Promise<string> {
     return test.step('read experiment name', async () => {
