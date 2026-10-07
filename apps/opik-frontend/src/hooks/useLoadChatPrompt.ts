@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import { AxiosError } from "axios";
-import isEqual from "fast-deep-equal";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
+import { chatTemplatesEqual } from "@/lib/chatTemplate";
 import { PromptWithLatestVersion } from "@/types/prompts";
 
 export interface UseLoadChatPromptOptions {
@@ -114,28 +114,18 @@ const useLoadChatPrompt = ({
       return false;
     }
 
-    // Parse both templates as objects to compare semantically, not by string formatting
-    // IMPORTANT: Only compare role and content, ignore text prompt metadata fields
-    try {
-      const currentTemplate = JSON.parse(chatPromptTemplate);
-      const loadedTemplate = JSON.parse(chatPromptVersionData.template);
+    // A duplicated variant still points at the version it was copied from,
+    // so once another variant saves these messages as the latest version,
+    // this one is saved too.
+    const savedTemplates = [
+      chatPromptVersionData.template,
+      chatPromptData.latest_version?.template,
+    ];
 
-      const normalizeTemplate = (
-        template: Array<{
-          role: string;
-          content: unknown;
-          promptId?: string;
-          promptVersionId?: string;
-        }>,
-      ) => template.map(({ role, content }) => ({ role, content }));
-
-      const normalizedCurrent = normalizeTemplate(currentTemplate);
-      const normalizedLoaded = normalizeTemplate(loadedTemplate);
-
-      return !isEqual(normalizedCurrent, normalizedLoaded);
-    } catch {
-      return !isEqual(chatPromptTemplate, chatPromptVersionData.template);
-    }
+    return !savedTemplates.some(
+      (template) =>
+        template && chatTemplatesEqual(chatPromptTemplate, template),
+    );
   }, [
     selectedChatPromptId,
     chatPromptData,
