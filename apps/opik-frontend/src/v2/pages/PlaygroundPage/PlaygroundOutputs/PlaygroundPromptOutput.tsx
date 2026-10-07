@@ -84,7 +84,13 @@ const PlaygroundPromptOutput = ({
                 className="inline-block size-3 rounded-sm"
                 style={{ backgroundColor: promptColor.bg }}
               />
-              <span className="comet-body-s-accented">Output {letter}</span>
+              <span
+                className={cn("comet-body-s-accented", {
+                  "text-muted-gray": stale,
+                })}
+              >
+                Output {letter}
+              </span>
             </span>
             {modelLabel && ProviderIcon && (
               <span className="flex items-center gap-1 text-muted-gray">

@@ -9,7 +9,7 @@ import PlaygroundOutputCell from "./PlaygroundOutputCell";
 const PROMPT_ID = "prompt-1";
 const DATA_ITEM_ID = "item-1";
 const STALE_NOTE_TOOLTIP =
-  "Prompt changed since this run. Run again to update.";
+  "Prompt changed since the last run. Re-run to update results.";
 
 type Output = {
   isLoading: boolean;

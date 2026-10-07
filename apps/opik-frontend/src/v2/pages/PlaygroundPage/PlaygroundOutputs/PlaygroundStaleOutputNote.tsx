@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 const STALE_OUTPUT_EXPLANATION =
-  "Prompt changed since this run. Run again to update.";
+  "Prompt changed since the last run. Re-run to update results.";
 
 interface PlaygroundStaleOutputNoteProps {
   compact?: boolean;

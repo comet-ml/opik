@@ -5,7 +5,8 @@ import { TooltipProvider } from "@/ui/tooltip";
 import PlaygroundPromptOutput from "./PlaygroundPromptOutput";
 
 const PROMPT_ID = "prompt-1";
-const STALE_NOTE = "Prompt changed since this run. Run again to update.";
+const STALE_NOTE =
+  "Prompt changed since the last run. Re-run to update results.";
 
 type Output = {
   isLoading: boolean;
@@ -125,6 +126,7 @@ describe("PlaygroundPromptOutput", () => {
     const markdown = screen.getByTestId("markdown");
     expect(markdown).toHaveTextContent("the answer");
     expect(markdown).toHaveClass("text-muted-gray");
+    expect(screen.getByText("Output A")).toHaveClass("text-muted-gray");
     expect(queryStaleNote()).toHaveTextContent(STALE_NOTE);
     expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
   });
@@ -143,6 +145,7 @@ describe("PlaygroundPromptOutput", () => {
     const markdown = screen.getByTestId("markdown");
     expect(markdown).toHaveTextContent("the new answer");
     expect(markdown).not.toHaveClass("text-muted-gray");
+    expect(screen.getByText("Output A")).not.toHaveClass("text-muted-gray");
     expect(queryStaleNote()).not.toBeInTheDocument();
   });
 });
