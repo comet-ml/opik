@@ -510,6 +510,7 @@ areas:
       - playground/playground-dataset-run-failure.spec.ts
       - playground/playground-experiment-name.spec.ts
       - playground/playground-failed-run-output.spec.ts
+      - playground/playground-message-cursor.spec.ts
       - playground/playground-metric-selection.spec.ts
       - playground/playground-model-parameters.spec.ts
       - playground/playground-openrouter-model-parameters.spec.ts
@@ -525,7 +526,7 @@ areas:
       - prompts/prompt-playground-traces.spec.ts
       - prompts/prompt-version-playground.spec.ts
     capabilities:
-      compose-run-prompt:        { covered: true,  tier: t1-smoke, note: "smoke covers composing and running a prompt. t2 also covers OPIK-8313's RESET (playground-reset.spec.ts): the control leaves exactly one empty prompt card on a fresh page, after the list has grown, twice in a row, across a reload, and out of dataset mode — where it also clears the loaded source and returns an editable editor. RECORDED GAP, not a claim: reset has no capability key of its own and is filed here as the nearest fit, so read this key as 'compose, run, and reset the composer', and do not take the reset assertions as evidence about running." }
+      compose-run-prompt:        { covered: true,  tier: t1-smoke, note: "smoke covers composing and running a prompt. t2 also covers OPIK-8313's RESET (playground-reset.spec.ts): the control leaves exactly one empty prompt card on a fresh page, after the list has grown, twice in a row, across a reload, and out of dataset mode — where it also clears the loaded source and returns an editable editor. RECORDED GAP, not a claim: reset has no capability key of its own and is filed here as the nearest fit, so read this key as 'compose, run, and reset the composer', and do not take the reset assertions as evidence about running. t3 also covers OPIK-5298's message editor cursor (playground-message-cursor.spec.ts): at column 0 of an empty message and of a line with text, no part of the cursor is clipped by the editor's scroll box. Checked as geometry, so it says nothing about blinking or colour." }
       select-model-provider:     { covered: true,  suites: [provider-sanity] }
       # OPEN, needs a human call: STOPPING a run has no capability of its own in
       # this area. playground-stop-run.spec.ts rides on run-against-dataset for
