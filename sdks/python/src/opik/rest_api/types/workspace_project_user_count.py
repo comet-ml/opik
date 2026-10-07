@@ -9,6 +9,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 class WorkspaceProjectUserCount(UniversalBaseModel):
     workspace_id: typing.Optional[str] = None
     project_id: typing.Optional[str] = None
+    project_name: typing.Optional[str] = None
     user: typing.Optional[str] = None
     count: typing.Optional[int] = None
 

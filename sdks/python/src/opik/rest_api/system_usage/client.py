@@ -8,7 +8,11 @@ from ..types.bi_information_response import BiInformationResponse
 from ..types.spans_count_response import SpansCountResponse
 from ..types.trace_count_response import TraceCountResponse
 from ..types.usage_by_workspace_project_user_response import UsageByWorkspaceProjectUserResponse
+from ..types.usage_projects_response import UsageProjectsResponse
 from .raw_client import AsyncRawSystemUsageClient, RawSystemUsageClient
+
+# this is used as the default value for optional parameters
+OMIT = typing.cast(typing.Any, ...)
 
 
 class SystemUsageClient:
@@ -25,6 +29,51 @@ class SystemUsageClient:
         RawSystemUsageClient
         """
         return self._raw_client
+
+    def find_usage_projects(
+        self,
+        *,
+        workspace_ids: typing.Sequence[str],
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> UsageProjectsResponse:
+        """
+        Find projects across the given workspaces, optionally narrowed by project ids or a case-insensitive name substring. Unknown or deleted projects are omitted.
+
+        Parameters
+        ----------
+        workspace_ids : typing.Sequence[str]
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        name : typing.Optional[str]
+
+        limit : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        UsageProjectsResponse
+            UsageProjectsResponse resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.system_usage.find_usage_projects(workspace_ids=['workspace_ids'], )
+        """
+        _response = self._raw_client.find_usage_projects(
+            workspace_ids=workspace_ids,
+            project_ids=project_ids,
+            name=name,
+            limit=limit,
+            request_options=request_options,
+        )
+        return _response.data
 
     def get_dataset_bi_info(self, *, request_options: typing.Optional[RequestOptions] = None) -> BiInformationResponse:
         """
@@ -210,6 +259,54 @@ class AsyncSystemUsageClient:
         AsyncRawSystemUsageClient
         """
         return self._raw_client
+
+    async def find_usage_projects(
+        self,
+        *,
+        workspace_ids: typing.Sequence[str],
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> UsageProjectsResponse:
+        """
+        Find projects across the given workspaces, optionally narrowed by project ids or a case-insensitive name substring. Unknown or deleted projects are omitted.
+
+        Parameters
+        ----------
+        workspace_ids : typing.Sequence[str]
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        name : typing.Optional[str]
+
+        limit : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        UsageProjectsResponse
+            UsageProjectsResponse resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.system_usage.find_usage_projects(workspace_ids=['workspace_ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_usage_projects(
+            workspace_ids=workspace_ids,
+            project_ids=project_ids,
+            name=name,
+            limit=limit,
+            request_options=request_options,
+        )
+        return _response.data
 
     async def get_dataset_bi_info(
         self, *, request_options: typing.Optional[RequestOptions] = None
