@@ -251,9 +251,9 @@ test.describe(
           expect(executed[0].prompts?.map((p) => p.experiment_name)).toEqual([expectedName]);
         });
 
-        await test.step('The field advances itself so a re-run cannot collide', async () => {
+        await test.step('The field keeps the name of the run it just made', async () => {
           await playground.waitForRunSettled();
-          expect(await playground.readExperimentName()).toBe(`${runName}_02`);
+          expect(await playground.readExperimentName()).toBe(runName);
         });
 
         await test.step('The suite holds exactly that one experiment, under that name', async () => {
