@@ -470,7 +470,12 @@ test.describe(
         // held — and the seed may carry rows older than the default window.
         await test.step('Open the project Logs on the Traces tab, whole history on one page', async () => {
           await logs.gotoTraces(project.id, { timeRange: 'alltime', size: 100 });
-          await logs.waitForReady();
+          // A longer readiness window than the 15s default. The first row cannot
+          // paint until the listing and its count query have both answered over
+          // a 25-row project this test seeded moments ago, and on a shared cloud
+          // workspace that has been observed to exceed 15s — which surfaced as a
+          // flake here rather than in anything the test asserts.
+          await logs.waitForReady({ timeout: 60_000 });
           expect(
             await logs.activeLogsTab(),
             'the Traces tab is the one on screen — `logsType` is persisted per project',

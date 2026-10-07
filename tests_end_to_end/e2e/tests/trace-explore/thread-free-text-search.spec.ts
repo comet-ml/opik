@@ -238,7 +238,11 @@ test.describe(
         // the page shows and what the API says for the identical term.
         await test.step('Open the project Logs on the Threads tab, whole seed on one page', async () => {
           await logs.gotoThreads(project.id, { timeRange: TIME_RANGE, size: 100 });
-          await logs.waitForThreadsReady();
+          // A longer readiness window than the 15s default: the fixture has
+          // already waited for every thread to be aggregated server-side, but the
+          // first paint of a cold Logs page over a freshly seeded project on a
+          // shared cloud workspace has been seen to exceed it on the Traces tab.
+          await logs.waitForThreadsReady(undefined, { timeout: 60_000 });
           expect(
             await logs.activeLogsTab(),
             'the Threads tab is the one on screen — `logsType` is persisted per project',

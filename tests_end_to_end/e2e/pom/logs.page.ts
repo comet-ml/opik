@@ -474,13 +474,31 @@ export class LogsPage {
     );
   }
 
-  async waitForReady(): Promise<void> {
+  /**
+   * Wait until the Logs table has either a row or its empty state on screen.
+   *
+   * `timeout` is opt-in and defaults to the config's 15s `actionTimeout`, which
+   * is what every existing caller gets. A caller whose project is large or
+   * freshly seeded should raise it: the first row cannot paint until the listing
+   * AND its count query have both answered over a project the write path is
+   * still catching up with, and on a shared cloud workspace that has been
+   * observed to take longer than 15s for a ~25-row project — surfacing as a
+   * flake in `waitForReady` rather than in whatever the spec went on to assert.
+   *
+   * Not simply raised for everyone: a longer default would also lengthen the
+   * failure of every spec whose project legitimately has no rows, turning a
+   * quick, clear failure into a slow one.
+   */
+  async waitForReady(opts: { timeout?: number } = {}): Promise<void> {
     return test.step('Wait for Logs table ready', async () => {
       const realRow = this.page.locator('tr[data-row-id]').first();
       const emptyState = this.page.getByText('No traces yet');
       await Promise.race([
-        realRow.waitFor({ state: 'visible' }),
-        emptyState.waitFor({ state: 'visible' }),
+        realRow.waitFor({ state: 'visible', ...(opts.timeout ? { timeout: opts.timeout } : {}) }),
+        emptyState.waitFor({
+          state: 'visible',
+          ...(opts.timeout ? { timeout: opts.timeout } : {}),
+        }),
       ]);
       await this.page.waitForFunction(() => {
         const txt = document.body.innerText;
@@ -1129,12 +1147,22 @@ export class LogsPage {
    * that specific row — threads are eventually consistent, so gating on "any
    * row" can pass before the seeded thread has been aggregated into the list.
    */
-  async waitForThreadsReady(threadId?: string): Promise<void> {
+  async waitForThreadsReady(
+    threadId?: string,
+    opts: { timeout?: number } = {},
+  ): Promise<void> {
     return test.step('Wait for Threads table ready', async () => {
       const target = threadId
         ? this.threadRow(threadId)
         : this.page.locator('tr[data-row-id]').first();
-      await target.waitFor({ state: 'visible' });
+      // `timeout` opt-in, defaulting to the config's 15s actionTimeout, for the
+      // same reason `waitForReady` takes one — and more so here: a thread row is
+      // materialised from the traces that share its id, so the Threads listing
+      // trails the trace write by a further aggregation step.
+      await target.waitFor({
+        state: 'visible',
+        ...(opts.timeout ? { timeout: opts.timeout } : {}),
+      });
     });
   }
 
