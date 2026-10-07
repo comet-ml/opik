@@ -126,7 +126,7 @@
         <dependency>
             <groupId>io.opentelemetry.instrumentation</groupId>
             <artifactId>opentelemetry-r2dbc-1.0</artifactId>
-            <version>${opentelmetry.version}</version>
+            <version>${opentelmetry.version}-alpha</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
