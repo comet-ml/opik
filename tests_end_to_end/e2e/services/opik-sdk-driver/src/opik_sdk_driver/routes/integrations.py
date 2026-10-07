@@ -112,6 +112,14 @@ def _partial_chunk(model: str, content: str) -> dict[str, Any]:
 async def mock_chat(request: Request) -> Any:
     """A fixed `/api/chat`, reached by a real `ollama.Client` pointed at this app.
 
+    Answers in the two shapes `ollama.Client.chat` knows how to read, chosen by
+    the request's own `stream` flag: a single JSON object carrying the whole
+    reply and the usage counters when it is absent or false, and
+    newline-delimited JSON — `_STREAM_CHUNKS` text chunks followed by one
+    `done` chunk carrying no text, the counters on the last one — when it is
+    true. The caller's `model` is echoed back, defaulted only so a malformed
+    request still answers something readable.
+
     Async on purpose: the routes below run in FastAPI's thread pool and call
     back into this process over the loopback, so this handler has to be served
     by the event loop those threads are not occupying.
@@ -234,9 +242,24 @@ def ollama_chat(
 ) -> OllamaChatResponse:
     """Drive `track_ollama` through every call shape the caller asked for.
 
-    The decorator resolves its client through `get_global_client()`, so the
-    request's workspace and key have to be bound globally — the same wiring
-    `traces.py` and `threads.py` need.
+    In: one `OllamaChatRequest` carrying the project, the model, the prompt and
+    a LIST of calls — each naming its own label, its `stream` and `use_async`
+    flags, a provider override and an optional `parent_name`. Out: one
+    `OllamaChatResponse` holding a result per call, each echoing the `label` it
+    was asked under so the caller matches results to calls by name rather than
+    by position, alongside the content the SDK recorded, the model, and the
+    chunk count a streamed call aggregated. Plus `double_track_is_noop` —
+    whether re-wrapping an already-tracked client returned the same object and
+    the same bound `chat`, which is checked on a throwaway client rather than
+    observed through the spans.
+
+    Side effects, both deliberate and both for the duration of the request: the
+    request's workspace and key are bound as the GLOBAL Opik client, because
+    the decorator resolves its own client through `get_global_client()` — the
+    same wiring `traces.py` and `threads.py` need — and `opik.flush_tracker()`
+    runs before answering, so the caller's first REST read is not racing the
+    SDK's background streamer. The spans stay eventually consistent in
+    ClickHouse regardless, which the caller polls for.
     """
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     opik.set_global_client(client, context_wise=True)
@@ -244,9 +267,10 @@ def ollama_chat(
     try:
         host = _mock_host(request)
 
-        # The `opik_tracked` guard, checked on a client this route then throws
-        # away. Observing it through the spans would mean asserting an absence of
-        # duplicates, which passes just as well when the tracker never ran.
+        # The `opik_tracked` guard is checked on a client that this route then
+        # throws away. Observing it through the spans would mean asserting an
+        # absence of duplicates, which passes just as well when the tracker
+        # never ran.
         #
         # Inside the `try` rather than beside the two lines above: unlike the
         # sibling routes, this one has setup that calls into the SDK before the

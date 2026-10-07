@@ -293,6 +293,26 @@ test.describe(
             ).not.toBeNull();
             expect(duration!, 'and that duration is a real elapsed time').toBeGreaterThan(0);
 
+            // The partial-success half, and the reason `consumer_raises` is a
+            // shape of its own rather than a second `break_after`: the exception
+            // is raised in the CONSUMER's loop body and caught outside it, so
+            // the generator never fails and the trace must carry no error at
+            // all. A decorator that attributed the consumer's exception to the
+            // generator it was reading would report a failed trace for code
+            // that worked, which is the mirror image of
+            // `sdk-track-non-error-throw.spec.ts` — and asserted on every shape,
+            // so an error stamped on the plain early exits fails here too.
+            const lifecycle = await backendClient.getTraceLifecycle(traceId);
+            expect(lifecycle, `the trace for '${label}' must be readable`).not.toBeNull();
+            expect(
+              lifecycle!.endTime,
+              `the trace for '${label}' must have been closed by the decorator`,
+            ).not.toBeNull();
+            expect(
+              lifecycle!.errorInfo,
+              `the trace for '${label}' records no error — the generator itself did not fail`,
+            ).toBeNull();
+
             const traceSpans = await backendClient.listSpanRefs({
               projectId: project.id,
               traceId,
