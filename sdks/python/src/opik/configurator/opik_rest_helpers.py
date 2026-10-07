@@ -1,4 +1,5 @@
 import logging
+import urllib.parse
 from typing import Any, Dict, Final, List, Optional
 
 import httpx
@@ -30,20 +31,28 @@ def _get_httpx_client(
 
 def is_instance_active(url: str) -> bool:
     """
-    Returns True if the given Opik URL responds to an HTTP GET request.
+    Returns True if an Opik backend answers at the given Opik URL.
+
+    Pinged under ``api/``, where Opik's nginx serves the backend, and only a
+    ``"healthy": true`` answer counts: Opik's nginx outside ``/api/``, and a
+    frontend dev server such as Vite on the same port, answer every path with a
+    200 and an HTML page.
 
     Args:
         url (str): The base URL of the instance to check.
 
     Returns:
-        bool: True if the instance responds with HTTP status 200, otherwise False.
+        bool: True if the backend answers its ping with HTTP 200 and
+        ``"healthy": true``, otherwise False.
     """
+    api_url = urllib.parse.urljoin(url_helpers.ensure_ending_slash(url), "api/")
     try:
         with _get_httpx_client() as http_client:
             response = http_client.get(
-                url=url_helpers.get_is_alive_ping_url(url), timeout=HEALTH_CHECK_TIMEOUT
+                url=url_helpers.get_is_alive_ping_url(api_url),
+                timeout=HEALTH_CHECK_TIMEOUT,
             )
-        return response.status_code == 200
+        return response.status_code == 200 and response.json().get("healthy") is True
     except httpx.ConnectTimeout:
         return False
     except Exception:

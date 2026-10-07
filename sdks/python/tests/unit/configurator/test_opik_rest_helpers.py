@@ -11,21 +11,31 @@ from opik.configurator import opik_rest_helpers
 
 class TestIsInstanceActive:
     @pytest.mark.parametrize(
-        "status_code, expected_result",
+        "status_code, body, expected_result",
         [
-            (200, True),
-            (404, False),
-            (500, False),
+            (200, {"message": "Healthy Server", "healthy": True}, True),
+            # Vite, or Opik's nginx outside /api/: every path is the HTML page.
+            (200, ValueError("Expecting value"), False),
+            (200, ["not", "an", "object"], False),
+            (404, ValueError("Expecting value"), False),
+            (500, {"message": "Not Healthy", "healthy": False}, False),
         ],
     )
     @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
-    def test_is_instance_active(self, mock_httpx_client, status_code, expected_result):
+    def test_is_instance_active(
+        self, mock_httpx_client, status_code, body, expected_result
+    ):
         """
-        Test various HTTP status code responses to check if the instance is active.
+        Only the Opik backend's own healthy answer counts, so a dev server on the
+        same port is not taken for Opik.
         """
         mock_client_instance = MagicMock()
         mock_response = Mock()
         mock_response.status_code = status_code
+        if isinstance(body, Exception):
+            mock_response.json.side_effect = body
+        else:
+            mock_response.json.return_value = body
 
         mock_client_instance.__enter__.return_value = mock_client_instance
         mock_client_instance.__exit__.return_value = False
@@ -36,6 +46,11 @@ class TestIsInstanceActive:
         result = opik_rest_helpers.is_instance_active(url)
 
         assert result == expected_result
+        # Under api/, where Opik's nginx serves the backend.
+        assert (
+            mock_client_instance.get.call_args.kwargs["url"]
+            == "http://example.com/api/is-alive/ping"
+        )
 
     @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_is_instance_active_timeout(self, mock_httpx_client):
