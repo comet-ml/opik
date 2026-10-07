@@ -39,6 +39,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -326,8 +329,19 @@ class TracesSearchPartitionPruningTest {
         TraceAssertions.assertTraces(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(),
                 StatsUtils.getProjectTraceStatItems(search.page().content()));
-        Stream.of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
-                .forEach(queryName -> assertSearchScansReadOnlyProjectWeeks(queryName, search.token()));
+    }
+
+    /** One search shared by the statement cases, each checking a different statement of it. */
+    private Stream<Arguments> searchStatements() {
+        var search = search();
+        return Stream.of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
+                .map(queryName -> Arguments.of(queryName, search));
+    }
+
+    @ParameterizedTest(name = "{0} reads the text columns of only the project's weeks")
+    @MethodSource("searchStatements")
+    void searchStatementReadsOnlyProjectWeeks(String queryName, Search search) {
+        assertSearchScansReadOnlyProjectWeeks(queryName, search.token());
     }
 
     @Test
@@ -341,9 +355,20 @@ class TracesSearchPartitionPruningTest {
         TraceAssertions.assertThreads(search.expected(), search.searchOnlyPage().content());
         TraceAssertions.assertStats(search.stats().stats(),
                 StatsUtils.getProjectThreadStatItems(search.traces(), List.of(), null));
-        // The time-bounded and the search-only page share a query name, so both statements are checked.
-        Stream.of("find_threads_by_project", "count_threads_by_project", "thread_stats")
-                .forEach(queryName -> assertSearchScansReadOnlyProjectWeeks(queryName, search.token()));
+    }
+
+    /** One thread search shared by the statement cases, each checking a different statement of it. */
+    private Stream<Arguments> threadSearchStatements() {
+        var search = threadSearch();
+        return Stream.of("find_threads_by_project", "count_threads_by_project", "thread_stats")
+                .map(queryName -> Arguments.of(queryName, search));
+    }
+
+    // The time-bounded and the search-only page share a query name, so both of their statements are checked.
+    @ParameterizedTest(name = "{0} reads the text columns of only the project's weeks")
+    @MethodSource("threadSearchStatements")
+    void threadSearchStatementReadsOnlyProjectWeeks(String queryName, ThreadSearch search) {
+        assertSearchScansReadOnlyProjectWeeks(queryName, search.token());
     }
 
     /**

@@ -710,8 +710,25 @@ class SpansReadPathPartitionPruningTest {
         assertThat(search.page().total()).isEqualTo(search.expected().size());
         SpanAssertions.assertSpan(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(), StatsUtils.getProjectSpanStatItems(search.expected()));
-        Stream.of("count_spans_by_project_id", "get_span_stats", "get_span_stats_feedback_scores")
-                .forEach(queryName -> assertPlanPrunesSpanPartitions(queryName, search.token()));
+    }
+
+    /** One span search shared by the statement cases, each checking a different statement of it. */
+    private Stream<Arguments> spanSearchStatements() {
+        var search = spanSearch();
+        return Stream.of("count_spans_by_project_id", "get_span_stats", "get_span_stats_feedback_scores")
+                .map(queryName -> arguments(queryName, search));
+    }
+
+    @ParameterizedTest(name = "{0} prunes the spans partitions")
+    @MethodSource("spanSearchStatements")
+    void spanSearchStatementPrunesPartitions(String queryName, SpanSearch search) {
+        assertPlanPrunesSpanPartitions(queryName, search.token());
+    }
+
+    @Test
+    void spanFindSearchPrunesPartitions() {
+        var search = spanSearch();
+
         assertSubqueryPrunesSpanPartitions("find_spans_by_project_id", search.token());
     }
 
