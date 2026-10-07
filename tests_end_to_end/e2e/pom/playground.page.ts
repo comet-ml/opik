@@ -426,6 +426,16 @@ export class PlaygroundPage {
     });
   }
 
+  messageEditor(variantIndex: number, messageIndex: number): Locator {
+    return this.variantMessages(variantIndex).nth(messageIndex).locator('.cm-content').first();
+  }
+
+  async addMessage(variantIndex: number): Promise<void> {
+    return test.step(`click + Message on variant ${variantIndex}`, async () => {
+      await this.variantCard(variantIndex).getByRole('button', { name: 'Message' }).click();
+    });
+  }
+
   async focusFirstMessageAtLineStart(): Promise<void> {
     return test.step('put the cursor at the start of the first message', async () => {
       await this.variantMessages(0).first().locator('.cm-content').first().click();
