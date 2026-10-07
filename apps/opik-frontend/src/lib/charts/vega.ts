@@ -190,6 +190,34 @@ const setScaleProperty = (channel: Channel, key: string, value: unknown) => {
   channel.scale = scale;
 };
 
+const TITLED_CHANNELS = ["x", "y", "color", "theta", "size", "opacity"];
+
+// "experiment_count" → "Experiment count", "dataset_name" → "Dataset": a readable default for a field-named title.
+const humanizeField = (field: string) => {
+  const words = field
+    .replace(/_name$/, "")
+    .replace(/[_.]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim()
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+const setChannelProperty = (
+  channel: Channel,
+  part: "axis" | "legend",
+  key: string,
+  value: unknown,
+) => {
+  if (!channel || channel[part] === null) return;
+  const props = { ...((channel[part] as Unit) ?? {}) };
+  if (props[key] === undefined) props[key] = value;
+  channel[part] = props;
+};
+
+const distinctCount = (rows: VegaRows, field: unknown) =>
+  typeof field === "string" ? new Set(rows.map((row) => row[field])).size : 0;
+
 /** Colour and shape rules a config cannot express, because they depend on the mark and the data. */
 const applyChartRules = (
   unit: Unit,
@@ -201,6 +229,30 @@ const applyChartRules = (
   const mark = markType(unit);
   if (!encoding || !mark) return;
   const { color, x, y, xOffset } = encoding;
+
+  TITLED_CHANNELS.forEach((name) => {
+    const channel = encoding[name];
+    if (
+      channel &&
+      typeof channel.field === "string" &&
+      channel.title === undefined
+    ) {
+      channel.title = humanizeField(channel.field);
+    }
+  });
+
+  // Category labels share the plot width instead of the value axis's fixed --chart-axis-max, and follow resizes.
+  const categories = distinctCount(rows, x?.field);
+  if (x && DISCRETE.has(x.type as string) && categories) {
+    setChannelProperty(x, "axis", "labelLimit", {
+      expr: `max(${tokens.axis.max}, width / ${categories} - ${tokens.plotPaddingSm})`,
+    });
+  }
+  if (color) {
+    setChannelProperty(color, "legend", "labelLimit", {
+      expr: `max(${tokens.axis.max}, width / 3 - ${tokens.legend.gapX * 2})`,
+    });
+  }
 
   if (
     color &&
