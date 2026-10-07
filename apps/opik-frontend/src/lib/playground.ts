@@ -9,6 +9,7 @@ import {
   DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
 import {
+  getDefaultThinkingEffort,
   getDefaultThinkingLevel,
   isClaudeModel,
   supportsAnthropicThinkingEffort,
@@ -151,7 +152,7 @@ export const getDefaultConfigByProvider = (
     };
 
     if (supportsAnthropicThinkingEffort(model)) {
-      config.thinkingEffort = "high";
+      config.thinkingEffort = getDefaultThinkingEffort(model);
     }
 
     return config;
