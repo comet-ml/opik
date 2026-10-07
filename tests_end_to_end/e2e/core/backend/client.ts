@@ -578,6 +578,25 @@ export interface ThreadDetail {
   id: string;
   projectId: string;
   feedbackScores: FeedbackScoreRef[];
+  /**
+   * The aggregate `find_thread_by_id` computes over the thread's OWN traces —
+   * the half opik#8735 rewrote, and the half `feedbackScores` says nothing
+   * about (those come from a join, not from the aggregate).
+   *
+   * Every field is `| null` rather than optional: an absent aggregate and a
+   * zero one are different answers from this endpoint, and a caller that needs
+   * one has to assert it is there instead of reading a missing number as 0.
+   */
+  numberOfMessages: number | null;
+  totalEstimatedCost: number | null;
+  usage: Record<string, number> | null;
+  duration: number | null;
+  /** ISO strings, not Dates — compared for byte-identity across reads. */
+  startTime: string | null;
+  endTime: string | null;
+  /** The first/last turn the aggregate selected, as the endpoint serialises them. */
+  firstMessage: unknown | null;
+  lastMessage: unknown | null;
 }
 
 export interface AutomationRuleRef {
@@ -2692,13 +2711,21 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * Raw fetch for the same two reasons as the workspace read: the pinned SDK
      * has no binding for it, and the status is part of the contract under test
      * — a mis-gated bind surfaces as 500, not as a wrong number.
+     *
+     * `intervalEnd` is OPTIONAL, and omitting it is not the same request with a
+     * default filled in. Every date-range preset that ends today sends no
+     * `interval_end` at all (`calculateIntervalStartAndEnd` returns undefined
+     * for one), and on that branch the read has no upper id bound: a row whose
+     * UUIDv7 id instant is in the future counts, clamped into the latest
+     * bucket. A caller that passed `new Date()` instead would be driving the
+     * other branch and could never observe it.
      */
     async projectMetric(args: {
       projectId: string;
       metricType: ProjectMetricType;
       interval: MetricInterval;
       intervalStart: Date;
-      intervalEnd: Date;
+      intervalEnd?: Date;
       breakdown?: MetricBreakdown;
     }): Promise<RawApiResult & { series: MetricSeries[] }> {
       const { status, message, json } = await rawFetch(
@@ -2709,7 +2736,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             metric_type: args.metricType,
             interval: args.interval,
             interval_start: args.intervalStart.toISOString(),
-            interval_end: args.intervalEnd.toISOString(),
+            ...(args.intervalEnd ? { interval_end: args.intervalEnd.toISOString() } : {}),
             ...(args.breakdown
               ? {
                   breakdown: {
@@ -3092,6 +3119,71 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         id: String(experiment.id),
         name,
         datasetId: experiment.datasetId ? String(experiment.datasetId) : null,
+      };
+    },
+
+    /**
+     * `GET /v1/private/experiments/{id}`'s `metadata`, exactly as the wire
+     * carried it.
+     *
+     * Raw rather than through the pinned SDK because the contract under test is
+     * what the run STORED, key for key: the Playground writes its config there
+     * (`metadata.messages` is the authored prompt template, as a JSON string),
+     * and the compare Configuration tab is a view over the same object. A
+     * camel-cased projection would rename a user's own metadata keys.
+     *
+     * Throws rather than answering `{}` when the key is absent: an experiment
+     * that lost its metadata is the failure a caller is here to catch, and an
+     * empty object compares equal to "nothing was stored" in every assertion
+     * that follows.
+     */
+    async getExperimentMetadata(id: string): Promise<Record<string, unknown>> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getExperimentMetadata: experiment ${id} read answered ${status}: ${message}`);
+      }
+      const metadata = (json as { metadata?: unknown } | null)?.metadata;
+      if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        throw new Error(
+          `getExperimentMetadata: experiment ${id} carried no metadata object (got ${
+            Array.isArray(metadata) ? 'an array' : typeof metadata
+          })`,
+        );
+      }
+      return metadata as Record<string, unknown>;
+    },
+
+    /**
+     * `GET /v1/private/experiments/{id}`'s `prompt_versions`, exactly as the
+     * wire carried them.
+     *
+     * Raw rather than through the pinned SDK because the contract under test is
+     * the difference between an ABSENT key and a null one. The frontend decides
+     * a linked prompt has been deleted with `isUndefined(prompt_name)`, so a
+     * backend that started sending `prompt_name: null` would silently turn the
+     * deleted tag into an enabled link with an empty label — and the SDK's
+     * camel-cased, optional-typed projection cannot tell the two apart. The
+     * backend omits nulls today (`JsonInclude.Include.NON_NULL`), which is
+     * exactly the assumption worth pinning.
+     *
+     * `null` rather than `[]` when the key is missing altogether: an experiment
+     * that lost its links and one that never had any are different answers.
+     */
+    async getExperimentPromptVersionsRaw(
+      id: string,
+    ): Promise<RawApiResult & { promptVersions: Record<string, unknown>[] | null }> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${id}`,
+      );
+      const raw = (json as { prompt_versions?: unknown } | null)?.prompt_versions;
+      return {
+        status,
+        message,
+        promptVersions: Array.isArray(raw) ? (raw as Record<string, unknown>[]) : null,
       };
     },
 
@@ -4687,17 +4779,33 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
-     * One thread by id, with the feedback scores attached to the THREAD itself.
+     * One thread by id — `POST /v1/private/traces/threads/retrieve`.
      *
-     * Not derivable from `listThreads`: the row shape that view renders carries
-     * the aggregates, not the scores. Thread-level metrics (`evaluate_threads`)
-     * write here and nowhere else — a score on a thread is not a score on any
-     * of its traces — so this is the only API read that can confirm one landed.
+     * Two things live here that nothing else can reach:
+     *
+     *  - the feedback scores attached to the THREAD itself. Not derivable from
+     *    `listThreads`: the row shape that view renders carries the aggregates,
+     *    not the scores. Thread-level metrics (`evaluate_threads`) write here
+     *    and nowhere else — a score on a thread is not a score on any of its
+     *    traces — so this is the only API read that can confirm one landed.
+     *  - the aggregate `find_thread_by_id` computes, which opik#8735 rewrote to
+     *    be restricted to the requested `thread_id`. `listThreads` answers the
+     *    same numbers from an INDEPENDENTLY written query, which is what makes
+     *    comparing the two worth doing rather than circular.
+     *
+     * `truncate` is the endpoint's own flag and a separate code path in that
+     * rewrite, not a display option — a spec about the aggregate has to drive
+     * both or it has only covered half of what changed.
      */
-    async getThread(args: { projectId: string; threadId: string }): Promise<ThreadDetail> {
+    async getThread(args: {
+      projectId: string;
+      threadId: string;
+      truncate?: boolean;
+    }): Promise<ThreadDetail> {
       const thread = await opik.api.traces.getTraceThread({
         projectId: args.projectId,
         threadId: args.threadId,
+        ...(args.truncate === undefined ? {} : { truncate: args.truncate }),
       });
       return {
         id: String(thread.id ?? ''),
@@ -4708,6 +4816,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           reason: fs.reason ?? null,
           source: String(fs.source),
         })),
+        numberOfMessages: thread.numberOfMessages ?? null,
+        totalEstimatedCost: thread.totalEstimatedCost ?? null,
+        usage: thread.usage ?? null,
+        duration: thread.duration ?? null,
+        startTime: thread.startTime ? new Date(thread.startTime).toISOString() : null,
+        endTime: thread.endTime ? new Date(thread.endTime).toISOString() : null,
+        firstMessage: thread.firstMessage ?? null,
+        lastMessage: thread.lastMessage ?? null,
       };
     },
 
@@ -4782,6 +4898,31 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
       return (page.content ?? []).map((t) => String(t.id));
+    },
+
+    /**
+     * Span ids visible for a project under `filters` — `GET /v1/private/spans`,
+     * the read behind the Spans table.
+     *
+     * The counterpart to `listTraceIds`, and separate from `listSpanRefs`
+     * because that one takes no filters at all. A spec that drives a quick
+     * filter in the UI needs to know what the SAME filter returns server-side,
+     * or "the table narrowed to one row" says nothing about whether it narrowed
+     * to the right one.
+     */
+    async listSpanIds(
+      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+    ): Promise<string[]> {
+      const page = await opik.api.spans.getSpansByProject({
+        projectId: args.projectId,
+        size: args.size ?? 200,
+        page: 1,
+        truncate: true,
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.fromTime ? { fromTime: args.fromTime } : {}),
+        ...(args.toTime ? { toTime: args.toTime } : {}),
+      });
+      return (page.content ?? []).map((s) => String(s.id));
     },
 
     /**
@@ -5475,6 +5616,29 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (status !== 204) {
         throw new Error(
           `addAnnotationQueueItems('${queueId}'): expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * `POST /v1/private/annotation-queues/{id}/items/delete` — take items back
+     * out of a queue, the way the items table's own remove action does.
+     *
+     * The counterpart of `addAnnotationQueueItems`, and needed for a claim
+     * neither adding nor reading can reach: that automation never RE-adds
+     * something a reviewer removed on purpose. A queue that quietly re-filled
+     * itself would make the remove action useless, and nothing about the
+     * queue's own state would say so.
+     */
+    async removeAnnotationQueueItems(queueId: string, ids: string[]): Promise<void> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/annotation-queues/${queueId}/items/delete`,
+        { body: { ids } },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `removeAnnotationQueueItems('${queueId}'): expected 204, got ${status}: ${message}`,
         );
       }
     },

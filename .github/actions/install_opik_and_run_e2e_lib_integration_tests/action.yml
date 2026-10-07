@@ -14,12 +14,26 @@ runs:
   steps:
     - name: Install OPIK, test requirements, and run tests for ${{ inputs.library_name }}
       shell: bash
+      # Set here as well as in the calling workflow: a composite action is
+      # reusable, so it must not depend on every future caller remembering these.
+      env:
+        PIP_RETRIES: 8
+        PIP_DEFAULT_TIMEOUT: 30
+        UV_HTTP_TIMEOUT: 30
+        UV_HTTP_RETRIES: 8
+        LIB: ${{ inputs.library_name }}
+        PY_VERSION: ${{ inputs.python_version }}
       run: |
+        # Inputs become paths and CLI args; reject anything outside a safe charset.
+        for v in "$LIB" "$PY_VERSION"; do
+          [[ "$v" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error title=Invalid input::'$v' must match ^[A-Za-z0-9._-]+\$"; exit 1; }
+        done
+
         # create virtual environment
-        uv venv ${{ inputs.library_name }}-env --python ${{ inputs.python_version }}
-        source ${{ inputs.library_name }}-env/bin/activate
+        uv venv "$LIB-env" --python "$PY_VERSION"
+        source "$LIB-env/bin/activate"
         
-        cd ${{ github.workspace }}/sdks/python
+        cd "$GITHUB_WORKSPACE/sdks/python"
         
         echo "Installing OPIK"
         uv pip install .   
@@ -27,12 +41,12 @@ runs:
         echo "Installing test dependencies"
         cd ./tests
         uv pip install -r test_requirements.txt
-        uv pip install -r e2e_library_integration/${{ inputs.library_name }}/requirements.txt
+        uv pip install -r "e2e_library_integration/$LIB/requirements.txt"
         uv pip list
         
         echo "Running tests"
         export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
-        cd ./e2e_library_integration/${{ inputs.library_name }}/
+        cd "./e2e_library_integration/$LIB/"
         python -m pytest -vv .
         
         # Deactivate virtual environment

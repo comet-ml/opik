@@ -6,11 +6,13 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -28,17 +30,22 @@ import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -70,11 +77,13 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -192,9 +201,11 @@ class SpansReadPathPartitionPruningTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync template;
+    private ProjectMetricsDAO projectMetricsDAO;
 
     @BeforeAll
-    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template) {
+    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template,
+            ProjectMetricsDAO projectMetricsDAO) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -203,6 +214,7 @@ class SpansReadPathPartitionPruningTest {
         this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
+        this.projectMetricsDAO = projectMetricsDAO;
         // One batch, so each filler week is one part holding two traces the primary key cannot exclude by id.
         spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
                 .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
@@ -439,9 +451,175 @@ class SpansReadPathPartitionPruningTest {
                 .isEqualTo(expected);
     }
 
+    @Test
+    void alertTotalCostCountsAFarFutureSpanOfATraceInTheWindow() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        // The alert window bounds trace_id only, so the far-future week must come from the span-weeks pre-pass.
+        var expected = totalCost(createTraceWithAFarFutureSpan(projectName, now).spans());
+
+        var actual = projectMetricsDAO.getTotalCost(List.of(projectId), now.minus(Duration.ofHours(1)), null)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER))
+                .block();
+
+        assertThat(actual).isEqualByComparingTo(expected);
+    }
+
+    /** Each read takes the project name and the trace id, and returns the traces it read. */
+    private Stream<Arguments> traceReads() {
+        return Stream.of(
+                arguments("find_traces_by_project_id", (BiFunction<String, UUID, List<Trace>>) (projectName,
+                        _) -> traceResourceClient.getByProjectName(projectName, API_KEY, WORKSPACE_NAME)),
+                arguments("find_trace_stream", (BiFunction<String, UUID, List<Trace>>) (projectName,
+                        _) -> traceResourceClient.getStreamAndAssertContent(API_KEY, WORKSPACE_NAME,
+                                TraceSearchStreamRequest.builder().projectName(projectName).build())),
+                arguments("find_traces_by_ids", (BiFunction<String, UUID, List<Trace>>) (_,
+                        traceId) -> List.of(traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("traceReads")
+    void traceAggregatesAFarFutureSpanOfItsTrace(String queryName, BiFunction<String, UUID, List<Trace>> read) {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        // The spans reads are keyed by trace id, so the far-future week must come from the span-weeks pre-pass.
+        var created = createTraceWithAFarFutureSpan(projectName, Instant.now());
+        var expected = SpanAggregates.builder().spanCount(created.spans().size())
+                .totalEstimatedCost(totalCost(created.spans())).build();
+
+        var actual = read.apply(projectName, created.trace().id());
+
+        // The whole trace, with the usage its spans add up to, then the span aggregates the trace assertion leaves out.
+        var expectedTrace = created.trace().toBuilder().usage(totalUsage(created.spans())).build();
+        TraceAssertions.assertTraces(actual, List.of(expectedTrace), USER);
+        assertThat(actual)
+                .map(trace -> SpanAggregates.builder().spanCount(trace.spanCount())
+                        .totalEstimatedCost(trace.totalEstimatedCost()).build())
+                .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
+                        .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                        .build())
+                .containsExactly(expected);
+    }
+
+    /** The span count and total cost reported by a trace read. */
+    @Builder(toBuilder = true)
+    private record SpanAggregates(int spanCount, BigDecimal totalEstimatedCost) {
+    }
+
+    /** A trace and the spans written for it. */
+    @Builder(toBuilder = true)
+    private record TraceWithSpans(Trace trace, List<Span> spans) {
+    }
+
+    /** A trace at {@code now} with one span beside it and one a bad clock files under a far-future week. */
+    private TraceWithSpans createTraceWithAFarFutureSpan(String projectName, Instant now) {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .projectName(projectName)
+                // ClickHouse keeps microseconds, and the CI JVM clock has nanoseconds.
+                .startTime(now.truncatedTo(ChronoUnit.MILLIS))
+                .endTime(now.truncatedTo(ChronoUnit.MILLIS).plusMillis(100))
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+        var spans = Stream.of(now, farFutureInstant())
+                .map(idAt -> newSpan(idAt, trace.id()).toBuilder()
+                        .projectName(projectName)
+                        .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomInt(1, 100_000), 2))
+                        .build())
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+        return TraceWithSpans.builder().trace(trace).spans(spans).build();
+    }
+
+    private static Map<String, Long> totalUsage(List<Span> spans) {
+        return spans.stream()
+                .flatMap(span -> span.usage().entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().longValue(), Long::sum));
+    }
+
+    private static BigDecimal totalCost(List<Span> spans) {
+        return spans.stream().map(Span::totalEstimatedCost).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** Past every real clock, short of where {@code id_at} saturates. */
+    private static Instant farFutureInstant() {
+        return LocalDate.of(RandomUtils.secure().randomInt(2150, 2290), 1, 1)
+                .plusDays(RandomUtils.secure().randomInt(0, 365))
+                .atTime(12, 0)
+                .toInstant(ZoneOffset.UTC);
+    }
+
+    @Test
+    void spanStatsCountSpansInEveryWeekWithoutASearch() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var windowWeeks = RandomUtils.secure().randomInt(2, 20);
+        var fromTime = THIS_MONDAY.minusWeeks(windowWeeks).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
+        // Two ordinary weeks inside the window and the far-future one a bad clock files spans under.
+        var ordinary = Stream.generate(() -> THIS_MONDAY.minusWeeks(RandomUtils.secure().randomInt(0, windowWeeks)))
+                .distinct()
+                .limit(2)
+                .map(monday -> monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC));
+        var spans = Stream.concat(ordinary, Stream.of(farFutureInstant()))
+                .map(idAt -> newSpan(idAt, ID_GENERATOR.generateId()).toBuilder()
+                        .projectName(projectName)
+                        .duration(null)
+                        .totalEstimatedCost(null)
+                        .build())
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+        var expected = StatsUtils.getProjectSpanStatItems(spans);
+
+        var actual = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
+                Map.of("from_time", fromTime));
+
+        TraceAssertions.assertStats(actual.stats(), expected);
+    }
+
     private static KpiCardResponse.KpiMetric kpi(KpiCardResponse.KpiMetricType type, Double current,
             Double previous) {
         return KpiCardResponse.KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
+    }
+
+    /** The searched spans and the responses. */
+    @Builder(toBuilder = true)
+    private record SpanSearch(List<Span> expected, Span.SpanPage page, ProjectStats stats) {
+    }
+
+    private SpanSearch spanSearch() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var token = RandomStringUtils.secure().nextAlphanumeric(12);
+        var fromTime = THIS_MONDAY.minusWeeks(10).atStartOfDay().toInstant(ZoneOffset.UTC).toString();
+        // Two ordinary weeks and the far-future one a bad clock files spans under.
+        var expected = Stream.of(THIS_MONDAY.minusWeeks(5), THIS_MONDAY, LocalDate.of(2199, 12, 30))
+                .map(monday -> newSpan(monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC),
+                        ID_GENERATOR.generateId()).toBuilder()
+                        .projectName(projectName)
+                        .name("searchable-" + token)
+                        // newSpan leaves end_time unset, so the span has no duration; cost is derived from model/usage.
+                        .duration(null)
+                        .totalEstimatedCost(null)
+                        .build())
+                .sorted(Comparator.comparing(Span::id).reversed())
+                .toList();
+        spanResourceClient.batchCreateSpans(expected, API_KEY, WORKSPACE_NAME);
+        var page = spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, projectName, null, 1, 10, null, null, null,
+                null, null, fromTime, null, token);
+        var stats = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
+                Map.of("search", token, "from_time", fromTime));
+        return SpanSearch.builder().expected(expected).page(page).stats(stats).build();
+    }
+
+    @Test
+    void spanSearchBoundedToProjectWeeksReturnsEveryMatch() {
+        var search = spanSearch();
+
+        assertThat(search.page().total()).isEqualTo(search.expected().size());
+        SpanAssertions.assertSpan(search.page().content(), search.expected(), USER);
+        TraceAssertions.assertStats(search.stats().stats(), StatsUtils.getProjectSpanStatItems(search.expected()));
     }
 
     private void batchUpdateTags(Span span, Set<UUID> ids) {
