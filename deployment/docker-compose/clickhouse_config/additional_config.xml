@@ -4,6 +4,9 @@
          (dev-runner with TOGGLE_OLLIE_ENABLED=true, or prod via OPIK-6846). No effect otherwise. -->
     <custom_settings_prefixes>SQL_</custom_settings_prefixes>
 
+    <!-- Mirrors conf.d/timezone.xml in the Helm chart's values.yaml, which explains it. -->
+    <timezone>UTC</timezone>
+
     <!-- Mirrors conf.d/merge_tree.xml in the Helm chart's values.yaml, which explains the
          values; keep the two in step. Without these, LWD-masked rows are never reclaimed. -->
     <merge_tree>

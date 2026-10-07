@@ -932,6 +932,13 @@ clickhouse:
         <yandex>
           <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
         </yandex>
+      # Server default timezone. The backend writes absolute UTC instants but compares against timezone-less
+      # literals such as the epoch end_time sentinel, so a host timezone leaking in misreads unfinished traces.
+      # Only a default: a query can still override it with SETTINGS session_timezone or a timezone argument.
+      conf.d/timezone.xml: |
+        <clickhouse>
+          <timezone>UTC</timezone>
+        </clickhouse>
       # Without these, partitioned tables prune reads but LWD-bloated parts never
       # self-merge, so masked rows are never physically reclaimed.
       conf.d/merge_tree.xml: |

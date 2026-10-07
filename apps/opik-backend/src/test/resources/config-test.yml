@@ -84,11 +84,6 @@ databaseAnalytics:
   #   async-insert flush; same override semantics as asyncInsertBusyTimeoutMaxMs above. Larger values yield fewer,
   #   larger parts at the cost of more buffer memory.
   asyncInsertMaxDataSize: # Empty - ClickHouse/server-side value applies
-  #  Default: UTC
-  #  Description: ClickHouse session_timezone for the app's connections (not the readonly free-form SQL user,
-  #   which rejects it). Keeps timezone-less literals such as the epoch end_time sentinel in the SQL equal to the
-  #   absolute epoch the app writes, so a non-UTC ClickHouse server does not misread unfinished traces.
-  sessionTimezone: UTC
   #  Default: 3000
   #  Description: Cadence (ms) for http_headers_progress_interval_ms, applied to custom_http_params like the overrides
   #   above, but only on the R2DBC connection and not on the v2 client (the read-only free-form SQL user runs under
