@@ -149,11 +149,15 @@ export class TracePanelPage {
   async spanTreeDepths(): Promise<Record<string, number>> {
     return test.step('Read the depth of every rendered span-tree node', async () => {
       await this.root.locator('[data-testid^="trace-tree-node-"]').first().waitFor();
-      return this.page.evaluate(() => {
+      // Evaluated against the panel element rather than `document`: the callers
+      // compare the depth map WHOLE, so a stale tree still mounted outside this
+      // panel would add entries — or overwrite same-named ones — and turn an
+      // exact tree-shape assertion into a shape about two trees.
+      return this.root.evaluate((root) => {
         // `INDENT_PX` in VirtualizedTreeViewer.tsx.
         const INDENT = 24;
         const depths: Record<string, number> = {};
-        const nodes = document.querySelectorAll('[data-testid^="trace-tree-node-"]');
+        const nodes = root.querySelectorAll('[data-testid^="trace-tree-node-"]');
         for (const node of Array.from(nodes)) {
           const name = (node.getAttribute('data-testid') ?? '').replace('trace-tree-node-', '');
           // The node also renders a details pane and a duration timeline whose

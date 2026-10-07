@@ -94,6 +94,21 @@ export const test = baseTest.extend<OpenAiResponsesStubFixtures>({
           return;
         }
         requestCount += 1;
+        // The model is echoed back fixed, which is what keeps the cost
+        // assertion an exact number — but it also means a tracker that asked
+        // for a different model would still be answered `gpt-4o` and still
+        // price at $2.51. Recorded as an unexpected request rather than
+        // answered differently, so the spec's existing
+        // `unexpectedRequests()` assertion catches it while the echoed model
+        // stays fixed by this file.
+        try {
+          const asked = (JSON.parse(body) as { model?: unknown }).model;
+          if (asked !== STUB_RESPONSES_MODEL) {
+            unexpected.push(`POST /v1/responses asked for model ${String(asked)}`);
+          }
+        } catch {
+          unexpected.push('POST /v1/responses with a body that is not JSON');
+        }
         // A Responses-shaped payload, not a chat-completions one: `usage` here
         // carries `input_tokens`/`output_tokens`, which is exactly the pair
         // opik#8782 had mapped the wrong way round onto Opik's
@@ -124,10 +139,6 @@ export const test = baseTest.extend<OpenAiResponsesStubFixtures>({
         };
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(payload));
-        // `body` is read only to be sure the request arrived whole; nothing is
-        // asserted on it, because what the SDK sends upstream is not this
-        // spec's subject.
-        void body;
       });
     });
 
@@ -143,11 +154,17 @@ export const test = baseTest.extend<OpenAiResponsesStubFixtures>({
     // (`core/sdk/typescript-sdk.ts`), plus `projectName` so the tracker's trace
     // lands in this test's own project rather than in Default Project — where it
     // would be indistinguishable from the tracker having written nothing.
-    expect(
-      envConfig.apiKey,
-      'openaiResponsesStub needs an API key to write traces — global-setup mints one into ' +
-        'OPIK_API_KEY for cloud and self-hosted deployments',
-    ).toBeTruthy();
+    // Gated on the deployment, exactly as `makeTypescriptSdk` gates the same
+    // three settings: an OSS install authenticates nothing, so `envConfig.apiKey`
+    // is legitimately null there and an unconditional assertion makes this spec
+    // unrunnable on the deployment the whole estate defaults to.
+    if (envConfig.deployment !== 'oss') {
+      expect(
+        envConfig.apiKey,
+        'openaiResponsesStub needs an API key to write traces on a ' +
+          `${envConfig.deployment} deployment — global-setup mints one into OPIK_API_KEY`,
+      ).toBeTruthy();
+    }
     const opikClient = new Opik({
       apiKey: envConfig.apiKey ?? undefined,
       workspaceName: envConfig.workspace,

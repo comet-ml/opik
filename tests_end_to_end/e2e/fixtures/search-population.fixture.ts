@@ -141,7 +141,14 @@ const weekBucket = (moment: Date): number => {
 };
 
 /**
- * Whether this deployment accepts an id backdated by one week.
+ * Whether this deployment accepts an id backdated as far as the seed will go.
+ *
+ * `ageMs` is the DEEPEST backdate the population would emit, not the shallowest:
+ * a probe at one week that then seeded ids two weeks old would pass on an
+ * environment whose window sits between the two, and the real batch write would
+ * be rejected — a hard fixture failure rather than the graceful fall back to a
+ * single week this returns a boolean for. The estate's shared
+ * `skipUnlessBackdatedIdsAccepted` takes the age for the same reason.
  *
  * Probed with a real write because the mode is not readable from the client —
  * `uuidValidation.enabled` / `auditOnly` are backend config. The probe trace is
@@ -157,8 +164,9 @@ const weekBucket = (moment: Date): number => {
 async function backdatedIdsAccepted(
   backendClient: BackendClient,
   projectName: string,
+  ageMs: number,
 ): Promise<boolean> {
-  const id = uuid7(new Date(Date.now() - WEEK_MS));
+  const id = uuid7(new Date(Date.now() - ageMs));
   try {
     await backendClient.createTraceWithSource({
       id,
@@ -217,7 +225,14 @@ export const test = baseTest.extend<SearchPopulationFixtures>({
     const traceIds: string[] = [];
 
     try {
-      const spreadAchieved = (await backdatedIdsAccepted(backendClient, project.name))
+      // `(REQUESTED_WEEK_SPREAD - 1)` weeks is the oldest id the loop below
+      // emits, since the offset is `position % spreadAchieved`.
+      const deepestBackdateMs = (REQUESTED_WEEK_SPREAD - 1) * WEEK_MS;
+      const spreadAchieved = (await backdatedIdsAccepted(
+        backendClient,
+        project.name,
+        deepestBackdateMs,
+      ))
         ? REQUESTED_WEEK_SPREAD
         : 1;
 

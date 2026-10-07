@@ -358,6 +358,16 @@ export interface TrackedSpanRef {
   input: Record<string, unknown> | null;
   output: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
+  /**
+   * The error the SDK stamped on this span, or null for a clean lifecycle.
+   *
+   * Carried here because a spec asserting a tracked call ended as a PARTIAL
+   * SUCCESS needs the span's own answer, not just its trace's: the two are
+   * written separately, so a decorator that blamed a consumer's exception on
+   * the span it was reading would leave the trace clean and pass a
+   * trace-only check.
+   */
+  errorInfo: { exceptionType: string; message: string | null } | null;
 }
 
 /**
@@ -3651,6 +3661,12 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         input: (s.input ?? null) as Record<string, unknown> | null,
         output: (s.output ?? null) as Record<string, unknown> | null,
         metadata: (s.metadata ?? null) as Record<string, unknown> | null,
+        errorInfo: s.errorInfo
+          ? {
+              exceptionType: s.errorInfo.exceptionType,
+              message: s.errorInfo.message ?? null,
+            }
+          : null,
       }));
     },
 

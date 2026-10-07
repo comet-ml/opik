@@ -244,6 +244,17 @@ test.describe(
             spans.filter((span) => span.parentSpanId !== null).map((span) => span.name),
             '@track on a top-level call produces a ROOT span, with no parent',
           ).toEqual([]);
+          // On the SPAN as well as on the trace, which the per-shape loop below
+          // asserts. The two are written separately, so a decorator that blamed
+          // the CONSUMER's exception on the generator it was reading could leave
+          // the trace clean and stamp only the span — and `consumer_raises`
+          // would then pass as the partial success it is supposed to prove.
+          expect(
+            spans
+              .filter((span) => span.errorInfo !== null)
+              .map((span) => `${span.name}=${span.errorInfo?.exceptionType}`),
+            'no span carries an error — in every shape the generator itself succeeded',
+          ).toEqual([]);
         });
 
         const spanByName = new Map(spans.map((span) => [span.name, span]));
