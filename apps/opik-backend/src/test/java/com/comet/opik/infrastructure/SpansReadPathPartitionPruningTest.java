@@ -1,5 +1,11 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.AlertTriggerConfig;
+import com.comet.opik.api.AlertTriggerConfigType;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -13,6 +19,9 @@ import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
+import com.comet.opik.api.Webhook;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
+import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -26,6 +35,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
@@ -33,13 +43,12 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -90,6 +99,13 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -201,11 +217,10 @@ class SpansReadPathPartitionPruningTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync template;
-    private ProjectMetricsDAO projectMetricsDAO;
+    private AlertResourceClient alertResourceClient;
 
     @BeforeAll
-    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template,
-            ProjectMetricsDAO projectMetricsDAO) {
+    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -214,7 +229,7 @@ class SpansReadPathPartitionPruningTest {
         this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
-        this.projectMetricsDAO = projectMetricsDAO;
+        this.alertResourceClient = new AlertResourceClient(clientSupport);
         // One batch, so each filler week is one part holding two traces the primary key cannot exclude by id.
         spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
                 .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
@@ -459,12 +474,9 @@ class SpansReadPathPartitionPruningTest {
         // The alert window bounds trace_id only, so the far-future week must come from the span-weeks pre-pass.
         var expected = totalCost(createTraceWithAFarFutureSpan(projectName, now).spans());
 
-        var actual = projectMetricsDAO.getTotalCost(List.of(projectId), now.minus(Duration.ofHours(1)), null)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
-                        .put(RequestContext.USER_NAME, USER))
-                .block();
+        var actual = fireTraceCostAlert(projectId);
 
-        assertThat(actual).isEqualByComparingTo(expected);
+        assertThat(new BigDecimal(actual.metricValue())).isEqualByComparingTo(expected);
     }
 
     /** Each read takes the project name and the trace id, and returns the traces it read. */
@@ -511,6 +523,48 @@ class SpansReadPathPartitionPruningTest {
     /** A trace and the spans written for it. */
     @Builder(toBuilder = true)
     private record TraceWithSpans(Trace trace, List<Span> spans) {
+    }
+
+    /**
+     * The alert job is the only reader of the alert total cost, so it is driven through a cost alert: a zero threshold
+     * fires on the first run, and the webhook carries the total the job read.
+     */
+    private MetricsAlertPayload fireTraceCostAlert(UUID projectId) {
+        var webhookPath = "/alert-webhook-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        wireMock.server().stubFor(post(urlEqualTo(webhookPath)).willReturn(aResponse().withStatus(200)));
+        // The webhook sender names the workspace in the payload.
+        wireMock.server().stubFor(get(urlPathEqualTo("/workspaces/workspace-name"))
+                .withQueryParam("id", equalTo(WORKSPACE_ID))
+                .willReturn(aResponse().withStatus(200).withBody(WORKSPACE_NAME)));
+        var alert = Alert.builder()
+                .name("cost-" + RandomStringUtils.secure().nextAlphanumeric(12))
+                .enabled(true)
+                .alertType(AlertType.GENERAL)
+                .projectId(projectId)
+                .webhook(Webhook.builder()
+                        .url("http://localhost:%d%s".formatted(wireMock.server().port(), webhookPath))
+                        .secretToken(UUID.randomUUID().toString())
+                        .build())
+                .triggers(List.of(AlertTrigger.builder()
+                        .eventType(AlertEventType.TRACE_COST)
+                        .triggerConfigs(List.of(AlertTriggerConfig.builder()
+                                .type(AlertTriggerConfigType.THRESHOLD_COST)
+                                .configValue(Map.of(
+                                        AlertTriggerConfig.THRESHOLD_CONFIG_KEY, "0",
+                                        AlertTriggerConfig.WINDOW_CONFIG_KEY, "3600"))
+                                .build()))
+                        .build()))
+                .build();
+        alertResourceClient.createAlert(alert, API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+
+        var body = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
+                .until(() -> wireMock.server().findAll(postRequestedFor(urlEqualTo(webhookPath))),
+                        requests -> !requests.isEmpty())
+                .getFirst().getBodyAsString();
+        @SuppressWarnings("unchecked")
+        WebhookEvent<Map<String, Object>> event = JsonUtils.readValue(body, WebhookEvent.class);
+        var metadata = (List<?>) event.getPayload().get("metadata");
+        return JsonUtils.readValue(JsonUtils.writeValueAsString(metadata.getFirst()), MetricsAlertPayload.class);
     }
 
     /** A trace at {@code now} with one span beside it and one a bad clock files under a far-future week. */
