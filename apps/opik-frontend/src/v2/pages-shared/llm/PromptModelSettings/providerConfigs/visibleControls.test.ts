@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { hasVisibleControls } from "./visibleControls";
+import {
+  createSupports,
+  getOpenAIVisibleControls,
+  hasVisibleControls,
+} from "./visibleControls";
 import {
   OPTIMIZATION_UNSUPPORTED_PARAMS,
   RULE_UNSUPPORTED_PARAMS,
 } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import {
+  LLMOpenAIConfigsType,
+  OpenAiPipelineMode,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 
 const ANTHROPIC_CONFIG = {
   temperature: 0.4,
@@ -17,7 +26,18 @@ const ANTHROPIC_CONFIG = {
 const RULE_CONFIG = { temperature: 0.4 };
 
 describe("hasVisibleControls", () => {
-  it("is false for a Claude model without sampling params on a rule", () => {
+  it("is false on a rule for a newly synced Claude with no capability row", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        "claude-opus-9" as PROVIDER_MODEL_TYPE,
+        ANTHROPIC_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it("is true for a Claude model without sampling params on a rule, which keeps its effort", () => {
     expect(
       hasVisibleControls(
         PROVIDER_TYPE.ANTHROPIC,
@@ -25,7 +45,7 @@ describe("hasVisibleControls", () => {
         ANTHROPIC_CONFIG,
         RULE_UNSUPPORTED_PARAMS,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("is true for the same Claude model on the playground", () => {
@@ -59,6 +79,24 @@ describe("hasVisibleControls", () => {
       ),
     ).toBe(true);
   });
+
+  it.each([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH],
+  ])(
+    "is false for %s on a rule whose config carries only max output tokens",
+    (provider, model) => {
+      expect(
+        hasVisibleControls(
+          provider,
+          model,
+          { maxCompletionTokens: 4000 },
+          RULE_UNSUPPORTED_PARAMS,
+        ),
+      ).toBe(false);
+    },
+  );
 
   it("is false for a Gemini 3 model without a thinking row on a rule", () => {
     expect(
@@ -125,11 +163,81 @@ describe("hasVisibleControls", () => {
     ).toBe(true);
   });
 
-  it.each([
-    PROVIDER_TYPE.OPIK_FREE,
-    PROVIDER_TYPE.OLLAMA,
-    PROVIDER_TYPE.BEDROCK,
-  ])("is false for %s, which has no panel", (provider) => {
-    expect(hasVisibleControls(provider, "", {})).toBe(false);
+  it.each([PROVIDER_TYPE.OLLAMA, PROVIDER_TYPE.BEDROCK])(
+    "is true for %s, which shares the custom panel and its JSON editor",
+    (provider) => {
+      expect(hasVisibleControls(provider, "", {})).toBe(true);
+      expect(
+        hasVisibleControls(provider, "", RULE_CONFIG, RULE_UNSUPPORTED_PARAMS),
+      ).toBe(true);
+      expect(
+        hasVisibleControls(provider, "", {}, OPTIMIZATION_UNSUPPORTED_PARAMS),
+      ).toBe(true);
+    },
+  );
+
+  it("is false for the Opik free model, which has no panel", () => {
+    expect(hasVisibleControls(PROVIDER_TYPE.OPIK_FREE, "", {})).toBe(false);
+  });
+});
+
+describe("the OpenAI penalty sliders", () => {
+  const OPENAI_CONFIG: LLMOpenAIConfigsType = {
+    temperature: 0.4,
+    maxCompletionTokens: 4000,
+    topP: 1,
+    frequencyPenalty: 0.5,
+    presencePenalty: 0.3,
+  };
+
+  const penalties = (mode?: OpenAiPipelineMode) => {
+    const { frequencyPenalty, presencePenalty } = getOpenAIVisibleControls({
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      configs: OPENAI_CONFIG,
+      supports: createSupports(),
+      openAiPipelineMode: mode,
+    });
+    return { frequencyPenalty, presencePenalty };
+  };
+
+  it("are hidden on a Responses API key", () => {
+    expect(penalties("responses_api")).toEqual({
+      frequencyPenalty: false,
+      presencePenalty: false,
+    });
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "are shown when the mode is %s",
+    (mode) => {
+      expect(penalties(mode)).toEqual({
+        frequencyPenalty: true,
+        presencePenalty: true,
+      });
+    },
+  );
+
+  // Throttling is hidden so that the only controls left are the ones the config carries.
+  const anyVisible = (
+    configs: Partial<LLMOpenAIConfigsType>,
+    mode?: OpenAiPipelineMode,
+  ) =>
+    hasVisibleControls(
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_MODEL_TYPE.GPT_4O,
+      configs,
+      OPTIMIZATION_UNSUPPORTED_PARAMS,
+      mode,
+    );
+
+  it("leave the other controls visible on a Responses API key", () => {
+    expect(anyVisible(OPENAI_CONFIG, "responses_api")).toBe(true);
+  });
+
+  it("leave nothing to show when the config holds only penalties on a Responses API key", () => {
+    const onlyPenalties = { frequencyPenalty: 0.5, presencePenalty: 0.3 };
+
+    expect(anyVisible(onlyPenalties, "responses_api")).toBe(false);
+    expect(anyVisible(onlyPenalties, "chat_completions_api")).toBe(true);
   });
 });

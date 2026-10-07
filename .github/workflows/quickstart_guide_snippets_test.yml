@@ -1,5 +1,10 @@
 name: Quickstart Guide Snippets Tests
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False
   ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}

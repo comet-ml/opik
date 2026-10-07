@@ -146,22 +146,55 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
 
 describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
   it.each([
-    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
-    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
-  ])("seeds no thinkingEffort for %s while the backend drops it", (model) => {
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
+  ])("seeds %s with Anthropic's default effort, %s", (model, effort) => {
     const config = getDefaultConfigByProvider(
       PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
       model,
+    );
+
+    expect(config).toMatchObject({ thinkingEffort: effort });
+  });
+
+  it("seeds no thinkingEffort for a model that takes none", () => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
     );
 
     expect(config).not.toHaveProperty("thinkingEffort");
   });
 });
 
+describe("getDefaultConfigByProvider — Ollama and Bedrock", () => {
+  const CUSTOM_DEFAULTS = {
+    temperature: 0,
+    maxCompletionTokens: 4000,
+    topP: 1,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    custom_parameters: null,
+    throttling: 0,
+    maxConcurrentRequests: 5,
+  };
+
+  it.each([
+    [`${PROVIDER_TYPE.OLLAMA}:local`, "custom-llm/local/llama3.2"],
+    [`${PROVIDER_TYPE.BEDROCK}:aws`, "custom-llm/aws/openai.gpt-oss-120b-1:0"],
+    [PROVIDER_TYPE.CUSTOM, "custom-llm/gw/mistral-large-2411"],
+  ])("seeds %s with the custom provider's defaults", (provider, model) => {
+    expect(
+      getDefaultConfigByProvider(provider, model as PROVIDER_MODEL_TYPE),
+    ).toEqual(CUSTOM_DEFAULTS);
+  });
+});
+
 describe("restoreMissingConfigKeys", () => {
   const prompt = (
-    provider: PROVIDER_TYPE,
+    provider: PROVIDER_TYPE | COMPOSED_PROVIDER_TYPE,
     model: PROVIDER_MODEL_TYPE,
     configs: Record<string, unknown>,
   ) =>
@@ -228,6 +261,38 @@ describe("restoreMissingConfigKeys", () => {
     );
 
     expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
+    expect(restored.configs).not.toHaveProperty("temperature");
+    expect(restored.configs).not.toHaveProperty("topP");
+  });
+
+  it("fills the custom defaults into an Ollama prompt stored before it had a panel", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(
+        `${PROVIDER_TYPE.OLLAMA}:local`,
+        "custom-llm/local/llama3.2" as PROVIDER_MODEL_TYPE,
+        {},
+      ),
+    );
+
+    expect(restored.configs).toMatchObject({
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    });
+  });
+
+  it("leaves the sampling pair unset for a Claude on Bedrock stored without a config", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(
+        `${PROVIDER_TYPE.BEDROCK}:aws`,
+        "custom-llm/aws/us.anthropic.claude-sonnet-4-5-20250929-v1:0" as PROVIDER_MODEL_TYPE,
+        {},
+      ),
+    );
+
+    expect(restored.configs).toMatchObject({ maxCompletionTokens: 4000 });
     expect(restored.configs).not.toHaveProperty("temperature");
     expect(restored.configs).not.toHaveProperty("topP");
   });

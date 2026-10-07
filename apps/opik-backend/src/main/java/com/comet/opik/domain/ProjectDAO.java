@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectIdLastUpdated;
+import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import lombok.NonNull;
@@ -54,6 +55,10 @@ interface ProjectDAO {
 
     @SqlQuery("SELECT * FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId ORDER BY id")
     List<Project> findByIds(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("SELECT workspace_id, id AS project_id, name FROM projects WHERE id IN (<ids>)")
+    @RegisterConstructorMapper(WorkspaceProjectName.class)
+    List<WorkspaceProjectName> findNamesByIds(@BindList("ids") Collection<UUID> ids);
 
     @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId")
     Set<UUID> findIdsByWorkspaceId(@Bind("workspaceId") String workspaceId);
@@ -118,4 +123,20 @@ interface ProjectDAO {
     @AllowUnusedBindings
     List<Project> findByGlobalNames(@NonNull @BindList("names") List<String> names,
             @Define("workspace_ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "workspace_ids") Set<String> workspaceIds);
+
+    @SqlQuery("""
+            SELECT workspace_id, id AS project_id, name FROM projects
+            WHERE workspace_id IN (<workspace_ids>)
+            <if(project_ids)> AND id IN (<project_ids>) <endif>
+            <if(name)> AND name LIKE concat('%', :name, '%') ESCAPE '!' <endif>
+            ORDER BY name, workspace_id, id
+            LIMIT :limit
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    @RegisterConstructorMapper(WorkspaceProjectName.class)
+    List<WorkspaceProjectName> findAcrossWorkspaces(@NonNull @BindList("workspace_ids") Collection<String> workspaceIds,
+            @Define("project_ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "project_ids") Collection<UUID> projectIds,
+            @Define("name") @Bind("name") String name,
+            @Bind("limit") int limit);
 }

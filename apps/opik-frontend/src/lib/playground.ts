@@ -9,6 +9,7 @@ import {
   DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
 import {
+  getDefaultThinkingEffort,
   getDefaultThinkingLevel,
   isClaudeModel,
   supportsAnthropicThinkingEffort,
@@ -43,7 +44,10 @@ import {
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
-import { parseComposedProviderType } from "@/lib/provider";
+import {
+  isOpenAICompatibleProvider,
+  parseComposedProviderType,
+} from "@/lib/provider";
 
 /**
  * Fills in config parameters a stored prompt has no value for, from the provider defaults.
@@ -148,7 +152,7 @@ export const getDefaultConfigByProvider = (
     };
 
     if (supportsAnthropicThinkingEffort(model)) {
-      config.thinkingEffort = "high";
+      config.thinkingEffort = getDefaultThinkingEffort(model);
     }
 
     return config;
@@ -203,7 +207,7 @@ export const getDefaultConfigByProvider = (
     return config;
   }
 
-  if (providerType === PROVIDER_TYPE.CUSTOM) {
+  if (isOpenAICompatibleProvider(providerType)) {
     return {
       temperature: DEFAULT_CUSTOM_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS,
