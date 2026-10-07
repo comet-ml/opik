@@ -102,6 +102,14 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    <if(traces_partitioned && search_text)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        FROM traces
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id
+                        <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                    <endif>
                 )
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
@@ -122,6 +130,12 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND thread_id \\<> ''
                           <if(filters)> AND <filters> <endif>
                           <if(search_text)> AND <search_text> <endif>
+                          <if(traces_partitioned && search_text)>
+                          AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                              SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              FROM traces
+                              WHERE workspace_id = :workspace_id AND project_id = :project_id)
+                          <endif>
                         ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     )
@@ -177,7 +191,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           <if(search_text)> AND <search_text> <endif>
                       <else>
                           <if(traces_final_ids)>
-                              AND id IN (SELECT id FROM traces_final_ids)
+                              AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                               <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                                   >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                               <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -210,7 +224,7 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND trace_id IN (SELECT id FROM traces_final)
                   <else>
                       <if(traces_final_ids)>
-                          AND trace_id IN (SELECT id FROM traces_final_ids)
+                          AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                       <else>
                           <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -538,6 +552,14 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    <if(traces_partitioned && search_text)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        FROM traces
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id
+                        <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                    <endif>
                 )
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
@@ -563,7 +585,7 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND project_id = :project_id
                       AND thread_id \\<> ''
                       <if(traces_final_ids)>
-                          AND id IN (SELECT id FROM traces_final_ids)
+                          AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                           <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                               >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                           <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -802,10 +824,28 @@ class ThreadDAOImpl implements ThreadDAO {
      *  - The last updated time of the thread, which is the last_updated_at of the last trace in the list.
      *  - The creator of the thread, which is the created_by of the first trace in the list.
      *  - The creation time of the thread, which is the created_at of the first trace in the list.
+     * <p>
+     * Two phases, so input/output are read for two traces instead of all of them (OPIK-8678): traces_final keeps
+     * narrow columns only, the {@code thread_aggs} scalar aggregates them once and names the first and last trace,
+     * and {@code messages} reads the payloads of just those ids, with the same latest-version dedup.
+     * <p>
+     * The first trace is the earliest start_time and the last the latest end_time, skipping NULL / epoch end_time,
+     * as the former {@code argMin(input, start_time)} / {@code argMax(output, nullIf(end_time, epoch))} chose them.
+     * Ties are broken explicitly, by the largest id: that is what those first-seen argMin/argMax returned over
+     * traces_final, which is sorted by id DESC. first_trace_id maximises (-start_time, id), negated as Decimal128(9)
+     * so the legacy DateTime64(9) layout keeps nanosecond order. With no ended trace, last_trace_id is NULL and so is
+     * the last message, as the former argMax over an all-NULL key returned. A scalar rather than a CTE keeps the aggregate to a single
+     * evaluation: a CTE is inlined at every reference, and each extra pass costs a round trip to the shards.
+     * <p>
+     * traces_ids matches any version carrying the thread_id, so a trace whose latest version moved to another
+     * thread lands in traces_final under that other thread_id. Only the requested thread is aggregated: the moved
+     * trace is not part of it, and an extra group would otherwise be a second row in arbitrary order, of which
+     * findById keeps the first.
      ***/
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
-    private static final String SELECT_TRACES_THREAD_BY_ID = """
+    @VisibleForTesting
+    static final String SELECT_TRACES_THREAD_BY_ID = """
             WITH traces_ids AS (
                 SELECT
                     id
@@ -815,12 +855,17 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND thread_id = :thread_id
             ), traces_final AS (
                 SELECT
-                    *,
-                    truncated_input,
-                    truncated_output,
-                    input_length,
-                    output_length,
-                    truncation_threshold
+                    id,
+                    workspace_id,
+                    project_id,
+                    thread_id,
+                    start_time,
+                    end_time,
+                    last_updated_at,
+                    last_updated_by,
+                    created_by,
+                    created_at,
+                    environment
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -848,6 +893,53 @@ class ThreadDAOImpl implements ThreadDAO {
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans_deduped
                 GROUP BY trace_id
+            ), (
+                SELECT groupArray(tuple(thread_id, workspace_id, project_id, start_time, end_time, duration,
+                    first_trace_id, last_trace_id, number_of_messages, total_estimated_cost, usage, last_updated_at,
+                    last_updated_by, created_by, created_at, environment))
+                FROM (
+                    SELECT
+                        t.thread_id as thread_id,
+                        t.workspace_id as workspace_id,
+                        t.project_id as project_id,
+                        min(t.start_time) as start_time,
+                        max(t.end_time) as end_time,
+                        if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
+                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                           NULL) AS duration,
+                        argMax(t.id, (-CAST(t.start_time AS Decimal128(9)), t.id)) as first_trace_id,
+                        argMaxIf(toNullable(t.id), (t.end_time, t.id), t.end_time IS NOT NULL AND t.end_time != toDateTime64('1970-01-01 00:00:00.000', 9)) as last_trace_id,
+                        count(DISTINCT t.id) * 2 as number_of_messages,
+                        sum(s.total_estimated_cost) as total_estimated_cost,
+                        sumMap(s.usage) as usage,
+                        max(t.last_updated_at) as last_updated_at,
+                        argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
+                        argMin(t.created_by, t.created_at) as created_by,
+                        min(t.created_at) as created_at,
+                        argMin(t.environment, t.start_time) as environment
+                    FROM traces_final AS t
+                    LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+                    WHERE t.thread_id = :thread_id
+                    GROUP BY t.workspace_id, t.project_id, t.thread_id
+                )
+            ) AS thread_aggs, messages AS (
+                SELECT
+                    mapFromArrays(
+                        groupArray(id),
+                        groupArray(<if(truncate)>tuple(truncated_input, truncated_output, input_length, output_length, truncation_threshold)<else>tuple(input, output)<endif>)
+                    ) AS by_id
+                FROM (
+                    SELECT
+                        id,
+                        <if(truncate)>truncated_input, truncated_output, input_length, output_length, truncation_threshold<else>input, output<endif>
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND has(arrayConcat(arrayMap(a -> a.7, thread_aggs), arrayMap(a -> a.8, thread_aggs)), id)
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
             ), trace_threads_ids AS (
                 SELECT
                     id as thread_model_id
@@ -1025,10 +1117,10 @@ class ThreadDAOImpl implements ThreadDAO {
                 t.start_time as start_time,
                 t.end_time as end_time,
                 t.duration as duration,
-                <if(truncate)> t.truncated_first_message as first_message <else> t.first_message as first_message<endif>,
-                <if(truncate)> t.truncated_last_message as last_message <else> t.last_message as last_message<endif>,
-                <if(truncate)> t.first_message_length >= t.first_message_truncation_threshold as first_message_truncated <else> false as first_message_truncated <endif>,
-                <if(truncate)> t.last_message_length >= t.last_message_truncation_threshold as last_message_truncated <else> false as last_message_truncated <endif>,
+                tupleElement(m.by_id[t.first_trace_id], 1) as first_message,
+                if(t.last_trace_id IS NULL, NULL, tupleElement(m.by_id[assumeNotNull(t.last_trace_id)], 2)) as last_message,
+                <if(truncate)> tupleElement(m.by_id[t.first_trace_id], 3) >= tupleElement(m.by_id[t.first_trace_id], 5) as first_message_truncated <else> false as first_message_truncated <endif>,
+                <if(truncate)> if(t.last_trace_id IS NULL, NULL, tupleElement(m.by_id[assumeNotNull(t.last_trace_id)], 4) >= tupleElement(m.by_id[assumeNotNull(t.last_trace_id)], 5)) as last_message_truncated <else> false as last_message_truncated <endif>,
                 t.number_of_messages as number_of_messages,
                 t.total_estimated_cost as total_estimated_cost,
                 t.usage as usage,
@@ -1046,35 +1138,13 @@ class ThreadDAOImpl implements ThreadDAO {
                 ttaq.annotation_queues AS annotation_queues
             FROM (
                 SELECT
-                    t.thread_id as thread_id,
-                    t.workspace_id as workspace_id,
-                    t.project_id as project_id,
-                    min(t.start_time) as start_time,
-                    max(t.end_time) as end_time,
-                    if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
-                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                       NULL) AS duration,
-                    argMin(t.input, t.start_time) as first_message,
-                    argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
-                    argMin(t.truncated_input, t.start_time) as truncated_first_message,
-                    argMax(t.truncated_output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as truncated_last_message,
-                    argMin(t.input_length, t.start_time) as first_message_length,
-                    argMax(t.output_length, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message_length,
-                    argMin(t.truncation_threshold, t.start_time) as first_message_truncation_threshold,
-                    argMax(t.truncation_threshold, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message_truncation_threshold,
-                    count(DISTINCT t.id) * 2 as number_of_messages,
-                    sum(s.total_estimated_cost) as total_estimated_cost,
-                    sumMap(s.usage) as usage,
-                    max(t.last_updated_at) as last_updated_at,
-                    argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
-                    argMin(t.created_by, t.created_at) as created_by,
-                    min(t.created_at) as created_at,
-                    argMin(t.environment, t.start_time) as environment
-                FROM traces_final AS t
-                LEFT JOIN spans_agg AS s ON t.id = s.trace_id
-                GROUP BY t.workspace_id, t.project_id, t.thread_id
+                    a.1 AS thread_id, a.2 AS workspace_id, a.3 AS project_id, a.4 AS start_time, a.5 AS end_time,
+                    a.6 AS duration, a.7 AS first_trace_id, a.8 AS last_trace_id, a.9 AS number_of_messages,
+                    a.10 AS total_estimated_cost, a.11 AS usage, a.12 AS last_updated_at, a.13 AS last_updated_by,
+                    a.14 AS created_by, a.15 AS created_at, a.16 AS environment
+                FROM (SELECT arrayJoin(thread_aggs) AS a)
             ) AS t
+            CROSS JOIN messages AS m
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
@@ -1134,6 +1204,14 @@ class ThreadDAOImpl implements ThreadDAO {
                         <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                             \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                         <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                        <if(traces_partitioned && search_text)>
+                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                            SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            FROM traces
+                            WHERE workspace_id = :workspace_id AND project_id = :project_id
+                            <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                            <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                        <endif>
                     )
                     WHERE 1 = 1
                     <if(filters)> AND <filters> <endif>
@@ -1159,7 +1237,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND project_id = :project_id
                           AND thread_id \\<> ''
                           <if(traces_final_ids)>
-                              AND id IN (SELECT id FROM traces_final_ids)
+                              AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                               <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                                   >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                               <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1188,7 +1266,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       <if(traces_final_ids)>
-                          AND trace_id IN (SELECT id FROM traces_final_ids)
+                          AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                       <else>
                           <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1511,6 +1589,7 @@ class ThreadDAOImpl implements ThreadDAO {
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
                             addExcludeFlags(template, criteria);
+                            addTracesPartitionedFlag(template);
 
                             template = template.add("offset", offset)
                                     .add("log_comment", getLogComment("find_threads_by_project", workspaceId, userName,
@@ -1561,6 +1640,12 @@ class ThreadDAOImpl implements ThreadDAO {
                                     .defaultIfEmpty(TraceThread.TraceThreadPage.empty(page,
                                             traceThreadSortingFactory.getSortableFields()));
                         })));
+    }
+
+    private void addTracesPartitionedFlag(ST template) {
+        if (traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
     }
 
     private boolean traceColumnsNonNullable() {
@@ -1664,6 +1749,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     THREAD_SEARCH_CLAUSE,
                     traceColumnsNonNullable());
             statsSQL.add("log_comment", getLogComment("thread_stats", workspaceId, userName, ""));
+            addTracesPartitionedFlag(statsSQL);
 
             if (shouldUseTracesFinalIdsPrefilter(criteria, statsSQL)) {
                 statsSQL.add("traces_final_ids", true);
@@ -1693,6 +1779,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 THREAD_SEARCH_CLAUSE,
                 traceColumnsNonNullable());
         template.add("log_comment", getLogComment("count_threads_by_project", workspaceId, userName, ""));
+        addTracesPartitionedFlag(template);
 
         if (shouldUseTracesFinalIdsPrefilter(traceSearchCriteria, template)) {
             template.add("traces_final_ids", true);

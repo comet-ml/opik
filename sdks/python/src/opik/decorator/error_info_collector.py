@@ -2,7 +2,7 @@ from opik.types import ErrorInfoDict
 import traceback
 
 
-def collect(exception: Exception) -> ErrorInfoDict:
+def collect(exception: BaseException) -> ErrorInfoDict:
     result: ErrorInfoDict = {
         "exception_type": type(exception).__name__,
         "traceback": "".join(

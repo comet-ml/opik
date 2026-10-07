@@ -350,7 +350,7 @@ All GEval-derived metrics expose the `model` parameter so you can switch the und
 ```python title="Python" language="python"
 from opik.evaluation.metrics import ComplianceRiskJudge
 
-metric = ComplianceRiskJudge(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
+metric = ComplianceRiskJudge(model="bedrock/us.anthropic.claude-sonnet-4-6")
 
 payload = """INPUT: What is the capital of France?
 OUTPUT: The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.
@@ -364,7 +364,7 @@ import { ComplianceRiskJudge } from "opik/evaluation/metrics";
 import { anthropic } from "@ai-sdk/anthropic";
 
 const metric = new ComplianceRiskJudge({ 
-  model: anthropic("claude-3-5-sonnet-latest") 
+  model: anthropic("claude-sonnet-4-6") 
 });
 
 const payload = `INPUT: What is the capital of France?

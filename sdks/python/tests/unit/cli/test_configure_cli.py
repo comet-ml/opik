@@ -1,6 +1,7 @@
 """Tests for the ``opik configure`` command group."""
 
 import pathlib
+from types import SimpleNamespace
 
 import click
 import pytest
@@ -66,13 +67,8 @@ def test_configure_no_subcommand__runs_configurator():
 
 
 class TestAssistantConfirmation:
-    """`opik configure` must ask before editing another tool's config.
-
-    Registering an MCP server writes into files owned by Claude Code, Cursor and
-    friends. Configuring Opik is not consent for that. The client picker is that
-    question — one question, the same one `opik mcp configure` asks — preceded by
-    a block saying what the step is and what it writes.
-    """
+    """`opik configure` asks before editing another tool's config; a terminal
+    "yes" redirects to `opik mcp configure`, flags and unattended runs stay inline."""
 
     @staticmethod
     def _run(
@@ -112,31 +108,27 @@ class TestAssistantConfirmation:
                 )[1],
             ),
         ):
-            outcome = configure_cli._setup_assistants(
+            outcome, redirected = configure_cli._setup_assistants(
                 {}, install_mcp, install_skills, auto
             )
-        return confirm, setup_calls, outcome
+        return confirm, setup_calls, outcome, redirected
 
-    def test_no_flags__asks_permission_then_reaches_the_installer(self):
-        """Registering into another tool's config is asked for, not inferred."""
-        confirm, setup_calls, _ = self._run(answer=True)
-
-        assert confirm.called
-        assert len(setup_calls) == 1
-        assert setup_calls[0]["install_mcp"] is True
-
-    def test_no_flags__permission_refused__does_not_register(self):
-        confirm, setup_calls, outcome = self._run(answer=False)
+    def test_no_flags__asks_permission_then_redirects_to_the_mcp_flow(self):
+        """One MCP setup flow, not two: the yes buys `opik mcp configure`."""
+        confirm, setup_calls, _, redirected = self._run(answer=True)
 
         assert confirm.called
-        assert setup_calls[0]["install_mcp"] is False
+        assert redirected is True
+        assert setup_calls == [], "the inline installer must not also run"
+
+    def test_no_flags__permission_refused__does_not_register_or_redirect(self):
+        """With no pack question left, a "no" to the server runs nothing."""
+        confirm, setup_calls, outcome, redirected = self._run(answer=False)
+
+        assert confirm.called
+        assert redirected is False
+        assert setup_calls == []
         assert outcome.mcp_decision == "declined"
-
-    def test_no_flags__picker_is_not_pre_confirmed(self):
-        """`assume_confirmed` would skip the picker, leaving nothing to answer."""
-        _, setup_calls, _ = self._run()
-
-        assert setup_calls[0]["assume_confirmed"] is False
 
     def test_skipping_the_picker__is_not_reported_as_declining_permission(self):
         """The two are different answers and the funnel needs both.
@@ -145,34 +137,40 @@ class TestAssistantConfirmation:
         never having accepted, which hid the one drop the funnel exists to
         show: said yes, then chose no client.
         """
-        _, _, outcome = self._run(answer=True, declined=True)
+        _, _, outcome, _ = self._run(answer=True, declined=True, install_mcp=True)
 
         assert outcome.mcp_decision == "requested", "they did give permission"
         assert outcome.clients == 0, "and still registered nothing"
         assert outcome.mcp_declined is True, "deliberately, not a failure"
 
-    def test_no_flags__still_offers_the_skill_pack(self):
-        """The pack is a separate question: it needs no MCP server."""
-        _, setup_calls, _ = self._run(declined=True)
+    def test_declining_the_server__skips_the_pack_too(self):
+        """Refusing the server refuses the pack, which also writes into AI
+        clients; `--install-skills` still overrides."""
+        _, setup_calls, outcome, _ = self._run(answer=False, install_skills=None)
 
-        assert setup_calls[0]["skills"].decision is configure_cli.consent.Decision.ASK
+        assert setup_calls == []
+        assert outcome.skills_decision == "declined"
 
     def test_install_mcp_flag__is_the_consent__skips_the_picker(self):
-        _, setup_calls, _ = self._run(install_mcp=True)
+        """A script's flag registers inline rather than ending inside an agent."""
+        _, setup_calls, _, redirected = self._run(install_mcp=True)
 
+        assert redirected is False
         assert setup_calls[0]["assume_confirmed"] is True
 
     def test_no_terminal__does_not_prompt(self):
-        confirm, setup_calls, _ = self._run(interactive=False)
+        confirm, setup_calls, _, redirected = self._run(interactive=False)
 
         assert not confirm.called
         assert setup_calls == []
+        assert redirected is False
 
     def test_no_host_detected__nothing_worth_asking(self):
-        confirm, setup_calls, _ = self._run(detected=())
+        confirm, setup_calls, _, redirected = self._run(detected=())
 
         assert not confirm.called
         assert setup_calls == []
+        assert redirected is False
 
     def test_intro_does_not_list_the_clients(self, capsys):
         """The picker directly below is that list; twice pushed the question off."""
@@ -287,6 +285,37 @@ class TestCodingAgentFlow:
             configure_cli._setup_assistants({}, None, None, False)
 
         assert calls == []
+
+    def test_install_mcp_without_a_terminal__ends_on_each_clients_next_step(self):
+        """Run by an agent: the ending names Claude Code's sign-in command."""
+        with (
+            mock.patch.object(
+                configure_cli.mcp_installer,
+                "detected_host_keys",
+                return_value=["claude-code"],
+            ),
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=False
+            ),
+            mock.patch.object(
+                configure_cli.assistants,
+                "setup",
+                return_value=assistants.Outcome(
+                    clients=1,
+                    skills=False,
+                    next_steps=(
+                        "Claude Code: sign in with `claude mcp login opik-mcp`.",
+                    ),
+                ),
+            ),
+            configure_cli.install_view.console.capture() as capture,
+        ):
+            configure_cli._setup_assistants({}, True, None, True)
+
+        out = " ".join(capture.get().split())
+        assert "claude mcp login opik-mcp" in out
+        assert "Start a new session" in out
+        assert "Restart your AI client" not in out
 
 
 def test_configure_no_terminal__assumes_the_defaults_instead_of_demanding_yes():
@@ -464,7 +493,7 @@ class TestAssistantOutcomeReachesTheCaller:
 
         with (
             mock.patch.object(
-                configure_cli, "_setup_assistants", return_value=installed
+                configure_cli, "_setup_assistants", return_value=(installed, False)
             ),
             mock.patch.object(configure_cli.opik_configure, "OpikConfigurator") as ctor,
         ):
@@ -529,7 +558,8 @@ class TestTheDecisionIsReported:
                 ),
             ),
         ):
-            return configure_cli._setup_assistants({}, install_mcp, None, auto)
+            outcome, _ = configure_cli._setup_assistants({}, install_mcp, None, auto)
+            return outcome
 
     def test_nothing_detected__is_not_a_refusal(self):
         outcome = self._reason(detected=0)
@@ -701,11 +731,90 @@ class TestBothDecisionsReachTheEvent:
         assert event["mcp_decision"] == "declined"
         assert event["skills_decision"] == "requested"
 
-    def test_declining_the_server__does_not_imply_declining_the_pack(self):
-        """They used to be coupled, so one Enter answered both."""
-        _, setup_calls, _ = TestAssistantConfirmation._run(declined=True)
+    def test_declining_the_server__reports_the_pack_as_declined_too(self):
+        """One decision, one reason — still distinct from a failed download."""
+        _, _, outcome, _ = TestAssistantConfirmation._run(answer=False)
 
-        assert setup_calls[0]["skills"].decision is configure_cli.consent.Decision.ASK
+        assert outcome.skills_decision == "declined"
+
+
+class TestTheRedirectIntoTheMcpFlow:
+    """A "yes" to MCP hands over to `opik mcp configure`, the one implementation."""
+
+    @staticmethod
+    def _run(redirect, outcome=None):
+        runner = CliRunner()
+
+        def flow(**kwargs):
+            kwargs["progress"].redirect_to_mcp = redirect
+            return outcome or assistants.Outcome(clients=1, skills=True)
+
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli, "run_interactive_configure", side_effect=flow
+            ),
+            mock.patch.object(
+                configure_cli.account_identity, "event_properties", return_value={}
+            ),
+            mock.patch.object(configure_cli.analytics, "track_event") as track,
+            mock.patch("opik.cli.mcp.run_configure") as run_configure,
+        ):
+            result = runner.invoke(cli, ["configure", "--use-local"])
+
+        assert result.exit_code == 0, result.output
+        return run_configure, track
+
+    def test_asked_for__runs_the_mcp_flow(self):
+        run_configure, _ = self._run(redirect=True)
+
+        assert run_configure.called
+
+    def test_not_asked_for__does_not(self):
+        run_configure, _ = self._run(redirect=False)
+
+        assert not run_configure.called
+
+    def test_the_result_event_is_reported_first(self):
+        """Reported before handing over: the MCP flow may replace this process."""
+        run_configure, track = self._run(redirect=True)
+
+        reported_before_redirect = track.call_args_list[-1].args[:3]
+        assert reported_before_redirect == ("configuration", "configure", "result")
+        assert run_configure.called
+
+    def test_redirect__result_event_says_the_mcp_step_was_handed_over(self):
+        """Otherwise a handover reads as `requested` with nothing written."""
+        _, track = self._run(redirect=True)
+
+        assert track.call_args_list[-1].kwargs["mcp_redirected"] is True
+
+    def test_no_redirect__result_event_says_so(self):
+        _, track = self._run(redirect=False)
+
+        assert track.call_args_list[-1].kwargs["mcp_redirected"] is False
+
+    def test_inline__result_event_carries_the_connection_signals(self):
+        """The same signals as `opik mcp configure`'s result, for inline runs."""
+        outcome = assistants.Outcome(
+            clients=1,
+            skills=True,
+            transport="remote",
+            sign_in="failed",
+            stale_tool="removed",
+        )
+
+        _, track = self._run(redirect=False, outcome=outcome)
+
+        event = track.call_args_list[-1].kwargs
+        assert (event["transport"], event["sign_in"], event["cancelled"]) == (
+            "remote",
+            "failed",
+            False,
+        )
+        assert event["stale_tool"] == "removed"
 
 
 class TestTheMcpQuestionIsRecommended:
@@ -721,7 +830,10 @@ class TestTheMcpQuestionIsRecommended:
             configure_cli._ask_about_mcp()
 
         out = capsys.readouterr().out
-        assert "Set up Opik MCP for your AI client?" in out
+        # A statement, not a question: `click.confirm` below asks the question,
+        # and this block used to ask it too.
+        assert "Opik MCP" in out
+        assert "?" not in out
         assert "(Recommended)" in out
 
     def test_permission_is_asked_with_a_real_label_and_defaults_to_yes(self):
@@ -754,7 +866,7 @@ class TestTheDeploymentQuestionTakesBothInputs:
                 selector, "_key_reader", return_value=lambda: next(pressed)
             ),
         ):
-            return configure_cli._ask_for_deployment_type()
+            return configure_cli.ask_for_deployment_type("Where?")
 
     def test_typing_the_number__picks_that_row(self):
         from opik.cli import selector
@@ -798,7 +910,7 @@ class TestTheDeploymentQuestionTakesBothInputs:
             mock.patch.object(selector, "is_supported", return_value=False),
             mock.patch("builtins.input", return_value="2") as typed,
         ):
-            result = configure_cli._ask_for_deployment_type()
+            result = configure_cli.ask_for_deployment_type("Where?")
 
         assert typed.called, "the plain prompt is what a pipe or CI log gets"
         assert result is configure_cli.interactive_helpers.DeploymentType.SELF_HOSTED
@@ -810,7 +922,7 @@ class TestTheDeploymentQuestionTakesBothInputs:
             mock.patch.object(selector, "is_supported", return_value=False),
             mock.patch("builtins.input", return_value=""),
         ):
-            result = configure_cli._ask_for_deployment_type()
+            result = configure_cli.ask_for_deployment_type("Where?")
 
         assert result is configure_cli.interactive_helpers.DeploymentType.CLOUD
 
@@ -1008,3 +1120,381 @@ class TestPickerSkippedSeparatesTheTwoRefusals:
         )
 
         assert event["picker_skipped"] is False
+
+
+class TestTheRedirectCarriesTheFlags:
+    """Flags survive the handover; a lost refusal would install the pack anyway."""
+
+    @staticmethod
+    def _redirected(*args):
+        from opik.cli import mcp as mcp_cli
+
+        def flow(**kwargs):
+            kwargs["progress"].redirect_to_mcp = True
+            return assistants.Outcome(clients=0, skills=False)
+
+        runner = CliRunner()
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli, "run_interactive_configure", side_effect=flow
+            ),
+            mock.patch.object(configure_cli.analytics, "track_event"),
+            mock.patch.object(mcp_cli, "run_configure") as run_configure,
+        ):
+            result = runner.invoke(cli, ["configure", "--use-local", *args])
+            assert result.exit_code == 0, result.output
+        return run_configure.call_args.kwargs
+
+    def test_a_refusal__reaches_the_mcp_flow(self):
+        assert self._redirected("--no-install-skills")["skills_flag"] is False
+
+    def test_a_request__reaches_it_too(self):
+        assert self._redirected("--install-skills")["skills_flag"] is True
+
+    def test_saying_nothing__stays_nothing(self):
+        """Which is what lets the MCP flow install the pack by default."""
+        assert self._redirected()["skills_flag"] is None
+
+
+class TestTheRedirectReportsTheWholeFlow:
+    """The redirect emits `opik mcp configure`'s events (`@entry_point`).
+
+    Nothing here mocks `run_configure`: suppression is decided by the real frame
+    chain.
+    """
+
+    @staticmethod
+    def _reported(direct=False):
+        from opik import environment_details
+        from opik.analytics import api as analytics_api, worker as analytics_worker
+        from opik.cli import mcp as mcp_cli
+        from opik.config import OpikConfig
+        from opik.configurator.mcp import install as mcp_install
+
+        recorded = []
+
+        class Recorder:
+            def enqueue(self, event):
+                # Like the real worker: run context at enqueue, session at send.
+                event = event._replace(
+                    properties={
+                        **environment_details.run_context(),
+                        **event.properties,
+                    }
+                )
+                recorded.append(
+                    (
+                        event.name,
+                        {**analytics_worker.session_properties(), **event.properties},
+                    )
+                )
+                return True
+
+        def flow(**kwargs):
+            kwargs["progress"].redirect_to_mcp = True
+            return assistants.Outcome(clients=0, skills=False)
+
+        runner = CliRunner()
+        with (
+            # Module-level and deliberately not reset per run, so a test that
+            # left it set would colour every test after it.
+            mock.patch.object(environment_details, "_RUN_CONTEXT", {}),
+            mock.patch.object(analytics_api, "_WORKER", Recorder()),
+            mock.patch.object(analytics_api, "_DISABLED", False),
+            mock.patch.object(analytics_api, "_ALREADY_REPORTED", set()),
+            mock.patch.object(analytics_api, "_REPORTING_CODE", set()),
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli, "run_interactive_configure", side_effect=flow
+            ),
+            mock.patch.object(
+                configure_cli.account_identity, "event_properties", return_value={}
+            ),
+            mock.patch.object(
+                mcp_cli.account_identity, "event_properties", return_value={}
+            ),
+            mock.patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            # Already configured by the time the redirect runs — which is the
+            # point of the redirect: `opik configure` has just written this.
+            mock.patch.object(
+                mcp_cli.opik_config,
+                "OpikConfig",
+                return_value=OpikConfig(
+                    url_override="https://www.comet.com/opik/api/",
+                    workspace="acme-ai",
+                    api_key="key",
+                ),
+            ),
+            mock.patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+            mock.patch.object(
+                mcp_cli.assistants.mcp_installer,
+                "setup_mcp_server",
+                return_value=mcp_install.InstallReport(registered=()),
+            ),
+            mock.patch.object(
+                mcp_cli.assistants.consent, "granted", return_value=False
+            ),
+        ):
+            if direct:
+                result = runner.invoke(cli, ["mcp", "configure"])
+            else:
+                result = runner.invoke(cli, ["configure", "--use-local"])
+
+        assert result.exit_code == 0, result.output
+        return recorded
+
+    def test_both_commands_report_their_own_pair(self):
+        assert [name for name, _ in self._reported()] == [
+            "opik_python_sdk__configuration__configure",
+            "opik_python_sdk__configuration__configure__result",
+            "opik_python_sdk__configuration__mcp_configure",
+            "opik_python_sdk__configuration__mcp_configure__result",
+        ]
+
+    def test_every_mcp_event_says_it_was_reached_through_configure(self):
+        """Carried by the run context, so a later event gets it without asking."""
+        reported = self._reported()
+
+        assert [
+            properties.get("invoked_via")
+            for name, properties in reported
+            if "mcp_configure" in name
+        ] == ["opik_configure", "opik_configure"]
+
+    def test_the_configure_events_predate_the_handover__so_they_do_not_claim_it(self):
+        reported = self._reported()
+
+        assert [
+            properties.get("invoked_via")
+            for name, properties in reported
+            if "mcp_configure" not in name
+        ] == [None, None]
+
+    def test_a_direct_run_says_so(self):
+        """The control, and the reason the funnel can separate the two."""
+        reported = self._reported(direct=True)
+
+        assert {properties.get("invoked_via") for _, properties in reported} == {
+            "direct"
+        }
+
+    def test_one_session_covers_the_whole_handover(self):
+        """Same process, so the four events are joinable without a correlation id."""
+        reported = self._reported()
+
+        assert len({properties["session_id"] for _, properties in reported}) == 1
+
+
+class TestTheProjectLink:
+    """The closing block links the project; a lookup only picks which link."""
+
+    @staticmethod
+    def _config(url_override="https://www.comet.com/opik/api/"):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            url_override=url_override,
+            workspace="acme-ai",
+            api_key="key",
+            check_tls_certificate=True,
+        )
+
+    @staticmethod
+    def _listing(monkeypatch, content):
+        monkeypatch.setattr(
+            configure_cli.opik_rest_helpers, "list_projects", lambda **kwargs: content
+        )
+
+    def test_an_existing_project__links_its_page(self, monkeypatch):
+        monkeypatch.setattr(configure_cli.opik_config, "OpikConfig", self._config)
+        self._listing(
+            monkeypatch,
+            content=[
+                {"name": "checkout-bot-v2", "id": "other"},
+                {"name": "checkout-bot", "id": "0190-abc"},
+            ],
+        )
+
+        assert configure_cli._project_url("checkout-bot") == (
+            "https://www.comet.com/opik/acme-ai/projects/0190-abc/",
+            True,
+        )
+
+    def test_no_such_project_yet__links_the_project_list(self, monkeypatch):
+        """The name filter is a partial match, so a near miss is not the project."""
+        monkeypatch.setattr(configure_cli.opik_config, "OpikConfig", self._config)
+        self._listing(monkeypatch, content=[{"name": "checkout-bot-v2", "id": "x"}])
+
+        assert configure_cli._project_url("checkout-bot") == (
+            "https://www.comet.com/opik/acme-ai/projects",
+            False,
+        )
+
+    def test_an_unreachable_backend__still_gives_a_link(self, monkeypatch):
+        monkeypatch.setattr(configure_cli.opik_config, "OpikConfig", self._config)
+        self._listing(monkeypatch, content=None)
+
+        assert configure_cli._project_url("checkout-bot") == (
+            "https://www.comet.com/opik/acme-ai/projects",
+            False,
+        )
+
+    def test_a_workspace_name_is_one_path_segment(self, monkeypatch):
+        """A `/`, `?` or `#` in it must not move the link somewhere else."""
+        monkeypatch.setattr(
+            configure_cli.opik_config,
+            "OpikConfig",
+            lambda: SimpleNamespace(**{**vars(self._config()), "workspace": "a/b?c"}),
+        )
+        self._listing(monkeypatch, content=[])
+
+        assert configure_cli._project_url("checkout-bot")[0] == (
+            "https://www.comet.com/opik/a%2Fb%3Fc/projects"
+        )
+
+    def test_a_local_opik__serves_the_ui_at_its_root(self, monkeypatch):
+        """Only the Comet platform puts the UI under `/opik/`."""
+        monkeypatch.setattr(
+            configure_cli.opik_config,
+            "OpikConfig",
+            lambda: self._config(url_override="http://localhost:5173/api/"),
+        )
+        self._listing(monkeypatch, content=[])
+
+        assert configure_cli._project_url("checkout-bot")[0] == (
+            "http://localhost:5173/acme-ai/projects"
+        )
+
+
+class TestAskForConnection:
+    """Which Opik `opik mcp configure` connects to: asked for the AI client, never
+    saved to ~/.opik.config, and not taken from it either."""
+
+    @pytest.fixture
+    def config_file(self, monkeypatch, tmp_path):
+        path = tmp_path / "opik.config"
+        path.write_text(
+            "[opik]\n"
+            "url_override = https://www.comet.com/opik/api/\n"
+            "api_key = saved-key\n"
+            "workspace = saved-ws\n"
+        )
+        monkeypatch.setenv("OPIK_CONFIG_PATH", str(path))
+        return path
+
+    def test_local__the_saved_file_is_left_as_it_was(self, config_file):
+        """It used to be overwritten with the local URL, after which every run
+        reused that URL without asking again."""
+        before = config_file.read_text()
+
+        with (
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+                return_value=True,
+            ),
+            mock.patch.object(configure_cli.install_view, "render_configure_hint"),
+            mock.patch("opik.config.update_session_config") as session_update,
+        ):
+            connection = configure_cli.ask_for_connection(
+                configure_cli.interactive_helpers.DeploymentType.LOCAL
+            )
+
+        assert config_file.read_text() == before
+        session_update.assert_not_called()
+        assert connection["use_local"] is True
+        assert connection["base_url"] == "http://localhost:5173/"
+        assert connection["api_key"] is None, "the saved key is not this Opik's"
+
+    def test_local_found_without_asking__says_which(self, config_file):
+        """Another local Opik on a different port would otherwise go unseen."""
+        with (
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+                return_value=True,
+            ),
+            mock.patch.object(
+                configure_cli.install_view, "render_configure_hint"
+            ) as hint,
+        ):
+            configure_cli.ask_for_connection(
+                configure_cli.interactive_helpers.DeploymentType.LOCAL
+            )
+
+        hint.assert_called_once_with("Using the local Opik at http://localhost:5173/")
+
+    def test_local_url_typed__is_not_repeated_back(self, config_file):
+        def active(url):
+            return url == "http://localhost:5174/"
+
+        with (
+            mock.patch("opik.configurator.configure.is_interactive", return_value=True),
+            mock.patch("builtins.input", return_value="http://localhost:5174"),
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+                side_effect=active,
+            ),
+            mock.patch.object(
+                configure_cli.install_view, "render_configure_hint"
+            ) as hint,
+        ):
+            connection = configure_cli.ask_for_connection(
+                configure_cli.interactive_helpers.DeploymentType.LOCAL
+            )
+
+        assert connection["base_url"] == "http://localhost:5174/"
+        assert not any("localhost:5174" in call.args[0] for call in hint.call_args_list)
+
+    def test_self_hosted__asks_for_key_and_workspace__but_not_a_project(
+        self, config_file
+    ):
+        """The project is where this SDK logs, not part of which Opik to reach."""
+        before = config_file.read_text()
+        questions = []
+
+        def approve(question):
+            questions.append(question)
+            return True
+
+        with (
+            mock.patch("opik.configurator.configure.is_interactive", return_value=True),
+            mock.patch("builtins.input", return_value="https://opik.acme.com"),
+            mock.patch(
+                "opik.configurator.configure.getpass.getpass", return_value="answer-key"
+            ),
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+                return_value=True,
+            ),
+            mock.patch(
+                "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
+                return_value=True,
+            ),
+            mock.patch.object(
+                configure_cli.opik_configure.OpikConfigurator,
+                "_get_default_workspace",
+                return_value="team-ws",
+            ),
+            mock.patch(
+                "opik.configurator.configure.ask_user_for_approval",
+                side_effect=approve,
+            ),
+            mock.patch("opik.config.update_session_config") as session_update,
+        ):
+            connection = configure_cli.ask_for_connection(
+                configure_cli.interactive_helpers.DeploymentType.SELF_HOSTED
+            )
+
+        assert config_file.read_text() == before
+        session_update.assert_not_called()
+        assert connection["api_key"] == "answer-key"
+        assert connection["workspace"] == "team-ws"
+        assert connection["self_hosted_comet"] is True
+        assert connection["base_url"] == "https://opik.acme.com/"
+        assert questions == ['Use the "team-ws" workspace?']

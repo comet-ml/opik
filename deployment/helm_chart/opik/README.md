@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.87](https://img.shields.io/badge/Version-2.2.87-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.87](https://img.shields.io/badge/AppVersion-2.2.87-informational?style=flat-square)
+![Version: 2.2.94](https://img.shields.io/badge/Version-2.2.94-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.94](https://img.shields.io/badge/AppVersion-2.2.94-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -141,7 +141,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.env.LOG_LEVEL | string | `"info"` |  |
 | clickhouse.backupServer.extraVolumeMounts | list | `[]` | Additional volume mounts for the `clickhouse-backup` container. The mount name can reference a CHI `volumeClaimTemplate` defined in `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume defined in `extraVolumes` above. |
 | clickhouse.backupServer.extraVolumes | list | `[]` | Additional volumes to add to the ClickHouse pod when the backup server is enabled. Use this for non-PVC volume types (emptyDir, configMap, secret, hostPath, etc.). For persistent storage, prefer using `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and reference its name directly in `extraVolumeMounts` below (the clickhouse operator matches volumeMount names to volumeClaimTemplate names automatically). Note that `clickhouse-backup` writes local backups to `/var/lib/clickhouse/backup/` by default (on the same filesystem as ClickHouse data to preserve hard links). Mounting a separate volume at that path will cause backups to use full copies instead of hard links. |
-| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.39"` |  |
+| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.7.4"` |  |
 | clickhouse.backupServer.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.backupServer.monitoring.annotations | object | `{}` |  |
 | clickhouse.backupServer.monitoring.enabled | bool | `false` |  |
@@ -161,12 +161,14 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.relabelings | list | `[]` |  |
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
+| clickhouse.backupServer.securityContext | object | `{"allowPrivilegeEscalation":false}` | securityContext of the clickhouse-backup sidecar; it inherits the pod's uid 101, so it needs the same explicit allowPrivilegeEscalation as `clickhouse.securityContext`. |
 | clickhouse.backupServer.service.name | string | `""` |  |
 | clickhouse.backupServer.service.port | string | `""` |  |
 | clickhouse.configuration.files."conf.d/memory.xml" | string | `"<yandex>\n  <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>\n</yandex>\n"` |  |
 | clickhouse.configuration.files."conf.d/merge_tree.xml" | string | `"<clickhouse>\n  <merge_tree>\n    <!-- 400 GiB; month-sized parts outgrow the 150 GiB default permanently. -->\n    <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>\n    <!-- 7 days quiet makes a part eligible for the force-merge that reclaims LWD mass. -->\n    <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>\n    <!-- Per-part: with 1, a partition still taking writes never becomes eligible. -->\n    <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>\n    <!-- Throttle concurrent big merges so they cannot starve the pool. -->\n    <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>\n  </merge_tree>\n</clickhouse>\n"` |  |
 | clickhouse.configuration.files."conf.d/profiles.xml" | string | `"<clickhouse>\n  <profiles>\n    <default>\n        <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>\n        <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>\n        <!-- CH 25.8 made the experimental Time type opt-in; required for fresh installs to replay migration 000030. -->\n        <enable_time_time64_type>1</enable_time_time64_type>\n        <!-- the new CH 25.x default (1) makes FINAL reads on skip-indexed tables over-read massively; our queries already prune on the PK/project_id, so exact mode isn't needed. -->\n        <use_skip_indexes_if_final_exact_mode>0</use_skip_indexes_if_final_exact_mode>\n    </default>\n  </profiles>\n</clickhouse>\n"` |  |
 | clickhouse.configuration.files."conf.d/system_tables.xml" | string | `"<clickhouse>\n  <opentelemetry_span_log remove=\"1\"/>\n  <asynchronous_metric_log remove=\"1\"/>\n  <processors_profile_log remove=\"1\"/>\n  <text_log remove=\"1\"/>\n  <trace_log remove=\"1\"/>\n  <blob_storage_log remove=\"1\"/>\n  <error_log>\n      <engine>\n          ENGINE MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>error_log</table>\n  </error_log>\n  <latency_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>latency_log</table>\n  </latency_log>\n  <metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>metric_log</table>\n  </metric_log>\n  <query_metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>query_metric_log</table>\n  </query_metric_log>\n</clickhouse>\n"` |  |
+| clickhouse.configuration.files."conf.d/timezone.xml" | string | `"<clickhouse>\n  <timezone>UTC</timezone>\n</clickhouse>\n"` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
@@ -212,6 +214,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.readinessProbe.periodSeconds | int | `10` |  |
 | clickhouse.readinessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.replicasCount | int | `1` |  |
+| clickhouse.securityContext | object | `{"allowPrivilegeEscalation":false}` | securityContext of the clickhouse container. The pod runs as uid 101, and policies against privilege escalation (e.g. Azure AKS Deployment Safeguards) refuse a non-root container unless allowPrivilegeEscalation is set false explicitly. |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.serviceAccount.create | bool | `false` |  |

@@ -15,7 +15,11 @@ import {
 import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
-import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  LLMPromptConfigsType,
+  OpenAiPipelineMode,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 
 const DATA_PREFIX = "data:";
@@ -54,6 +58,7 @@ interface GetCompletionProxyStreamParams {
   signal: AbortSignal;
   configs: LLMPromptConfigsType;
   workspaceName: string;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const isPythonProxyError = (
@@ -89,10 +94,12 @@ const getCompletionProxyStream = async ({
   signal,
   configs,
   workspaceName,
+  openAiPipelineMode,
 }: GetCompletionProxyStreamParams) => {
   const configsRecord = sanitizeConfigForRequest(
     model,
     configs as unknown as Record<string, unknown>,
+    openAiPipelineMode,
   );
 
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
@@ -119,6 +126,7 @@ export interface RunStreamingArgs {
   configs: LLMPromptConfigsType;
   onAddChunk: (accumulatedValue: string) => void;
   signal: AbortSignal;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 export interface RunStreamingReturn {
@@ -149,6 +157,7 @@ const useCompletionProxyStreaming = ({
       configs,
       onAddChunk,
       signal,
+      openAiPipelineMode,
     }: RunStreamingArgs): Promise<RunStreamingReturn> => {
       const startTime = getNowUtcTimeISOString();
 
@@ -172,6 +181,7 @@ const useCompletionProxyStreaming = ({
           configs,
           signal,
           workspaceName,
+          openAiPipelineMode,
         });
 
         // Extract resolved model and provider from headers

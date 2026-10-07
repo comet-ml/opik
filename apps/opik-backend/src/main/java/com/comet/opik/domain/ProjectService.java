@@ -6,6 +6,7 @@ import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -18,6 +19,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
+import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
 import jakarta.annotation.Nullable;
@@ -79,6 +81,9 @@ public interface ProjectService {
 
     List<Project> findByIds(String workspaceId, Set<UUID> ids);
 
+    List<WorkspaceProjectName> findAcrossWorkspaces(Set<String> workspaceIds, Set<UUID> projectIds, String name,
+            int limit);
+
     Mono<Set<UUID>> findProjectIdsByWorkspace();
 
     List<Project> findByNames(String workspaceId, List<String> names);
@@ -88,6 +93,8 @@ public interface ProjectService {
     Mono<Optional<UUID>> resolveProjectId(String projectName);
 
     Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
+
+    Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids);
 
     Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
@@ -115,8 +122,10 @@ public interface ProjectService {
     void validateProjectIdExists(UUID projectId, String workspaceId);
 
     static Map<String, Project> groupByName(List<Project> projects) {
+        // Keyed by the stripped name because callers look up with WorkspaceUtils.getProjectName, which strips, while
+        // MySQL's PAD SPACE collation still matches a stored name with trailing spaces.
         return projects.stream().collect(Collectors.toMap(
-                Project::name,
+                WorkspaceUtils::stripProjectName,
                 Function.identity(),
                 BinaryOperatorUtils.last(),
                 () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
@@ -141,6 +150,7 @@ class ProjectServiceImpl implements ProjectService {
             SortableFields.LAST_UPDATED_TRACE_AT, LAST_UPDATED_TRACE_AT_SORT);
 
     private static final int DEMO_PROJECT_WORKSPACE_CHUNK_SIZE = 1_000;
+    private static final int ID_LOOKUP_CHUNK_SIZE = 1_000;
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
@@ -405,6 +415,36 @@ class ProjectServiceImpl implements ProjectService {
         }
 
         return template.inTransaction(READ_ONLY, handle -> handle.attach(ProjectDAO.class).findByIds(ids, workspaceId));
+    }
+
+    @Override
+    public List<WorkspaceProjectName> findAcrossWorkspaces(@NonNull Set<String> workspaceIds, Set<UUID> projectIds,
+            String name, int limit) {
+        if (workspaceIds.isEmpty()) {
+            return List.of();
+        }
+        String escapedName = StringUtils.isBlank(name) ? null : escapeLike(name.strip());
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(ProjectDAO.class)
+                .findAcrossWorkspaces(workspaceIds, projectIds, escapedName, limit));
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
+
+    @Override
+    public Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids) {
+        if (CollectionUtils.isEmpty(ids)) {
+            return Mono.just(Map.of());
+        }
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+            var repository = handle.attach(ProjectDAO.class);
+            return Lists.partition(List.copyOf(ids), ID_LOOKUP_CHUNK_SIZE)
+                    .stream()
+                    .flatMap(chunk -> repository.findNamesByIds(chunk).stream())
+                    .collect(Collectors.toUnmodifiableMap(WorkspaceProjectName::projectId,
+                            WorkspaceProjectName::name));
+        })).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,6 +33,24 @@ export const LAUNCHER = "npx";
  * separable from a `uvx` one on the other side of the handoff.
  */
 export const LAUNCHER_ENV_VAR = "OPIK_CLI_LAUNCHER";
+
+/**
+ * Carries this run's `session_id` to the Python CLI (read in its
+ * `environment_details`), so both halves of the run report the same one.
+ */
+export const SESSION_ID_ENV_VAR = "OPIK_CLI_SESSION_ID";
+
+/** Nine ASCII letters, the same shape the Python SDK generates. */
+const SESSION_ID_LENGTH = 9;
+const SESSION_ID_ALPHABET =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+export function newSessionId(): string {
+  return Array.from(
+    randomBytes(SESSION_ID_LENGTH),
+    (byte) => SESSION_ID_ALPHABET[byte % SESSION_ID_ALPHABET.length],
+  ).join("");
+}
 
 declare const __OPIK_SDK_VERSION__: string;
 
@@ -152,11 +170,14 @@ export function createReporter(
   const url = env.OPIK_ANALYTICS_URL ?? ANALYTICS_URL_DEFAULT;
   const id = enabled ? userIdentifier(env) : "";
   const { command, flags } = summarizeArgs(args);
-  // Ties the three events of one run together, since they are separate requests.
-  const runId = randomUUID();
+  // Shared with the Python CLI, so its events join these.
+  const sessionId = newSessionId();
   const inFlight: Promise<void>[] = [];
 
   return {
+    /** Handed to the Python CLI so its events report the same run. */
+    sessionId,
+
     track(
       name: EventName,
       properties: Record<string, PropertyValue> = {},
@@ -168,7 +189,7 @@ export function createReporter(
         anonymous_id: id,
         event_type: eventName(name),
         event_properties: {
-          run_id: runId,
+          session_id: sessionId,
           launcher: LAUNCHER,
           sdk_version: SDK_VERSION,
           command,

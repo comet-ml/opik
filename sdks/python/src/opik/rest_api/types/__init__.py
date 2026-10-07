@@ -60,6 +60,8 @@ from .annotation_queue_items_public import AnnotationQueueItemsPublic
 from .annotation_queue_page_public import AnnotationQueuePagePublic
 from .annotation_queue_public import AnnotationQueuePublic
 from .annotation_queue_public_scope import AnnotationQueuePublicScope
+from .annotation_queue_reference import AnnotationQueueReference
+from .annotation_queue_reference_public import AnnotationQueueReferencePublic
 from .annotation_queue_reviewer import AnnotationQueueReviewer
 from .annotation_queue_reviewer_public import AnnotationQueueReviewerPublic
 from .annotation_queue_scope import AnnotationQueueScope
@@ -717,6 +719,7 @@ from .trace_write import TraceWrite
 from .trace_write_source import TraceWriteSource
 from .usage import Usage
 from .usage_by_workspace_project_user_response import UsageByWorkspaceProjectUserResponse
+from .usage_projects_response import UsageProjectsResponse
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
@@ -746,6 +749,7 @@ from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
 from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
+from .workspace_project_name import WorkspaceProjectName
 from .workspace_project_user_count import WorkspaceProjectUserCount
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
@@ -810,6 +814,8 @@ __all__ = [
     "AnnotationQueuePagePublic",
     "AnnotationQueuePublic",
     "AnnotationQueuePublicScope",
+    "AnnotationQueueReference",
+    "AnnotationQueueReferencePublic",
     "AnnotationQueueReviewer",
     "AnnotationQueueReviewerPublic",
     "AnnotationQueueScope",
@@ -1420,6 +1426,7 @@ __all__ = [
     "TraceWriteSource",
     "Usage",
     "UsageByWorkspaceProjectUserResponse",
+    "UsageProjectsResponse",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
@@ -1449,6 +1456,7 @@ __all__ = [
     "WorkspaceMetricsSummaryRequest",
     "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
+    "WorkspaceProjectName",
     "WorkspaceProjectUserCount",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",

@@ -1,0 +1,5 @@
+<clickhouse>
+    <!-- Mirrors conf.d/timezone.xml in the Helm chart's values.yaml, which explains it, and
+         deployment/docker-compose/clickhouse_config/additional_config.xml; keep the three in step. -->
+    <timezone>UTC</timezone>
+</clickhouse>

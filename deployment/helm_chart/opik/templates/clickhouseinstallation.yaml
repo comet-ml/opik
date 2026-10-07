@@ -159,6 +159,10 @@ spec:
             lifecycle:
               {{- toYaml . | nindent 14 }}
             {{- end }}
+            {{- with .Values.clickhouse.securityContext }}
+            securityContext:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
             {{- if or .Values.clickhouse.extraVolumeMounts .Values.clickhouse.tieredStorage.enabled }}
             volumeMounts:
               {{- with .Values.clickhouse.extraVolumeMounts }}
@@ -178,6 +182,10 @@ spec:
             {{- toYaml . | nindent 14 }}
             {{- end }}
             args: ["server"]
+            {{- with .Values.clickhouse.backupServer.securityContext }}
+            securityContext:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
             {{- with .Values.clickhouse.backupServer.env }}
             env:
             {{-   range $name, $value := . }}
