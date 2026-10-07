@@ -31,8 +31,8 @@ class FreeFormSqlQueryLogReader {
     private final FreeFormSqlQueryDAO dao;
     private final FreeFormSqlPostRunCheckConfig config;
 
-    // Explicit, not Lombok-generated: @Config on a field is not carried onto a generated constructor in the
-    // production build, and Guice then injects an empty FreeFormSqlPostRunCheckConfig.
+    // Explicit, not Lombok-generated: the Docker build stage compiles without lombok.config, so its
+    // copyableAnnotations don't carry @Config onto a generated constructor and Guice injects an empty config.
     @Inject
     FreeFormSqlQueryLogReader(@NonNull FreeFormSqlQueryDAO dao,
             @NonNull @Config("freeFormSqlPostRunCheck") FreeFormSqlPostRunCheckConfig config) {
