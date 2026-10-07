@@ -177,6 +177,9 @@ public class AgentInsightsJobService {
                 reportConfig.getAutoFirstRunMaxRetries());
     }
 
+    private record ReapOutcome(long earlierTimeouts, boolean retry) {
+    }
+
     @VisibleForTesting
     public void reapTimedOutAutoFirstRuns(@NonNull Duration runTimeout, int maxRetries) {
         List<EnabledJob> timedOut = transactionTemplate.inTransaction(READ_ONLY,
@@ -184,24 +187,28 @@ public class AgentInsightsJobService {
                         .findTimedOutAutoFirstRuns(runTimeout.toSeconds()));
         for (var job : timedOut) {
             try {
-                transactionTemplate.inTransaction(WRITE, handle -> {
+                ReapOutcome outcome = transactionTemplate.inTransaction(WRITE, handle -> {
                     var failures = handle.attach(ReportFailureDAO.class);
                     long earlier = failures.countByReason(job.workspaceId(), ReportFailureDAO.AGENT_INSIGHTS_TYPE,
                             job.projectId(), AgentInsightsJob.FailureReason.TIMED_OUT);
                     boolean retry = earlier < maxRetries;
                     if (handle.attach(AgentInsightsJobDAO.class).reapTimedOutAutoFirstRun(job.workspaceId(),
                             job.projectId(), runTimeout.toSeconds(), retry, RequestContext.SYSTEM_USER) == 0) {
-                        log.info("Skipping reap of automatic Agent Insights run for project '{}': it reported "
-                                + "back after being selected", job.projectId());
                         return null;
                     }
                     failures.insert(idGenerator.generateId(), job.workspaceId(),
                             ReportFailureDAO.AGENT_INSIGHTS_TYPE, job.projectId(),
                             AgentInsightsJob.FailureReason.TIMED_OUT, null, RequestContext.SYSTEM_USER);
-                    log.warn("Automatic Agent Insights run for project '{}' timed out (retries so far: {} of {}), {}",
-                            job.projectId(), earlier, maxRetries, retry ? "retrying" : "giving up");
-                    return null;
+                    return new ReapOutcome(earlier, retry);
                 });
+                if (outcome == null) {
+                    log.info("Skipping reap of automatic Agent Insights run for project '{}': it reported back after "
+                            + "being selected", job.projectId());
+                } else {
+                    log.warn("Automatic Agent Insights run for project '{}' timed out (retries so far: {} of {}), {}",
+                            job.projectId(), outcome.earlierTimeouts(), maxRetries,
+                            outcome.retry() ? "retrying" : "giving up");
+                }
             } catch (Exception e) {
                 // Per-project isolation: one failed reap must not skip the rest.
                 log.error("Failed to reap timed-out automatic Agent Insights run for project '{}'",
