@@ -4,6 +4,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.RecentActivity;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -45,9 +46,11 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -239,6 +242,31 @@ class RecentActivityResourceTest {
 
             assertThat(result.content()).noneMatch(
                     item -> experiment.name().equals(item.name()));
+        }
+
+        @Test
+        @DisplayName("Counts only SDK-logged traces in the daily trace count")
+        void countsOnlySdkLoggedTraces() {
+            var projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE_NAME);
+
+            // A trace sent without a source is stored as 'unknown', like the rows from before source tracking
+            var countedSources = Arrays.asList(Source.SDK, Source.SDK, null);
+            var skippedSources = List.of(Source.PLAYGROUND, Source.PLAYGROUND, Source.EXPERIMENT,
+                    Source.OPTIMIZATION, Source.EVALUATOR);
+            Stream.concat(countedSources.stream(), skippedSources.stream())
+                    .forEach(source -> traceResourceClient.createTrace(Trace.builder()
+                            .projectName(projectName)
+                            .startTime(Instant.now())
+                            .source(source)
+                            .build(), API_KEY, TEST_WORKSPACE_NAME));
+
+            var result = recentActivityResourceClient.getActivities(projectId, API_KEY, TEST_WORKSPACE_NAME);
+
+            assertThat(result.content())
+                    .filteredOn(item -> item.type() == RecentActivity.ActivityType.TRACE_DAILY)
+                    .extracting(RecentActivity.RecentActivityItem::name)
+                    .containsExactly(String.valueOf(countedSources.size()));
         }
     }
 
