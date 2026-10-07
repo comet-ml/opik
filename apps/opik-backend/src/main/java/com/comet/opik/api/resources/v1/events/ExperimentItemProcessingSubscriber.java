@@ -125,7 +125,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                                         log.info("Experiment '{}' complete, waiting for assertions to finish",
                                                 message.experimentId());
                                         // Stamped here, not with the assertions: a cancelled suite never
-                                        // reaches those, and would look for ever like a run still going.
+                                        // reaches those, and would look forever like a run still going.
                                         return stampFinished(message);
                                     }
                                     log.info("Experiment '{}' complete, finishing", message.experimentId());

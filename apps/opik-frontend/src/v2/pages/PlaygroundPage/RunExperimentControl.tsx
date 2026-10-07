@@ -18,6 +18,7 @@ import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectB
 import { useActiveProjectId } from "@/store/AppStore";
 import {
   useDatasetType,
+  useIsRunning,
   useScoresByDatasetId,
   useSelectedRuleIds,
   useResetDatasetFilters,
@@ -188,6 +189,8 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
     [selectedRuleIds, datasetId, setSelectedRuleIds, setScoresForDataset],
   );
 
+  const isRunning = useIsRunning();
+
   const handleClickX = useCallback(() => {
     if (isExperimentMode) {
       onLeaveExperimentMode();
@@ -212,6 +215,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
         onChange={handleDatasetChange}
         projectId={activeProjectId ?? undefined}
         datasetType={type}
+        disabled={isRunning}
         autoOpen={!isExperimentMode}
         onDismiss={() => !isExperimentMode && setPendingType(null)}
       />
@@ -228,13 +232,15 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
             open={metricsOpen}
             onOpenChange={setMetricsOpen}
             onRuleCreated={handleRuleCreated}
+            disabled={isRunning}
           />
         </>
       )}
       <Separator orientation="vertical" />
       <button
-        className="flex h-full items-center px-1 text-light-slate hover:text-primary-hover"
+        className="flex h-full items-center px-1 text-light-slate hover:text-primary-hover disabled:pointer-events-none disabled:opacity-50"
         onClick={handleClickX}
+        disabled={isRunning}
         aria-label="Clear selection"
       >
         <X className="size-3.5" />
