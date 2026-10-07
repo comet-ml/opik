@@ -18,6 +18,12 @@ export const codeMirrorPromptTheme = EditorView.theme({
   ".cm-line": {
     "padding-left": 0,
   },
+  // With no line padding, CodeMirror's default -0.6px cursor margin puts a
+  // column-0 cursor outside .cm-scroller, which clips it: an empty editor
+  // shows no cursor at all.
+  ".cm-cursor": {
+    marginLeft: 0,
+  },
   ".cm-scroller": {
     fontFamily: "inherit",
   },
