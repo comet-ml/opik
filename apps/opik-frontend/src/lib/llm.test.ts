@@ -143,23 +143,35 @@ describe("getNextMessageType", () => {
       generateDefaultLLMPromptMessage({ role: role as LLM_MESSAGE_ROLE }),
     );
 
-  it.each([LLM_MESSAGE_ROLE.user, LLM_MESSAGE_ROLE.assistant])(
-    "keeps the %s role for the next message",
-    (role) => {
-      expect(nextRoleAfter(role)).toBe(role);
-    },
-  );
-
-  it("adds an assistant message, not another ai message, after an ai message", () => {
-    expect(nextRoleAfter(LLM_MESSAGE_ROLE.ai)).toBe(LLM_MESSAGE_ROLE.assistant);
+  it("adds an assistant message after a user message", () => {
+    expect(nextRoleAfter(LLM_MESSAGE_ROLE.user)).toBe(
+      LLM_MESSAGE_ROLE.assistant,
+    );
   });
 
   it.each([
+    LLM_MESSAGE_ROLE.assistant,
+    LLM_MESSAGE_ROLE.ai,
     LLM_MESSAGE_ROLE.system,
     LLM_MESSAGE_ROLE.tool_execution_result,
     "tool",
     "developer",
   ])("adds a user message after a %s message", (role) => {
     expect(nextRoleAfter(role)).toBe(LLM_MESSAGE_ROLE.user);
+  });
+
+  it("alternates user and assistant as messages are added", () => {
+    const roles = [LLM_MESSAGE_ROLE.system];
+    for (let i = 0; i < 4; i++) {
+      roles.push(nextRoleAfter(roles[roles.length - 1]));
+    }
+
+    expect(roles).toEqual([
+      LLM_MESSAGE_ROLE.system,
+      LLM_MESSAGE_ROLE.user,
+      LLM_MESSAGE_ROLE.assistant,
+      LLM_MESSAGE_ROLE.user,
+      LLM_MESSAGE_ROLE.assistant,
+    ]);
   });
 });
