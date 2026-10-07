@@ -55,9 +55,10 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
      *
      * <p>Tier storage: {@code cold_bytes} is what sits on object-storage disks, and
      * {@code ttl_move_due_parts} counts parts whose move TTL has expired but which are still on a
-     * local disk (a backlog that should drain). Future-dated weekly partitions are excluded from the
-     * backlog: an {@code id_at} past 2106 wraps the 32-bit TTL time into the past, but ClickHouse
-     * never moves those parts, so counting them would report a backlog that cannot drain.
+     * local disk (a backlog that should drain). Only date-shaped partitions in the past count
+     * ({@code YYYYMMDD} or {@code YYYYMM}, the layouts move TTLs are set on): {@code system.parts}
+     * shows TTL times as 32-bit {@code DateTime}, so an {@code id_at} past 2106 looks long expired
+     * while ClickHouse, which keeps the full value, never moves it.
      */
     private static final String PARTITION_STATS_SQL = """
             WITH (SELECT groupArray(name) FROM system.disks WHERE type = 'ObjectStorage') AS object_storage_disks
@@ -72,7 +73,8 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                 toInt64(sumIf(bytes_on_disk, has(object_storage_disks, disk_name))) AS cold_bytes,
                 toInt64(countIf(NOT has(object_storage_disks, disk_name)
                     AND notEmpty(move_ttl_info.max) AND now() >= arrayMax(move_ttl_info.max)
-                    AND NOT (match(partition_id, '^[0-9]{8}$') AND partition_id > formatDateTime(now(), '%Y%m%d'))
+                    AND match(partition_id, '^[0-9]{6}([0-9]{2})?$')
+                    AND substring(formatDateTime(now(), '%Y%m%d'), 1, length(partition_id)) >= partition_id
                 )) AS ttl_move_due_parts
             FROM system.parts
             WHERE database = :database_name AND active
