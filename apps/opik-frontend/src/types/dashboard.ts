@@ -158,6 +158,9 @@ export interface OllieChartWidgetType {
       sql: string;
       projectId?: string | null;
     };
+    // What the query reads: "workspace" (experiments, datasets) sits on experiments dashboards, "project" (traces,
+    // spans, scores, threads) on multi-project ones. Ollie keeps to that; the backend does not check it yet.
+    scope?: "workspace" | "project";
     // Rows captured in chat, used when there is no query to re-run.
     rows?: Record<string, unknown>[];
     description?: string;
