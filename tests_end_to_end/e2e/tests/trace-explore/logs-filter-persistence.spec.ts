@@ -3,6 +3,8 @@ import { LogsPage } from '@e2e/pom/logs.page';
 import { ProjectDashboardsPage } from '@e2e/pom/project-dashboards.page';
 import { SidebarNav } from '@e2e/pom/sidebar.page';
 
+type NavLogWindow = Window & { __navLog?: string[] };
+
 /**
  * Logs filter chips are remembered per project for the browser tab and restored
  * whenever the Logs URL carries no filter param (OPIK-8704). The sidebar's
@@ -59,6 +61,21 @@ test.describe('Logs filter persistence', { tag: ['@t2-cuj', '@area:traces'] }, (
       const { all, sharedTag } = filterableTraces;
       const tagged = all.filter((t) => t.tags.includes(sharedTag));
 
+      // Records every SPA URL change so the test can prove a bare /logs
+      // navigation happened (the sidebar link is already active, so nothing
+      // else observable distinguishes the click from a no-op).
+      await page.addInitScript(() => {
+        const w = window as NavLogWindow;
+        w.__navLog = [];
+        for (const method of ['pushState', 'replaceState'] as const) {
+          const original = window.history[method].bind(window.history);
+          window.history[method] = (data, unused, url) => {
+            if (url != null) w.__navLog?.push(String(url));
+            original(data, unused, url);
+          };
+        }
+      });
+
       await test.step(`Open Traces and filter by tag "${sharedTag}"`, async () => {
         await logs.gotoTraces(project.id);
         await logs.waitForReady();
@@ -68,10 +85,25 @@ test.describe('Logs filter persistence', { tag: ['@t2-cuj', '@area:traces'] }, (
           fs.some((f) => f.field === 'tags' && f.value === sharedTag),
         );
         await expect(logs.traceRows).toHaveCount(tagged.length);
+        await page.evaluate(() => {
+          (window as NavLogWindow).__navLog = [];
+        });
       });
 
-      await test.step('Click Logs in the sidebar and verify the filter is still applied', async () => {
+      await test.step('Click Logs in the sidebar and verify a bare navigation happened', async () => {
         await sidebar.navigateTo('Logs');
+        await expect
+          .poll(() =>
+            page.evaluate(() =>
+              ((window as NavLogWindow).__navLog ?? []).some(
+                (url) => /\/logs(\?|$)/.test(url) && !url.includes('traces_filters'),
+              ),
+            ),
+          )
+          .toBe(true);
+      });
+
+      await test.step('Verify the filter came back', async () => {
         await logs.waitForUrlFilters('traces', (fs) =>
           fs.some((f) => f.field === 'tags' && f.value === sharedTag),
         );

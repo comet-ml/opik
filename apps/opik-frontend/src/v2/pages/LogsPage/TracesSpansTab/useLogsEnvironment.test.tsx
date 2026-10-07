@@ -36,7 +36,8 @@ const readRemembered = () => {
 };
 
 // The window adapter doesn't re-render on its own; rerender() stands in for the router.
-const setup = () => renderHook(() => useLogsEnvironment("p1"), { wrapper });
+const setup = (canRestore = true) =>
+  renderHook(() => useLogsEnvironment("p1", { canRestore }), { wrapper });
 
 describe("useLogsEnvironment", () => {
   beforeEach(() => {
@@ -53,6 +54,31 @@ describe("useLogsEnvironment", () => {
       await waitFor(() => expect(readUrlEnvironment()).toBe("prod"));
       rerender();
       expect(result.current.environment).toBe("prod");
+    });
+
+    it("returns the restored environment on the first render", () => {
+      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      const renders: string[] = [];
+      renderHook(
+        () => {
+          const hook = useLogsEnvironment("p1", { canRestore: true });
+          renders.push(hook.environment);
+          return hook;
+        },
+        { wrapper },
+      );
+
+      expect(renders[0]).toBe("prod");
+    });
+
+    it("does not restore when canRestore is false (URL arrived with filters)", () => {
+      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      const { result, rerender } = setup(false);
+      rerender();
+
+      expect(result.current.environment).toBe("");
+      expect(readUrlEnvironment()).toBeNull();
+      expect(readRemembered()).toBe("prod");
     });
 
     it("does not restore over an environment that arrives in the URL", () => {
@@ -112,17 +138,14 @@ describe("useLogsEnvironment", () => {
   });
 
   describe("invalid environment", () => {
-    it("clears the URL and the saved value, without looping back", async () => {
+    it("forgets an invalid remembered value without looping back", async () => {
       sessionStorage.setItem(MEMORY_KEY, JSON.stringify("deleted-env"));
       const { result, rerender } = setup();
 
-      await waitFor(() => expect(readUrlEnvironment()).toBe("deleted-env"));
-      rerender();
-      await waitFor(() => expect(readUrlEnvironment()).toBeNull());
-      expect(readRemembered()).toBeUndefined();
-
+      await waitFor(() => expect(readRemembered()).toBeUndefined());
       rerender();
       expect(result.current.environment).toBe("");
+      expect(result.current.envIsValid).toBeNull();
       expect(readUrlEnvironment()).toBeNull();
     });
 
@@ -131,6 +154,15 @@ describe("useLogsEnvironment", () => {
       setup();
 
       await waitFor(() => expect(readUrlEnvironment()).toBeNull());
+    });
+
+    it("does not wipe a different remembered environment", async () => {
+      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      setUrl({ environment: "deleted-env" });
+      setup(false);
+
+      await waitFor(() => expect(readUrlEnvironment()).toBeNull());
+      expect(readRemembered()).toBe("prod");
     });
 
     it("waits for the environments list before judging validity", () => {

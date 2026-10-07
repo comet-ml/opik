@@ -18,6 +18,7 @@ import {
   ChipValue,
   ChipValueMap,
 } from "@/shared/filter-chips/types";
+import { createSessionStorageMemory } from "@/lib/sessionStorageMemory";
 
 export type { FilterRemovedSource };
 
@@ -26,18 +27,13 @@ type WriteValuesAnalytics =
   | { kind: "remove"; id: string; source: FilterRemovedSource }
   | { kind: "clear_all" };
 
-export interface FilterChipsPersistence {
-  load: () => Filter[] | undefined;
-  save: (filters: Filter[] | undefined) => void;
-}
-
 interface UseFilterChipsArgs {
   tableId: string;
   urlKey: string;
   definitions: ChipDefinition[];
   defaultPinned: string[];
   onChange?: () => void;
-  persistence?: FilterChipsPersistence;
+  persistKey?: string;
 }
 
 interface UseFilterChipsResult {
@@ -45,6 +41,7 @@ interface UseFilterChipsResult {
   chipsUnpinned: ChipDefinition[];
   values: ChipValueMap;
   filters: Filter[];
+  filtersParamAbsent: boolean;
   applyValue: (id: string, value: ChipValue) => void;
   clearValue: (id: string, source?: FilterRemovedSource) => void;
   clearAll: () => void;
@@ -68,7 +65,7 @@ const useFilterChips = ({
   definitions,
   defaultPinned,
   onChange,
-  persistence,
+  persistKey,
 }: UseFilterChipsArgs): UseFilterChipsResult => {
   const [pinnedIds = defaultPinned, setPinnedIds] = useLocalStorageState<
     string[]
@@ -80,16 +77,28 @@ const useFilterChips = ({
     { updateType: "replaceIn" },
   );
 
+  const memory = useMemo(
+    () =>
+      persistKey ? createSessionStorageMemory<Filter[]>(persistKey) : undefined,
+    [persistKey],
+  );
+
+  // Computed during render so the first render is already filtered.
+  const restored = useMemo(
+    () => (rawFilters === undefined && memory ? memory.load() : undefined),
+    [rawFilters, memory],
+  );
+  const filtersParamAbsent = rawFilters === undefined;
+  const sourceFilters = rawFilters ?? restored;
+
   // Re-runs on every URL change: re-clicking the current page's link doesn't remount it.
   useEffect(() => {
-    if (!persistence || rawFilters !== undefined) return;
-    const saved = persistence.load();
-    if (saved && saved.length > 0) setRawFilters(saved);
-  }, [persistence, rawFilters, setRawFilters]);
+    if (restored && restored.length > 0) setRawFilters(restored);
+  }, [restored, setRawFilters]);
 
   const urlFilters: Filter[] = useMemo(
-    () => (Array.isArray(rawFilters) ? rawFilters : EMPTY_FILTERS),
-    [rawFilters],
+    () => (Array.isArray(sourceFilters) ? sourceFilters : EMPTY_FILTERS),
+    [sourceFilters],
   );
 
   const { values, dropped } = useMemo(
@@ -167,11 +176,11 @@ const useFilterChips = ({
 
         const nextFilters = chipsToFilters(definitions, nextValues);
         const next = nextFilters.length > 0 ? nextFilters : undefined;
-        persistence?.save(next);
+        memory?.save(next);
         return next;
       });
     },
-    [definitions, setRawFilters, analytics, persistence],
+    [definitions, setRawFilters, analytics, memory],
   );
 
   const previousFiltersRef = useRef(filters);
@@ -246,6 +255,7 @@ const useFilterChips = ({
     chipsUnpinned,
     values,
     filters,
+    filtersParamAbsent,
     applyValue,
     clearValue,
     clearAll,

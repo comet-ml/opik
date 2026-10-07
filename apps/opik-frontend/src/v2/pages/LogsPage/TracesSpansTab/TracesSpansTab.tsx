@@ -53,8 +53,6 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { generateEnvironmentFilter } from "@/lib/filters";
-import { createSessionStorageMemory } from "@/lib/sessionStorageMemory";
-import { Filter } from "@/types/filters";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
@@ -615,13 +613,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const { environment, envIsValid, changeEnvironment } =
-    useLogsEnvironment(projectId);
-
-  useEffect(() => {
-    if (envIsValid === false) setPage(1);
-  }, [envIsValid, setPage]);
-
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
@@ -735,17 +726,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const defaultPinned = LOGS_DEFAULT_PINNED_CHIPS[type];
   const tableId = LOGS_TABLE_ID[type];
   const filtersUrlKey = getLogsFiltersUrlKey(type);
-  const filtersMemoryKey = getLogsFiltersMemoryKey(projectId, filtersUrlKey);
-  const filtersMemory = useMemo(
-    () => createSessionStorageMemory<Filter[]>(filtersMemoryKey),
-    [filtersMemoryKey],
-  );
 
   const {
     chipsPinned,
     chipsUnpinned,
     values: chipValues,
     filters: chipFilters,
+    filtersParamAbsent,
     applyValue: applyChipValue,
     clearValue: clearChipValue,
     clearAll: clearAllChips,
@@ -761,8 +748,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     definitions: chipDefinitions,
     defaultPinned,
     onChange: handleChipFiltersChange,
-    persistence: filtersMemory,
+    persistKey: getLogsFiltersMemoryKey(projectId, filtersUrlKey),
   });
+
+  const { environment, envIsValid, changeEnvironment } = useLogsEnvironment(
+    projectId,
+    { canRestore: filtersParamAbsent },
+  );
+
+  useEffect(() => {
+    if (envIsValid === false) setPage(1);
+  }, [envIsValid, setPage]);
 
   const { addTag: addTagFilter } = useTagsChipActions({
     chipId: "tags",

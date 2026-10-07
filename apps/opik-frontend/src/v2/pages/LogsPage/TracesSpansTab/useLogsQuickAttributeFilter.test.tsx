@@ -180,6 +180,35 @@ describe("useLogsQuickAttributeFilter", () => {
     });
   });
 
+  describe("span selected after a bare landing", () => {
+    it("appends to the remembered spans filters when the param is absent", async () => {
+      const remembered = [
+        {
+          id: "x",
+          field: "name",
+          type: "string",
+          operator: "=",
+          value: "chat",
+        },
+      ];
+      sessionStorage.setItem(
+        `logs-filters:${PROJECT_ID}:spans_filters`,
+        JSON.stringify(remembered),
+      );
+      setUrl({ trace: "t1", span: "s1" });
+      const { result } = setup(TRACE_DATA_TYPE.traces);
+
+      await act(async () => {
+        result.current.filter("input", "query", "hi");
+      });
+
+      const filters = readFilters("spans_filters");
+      expect(filters).toHaveLength(2);
+      expect(filters[0]).toEqual(remembered[0]);
+      expect(readRemembered("spans_filters")).toEqual(filters);
+    });
+  });
+
   describe("trace selected on the spans table", () => {
     beforeEach(() => setUrl({ trace: "t1" }));
 

@@ -91,8 +91,9 @@ export const useLogsQuickAttributeFilter = ({
       if (!target) return;
 
       setFilters((current) => {
+        // An absent param (bare landing) still has remembered filters to build on.
         const next = addQuickFilter(
-          Array.isArray(current) ? current : [],
+          Array.isArray(current) ? current : filtersMemory.load() ?? [],
           target,
           stringifyFilterValue(value),
         );

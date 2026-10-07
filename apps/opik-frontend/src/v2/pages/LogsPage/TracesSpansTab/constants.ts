@@ -11,6 +11,8 @@ export const LOGS_DEFAULT_PINNED_CHIPS: Record<TRACE_DATA_TYPE, string[]> = {
   [TRACE_DATA_TYPE.spans]: ["type", "tags", "with_errors", "metadata"],
 };
 
+export const THREADS_FILTERS_URL_KEY = "threads_filters";
+
 export const getLogsFiltersUrlKey = (type: TRACE_DATA_TYPE) =>
   `${type}_filters`;
 

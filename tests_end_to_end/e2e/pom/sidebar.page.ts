@@ -24,11 +24,14 @@ export class SidebarNav {
   }
 
   /**
-   * Click the sidebar item and wait for it to become the active route.
+   * Click the sidebar item and, when it was not already the active route, wait
+   * for it to become active.
    *
    * Settles on the link's `aria-current="page"` rather than a URL change: the
-   * router sets it for the matched route, and clicking the item you are already
-   * on (a bare-URL re-navigation) changes no pathname to wait on.
+   * router sets it for the matched route. Clicking the item you are already on
+   * (a bare-URL re-navigation) has nothing to wait for, so it returns right
+   * after the click; callers that need proof the navigation ran should observe
+   * it themselves (e.g. a history log).
    */
   async navigateTo(label: string): Promise<void> {
     return test.step(`Open "${label}" from the sidebar`, async () => {
@@ -37,8 +40,11 @@ export class SidebarNav {
         await expand.click();
       }
       const link = this.link(label);
+      const wasActive = (await link.getAttribute('aria-current')) === 'page';
       await link.click();
-      await expect(link).toHaveAttribute('aria-current', 'page');
+      if (!wasActive) {
+        await expect(link).toHaveAttribute('aria-current', 'page');
+      }
     });
   }
 }
