@@ -161,8 +161,9 @@ test.describe(
           expect(toasts[0]).not.toContain(nameA);
         });
 
-        await test.step('The field advances itself so a re-run cannot collide', async () => {
-          expect(await playground.readExperimentName()).toBe(`${runName}_02`);
+        await test.step('The field keeps the name of the column run it just made', async () => {
+          expect(await playground.readExperimentName()).toBe(runName);
+          await expect(playground.experimentNamePreview()).toContainText(`Created: ${nameB}`);
         });
 
         await test.step('The suite holds exactly that one experiment, under that name', async () => {
