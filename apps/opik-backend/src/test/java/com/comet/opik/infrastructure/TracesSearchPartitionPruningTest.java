@@ -66,9 +66,11 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
@@ -117,11 +119,11 @@ class TracesSearchPartitionPruningTest {
     private static final LocalDate FILLER_MONDAY = WINDOW_MONDAYS.get(2);
 
     /**
-     * Per initial statement of one search, the partitions each forwarded read of the text columns touched. A statement
+     * Per initial statement of one search, the partitions each forwarded read of the text columns touched, a set. A statement
      * is told apart by the search token in its text and by its query name, both of which the test chose.
      */
     private static final String TEXT_READ_PARTITIONS = """
-            SELECT initial_query_id, arrayStringConcat(arraySort(partitions), ',')
+            SELECT initial_query_id, arrayStringConcat(partitions, ',')
             FROM system.query_log
             WHERE initial_query_id IN (
                 SELECT query_id
@@ -231,12 +233,15 @@ class TracesSearchPartitionPruningTest {
                 .sorted(Map.Entry.comparingByKey())
                 .toList();
         var project = projects.get(1);
+        // ClickHouse keeps microseconds, and the CI JVM clock has nanoseconds.
+        var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         // One batch, so one part whose key range brackets the searched project in a week it has no traces in.
         traceResourceClient.batchCreateTraces(Stream.of(projects.get(0), projects.get(2))
-                .map(neighbour -> newTrace(neighbour.getValue(), FILLER_MONDAY, token))
+                .map(neighbour -> newTrace(neighbour.getValue(), FILLER_MONDAY, token, now))
                 .toList(), API_KEY, WORKSPACE_NAME);
-        var expected = PROJECT_MONDAYS.stream()
-                .map(monday -> newTrace(project.getValue(), monday, token))
+        // A start time a second apart per trace, so the thread page's start-time order is unambiguous.
+        var expected = IntStream.range(0, PROJECT_MONDAYS.size())
+                .mapToObj(i -> newTrace(project.getValue(), PROJECT_MONDAYS.get(i), token, now.minusSeconds(i + 1)))
                 .sorted(Comparator.comparing(Trace::id).reversed())
                 .toList();
         traceResourceClient.batchCreateTraces(expected, API_KEY, WORKSPACE_NAME);
@@ -280,15 +285,15 @@ class TracesSearchPartitionPruningTest {
     private ThreadSearch threadSearch() {
         var seeded = seed();
         var params = searchParams(seeded);
-        // A time-bounded thread list joins trace_threads, whose rows closing a thread writes.
-        seeded.expected().forEach(trace -> traceResourceClient.closeTraceThread(trace.threadId(), null,
-                seeded.projectName(), API_KEY, WORKSPACE_NAME));
-        // One thread per trace. Closes can share a timestamp, which the page then orders by its own tie-breakers,
-        // so pages are compared by thread id rather than by close order.
+        // One thread per trace. The page orders by last update desc, then start time asc: closing the latest start
+        // first makes both keys agree, so the order holds even when two closes share a timestamp.
         var expected = seeded.expected().stream()
+                .sorted(Comparator.comparing(Trace::startTime))
                 .map(trace -> expectedThread(trace, seeded.projectId()))
-                .sorted(Comparator.comparing(TraceThread::id))
                 .toList();
+        // A time-bounded thread list joins trace_threads, whose rows closing a thread writes.
+        expected.reversed().forEach(thread -> traceResourceClient.closeTraceThread(thread.id(), null,
+                seeded.projectName(), API_KEY, WORKSPACE_NAME));
         var page = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .until(() -> traceResourceClient.getTraceThreads(null, seeded.projectName(), API_KEY, WORKSPACE_NAME,
                         List.of(), List.of(), params), threads -> threads.total() == expected.size());
@@ -305,10 +310,6 @@ class TracesSearchPartitionPruningTest {
                 .searchOnlyPage(searchOnlyPage)
                 .stats(stats)
                 .build();
-    }
-
-    private static List<TraceThread> byId(List<TraceThread> threads) {
-        return threads.stream().sorted(Comparator.comparing(TraceThread::id)).toList();
     }
 
     private static TraceThread expectedThread(Trace trace, UUID projectId) {
@@ -356,9 +357,9 @@ class TracesSearchPartitionPruningTest {
         var search = threadSearch();
 
         assertThat(search.page().total()).isEqualTo(search.expected().size());
-        TraceAssertions.assertThreads(search.expected(), byId(search.page().content()));
+        TraceAssertions.assertThreads(search.expected(), search.page().content());
         assertThat(search.searchOnlyPage().total()).isEqualTo(search.expected().size());
-        TraceAssertions.assertThreads(search.expected(), byId(search.searchOnlyPage().content()));
+        TraceAssertions.assertThreads(search.expected(), search.searchOnlyPage().content());
         TraceAssertions.assertStats(search.stats().stats(),
                 StatsUtils.getProjectThreadStatItems(search.traces(), List.of(), null));
     }
@@ -385,8 +386,7 @@ class TracesSearchPartitionPruningTest {
         var projectWeeks = PROJECT_MONDAYS.stream()
                 .map(monday -> "%s.traces_local.%s".formatted(ClickHouseContainerUtils.DATABASE_NAME,
                         monday.format(DateTimeFormatter.BASIC_ISO_DATE)))
-                .sorted()
-                .collect(Collectors.joining(","));
+                .collect(Collectors.toSet());
         Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .untilAsserted(() -> {
                     var textReadsByStatement = textReadPartitionsByStatement(queryName, token);
@@ -397,24 +397,22 @@ class TracesSearchPartitionPruningTest {
                 });
     }
 
-    private Map<String, List<String>> textReadPartitionsByStatement(String queryName, String token) {
+    private Map<String, List<Set<String>>> textReadPartitionsByStatement(String queryName, String token) {
         return template.nonTransaction(connection -> Flux.from(connection.createStatement(TEXT_READ_PARTITIONS)
                 .bind("query_name", queryName)
                 .bind("token", token)
                 .bind("input_column", "%s.traces_local.input".formatted(ClickHouseContainerUtils.DATABASE_NAME))
                 .execute())
                 .flatMap(result -> result.map((row, _) -> Map.entry(row.get(0, String.class),
-                        row.get(1, String.class))))
+                        Set.of(row.get(1, String.class).split(",")))))
                 .collect(Collectors.groupingBy(Map.Entry::getKey,
                         Collectors.mapping(Map.Entry::getValue, Collectors.toList()))))
                 .block();
     }
 
     /** A trace whose id is minted mid-week, so the partition value is the week's Monday rather than the id's own day. */
-    private Trace newTrace(String projectName, LocalDate monday, String token) {
+    private Trace newTrace(String projectName, LocalDate monday, String token, Instant startTime) {
         var idAt = monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC);
-        // ClickHouse keeps microseconds, and the CI JVM clock has nanoseconds.
-        var startTime = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         return factory.manufacturePojo(Trace.class).toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(idAt.toEpochMilli()))
                 .startTime(startTime)

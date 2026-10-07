@@ -733,8 +733,8 @@ class SpansReadPathPartitionPruningTest {
     }
 
     /**
-     * The plan of the statement this search sent selects fewer {@code spans} parts by partition key than the table
-     * holds. The search's only partition-key predicate is the week hint, so this is the hint pruning.
+     * Every {@code spans} read in the plan of the statement this search sent selects fewer parts by partition key than
+     * the table holds. The search's only partition-key predicate is the week hint, so this is the hint pruning.
      */
     private void assertPlanPrunesSpanPartitions(String queryName, String token) {
         var plan = JsonUtils.getJsonNodeFromString(String.join("\n", template.stream(connection -> Flux.from(
@@ -749,8 +749,9 @@ class SpansReadPathPartitionPruningTest {
                 .filter(index -> "Partition".equals(index.path("Type").asText()))
                 .toList();
         assertThat(partitionSelections)
-                .as("%s reads spans with a partition-key selection", queryName)
-                .anySatisfy(index -> assertThat(index.path("Selected Parts").asInt())
+                .as("every spans read of %s selects by partition key", queryName)
+                .isNotEmpty()
+                .allSatisfy(index -> assertThat(index.path("Selected Parts").asInt())
                         .isLessThan(index.path("Initial Parts").asInt()));
     }
 
