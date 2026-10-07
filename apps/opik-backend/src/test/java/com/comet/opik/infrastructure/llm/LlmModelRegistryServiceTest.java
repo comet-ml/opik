@@ -198,16 +198,31 @@ class LlmModelRegistryServiceTest {
         assertThat(merged.get("anthropic")).hasSize(1);
     }
 
-    @Test
-    void mergeKeepsReasoningFlagThatAnOverrideOmits() {
-        var defaults = Map.of("openai", List.of(LlmModelDefinition.builder().id("o3").reasoning(true).build()));
-        var overrides = Map.of("openai",
-                List.of(LlmModelDefinition.builder().id("o3").structuredOutput(true).build()));
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "o3     | label: O3 from override | true",
+            "o3     | reasoning: false        | false",
+            "gpt-4o | reasoning: true         | true",
+            "gpt-4o | label: GPT 4o           | false"
+    })
+    void localOverrideChangesReasoningFlagOnlyWhenItSetsIt(String model, String overrideField,
+            boolean expectedReasoning, @TempDir Path tempDir) throws IOException {
+        var overridePath = tempDir.resolve("override.yaml");
+        Files.writeString(overridePath, """
+                openai:
+                  - id: "%s"
+                    %s
+                """.formatted(model, overrideField));
 
-        var merged = LlmModelRegistryService.merge(defaults, overrides);
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setLocalOverridePath(overridePath.toString());
 
-        assertThat(merged.get("openai")).containsExactly(
-                LlmModelDefinition.builder().id("o3").structuredOutput(true).reasoning(true).build());
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(service.findModel(model)).get()
+                .extracting(result -> result.model().reasoning())
+                .isEqualTo(expectedReasoning);
     }
 
     @Test
