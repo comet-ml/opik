@@ -45,13 +45,14 @@ public class AuthFilter implements ContainerRequestFilter {
         var sessionToken = headers.getCookies().get(RequestContext.SESSION_COOKIE);
 
         UriInfo uriInfo = context.getUriInfo();
-        String path = uriInfo.getRequestUri().getPath();
+        String templatePath = MatchedTemplatePathResolver.resolve(uriInfo);
 
         // Unlike other /v1/internal/* endpoints, the Agent Insights query executor and the dashboard saved queries
         // Ollie charts run must be authenticated: they derive the bounding workspace_id from auth (see OPIK-6814 /
         // Agent Insights technical design), so they go through the same authentication path as /v1/private/*.
-        if (PRIVATE_PATH_PATTERN.matcher(path).matches()
-                || AUTHENTICATED_INTERNAL_PATH_PATTERN.matcher(path).matches()) {
+        if (templatePath == null
+                || PRIVATE_PATH_PATTERN.matcher(templatePath).matches()
+                || AUTHENTICATED_INTERNAL_PATH_PATTERN.matcher(templatePath).matches()) {
             ContextInfoHolder contextInfo = ContextInfoHolder.builder()
                     .uriInfo(uriInfo)
                     .method(context.getMethod())
@@ -68,7 +69,7 @@ public class AuthFilter implements ContainerRequestFilter {
             } else {
                 authService.authenticate(headers, sessionToken, contextInfo);
             }
-        } else if (SESSION_PATH_PATTERN.matcher(path).matches()) {
+        } else if (SESSION_PATH_PATTERN.matcher(templatePath).matches()) {
             authService.authenticateSession(sessionToken);
         }
 
