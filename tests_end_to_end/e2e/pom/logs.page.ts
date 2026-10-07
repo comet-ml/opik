@@ -112,8 +112,18 @@ export class LogsPage {
    * other two take. It is also persisted per project, and it decides whether
    * the read is windowed at all — so an unstated range is whichever one the
    * profile last stored.
+   *
+   * `size` is the table's page size, as `gotoSpans` already takes it. Worth
+   * stating for the same reason `timeRange` is: the page keeps it in
+   * localStorage as well as in the URL and syncs the two on init
+   * (`useQueryParamAndLocalStorageState`), so a spec that wants its whole seed
+   * on one page has to say how big a page is rather than inherit whatever the
+   * profile last stored.
    */
-  async gotoTraces(projectId: string, opts: { timeRange?: string } = {}): Promise<void> {
+  async gotoTraces(
+    projectId: string,
+    opts: { timeRange?: string; size?: number } = {},
+  ): Promise<void> {
     return test.step(
       `Open Logs (Traces) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
       async () => {
@@ -121,6 +131,7 @@ export class LogsPage {
         const env = loadEnvConfig();
         const params = new URLSearchParams({ logsType: 'traces' });
         if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        if (opts.size !== undefined) params.set('size', String(opts.size));
         await this.page.goto(
           `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
         );
@@ -1003,6 +1014,80 @@ export class LogsPage {
     return test.step('Clear all filters', async () => {
       await this.clearAllFiltersButton.click();
       await this.clearAllFiltersButton.waitFor({ state: 'hidden' });
+    });
+  }
+
+  // --- Free-text search ("Search by anything") ---
+
+  /**
+   * The "Search by anything" box that sits as `FilterChipBar`'s prefix on the
+   * Traces and Spans tabs.
+   *
+   * `data-testid="search-input"` comes from the shared `SearchInput`, so it is
+   * the FE's own stability contract rather than a structural fallback. The
+   * testid is generic (the component is shared), so every method below asserts
+   * the lookup resolved to exactly ONE box: a popover that mounted a second
+   * SearchInput of its own would otherwise be typed into silently.
+   */
+  get searchBox(): Locator {
+    return this.page.getByTestId('search-input');
+  }
+
+  /**
+   * Type `term` into the search box and wait for the page to have taken it.
+   *
+   * The settle is on the URL's own `<type>_search` param, which is the page's
+   * single source of truth for the term and what the next list/stats request is
+   * built from — `SearchInput` is a `DebounceInput` with a 300ms delay, so a
+   * caller that read the table straight after typing would be reading the
+   * pre-search answer. Waiting on the committed param instead of on a fixed
+   * delay is what keeps that deterministic.
+   *
+   * Compared lower-cased because `TracesSpansTab` commits
+   * `search.trim().toLowerCase()` — the term that reaches the API is the
+   * folded one, and `ilike` makes that equivalent. Callers that want the API
+   * and the UI to be asking the identical question should pass a term that is
+   * already lower-case.
+   *
+   * Does NOT wait for the rows: what the table then shows is the assertion, and
+   * a POM that waited for a particular row count would be deciding the answer
+   * before the spec got to.
+   */
+  async searchFor(term: string, type: 'traces' | 'spans' = 'traces'): Promise<void> {
+    return test.step(`Search the ${type} table for "${term}"`, async () => {
+      await expect(this.searchBox, 'exactly one search box on the Logs page').toHaveCount(1);
+      await this.searchBox.fill(term);
+      const committed = term.trim().toLowerCase();
+      await this.page.waitForURL(
+        (url) => url.searchParams.get(`${type}_search`) === committed,
+        { timeout: 15_000 },
+      );
+    });
+  }
+
+  /**
+   * Clear the search box, and wait for the term to leave the URL.
+   *
+   * Through the box's own Clear button — the control a user reaches for, and
+   * the one that also resets the page back to 1. The param is dropped entirely
+   * rather than set empty, so the wait is on absence.
+   */
+  async clearSearch(type: 'traces' | 'spans' = 'traces'): Promise<void> {
+    return test.step(`Clear the ${type} table's search`, async () => {
+      await expect(this.searchBox, 'exactly one search box on the Logs page').toHaveCount(1);
+      // The Clear button only renders while the box holds text, and it is an
+      // icon-only `Button` with no name — addressed as the button inside the
+      // search box's own wrapper, which is the only one there.
+      const clear = this.searchBox.locator('xpath=..').getByRole('button');
+      await expect(clear, 'exactly one clear button beside the search box').toHaveCount(1);
+      await clear.click();
+      await this.page.waitForURL(
+        (url) => {
+          const value = url.searchParams.get(`${type}_search`);
+          return value === null || value === '';
+        },
+        { timeout: 15_000 },
+      );
     });
   }
 

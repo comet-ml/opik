@@ -305,6 +305,28 @@ areas:
       # this under either would retire the question permanently.
       logs-open-ended-window: { covered: false, note: "A date-range preset ending today sends no interval_end, on the kpi-cards read and on the chart's metrics read alike: the KPI cards, their period-over-period deltas and the table footer then report one population including a row whose UUIDv7 id instant is mid-2200, on the Traces, Spans and Threads tabs. Pinned against the same seed read with interval_end = now, where every current-period number differs and the prior period is identical" }
       filter-traces:          { covered: true,  tier: t2-cuj }
+      # New for 2.2.93, from the release pass's own exploration of opik#8767.
+      #
+      # The Logs page's "Search by anything" box and the `search` param behind
+      # it — `ilike('%term%')` across a trace's id/name/input/output/metadata/
+      # error_info/tags/thread_id and a span's id/trace_id/name/type/input/
+      # output/metadata/tags/model/provider — plus the week pre-pass opik#8767
+      # put in front of it, which bounds the scan to the weeks the project
+      # actually holds rows in.
+      #
+      # Its own key rather than folded into `filter-traces`, which the
+      # exploration's candidate reached for. That key is the structured filter
+      # CHIPS: its three specs (trace-filters, trace-source-merge,
+      # span-quick-filter-routing) build `traces_filters` entries and never
+      # render `search_text`, so they cannot reach this branch at all — and
+      # `filter-traces` is already `covered: true`, so folding search under it
+      # would retire the question permanently while nothing had tested it.
+      #
+      # Deliberately names BOTH surfaces, because one spec drives each: the two
+      # API-level tests assert the listing, the page walk and the stats on
+      # traces and on spans, and the third types into the box and asserts the
+      # table agrees with the API for the identical term.
+      free-text-search:       { covered: false, note: "Free-text `search` over traces and spans, asserted as EXACTNESS rather than membership on a seeded 25-row project (14 carrying a needle token in name/input/output, 11 decoys carrying none, one span mirroring each trace): the id SET and the envelope's `total` both pinned, a one-character term resolving to the same set (the fixture asserts the character appears in no decoy and in no seeded id, since the span clause matches on id and trace_id), the set surviving a walk at size 3 with no duplicate and no short-page early exit, /traces/stats and /spans/stats agreeing under the search and without it — read as the raw stats list, because this endpoint answers `{\"stats\": []}` rather than a zeroed count when it matches nothing — and the search composed with a `name contains` filter whose group deliberately spans matching AND decoy rows, so the intersection is strictly smaller than either side alone. The UI half types into the box and asserts the footer total, the rendered row set and every decoy's absence against the API's answer for the same term, then that clearing it restores the project. PARTIAL on the thing opik#8767 changed: the week spread is a fixture parameter (3 requested) asserted as a per-week census of the answer, but an environment running UUIDv7 validation in reject mode with a sub-week window (staging: PT24H) refuses backdated ids and the seed falls back to one week, which it reports as `weeksCovered` rather than claiming. Needs uuidValidation.auditOnly=true to drive the bound. Not covered: thread search (ThreadDAO has its own clause), and search under a from_time/to_time window" }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
       # New for 2.2.86, from the release pass's own exploration of opik#8411.

@@ -395,6 +395,17 @@ export interface SpanBatchSeed {
    * never seed the row whose read mapping is under test.
    */
   parentSpanId?: string;
+  /**
+   * The span's JSON `input` / `output` sections.
+   *
+   * Sent only when supplied, like `TraceBatchSeed`'s: a span with no `input`
+   * key and one with an empty object are different rows, and `SpanDAO`'s
+   * free-text search clause matches on both columns — so a seed that needs a
+   * term to be findable in a span's payload (rather than only in its name) has
+   * to put it here.
+   */
+  input?: TraceJsonSection;
+  output?: TraceJsonSection;
   startTime?: Date;
   endTime?: Date;
   model?: string;
@@ -489,6 +500,44 @@ export interface SpanIdPage {
   page: number;
   size: number;
   total: number;
+}
+
+/**
+ * One page of a traces OR spans listing read under a free-text `search`.
+ *
+ * The same four fields as `SpanIdPage`, under its own name because the two
+ * reads it serves are different endpoints and a caller walking the traces
+ * listing should not be holding something called a span page. `total` is the
+ * load-bearing one here: free-text search's failure mode is rows silently
+ * dropped from a result set that still looks like an ordinary list, and a
+ * reader that only collected ids could not tell a short page from a short
+ * population.
+ */
+export interface EntityIdPage {
+  ids: string[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+/**
+ * One entry of a `/traces/stats` or `/spans/stats` answer, as the server spells
+ * it.
+ *
+ * Kept as the raw `{ name, type, value }` list rather than reduced to a lookup
+ * of the numbers a caller wants, because ABSENCE is a real answer from this
+ * endpoint: a stats read that matches no row comes back `{"stats": []}` — not
+ * with the counts zeroed — so a helper that answered `0` for a missing
+ * `trace_count` would turn "the server reported nothing" into a passing number.
+ * The caller asserts the stat is present and then reads it.
+ *
+ * `value` is `unknown` because the union really is one: a COUNT carries a
+ * number, a PERCENTAGE carries a `{ p50, p90, p99 }` object.
+ */
+export interface ProjectStatRef {
+  name: string;
+  type: string;
+  value: unknown;
 }
 
 /** One KPI card as `POST /v1/private/projects/{id}/kpi-cards` answers it. */
@@ -3779,6 +3828,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             source: span.source ?? 'sdk',
             type: span.type ?? 'general',
             ...(span.parentSpanId === undefined ? {} : { parent_span_id: span.parentSpanId }),
+            ...(span.input === undefined ? {} : { input: span.input }),
+            ...(span.output === undefined ? {} : { output: span.output }),
             start_time: (span.startTime ?? now).toISOString(),
             end_time: (span.endTime ?? now).toISOString(),
             ...(span.model === undefined ? {} : { model: span.model }),
@@ -3830,6 +3881,142 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         size: answer.size ?? 0,
         total: answer.total ?? 0,
       };
+    },
+
+    /**
+     * One page of `GET /v1/private/traces` under a free-text `search`, as the
+     * Logs page's "Search by anything" box asks for it.
+     *
+     * Separate from `listTraceIds`, which takes structured `filters` only and
+     * throws the envelope away. `search` reaches an entirely different branch of
+     * `TraceDAO` — `ilike('%term%')` across id, name, input, output, metadata,
+     * error_info, tags and thread_id, plus (opik#8767) a week pre-pass that
+     * bounds the scan to the weeks the project actually has rows in. Its failure
+     * mode is rows silently missing from results, counts and stats with no
+     * error, so `total` has to come back with the ids rather than be inferred
+     * from them.
+     *
+     * `search` and `filters` are both optional and compose: the page sends them
+     * together when a chip is applied beside a search term, and the server is
+     * expected to intersect them.
+     *
+     * Deliberately NOT `fetchAllPages` — a caller of this is usually walking the
+     * page boundary on purpose, which is where a cursor that loses a row shows
+     * up. Both retries for the same reasons `listSpanIdsPage` takes them.
+     */
+    async searchTraceIdsPage(args: {
+      projectId: string;
+      search?: string;
+      filters?: BackendFilter[];
+      page?: number;
+      size?: number;
+    }): Promise<EntityIdPage> {
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          opik.api.traces.getTracesByProject({
+            projectId: args.projectId,
+            page: args.page ?? 1,
+            size: args.size ?? 200,
+            truncate: true,
+            ...(args.search === undefined ? {} : { search: args.search }),
+            ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          }),
+        ),
+      );
+      return {
+        ids: (answer.content ?? []).map((t) => String(t.id ?? '')),
+        page: answer.page ?? args.page ?? 1,
+        size: answer.size ?? 0,
+        total: answer.total ?? 0,
+      };
+    },
+
+    /**
+     * The span counterpart of `searchTraceIdsPage`.
+     *
+     * Its own method rather than a flag, because the two reads are different
+     * endpoints with different search clauses: `SpanDAO` additionally matches
+     * `trace_id`, `type`, `model` and `provider`, so a term that is exact over
+     * traces is not automatically exact over spans. A spec asserting exactness
+     * on both has to drive both.
+     */
+    async searchSpanIdsPage(args: {
+      projectId: string;
+      search?: string;
+      filters?: BackendFilter[];
+      page?: number;
+      size?: number;
+    }): Promise<EntityIdPage> {
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            page: args.page ?? 1,
+            size: args.size ?? 200,
+            truncate: true,
+            ...(args.search === undefined ? {} : { search: args.search }),
+            ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          }),
+        ),
+      );
+      return {
+        ids: (answer.content ?? []).map((s) => String(s.id ?? '')),
+        page: answer.page ?? args.page ?? 1,
+        size: answer.size ?? 0,
+        total: answer.total ?? 0,
+      };
+    },
+
+    /**
+     * `GET /v1/private/traces/stats` or `/v1/private/spans/stats` — the numbers
+     * the Logs page renders beside its table, under the same `search` and
+     * `filters` the listing was read with.
+     *
+     * One method over both entities because a caller asserting that the stats
+     * agree with the listing has to ask the same question of both, and two
+     * near-identical methods is how the two drift apart.
+     *
+     * Returns the list verbatim (see `ProjectStatRef`): an empty `stats` array
+     * is this endpoint's real answer for a search that matches nothing, so the
+     * caller must assert the stat it wants is PRESENT before reading it. A
+     * stat arriving with no name is treated as a malformed response and thrown
+     * rather than skipped — dropping it would turn it into a missing stat,
+     * which is the very thing a caller is trying to tell apart.
+     */
+    async entityStats(args: {
+      entity: 'traces' | 'spans';
+      projectId: string;
+      search?: string;
+      filters?: BackendFilter[];
+    }): Promise<ProjectStatRef[]> {
+      const request = {
+        projectId: args.projectId,
+        ...(args.search === undefined ? {} : { search: args.search }),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+      };
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          args.entity === 'traces'
+            ? opik.api.traces.getTraceStats(request)
+            : opik.api.spans.getSpanStats(request),
+        ),
+      );
+      return (answer.stats ?? []).map((stat) => {
+        if (typeof stat.name !== 'string' || stat.name === '') {
+          throw new Error(
+            `entityStats(${args.entity}): a stat arrived with no name: ${JSON.stringify(stat)}`,
+          );
+        }
+        return {
+          name: stat.name,
+          type: String(stat.type),
+          // `value` only exists on the COUNT/AVG arms of the union; a
+          // PERCENTAGE carries `p50/p90/p99` instead. Kept as whatever the
+          // server sent so a caller reading a count asserts on a number and one
+          // reading duration asserts on the object.
+          value: (stat as { value?: unknown }).value,
+        };
+      });
     },
 
     /**

@@ -1,4 +1,4 @@
-export { test, expect } from './suite-item-nav.fixture';
+export { test, expect } from './search-population.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -347,4 +347,10 @@ export type {
   SuiteItemNavRef,
   SuiteItemNavFixtures,
 } from './suite-item-nav.fixture';
+export type {
+  SearchRowRef,
+  SearchPopulationRef,
+  SearchPopulationFixtures,
+} from './search-population.fixture';
+export { SEARCH_NEEDLE, SEARCH_NEEDLE_CHAR } from './search-population.fixture';
 export type { ProjectRef } from '../core/backend';

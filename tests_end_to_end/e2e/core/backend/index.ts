@@ -38,6 +38,8 @@ export {
   type OtelSpanSeed,
   type TraceBatchSeed,
   type SpanIdPage,
+  type EntityIdPage,
+  type ProjectStatRef,
   type KpiCardStat,
   type TraceDetail,
   type TracePayload,
