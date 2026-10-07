@@ -25,14 +25,39 @@ const PROMPT_TOKENS = 11;
 const COMPLETION_TOKENS = 7;
 const TOTAL_TOKENS = PROMPT_TOKENS + COMPLETION_TOKENS;
 
-/** Ollama's own counters, which have to survive under `original_usage.*`. */
+/** Ollama's own token counters, which have to survive under `original_usage.*`. */
 const NATIVE_USAGE_KEYS = [
   'original_usage.prompt_eval_count',
   'original_usage.eval_count',
+] as const;
+
+/**
+ * Ollama's timings, which must NOT reach the usage map — and the reason this
+ * list is here rather than in the one above.
+ *
+ * opik#8771 (2.2.94) deliberately stopped forwarding them. Ollama reports them
+ * in NANOSECONDS, so any call longer than about 2.1 seconds overflows the
+ * backend's 32-bit usage values and the whole span batch is rejected — which
+ * presents to a user as the SDK having logged nothing at all. They are kept in
+ * the span's metadata instead, which the spec asserts separately.
+ *
+ * Asserted as an absence rather than simply dropped from the spec, because
+ * "these four keys are not in the usage map" is the whole of what opik#8771
+ * changed, and a build that put them back would be reintroducing the overflow.
+ */
+const TIMING_KEYS_EXCLUDED_FROM_USAGE = [
   'original_usage.prompt_eval_duration',
   'original_usage.eval_duration',
   'original_usage.total_duration',
   'original_usage.load_duration',
+] as const;
+
+/** The timing fields themselves, as ollama names them in its own reply. */
+const NATIVE_TIMING_FIELDS = [
+  'prompt_eval_duration',
+  'eval_duration',
+  'total_duration',
+  'load_duration',
 ] as const;
 
 /** How long the spans may take to become queryable after the bridge flushed. */
@@ -60,6 +85,17 @@ const SPAN_VISIBLE_TIMEOUT_MS = 90_000;
  * wrong token count in a span panel, and a span-per-chunk surfaces as a trace
  * that looks busy — neither gets reported quickly, and both are invisible to a
  * test that only checks a span exists.
+ *
+ * Updated during the 2.2.94 release pass. This spec was written against 2.2.92
+ * and asserted that all six of ollama's native fields survived under
+ * `original_usage.*`. opik#8771 then deliberately stopped forwarding the four
+ * `*_duration` ones: ollama reports them in nanoseconds, so any call longer than
+ * about 2.1 seconds overflowed the backend's 32-bit usage values and the whole
+ * span batch was rejected — the SDK appearing to log nothing. The assertion is
+ * now the pair it is: the two token counters must still be in `usage`, the four
+ * timings must NOT be, and they must still be recorded in the span's metadata.
+ * The exploration could not reach #8771 (no Ollama on staging), so this is the
+ * first place the change was observed.
  */
 test.describe(
   "Trace Explore — the Ollama tracker's spans",
@@ -100,6 +136,34 @@ test.describe(
         usage['original_usage.eval_count'],
         'the native completion counter must survive with its own value',
       ).toBe(COMPLETION_TOKENS);
+      // And the timings are kept OUT of it (opik#8771). Stated as the set of
+      // forbidden keys that are present, so a failure names which one came back
+      // rather than only that the map was the wrong size.
+      expect(
+        TIMING_KEYS_EXCLUDED_FROM_USAGE.filter((key) => usage[key] !== undefined),
+        `span '${span.name}' must keep ollama's nanosecond timings out of the usage map — ` +
+          'they overflow the backend\'s 32-bit usage values and take the whole span batch ' +
+          'down with them',
+      ).toEqual([]);
+    };
+
+    /**
+     * The timings are still recorded, in the span's metadata.
+     *
+     * The other half of opik#8771, and the reason excluding them from `usage` is
+     * not a loss of information: `split_dict_by_keys(result_dict, ["message"])`
+     * puts everything ollama reported except the message into the metadata. A
+     * spec that only asserted the absence above would be equally satisfied by a
+     * build that had stopped recording the timings altogether.
+     */
+    const assertTimingsInMetadata = (span: TrackedSpanRef): void => {
+      expect(span.metadata, `span '${span.name}' must carry metadata`).not.toBeNull();
+      const metadata = span.metadata!;
+      expect(
+        NATIVE_TIMING_FIELDS.filter((key) => typeof metadata[key] !== 'number'),
+        `span '${span.name}' records ollama's timings in its metadata, where a nanosecond ` +
+          'value is not constrained to 32 bits',
+      ).toEqual([]);
     };
 
     /** The text a chat span recorded as its answer. */
@@ -294,6 +358,12 @@ test.describe(
           }
         });
 
+        await test.step("Every span keeps ollama's timings in its metadata instead", () => {
+          for (const span of spans) {
+            assertTimingsInMetadata(span);
+          }
+        });
+
         await test.step('Every span is attributed to the integration in its metadata', () => {
           expect(
             spans.map((s) => {
@@ -355,6 +425,7 @@ test.describe(
 
         await test.step('The nested chat span carries the same mapped usage', () => {
           assertMappedUsage(chat);
+          assertTimingsInMetadata(chat);
         });
 
         const panel = await test.step('Open the trace and select the chat span', async () => {
