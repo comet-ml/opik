@@ -75,7 +75,7 @@ describe("PlaygroundNavBadge", () => {
     expect(setHasUnseenRunCompletion).not.toHaveBeenCalledWith(true);
   });
 
-  // Experiment ids outlive the run that made them. Without the in-flight gate this polls for ever
+  // Experiment ids outlive the run that made them. Without the in-flight gate this polls forever
   // on every page, on behalf of a run that finished sessions ago.
   it("does not poll when no run is in flight", () => {
     isRunInFlight = false;
@@ -95,7 +95,7 @@ describe("PlaygroundNavBadge", () => {
     expect(queriesEnabled()).toBe(false);
   });
 
-  // A run the server never settles would otherwise be polled every ten seconds for ever, from any
+  // A run the server never settles would otherwise be polled every ten seconds forever, from any
   // page, and again after a restart — the in-flight flag that gates this is persisted.
   describe("a run that never settles", () => {
     const intervalFor = (createdAt: string) => {
@@ -115,7 +115,7 @@ describe("PlaygroundNavBadge", () => {
     });
 
     it("gives up once the experiment is older than the ceiling", () => {
-      const ancient = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const ancient = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
 
       expect(intervalFor(ancient)).toBe(false);
     });

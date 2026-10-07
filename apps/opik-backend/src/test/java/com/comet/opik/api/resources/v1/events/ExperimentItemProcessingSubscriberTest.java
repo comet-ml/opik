@@ -157,7 +157,7 @@ class ExperimentItemProcessingSubscriberTest {
     }
 
     // A cancelled test suite never reaches its assertions, so stamping only there would leave its
-    // rows looking for ever like a run still in progress.
+    // rows looking forever like a run still in progress.
     @Test
     @DisplayName("should record a drained test suite as finished while its assertions are still pending")
     void stampTestSuiteOnItemDrain() {
