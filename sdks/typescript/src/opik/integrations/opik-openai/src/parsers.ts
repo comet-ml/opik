@@ -309,8 +309,8 @@ export const parseUsage = (
 
   if (hasResponseUsage(res)) {
     return {
-      completion_tokens: res.usage.input_tokens,
-      prompt_tokens: res.usage.output_tokens,
+      completion_tokens: res.usage.output_tokens,
+      prompt_tokens: res.usage.input_tokens,
       total_tokens: res.usage.total_tokens,
       ...filterNumericValues(flattenObject(res.usage, "original_usage")),
     };
