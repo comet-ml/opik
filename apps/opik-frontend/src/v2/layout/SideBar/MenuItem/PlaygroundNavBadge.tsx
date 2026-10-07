@@ -4,7 +4,7 @@ import { useRouterState } from "@tanstack/react-router";
 
 import { getExperimentById } from "@/api/datasets/useExperimentById";
 import { isExperimentTerminal } from "@/lib/experiments";
-import { EXPERIMENT_STATUS } from "@/types/datasets";
+import { EXPERIMENT_STATUS, Experiment } from "@/types/datasets";
 import {
   useExperimentByPromptId,
   useHasUnseenRunCompletion,
@@ -14,6 +14,15 @@ import {
 } from "@/store/PlaygroundStore";
 
 const POLL_INTERVAL_MS = 10000;
+
+const MAX_WATCH_AGE_MS = 60 * 60 * 1000;
+
+const watchedTooLong = (experiment: Experiment | undefined) => {
+  if (!experiment?.created_at) return false;
+  return (
+    Date.now() - new Date(experiment.created_at).getTime() > MAX_WATCH_AGE_MS
+  );
+};
 
 type PlaygroundNavBadgeProps = {
   collapsed: boolean;
@@ -55,7 +64,8 @@ const PlaygroundNavBadge: React.FC<PlaygroundNavBadgeProps> = ({
       queryFn: (context: QueryFunctionContext) =>
         getExperimentById(context, { experimentId }),
       enabled: shouldWatch,
-      refetchInterval: POLL_INTERVAL_MS,
+      refetchInterval: (query: { state: { data?: Experiment } }) =>
+        watchedTooLong(query.state.data) ? false : POLL_INTERVAL_MS,
     })),
   });
 

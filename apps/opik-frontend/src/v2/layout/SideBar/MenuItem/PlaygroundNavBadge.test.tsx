@@ -23,13 +23,20 @@ vi.mock("@tanstack/react-router", () => ({
 
 // Module-scope spy: vi.mock factories run lazily, after this is initialized.
 const useQueriesSpy = vi.fn(
-  ({ queries }: { queries: { enabled?: boolean }[] }) =>
-    queries.map((_, i) => ({ data: { status: statuses[i] } })),
+  ({
+    queries,
+  }: {
+    queries: {
+      enabled?: boolean;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      refetchInterval?: (query: any) => number | false;
+    }[];
+  }) => queries.map((_, i) => ({ data: { status: statuses[i] } })),
 );
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueries: (args: { queries: { enabled?: boolean }[] }) =>
-    useQueriesSpy(args),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  useQueries: (args: any) => useQueriesSpy(args),
 }));
 
 vi.mock("@/api/datasets/useExperimentById", () => ({
@@ -86,6 +93,32 @@ describe("PlaygroundNavBadge", () => {
     renderBadge();
 
     expect(queriesEnabled()).toBe(false);
+  });
+
+  // A run the server never settles would otherwise be polled every ten seconds for ever, from any
+  // page, and again after a restart — the in-flight flag that gates this is persisted.
+  describe("a run that never settles", () => {
+    const intervalFor = (createdAt: string) => {
+      renderBadge();
+      const query = useQueriesSpy.mock.calls.at(-1)?.[0].queries[0];
+      return query?.refetchInterval?.({
+        state: {
+          data: { status: EXPERIMENT_STATUS.RUNNING, created_at: createdAt },
+        },
+      });
+    };
+
+    it("keeps polling while it is still young enough to be real", () => {
+      const justStarted = new Date(Date.now() - 60 * 1000).toISOString();
+
+      expect(intervalFor(justStarted)).toBe(10000);
+    });
+
+    it("gives up once the experiment is older than the ceiling", () => {
+      const ancient = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+      expect(intervalFor(ancient)).toBe(false);
+    });
   });
 
   it("stops watching once the run it was following has finished", () => {

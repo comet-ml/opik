@@ -4,10 +4,16 @@ import get from "lodash/get";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useExperimentById from "@/api/datasets/useExperimentById";
 import useAppStore from "@/store/AppStore";
-import { useDatasetPage, useDatasetSize } from "@/store/PlaygroundStore";
+import {
+  useDatasetFilters,
+  useDatasetPage,
+  useDatasetSize,
+} from "@/store/PlaygroundStore";
 import { EXPERIMENT_STATUS, Experiment } from "@/types/datasets";
+import { COLUMN_DATA_ID, COLUMN_TAGS_ID } from "@/types/shared";
 
-const REFETCH_INTERVAL = 1000;
+const STATUS_REFETCH_INTERVAL = 1000;
+const ROWS_REFETCH_INTERVAL = 3000;
 
 /**
  * Whether the run has stopped producing items. A status cannot answer this: cancelling writes one
@@ -44,9 +50,10 @@ const EMPTY_ITEM: PlaygroundExperimentItem = {
  * Scoped to the table's page rather than the whole dataset a run now covers, and keyed so every
  * cell in a column shares one request.
  *
- * The table's filters are deliberately not passed: this endpoint returns only what the run
- * processed anyway, and has no field for a dataset column — sending one matched nothing, so every
- * row of a filtered run read as never run.
+ * Filtered the same way as the table, or the two disagree about which rows a page holds and a row
+ * that ran reads as never run. Dotted rather than the {field, key} pair the dataset-items endpoint
+ * takes, since this one resolves the column from the name alone. Only the fields it knows are
+ * sent; anything else would be read as a data key and match nothing.
  *
  * Polling stops once the row has its item, or once the run's finish stamp says none is coming.
  * Without that second condition a row the run never reached waits for ever.
@@ -59,6 +66,16 @@ export default function usePlaygroundExperimentItem(
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const page = useDatasetPage();
   const size = useDatasetSize();
+  const datasetFilters = useDatasetFilters();
+  const supportedFilters = useMemo(
+    () =>
+      datasetFilters.filter(
+        (filter) =>
+          filter.field.startsWith(`${COLUMN_DATA_ID}.`) ||
+          filter.field === COLUMN_TAGS_ID,
+      ),
+    [datasetFilters],
+  );
 
   // Polling stops at the stamp — a finished run has nothing left to report.
   const { data: experiment, dataUpdatedAt: experimentReadAt } =
@@ -70,7 +87,7 @@ export default function usePlaygroundExperimentItem(
         // back into view refetches nothing.
         staleTime: (query) => (hasFinished(query.state.data) ? Infinity : 0),
         refetchInterval: (query) =>
-          hasFinished(query.state.data) ? false : REFETCH_INTERVAL,
+          hasFinished(query.state.data) ? false : STATUS_REFETCH_INTERVAL,
       },
     );
 
@@ -94,6 +111,7 @@ export default function usePlaygroundExperimentItem(
       page,
       size,
       truncate: false,
+      filters: supportedFilters,
     },
     {
       enabled: !!experimentId && !!datasetId,
@@ -109,7 +127,7 @@ export default function usePlaygroundExperimentItem(
         // them calls a row unrun and then contradicts itself. One more read settles it.
         return hasItem || readAfterFinish(query.state.dataUpdatedAt)
           ? false
-          : REFETCH_INTERVAL;
+          : ROWS_REFETCH_INTERVAL;
       },
     },
   );

@@ -5,6 +5,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
 import {
   useIsPromptRunning,
+  useIsResumingRun,
   usePromptById,
   useDatasetItemsTotal,
 } from "@/store/PlaygroundStore";
@@ -26,6 +27,7 @@ const PlaygroundRunButton = ({
 }: PlaygroundRunButtonProps) => {
   const prompt = usePromptById(promptId);
   const isPromptRunning = useIsPromptRunning(promptId);
+  const isResumingRun = useIsResumingRun();
 
   const { datasetId } = usePlaygroundDataset();
   const datasetItemsTotal = useDatasetItemsTotal();
@@ -34,6 +36,7 @@ const PlaygroundRunButton = ({
   const hasMediaCompatibilityIssue = !!prompt && hasUnsupportedMedia(prompt);
   const hasNoDatasetItems = !!datasetId && datasetItemsTotal === 0;
   const isPromptRunDisabled =
+    isResumingRun ||
     !prompt?.model ||
     hasUnrunnableMessages ||
     hasMediaCompatibilityIssue ||
