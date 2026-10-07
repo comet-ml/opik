@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
@@ -72,6 +73,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -89,6 +91,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -1160,6 +1163,30 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     any())).thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(response)).build());
         }
 
+        private void assertSpansFetchedOnceFor(TraceToScoreLlmAsJudge message) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Set<UUID>> traceIdsCaptor = ArgumentCaptor.forClass(Set.class);
+            verify(spanService, times(1)).getByTraceIds(traceIdsCaptor.capture());
+            assertThat(traceIdsCaptor.getValue()).containsExactly(message.trace().id());
+        }
+
+        private void assertSuiteScoresStoredOnceFor(TraceToScoreLlmAsJudge message) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService, times(1)).scoreBatchOfTraces(scoresCaptor.capture());
+            var trace = message.trace();
+            assertThat(scoresCaptor.getValue())
+                    .extracting(FeedbackScoreBatchItem::id, FeedbackScoreBatchItem::projectId,
+                            FeedbackScoreBatchItem::projectName, FeedbackScoreBatchItem::categoryName,
+                            FeedbackScoreBatchItem::name, item -> item.value().intValue(),
+                            FeedbackScoreBatchItem::reason)
+                    .containsExactlyInAnyOrder(
+                            tuple(trace.id(), trace.projectId(), trace.projectName(),
+                                    TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY, "Is polite", 1, "polite"),
+                            tuple(trace.id(), trace.projectId(), trace.projectName(),
+                                    TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY, "Is short", 0, "long"));
+        }
+
         private List<String> judgedModels(int times) {
             ArgumentCaptor<LlmAsJudgeModelParameters> captor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
             verify(aiProxyService, times(times)).scoreTrace(any(), captor.capture(), any());
@@ -1172,21 +1199,14 @@ class OnlineScoringLlmAsJudgeScorerTest {
             stubJudgeRouting();
             stubJudge("judge-a", new ClientErrorException("invalid x-api-key", 401));
             stubJudge("judge-b", SUITE_RESPONSE);
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
-            when(feedbackScoreService.scoreBatchOfTraces(scoresCaptor.capture())).thenReturn(Mono.empty());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
             when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any())).thenReturn(Mono.empty());
 
             scorer.doScore(message).block();
 
             assertThat(judgedModels(2)).containsExactly("judge-a", "judge-b");
-            verify(spanService, times(1)).getByTraceIds(any());
-            verify(feedbackScoreService, times(1)).scoreBatchOfTraces(any());
-            assertThat(scoresCaptor.getValue())
-                    .extracting(FeedbackScoreBatchItem::name, item -> item.value().intValue())
-                    .containsExactlyInAnyOrder(
-                            tuple("Is polite", 1),
-                            tuple("Is short", 0));
+            assertSpansFetchedOnceFor(message);
+            assertSuiteScoresStoredOnceFor(message);
             verify(testSuiteAssertionCounterService, times(1))
                     .decrementAndFinishIfComplete(message.workspaceId(), message.experimentId());
         }
@@ -1230,16 +1250,51 @@ class OnlineScoringLlmAsJudgeScorerTest {
         }
 
         @Test
-        void doesNotFallBackWhenTheSpansCannotBeFetched() {
+        void recordsTheFailedEvaluationOnceAndDoesNotFallBackWhenTheSpansCannotBeFetched() {
             var message = suiteMessage(List.of("judge-b"));
             stubJudgeRouting();
+            when(serviceTogglesConfig.isOnlineScoringTracingEnabled()).thenReturn(true);
+            var monitored = new MonitoredEvaluation();
+            when(onlineEvaluationRecorder.begin(any(Trace.class), any(), any(), anyString(), any(), any()))
+                    .thenReturn(monitored);
             var failure = new NotFoundException("Trace not found");
-            when(spanService.getByTraceIds(any())).thenReturn(Flux.error(failure));
+            when(spanService.getByTraceIds(Set.of(message.trace().id()))).thenReturn(Flux.error(failure));
 
             assertThatThrownBy(() -> scorer.doScore(message).block()).isSameAs(failure);
-            verify(spanService, times(1)).getByTraceIds(any());
+            assertThat(monitored.failed).containsExactly(failure);
+            assertThat(monitored.completed).isEmpty();
+            verify(onlineEvaluationRecorder).begin(message.trace(), message.ruleId(), message.ruleName(), "judge-a",
+                    message.workspaceId(), message.userName());
+            verifyNoMoreInteractions(onlineEvaluationRecorder);
+            assertSpansFetchedOnceFor(message);
             verifyNoInteractions(aiProxyService);
             verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
+        }
+
+        @Test
+        void monitorsEachJudgeAttemptOnItsOwnTrace() {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            when(serviceTogglesConfig.isOnlineScoringTracingEnabled()).thenReturn(true);
+            var judgeA = new MonitoredEvaluation();
+            var judgeB = new MonitoredEvaluation();
+            when(onlineEvaluationRecorder.begin(any(Trace.class), any(), any(), eq("judge-a"), any(), any()))
+                    .thenReturn(judgeA);
+            when(onlineEvaluationRecorder.begin(any(Trace.class), any(), any(), eq("judge-b"), any(), any()))
+                    .thenReturn(judgeB);
+            var rejection = new ClientErrorException("invalid x-api-key", 401);
+            stubJudge("judge-a", rejection);
+            stubJudge("judge-b", SUITE_RESPONSE);
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any())).thenReturn(Mono.empty());
+
+            scorer.doScore(message).block();
+
+            assertThat(judgeA.failed).containsExactly(rejection);
+            assertThat(judgeA.completed).isEmpty();
+            assertThat(judgeB.failed).isEmpty();
+            assertThat(judgeB.completed).singleElement()
+                    .satisfies(scores -> assertThat(scores).hasSize(2));
         }
 
         @Test
@@ -1252,7 +1307,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
             assertThatThrownBy(() -> scorer.doScore(message).block()).isSameAs(failure);
             assertThat(judgedModels(1)).containsExactly("judge-a");
-            verify(feedbackScoreService, times(1)).scoreBatchOfTraces(any());
+            assertSpansFetchedOnceFor(message);
+            assertSuiteScoresStoredOnceFor(message);
             verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
         }
 
@@ -1312,6 +1368,40 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .experimentId(UUID.randomUUID())
                     .judgeFallbackModels(judgeFallbackModels)
                     .build();
+        }
+    }
+
+    private static final class MonitoredEvaluation implements EvaluationRecorder {
+
+        private final List<List<? extends FeedbackScoreItem>> completed = new CopyOnWriteArrayList<>();
+        private final List<Throwable> failed = new CopyOnWriteArrayList<>();
+
+        @Override
+        public Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call) {
+            return EvaluationRecorder.NOOP.recordLlmCall(request, call);
+        }
+
+        @Override
+        public Mono<DecisionsResponse> recordDecisionCall(DecisionsRequest request, Mono<DecisionsResponse> call) {
+            return EvaluationRecorder.NOOP.recordDecisionCall(request, call);
+        }
+
+        @Override
+        public Mono<String> recordToolCall(String toolName, String arguments, Mono<String> execution) {
+            return EvaluationRecorder.NOOP.recordToolCall(toolName, arguments, execution);
+        }
+
+        @Override
+        public void recordPreparation(int fetchedSpanCount, int estimatedTokens, boolean agentic) {
+        }
+
+        @Override
+        public void flagBudgetExceeded() {
+        }
+
+        @Override
+        public <T extends FeedbackScoreItem> Mono<List<T>> monitor(Mono<List<T>> scoring) {
+            return scoring.doOnNext(completed::add).doOnError(failed::add);
         }
     }
 
