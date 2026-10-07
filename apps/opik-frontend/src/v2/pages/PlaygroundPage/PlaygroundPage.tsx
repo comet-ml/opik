@@ -119,6 +119,7 @@ const PlaygroundPage = () => {
   const providerKeys: COMPOSED_PROVIDER_TYPE[] = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
   }, [providerKeysData]);
+  const hasLoadedProviderKeys = !!providerKeysData;
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -216,13 +217,13 @@ const PlaygroundPage = () => {
 
   // Auto-open setup dialog when no providers configured (only on initial load)
   useEffect(() => {
-    if (!isPendingProviderKeys && !hasCheckedInitialProviders) {
+    if (hasLoadedProviderKeys && !hasCheckedInitialProviders) {
       setHasCheckedInitialProviders(true);
       if (providerKeys.length === 0) {
         setSetupDialogOpen(true);
       }
     }
-  }, [isPendingProviderKeys, hasCheckedInitialProviders, providerKeys.length]);
+  }, [hasLoadedProviderKeys, hasCheckedInitialProviders, providerKeys.length]);
 
   // Handle provider addition - trigger validation for all prompts
   const handleProviderAdded = useCallback(() => {
@@ -335,6 +336,7 @@ const PlaygroundPage = () => {
                   workspaceName={workspaceName}
                   providerKeys={providerKeys}
                   isPendingProviderKeys={isPendingProviderKeys}
+                  hasLoadedProviderKeys={hasLoadedProviderKeys}
                   runSingle={runSingle}
                   stopSingle={stopSingle}
                 />
@@ -364,6 +366,7 @@ const PlaygroundPage = () => {
                   workspaceName={workspaceName}
                   providerKeys={providerKeys}
                   isPendingProviderKeys={isPendingProviderKeys}
+                  hasLoadedProviderKeys={hasLoadedProviderKeys}
                 />
               </div>
 

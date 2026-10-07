@@ -68,7 +68,7 @@ interface PlaygroundPromptProps {
   index: number;
   promptId: string;
   providerKeys: COMPOSED_PROVIDER_TYPE[];
-  isPendingProviderKeys: boolean;
+  hasLoadedProviderKeys: boolean;
   hasRegistryModels: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
@@ -81,7 +81,7 @@ const PlaygroundPrompt = ({
   promptId,
   index,
   providerKeys,
-  isPendingProviderKeys,
+  hasLoadedProviderKeys,
   hasRegistryModels,
   providerResolver,
   modelResolver,
@@ -270,11 +270,12 @@ const PlaygroundPrompt = ({
 
   useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
-    // Without the registry's models every stored model looks unknown and would be swapped for the first
-    // provider's default, so the check waits until the registry has models, even after it has failed.
+    // A failed request is not an empty answer: without the registry's models every stored model looks
+    // unknown, and without the keys every provider looks removed, so the model would be swapped or cleared.
+    // The check waits until both have really loaded, even after one has failed.
     if (
       !checkedIfModelIsValidRef.current &&
-      !isPendingProviderKeys &&
+      hasLoadedProviderKeys &&
       hasRegistryModels
     ) {
       checkedIfModelIsValidRef.current = true;
@@ -306,7 +307,7 @@ const PlaygroundPrompt = ({
     }
   }, [
     providerKeys,
-    isPendingProviderKeys,
+    hasLoadedProviderKeys,
     hasRegistryModels,
     providerResolver,
     modelResolver,

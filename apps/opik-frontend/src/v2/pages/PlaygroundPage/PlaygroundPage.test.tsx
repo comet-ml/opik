@@ -94,7 +94,8 @@ vi.mock("@/v2/pages/PlaygroundPage/PlaygroundAddVariant", () => ({
 vi.mock(
   "@/v2/pages-shared/llm/SetupProviderDialog/SetupProviderDialog",
   () => ({
-    default: () => null,
+    default: ({ open }: { open: boolean }) =>
+      open ? <div data-testid="setup-provider-dialog" /> : null,
   }),
 );
 vi.mock("@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages", () => ({
@@ -420,6 +421,45 @@ describe("PlaygroundPage stored models", () => {
     ]);
   });
 
+  it("keeps every stored model while the provider keys have failed", async () => {
+    backend.providerKeys = fail;
+    backend.registry = reply(OPENAI_REGISTRY);
+    storePrompts([
+      { model: PROVIDER_MODEL_TYPE.GPT_4O_MINI, provider: OPEN_AI },
+      { model: PROVIDER_MODEL_TYPE.GPT_4_1_MINI, provider: OPEN_AI },
+    ]);
+    const stored = storedPrompts();
+
+    renderPage();
+    await advance(30_000);
+
+    expect(variantCards()).toHaveLength(2);
+    expect(storedPrompts()).toEqual(stored);
+  });
+
+  it("checks the stored models once the provider keys answer after failing", async () => {
+    backend.providerKeys = fail;
+    backend.registry = reply(OPENAI_REGISTRY);
+    storePrompts([
+      { model: PROVIDER_MODEL_TYPE.GPT_4O_MINI, provider: OPEN_AI },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, provider: GEMINI },
+    ]);
+
+    renderPage();
+    await advance(30_000);
+
+    backend.providerKeys = reply(ANTHROPIC_AND_OPENAI_KEYS);
+    await act(async () => {
+      focusManager.setFocused(true);
+    });
+    await advance();
+
+    expect(storedPrompts().map(({ model }) => model)).toEqual([
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    ]);
+  });
+
   it("keeps every stored model when the model registry answers with empty model lists", async () => {
     backend.providerKeys = reply(ANTHROPIC_AND_OPENAI_KEYS);
     backend.registry = reply({
@@ -484,5 +524,27 @@ describe("PlaygroundPage stored models", () => {
       PROVIDER_MODEL_TYPE.GPT_4O_MINI,
       PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
     ]);
+  });
+});
+
+describe("PlaygroundPage setup provider dialog", () => {
+  const setupDialog = () => screen.queryByTestId("setup-provider-dialog");
+
+  it("opens when the workspace has no provider keys", async () => {
+    backend.providerKeys = reply({ content: [], total: 0 });
+
+    renderPage();
+    await advance();
+
+    expect(setupDialog()).not.toBeNull();
+  });
+
+  it("stays closed while the provider keys have failed", async () => {
+    backend.providerKeys = fail;
+
+    renderPage();
+    await advance(30_000);
+
+    expect(setupDialog()).toBeNull();
   });
 });
