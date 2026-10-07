@@ -107,7 +107,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
     window.open(url, "_blank");
   };
 
-  const hasOutput =
+  const hasCurrentRun =
     !stale &&
     (value !== null ||
       Boolean(error) ||
@@ -137,7 +137,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
       tableMetadata={context.table.options.meta}
       className="flex pt-5"
     >
-      {hasOutput ? (
+      {hasCurrentRun ? (
         <div className="group relative flex size-full flex-col">
           {traceId && activeProjectId && (
             <TooltipWrapper content="Click to open original trace">

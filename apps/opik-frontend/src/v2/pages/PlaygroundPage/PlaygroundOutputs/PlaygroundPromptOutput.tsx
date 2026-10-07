@@ -1,7 +1,6 @@
 import React from "react";
 import { Clock, Coins } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import PlaygroundOutputError from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputError";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
@@ -40,7 +39,8 @@ const PlaygroundPromptOutput = ({
     usage?.model,
   );
 
-  const hasOutput = value !== null || Boolean(error) || isLoading;
+  const hasCurrentRun =
+    !stale && (value !== null || Boolean(error) || isLoading);
 
   const renderContent = () => {
     if (isLoading && !value) {
@@ -48,18 +48,10 @@ const PlaygroundPromptOutput = ({
     }
 
     if (error) {
-      return <PlaygroundOutputError message={error} stale={stale} />;
+      return <PlaygroundOutputError message={error} />;
     }
 
-    return (
-      <MarkdownPreview
-        className={cn({
-          "text-muted-gray dark:text-foreground": stale,
-        })}
-      >
-        {value}
-      </MarkdownPreview>
-    );
+    return <MarkdownPreview>{value}</MarkdownPreview>;
   };
 
   const promptColor =
@@ -75,7 +67,7 @@ const PlaygroundPromptOutput = ({
           onStop={onStop}
         />
       )}
-      {hasOutput ? (
+      {hasCurrentRun ? (
         <div className="flex-1 bg-background p-4">
           <div className="mb-3 flex items-center gap-5">
             <span className="flex items-center gap-2">
