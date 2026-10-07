@@ -233,6 +233,13 @@ export class PlaygroundPage {
       .filter({ hasText: 'Run complete' });
   }
 
+  savedToLibraryToast(text: string): Locator {
+    return this.page
+      .getByRole('region', { name: 'Notifications (F8)' })
+      .getByRole('status')
+      .filter({ hasText: text });
+  }
+
   /**
    * Start recording every toast the page raises, from before the first one can
    * appear. Must be called BEFORE `goto()` — it installs an init script, which
