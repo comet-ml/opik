@@ -323,7 +323,7 @@ describe("PlaygroundOutputCell", () => {
     });
 
     // Stopping a run leaves the rows it never reached without an experiment item, and nothing
-    // will ever write one. Keyed off the item alone, those rows load for ever.
+    // will ever write one. Keyed off the item alone, those rows load forever.
     it("should stop loading and say so for a row the stopped run never reached", () => {
       experimentItem = {
         hasItem: false,
@@ -341,7 +341,7 @@ describe("PlaygroundOutputCell", () => {
       expect(screen.getByText("Cancelled")).toBeInTheDocument();
     });
 
-    it("should settle empty rather than load for ever when the call returned nothing", () => {
+    it("should settle empty rather than load forever when the call returned nothing", () => {
       experimentItem = {
         hasItem: true,
         notRun: false,

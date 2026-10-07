@@ -56,7 +56,7 @@ const EMPTY_ITEM: PlaygroundExperimentItem = {
  * sent; anything else would be read as a data key and match nothing.
  *
  * Polling stops once the row has its item, or once the run's finish stamp says none is coming.
- * Without that second condition a row the run never reached waits for ever.
+ * Without that second condition a row the run never reached waits forever.
  */
 export default function usePlaygroundExperimentItem(
   experimentId: string | undefined,
