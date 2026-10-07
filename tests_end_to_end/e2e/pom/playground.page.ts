@@ -147,18 +147,30 @@ export class PlaygroundPage {
   }
 
   /**
-   * Add a variant that copies the last one — same model and messages
-   * (`PlaygroundAddVariant.handleDuplicateLastPrompt`).
-   *
-   * Duplicating rather than adding a blank variant is deliberate: a blank one
-   * inherits only the last-picked model and needs its messages configured
-   * again, which is setup the naming assertion does not care about.
+   * Specs that only need a second variant duplicate rather than add a blank one:
+   * a blank variant inherits only the last-picked model and needs its messages
+   * configured again.
    */
-  async duplicateLastVariant(): Promise<void> {
-    return test.step('add variant (duplicate of the last one)', async () => {
-      await this.page.getByTestId('playground-add-variant-button').click();
-      await this.page.getByRole('button', { name: 'Duplicate variant' }).click();
+  async duplicateVariant(index: number): Promise<void> {
+    return test.step(`duplicate variant ${index}`, async () => {
+      // The header actions only expand while the card is hovered.
+      await this.variantCard(index).hover();
+      await this.duplicateVariantButton(index).click();
     });
+  }
+
+  async addBlankVariant(): Promise<void> {
+    return test.step('add a blank variant', async () => {
+      await this.page.getByTestId('playground-add-variant-button').click();
+    });
+  }
+
+  duplicateVariantButton(index: number): Locator {
+    return this.variantCard(index).getByTestId('playground-duplicate-variant-button');
+  }
+
+  variantModelPicker(index: number): Locator {
+    return this.variantCard(index).getByTestId('select-a-llm-model');
   }
 
   /**
