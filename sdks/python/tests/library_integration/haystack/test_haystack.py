@@ -59,6 +59,7 @@ def test_haystack__happyflow(
             model=MODEL_NAME,
             generation_kwargs={
                 "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
+                "max_completion_tokens": 64,
             },
         ),
     )
@@ -69,7 +70,7 @@ def test_haystack__happyflow(
         ChatMessage.from_system(
             "Always respond in German even if some input data is in other languages."
         ),
-        ChatMessage.from_user("Tell me about {{location}}"),
+        ChatMessage.from_user("Tell me about {{location}} in one sentence."),
     ]
 
     pipe.run(
@@ -187,6 +188,7 @@ def test_haystack__context_aware_tracing(fake_backend):
                 model=MODEL_NAME,
                 generation_kwargs={
                     "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
+                    "max_completion_tokens": 64,
                 },
             ),
         )

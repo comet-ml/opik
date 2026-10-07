@@ -21,7 +21,6 @@ env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False
-  OPIK_TEST_EXPENSIVE: ${{ inputs.run_expensive_tests }}
 on:
   workflow_call:
     inputs:
@@ -43,7 +42,9 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+        # Lowest and highest supported Python only: these suites make paid
+        # LLM calls and the intermediate versions add cost without coverage.
+        python_version: ["3.10", "3.14"]
 
     steps:
       - name: Check out code
@@ -77,6 +78,10 @@ jobs:
           credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
 
       - name: Run tests
+        env:
+          # Video/TTS output does not depend on the Python version, so the
+          # expensive tests run on one matrix entry only.
+          OPIK_TEST_EXPENSIVE: ${{ inputs.run_expensive_tests && matrix.python_version == '3.14' }}
         run: |
           cd ./tests/library_integration/openai/
           python -m pytest  -vv .
