@@ -22,6 +22,7 @@ import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTes
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
 import usePlaygroundStore, {
+  beginExperimentRun,
   getExperimentNameForPrompt,
   getExperimentNamesForPrompts,
   usePromptIds,
@@ -570,6 +571,7 @@ const useActionButtonActions = ({
     resetState();
     isToStopRef.current = false;
     setAllRunning(true);
+    const registerRunExperiments = beginExperimentRun(datasetId);
 
     try {
       const prompts = promptIds.map((id) => promptMap[id]);
@@ -601,6 +603,7 @@ const useActionButtonActions = ({
         };
       });
 
+      registerRunExperiments(experiments, experimentPromptMap);
       storeExperiments(experiments);
       setExperimentByPromptId(experimentPromptMap);
       setProgressPhase("running");
@@ -643,6 +646,7 @@ const useActionButtonActions = ({
     isToStopRef.current = false;
     announcePendingRef.current = true;
     setAllRunning(true);
+    const registerRunExperiments = beginExperimentRun(datasetId);
 
     const runExperiments: LogExperiment[] = [];
     const announcer = createCompletionAnnouncer(promptIds.length, () => {
@@ -659,6 +663,7 @@ const useActionButtonActions = ({
         ...logProcessorHandlers,
         projectName,
         onAddExperimentRegistry: (experiments, map) => {
+          registerRunExperiments(experiments, map);
           runExperiments.splice(0, runExperiments.length, ...experiments);
           logProcessorHandlers.onAddExperimentRegistry?.(experiments, map);
           announcer.experimentsRegistered(experiments.length);
@@ -706,6 +711,7 @@ const useActionButtonActions = ({
     setProgress,
     projectName,
     datasetName,
+    datasetId,
     canLogTraceSpanThread,
     canCreateExperiments,
     promptIds.length,
@@ -725,6 +731,7 @@ const useActionButtonActions = ({
 
       setPromptRunning(promptId, true);
       scopedAnnounceRef.current.add(promptId);
+      const registerRunExperiments = beginExperimentRun(datasetId);
 
       const singleRunExperiments: LogExperiment[] = [];
       const announcer = createCompletionAnnouncer(1, () => {
@@ -740,6 +747,7 @@ const useActionButtonActions = ({
           ...logProcessorHandlers,
           projectName,
           onAddExperimentRegistry: (experiments, map) => {
+            registerRunExperiments(experiments, map);
             singleRunExperiments.splice(
               0,
               singleRunExperiments.length,
@@ -787,6 +795,7 @@ const useActionButtonActions = ({
       processCombination,
       projectName,
       datasetName,
+      datasetId,
       canLogTraceSpanThread,
       canCreateExperiments,
     ],
@@ -800,6 +809,7 @@ const useActionButtonActions = ({
 
       setPromptRunning(promptId, true);
       scopedAnnounceRef.current.add(promptId);
+      const registerRunExperiments = beginExperimentRun(datasetId);
 
       const experimentName = getExperimentNameForPrompt(prompt.id);
 
@@ -820,6 +830,10 @@ const useActionButtonActions = ({
           setPromptRunning(promptId, false);
           return;
         }
+
+        registerRunExperiments([{ id: experiment.experiment_id }], {
+          [promptId]: experiment.experiment_id,
+        });
 
         if (!usePlaygroundStore.getState().isRunningMap[promptId]) {
           return;
