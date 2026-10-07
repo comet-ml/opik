@@ -341,9 +341,11 @@ public class FilterQueryBuilder {
                             "notEmpty(%1$s)")))
                     .put(Operator.IN, new EnumMap<>(Map.of(
                             FieldType.ENUM, "%1$s IN :filter%2$d",
+                            FieldType.ENUM_LEGACY, "(%1$s IN :filter%2$d OR %1$s = '%3$s')",
                             FieldType.STRING_LIST, "%1$s IN :filter%2$d")))
                     .put(Operator.NOT_IN, new EnumMap<>(Map.of(
                             FieldType.ENUM, "%1$s NOT IN :filter%2$d",
+                            FieldType.ENUM_LEGACY, "(%1$s NOT IN :filter%2$d AND %1$s != '%3$s')",
                             FieldType.STRING_LIST, "%1$s NOT IN :filter%2$d")))
                     .build());
 

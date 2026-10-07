@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDatasetFilterColumns,
+  generateLogsSourceFilter,
+  processFilters,
   transformDataColumnFilters,
 } from "./filters";
 import {
@@ -9,6 +11,7 @@ import {
   DYNAMIC_COLUMN_TYPE,
 } from "@/types/shared";
 import { Filter } from "@/types/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 
 const createFilter = (
   overrides: Partial<Filter> &
@@ -131,5 +134,46 @@ describe("transformDataColumnFilters", () => {
     expect(result[0]).toMatchObject({ field: COLUMN_DATA_ID, key: "input" });
     expect(result[1]).toMatchObject({ field: "tags", key: "" });
     expect(result[2]).toMatchObject({ field: COLUMN_DATA_ID, key: "score" });
+  });
+});
+
+describe("generateLogsSourceFilter", () => {
+  const toBackendFilters = (source: LOGS_SOURCE) =>
+    JSON.parse(
+      processFilters(undefined, generateLogsSourceFilter(source)).filters!,
+    );
+
+  it("scopes playground logs to single runs and playground experiments only", () => {
+    expect(toBackendFilters(LOGS_SOURCE.playground)).toEqual([
+      {
+        field: "source",
+        type: COLUMN_TYPE.string,
+        operator: "in",
+        value: "playground,experiment",
+      },
+      {
+        field: "metadata",
+        type: COLUMN_TYPE.dictionary,
+        operator: "=",
+        key: "created_from",
+        value: "playground",
+      },
+    ]);
+  });
+
+  it.each([
+    LOGS_SOURCE.sdk,
+    LOGS_SOURCE.experiment,
+    LOGS_SOURCE.optimization,
+    LOGS_SOURCE.evaluator,
+  ])("filters %s logs by source alone", (source) => {
+    expect(toBackendFilters(source)).toEqual([
+      {
+        field: "source",
+        type: COLUMN_TYPE.string,
+        operator: "=",
+        value: source,
+      },
+    ]);
   });
 });
