@@ -4,14 +4,11 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .workspace_project_name import WorkspaceProjectName
 
 
-class WorkspaceProjectUserCount(UniversalBaseModel):
-    workspace_id: typing.Optional[str] = None
-    project_id: typing.Optional[str] = None
-    project_name: typing.Optional[str] = None
-    user: typing.Optional[str] = None
-    count: typing.Optional[int] = None
+class UsageProjectsResponse(UniversalBaseModel):
+    projects: typing.Optional[typing.List[WorkspaceProjectName]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
