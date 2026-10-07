@@ -420,6 +420,44 @@ describe("PlaygroundPage stored models", () => {
     ]);
   });
 
+  it("keeps every stored model when the model registry answers with empty model lists", async () => {
+    backend.providerKeys = reply(ANTHROPIC_AND_OPENAI_KEYS);
+    backend.registry = reply({
+      [PROVIDER_TYPE.OPEN_AI]: [],
+      [PROVIDER_TYPE.ANTHROPIC]: [],
+    });
+    storePrompts([
+      { model: PROVIDER_MODEL_TYPE.GPT_4O_MINI, provider: OPEN_AI },
+      { model: PROVIDER_MODEL_TYPE.GPT_4_1_MINI, provider: OPEN_AI },
+    ]);
+
+    renderPage();
+    await advance(30_000);
+
+    expect(variantCards()).toHaveLength(2);
+    expect(storedPrompts().map(({ model }) => model)).toEqual([
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.GPT_4_1_MINI,
+    ]);
+  });
+
+  it("checks the stored models once the model registry answers with models", async () => {
+    backend.providerKeys = reply(ANTHROPIC_AND_OPENAI_KEYS);
+    backend.registry = reply(OPENAI_REGISTRY);
+    storePrompts([
+      { model: PROVIDER_MODEL_TYPE.GPT_4O_MINI, provider: OPEN_AI },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, provider: GEMINI },
+    ]);
+
+    renderPage();
+    await advance();
+
+    expect(storedPrompts().map(({ model }) => model)).toEqual([
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    ]);
+  });
+
   it("checks the stored models once the model registry answers after failing", async () => {
     backend.providerKeys = reply(ANTHROPIC_AND_OPENAI_KEYS);
     backend.registry = fail;
