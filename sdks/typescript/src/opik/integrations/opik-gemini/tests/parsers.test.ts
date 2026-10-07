@@ -29,6 +29,7 @@ describe("Gemini parsers", () => {
       expect(result?.prompt_tokens).toBe(10);
       expect(result?.completion_tokens).toBe(105);
       expect(result?.total_tokens).toBe(115);
+      expect(result?.["original_usage.thoughtsTokenCount"]).toBe(100);
     });
 
     it("counts tool-use prompt tokens as prompt tokens", () => {
@@ -44,6 +45,7 @@ describe("Gemini parsers", () => {
       expect(result?.prompt_tokens).toBe(50);
       expect(result?.completion_tokens).toBe(5);
       expect(result?.total_tokens).toBe(55);
+      expect(result?.["original_usage.tool_use_prompt_token_count"]).toBe(40);
     });
 
     it("keeps a zero candidates count", () => {
