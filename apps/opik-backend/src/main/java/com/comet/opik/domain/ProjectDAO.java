@@ -5,6 +5,7 @@ import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -62,8 +63,9 @@ interface ProjectDAO {
     List<WorkspaceProjectName> findNamesByIds(@BindList("ids") Collection<UUID> ids);
 
     // DATE() in the MySQL session timezone, so callers get a calendar date without picking a zone.
+    // Null when there are no projects (MIN over an empty table).
     @SqlQuery("SELECT DATE(MIN(created_at)) FROM projects")
-    LocalDate findEarliestCreationDate();
+    @Nullable LocalDate findEarliestCreationDate();
 
     @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId")
     Set<UUID> findIdsByWorkspaceId(@Bind("workspaceId") String workspaceId);

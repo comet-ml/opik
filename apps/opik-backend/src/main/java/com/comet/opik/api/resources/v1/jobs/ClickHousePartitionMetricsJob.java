@@ -26,10 +26,13 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple4;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.ToLongFunction;
@@ -84,8 +87,9 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
     private final AtomicReference<Snapshot> snapshot = new AtomicReference<>(Snapshot.EMPTY);
     private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
-    // Looked up once, on the first poll after startup: the oldest project doesn't get older.
-    private final AtomicReference<LocalDate> inRangeFrom = new AtomicReference<>();
+    // Partition-date floor derived from the oldest project; looked up on the first poll after startup and
+    // cached, since the oldest project doesn't get older.
+    private final AtomicReference<LocalDate> cachedPartitionRangeStart = new AtomicReference<>();
 
     @Inject
     public ClickHousePartitionMetricsJob(
@@ -157,7 +161,7 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                     });
             return Mono
                     .zip(partitionMetricsDAO.getPartitionStats(), lwdRowCounts, partitionMetricsDAO.getServerDate(),
-                            inRangeFrom())
+                            loadPartitionRangeStart())
                     .doOnNext(this::updateSnapshot)
                     // A failed refresh stops reporting rather than publishing the last snapshot indefinitely.
                     .doOnError(exception -> snapshot.set(Snapshot.EMPTY))
@@ -189,25 +193,30 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
         currentExecution.set(subscription);
     }
 
-    private Mono<LocalDate> inRangeFrom() {
-        var cached = inRangeFrom.get();
+    /** Empty while there are no projects; not cached then, so the lookup is retried next poll. */
+    private Mono<Optional<LocalDate>> loadPartitionRangeStart() {
+        var cached = cachedPartitionRangeStart.get();
         if (cached != null) {
-            return Mono.just(cached);
+            return Mono.just(Optional.of(cached));
         }
-        // No projects means no legitimate data yet: nothing is "too old", and the lookup is retried next poll.
         return projectService.findEarliestCreationDate()
                 .map(earliest -> earliest.map(date -> {
-                    var from = PartitionRange.floorFor(date);
-                    inRangeFrom.set(from);
-                    log.info("ClickHouse partition metrics: in-range floor '{}' from oldest project date '{}'",
-                            from, date);
-                    return from;
-                }).orElse(LocalDate.MIN));
+                    var start = PartitionRange.floorFor(date);
+                    cachedPartitionRangeStart.set(start);
+                    log.info("ClickHouse partition metrics: partition range starts '{}', from oldest project date '{}'",
+                            start, date);
+                    return start;
+                }));
     }
 
-    private void updateSnapshot(Tuple4<List<PartitionStat>, List<LwdStat>, LocalDate, LocalDate> result) {
+    private void updateSnapshot(
+            Tuple4<List<PartitionStat>, List<LwdStat>, LocalDate, Optional<LocalDate>> result) {
         // ClickHouse's date, not the JVM's: partition ids are computed in the ClickHouse server timezone.
-        var range = PartitionRange.of(result.getT4(), result.getT3());
+        var serverDate = result.getT3();
+        // No projects means no legitimate data: any leftover past partition groups, keeping series bounded.
+        var start = result.getT4()
+                .orElseGet(() -> serverDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)));
+        var range = PartitionRange.of(start, serverDate);
         var partitionStats = range.group(result.getT1());
         var lwdStats = range.groupLwd(result.getT2());
         snapshot.set(Snapshot.builder()
