@@ -79,7 +79,7 @@ class ExperimentItemProcessorTest {
 
     @BeforeEach
     void setUp() {
-        var messageRenderer = new ExperimentMessageRenderer(mustacheParser);
+        var messageRenderer = new ExperimentMessageRenderer(mustacheParser, llmProviderFactory);
         var tracePersistence = new ExperimentTracePersistence(
                 traceService, spanService, experimentItemService, llmProviderFactory, idGenerator);
         processor = new ExperimentItemProcessor(

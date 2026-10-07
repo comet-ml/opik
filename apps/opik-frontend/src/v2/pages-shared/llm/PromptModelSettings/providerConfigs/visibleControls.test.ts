@@ -26,7 +26,18 @@ const ANTHROPIC_CONFIG = {
 const RULE_CONFIG = { temperature: 0.4 };
 
 describe("hasVisibleControls", () => {
-  it("is false for a Claude model without sampling params on a rule", () => {
+  it("is false on a rule for a newly synced Claude with no capability row", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        "claude-opus-9" as PROVIDER_MODEL_TYPE,
+        ANTHROPIC_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it("is true for a Claude model without sampling params on a rule, which keeps its effort", () => {
     expect(
       hasVisibleControls(
         PROVIDER_TYPE.ANTHROPIC,
@@ -34,7 +45,7 @@ describe("hasVisibleControls", () => {
         ANTHROPIC_CONFIG,
         RULE_UNSUPPORTED_PARAMS,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("is true for the same Claude model on the playground", () => {
@@ -134,12 +145,21 @@ describe("hasVisibleControls", () => {
     ).toBe(true);
   });
 
-  it.each([
-    PROVIDER_TYPE.OPIK_FREE,
-    PROVIDER_TYPE.OLLAMA,
-    PROVIDER_TYPE.BEDROCK,
-  ])("is false for %s, which has no panel", (provider) => {
-    expect(hasVisibleControls(provider, "", {})).toBe(false);
+  it.each([PROVIDER_TYPE.OLLAMA, PROVIDER_TYPE.BEDROCK])(
+    "is true for %s, which shares the custom panel and its JSON editor",
+    (provider) => {
+      expect(hasVisibleControls(provider, "", {})).toBe(true);
+      expect(
+        hasVisibleControls(provider, "", RULE_CONFIG, RULE_UNSUPPORTED_PARAMS),
+      ).toBe(true);
+      expect(
+        hasVisibleControls(provider, "", {}, OPTIMIZATION_UNSUPPORTED_PARAMS),
+      ).toBe(true);
+    },
+  );
+
+  it("is false for the Opik free model, which has no panel", () => {
+    expect(hasVisibleControls(PROVIDER_TYPE.OPIK_FREE, "", {})).toBe(false);
   });
 });
 
