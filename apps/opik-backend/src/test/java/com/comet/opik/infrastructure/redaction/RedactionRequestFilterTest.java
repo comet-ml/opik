@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Arrays;
 import java.util.List;
@@ -65,23 +66,14 @@ class RedactionRequestFilterTest {
         private final RedactionRequestFilter filter = new RedactionRequestFilter(redactionService,
                 () -> requestContext);
 
-        @Test
-        @DisplayName("records the decision for a private resource")
-        void privateResource() throws Exception {
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "/v1/private/traces|/{id}",
+                "/v1/internal/analytics-queries|/projects/{projectId}"})
+        @DisplayName("records the decision for a covered resource")
+        void coveredResource(String templates) throws Exception {
             enabled(true);
-            var context = requestContext("/v1/private/traces|/{id}");
-
-            filter.filter(context);
-
-            assertThat(requestContext.isRedactResponse()).isTrue();
-            verify(context).setProperty(RedactionRequestFilter.REDACT_RESPONSE_PROPERTY, true);
-        }
-
-        @Test
-        @DisplayName("records the decision for the analytics query executor")
-        void analyticsQueries() throws Exception {
-            enabled(true);
-            var context = requestContext("/v1/internal/analytics-queries|/projects/{projectId}");
+            var context = requestContext(templates);
 
             filter.filter(context);
 
