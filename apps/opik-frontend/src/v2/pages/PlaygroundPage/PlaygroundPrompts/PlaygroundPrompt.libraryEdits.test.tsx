@@ -144,6 +144,39 @@ const seedPlaygroundPrompt = (prompt: Partial<PlaygroundPromptType>) =>
 
 const storedPrompt = () => usePlaygroundStore.getState().promptMap[CARD_ID];
 
+const reloadWithStoredPrompt = (prompt: Partial<PlaygroundPromptType>) => {
+  localStorage.setItem(
+    "PLAYGROUND_STATE",
+    JSON.stringify({
+      state: {
+        promptIds: [CARD_ID],
+        promptMap: {
+          [CARD_ID]: {
+            id: CARD_ID,
+            name: "Prompt",
+            model: "",
+            provider: "",
+            configs: {},
+            ...prompt,
+          },
+        },
+      },
+      version: 0,
+    }),
+  );
+  return act(() => usePlaygroundStore.persist.rehydrate());
+};
+
+const editedV1Messages = () =>
+  TEMPLATES.v1.map((message, index) => ({
+    id: `m${index}`,
+    ...message,
+    content:
+      message.role === LLM_MESSAGE_ROLE.user
+        ? `${message.content} STORED-EDIT`
+        : message.content,
+  }));
+
 const appendToUserMessage = (text: string) =>
   act(() =>
     usePlaygroundStore.getState().updatePrompt(CARD_ID, {
@@ -271,5 +304,47 @@ describe("PlaygroundPrompt with a prompt loaded from the library", () => {
     expect(screen.getByText("user: Another prompt")).toBeInTheDocument();
     expect(screen.queryByText(/UNSAVED-EDIT/)).not.toBeInTheDocument();
     expect(screen.getByText("Loaded: Other")).toBeInTheDocument();
+  });
+});
+
+describe("PlaygroundPrompt with a library prompt stored before this fix", () => {
+  it("keeps the stored edit of a prompt pinned to a version", async () => {
+    await reloadWithStoredPrompt({
+      loadedChatPromptId: "greeter",
+      loadedChatPromptVersionId: "v1",
+      messages: editedV1Messages(),
+    });
+
+    renderCard();
+
+    expect(
+      screen.getByText("user: Say hi to {{name}} STORED-EDIT"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("loads the latest version once into a prompt that follows it, since the applied version is unknown", async () => {
+    await reloadWithStoredPrompt({
+      loadedChatPromptId: "greeter",
+      messages: editedV1Messages(),
+    });
+
+    renderCard();
+
+    expect(screen.getByText("user: Greet {{name}}")).toBeInTheDocument();
+    expect(screen.queryByText(/STORED-EDIT/)).not.toBeInTheDocument();
+    expect(storedPrompt().appliedChatPromptVersionId).toBe("v2");
+  });
+
+  it("still fills a pinned prompt that has only a blank message", async () => {
+    await reloadWithStoredPrompt({
+      loadedChatPromptId: "greeter",
+      loadedChatPromptVersionId: "v1",
+      messages: [{ id: "blank", role: LLM_MESSAGE_ROLE.user, content: "" }],
+    });
+
+    renderCard();
+
+    expect(screen.getByText("user: Say hi to {{name}}")).toBeInTheDocument();
   });
 });

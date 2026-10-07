@@ -30,10 +30,21 @@ const PROMPTS: Record<string, { name: string; latestVersionId: string }> = {
   other: { name: "Other", latestVersionId: "v3" },
 };
 
+const NON_ARRAY_TEMPLATES: Record<string, string> = {
+  malformed: '[{"role": "user", "content": "Say hi',
+  string: JSON.stringify("Say hi to {{name}}"),
+  number: "42",
+  object: JSON.stringify({ text: "Say hi to {{name}}" }),
+};
+
 const PROMPT_BY_VERSION: Record<string, string> = {
   v1: "greeter",
   v2: "greeter",
   v3: "other",
+  malformed: "greeter",
+  string: "greeter",
+  number: "greeter",
+  object: "greeter",
 };
 
 const messagesOf = (versionId: string): LLMMessage[] =>
@@ -80,12 +91,15 @@ beforeEach(() => {
   vi.mocked(usePromptVersionById).mockImplementation(
     ({ versionId }, options) => {
       const template =
-        options?.enabled === false ? undefined : TEMPLATES[versionId];
+        options?.enabled === false
+          ? undefined
+          : NON_ARRAY_TEMPLATES[versionId] ??
+            (TEMPLATES[versionId] && JSON.stringify(TEMPLATES[versionId]));
       return {
         data: template && {
           id: versionId,
           prompt_id: PROMPT_BY_VERSION[versionId],
-          template: JSON.stringify(template),
+          template,
         },
         isSuccess: Boolean(template),
       } as unknown as ReturnType<typeof usePromptVersionById>;
@@ -183,6 +197,44 @@ describe("useLoadChatPrompt", () => {
 
       expect(onMessagesLoaded).toHaveBeenCalledTimes(1);
       expectLoaded(expectedVersionId, expectedName);
+    },
+  );
+
+  it.each([
+    {
+      template: "is not valid JSON",
+      versionId: "malformed",
+      content: NON_ARRAY_TEMPLATES.malformed,
+    },
+    {
+      template: "is a JSON string",
+      versionId: "string",
+      content: "Say hi to {{name}}",
+    },
+    {
+      template: "is a JSON number",
+      versionId: "number",
+      content: "42",
+    },
+    {
+      template: "is a JSON object",
+      versionId: "object",
+      content: NON_ARRAY_TEMPLATES.object,
+    },
+  ])(
+    "loads one user message and reports the version when the template $template",
+    ({ versionId, content }) => {
+      renderLoader({
+        selectedChatPromptId: "greeter",
+        selectedChatPromptVersionId: versionId,
+      });
+
+      expect(onMessagesLoaded).toHaveBeenCalledTimes(1);
+      expect(onMessagesLoaded).toHaveBeenLastCalledWith(
+        [expect.objectContaining({ role: LLM_MESSAGE_ROLE.user, content })],
+        "Greeter",
+        versionId,
+      );
     },
   );
 
