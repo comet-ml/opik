@@ -3,7 +3,8 @@ import get from "lodash/get";
 import api, { EXPERIMENT_EXECUTION_REST_ENDPOINT } from "@/api/api";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 import { snakeCaseObj } from "@/lib/utils";
-import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
+import { resolvePromptVersionRefs } from "@/api/playground/promptLinkage";
+import { useFetchPrompt } from "@/api/prompts/usePromptById";
 import { PlaygroundPromptType } from "@/types/playground";
 import { OpenAiPipelineMode } from "@/types/providers";
 import { useToast } from "@/ui/use-toast";
@@ -30,18 +31,25 @@ interface UseRunExperimentExecutionParams {
   openAiPipelineMode?: OpenAiPipelineMode;
 }
 
-const runExperimentExecution = async ({
-  datasetName,
-  datasetVersionId,
-  datasetId,
-  versionHash,
-  prompts,
-  projectName,
-  experimentNames,
-  openAiPipelineMode,
-}: UseRunExperimentExecutionParams): Promise<ExperimentExecutionResponse> => {
-  const promptVariants = prompts.map((prompt) => {
-    const versionRefs = collectPromptVersionRefs(prompt);
+const runExperimentExecution = async (
+  {
+    datasetName,
+    datasetVersionId,
+    datasetId,
+    versionHash,
+    prompts,
+    projectName,
+    experimentNames,
+    openAiPipelineMode,
+  }: UseRunExperimentExecutionParams,
+  fetchPrompt: ReturnType<typeof useFetchPrompt>,
+): Promise<ExperimentExecutionResponse> => {
+  const versionRefsByPrompt = await Promise.all(
+    prompts.map((prompt) => resolvePromptVersionRefs(prompt, fetchPrompt)),
+  );
+
+  const promptVariants = prompts.map((prompt, index) => {
+    const versionRefs = versionRefsByPrompt[index];
     const promptVersions = versionRefs.length
       ? versionRefs.map((ref) => ({ id: ref.id, prompt_id: ref.promptId }))
       : undefined;
@@ -78,9 +86,11 @@ const runExperimentExecution = async ({
 
 export default function useRunExperimentExecution() {
   const { toast } = useToast();
+  const fetchPrompt = useFetchPrompt();
 
   return useMutation({
-    mutationFn: runExperimentExecution,
+    mutationFn: (params: UseRunExperimentExecutionParams) =>
+      runExperimentExecution(params, fetchPrompt),
     onError: (error: AxiosError) => {
       const message =
         get(error, ["response", "data", "message"]) ||

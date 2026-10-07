@@ -37,6 +37,29 @@ export const collectPromptVersionRefs = (
   return refs;
 };
 
+type FetchPrompt = (params: {
+  promptId: string;
+}) => Promise<{ latest_version?: PromptVersion }>;
+
+export const resolvePromptVersionRefs = async (
+  prompt: PlaygroundPromptType,
+  fetchPrompt: FetchPrompt,
+): Promise<PromptVersionRef[]> => {
+  const { loadedChatPromptId, loadedChatPromptVersionId } = prompt;
+  if (!loadedChatPromptId || loadedChatPromptVersionId) {
+    return collectPromptVersionRefs(prompt);
+  }
+
+  const latestVersionId = await fetchPrompt({ promptId: loadedChatPromptId })
+    .then((promptData) => promptData.latest_version?.id)
+    .catch(() => undefined);
+
+  return collectPromptVersionRefs({
+    ...prompt,
+    loadedChatPromptVersionId: latestVersionId,
+  });
+};
+
 const parseTemplateJson = (template?: string): unknown => {
   if (!template) return null;
   try {

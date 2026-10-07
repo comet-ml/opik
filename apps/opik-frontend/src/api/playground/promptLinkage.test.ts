@@ -3,6 +3,7 @@ import {
   collectPromptVersionRefs,
   buildPromptLibraryMetadata,
   resolvePromptVersionForLink,
+  resolvePromptVersionRefs,
 } from "./promptLinkage";
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLMMessage, LLM_MESSAGE_ROLE } from "@/types/llm";
@@ -211,5 +212,96 @@ describe("resolvePromptVersionForLink", () => {
     );
     expect(fetchVersion).not.toHaveBeenCalled();
     expect(result).toBeUndefined();
+  });
+});
+
+describe("resolvePromptVersionRefs", () => {
+  const promptWithLatest = (latestVersionId: string) => ({
+    latest_version: { id: latestVersionId } as PromptVersion,
+  });
+
+  it("links the latest version when the prompt was loaded as latest", async () => {
+    const fetchPrompt = vi.fn(async () => promptWithLatest("V2"));
+
+    const result = await resolvePromptVersionRefs(
+      prompt({ loadedChatPromptId: "P1" }),
+      fetchPrompt,
+    );
+
+    expect(fetchPrompt).toHaveBeenCalledWith({ promptId: "P1" });
+    expect(result).toEqual([{ id: "V2", promptId: "P1" }]);
+  });
+
+  it("links the version that is latest when the run starts, not when the prompt was picked", async () => {
+    const fetchPrompt = vi.fn(async () => promptWithLatest("V2"));
+    const loadedAsLatest = prompt({ loadedChatPromptId: "P1" });
+
+    await resolvePromptVersionRefs(loadedAsLatest, fetchPrompt);
+    fetchPrompt.mockResolvedValue(promptWithLatest("V3"));
+    const result = await resolvePromptVersionRefs(loadedAsLatest, fetchPrompt);
+
+    expect(result).toEqual([{ id: "V3", promptId: "P1" }]);
+  });
+
+  it("keeps an explicitly picked version without looking up the latest", async () => {
+    const fetchPrompt = vi.fn(async () => promptWithLatest("V2"));
+
+    const result = await resolvePromptVersionRefs(
+      prompt({ loadedChatPromptId: "P1", loadedChatPromptVersionId: "V1" }),
+      fetchPrompt,
+    );
+
+    expect(fetchPrompt).not.toHaveBeenCalled();
+    expect(result).toEqual([{ id: "V1", promptId: "P1" }]);
+  });
+
+  it("keeps message-level versions next to the resolved latest version", async () => {
+    const fetchPrompt = vi.fn(async () => promptWithLatest("V2"));
+
+    const result = await resolvePromptVersionRefs(
+      prompt({
+        loadedChatPromptId: "P1",
+        messages: [message({ promptId: "P2", promptVersionId: "VT" })],
+      }),
+      fetchPrompt,
+    );
+
+    expect(result).toEqual([
+      { id: "V2", promptId: "P1" },
+      { id: "VT", promptId: "P2" },
+    ]);
+  });
+
+  it("links nothing for the chat prompt when it has no versions", async () => {
+    const fetchPrompt = vi.fn(async () => ({}));
+
+    const result = await resolvePromptVersionRefs(
+      prompt({ loadedChatPromptId: "P1" }),
+      fetchPrompt,
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it("links nothing for the chat prompt when it cannot be fetched", async () => {
+    const fetchPrompt = vi.fn(async () => {
+      throw new Error("404");
+    });
+
+    const result = await resolvePromptVersionRefs(
+      prompt({ loadedChatPromptId: "P1" }),
+      fetchPrompt,
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it("does not fetch for an ad-hoc prompt", async () => {
+    const fetchPrompt = vi.fn();
+
+    const result = await resolvePromptVersionRefs(prompt(), fetchPrompt);
+
+    expect(fetchPrompt).not.toHaveBeenCalled();
+    expect(result).toEqual([]);
   });
 });

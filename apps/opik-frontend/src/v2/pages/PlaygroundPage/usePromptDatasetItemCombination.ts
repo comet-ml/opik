@@ -30,7 +30,8 @@ import isNumber from "lodash/isNumber";
 import { parseCompletionOutput } from "@/lib/playground";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
-import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
+import { resolvePromptVersionRefs } from "@/api/playground/promptLinkage";
+import { useFetchPrompt } from "@/api/prompts/usePromptById";
 import { getTextFromMessageContent } from "@/lib/llm";
 
 export interface DatasetItemPromptCombination {
@@ -173,6 +174,7 @@ const usePromptDatasetItemCombination = ({
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
   const hydratePromptMetadata = useHydratePromptMetadata();
+  const fetchPrompt = useFetchPrompt();
 
   const runStreaming = useCompletionProxyStreaming({
     workspaceName,
@@ -235,9 +237,9 @@ const usePromptDatasetItemCombination = ({
         // message-only collection silently dropped — the root cause of
         // OPIK-6838 #1 (empty "Prompt commit" column) and #3 (dataset
         // experiments missing from the prompt's Experiments tab).
-        const promptLibraryVersions = collectPromptVersionRefs(prompt).map(
-          (ref) => ({ id: ref.id }),
-        );
+        const promptLibraryVersions = (
+          await resolvePromptVersionRefs(prompt, fetchPrompt)
+        ).map((ref) => ({ id: ref.id }));
 
         // Calculate prompt library metadata at execution time
         // This checks React Query cache to determine if prompt is unchanged from library
@@ -336,6 +338,7 @@ const usePromptDatasetItemCombination = ({
     [
       hydrateDatasetItemData,
       hydratePromptMetadata,
+      fetchPrompt,
       addAbortController,
       updateOutput,
       runStreaming,
