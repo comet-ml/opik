@@ -282,8 +282,9 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
         name="Triage agent",
         instructions="Handoff to the appropriate agent based on the language of the request.",
         handoffs=[spanish_agent, english_agent],
+        # Default reasoning on purpose: at minimal effort the model sometimes
+        # answers directly instead of handing off, and the handoff is what's tested.
         model=MODEL_FOR_TESTS,
-        model_settings=MODEL_SETTINGS_FOR_TESTS,
     )
 
     _ = await Runner.run(triage_agent, input=input_message)
@@ -455,8 +456,9 @@ async def test_opik_tracing_processor__functions(fake_backend):
         name="Hello world",
         instructions="You are a helpful agent.",
         tools=[get_weather],
+        # Default reasoning on purpose: the test needs the model to choose
+        # to call the tool, which minimal effort sometimes skips.
         model=MODEL_FOR_TESTS,
-        model_settings=MODEL_SETTINGS_FOR_TESTS,
     )
 
     _ = await Runner.run(agent, input=input_message)
@@ -629,8 +631,9 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
         name="Hello world",
         instructions="You are a helpful agent.",
         tools=[get_weather],
+        # Default reasoning on purpose: the test needs the model to choose
+        # to call the tool, which minimal effort sometimes skips.
         model=MODEL_FOR_TESTS,
-        model_settings=MODEL_SETTINGS_FOR_TESTS,
     )
 
     _ = await Runner.run(agent, input=input_message)
