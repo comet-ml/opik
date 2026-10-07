@@ -36,6 +36,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -191,6 +192,18 @@ class ClickHousePartitionMetricsDAOTest {
 
             assertThat(actual).isEqualTo(expected);
         });
+    }
+
+    @Test
+    void serverDateIsClickHouseToday() {
+        var expected = LocalDate.parse(Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement("SELECT toString(today())").execute())
+                .flatMap(result -> result.map((row, metadata) -> row.get(0, String.class)))
+                .blockFirst());
+
+        var actual = partitionMetricsDAO.getServerDate().block();
+
+        assertThat(actual).isEqualTo(expected);
     }
 
     private PartitionStat tracesStat() {

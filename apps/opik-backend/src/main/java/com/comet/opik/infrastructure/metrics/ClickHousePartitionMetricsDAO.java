@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -37,6 +38,9 @@ public interface ClickHousePartitionMetricsDAO {
     }
 
     Mono<List<PartitionStat>> getPartitionStats();
+
+    /** ClickHouse's current date, in the server timezone that partition ids are computed in. */
+    Mono<LocalDate> getServerDate();
 
     /** LWD-masked row counts per partition. A table whose scan fails contributes no stats; the others are unaffected. */
     Mono<List<LwdStat>> getLwdRowCounts(List<String> tables);
@@ -66,6 +70,11 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
             FROM system.parts
             WHERE database = :database_name AND active
             GROUP BY table, partition_id
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    private static final String SERVER_DATE_SQL = """
+            SELECT toString(today()) AS server_date
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -126,6 +135,18 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                         .lastActivityEpochSeconds(row.get("last_activity", Long.class))
                         .build()))
                 .collectList();
+    }
+
+    @Override
+    public Mono<LocalDate> getServerDate() {
+        String query = TemplateUtils.newST(SERVER_DATE_SQL)
+                .add("log_comment", "partition_metrics_server_date")
+                .render();
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(query).execute())
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("server_date", String.class)))
+                .next()
+                .map(LocalDate::parse);
     }
 
     @Override

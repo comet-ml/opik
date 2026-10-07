@@ -22,12 +22,11 @@ import org.quartz.JobExecutionContext;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuple2;
+import reactor.util.function.Tuple3;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -151,7 +150,7 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                         return Mono.just(List.of());
                     });
             return Mono
-                    .zip(partitionMetricsDAO.getPartitionStats(), lwdRowCounts)
+                    .zip(partitionMetricsDAO.getPartitionStats(), lwdRowCounts, partitionMetricsDAO.getServerDate())
                     .doOnNext(this::updateSnapshot)
                     .then();
         });
@@ -181,8 +180,9 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
         currentExecution.set(subscription);
     }
 
-    private void updateSnapshot(Tuple2<List<PartitionStat>, List<LwdStat>> result) {
-        var range = PartitionRange.of(config.getInRangeFrom(), LocalDate.now(ZoneOffset.UTC));
+    private void updateSnapshot(Tuple3<List<PartitionStat>, List<LwdStat>, LocalDate> result) {
+        // ClickHouse's date, not the JVM's: partition ids are computed in the ClickHouse server timezone.
+        var range = PartitionRange.of(config.getInRangeFrom(), result.getT3());
         var partitionStats = range.group(result.getT1());
         var lwdStats = range.groupLwd(result.getT2());
         snapshot.set(Snapshot.builder()
