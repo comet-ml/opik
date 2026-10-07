@@ -33,8 +33,9 @@ def is_instance_active(url: str) -> bool:
     """
     Returns True if an Opik backend answers at the given Opik URL.
 
-    Pinged under ``api/``, where Opik's nginx serves the backend, and only a
-    ``"healthy": true`` answer counts: Opik's nginx outside ``/api/``, and a
+    Pinged under ``api/``, where Opik's nginx serves the backend, then at the
+    root, where a backend run on its own answers (``scripts/dev-runner.sh``). Only
+    a ``"healthy": true`` answer counts: Opik's nginx outside ``/api/``, and a
     frontend dev server such as Vite on the same port, answer every path with a
     200 and an HTML page.
 
@@ -45,18 +46,19 @@ def is_instance_active(url: str) -> bool:
         bool: True if the backend answers its ping with HTTP 200 and
         ``"healthy": true``, otherwise False.
     """
-    api_url = urllib.parse.urljoin(url_helpers.ensure_ending_slash(url), "api/")
-    try:
-        with _get_httpx_client() as http_client:
-            response = http_client.get(
-                url=url_helpers.get_is_alive_ping_url(api_url),
-                timeout=HEALTH_CHECK_TIMEOUT,
-            )
-        return response.status_code == 200 and response.json().get("healthy") is True
-    except httpx.ConnectTimeout:
-        return False
-    except Exception:
-        return False
+    base_url = url_helpers.ensure_ending_slash(url)
+    for api_url in (urllib.parse.urljoin(base_url, "api/"), base_url):
+        try:
+            with _get_httpx_client() as http_client:
+                response = http_client.get(
+                    url=url_helpers.get_is_alive_ping_url(api_url),
+                    timeout=HEALTH_CHECK_TIMEOUT,
+                )
+            if response.status_code == 200 and response.json().get("healthy") is True:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def is_api_key_correct(api_key: str, url: str) -> bool:

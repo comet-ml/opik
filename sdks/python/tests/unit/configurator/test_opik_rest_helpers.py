@@ -46,11 +46,33 @@ class TestIsInstanceActive:
         result = opik_rest_helpers.is_instance_active(url)
 
         assert result == expected_result
-        # Under api/, where Opik's nginx serves the backend.
+        # Under api/ first, where Opik's nginx serves the backend.
         assert (
-            mock_client_instance.get.call_args.kwargs["url"]
+            mock_client_instance.get.call_args_list[0].kwargs["url"]
             == "http://example.com/api/is-alive/ping"
         )
+
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
+    def test_is_instance_active__backend_run_on_its_own__answers_at_the_root(
+        self, mock_httpx_client
+    ):
+        """`scripts/dev-runner.sh` has `opik configure` pointed at the backend's
+        own port, which has no `/api/` prefix."""
+        not_found = Mock(status_code=404)
+        healthy = Mock(status_code=200)
+        healthy.json.return_value = {"message": "Healthy Server", "healthy": True}
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.get.side_effect = [not_found, healthy]
+        mock_httpx_client.return_value = mock_client_instance
+
+        assert opik_rest_helpers.is_instance_active("http://localhost:8080") is True
+        assert [
+            call.kwargs["url"] for call in mock_client_instance.get.call_args_list
+        ] == [
+            "http://localhost:8080/api/is-alive/ping",
+            "http://localhost:8080/is-alive/ping",
+        ]
 
     @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_is_instance_active_timeout(self, mock_httpx_client):
