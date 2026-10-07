@@ -22,15 +22,15 @@ const PlaygroundRunButton = ({
   const prompt = usePromptById(promptId);
   const isPromptRunning = useIsPromptRunning(promptId);
 
-  const hasEmptyMessages = !!prompt && !canRunMessages(prompt.messages);
+  const hasUnrunnableMessages = !!prompt && !canRunMessages(prompt.messages);
   const hasMediaCompatibilityIssue = !!prompt && hasUnsupportedMedia(prompt);
   const isPromptRunDisabled =
-    !prompt?.model || hasEmptyMessages || hasMediaCompatibilityIssue;
+    !prompt?.model || hasUnrunnableMessages || hasMediaCompatibilityIssue;
 
   let promptRunDisabledReason: string | null = null;
   if (!prompt?.model) {
     promptRunDisabledReason = "Please select an LLM model for this prompt";
-  } else if (hasEmptyMessages) {
+  } else if (hasUnrunnableMessages) {
     promptRunDisabledReason =
       "Message is empty. Please add some text to proceed";
   } else if (hasMediaCompatibilityIssue) {
