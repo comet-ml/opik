@@ -3,6 +3,7 @@ import { loadEnvConfig } from '../../config/env.config';
 import { SuiteExperimentPanelPage } from '@e2e/pom/suite-experiment-panel.page';
 import { TestSuiteItemsPage } from '@e2e/pom/test-suite-items.page';
 import {
+  inAppPath,
   parseFromParam,
   searchParamMap,
   toRelativeHref,
@@ -74,7 +75,9 @@ test.describe(
           // same React component behind different prefixes, and this call site
           // must pick the suite prefix.
           expect(target.pathname, 'the tag targets the test-suite items page').toBe(
-            `/${workspace}/projects/${project.id}/test-suites/${seed.suiteId}/items`,
+            inAppPath(
+              `/${workspace}/projects/${project.id}/test-suites/${seed.suiteId}/items`,
+            ),
           );
           expect(target.searchParams.get('row'), 'the tag carries the open row').toBe(openItemId);
 
@@ -337,7 +340,9 @@ test.describe(
             // for the Experiment button to open. The one case where the two
             // gates must disagree.
             label: 'a valid compare href carrying no `experiments`',
-            from: `/${workspace}/projects/${project.id}/experiments/${seed.suiteId}/compare?tab=items`,
+            from: inAppPath(
+              `/${workspace}/projects/${project.id}/experiments/${seed.suiteId}/compare?tab=items`,
+            ),
             backTooltip: 'Back to experiment',
             expectButton: false,
           },

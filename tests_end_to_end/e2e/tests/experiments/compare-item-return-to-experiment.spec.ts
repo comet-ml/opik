@@ -3,6 +3,8 @@ import { loadEnvConfig } from '../../config/env.config';
 import { CompareExperimentsPage } from '@e2e/pom/compare-experiments.page';
 import { DatasetItemsPage } from '@e2e/pom/dataset-items.page';
 import {
+  appBasePath,
+  inAppPath,
   parseFromParam,
   searchParamMap,
   toRelativeHref,
@@ -91,7 +93,9 @@ test.describe(
           const target = new URL(href, 'http://tag.invalid');
 
           expect(target.pathname, 'the tag targets the dataset items page').toBe(
-            `/${workspace}/projects/${project.id}/datasets/${comparison.datasetId}/items`,
+            inAppPath(
+              `/${workspace}/projects/${project.id}/datasets/${comparison.datasetId}/items`,
+            ),
           );
           expect(target.searchParams.get('row'), 'the tag carries the open row').toBe(openItemId);
 
@@ -133,7 +137,9 @@ test.describe(
           await compare.clickDatasetItemTag();
           const landed = new URL(page.url());
           expect(landed.pathname, 'landed on the dataset items page').toBe(
-            `/${workspace}/projects/${project.id}/datasets/${comparison.datasetId}/items`,
+            inAppPath(
+              `/${workspace}/projects/${project.id}/datasets/${comparison.datasetId}/items`,
+            ),
           );
           expect(landed.searchParams.get('row'), 'the open row survived the hop').toBe(openItemId);
           // Verbatim: the items page appends its own view params, but it must
@@ -385,7 +391,7 @@ test.describe(
           },
           {
             label: 'an in-app path that is not a compare view',
-            from: `/${workspace}/projects/${project.id}/datasets`,
+            from: inAppPath(`/${workspace}/projects/${project.id}/datasets`),
             backTooltip: 'Back to datasets',
             expectButton: false,
           },
@@ -397,7 +403,9 @@ test.describe(
             // correctly hidden. A build that gated both on the same condition
             // fails exactly here and nowhere else above.
             label: 'a valid compare href carrying no `experiments`',
-            from: `/${workspace}/projects/${project.id}/experiments/${comparison.datasetId}/compare?tab=items`,
+            from: inAppPath(
+              `/${workspace}/projects/${project.id}/experiments/${comparison.datasetId}/compare?tab=items`,
+            ),
             backTooltip: 'Back to experiment',
             expectButton: false,
           },
@@ -422,6 +430,172 @@ test.describe(
                 nav.experimentButton,
                 `Experiment buttons in the item panel for ${label}`,
               ).toHaveCount(expectButton ? 1 : 0);
+            },
+          );
+        }
+      },
+    );
+
+    test(
+      'the `from` guard accepts only a same-origin compare route under the app basepath',
+      { tag: ['@cap:experiments.return-to-experiment'] },
+      async ({ comparison, project, page }) => {
+        /**
+         * The branch `parseExperimentReturnHref` exists for, and the one its
+         * own comment names: a deployment served under a path prefix, whose
+         * workspace name STARTS WITH that prefix ("opik-demo" under "/opik").
+         * The guard returns route params rather than a literal path precisely
+         * so TanStack cannot strip the basepath off such a workspace by string
+         * prefix and mangle it.
+         *
+         * Both halves of that shape are preconditions, and they are asserted
+         * rather than assumed. On a deployment served at `/` the guard's
+         * basepath test is `base && …`, i.e. skipped entirely — so every case
+         * below would be rejected or accepted for a reason that has nothing to
+         * do with the basepath, and the test would read as coverage of a branch
+         * it never reached. The PR's own environment served at `/`, which is
+         * exactly how this gap survived its radar pass.
+         */
+        const basePath = appBasePath();
+        test.skip(
+          basePath === '',
+          'this deployment serves the app at /, so `parseExperimentReturnHref` never ' +
+            'evaluates its basepath check — set OPIK_BASE_URL to a path-prefixed ' +
+            'deployment to drive this branch',
+        );
+        // `/opik` -> `opik`. The workspace has to start with it for the
+        // no-mangling assertion below to be able to fail.
+        const basePathSegment = basePath.replace(/^\//, '');
+        test.skip(
+          !workspace.startsWith(basePathSegment),
+          `workspace "${workspace}" does not start with the basepath segment ` +
+            `"${basePathSegment}", so the prefix-mangling this branch guards against ` +
+            'cannot occur on this deployment',
+        );
+
+        const [expA, expB] = comparison.experiments;
+        const compare = new CompareExperimentsPage(page, project.id, comparison.datasetId, [
+          expA.experimentId,
+          expB.experimentId,
+        ]);
+        const items = new DatasetItemsPage(page, project.id, comparison.datasetId);
+        const openItemId = comparison.itemIds[0];
+
+        let goodFrom = '';
+
+        await test.step('Record a good `from`, which carries the basepath and the workspace', async () => {
+          await compare.gotoResultsView({ height: 'large', row: openItemId });
+          goodFrom = toRelativeHref(page.url());
+          // Taken from the browser rather than composed, then asserted to have
+          // the shape the rest of this test depends on: if `goodFrom` did not
+          // actually carry the basepath followed by the full workspace name,
+          // the accept case below would be proving something else.
+          expect(
+            goodFrom.startsWith(`${basePath}/${workspace}/`),
+            `the compare view's own href must carry the basepath and the whole workspace ` +
+              `name — got "${goodFrom}"`,
+          ).toBe(true);
+        });
+
+        await test.step('The valid `from` is honoured, basepath and workspace name intact', async () => {
+          await items.gotoWithReturn({ from: goodFrom });
+          await items.waitForReady();
+          const nav = items.headerReturnNav();
+          await nav.expectBackTooltip('Back to experiment');
+          // Verbatim equality, which is the no-mangling assertion: a build that
+          // stripped the basepath by string prefix would answer
+          // `/opik/-testing/...` or `/-testing/...` here — a plausible-looking
+          // href that navigates nowhere — and a `toContain(workspace)` check
+          // would not see it.
+          expect(
+            await nav.readBackHref(),
+            'the back button rebuilds the exact href it was handed, with one basepath ' +
+              'and the whole workspace name',
+          ).toBe(goodFrom);
+        });
+
+        await test.step('And following it really does land back on the compare route', async () => {
+          const nav = items.headerReturnNav();
+          await nav.clickBackToCompare();
+          await compare.waitForResultsReady();
+          expect(
+            toRelativeHref(page.url()),
+            'the round trip lands on the view `from` named, not on a mangled sibling',
+          ).toBe(goodFrom);
+        });
+
+        /**
+         * The reject cases a basepath makes possible, which the sibling test's
+         * table cannot express because it has no basepath to subvert.
+         *
+         * The good `from` leads the list on purpose and is not decoration: it
+         * runs the same locator against a build that MUST answer "Back to
+         * experiment", so a fallback label recorded for the rejects is a real
+         * rejection rather than a page that never read `from` at all.
+         */
+        const cases: Array<{ label: string; from: string; accepted: boolean }> = [
+          { label: 'the good compare href (control)', from: goodFrom, accepted: true },
+          {
+            // The one staging adds, and the reason this test exists: the SAME
+            // compare route with the basepath removed. `/opik-testing/…` does
+            // not start with `/opik/`, so the guard must refuse it — and a
+            // deployment served at `/` cannot tell this case apart from the
+            // accept case at all.
+            label: 'the compare route with the basepath stripped',
+            from: goodFrom.slice(basePath.length),
+            accepted: false,
+          },
+          {
+            // A leading `//` makes the next segment a HOST, so this parses as
+            // `http://opik/opik-testing/…` — a different origin, which the
+            // `url.origin` guard refuses. It looks almost identical to the
+            // accept case in a URL bar, which is what makes it worth pinning.
+            label: 'a protocol-relative URL whose host is the basepath segment',
+            from: `/${goodFrom}`,
+            accepted: false,
+          },
+          {
+            // WHATWG URL folds a backslash to a forward slash for special
+            // schemes, so `/\host/x` parses as `//host/x` and is off-origin.
+            // A guard that only string-matched on `//` would miss it.
+            label: 'a backslash-escaped off-site URL',
+            from: `/\\evil.example.com${basePath}/${workspace}/projects/${project.id}/experiments/${comparison.datasetId}/compare`,
+            accepted: false,
+          },
+          {
+            // In-app, carrying the basepath, same origin — and still refused,
+            // because it is not a compare route. The discriminator for the
+            // basepath cases above: it proves a rejection recorded there is
+            // about the basepath rather than about the route pattern.
+            label: 'an in-app non-compare path under the basepath',
+            from: inAppPath(`/${workspace}/projects/${project.id}/datasets`),
+            accepted: false,
+          },
+        ];
+
+        for (const { label, from, accepted } of cases) {
+          await test.step(
+            `With ${label}, the back button ${accepted ? 'offers the experiment' : 'falls back to datasets'}`,
+            async () => {
+              await items.gotoWithReturn({ from });
+              await items.waitForReady();
+              const nav = items.headerReturnNav();
+              await nav.expectBackTooltip(accepted ? 'Back to experiment' : 'Back to datasets');
+
+              // The href as well as the label, for every case: the failure
+              // worth catching here is an open redirect, and a button labelled
+              // "Back to datasets" that still points off-site would satisfy a
+              // label-only assertion.
+              const href = await nav.readBackHref();
+              expect(
+                href.startsWith(`${basePath}/`),
+                `the back button must stay inside the app under ${basePath} — got "${href}"`,
+              ).toBe(true);
+              const resolved = new URL(href, 'http://in-app.invalid');
+              expect(
+                resolved.origin,
+                'and must not resolve to another origin',
+              ).toBe('http://in-app.invalid');
             },
           );
         }

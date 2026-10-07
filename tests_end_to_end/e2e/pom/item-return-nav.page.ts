@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { loadEnvConfig } from '../config/env.config';
 
 /**
  * The "way back to the experiment" controls an items page renders when it was
@@ -193,6 +194,36 @@ export class ItemReturnNav {
     });
   }
 }
+
+/**
+ * The path prefix this deployment serves the app under: `/opik` on a
+ * Comet-hosted install, `''` where the app is at the root.
+ *
+ * Every in-app path a spec writes BY HAND has to carry this, and that is not
+ * cosmetic — it is the axis `parseExperimentReturnHref` exists for. The guard
+ * rejects a `from` whose pathname does not start with `<basepath>/`, so on a
+ * deployment served at `/opik` a hand-written `/my-workspace/projects/…` is
+ * rejected for the WRONG reason, and a reject-case assertion then passes while
+ * testing the basepath check instead of the case it is named for.
+ *
+ * Derived from the suite's own configured base URL rather than from whatever
+ * URL the browser happens to be on: these expectations are about the path the
+ * product BUILDS, and reading it back off the current location would make them
+ * agree with a wrong answer.
+ *
+ * Paths taken from `page.url()` through `toRelativeHref` already carry it and
+ * must not have it added twice.
+ */
+export const appBasePath = (): string =>
+  new URL(loadEnvConfig().baseUrl).pathname.replace(/\/+$/, '');
+
+/**
+ * An in-app path with this deployment's basepath on the front.
+ *
+ * `path` is the route as the router spells it, always starting with `/` — e.g.
+ * `inAppPath('/my-ws/projects/1/datasets')`.
+ */
+export const inAppPath = (path: string): string => `${appBasePath()}${path}`;
 
 /**
  * A URL's query as a plain map, for comparing one view's search against
