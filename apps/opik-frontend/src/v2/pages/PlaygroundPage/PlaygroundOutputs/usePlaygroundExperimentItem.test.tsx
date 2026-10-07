@@ -27,10 +27,12 @@ vi.mock("@/api/datasets/useExperimentById", () => ({
   }),
 }));
 
-// No row ever carries an item: this is the shape a stopped run leaves behind for everything it
-// never reached.
+// Empty by default: the shape a stopped run leaves behind for everything it never reached.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let rows: any[];
+
 vi.mock("@/api/datasets/useCompareExperimentsList", () => ({
-  default: () => ({ data: { content: [] }, dataUpdatedAt: rowsReadAt }),
+  default: () => ({ data: { content: rows }, dataUpdatedAt: rowsReadAt }),
 }));
 
 vi.mock("@/store/AppStore", () => ({
@@ -68,6 +70,7 @@ describe("usePlaygroundExperimentItem", () => {
     finishedAt = new Date().toISOString();
     experimentReadAt = Date.now();
     rowsReadAt = experimentReadAt + 1_000;
+    rows = [];
   });
 
   it("should report a row the stopped run never reached as not run", async () => {
@@ -137,5 +140,46 @@ describe("usePlaygroundExperimentItem", () => {
 
     await waitFor(() => expect(result.current.hasItem).toBe(false));
     expect(result.current.notRun).toBe(false);
+  });
+
+  // What the run wrote for this row, read back out of a page that also holds other rows' items and
+  // earlier attempts at this one.
+  describe("reading the row's own item back", () => {
+    const item = (overrides: Record<string, unknown>) => ({
+      dataset_item_id: DATASET_ITEM_ID,
+      created_at: "2026-10-01T00:00:00Z",
+      trace_id: "trace-old",
+      output: { output: "an older answer" },
+      ...overrides,
+    });
+
+    it("should take the newest attempt and count the ones before it", async () => {
+      rows = [
+        {
+          experiment_items: [
+            item({}),
+            { ...item({}), dataset_item_id: "other" },
+          ],
+        },
+        {
+          experiment_items: [
+            item({
+              created_at: "2026-10-02T00:00:00Z",
+              trace_id: "trace-new",
+              output: { error: { message: "provider refused the request" } },
+            }),
+          ],
+        },
+      ];
+
+      const { result } = renderItem();
+
+      await waitFor(() => expect(result.current.hasItem).toBe(true));
+      expect(result.current.error).toBe("provider refused the request");
+      expect(result.current.output).toBeNull();
+      expect(result.current.traceId).toBe("trace-new");
+      // The unrelated row's item is not this row's attempt.
+      expect(result.current.runCount).toBe(2);
+    });
   });
 });

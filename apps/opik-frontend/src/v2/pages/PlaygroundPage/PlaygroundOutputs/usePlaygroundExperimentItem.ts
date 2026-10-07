@@ -16,9 +16,10 @@ const STATUS_REFETCH_INTERVAL = 1000;
 const ROWS_REFETCH_INTERVAL = 3000;
 
 /**
- * Whether the run has stopped producing items. A status cannot answer this: cancelling writes one
- * the moment the stop is asked for, while items already with a provider are still landing. The
- * backend stamps this when the run actually drains.
+ * Whether the run has stopped producing items. A status cannot answer this: cancelling writes
+ * CANCELLED the moment the stop is asked for, while items already with a provider are still
+ * landing. finished_at is stamped only once the run actually drains, which is why the settling
+ * logic below reads it rather than the status.
  */
 const hasFinished = (experiment: Experiment | undefined) =>
   !!experiment?.finished_at;
@@ -96,12 +97,12 @@ export default function usePlaygroundExperimentItem(
   // The read that first told us the run had finished. Pinned rather than taken fresh: the run is
   // read again whenever a cell scrolls back, and anything else watching it can refresh it too, so a
   // reference that moved would put the loader back on a row that had already settled.
-  const knownFinishedAt = useRef<number | null>(null);
-  if (!finished) knownFinishedAt.current = null;
-  else knownFinishedAt.current ??= experimentReadAt;
+  const finishedObservedAt = useRef<number | null>(null);
+  if (!finished) finishedObservedAt.current = null;
+  else finishedObservedAt.current ??= experimentReadAt;
 
-  const readAfterFinish = (rowsAt: number) =>
-    knownFinishedAt.current !== null && rowsAt >= knownFinishedAt.current;
+  const wasReadAfterFinish = (rowsAt: number) =>
+    finishedObservedAt.current !== null && rowsAt >= finishedObservedAt.current;
 
   const { data, dataUpdatedAt: rowsReadAt } = useCompareExperimentsList(
     {
@@ -125,14 +126,14 @@ export default function usePlaygroundExperimentItem(
         );
         // Rows read before that cannot show the items written just before it, so concluding from
         // them calls a row unrun and then contradicts itself. One more read settles it.
-        return hasItem || readAfterFinish(query.state.dataUpdatedAt)
+        return hasItem || wasReadAfterFinish(query.state.dataUpdatedAt)
           ? false
           : ROWS_REFETCH_INTERVAL;
       },
     },
   );
 
-  const confirmedFinished = readAfterFinish(rowsReadAt);
+  const rowsReadAfterFinish = wasReadAfterFinish(rowsReadAt);
 
   return useMemo(() => {
     if (!experimentId) return EMPTY_ITEM;
@@ -144,7 +145,7 @@ export default function usePlaygroundExperimentItem(
 
     const latest = items[0];
     if (!latest) {
-      return confirmedFinished
+      return rowsReadAfterFinish
         ? {
             ...EMPTY_ITEM,
             notRun: true,
@@ -153,8 +154,8 @@ export default function usePlaygroundExperimentItem(
         : EMPTY_ITEM;
     }
 
-    // A row whose provider call failed carries no output; the backend puts the fault under
-    // `output.error` instead, which is where the cell's error state comes from.
+    // A row whose provider call failed carries no output; ExperimentTracePersistence puts the
+    // fault under `output.error` as `{type?, message}`, which is the cell's error state.
     const output = get(latest, ["output", "output"], null);
     const error = get(latest, ["output", "error", "message"], null);
 
@@ -171,7 +172,7 @@ export default function usePlaygroundExperimentItem(
     data?.content,
     datasetItemId,
     experimentId,
-    confirmedFinished,
+    rowsReadAfterFinish,
     experiment?.status,
   ]);
 }
