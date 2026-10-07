@@ -10,6 +10,7 @@ import { getAlphabetLetter } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
+import PlaygroundStaleOutputNote from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStaleOutputNote";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
 
 interface PlaygroundPromptOutputProps {
@@ -108,6 +109,7 @@ const PlaygroundPromptOutput = ({
               </span>
             )}
           </div>
+          {stale && <PlaygroundStaleOutputNote className="mb-3" />}
           <div className="comet-body-s">{renderContent()}</div>
         </div>
       ) : (
