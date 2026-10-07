@@ -4,23 +4,19 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
-export const WorkspaceProjectUserCount: core.serialization.ObjectSchema<
-    serializers.WorkspaceProjectUserCount.Raw,
-    OpikApi.WorkspaceProjectUserCount
+export const WorkspaceProjectName: core.serialization.ObjectSchema<
+    serializers.WorkspaceProjectName.Raw,
+    OpikApi.WorkspaceProjectName
 > = core.serialization.object({
     workspaceId: core.serialization.property("workspace_id", core.serialization.string().optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
-    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
-    user: core.serialization.string().optional(),
-    count: core.serialization.number().optional(),
+    name: core.serialization.string().optional(),
 });
 
-export declare namespace WorkspaceProjectUserCount {
+export declare namespace WorkspaceProjectName {
     export interface Raw {
         workspace_id?: string | null;
         project_id?: string | null;
-        project_name?: string | null;
-        user?: string | null;
-        count?: number | null;
+        name?: string | null;
     }
 }
