@@ -853,3 +853,79 @@ class OllamaChatResponse(BaseModel):
 
     double_track_is_noop: bool
     calls: list[OllamaChatResult]
+
+
+class TrackedGeneratorCall(BaseModel):
+    """One `@opik.track`ed call the generator route is to make.
+
+    `shape` selects HOW the consumer stops, and each value is a way a user stops
+    reading a streamed response early — the thing that left no trace at all
+    before opik#8518:
+
+    - `break_after` — a `for` loop that `break`s after `take` items, the
+      ordinary case.
+    - `bare_next` — a single `next()` and nothing more, i.e. a peek.
+    - `islice` — `itertools.islice` stopping short of the end, where the
+      consumer never touches the generator itself.
+    - `consumer_raises` — an exception raised in the CONSUMER's loop body after
+      `take` items and caught outside the loop. The generator itself does not
+      fail, so this must still be reported as a successful partial span rather
+      than an errored one.
+
+    And two controls, which are not early exits at all:
+
+    - `exhaust` — a generator read to the end, which raises `StopIteration` and
+      so was always reported.
+    - `plain_function` — a tracked NON-generator. Both exist so that "the trace
+      is there" cannot be confused with "the SDK reached this environment": a
+      red result on an early-exit shape next to a green one on a control is a
+      product finding, and a red everywhere is a connectivity problem.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Also the tracked function's `name`, so the trace is addressable by it.
+    # Echoed back for the same reason `OllamaChatCall.label` is: a result is
+    # matched to its call rather than to its position.
+    label: str
+    shape: Literal[
+        "break_after",
+        "bare_next",
+        "islice",
+        "consumer_raises",
+        "exhaust",
+        "plain_function",
+    ]
+    # How many items the consumer takes before stopping. Ignored by `exhaust`
+    # and `plain_function`.
+    take: int = 1
+
+
+class TrackedGeneratorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # What the generator yields, in order. Supplied by the caller rather than
+    # fixed here so the caller can derive the span output it expects — the
+    # decorator records `"".join(str(item) for item in consumed)` — without a
+    # second copy of the list living in this file.
+    items: list[str]
+    calls: list[TrackedGeneratorCall]
+    workspace: str | None = None
+
+
+class TrackedGeneratorResult(BaseModel):
+    label: str
+    # What the consumer actually received before it stopped. The one fact that
+    # exists only inside this process, and what makes the span's output
+    # assertable: a span recording more or less than this is wrong, and a
+    # caller that could not see it could only assert presence.
+    consumed: list[str]
+    # The exception type the consumer caught, for `consumer_raises`; null
+    # otherwise. Asserted rather than decoration: if the raise never happened,
+    # that shape degenerates into `break_after` and proves nothing extra.
+    caught: str | None = None
+
+
+class TrackedGeneratorResponse(BaseModel):
+    calls: list[TrackedGeneratorResult]

@@ -508,6 +508,56 @@ export interface PythonSdkClient {
       chunk_count: number;
     }>;
   }>;
+  /**
+   * Drive `@opik.track` over a GENERATOR that the consumer stops reading early,
+   * in every shape a user stops one in.
+   *
+   * One call rather than one per shape, for the reason the route's header gives:
+   * the two controls (`exhaust`, `plain_function`) are only worth anything
+   * beside the early-exit shapes in the SAME run, because a trace missing from
+   * a run where the controls also went missing says nothing about generators.
+   *
+   * Returns only what lives in the bridge's process — what each consumer
+   * actually received before it stopped, and whether the `consumer_raises`
+   * shape really raised. The traces and spans the decorator wrote are the
+   * caller's to read back over REST, which is where "the whole trace was
+   * dropped" (the pre-opik#8518 behaviour) is observable.
+   */
+  trackedGeneratorCalls(args: {
+    project_name: string;
+    /**
+     * What the generator yields, in order. Passed in rather than fixed in the
+     * bridge so the caller can derive the span output it expects — the
+     * decorator records the consumed items joined with no separator.
+     */
+    items: string[];
+    calls: Array<{
+      /** Also the tracked function's name, so the trace is addressable by it. */
+      label: string;
+      shape:
+        | 'break_after'
+        | 'bare_next'
+        | 'islice'
+        | 'consumer_raises'
+        | 'exhaust'
+        | 'plain_function';
+      /** Items the consumer takes before stopping; ignored by the two controls. */
+      take?: number;
+    }>;
+    workspace?: string;
+  }): Promise<{
+    calls: Array<{
+      label: string;
+      /**
+       * What the consumer received before it stopped — the fact that exists
+       * only inside the bridge, and what makes the span's recorded output
+       * assertable rather than merely present.
+       */
+      consumed: string[];
+      /** The exception type the consumer caught, for `consumer_raises`; null otherwise. */
+      caught: string | null;
+    }>;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -858,6 +908,19 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           chunk_count: number;
         }>;
       }>('POST', '/integrations/ollama/chat', args, { timeoutMs: 150_000 });
+    },
+    async trackedGeneratorCalls(args) {
+      // One request makes every call in the sequence, collects the dropped
+      // generators and then flushes — so the budget covers all of them plus the
+      // upload, which is rate-limited on a shared cloud workspace where a 429
+      // makes the SDK back off. The generators themselves are local and instant.
+      return request<{
+        calls: Array<{
+          label: string;
+          consumed: string[];
+          caught: string | null;
+        }>;
+      }>('POST', '/traces/track-generator', args, { timeoutMs: 150_000 });
     },
   };
 }

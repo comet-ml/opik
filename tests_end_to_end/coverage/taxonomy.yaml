@@ -342,6 +342,29 @@ areas:
       # asserted as set equality against a direct REST enumeration rather than
       # as a count.
       sdk-multipage-stream-reads: { covered: false }
+      # New for 2.2.93, from the release pass's own exploration of opik#8518.
+      #
+      # `@opik.track` on a GENERATOR, specifically one the consumer stops
+      # reading before it is exhausted. A different code path from a tracked
+      # function: `SyncTrackedGenerator` opens its span on the first next() and,
+      # before opik#8518, ended it only on StopIteration — so an early exit left
+      # the span open and the WHOLE TRACE was dropped, which a user reads as
+      # "the SDK logged nothing".
+      #
+      # Its own key, and NOT `list-traces`, which the exploration's candidate
+      # reached for. The OPEN note at the top of this area already records that
+      # `list-traces` is carrying `sdk-track-non-error-throw.spec.ts` for want
+      # of a better key and warns in its own note against reading its
+      # `covered: true` as evidence about the SDK trace lifecycle — folding a
+      # second SDK-lifecycle spec under it would make that worse, and would also
+      # conflate the TypeScript SDK (that spec's subject) with the Python one.
+      #
+      # Deliberately narrower than the `traces.sdk-trace-lifecycle` the OPEN
+      # note proposes as a candidate: this spec exercises generators under
+      # @track and nothing else, and a capability counted as covered is never
+      # re-derived. Whether to add that broader key and re-home the TypeScript
+      # spec is still the open question it was.
+      sdk-track-generator-spans: { covered: false, note: "A tracked generator stopped early still logs its trace and its span, in all four ways a consumer stops one: a for-loop break, a bare next(), itertools.islice, and an exception raised in the CONSUMER's loop body and caught outside (the generator itself does not fail, so that one must read as a partial success and carry no error). Asserted beyond presence on the recorded OUTPUT, which the fix defines as the items actually yielded before the consumer stopped — a distinct expected string per shape, on the trace AND on its span, so a build that recorded the whole generator or none of it fails. Population asserted by exhaustion (exactly one span per call, label set compared whole, held across a quiet period) so an extra or missing span fails rather than hiding behind the rows that were looked for; plus a non-null positive duration per trace, which is what ending the span produces. A fully exhausted generator and a plain tracked function run beside them as controls, so a red early-exit shape next to a green control is a product finding rather than the SDK failing to reach the environment. The UI half pins the same fact where a user sees it: every trace a row in the Logs table and its duration cell an elapsed time rather than the 'NA' a never-ended span renders as. Driven through a new opik-sdk-driver route (/traces/track-generator); the bridge drove @opik.track only on a plain function before. Not covered: the ASYNC generator wrapper (aclose, and the loop-shutdown path), an explicit close() by the caller, the atexit backstop for a generator still alive at interpreter exit, and a generations_aggregator override" }
       # New for 2.2.92, from the release pass's own exploration of opik#8368.
       #
       # The spans an `opik.integrations.*` TRACKER writes — here `track_ollama`,
