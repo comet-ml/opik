@@ -4,7 +4,6 @@ import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
@@ -21,7 +20,6 @@ import java.util.concurrent.CompletableFuture;
  * times while the initial entry is missing. The settings are in {@link FreeFormSqlPostRunCheckConfig}.
  */
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class FreeFormSqlQueryLogReader {
 
     /**
@@ -30,8 +28,17 @@ class FreeFormSqlQueryLogReader {
      */
     private static final Scheduler WAITS = Schedulers.newSingle("free-form-sql-query-log-waits", true);
 
-    private final @NonNull FreeFormSqlQueryDAO dao;
-    private final @NonNull @Config("freeFormSqlPostRunCheck") FreeFormSqlPostRunCheckConfig config;
+    private final FreeFormSqlQueryDAO dao;
+    private final FreeFormSqlPostRunCheckConfig config;
+
+    // Explicit, not Lombok-generated: @Config on a field is not carried onto a generated constructor in the
+    // production build, and Guice then injects an empty FreeFormSqlPostRunCheckConfig.
+    @Inject
+    FreeFormSqlQueryLogReader(@NonNull FreeFormSqlQueryDAO dao,
+            @NonNull @Config("freeFormSqlPostRunCheck") FreeFormSqlPostRunCheckConfig config) {
+        this.dao = dao;
+        this.config = config;
+    }
 
     /**
      * @return the entries of {@code queryId}; without the initial one as {@code user} if it never appeared, which the
