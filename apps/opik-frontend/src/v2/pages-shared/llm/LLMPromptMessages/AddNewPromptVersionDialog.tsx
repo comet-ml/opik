@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
 import { ExternalLink } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import {
@@ -36,7 +36,6 @@ import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSele
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
-import { generatePromptURL } from "@/lib/prompt";
 import {
   PromptVersion,
   PromptWithLatestVersion,
@@ -90,6 +89,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const {
     permissions: { canCreatePrompts, canEditPrompts },
@@ -174,29 +174,28 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
     hasValidTemplate &&
     (canSaveNewPrompt || canSaveExistingPrompt);
 
-  const getViewPromptActions = (savedPromptId?: string, versionId?: string) =>
+  const getGoToPromptActions = (savedPromptId?: string, versionId?: string) =>
     savedPromptId && activeProjectId
       ? [
           <ToastAction
-            key="view-prompt"
             variant="link"
             size="sm"
             className="px-0"
-            altText="View prompt"
+            altText="Go to prompt"
+            key="Go to prompt"
             onClick={() =>
-              window.open(
-                generatePromptURL(
+              navigate({
+                to: "/$workspaceName/projects/$projectId/prompts/$promptId",
+                params: {
                   workspaceName,
-                  activeProjectId,
-                  savedPromptId,
-                  versionId,
-                ),
-                "_blank",
-              )
+                  projectId: activeProjectId,
+                  promptId: savedPromptId,
+                },
+                search: versionId ? { activeVersionId: versionId } : {},
+              })
             }
           >
-            View prompt
-            <ExternalLink className="ml-1 size-3.5 shrink-0" />
+            Go to prompt
           </ToastAction>,
         ]
       : undefined;
@@ -231,7 +230,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           onSuccess: (data) => {
             toast({
               description: `Saved new version of ${promptLabel} "${selectedPrompt.name}"`,
-              actions: getViewPromptActions(data.prompt_id, data.id),
+              actions: getGoToPromptActions(data.prompt_id, data.id),
             });
             onSave(data, selectedPrompt.name, selectedPrompt.id);
           },
@@ -256,7 +255,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           onSuccess: (data?: PromptWithLatestVersion) => {
             toast({
               description: `Saved new ${promptLabel} "${name}"`,
-              actions: getViewPromptActions(data?.id),
+              actions: getGoToPromptActions(data?.id),
             });
             if (data?.latest_version)
               onSave(data.latest_version, data.name, data.id);

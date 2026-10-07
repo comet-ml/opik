@@ -1,5 +1,5 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import AddNewPromptVersionDialog from "./AddNewPromptVersionDialog";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
@@ -14,6 +14,7 @@ import {
 const mockToast = vi.fn();
 const mockCreateVersion = vi.fn();
 const mockCreatePrompt = vi.fn();
+const mockNavigate = vi.fn();
 let mockIsSavingVersion = false;
 let mockIsCreatingPrompt = false;
 
@@ -45,6 +46,7 @@ vi.mock("@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+  useNavigate: () => mockNavigate,
 }));
 
 vi.mock("@/store/AppStore", () => ({
@@ -113,24 +115,20 @@ const saveNewVersion = () => {
 
 const toastActions = () => mockToast.mock.calls[0][0].actions;
 
-const clickViewPrompt = () => {
+const clickGoToPrompt = () => {
   render(
     <ToastProvider>
       <Toast open>{toastActions()}</Toast>
       <ToastViewport />
     </ToastProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: "View prompt" }));
+  fireEvent.click(screen.getByRole("button", { name: "Go to prompt" }));
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockIsSavingVersion = false;
   mockIsCreatingPrompt = false;
-});
-
-afterEach(() => {
-  vi.unstubAllEnvs();
 });
 
 describe("AddNewPromptVersionDialog success toast", () => {
@@ -193,42 +191,34 @@ describe("AddNewPromptVersionDialog success toast", () => {
 });
 
 describe("AddNewPromptVersionDialog success toast link", () => {
-  beforeEach(() => {
-    vi.spyOn(window, "open").mockImplementation(() => null);
-  });
+  const PROMPT_PAGE = {
+    to: "/$workspaceName/projects/$projectId/prompts/$promptId",
+    params: {
+      workspaceName: "test-workspace",
+      projectId: "test-project-id",
+      promptId: "prompt-1",
+    },
+  };
 
-  it("opens the new prompt in a new tab", () => {
+  it("goes to the new prompt", () => {
     saveNewPrompt()({ ...EXISTING_PROMPT, name: "My prompt" });
 
-    clickViewPrompt();
+    clickGoToPrompt();
 
-    expect(window.open).toHaveBeenCalledWith(
-      `${window.location.origin}/test-workspace/projects/test-project-id/prompts/prompt-1`,
-      "_blank",
-    );
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith({ ...PROMPT_PAGE, search: {} });
   });
 
-  it("opens the new version of an existing prompt in a new tab", () => {
+  it("goes to the new version of an existing prompt", () => {
     saveNewVersion()(VERSION);
 
-    clickViewPrompt();
+    clickGoToPrompt();
 
-    expect(window.open).toHaveBeenCalledWith(
-      `${window.location.origin}/test-workspace/projects/test-project-id/prompts/prompt-1?activeVersionId=version-2`,
-      "_blank",
-    );
-  });
-
-  it("keeps the app base path in the link", () => {
-    vi.stubEnv("VITE_BASE_URL", "/opik/");
-    saveNewVersion()(VERSION);
-
-    clickViewPrompt();
-
-    expect(window.open).toHaveBeenCalledWith(
-      `${window.location.origin}/opik/test-workspace/projects/test-project-id/prompts/prompt-1?activeVersionId=version-2`,
-      "_blank",
-    );
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith({
+      ...PROMPT_PAGE,
+      search: { activeVersionId: "version-2" },
+    });
   });
 
   it("shows no link when the created prompt comes back without an id", () => {
