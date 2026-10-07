@@ -643,7 +643,7 @@ class ExperimentExecutionServiceTest {
 
             verify(itemPublisher, never()).publish(any(), any(), anyBoolean());
 
-            // The records exist by this point; left alone they would read as running for ever. Every
+            // The records exist by this point; left alone they would read as running forever. Every
             // one of them has to be marked, and marked finished: 'finished' is what makes the DAO
             // stamp finished_at, which is how the page tells a stopped row from one still running.
             var createCaptor = ArgumentCaptor.forClass(Experiment.class);
