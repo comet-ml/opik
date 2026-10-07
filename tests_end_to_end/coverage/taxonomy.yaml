@@ -408,6 +408,28 @@ areas:
       # so it cannot see a tracker that mapped the provider's counters onto the
       # wrong keys, which is the silent-wrongness half here. Folding this under
       # it would retire the question permanently.
+      # New for 2.2.94, from the release pass's own exploration of opik#8782.
+      #
+      # The spans a TYPESCRIPT `opik-openai` tracker writes — here `trackOpenAI`
+      # over the OpenAI **Responses** API, whose `usage` reports
+      # `input_tokens`/`output_tokens`. opik#8782 had those assigned to
+      # `completion_tokens`/`prompt_tokens`: literally transposed, so every
+      # Responses-API span was billed at the wrong per-token rate while looking
+      # entirely healthy.
+      #
+      # Named for THIS tracker and this endpoint, not for the family. The spec
+      # exercises one of five integration packages (`opik-openai`, `opik-gemini`,
+      # `opik-langchain`, `opik-otel`, `opik-vercel`) on one of its two endpoints,
+      # and a capability counted as covered is never re-derived.
+      #
+      # Its own key rather than folded into `span-model-cost-tokens`, which the
+      # exploration's candidate reached for — the same call the 2.2.92 pass made
+      # for `sdk-ollama-tracker-spans`, and for the same reason. That key is about
+      # server-side PRICE resolution over hand-seeded spans: its fixture writes
+      # the usage map itself, so it cannot see a tracker that filled the map in
+      # wrongly, which is the entire defect here. It is already `covered: true`,
+      # so folding this under it would retire the question permanently.
+      ts-sdk-openai-tracker-usage: { covered: false, note: "opik-openai's trackOpenAI over the OpenAI Responses API, driven against a local stub provider (127.0.0.1, no key, no network, so both token counts and the model are fixed by the fixture): the provider's deliberately lopsided input_tokens=1,000,000 / output_tokens=1,000 asserted to land on prompt_tokens / completion_tokens the right way round, as a WHOLE usage map including the native counters kept under original_usage.* — which is what makes it a mapping rather than a rename, and what rules out a tracker that had swapped both sides. Priced on that mapping at gpt-4o's published rates ($2.5e-06 in, $1e-05 out) to exactly $2.51, beside a control span this spec seeds by hand with the two counts TRANSPOSED, asserted to price at $10.0025 and strictly more — so the cost comparison is shown to discriminate rather than merely asserted on one side. gpt-4o chosen because its two rates are an order of magnitude apart, which the spec asserts before relying on. Population pinned by exhaustion (exactly one span per tracked call, so a span-per-chunk or a request/response pair fails) and the stub records any path it was not asked to serve, so a client that fell back to /v1/chat/completions — a different usage shape needing no mapping — fails loudly instead of passing while saying nothing. Also records, without endorsing, that this tracker types its generation span `general` where the Python track_ollama tracker types it `llm`. Needs `openai` + `opik-openai` as e2e devDependencies, with an `overrides` entry because opik-openai@2.2.94 still declares peer opik@^1.8.61 while the suite pins opik@^2.2.74; plain `npm ci` was verified to resolve. NOT covered: streaming (`stream: true`), the chat-completions endpoint, tool calls, cached or reasoning tokens as non-zero, an explicit `parent`, and every other opik-* integration package" }
       sdk-ollama-tracker-spans: { covered: false, note: "track_ollama writing one llm span per chat() call against a mock /api/chat: a streamed call aggregated into ONE span carrying the concatenated text the done chunk does not, prompt_eval_count/eval_count mapped onto prompt_tokens/completion_tokens with the native counters kept under original_usage.*, the provider default and its override, the stream-renamed span, a call nested under an @opik.track parent, and AsyncClient behaving identically. Span population pinned by exhaustion over the whole project, so a span-per-chunk fails. Not covered: any other opik.integrations.* tracker, tool_calls, thinking, and cost (a mock model name resolves no price)" }
       add-trace-to-dataset:   { covered: true,  tier: t2-cuj, note: "AddToDatasetDialog, and the create-dataset-items-from-{traces,spans} endpoints behind it: field_mappings resolving a path, taking precedence over enrichment_options on a collision, being dropped when the path resolves to nothing, and being ignored for a TEST_SUITE dataset; plus the four validation rejections (blank name, blank path, uncompilable path, over the 100-entry cap) and that none of them writes. Driven through the dialog's Advanced mapping section for one trace — defaults, Preview, re-pointing a row through the JSON tree — and read back through the API" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }

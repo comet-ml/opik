@@ -442,8 +442,23 @@ export class LogsPage {
    * it decides whether the read is windowed at all — `alltime` sends no
    * `from_time`, and only a windowed read takes the `trace_threads` inner-join
    * branch. A spec about that branch has to say which range it means.
+   *
+   * Note that `alltime` is NOT available here: `ThreadsTab` passes
+   * `excludePresets: [DATE_RANGE_PRESET_ALLTIME]`, so the Threads read is always
+   * windowed and a caller asking for it gets the default preset instead. A
+   * threads spec therefore states a bounded preset (`past24hours`, …) and seeds
+   * inside it, rather than reaching for the unwindowed read its Traces sibling
+   * can use.
+   *
+   * `size` is the table's page size, stated for the same reason `gotoTraces`
+   * states it: the value is persisted in localStorage as well as carried in the
+   * URL, so a spec that wants its whole seed on one page has to say how big a
+   * page is.
    */
-  async gotoThreads(projectId: string, opts: { timeRange?: string } = {}): Promise<void> {
+  async gotoThreads(
+    projectId: string,
+    opts: { timeRange?: string; size?: number } = {},
+  ): Promise<void> {
     return test.step(
       `Open Logs (Threads) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
       async () => {
@@ -451,6 +466,7 @@ export class LogsPage {
         const env = loadEnvConfig();
         const params = new URLSearchParams({ logsType: 'threads' });
         if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        if (opts.size !== undefined) params.set('size', String(opts.size));
         await this.page.goto(
           `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
         );
@@ -1021,7 +1037,7 @@ export class LogsPage {
 
   /**
    * The "Search by anything" box that sits as `FilterChipBar`'s prefix on the
-   * Traces and Spans tabs.
+   * Traces, Spans and Threads tabs.
    *
    * `data-testid="search-input"` comes from the shared `SearchInput`, so it is
    * the FE's own stability contract rather than a structural fallback. The
@@ -1049,11 +1065,21 @@ export class LogsPage {
    * and the UI to be asking the identical question should pass a term that is
    * already lower-case.
    *
+   * `type` is `'threads'` as well as the two entity tables, because the Threads
+   * tab mounts the same `SearchInput` under its own `threads_search` param. Note
+   * that `ThreadsTab` passes the raw term to the STATS read and the trimmed,
+   * folded one to the listing, so a caller asserting that the count card and the
+   * rows agree must pass a term that is already trimmed and lower-case — the
+   * two are otherwise asking different questions by construction.
+   *
    * Does NOT wait for the rows: what the table then shows is the assertion, and
    * a POM that waited for a particular row count would be deciding the answer
    * before the spec got to.
    */
-  async searchFor(term: string, type: 'traces' | 'spans' = 'traces'): Promise<void> {
+  async searchFor(
+    term: string,
+    type: 'traces' | 'spans' | 'threads' = 'traces',
+  ): Promise<void> {
     return test.step(`Search the ${type} table for "${term}"`, async () => {
       await expect(this.searchBox, 'exactly one search box on the Logs page').toHaveCount(1);
       await this.searchBox.fill(term);
@@ -1072,7 +1098,7 @@ export class LogsPage {
    * the one that also resets the page back to 1. The param is dropped entirely
    * rather than set empty, so the wait is on absence.
    */
-  async clearSearch(type: 'traces' | 'spans' = 'traces'): Promise<void> {
+  async clearSearch(type: 'traces' | 'spans' | 'threads' = 'traces'): Promise<void> {
     return test.step(`Clear the ${type} table's search`, async () => {
       await expect(this.searchBox, 'exactly one search box on the Logs page').toHaveCount(1);
       // The Clear button only renders while the box holds text, and it is an
@@ -1130,6 +1156,39 @@ export class LogsPage {
   /** A thread row, keyed by thread id (the row's data-row-id IS the thread id). */
   threadRow(threadId: string): Locator {
     return this.page.locator(`tr[data-row-id="${threadId}"]`);
+  }
+
+  /**
+   * Every rendered thread row.
+   *
+   * The same locator as {@link traceRows} — one shared `DataTable` stamps
+   * `data-row-id` on whichever entity it is rendering — but named for the
+   * Threads tab so a spec about threads does not read as though it were
+   * asserting on traces. Which table is on screen is `activeLogsTab()`'s
+   * business, and a threads spec asserts that first.
+   */
+  get threadRows(): Locator {
+    return this.page.locator('tr[data-row-id]');
+  }
+
+  /**
+   * The thread ids rendered on the current page, in table order.
+   *
+   * The Threads table's `data-row-id` is the THREAD id — a string the producer
+   * chose, not a UUID — which is also the only place it appears in the row: the
+   * id is not one of the rendered columns, so there is no text-based alternative.
+   */
+  async readThreadIdsOnPage(): Promise<string[]> {
+    return test.step('Read the thread ids on the current page', async () => {
+      await this.threadRows.first().waitFor({ state: 'visible' });
+      const ids = await this.threadRows.evaluateAll((rows) =>
+        rows.map((row) => row.getAttribute('data-row-id') ?? ''),
+      );
+      if (ids.some((id) => id === '')) {
+        throw new Error('LogsPage.readThreadIdsOnPage: a rendered row carried no data-row-id');
+      }
+      return ids;
+    });
   }
 
   /**

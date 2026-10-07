@@ -344,6 +344,17 @@ export interface TrackedSpanRef {
   model: string | null;
   provider: string | null;
   usage: Record<string, number> | null;
+  /**
+   * The price the server resolved from `usage`, `model` and `provider`.
+   *
+   * Null, not 0, when nothing was resolved — a model the price table has no row
+   * for and a model billed at zero are different answers, and a tracker that
+   * mapped the provider's token counters onto the WRONG keys produces a span
+   * that still prices, just at the wrong rate. A spec about a usage mapping
+   * therefore wants the cost beside the counters: the counters say what was
+   * recorded, the cost says what the recording was worth.
+   */
+  totalEstimatedCost: number | null;
   input: Record<string, unknown> | null;
   output: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
@@ -412,6 +423,15 @@ export interface SpanBatchSeed {
   provider?: string;
   /** Written through verbatim; deliberately no `total_cost` (see `createSpan`). */
   usage?: Record<string, number>;
+  /**
+   * The span's `metadata` payload, sent only when supplied.
+   *
+   * Not decoration: the trace panel decides whether to COLLAPSE a span by
+   * reading `metadata._opik.is_internal` (`spanVisibility.ts`), so the
+   * hidden-by-default half of the tree is unreachable without writing it here.
+   * Absent and `{}` are left distinct for the same reason `TraceBatchSeed` does.
+   */
+  metadata?: Record<string, unknown>;
   /** Set to make the span count toward the error rate. */
   errorInfo?: { exceptionType: string; message: string; traceback: string };
 }
@@ -3627,6 +3647,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         model: s.model ?? null,
         provider: s.provider ?? null,
         usage: s.usage ?? null,
+        totalEstimatedCost: s.totalEstimatedCost ?? null,
         input: (s.input ?? null) as Record<string, unknown> | null,
         output: (s.output ?? null) as Record<string, unknown> | null,
         metadata: (s.metadata ?? null) as Record<string, unknown> | null,
@@ -3844,6 +3865,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             ...(span.model === undefined ? {} : { model: span.model }),
             ...(span.provider === undefined ? {} : { provider: span.provider }),
             ...(span.usage === undefined ? {} : { usage: span.usage }),
+            ...(span.metadata === undefined ? {} : { metadata: span.metadata }),
             ...(span.errorInfo === undefined
               ? {}
               : {
@@ -5015,15 +5037,32 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * point of the thread-prefilter tests is to drive a *specific* field and
      * operator (an EQUAL on `id` takes a different backend branch than a
      * CONTAINS), so the caller must own that choice.
+     *
+     * `search` is the free-text term the Threads tab's "Search by anything" box
+     * commits as `threads_search`, and it is a THIRD branch again — `ThreadDAO`
+     * has its own clause, matching a thread's id and the input/output of the
+     * traces it aggregates, which is neither `TraceDAO`'s nor `SpanDAO`'s. It
+     * also fronts the week pre-pass opik#8778 put in (`traces_partitioned &&
+     * search_text`), reachable on no other parameter combination.
+     *
+     * `page` so a caller can walk the searched listing: a thread lost at a page
+     * boundary is the same silent shortfall the trace-side walk exists to catch.
      */
     async listThreads(
-      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+      args: {
+        projectId: string;
+        filters?: BackendFilter[];
+        search?: string;
+        page?: number;
+        size?: number;
+      } & ReadWindow,
     ): Promise<{ total: number; threads: ThreadRowRef[] }> {
       const page = await opik.api.traces.getTraceThreads({
         projectId: args.projectId,
         size: args.size ?? 100,
-        page: 1,
+        page: args.page ?? 1,
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.search === undefined ? {} : { search: args.search }),
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
@@ -5130,11 +5169,23 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * must assert it is present rather than testing it into an `if`.
      */
     async getThreadsStats(
-      args: { projectId: string; filters?: BackendFilter[] } & ReadWindow,
+      args: {
+        projectId: string;
+        filters?: BackendFilter[];
+        /**
+         * The same free-text term `listThreads` takes. The count card above the
+         * Threads table comes from here while the rows come from there, so a
+         * spec that only read one of the two could not catch the pair
+         * disagreeing — which is how a user sees "3 threads" above a table
+         * holding one.
+         */
+        search?: string;
+      } & ReadWindow,
     ): Promise<Partial<Record<string, ThreadStatValue>>> {
       const stats = await opik.api.traces.getTraceThreadStats({
         projectId: args.projectId,
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.search === undefined ? {} : { search: args.search }),
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
