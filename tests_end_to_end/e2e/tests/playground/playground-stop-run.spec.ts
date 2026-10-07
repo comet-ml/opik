@@ -7,11 +7,10 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  * OPIK-3268 — a run the user stopped must not claim it finished.
  *
  * `stopAll` and `stopSingle` both revoke the announcer's claim so a late
- * completion cannot raise the "Run complete" toast, and the name field — which
- * only advances when that toast fires — stays on what the user typed. A false
- * "Run complete" plus a silently advanced counter is wrongness a user then acts
- * on: they believe experiments exist under a name that was never used, and
- * their next run lands under `_02` for no reason.
+ * completion cannot raise the "Run complete" toast. A false "Run complete" is
+ * wrongness a user then acts on: they believe a run finished that never did.
+ * The name field keeps what the user typed, which is the name the stopped
+ * run's experiments carry.
  *
  * Both halves get their own test because they are separate call sites AND
  * separate mechanisms, so a regression in one says nothing about the other:
@@ -261,9 +260,6 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         if (remaining > 0) await page.waitForTimeout(remaining);
 
         expect(await playground.recordedRunCompletionToasts()).toEqual([]);
-        // The counter advances only when the toast fires, so this is a second,
-        // independent witness on the same claim — and it is the one the user
-        // carries into their next run.
         expect(await playground.readExperimentName()).toBe(runName);
       });
 
@@ -280,7 +276,8 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
 
         const [toast] = await playground.recordedRunCompletionToasts();
         expect(toast).toContain('2 experiments created');
-        expect(toast).toContain(`${runName}_a`);
+        // The stopped run's experiments already hold `{runName}_a` and `_b`.
+        expect(toast).toContain(`${runName}_02_a`);
         await registerCreatedExperiments();
       });
     },
@@ -387,7 +384,8 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
 
         const [toast] = await playground.recordedRunCompletionToasts();
         expect(toast).toContain('1 experiment created');
-        expect(toast).toContain(`${runName}_b`);
+        // The stopped column's experiment already holds `{runName}_b`.
+        expect(toast).toContain(`${runName}_02_b`);
         await registerCreatedExperiments();
       });
     },

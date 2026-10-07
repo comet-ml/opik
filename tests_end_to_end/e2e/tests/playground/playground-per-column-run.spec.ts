@@ -214,12 +214,9 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
           .toBe(3);
       });
 
-      await test.step('The field advances itself so a re-run cannot collide', async () => {
-        // A per-column run consumes the typed name exactly as a full run does —
-        // re-running with the field untouched would otherwise post `{runName}_b`
-        // a second time, and two experiments under one name are
-        // indistinguishable in the list.
-        expect(await playground.readExperimentName()).toBe(`${runName}_02`);
+      await test.step('The field keeps the name of the column run it just made', async () => {
+        expect(await playground.readExperimentName()).toBe(runName);
+        await expect(playground.experimentNamePreview()).toContainText(`Created: ${nameB}`);
       });
 
       await test.step('The dataset carries that one experiment and nothing else', async () => {
