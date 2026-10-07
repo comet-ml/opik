@@ -1,6 +1,7 @@
 import React from "react";
 import { Clock, Coins } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import PlaygroundOutputError from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputError";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
@@ -9,6 +10,7 @@ import { getAlphabetLetter } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
+import PlaygroundStaleOutputNote from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStaleOutputNote";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
 
 interface PlaygroundPromptOutputProps {
@@ -39,8 +41,7 @@ const PlaygroundPromptOutput = ({
     usage?.model,
   );
 
-  const hasCurrentRun =
-    !stale && (value !== null || Boolean(error) || isLoading);
+  const hasOutput = value !== null || Boolean(error) || isLoading;
 
   const renderContent = () => {
     if (isLoading && !value) {
@@ -48,10 +49,18 @@ const PlaygroundPromptOutput = ({
     }
 
     if (error) {
-      return <PlaygroundOutputError message={error} />;
+      return <PlaygroundOutputError message={error} stale={stale} />;
     }
 
-    return <MarkdownPreview>{value}</MarkdownPreview>;
+    return (
+      <MarkdownPreview
+        className={cn({
+          "text-muted-gray dark:text-foreground": stale,
+        })}
+      >
+        {value}
+      </MarkdownPreview>
+    );
   };
 
   const promptColor =
@@ -67,7 +76,7 @@ const PlaygroundPromptOutput = ({
           onStop={onStop}
         />
       )}
-      {hasCurrentRun ? (
+      {hasOutput ? (
         <div className="flex-1 bg-background p-4">
           <div className="mb-3 flex items-center gap-5">
             <span className="flex items-center gap-2">
@@ -100,6 +109,7 @@ const PlaygroundPromptOutput = ({
               </span>
             )}
           </div>
+          {stale && <PlaygroundStaleOutputNote className="mb-3" />}
           <div className="comet-body-s">{renderContent()}</div>
         </div>
       ) : (

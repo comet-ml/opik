@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/ui/tooltip";
 import PlaygroundPromptOutput from "./PlaygroundPromptOutput";
 
 const PROMPT_ID = "prompt-1";
+const STALE_NOTE = "Prompt changed since this run. Run again to update.";
 
 type Output = {
   isLoading: boolean;
@@ -24,17 +25,29 @@ vi.mock("@/v2/pages/PlaygroundPage/usePromptModelDisplay", () => ({
 }));
 
 vi.mock("@/shared/MarkdownPreview/MarkdownPreview", () => ({
-  default: ({ children }: { children: string | null }) => (
-    <div data-testid="markdown">{children}</div>
+  default: ({
+    children,
+    className,
+  }: {
+    children: string | null;
+    className?: string;
+  }) => (
+    <div data-testid="markdown" className={className}>
+      {children}
+    </div>
   ),
 }));
 
-const renderOutput = () =>
-  render(
-    <TooltipProvider>
-      <PlaygroundPromptOutput promptId={PROMPT_ID} promptIndex={0} />
-    </TooltipProvider>,
-  );
+const outputView = () => (
+  <TooltipProvider>
+    <PlaygroundPromptOutput promptId={PROMPT_ID} promptIndex={0} />
+  </TooltipProvider>
+);
+
+const renderOutput = () => render(outputView());
+
+const queryStaleNote = () =>
+  screen.queryByTestId("playground-stale-output-note");
 
 beforeEach(() => {
   output = { isLoading: false, value: null, stale: false };
@@ -66,18 +79,13 @@ describe("PlaygroundPromptOutput", () => {
     expect(
       screen.queryByTestId("playground-output-error"),
     ).not.toBeInTheDocument();
+    expect(queryStaleNote()).not.toBeInTheDocument();
   });
 
-  it("should show No runs yet instead of stale output once the prompt is edited", () => {
-    output = { isLoading: false, value: "the answer", stale: true };
-
-    renderOutput();
-
-    expect(screen.getByText("No runs yet")).toBeInTheDocument();
-    expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
-  });
-
-  it("should show No runs yet instead of a stale error once the prompt is edited", () => {
+  // Editing the prompt marks the previous output stale. The reason is most wanted
+  // exactly then — while correcting the prompt — so it dims rather than vanishing,
+  // as output and chips already do.
+  it("should dim a stale error instead of hiding it, and say the prompt changed", () => {
     output = {
       isLoading: false,
       value: null,
@@ -87,9 +95,54 @@ describe("PlaygroundPromptOutput", () => {
 
     renderOutput();
 
-    expect(screen.getByText("No runs yet")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("playground-output-error"),
-    ).not.toBeInTheDocument();
+    const tag = screen.getByTestId("playground-output-error");
+    expect(tag).toHaveTextContent("Run failed: ratings not defined");
+    expect(tag).toHaveClass("opacity-50");
+    expect(queryStaleNote()).toHaveTextContent(STALE_NOTE);
+  });
+
+  it("should not dim the error of the current run", () => {
+    output = {
+      isLoading: false,
+      value: null,
+      error: "ratings not defined",
+      stale: false,
+    };
+
+    renderOutput();
+
+    expect(screen.getByTestId("playground-output-error")).not.toHaveClass(
+      "opacity-50",
+    );
+    expect(queryStaleNote()).not.toBeInTheDocument();
+  });
+
+  it("should keep stale output from a run that succeeded, dimmed, and say the prompt changed", () => {
+    output = { isLoading: false, value: "the answer", stale: true };
+
+    renderOutput();
+
+    const markdown = screen.getByTestId("markdown");
+    expect(markdown).toHaveTextContent("the answer");
+    expect(markdown).toHaveClass("text-muted-gray");
+    expect(queryStaleNote()).toHaveTextContent(STALE_NOTE);
+    expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+  });
+
+  it("should drop the note as soon as the prompt is run again", () => {
+    output = { isLoading: false, value: "the old answer", stale: true };
+    const { rerender } = renderOutput();
+    expect(queryStaleNote()).toBeInTheDocument();
+
+    output = { isLoading: true, value: null, stale: false };
+    rerender(outputView());
+    expect(queryStaleNote()).not.toBeInTheDocument();
+
+    output = { isLoading: false, value: "the new answer", stale: false };
+    rerender(outputView());
+    const markdown = screen.getByTestId("markdown");
+    expect(markdown).toHaveTextContent("the new answer");
+    expect(markdown).not.toHaveClass("text-muted-gray");
+    expect(queryStaleNote()).not.toBeInTheDocument();
   });
 });
