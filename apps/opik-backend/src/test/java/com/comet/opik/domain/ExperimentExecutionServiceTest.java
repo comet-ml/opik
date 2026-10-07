@@ -675,7 +675,7 @@ class ExperimentExecutionServiceTest {
             stubDatasetItems(IntStream.range(0, 1001)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
                     .toList());
-            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
             stubExperimentCreate();
             // The first variant's cleanup fails; the second must still be marked.
             when(experimentService.update(any(UUID.class), any()))
@@ -690,7 +690,11 @@ class ExperimentExecutionServiceTest {
                     .as("the caller still learns the run was refused, not that a write failed")
                     .isInstanceOf(BadRequestException.class);
 
-            verify(experimentService, times(2)).update(any(UUID.class), any());
+            var idCaptor = ArgumentCaptor.forClass(UUID.class);
+            verify(experimentService, times(2)).update(idCaptor.capture(), any());
+            assertThat(idCaptor.getAllValues())
+                    .as("the surviving update is the sibling's, not a retry of the one that failed")
+                    .doesNotHaveDuplicates();
         }
 
         @Test
