@@ -54,6 +54,7 @@ import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
@@ -72,6 +73,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.MountableFile;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -95,8 +97,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -164,6 +169,29 @@ class SpansReadPathPartitionPruningTest {
             ORDER BY event_time_microseconds DESC
             LIMIT 1
             """;
+
+    /** The statement a search sent under one query name, told apart by the search token the test chose. */
+    private static final String SEARCH_STATEMENT = """
+            SELECT query_id, query
+            FROM system.query_log
+            WHERE log_comment LIKE concat(:query_name, ':%')
+            AND type = 'QueryFinish'
+            AND query LIKE concat('%', :token, '%')
+            ORDER BY event_time_microseconds DESC
+            LIMIT 1
+            """;
+
+    /** The partition-key selection ClickHouse logs for each read of a statement. */
+    private static final String PARTITION_KEY_SELECTIONS = """
+            SELECT message
+            FROM system.text_log
+            WHERE query_id = :query_id
+            AND logger_name LIKE :logger
+            AND message LIKE '%parts by partition key%'
+            """;
+
+    private static final Pattern PARTITION_KEY_SELECTION = Pattern
+            .compile("Selected (\\d+)/(\\d+) parts by partition key");
 
     private static final String PARTITION_PREFIX = "%s.spans.".formatted(DATABASE_NAME);
 
@@ -648,7 +676,7 @@ class SpansReadPathPartitionPruningTest {
 
     /** The searched spans and the responses. */
     @Builder(toBuilder = true)
-    private record SpanSearch(List<Span> expected, Span.SpanPage page, ProjectStats stats) {
+    private record SpanSearch(String token, List<Span> expected, Span.SpanPage page, ProjectStats stats) {
     }
 
     private SpanSearch spanSearch() {
@@ -672,7 +700,7 @@ class SpansReadPathPartitionPruningTest {
                 null, null, fromTime, null, token);
         var stats = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
                 Map.of("search", token, "from_time", fromTime));
-        return SpanSearch.builder().expected(expected).page(page).stats(stats).build();
+        return SpanSearch.builder().token(token).expected(expected).page(page).stats(stats).build();
     }
 
     @Test
@@ -682,6 +710,73 @@ class SpansReadPathPartitionPruningTest {
         assertThat(search.page().total()).isEqualTo(search.expected().size());
         SpanAssertions.assertSpan(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(), StatsUtils.getProjectSpanStatItems(search.expected()));
+        Stream.of("count_spans_by_project_id", "get_span_stats", "get_span_stats_feedback_scores")
+                .forEach(queryName -> assertPlanPrunesSpanPartitions(queryName, search.token()));
+        assertSubqueryPrunesSpanPartitions("find_spans_by_project_id", search.token());
+    }
+
+    /**
+     * The plan of the statement this search sent selects fewer {@code spans} parts by partition key than the table
+     * holds. The search's only partition-key predicate is the week hint, so this is the hint pruning.
+     */
+    private void assertPlanPrunesSpanPartitions(String queryName, String token) {
+        var plan = JsonUtils.getJsonNodeFromString(String.join("\n", template.stream(connection -> Flux.from(
+                connection.createStatement("EXPLAIN indexes = 1, json = 1 " + searchStatement(queryName, token)
+                        .query())
+                        .execute())
+                .flatMap(result -> result.map((row, _) -> row.get(0, String.class)))).collectList().block()));
+        var partitionSelections = plan.findParents("Node Type").stream()
+                .filter(node -> "ReadFromMergeTree".equals(node.path("Node Type").asText()))
+                .filter(node -> "%s.spans".formatted(DATABASE_NAME).equals(node.path("Description").asText()))
+                .flatMap(node -> StreamSupport.stream(node.path("Indexes").spliterator(), false))
+                .filter(index -> "Partition".equals(index.path("Type").asText()))
+                .toList();
+        assertThat(partitionSelections)
+                .as("%s reads spans with a partition-key selection", queryName)
+                .anySatisfy(index -> assertThat(index.path("Selected Parts").asInt())
+                        .isLessThan(index.path("Initial Parts").asInt()));
+    }
+
+    /**
+     * The find statement runs its search in a scalar subquery, whose read the plan does not show, so its partition
+     * selection is read from the server log ClickHouse writes for every read of the statement.
+     */
+    private void assertSubqueryPrunesSpanPartitions(String queryName, String token) {
+        var queryId = searchStatement(queryName, token).queryId();
+        Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                .untilAsserted(() -> assertThat(partitionKeySelections(queryId))
+                        .as("%s reads spans with a partition-key selection", queryName)
+                        .anySatisfy(selection -> assertThat(selection.getLeft()).isLessThan(selection.getRight())));
+    }
+
+    /** Each read's "Selected N/M parts by partition key", as (N, M). */
+    private List<Pair<Integer, Integer>> partitionKeySelections(String queryId) {
+        return template.stream(connection -> Flux.from(connection.createStatement(PARTITION_KEY_SELECTIONS)
+                .bind("query_id", queryId)
+                .bind("logger", "%s.spans %%".formatted(DATABASE_NAME))
+                .execute())
+                .flatMap(result -> result.map((row, _) -> row.get(0, String.class))))
+                .map(PARTITION_KEY_SELECTION::matcher)
+                .filter(Matcher::find)
+                .map(matcher -> Pair.of(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))))
+                .collectList()
+                .block();
+    }
+
+    private record SearchStatement(String queryId, String query) {
+    }
+
+    /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
+    private SearchStatement searchStatement(String queryName, String token) {
+        return Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                .until(() -> template.nonTransaction(connection -> Mono.from(connection
+                        .createStatement(SEARCH_STATEMENT)
+                        .bind("query_name", queryName)
+                        .bind("token", token)
+                        .execute())
+                        .flatMap(result -> Mono.from(result.map((row, _) -> new SearchStatement(
+                                row.get(0, String.class), row.get(1, String.class))))))
+                        .block(), Objects::nonNull);
     }
 
     private void batchUpdateTags(Span span, Set<UUID> ids) {

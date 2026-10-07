@@ -4,8 +4,10 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThread.TraceThreadPage;
+import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -20,7 +22,6 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
-import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -44,6 +45,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.MountableFile;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -54,6 +56,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Comparator;
@@ -73,8 +76,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code traces} that is every part from the window start through the far-future weeks a bad client clock creates,
  * so the search scans read only the weeks the project's own traces fall in (a key-only pre-pass). A pruning hint must
  * never drop a row, so this suite checks the whole trace and thread pages across ordinary and far-future weeks, next to a neighbouring
- * part whose key range brackets the project, and that the hint actually ran. {@code query_log.partitions} is
- * per-statement and includes the pre-pass's own key reads, so it cannot show the pruning itself.
+ * part whose key range brackets the project, and that each search statement prunes: {@code traces} is the
+ * {@code Distributed} wrapper here, so every read is forwarded to {@code traces_local} as a statement of its own, and
+ * the one that reads the large text columns must touch only the project's weeks. The key-only pre-pass is forwarded
+ * separately and touches the neighbours' week too, which is why the initial statement's partitions cannot show this.
  * <p>
  * Far-future and backdated ids are rejected at ingestion by default, so this suite disables that validation rather than
  * inserting rows directly. The topology setup is the one {@code TracesPartitionPruningMutationTest} uses.
@@ -107,6 +112,25 @@ class TracesSearchPartitionPruningTest {
             LocalDate.of(RandomUtils.secure().randomInt(2150, 2290), 1, 1)
                     .with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY)));
     private static final LocalDate FILLER_MONDAY = WINDOW_MONDAYS.get(2);
+
+    /**
+     * Per initial statement of one search, the partitions each forwarded read of the text columns touched. A statement
+     * is told apart by the search token in its text and by its query name, both of which the test chose.
+     */
+    private static final String TEXT_READ_PARTITIONS = """
+            SELECT initial_query_id, arrayStringConcat(arraySort(partitions), ',')
+            FROM system.query_log
+            WHERE initial_query_id IN (
+                SELECT query_id
+                FROM system.query_log
+                WHERE log_comment LIKE concat(:query_name, ':%')
+                AND type = 'QueryFinish'
+                AND is_initial_query
+                AND query LIKE concat('%', :token, '%'))
+            AND NOT is_initial_query
+            AND type = 'QueryFinish'
+            AND has(columns, :input_column)
+            """;
 
     private static final String PARTITION_KEY_OF_TABLE = """
             SELECT partition_key FROM system.tables WHERE database = currentDatabase() AND name = :table
@@ -190,7 +214,7 @@ class TracesSearchPartitionPruningTest {
 
     /** The searched project's traces, one thread each, in ordinary and far-future weeks. */
     @Builder(toBuilder = true)
-    private record Seeded(String token, String projectName, List<Trace> expected) {
+    private record Seeded(String token, UUID projectId, String projectName, List<Trace> expected) {
     }
 
     private Seeded seed() {
@@ -217,7 +241,12 @@ class TracesSearchPartitionPruningTest {
         Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .until(() -> traceResourceClient.getTraces(project.getValue(), null, API_KEY, WORKSPACE_NAME,
                         List.of(), List.of(), 10, Map.of()).total() == expected.size());
-        return Seeded.builder().token(token).projectName(project.getValue()).expected(expected).build();
+        return Seeded.builder()
+                .token(token)
+                .projectId(project.getKey())
+                .projectName(project.getValue())
+                .expected(expected)
+                .build();
     }
 
     private static Map<String, String> searchParams(Seeded seeded) {
@@ -226,7 +255,7 @@ class TracesSearchPartitionPruningTest {
 
     /** The searched data and the responses. */
     @Builder(toBuilder = true)
-    private record Search(List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
+    private record Search(String token, List<Trace> expected, Trace.TracePage page, ProjectStats stats) {
     }
 
     private Search search() {
@@ -236,35 +265,55 @@ class TracesSearchPartitionPruningTest {
                 List.of(), 10, params);
         var stats = traceResourceClient.getTraceStats(seeded.projectName(), null, API_KEY, WORKSPACE_NAME, null,
                 params);
-        return Search.builder().expected(seeded.expected()).page(page).stats(stats).build();
+        return Search.builder().token(seeded.token()).expected(seeded.expected()).page(page).stats(stats).build();
     }
 
     /** The searched threads and the responses, with and without a time range. */
     @Builder(toBuilder = true)
-    private record ThreadSearch(List<String> expectedThreadIds, TraceThreadPage page, TraceThreadPage searchOnlyPage,
-            ProjectStats stats) {
+    private record ThreadSearch(String token, List<Trace> traces, List<TraceThread> expected, TraceThreadPage page,
+            TraceThreadPage searchOnlyPage, ProjectStats stats) {
     }
 
     private ThreadSearch threadSearch() {
         var seeded = seed();
         var params = searchParams(seeded);
-        var expectedThreadIds = seeded.expected().stream().map(Trace::threadId).sorted().toList();
         // A time-bounded thread list joins trace_threads, whose rows closing a thread writes.
-        expectedThreadIds.forEach(threadId -> traceResourceClient.closeTraceThread(threadId, null,
+        seeded.expected().forEach(trace -> traceResourceClient.closeTraceThread(trace.threadId(), null,
                 seeded.projectName(), API_KEY, WORKSPACE_NAME));
+        // One thread per trace; the page lists the most recently closed first.
+        var expected = seeded.expected().reversed().stream()
+                .map(trace -> expectedThread(trace, seeded.projectId()))
+                .toList();
         var page = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .until(() -> traceResourceClient.getTraceThreads(null, seeded.projectName(), API_KEY, WORKSPACE_NAME,
-                        List.of(), List.of(), params), threads -> threads.total() == expectedThreadIds.size());
+                        List.of(), List.of(), params), threads -> threads.total() == expected.size());
         // Without a time range the page is resolved by the page-pushdown scan rather than the prefilter.
         var searchOnlyPage = traceResourceClient.getTraceThreads(null, seeded.projectName(), API_KEY,
                 WORKSPACE_NAME, List.of(), List.of(), Map.of("search", seeded.token()));
         var stats = traceResourceClient.getTraceThreadStats(seeded.projectName(), null, API_KEY, WORKSPACE_NAME,
                 null, params);
         return ThreadSearch.builder()
-                .expectedThreadIds(expectedThreadIds)
+                .token(seeded.token())
+                .traces(seeded.expected())
+                .expected(expected)
                 .page(page)
                 .searchOnlyPage(searchOnlyPage)
                 .stats(stats)
+                .build();
+    }
+
+    private static TraceThread expectedThread(Trace trace, UUID projectId) {
+        return TraceThread.builder()
+                .id(trace.threadId())
+                .projectId(projectId)
+                .firstMessage(trace.input())
+                .lastMessage(trace.output())
+                .startTime(trace.startTime())
+                .endTime(trace.endTime())
+                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(), trace.endTime()))
+                .numberOfMessages(2L)
+                .status(TraceThreadStatus.INACTIVE)
+                .environment(trace.environment())
                 .build();
     }
 
@@ -277,6 +326,8 @@ class TracesSearchPartitionPruningTest {
         TraceAssertions.assertTraces(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(),
                 StatsUtils.getProjectTraceStatItems(search.page().content()));
+        Stream.of("find_traces_by_project_id", "count_traces_by_project", "get_trace_stats_traces_spans")
+                .forEach(queryName -> assertSearchScansReadOnlyProjectWeeks(queryName, search.token()));
     }
 
     @Test
@@ -284,15 +335,48 @@ class TracesSearchPartitionPruningTest {
     void threadSearchBoundedToProjectWeeksReturnsEveryMatch() {
         var search = threadSearch();
 
-        assertThat(search.page().content()).extracting(TraceThread::id)
-                .containsExactlyInAnyOrderElementsOf(search.expectedThreadIds());
-        assertThat(search.searchOnlyPage().content()).extracting(TraceThread::id)
-                .containsExactlyInAnyOrderElementsOf(search.expectedThreadIds());
-        assertThat(search.stats().stats())
-                .filteredOn(stat -> StatsMapper.THREAD_COUNT.equals(stat.getName()))
-                .singleElement()
-                .extracting(ProjectStats.ProjectStatItem::getValue)
-                .isEqualTo((long) search.expectedThreadIds().size());
+        assertThat(search.page().total()).isEqualTo(search.expected().size());
+        TraceAssertions.assertThreads(search.expected(), search.page().content());
+        assertThat(search.searchOnlyPage().total()).isEqualTo(search.expected().size());
+        TraceAssertions.assertThreads(search.expected(), search.searchOnlyPage().content());
+        TraceAssertions.assertStats(search.stats().stats(),
+                StatsUtils.getProjectThreadStatItems(search.traces(), List.of(), null));
+        // The time-bounded and the search-only page share a query name, so both statements are checked.
+        Stream.of("find_threads_by_project", "count_threads_by_project", "thread_stats")
+                .forEach(queryName -> assertSearchScansReadOnlyProjectWeeks(queryName, search.token()));
+    }
+
+    /**
+     * Every statement of {@code queryName} for this search has a forwarded read of the text columns that touched
+     * exactly the project's weeks, not the neighbours' week inside the window.
+     */
+    private void assertSearchScansReadOnlyProjectWeeks(String queryName, String token) {
+        var projectWeeks = PROJECT_MONDAYS.stream()
+                .map(monday -> "%s.traces_local.%s".formatted(ClickHouseContainerUtils.DATABASE_NAME,
+                        monday.format(DateTimeFormatter.BASIC_ISO_DATE)))
+                .sorted()
+                .collect(Collectors.joining(","));
+        Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                .untilAsserted(() -> {
+                    var textReadsByStatement = textReadPartitionsByStatement(queryName, token);
+                    assertThat(textReadsByStatement).as("%s statements for this search", queryName).isNotEmpty();
+                    assertThat(textReadsByStatement).allSatisfy((statement, textReads) -> assertThat(textReads)
+                            .as("the text-column reads %s forwarded to traces_local", queryName)
+                            .contains(projectWeeks));
+                });
+    }
+
+    private Map<String, List<String>> textReadPartitionsByStatement(String queryName, String token) {
+        return template.nonTransaction(connection -> Flux.from(connection.createStatement(TEXT_READ_PARTITIONS)
+                .bind("query_name", queryName)
+                .bind("token", token)
+                .bind("input_column", "%s.traces_local.input".formatted(ClickHouseContainerUtils.DATABASE_NAME))
+                .execute())
+                .flatMap(result -> result.map((row, _) -> Map.entry(row.get(0, String.class),
+                        row.get(1, String.class))))
+                .collect(Collectors.groupingBy(Map.Entry::getKey,
+                        Collectors.mapping(Map.Entry::getValue, Collectors.toList()))))
+                .block();
     }
 
     /** A trace whose id is minted mid-week, so the partition value is the week's Monday rather than the id's own day. */
