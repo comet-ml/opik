@@ -15,6 +15,7 @@ import {
   selectReadOnly,
 } from "@/store/DashboardStore";
 import {
+  DASHBOARD_TYPE,
   DashboardWidgetComponentProps,
   OllieChartWidgetType,
 } from "@/types/dashboard";
@@ -62,6 +63,11 @@ const OllieChartWidget: React.FunctionComponent<
   const dateRange = useDashboardStore(
     (state) => selectRuntimeConfig(state)?.dateRange ?? DEFAULT_DATE_PRESET,
   );
+  // Experiments dashboards show no date range, so a widget there must not be bounded by a hidden one.
+  const hasDateRange = useDashboardStore(
+    (state) =>
+      selectRuntimeConfig(state)?.dashboardType !== DASHBOARD_TYPE.EXPERIMENTS,
+  );
   const widget = useDashboardStore(
     useShallow((state) => {
       if (preview) {
@@ -77,8 +83,11 @@ const OllieChartWidget: React.FunctionComponent<
   const { spec, query, rows: snapshotRows } = config;
 
   const { intervalStart, intervalEnd } = useMemo(
-    () => calculateIntervalConfig(dateRange),
-    [dateRange],
+    () =>
+      hasDateRange
+        ? calculateIntervalConfig(dateRange)
+        : { intervalStart: undefined, intervalEnd: undefined },
+    [dateRange, hasDateRange],
   );
 
   const {
