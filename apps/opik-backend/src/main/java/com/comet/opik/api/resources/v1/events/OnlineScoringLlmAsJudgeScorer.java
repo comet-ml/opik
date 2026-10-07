@@ -277,7 +277,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
         EvaluationRecorder recorder = beginRecorder(message);
 
-        return spansMono.flatMap(spans -> judgeFallingBackToNextModel(message, spans, mdc, recorder))
+        // A failed span fetch still finalizes the first attempt's monitoring trace, but it is not a judge
+        // rejection, so it must not reach the fallback.
+        return spansMono.materialize()
+                .flatMap(fetched -> fetched.hasError()
+                        ? recorder.<FeedbackScoreBatchItem>monitor(Mono.error(fetched.getThrowable()))
+                        : judgeFallingBackToNextModel(message, fetched.get(), mdc, recorder))
                 // Nothing to store when the evaluation was skipped or yielded no readable score; the skip or the
                 // response issues were already logged, so don't follow them with a success line.
                 .filter(scores -> !scores.isEmpty())
