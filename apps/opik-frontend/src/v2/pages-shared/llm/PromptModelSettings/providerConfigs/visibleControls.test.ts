@@ -80,6 +80,24 @@ describe("hasVisibleControls", () => {
     ).toBe(true);
   });
 
+  it.each([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH],
+  ])(
+    "is false for %s on a rule whose config carries only max output tokens",
+    (provider, model) => {
+      expect(
+        hasVisibleControls(
+          provider,
+          model,
+          { maxCompletionTokens: 4000 },
+          RULE_UNSUPPORTED_PARAMS,
+        ),
+      ).toBe(false);
+    },
+  );
+
   it("is false for a Gemini 3 model without a thinking row on a rule", () => {
     expect(
       hasVisibleControls(
