@@ -29,6 +29,10 @@ public record TraceToScoreLlmAsJudge(
         @Nullable String workspaceName,
         @Nullable List<String> judgeFallbackModels) implements RedisSubscriberMessage {
 
+    public TraceToScoreLlmAsJudge {
+        judgeFallbackModels = judgeFallbackModels == null ? null : List.copyOf(judgeFallbackModels);
+    }
+
     @Override
     public RedisSubscriberMessage withWorkspaceName(String workspaceName) {
         return toBuilder().workspaceName(workspaceName).build();
