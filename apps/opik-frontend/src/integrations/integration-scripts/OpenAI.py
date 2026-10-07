@@ -11,7 +11,7 @@ configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 openai_client = track_openai(OpenAI())  # HIGHLIGHTED_LINE
 prompt = "Write a haiku about AI engineering."
 response = openai_client.chat.completions.create(
-    model="gpt-5.6-terra",
+    model="gpt-4o-mini",
     messages=[{"role": "user", "content": prompt}],
 )
 print(response.choices[0].message.content)

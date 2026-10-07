@@ -5,7 +5,7 @@ import { INTEGRATIONS } from "./integrations";
 
 // OpenAI shuts gpt-3.5-turbo down on 2026-10-23, so snippets users copy must not name it.
 const RETIRED_MODEL = "gpt-3.5-turbo";
-const CURRENT_MODEL = "gpt-5.6-terra";
+const CURRENT_MODEL = "gpt-4o-mini";
 
 const integrationCode = (id: string): string => {
   const integration = INTEGRATIONS.find((item) => item.id === id);
