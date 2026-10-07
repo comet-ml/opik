@@ -119,8 +119,10 @@ class TracesSearchPartitionPruningTest {
     private static final LocalDate FILLER_MONDAY = WINDOW_MONDAYS.get(2);
 
     /**
-     * Per initial statement of one search, the partitions each forwarded read of the text columns touched, a set. A statement
-     * is told apart by the search token in its text and by its query name, both of which the test chose.
+     * One row per forwarded read of the text columns: the initial statement of the search it belongs to, and the
+     * partitions that read touched. The caller groups the rows by statement, so each statement maps to the partition
+     * set of every text-column read it forwarded. A statement is told apart by the search token in its text and by its
+     * query name, both of which the test chose.
      */
     private static final String TEXT_READ_PARTITIONS = """
             SELECT initial_query_id, arrayStringConcat(partitions, ',')
