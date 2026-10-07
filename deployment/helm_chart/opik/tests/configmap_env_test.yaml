@@ -85,9 +85,6 @@ tests:
       - equal:
           path: data.PARTITION_METRICS_LWD_TABLES
           value: "traces,spans"
-      - equal:
-          path: data.PARTITION_METRICS_IN_RANGE_FROM
-          value: "2024-01-01"
 
   - it: turns the cluster readiness probe on with the sharding switch
     set:
@@ -121,7 +118,6 @@ tests:
       partitionMetrics.enabled: true
       partitionMetrics.interval: 30s
       partitionMetrics.lwdTables: traces
-      partitionMetrics.inRangeFrom: "2023-06-05"
     documentSelector:
       path: metadata.name
       value: opik-backend
@@ -153,9 +149,6 @@ tests:
       - equal:
           path: data.PARTITION_METRICS_LWD_TABLES
           value: "traces"
-      - equal:
-          path: data.PARTITION_METRICS_IN_RANGE_FROM
-          value: "2023-06-05"
 
   - it: an explicit component env key wins over the derived value
     set:

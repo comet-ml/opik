@@ -25,6 +25,7 @@ import static java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
  * them push the gauges past the OTel cardinality limit, where the SDK silently folds the overflow
  * into one series and can drop legitimate partitions. Out-of-range partitions therefore report as one
  * series per table per side; in-range and non-date partitions ({@code all}, monthly ids) pass through.
+ * The floor is derived from the estate's oldest project (see {@link #floorFor}), so it needs no config.
  *
  * @param from earliest in-range partition date (inclusive)
  * @param to   latest in-range partition date (inclusive): next week's Monday
@@ -37,6 +38,15 @@ public record PartitionRange(@NonNull LocalDate from, @NonNull LocalDate to) {
 
     // Weekly tables partition by toYYYYMMDD of the week's Monday; monthly (YYYYMM) and 'all' don't match.
     private static final Pattern DAY_PARTITION = Pattern.compile("\\d{8}");
+
+    /**
+     * Floor for an estate whose oldest project was created on {@code earliestProjectDate}: no legitimate
+     * row is older than its project. One extra week absorbs timezone skew between MySQL and ClickHouse
+     * and ids minted slightly before their project was created.
+     */
+    public static LocalDate floorFor(@NonNull LocalDate earliestProjectDate) {
+        return earliestProjectDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
+    }
 
     /** In range: from {@code from} through the week after the one containing {@code today}. */
     public static PartitionRange of(@NonNull LocalDate from, @NonNull LocalDate today) {

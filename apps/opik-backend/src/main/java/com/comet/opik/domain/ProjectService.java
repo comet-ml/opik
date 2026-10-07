@@ -40,6 +40,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +96,9 @@ public interface ProjectService {
     Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
 
     Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids);
+
+    /** Creation date of the oldest project across all workspaces; empty when there are no projects. */
+    Mono<Optional<LocalDate>> findEarliestCreationDate();
 
     Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
@@ -430,6 +434,13 @@ class ProjectServiceImpl implements ProjectService {
 
     private static String escapeLike(String value) {
         return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
+
+    @Override
+    public Mono<Optional<LocalDate>> findEarliestCreationDate() {
+        return Mono.fromCallable(() -> Optional.ofNullable(template.inTransaction(READ_ONLY,
+                handle -> handle.attach(ProjectDAO.class).findEarliestCreationDate())))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override

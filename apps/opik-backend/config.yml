@@ -1468,9 +1468,6 @@ partitionMetrics:
   interval: ${PARTITION_METRICS_INTERVAL:-5m}
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
-  # Earliest legitimate weekly partition (ISO date). Weekly partitions before it, or after next week, are
-  # reported as one out_of_range_past / out_of_range_future series per table to keep series bounded.
-  inRangeFrom: ${PARTITION_METRICS_IN_RANGE_FROM:-2024-01-01}
 
 # LLM providers client configuration
 # Configuration for dynamic token auth on custom LLM providers (auth_config recipes)

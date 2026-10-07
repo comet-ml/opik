@@ -18,6 +18,7 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -59,6 +60,10 @@ interface ProjectDAO {
     @SqlQuery("SELECT workspace_id, id AS project_id, name FROM projects WHERE id IN (<ids>)")
     @RegisterConstructorMapper(WorkspaceProjectName.class)
     List<WorkspaceProjectName> findNamesByIds(@BindList("ids") Collection<UUID> ids);
+
+    // DATE() in the MySQL session timezone, so callers get a calendar date without picking a zone.
+    @SqlQuery("SELECT DATE(MIN(created_at)) FROM projects")
+    LocalDate findEarliestCreationDate();
 
     @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId")
     Set<UUID> findIdsByWorkspaceId(@Bind("workspaceId") String workspaceId);

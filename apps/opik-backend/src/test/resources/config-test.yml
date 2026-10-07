@@ -1091,8 +1091,6 @@ partitionMetrics:
   interval: 5m
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: traces,spans
-  # Earliest legitimate weekly partition (ISO date); older or far-future weekly partitions are grouped.
-  inRangeFrom: 2024-01-01
 
 # Job timeout configuration
 jobTimeout:

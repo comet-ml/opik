@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.jobs;
 
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.PartitionMetricsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO;
@@ -22,7 +23,7 @@ import org.quartz.JobExecutionContext;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuple3;
+import reactor.util.function.Tuple4;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -47,7 +48,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * stop reporting — this keeps exactly one series per (table, partition) and lets partitions that
  * age out drop from Prometheus instead of lingering as stale values.
  *
- * <p>Out-of-range weekly partitions (far-future or before {@code inRangeFrom}) are folded into one
+ * <p>Out-of-range weekly partitions (far-future, or older than the estate's oldest project) are folded into one
  * series per table per side by {@link PartitionRange}, so the series count stays bounded however many
  * junk partitions a table carries. The partition count is computed before folding and stays exact.
  */
@@ -78,19 +79,24 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     private final ClickHousePartitionMetricsDAO partitionMetricsDAO;
     private final LockService lockService;
     private final PartitionMetricsConfig config;
+    private final ProjectService projectService;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
     private final AtomicReference<Snapshot> snapshot = new AtomicReference<>(Snapshot.EMPTY);
     private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
+    // Looked up once, on the first poll after startup: the oldest project doesn't get older.
+    private final AtomicReference<LocalDate> inRangeFrom = new AtomicReference<>();
 
     @Inject
     public ClickHousePartitionMetricsJob(
             @NonNull ClickHousePartitionMetricsDAO partitionMetricsDAO,
             @NonNull LockService lockService,
-            @NonNull @Config("partitionMetrics") PartitionMetricsConfig config) {
+            @NonNull @Config("partitionMetrics") PartitionMetricsConfig config,
+            @NonNull ProjectService projectService) {
         this.partitionMetricsDAO = partitionMetricsDAO;
         this.lockService = lockService;
         this.config = config;
+        this.projectService = projectService;
 
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.clickhouse");
 
@@ -150,8 +156,11 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                         return Mono.just(List.of());
                     });
             return Mono
-                    .zip(partitionMetricsDAO.getPartitionStats(), lwdRowCounts, partitionMetricsDAO.getServerDate())
+                    .zip(partitionMetricsDAO.getPartitionStats(), lwdRowCounts, partitionMetricsDAO.getServerDate(),
+                            inRangeFrom())
                     .doOnNext(this::updateSnapshot)
+                    // A failed refresh stops reporting rather than publishing the last snapshot indefinitely.
+                    .doOnError(exception -> snapshot.set(Snapshot.EMPTY))
                     .then();
         });
 
@@ -180,9 +189,25 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
         currentExecution.set(subscription);
     }
 
-    private void updateSnapshot(Tuple3<List<PartitionStat>, List<LwdStat>, LocalDate> result) {
+    private Mono<LocalDate> inRangeFrom() {
+        var cached = inRangeFrom.get();
+        if (cached != null) {
+            return Mono.just(cached);
+        }
+        // No projects means no legitimate data yet: nothing is "too old", and the lookup is retried next poll.
+        return projectService.findEarliestCreationDate()
+                .map(earliest -> earliest.map(date -> {
+                    var from = PartitionRange.floorFor(date);
+                    inRangeFrom.set(from);
+                    log.info("ClickHouse partition metrics: in-range floor '{}' from oldest project date '{}'",
+                            from, date);
+                    return from;
+                }).orElse(LocalDate.MIN));
+    }
+
+    private void updateSnapshot(Tuple4<List<PartitionStat>, List<LwdStat>, LocalDate, LocalDate> result) {
         // ClickHouse's date, not the JVM's: partition ids are computed in the ClickHouse server timezone.
-        var range = PartitionRange.of(config.getInRangeFrom(), result.getT3());
+        var range = PartitionRange.of(result.getT4(), result.getT3());
         var partitionStats = range.group(result.getT1());
         var lwdStats = range.groupLwd(result.getT2());
         snapshot.set(Snapshot.builder()

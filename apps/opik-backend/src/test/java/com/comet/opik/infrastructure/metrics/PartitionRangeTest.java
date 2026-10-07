@@ -31,6 +31,16 @@ class PartitionRangeTest {
 
     @ParameterizedTest
     @CsvSource({
+            "2024-03-13, 2024-03-04",
+            "2024-03-11, 2024-03-04",
+            "2024-03-17, 2024-03-04"
+    })
+    void floorForIsTheWeekBeforeTheOldestProjectsWeek(String earliestProjectDate, String expected) {
+        assertThat(PartitionRange.floorFor(LocalDate.parse(earliestProjectDate))).isEqualTo(LocalDate.parse(expected));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
             "20240101, in_range",
             "20261005, in_range",
             "20261012, in_range",

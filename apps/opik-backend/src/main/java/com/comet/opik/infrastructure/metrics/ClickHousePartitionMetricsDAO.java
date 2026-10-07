@@ -145,7 +145,7 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(query).execute())
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("server_date", String.class)))
-                .next()
+                .single()
                 .map(LocalDate::parse);
     }
 

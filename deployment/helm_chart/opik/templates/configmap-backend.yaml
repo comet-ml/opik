@@ -55,7 +55,6 @@ data:
         "PARTITION_METRICS_ENABLED" $pm.enabled
         "PARTITION_METRICS_INTERVAL" $pm.interval
         "PARTITION_METRICS_LWD_TABLES" $pm.lwdTables
-        "PARTITION_METRICS_IN_RANGE_FROM" $pm.inRangeFrom
       }}
   {{- if not (hasKey $env $k) }}
   {{ $k }}: {{ $v | quote }}

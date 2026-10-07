@@ -822,9 +822,6 @@ partitionMetrics:
   interval: 5m
   # Comma-separated tables scanned for lightweight-deleted (masked) rows.
   lwdTables: "traces,spans"
-  # Earliest legitimate weekly partition (ISO date, quoted). Weekly partitions before it, or after next
-  # week, report as one out_of_range_past / out_of_range_future series per table to keep series bounded.
-  inRangeFrom: "2024-01-01"
 
 clickhouse:
   enabled: true
