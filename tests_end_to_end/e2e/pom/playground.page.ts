@@ -446,6 +446,44 @@ export class PlaygroundPage {
     });
   }
 
+  messageEditor(variantIndex: number, messageIndex: number): Locator {
+    return this.variantMessages(variantIndex).nth(messageIndex).locator('.cm-content').first();
+  }
+
+  async addMessage(variantIndex: number): Promise<void> {
+    return test.step(`click + Message on variant ${variantIndex}`, async () => {
+      await this.variantCard(variantIndex).getByRole('button', { name: 'Message' }).click();
+    });
+  }
+
+  async focusFirstMessageAtLineStart(): Promise<void> {
+    return test.step('put the cursor at the start of the first message', async () => {
+      await this.variantMessages(0).first().locator('.cm-content').first().click();
+      await this.page.keyboard.press('Home');
+    });
+  }
+
+  /**
+   * CodeMirror draws its own blinking `.cm-cursor` and `.cm-scroller` clips it,
+   * so "is the cursor visible" is asked as geometry: a pixel check would depend
+   * on the blink phase. A positive result is how many CSS pixels of the cursor
+   * are cut off on the left (OPIK-5298).
+   */
+  async firstMessageCursorClippedPx(): Promise<number> {
+    return test.step('measure how much of the first message cursor is clipped', async () => {
+      return this.variantMessages(0)
+        .first()
+        .locator('.cm-editor')
+        .first()
+        .evaluate((editor) => {
+          const cursor = editor.querySelector('.cm-cursor');
+          const scroller = editor.querySelector('.cm-scroller');
+          if (!cursor || !scroller) return Number.POSITIVE_INFINITY;
+          return scroller.getBoundingClientRect().left - cursor.getBoundingClientRect().left;
+        });
+    });
+  }
+
   /**
    * The "Run experiment" entry control — present only while NO dataset or test
    * suite is loaded. Its return after a reset is what says the reset really

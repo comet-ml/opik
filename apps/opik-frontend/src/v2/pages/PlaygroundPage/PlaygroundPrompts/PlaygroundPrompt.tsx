@@ -485,6 +485,7 @@ const PlaygroundPrompt = ({
           jsonTreeData={datasetSampleData}
           hidePromptActions={false}
           improvePromptConfig={improvePromptConfig}
+          autoFocusFirstMessage={index === 0}
         />
       </div>
 
