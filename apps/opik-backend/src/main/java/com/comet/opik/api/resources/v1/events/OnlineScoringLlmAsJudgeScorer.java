@@ -78,6 +78,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private static final AttributeKey<String> WORKSPACE_NAME_KEY = AttributeKey.stringKey("workspace_name");
     private static final AttributeKey<String> PATH_KEY = AttributeKey.stringKey("path");
     private static final AttributeKey<String> TRIGGER_KEY = AttributeKey.stringKey("trigger");
+    private static final int MAX_LOGGED_REJECTION_LENGTH = 512;
 
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
@@ -154,21 +155,27 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     protected Mono<Void> doScore(TraceToScoreLlmAsJudge message) {
         // Overriding doScore (not processEvent) keeps the post-scoring step inside the chain the
         // base wraps with the processed-success counter, so a failure there is not counted as processed.
-        return scoreFallingBackToNextJudge(message)
+        return super.doScore(message)
                 .then(finishAssertion(message));
     }
 
-    private Mono<Void> scoreFallingBackToNextJudge(TraceToScoreLlmAsJudge message) {
-        return super.doScore(message)
+    private Mono<List<FeedbackScoreBatchItem>> judgeFallingBackToNextModel(TraceToScoreLlmAsJudge message,
+            List<Span> spans, Map<String, String> mdc, EvaluationRecorder recorder) {
+        return judge(message, spans, mdc, recorder)
                 .onErrorResume(error -> isRejectedByProvider(error)
                         && CollectionUtils.isNotEmpty(message.judgeFallbackModels()),
-                        error -> {
-                            var next = withNextJudgeModel(message);
-                            log.warn("Judge model '{}' rejected traceId '{}', falling back to judge model '{}': '{}'",
-                                    message.llmAsJudgeCode().model().name(), message.trace().id(),
-                                    next.llmAsJudgeCode().model().name(), error.getMessage());
-                            return scoreFallingBackToNextJudge(next);
-                        });
+                        error -> judgeWithNextModel(message, spans, mdc, (ClientErrorException) error));
+    }
+
+    private Mono<List<FeedbackScoreBatchItem>> judgeWithNextModel(TraceToScoreLlmAsJudge message, List<Span> spans,
+            Map<String, String> mdc, ClientErrorException rejection) {
+        var next = withNextJudgeModel(message);
+        log.warn("Judge provider rejected the request, falling back to the next judge model: traceId='{}',"
+                + " model='{}', nextModel='{}', status='{}', reason='{}'",
+                message.trace().id(), message.llmAsJudgeCode().model().name(), next.llmAsJudgeCode().model().name(),
+                rejection.getResponse().getStatus(),
+                StringUtils.abbreviate(rejection.getMessage(), MAX_LOGGED_REJECTION_LENGTH));
+        return judgeFallingBackToNextModel(next, spans, mdc, beginRecorder(next));
     }
 
     private static boolean isRejectedByProvider(Throwable error) {
@@ -268,22 +275,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                 .put(RequestContext.USER_NAME, message.userName()))
                 : Mono.just(List.of());
 
-        // Monitoring recorder for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
-        // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then runs
-        // exactly as before with no extra writes.
-        EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? onlineEvaluationRecorder.begin(trace, message.ruleId(), message.ruleName(),
-                        message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
-                : EvaluationRecorder.NOOP;
+        EvaluationRecorder recorder = beginRecorder(message);
 
-        // Decisions models (Jev) have no chat, tools or structured output: one Decisions API call answers every
-        // score, so they skip the chat judge's agentic routing. Rule validation keeps {{trace}} out of their prompts.
-        boolean decisionModel = OpenRouterDecisionModel.isDecisionModel(message.llmAsJudgeCode().model().name());
-        Mono<List<FeedbackScoreBatchItem>> scoring = spansMono.flatMap(spans -> decisionModel
-                ? evaluateWithDecisionModel(message, spans, mdc, recorder)
-                : evaluateWithChatModel(message, spans, mdc, recorder));
-
-        return recorder.monitor(scoring)
+        return spansMono.flatMap(spans -> judgeFallingBackToNextModel(message, spans, mdc, recorder))
                 // Nothing to store when the evaluation was skipped or yielded no readable score; the skip or the
                 // response issues were already logged, so don't follow them with a success line.
                 .filter(scores -> !scores.isEmpty())
@@ -296,6 +290,26 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                 Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
                                         .orElse(error.getMessage()))))
                 .then();
+    }
+
+    // Monitoring recorder for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
+    // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then runs
+    // exactly as before with no extra writes.
+    private EvaluationRecorder beginRecorder(TraceToScoreLlmAsJudge message) {
+        return serviceTogglesConfig.isOnlineScoringTracingEnabled()
+                ? onlineEvaluationRecorder.begin(message.trace(), message.ruleId(), message.ruleName(),
+                        message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
+                : EvaluationRecorder.NOOP;
+    }
+
+    private Mono<List<FeedbackScoreBatchItem>> judge(TraceToScoreLlmAsJudge message, List<Span> spans,
+            Map<String, String> mdc, EvaluationRecorder recorder) {
+        // Decisions models (Jev) have no chat, tools or structured output: one Decisions API call answers every
+        // score, so they skip the chat judge's agentic routing. Rule validation keeps {{trace}} out of their prompts.
+        boolean decisionModel = OpenRouterDecisionModel.isDecisionModel(message.llmAsJudgeCode().model().name());
+        return recorder.monitor(decisionModel
+                ? evaluateWithDecisionModel(message, spans, mdc, recorder)
+                : evaluateWithChatModel(message, spans, mdc, recorder));
     }
 
     /**

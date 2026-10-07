@@ -47,6 +47,7 @@ import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -1179,6 +1180,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
             scorer.doScore(message).block();
 
             assertThat(judgedModels(2)).containsExactly("judge-a", "judge-b");
+            verify(spanService, times(1)).getByTraceIds(any());
+            verify(feedbackScoreService, times(1)).scoreBatchOfTraces(any());
             assertThat(scoresCaptor.getValue())
                     .extracting(FeedbackScoreBatchItem::name, item -> item.value().intValue())
                     .containsExactlyInAnyOrder(
@@ -1224,6 +1227,33 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
             assertThatThrownBy(() -> scorer.doScore(message).block()).isInstanceOf(ClientErrorException.class);
             assertThat(judgedModels(1)).containsExactly("judge-a");
+        }
+
+        @Test
+        void doesNotFallBackWhenTheSpansCannotBeFetched() {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            var failure = new NotFoundException("Trace not found");
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.error(failure));
+
+            assertThatThrownBy(() -> scorer.doScore(message).block()).isSameAs(failure);
+            verify(spanService, times(1)).getByTraceIds(any());
+            verifyNoInteractions(aiProxyService);
+            verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
+        }
+
+        @Test
+        void doesNotFallBackWhenTheScoresCannotBeStored() {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            stubJudge("judge-a", SUITE_RESPONSE);
+            var failure = new NotFoundException("Project not found");
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.error(failure));
+
+            assertThatThrownBy(() -> scorer.doScore(message).block()).isSameAs(failure);
+            assertThat(judgedModels(1)).containsExactly("judge-a");
+            verify(feedbackScoreService, times(1)).scoreBatchOfTraces(any());
+            verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
         }
 
         @Test
