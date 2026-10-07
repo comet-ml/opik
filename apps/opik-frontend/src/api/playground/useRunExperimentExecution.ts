@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import get from "lodash/get";
 import api, { EXPERIMENT_EXECUTION_REST_ENDPOINT } from "@/api/api";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import { dropEmptySystemMessages } from "@/lib/playground";
 import { snakeCaseObj } from "@/lib/utils";
 import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
 import { PlaygroundPromptType } from "@/types/playground";
@@ -48,7 +49,9 @@ const runExperimentExecution = async ({
 
     return {
       model: prompt.model,
-      messages: prompt.messages.map((msg) => snakeCaseObj(msg)),
+      messages: dropEmptySystemMessages(prompt.messages).map((msg) =>
+        snakeCaseObj(msg),
+      ),
       configs: sanitizeConfigForRequest(
         prompt.model,
         prompt.configs as Record<string, unknown>,

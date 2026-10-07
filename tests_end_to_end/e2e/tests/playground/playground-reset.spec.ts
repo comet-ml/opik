@@ -30,8 +30,8 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  * call, no real provider key and no wall-clock dependence anywhere in here.
  */
 
-/** What an untouched default prompt card contains: one message, with no body. */
-const ONE_EMPTY_MESSAGE = [''];
+/** What an untouched default prompt card contains: a System and a User message, with no body. */
+const EMPTY_DEFAULT_MESSAGES = ['', ''];
 
 test.describe('Playground — reset', { tag: ['@t2-cuj', '@area:playground'] }, () => {
   test.use({ viewport: { width: 1600, height: 900 } });
@@ -54,11 +54,11 @@ test.describe('Playground — reset', { tag: ['@t2-cuj', '@area:playground'] }, 
       await test.step('Reset on a fresh page leaves one empty prompt', async () => {
         await playground.resetPlayground();
         await expect(playground.variantCards()).toHaveCount(1);
-        expect(await playground.messageBodies()).toEqual(ONE_EMPTY_MESSAGE);
+        expect(await playground.messageBodies()).toEqual(EMPTY_DEFAULT_MESSAGES);
       });
 
       await test.step('Grow the prompt list: type a prompt and duplicate it', async () => {
-        await playground.fillFirstMessage('Summarise the following in one sentence.');
+        await playground.fillUserMessage('Summarise the following in one sentence.');
         await playground.duplicateLastVariant();
         // Assert the state the next step resets FROM. Without this, a reset
         // that did nothing at all would pass the assertions below, because the
@@ -73,20 +73,20 @@ test.describe('Playground — reset', { tag: ['@t2-cuj', '@area:playground'] }, 
       await test.step('Reset collapses it back to one empty prompt', async () => {
         await playground.resetPlayground();
         await expect(playground.variantCards()).toHaveCount(1);
-        expect(await playground.messageBodies()).toEqual(ONE_EMPTY_MESSAGE);
+        expect(await playground.messageBodies()).toEqual(EMPTY_DEFAULT_MESSAGES);
       });
 
       await test.step('Resetting again is idempotent', async () => {
         await playground.resetPlayground();
         await expect(playground.variantCards()).toHaveCount(1);
-        expect(await playground.messageBodies()).toEqual(ONE_EMPTY_MESSAGE);
+        expect(await playground.messageBodies()).toEqual(EMPTY_DEFAULT_MESSAGES);
       });
 
       await test.step('A reload finds nothing stale in the persisted store', async () => {
         await page.reload();
         await playground.waitForReady();
         await expect(playground.variantCards()).toHaveCount(1);
-        expect(await playground.messageBodies()).toEqual(ONE_EMPTY_MESSAGE);
+        expect(await playground.messageBodies()).toEqual(EMPTY_DEFAULT_MESSAGES);
       });
     },
   );
@@ -105,7 +105,7 @@ test.describe('Playground — reset', { tag: ['@t2-cuj', '@area:playground'] }, 
       await test.step('Load a dataset into the Playground', async () => {
         await playground.goto();
         await playground.waitForReady();
-        await playground.fillFirstMessage(typed);
+        await playground.fillUserMessage(typed);
         await playground.clickRunExperiment();
         await playground.selectRunExperimentSource({
           mode: 'dataset',
@@ -131,15 +131,15 @@ test.describe('Playground — reset', { tag: ['@t2-cuj', '@area:playground'] }, 
 
       await test.step('Exactly one empty prompt remains', async () => {
         await expect(playground.variantCards()).toHaveCount(1);
-        expect(await playground.messageBodies()).toEqual(ONE_EMPTY_MESSAGE);
+        expect(await playground.messageBodies()).toEqual(EMPTY_DEFAULT_MESSAGES);
       });
 
       await test.step('The message editor still accepts input', async () => {
         // A card that renders but cannot be typed into is the same outage as no
         // card at all, and the count assertion above cannot tell them apart.
         const retyped = 'A fresh prompt after the reset.';
-        await playground.fillFirstMessage(retyped);
-        expect(await playground.messageBodies()).toEqual([retyped]);
+        await playground.fillUserMessage(retyped);
+        expect(await playground.messageBodies()).toEqual(['', retyped]);
       });
     },
   );

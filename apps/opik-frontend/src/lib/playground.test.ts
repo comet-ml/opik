@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  canRunMessages,
   createCompletionAnnouncer,
+  dropEmptySystemMessages,
+  generateDefaultPrompt,
   getDefaultConfigByProvider,
   hasUnsupportedMedia,
   restoreMissingConfigKeys,
@@ -18,6 +21,12 @@ import { LLM_MESSAGE_ROLE, LLMMessage, MessageContent } from "@/types/llm";
 const userMessage = (content: MessageContent): LLMMessage => ({
   id: "message",
   role: LLM_MESSAGE_ROLE.user,
+  content,
+});
+
+const systemMessage = (content: MessageContent): LLMMessage => ({
+  id: "system-message",
+  role: LLM_MESSAGE_ROLE.system,
   content,
 });
 
@@ -443,5 +452,64 @@ describe("createCompletionAnnouncer", () => {
     announcer.loggingFinished();
 
     expect(announce).not.toHaveBeenCalled();
+  });
+});
+
+describe("generateDefaultPrompt", () => {
+  const generate = (initPrompt?: Partial<PlaygroundPromptType>) =>
+    generateDefaultPrompt({
+      initPrompt,
+      setupProviders: [],
+      providerResolver: () => "",
+      modelResolver: () => "",
+    });
+
+  it("starts with an empty system message and an empty user message", () => {
+    expect(
+      generate().messages.map(({ role, content }) => ({ role, content })),
+    ).toEqual([
+      { role: LLM_MESSAGE_ROLE.system, content: "" },
+      { role: LLM_MESSAGE_ROLE.user, content: "" },
+    ]);
+  });
+
+  it("keeps the messages of a prompt it is given", () => {
+    const messages = [userMessage("Hello")];
+
+    expect(generate({ messages }).messages).toBe(messages);
+  });
+});
+
+describe("dropEmptySystemMessages", () => {
+  it("drops a system message with no text", () => {
+    expect(
+      dropEmptySystemMessages([systemMessage(""), userMessage("Hello")]),
+    ).toEqual([userMessage("Hello")]);
+  });
+
+  it("keeps a system message with text and empty messages of other roles", () => {
+    const messages = [
+      systemMessage("Answer briefly"),
+      userMessage(""),
+      { id: "assistant", role: LLM_MESSAGE_ROLE.assistant, content: "" },
+    ];
+
+    expect(dropEmptySystemMessages(messages)).toEqual(messages);
+  });
+});
+
+describe("canRunMessages", () => {
+  it("allows a run with an empty system message and a filled user message", () => {
+    expect(canRunMessages([systemMessage(""), userMessage("Hello")])).toBe(
+      true,
+    );
+  });
+
+  it("blocks a run while the user message is empty", () => {
+    expect(canRunMessages([systemMessage(""), userMessage("")])).toBe(false);
+  });
+
+  it("blocks a run when only an empty system message is left", () => {
+    expect(canRunMessages([systemMessage("")])).toBe(false);
   });
 });

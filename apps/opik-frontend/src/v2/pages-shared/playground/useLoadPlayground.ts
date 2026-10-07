@@ -77,8 +77,7 @@ function useLoadPlayground() {
 
     return (
       keys.length === 1 &&
-      promptMap[keys[0]]?.messages?.length === 1 &&
-      promptMap[keys[0]]?.messages[0]?.content === ""
+      !!promptMap[keys[0]]?.messages?.every((message) => message.content === "")
     );
   }, [promptMap]);
 
@@ -152,7 +151,7 @@ function useLoadPlayground() {
             }),
           ];
         }
-      } else {
+      } else if (content || promptId) {
         newPrompt.messages = [
           generateDefaultLLMPromptMessage({
             content,
