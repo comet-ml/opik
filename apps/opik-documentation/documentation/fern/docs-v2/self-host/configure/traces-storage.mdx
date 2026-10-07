@@ -56,9 +56,17 @@ Compare `end_time` with `toDateTime64(0, 6)`, not with the string
 timezone, so on a server that does not run in UTC the string names a different instant and matches
 nothing. The number `0` is the epoch in every timezone.
 
-The Opik backend pins its own connections to UTC with `session_timezone`, configurable through
-`ANALYTICS_DB_SESSION_TIMEZONE` (default `UTC`), so the API and UI are correct whatever timezone your
-ClickHouse server uses. Leave it at `UTC`.
+### Run ClickHouse in UTC
+
+Opik expects the ClickHouse server's default timezone to be UTC. The Helm chart
+(`conf.d/timezone.xml`) and the Docker Compose configuration set `<timezone>UTC</timezone>`. If you
+run your own ClickHouse, set it there too, and check it with `SELECT timezone()`. On a server with
+another timezone, Opik misreads traces that have not ended: they can show a 1970 end time or a large
+negative duration.
+
+This is only a default. Your own queries can still use another timezone, with
+`SETTINGS session_timezone = '...'` or a timezone argument such as
+`toTimezone(start_time, 'Europe/Berlin')`.
 
 ## Aggregates on `duration` and `ttft`
 
