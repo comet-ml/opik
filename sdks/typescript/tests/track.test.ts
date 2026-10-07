@@ -636,6 +636,28 @@ describe("@track output set through getTrackContext()", () => {
     expect(innerSpan?.endTime).toBeDefined();
   });
 
+  it("leaves out a non-enumerable field of the return value that collides with the output set during the call", async () => {
+    const returned = { sources: ["doc-1"] };
+    Object.defineProperty(returned, "details", {
+      value: { internal: "returned-internal" },
+      enumerable: false,
+    });
+    const tracked = track({ name: "hidden-field" }, () => {
+      getTrackContext()?.span.update({
+        output: { details: { source: "explicit-source" } },
+      });
+      return returned;
+    });
+
+    tracked();
+    await trackOpikClient.flush();
+
+    expect(sentSpans()[0]?.output).toEqual({
+      sources: ["doc-1"],
+      details: { source: "explicit-source" },
+    });
+  });
+
   it("keeps a __proto__ key from the output set during the call", async () => {
     const tracked = track({ name: "proto-key" }, () => {
       getTrackContext()?.span.update({

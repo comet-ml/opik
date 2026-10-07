@@ -205,19 +205,16 @@ function deepMergeOutputs(captured: any, explicit: any, depth: number): any {
     return explicit;
   }
 
-  // Object.fromEntries defines own properties, so a "__proto__" key stays a key instead of
-  // going through the prototype setter.
+  // Collisions are looked up in the entries snapshot rather than re-read from `captured`, so a
+  // getter runs once and a non-enumerable field can't slip into the merge. Object.fromEntries
+  // defines own properties, so a "__proto__" key stays a key instead of going through the
+  // prototype setter.
+  const capturedEntries = new Map(Object.entries(captured));
   return Object.fromEntries([
-    ...Object.entries(captured),
+    ...capturedEntries,
     ...Object.entries(explicit).map(([key, value]) => [
       key,
-      deepMergeOutputs(
-        Object.prototype.hasOwnProperty.call(captured, key)
-          ? captured[key]
-          : undefined,
-        value,
-        depth + 1
-      ),
+      deepMergeOutputs(capturedEntries.get(key), value, depth + 1),
     ]),
   ]);
 }
