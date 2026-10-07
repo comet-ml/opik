@@ -151,7 +151,7 @@ class ExperimentsResourceExecuteTest {
 
     @ParameterizedTest
     @EnumSource(DatasetType.class)
-    void executeRejectsAnEmptyDatasetWithoutCreatingExperiments(DatasetType type) {
+    void executeRejectsAnEmptyDatasetOrTestSuiteWithoutCreatingExperiments(DatasetType type) {
         var workspace = newWorkspace();
         var dataset = DatasetResourceClient.buildDataset(podamFactory).toBuilder().type(type).build();
         var datasetId = datasetResourceClient.createDataset(dataset, workspace.apiKey(), workspace.name());
