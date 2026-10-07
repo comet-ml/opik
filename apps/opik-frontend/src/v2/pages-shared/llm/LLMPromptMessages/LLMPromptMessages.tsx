@@ -42,6 +42,7 @@ interface LLMPromptMessagesProps {
   hideAddButton?: boolean;
   jsonTreeData?: JsonObject | null;
   compact?: boolean;
+  shiftEnterInsertsNewline?: boolean;
 }
 
 const LLMPromptMessages = ({
@@ -57,6 +58,7 @@ const LLMPromptMessages = ({
   hideAddButton = false,
   jsonTreeData,
   compact = false,
+  shiftEnterInsertsNewline = false,
 }: LLMPromptMessagesProps) => {
   const lastFocusedMessageIdRef = useRef<string | null>(null);
   const messageRefsMap = useRef<Map<string, LLMPromptMessageHandle>>(new Map());
@@ -166,6 +168,7 @@ const LLMPromptMessages = ({
               improvePromptConfig={improvePromptConfig}
               jsonTreeData={jsonTreeData}
               compact={compact}
+              shiftEnterInsertsNewline={shiftEnterInsertsNewline}
             />
           ))}
         </div>

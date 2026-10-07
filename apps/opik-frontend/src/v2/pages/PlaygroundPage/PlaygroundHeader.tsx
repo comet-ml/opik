@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Pause, Play, RotateCcw } from "lucide-react";
 
 import { Separator } from "@/ui/separator";
@@ -9,6 +9,7 @@ import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import RunExperimentControl from "@/v2/pages/PlaygroundPage/RunExperimentControl";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { hasUnsupportedMedia } from "@/lib/playground";
+import { isMac } from "@/lib/utils";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
@@ -20,7 +21,8 @@ import {
   transformDataColumnFilters,
 } from "@/lib/filters";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
-import {
+import usePlaygroundRunHotkey from "@/v2/pages/PlaygroundPage/usePlaygroundRunHotkey";
+import usePlaygroundStore, {
   usePromptMap,
   useClearCreatedExperiments,
   useCreatedExperiments,
@@ -44,7 +46,7 @@ interface PlaygroundHeaderProps {
   onChangeDatasetId: (id: string | null) => void;
   onReset: () => void;
   onRunAll: () => void;
-
+  onRunSingle: (promptId: string) => void;
   onStopAll: () => void;
   maxWidth?: string;
 }
@@ -57,6 +59,7 @@ const PlaygroundHeader = ({
   onChangeDatasetId,
   onReset,
   onRunAll,
+  onRunSingle,
   onStopAll,
   maxWidth,
 }: PlaygroundHeaderProps) => {
@@ -168,23 +171,27 @@ const PlaygroundHeader = ({
     datasetName,
   ]);
 
-  // Keyboard shortcut: Shift+Enter to run all
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.shiftKey &&
-        event.key === "Enter" &&
-        !isRunDisabled &&
-        !isRunning
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        onRunAll();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [onRunAll, isRunDisabled, isRunning]);
+  const canRunPrompt = useCallback(
+    (promptId: string) => {
+      const prompt = promptMap[promptId];
+      return (
+        !!prompt?.model &&
+        prompt.messages.every((m) => m.content?.length > 0) &&
+        !hasUnsupportedMedia(prompt) &&
+        !(isExperimentMode && !datasetName) &&
+        !usePlaygroundStore.getState().isRunningMap[promptId]
+      );
+    },
+    [promptMap, isExperimentMode, datasetName],
+  );
+
+  usePlaygroundRunHotkey({
+    promptCount: Object.keys(promptMap).length,
+    canRunAll: !isRunDisabled && !isRunning,
+    canRunPrompt,
+    onRunAll,
+    onRunPrompt: onRunSingle,
+  });
 
   const handleLeaveExperimentMode = useCallback(() => {
     clearCreatedExperiments();
@@ -267,7 +274,11 @@ const PlaygroundHeader = ({
         >
           <Play className="mr-1 size-3" />
           {label}
-          <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
+          <HotkeyDisplay
+            hotkey={isMac ? "⌘" : "Ctrl"}
+            size="2xs"
+            className="ml-1.5"
+          />
           <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
         </Button>
       </TooltipWrapper>
