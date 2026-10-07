@@ -90,6 +90,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .providerId(providerConfig.id())
                 .workspaceId(workspaceId)
                 .authConfig(providerConfig.authConfig())
+                .provider(providerConfig.provider())
                 .build();
     }
 

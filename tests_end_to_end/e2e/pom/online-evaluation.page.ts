@@ -111,6 +111,96 @@ export class OnlineEvaluationPage {
     return this.page.getByTestId('add-edit-rule-dialog');
   }
 
+  // --- Judge model + its parameters (no submit) ---
+
+  /**
+   * Pick the judge model in the open rule dialog and stop there.
+   *
+   * Distinct from `fillAndSubmitCreateRuleDialogLLMJudge`, which fills the
+   * whole form and saves: what the model-parameters assertions need is the
+   * dialog left open on a chosen model, and a rule that is never created needs
+   * no teardown at all.
+   */
+  async selectJudgeModel(modelDisplayName: string): Promise<void> {
+    return test.step(`select judge model "${modelDisplayName}"`, async () => {
+      assertAllowedModelDisplayName(modelDisplayName);
+      const modelCombobox = this.judgeModelCombobox;
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await modelCombobox.click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      await expect(async () => {
+        await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+        const option = listbox.getByRole('option', { name: modelDisplayName, exact: true });
+        await expect(option.first()).toBeVisible({ timeout: 2_000 });
+        await option.first().click({ timeout: 2_000 });
+        await expect(modelCombobox).toContainText(modelDisplayName, { timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
+    });
+  }
+
+  /** The dialog's LLM-model combobox. */
+  private get judgeModelCombobox(): Locator {
+    return this.dialog
+      .getByRole('combobox')
+      .filter({ hasText: /Select an LLM model|claude|gpt|gemini|Claude|GPT|Gemini/i });
+  }
+
+  /**
+   * The model-parameters gear beside the judge model picker.
+   *
+   * Its ABSENCE is the assertion: `PromptModelConfigs` returns `null` when the
+   * model has nothing this surface can set, so the button leaves the DOM rather
+   * than being disabled. Addressed by its own `Settings2` icon because the
+   * trigger carries no testid and no accessible name (its label is a Radix
+   * tooltip), and the dialog holds another `aria-haspopup="menu"` button — the
+   * message-role selector — which a bare role lookup would match instead. Note
+   * the lucide class is `lucide-settings2`, with no hyphen before the digit.
+   */
+  get judgeModelParametersTrigger(): Locator {
+    return this.dialog
+      .locator('button[aria-haspopup="menu"]')
+      .filter({ has: this.page.locator('svg.lucide-settings2') });
+  }
+
+  /** The open model-parameters panel. One is mounted at a time (a DropdownMenu). */
+  get judgeModelParametersPanel(): Locator {
+    return this.page.getByRole('menu');
+  }
+
+  async openJudgeModelParameters(): Promise<void> {
+    return test.step('open the judge model parameters', async () => {
+      await expect(
+        this.judgeModelParametersTrigger,
+        'the model-parameters gear',
+      ).toHaveCount(1);
+      await this.judgeModelParametersTrigger.click();
+      await this.judgeModelParametersPanel.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Every slider control mounted in the open judge parameters panel, by control id.
+   *
+   * There is deliberately no "close the panel" counterpart. Escape is not safe
+   * to loop on here: the dropdown's close is animated, so it still reports
+   * visible for a beat after the first press, and a second press then reaches
+   * the DIALOG behind it and dismisses the whole form — which presents as the
+   * Cancel button detaching mid-click. A spec that has finished reading the
+   * panel should open a fresh dialog instead.
+   */
+  async mountedJudgeParameterIds(): Promise<string[]> {
+    return test.step('read the controls mounted in the judge parameters panel', async () => {
+      return this.judgeModelParametersPanel
+        .locator('input[data-testid$="-input"]')
+        .evaluateAll((els) =>
+          els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/-input$/, '')),
+        );
+    });
+  }
+
   /**
    * Delete a rule through the row's kebab menu, confirming the destructive
    * dialog. Resolves once the row is gone from the list.
