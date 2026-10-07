@@ -5,16 +5,26 @@ import { TooltipProvider } from "@/ui/tooltip";
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLM_MESSAGE_ROLE, MessageContent } from "@/types/llm";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { DATASET_TYPE } from "@/types/datasets";
 import PlaygroundRunButton from "./PlaygroundRunButton";
 
 const MEDIA_REASON =
   "This prompt contains media but the selected model doesn't support media input";
 
 let prompt: PlaygroundPromptType | undefined;
+let datasetType: DATASET_TYPE | null = null;
+let playgroundDataset: { datasetId: string | null; itemsTotal?: number } = {
+  datasetId: null,
+};
 
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
   useIsPromptRunning: () => false,
+  useDatasetType: () => datasetType,
+}));
+
+vi.mock("@/hooks/usePlaygroundDataset", () => ({
+  usePlaygroundDataset: () => playgroundDataset,
 }));
 
 const createPrompt = (
@@ -57,6 +67,8 @@ const hoverRunButton = () =>
 
 beforeEach(() => {
   onRun.mockClear();
+  datasetType = null;
+  playgroundDataset = { datasetId: null };
 });
 
 describe("PlaygroundRunButton", () => {
@@ -108,6 +120,50 @@ describe("PlaygroundRunButton", () => {
 
     it("should enable Run for text only on a non-vision model", () => {
       prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+
+      renderButton();
+
+      expect(getRunButton()).toBeEnabled();
+    });
+  });
+
+  describe("a dataset version with no items", () => {
+    beforeEach(() => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+      datasetType = DATASET_TYPE.DATASET;
+      playgroundDataset = { datasetId: "dataset-1::version-1", itemsTotal: 0 };
+    });
+
+    it("should disable Run and explain why", async () => {
+      renderButton();
+      hoverRunButton();
+
+      expect(getRunButton()).toBeDisabled();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        "This dataset is empty. Add items to run an experiment",
+      );
+    });
+
+    it("should name a test suite in the reason", async () => {
+      datasetType = DATASET_TYPE.TEST_SUITE;
+
+      renderButton();
+      hoverRunButton();
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        "This test suite is empty. Add items to run an experiment",
+      );
+    });
+
+    it("should not call onRun when the disabled button is clicked", () => {
+      renderButton();
+      fireEvent.click(getRunButton());
+
+      expect(onRun).not.toHaveBeenCalled();
+    });
+
+    it("should keep Run enabled while the item count is not known yet", () => {
+      playgroundDataset = { datasetId: "dataset-1::version-1" };
 
       renderButton();
 
