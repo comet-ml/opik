@@ -12,6 +12,7 @@ import {
 } from "@/store/PlaygroundStore";
 import { buildExperimentName } from "@/lib/experiments";
 import useRenameLastRunMutation from "@/api/playground/useRenameLastRunMutation";
+import useLastRunExperiments from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useLastRunExperiments";
 
 type PlaygroundExperimentNameProps = {
   datasetId?: string;
@@ -38,6 +39,11 @@ const PlaygroundExperimentName = ({
   const [firstPreview, ...restPreview] = shownName
     ? previewIndexes.map((index) => buildExperimentName(shownName, index))
     : [];
+  const lastRunExperiments = useLastRunExperiments(lastRun);
+  const serverNames =
+    lastRun && !shownName
+      ? lastRunExperiments.flatMap((e) => (e.name ? [e.name] : []))
+      : [];
 
   const handleChangeName = useCallback(
     (value: string) => {
@@ -68,12 +74,22 @@ const PlaygroundExperimentName = ({
       <div className="min-w-0" data-testid="playground-experiment-name-editor">
         <InlineEditableText
           value={shownName ?? ""}
-          placeholder="Auto-generated name"
+          placeholder={serverNames[0] ?? "Auto-generated name"}
           onChange={handleChangeName}
           className="max-w-64 [&_input]:w-48"
           alwaysShowEditIcon
         />
       </div>
+      {serverNames.length > 1 && (
+        <TooltipWrapper content={serverNames.join(", ")}>
+          <span
+            className="shrink-0 cursor-default text-sm text-muted-slate underline"
+            data-testid="playground-experiment-name-more"
+          >
+            +{serverNames.length - 1} more
+          </span>
+        </TooltipWrapper>
+      )}
 
       {firstPreview && (
         <div

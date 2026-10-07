@@ -8,10 +8,14 @@ import usePlaygroundStore from "@/store/PlaygroundStore";
 import PlaygroundExperimentName from "./PlaygroundExperimentName";
 
 const patch = vi.fn();
+const get = vi.fn();
 const toast = vi.fn();
 
 vi.mock("@/api/api", () => ({
-  default: { patch: (...args: unknown[]) => patch(...args) },
+  default: {
+    patch: (...args: unknown[]) => patch(...args),
+    get: (...args: unknown[]) => get(...args),
+  },
   EXPERIMENTS_REST_ENDPOINT: "/v1/private/experiments/",
 }));
 
@@ -34,8 +38,8 @@ const renderName = (datasetId = DATASET_ID) =>
     </QueryClientProvider>,
   );
 
-const commitName = (name: string) => {
-  fireEvent.click(screen.getByRole("button", { name: /foo|Auto-generated/ }));
+const commitName = (name: string, current = /foo|Auto-generated/) => {
+  fireEvent.click(screen.getByRole("button", { name: current }));
   const input = screen.getByRole("textbox");
   fireEvent.change(input, { target: { value: name } });
   fireEvent.keyDown(input, { key: "Enter" });
@@ -62,6 +66,7 @@ const preview = () => screen.getByTestId("playground-experiment-name-preview");
 describe("PlaygroundExperimentName", () => {
   beforeEach(() => {
     patch.mockReset();
+    get.mockReset();
     toast.mockReset();
     localStorage.clear();
   });
@@ -150,6 +155,38 @@ describe("PlaygroundExperimentName", () => {
     expect(patch).toHaveBeenCalledWith("/v1/private/experiments/e2", {
       name: "bar_b",
     });
+  });
+
+  it("shows the names the server gave an auto-named run", async () => {
+    const serverNames: Record<string, string> = {
+      "/v1/private/experiments/e1": "brave_tiger_1234",
+      "/v1/private/experiments/e2": "calm_river_5678",
+    };
+    get.mockImplementation(async (url: string) => ({
+      data: { id: url.split("/").pop(), name: serverNames[url] },
+    }));
+    patch.mockResolvedValue({});
+    finishedRun(null);
+    renderName();
+
+    await waitFor(() => expect(editor()).toHaveTextContent("brave_tiger_1234"));
+    expect(editor()).not.toHaveTextContent("Auto-generated name");
+    expect(
+      screen.getByTestId("playground-experiment-name-more"),
+    ).toHaveTextContent("+1 more");
+
+    commitName("bar", /brave_tiger_1234/);
+
+    await waitFor(() =>
+      expect(usePlaygroundStore.getState().experimentName).toBe("bar"),
+    );
+    expect(patch.mock.calls).toEqual([
+      ["/v1/private/experiments/e1", { name: "bar_a" }],
+      ["/v1/private/experiments/e2", { name: "bar_b" }],
+    ]);
+    expect(
+      screen.queryByTestId("playground-experiment-name-more"),
+    ).not.toBeInTheDocument();
   });
 
   it("clearing the box lets the next run be auto-named instead", () => {

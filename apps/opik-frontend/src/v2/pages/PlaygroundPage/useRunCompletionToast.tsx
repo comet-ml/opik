@@ -4,16 +4,33 @@ import { ExternalLink } from "lucide-react";
 import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
 import { LogExperiment } from "@/types/playground";
+import { getExperimentById } from "@/api/datasets/useExperimentById";
 import { generateCompareExperimentsURL } from "@/lib/experiments";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { toPlainDatasetId } from "@/utils/datasetVersionStorage";
+
+const withServerName = async (
+  experiment: LogExperiment,
+): Promise<LogExperiment> => {
+  if (experiment.name) return experiment;
+
+  try {
+    const { name } = await getExperimentById(
+      {},
+      { experimentId: experiment.id },
+    );
+    return { ...experiment, name };
+  } catch {
+    return experiment;
+  }
+};
 
 const useRunCompletionToast = (datasetId?: string | null) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
 
-  return useCallback(
+  const announce = useCallback(
     (experiments: LogExperiment[]) => {
       if (!experiments.length) return;
 
@@ -58,6 +75,18 @@ const useRunCompletionToast = (datasetId?: string | null) => {
       });
     },
     [datasetId, workspaceName, activeProjectId, toast],
+  );
+
+  return useCallback(
+    (experiments: LogExperiment[]) => {
+      if (experiments.every((e) => e.name)) {
+        announce(experiments);
+        return;
+      }
+
+      Promise.all(experiments.map(withServerName)).then(announce);
+    },
+    [announce],
   );
 };
 
