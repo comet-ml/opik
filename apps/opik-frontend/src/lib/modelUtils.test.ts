@@ -629,6 +629,85 @@ describe("sanitizeConfigForRequest", () => {
   });
 });
 
+describe("penalties on an OpenAI key set to the Responses API", () => {
+  const STORED = {
+    temperature: 0.4,
+    frequencyPenalty: 0.5,
+    presencePenalty: 0.3,
+  };
+
+  const sentPenalties = (
+    model: PROVIDER_MODEL_TYPE,
+    mode?: OpenAiPipelineMode,
+  ) => {
+    const { frequencyPenalty, presencePenalty } = sanitizeConfigForRequest(
+      model,
+      STORED,
+      mode,
+    );
+    return { frequencyPenalty, presencePenalty };
+  };
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("leaves both out of a non-reasoning model's request and keeps the temperature", () => {
+    expect(
+      supportsPenaltyParams(PROVIDER_MODEL_TYPE.GPT_4O, "responses_api"),
+    ).toBe(false);
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_4O,
+        STORED,
+        "responses_api",
+      ),
+    ).toEqual({ temperature: 0.4 });
+  });
+
+  it("keeps both in the stored config, so moving the key back restores them", () => {
+    sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GPT_4O,
+      STORED,
+      "responses_api",
+    );
+
+    expect(STORED).toEqual({
+      temperature: 0.4,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.3,
+    });
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "sends both when the mode is %s",
+    (mode) => {
+      expect(supportsPenaltyParams(PROVIDER_MODEL_TYPE.GPT_4O, mode)).toBe(
+        true,
+      );
+      expect(sentPenalties(PROVIDER_MODEL_TYPE.GPT_4O, mode)).toEqual({
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.3,
+      });
+    },
+  );
+
+  it("keeps both for models that never reach the OpenAI key", () => {
+    const customId = "custom-llm/my-gateway/gpt-4o" as PROVIDER_MODEL_TYPE;
+    setLatestProviderModelsSnapshot({
+      ...getLatestProviderModelsSnapshot(),
+      "custom-llm:my-gateway": [{ value: customId, label: "gpt-4o" }],
+    });
+
+    for (const model of [customId, PROVIDER_MODEL_TYPE.OPENAI_GPT_4O]) {
+      expect(sentPenalties(model, "responses_api")).toEqual({
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.3,
+      });
+    }
+  });
+});
+
 describe("Gemini thinking level", () => {
   it("is supported by the Gemini 2.5 family, including Flash Lite", () => {
     expect(
@@ -2219,7 +2298,18 @@ describe("OpenRouter request contract", () => {
     minP: 0,
     topA: 0,
   };
-  const WITHOUT_MAX_TOKENS = omit(CONFIG, "maxTokens");
+  const WITHOUT_MAX_TOKENS = {
+    temperature: 0.7,
+    topP: 0.9,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    custom_parameters: {
+      top_k: 40,
+      min_p: 0,
+      top_a: 0,
+      repetition_penalty: 1,
+    },
+  };
 
   describe.each<{
     model: PROVIDER_MODEL_TYPE;
@@ -2234,7 +2324,7 @@ describe("OpenRouter request contract", () => {
     {
       model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
       maxTokens: 512,
-      request: { ...CONFIG, maxTokens: 512 },
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 512 },
     },
     {
       model: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
@@ -2254,7 +2344,51 @@ describe("OpenRouter request contract", () => {
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
         ...CONFIG,
         topK: 39.6,
-      }).topK,
-    ).toBe(40);
+      }).custom_parameters,
+    ).toMatchObject({ top_k: 40 });
+  });
+
+  it("merges into custom_parameters, letting the panel's values win", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
+        ...CONFIG,
+        custom_parameters: { top_k: 5, transforms: ["middle-out"] },
+      }).custom_parameters,
+    ).toEqual({
+      ...WITHOUT_MAX_TOKENS.custom_parameters,
+      transforms: ["middle-out"],
+    });
+  });
+
+  it.each([
+    ["an array", ["middle-out"]],
+    ["a string", "middle-out"],
+  ])(
+    "replaces a custom_parameters that is %s instead of spreading it into numeric keys",
+    (_, malformed) => {
+      expect(
+        sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
+          topK: 40,
+          custom_parameters: malformed,
+        }).custom_parameters,
+      ).toEqual({ top_k: 40 });
+    },
+  );
+
+  it("nests only the parameters a stored prompt carries", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
+        temperature: 0.7,
+        topK: 40,
+      }),
+    ).toEqual({ temperature: 0.7, custom_parameters: { top_k: 40 } });
+  });
+
+  it("adds no custom_parameters when the config carries none of them", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
+        temperature: 0.7,
+      }),
+    ).toEqual({ temperature: 0.7 });
   });
 });

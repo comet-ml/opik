@@ -259,6 +259,60 @@ class ExperimentMessageRendererTest {
         }
 
         @Test
+        @DisplayName("should send every parameter of the config the OpenRouter panel sends")
+        void applyOpenRouterConfigs() {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            var mapper = JsonUtils.getMapper();
+            var configs = Map.<String, JsonNode>of(
+                    "maxTokens", mapper.valueToTree(512),
+                    "temperature", mapper.valueToTree(0.7),
+                    "topP", mapper.valueToTree(0.9),
+                    "frequencyPenalty", mapper.valueToTree(0.5),
+                    "presencePenalty", mapper.valueToTree(0.3),
+                    "custom_parameters", JsonUtils.getJsonNodeFromString(
+                            "{\"top_k\": 40, \"min_p\": 0.1, \"top_a\": 0.2, \"repetition_penalty\": 1.1}"));
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "openai/gpt-4o", messages, configs, null, null);
+
+            ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
+
+            assertThat(request).isEqualTo(ChatCompletionRequest.builder()
+                    .model("openai/gpt-4o")
+                    .messages(request.messages())
+                    .stream(false)
+                    .maxTokens(512)
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .frequencyPenalty(0.5)
+                    .presencePenalty(0.3)
+                    .customParameters(Map.of("top_k", 40, "min_p", 0.1, "top_a", 0.2, "repetition_penalty", 1.1))
+                    .build());
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"0", "\"512\"", "null"})
+        @DisplayName("should send no max_tokens for 0, which the OpenRouter panel uses for no limit, or a non-number")
+        void skipMaxTokensForZeroOrNonNumericValue(String json) {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "openai/gpt-4o", messages, Map.of("maxTokens", JsonUtils.getJsonNodeFromString(json)), null,
+                    null);
+
+            assertThat(renderer.buildChatCompletionRequest(prompt, messages).maxTokens()).isNull();
+        }
+
+        @Test
         @DisplayName("should forward custom_parameters so provider-specific settings reach the request")
         void forwardCustomParameters() {
             var messages = List.of(
