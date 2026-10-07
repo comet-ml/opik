@@ -446,11 +446,12 @@ export class PlaygroundPage {
   /**
    * CodeMirror draws its own blinking `.cm-cursor` and `.cm-scroller` clips it,
    * so "is the cursor visible" is asked as geometry: a pixel check would depend
-   * on the blink phase. A positive result is how many CSS pixels of the cursor
-   * are cut off on the left (OPIK-5298).
+   * on the blink phase. Signed: positive is how many CSS pixels of the cursor
+   * stick out past the scroll box's left edge and get cut off (OPIK-5298);
+   * zero or negative means the cursor is fully inside.
    */
-  async firstMessageCursorClippedPx(): Promise<number> {
-    return test.step('measure how much of the first message cursor is clipped', async () => {
+  async firstMessageCursorLeftOverflowPx(): Promise<number> {
+    return test.step('measure how far the first message cursor sticks out on the left', async () => {
       return this.variantMessages(0)
         .first()
         .locator('.cm-editor')

@@ -7,7 +7,7 @@ test.describe('Playground — message editor cursor', { tag: ['@t3-nightly', '@a
     { tag: ['@cap:playground.compose-run-prompt'] },
     async ({ page, project, providerKeys, testNamespace }) => {
       const playground = new PlaygroundPage(page, project.id);
-      let emptyMessageClippedPx = Number.NaN;
+      let emptyMessageOverflowPx = Number.NaN;
 
       await test.step('Give the workspace a provider so the Playground mounts', async () => {
         await providerKeys.createUnreachable({ providerName: `${testNamespace}-unreachable` });
@@ -21,21 +21,25 @@ test.describe('Playground — message editor cursor', { tag: ['@t3-nightly', '@a
       await test.step('An empty message shows the whole cursor', async () => {
         await playground.focusFirstMessageAtLineStart();
         await expect
-          .poll(() => playground.firstMessageCursorClippedPx(), {
+          .poll(() => playground.firstMessageCursorLeftOverflowPx(), {
             message: 'px of the cursor cut off by the editor edge',
           })
           .toBeLessThanOrEqual(0);
-        emptyMessageClippedPx = await playground.firstMessageCursorClippedPx();
+        emptyMessageOverflowPx = await playground.firstMessageCursorLeftOverflowPx();
       });
 
       await test.step('The start of a line with text shows the whole cursor', async () => {
         await playground.fillFirstMessage('Summarise the following in one sentence.');
         await playground.focusFirstMessageAtLineStart();
         await expect
-          .poll(() => playground.firstMessageCursorClippedPx(), {
+          .poll(() => playground.firstMessageCursorLeftOverflowPx(), {
             message: 'the cursor is back at column 0, where the empty message had it',
           })
-          .toBeCloseTo(emptyMessageClippedPx, 1);
+          .toBeCloseTo(emptyMessageOverflowPx, 1);
+        expect(
+          await playground.firstMessageCursorLeftOverflowPx(),
+          'px of the cursor cut off by the editor edge',
+        ).toBeLessThanOrEqual(0);
       });
     },
   );
