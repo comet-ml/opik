@@ -542,6 +542,27 @@ def test_ollama_chat__positional_arguments__logged_like_keywords(
     assert "stream" not in span.metadata
 
 
+def test_ollama_chat__positional_arguments__uninspectable_signature__still_logged_as_ollama(
+    fake_backend, monkeypatch
+):
+    client = ollama.Client()
+    wrapped = track_ollama(client)
+    monkeypatch.setattr(client, "_request", lambda *a, **kw: _response())
+
+    def _no_signature(func):
+        raise ValueError("no signature found")
+
+    monkeypatch.setattr("inspect.signature", _no_signature)
+
+    wrapped.chat(MODEL, messages=[{"role": "user", "content": "hi"}])
+    opik.flush_tracker()
+
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.input == {"messages": [{"role": "user", "content": "hi"}]}
+    assert span.metadata["created_from"] == "ollama"
+    assert span.metadata["type"] == "ollama_chat"
+
+
 def test_ollama_chat__function_tool__logged_as_json_schema(fake_backend, monkeypatch):
     def get_weather(city: str) -> str:
         """Get the current weather for a city.

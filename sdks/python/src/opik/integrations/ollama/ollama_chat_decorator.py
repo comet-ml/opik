@@ -155,7 +155,10 @@ def _bind_call_arguments(
 ) -> Dict[str, Any]:
     if not args:
         return kwargs
-    arguments = inspect_helpers.extract_inputs(func, args, kwargs)
+    try:
+        arguments = inspect_helpers.extract_inputs(func, args, kwargs)
+    except ValueError:  # chat's signature can't be inspected
+        return kwargs
     # extract_inputs fills in every default; keep only what the caller passed
     positional_names = list(arguments)[: len(args)]
     return {
