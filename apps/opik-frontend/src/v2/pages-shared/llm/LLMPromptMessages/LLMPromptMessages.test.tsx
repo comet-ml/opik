@@ -9,20 +9,23 @@ const { focusMessage } = vi.hoisted(() => ({ focusMessage: vi.fn() }));
 
 // The real message renders CodeMirror, which doesn't mount under jsdom; the
 // stub keeps the handle the list calls, so the test sees which message it focuses.
-vi.mock("@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessage", async () => {
-  const { forwardRef, useImperativeHandle } = await import("react");
-  return {
-    default: forwardRef<unknown, { message: LLMMessage }>(
-      ({ message }, ref) => {
-        useImperativeHandle(ref, () => ({
-          insertAtCursor: vi.fn(),
-          focus: () => focusMessage(message.id),
-        }));
-        return <div data-testid={`message-${message.id}`} />;
-      },
-    ),
-  };
-});
+vi.mock(
+  "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessage",
+  async () => {
+    const { forwardRef, useImperativeHandle } = await import("react");
+    return {
+      default: forwardRef<unknown, { message: LLMMessage }>(
+        ({ message }, ref) => {
+          useImperativeHandle(ref, () => ({
+            insertAtCursor: vi.fn(),
+            focus: () => focusMessage(message.id),
+          }));
+          return <div data-testid={`message-${message.id}`} />;
+        },
+      ),
+    };
+  },
+);
 
 const createMessage = (id: string): LLMMessage => ({
   id,
@@ -47,7 +50,9 @@ const Harness = ({
       onAddMessage={() =>
         setMessages((previous) => {
           const added = createMessage(`added-${previous.length}`);
-          return addAt === "start" ? [added, ...previous] : [...previous, added];
+          return addAt === "start"
+            ? [added, ...previous]
+            : [...previous, added];
         })
       }
       autoFocusFirstMessage={autoFocusFirstMessage}
