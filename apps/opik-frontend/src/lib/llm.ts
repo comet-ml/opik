@@ -22,15 +22,20 @@ export const generateDefaultLLMPromptMessage = (
   };
 };
 
+// System and tool messages are one-off context, so the message after them
+// starts a user turn; roles parsed from JSON can also be values outside the enum.
+// `ai` is the LLM-judge name for assistant: chat completions reject it, so a new
+// message after one gets the name runs accept.
+const NEXT_MESSAGE_ROLE: ReadonlyMap<string, LLM_MESSAGE_ROLE> = new Map([
+  [LLM_MESSAGE_ROLE.user, LLM_MESSAGE_ROLE.user],
+  [LLM_MESSAGE_ROLE.assistant, LLM_MESSAGE_ROLE.assistant],
+  [LLM_MESSAGE_ROLE.ai, LLM_MESSAGE_ROLE.assistant],
+]);
+
 export const getNextMessageType = (
   previousMessage: LLMMessage,
-): LLM_MESSAGE_ROLE => {
-  if (previousMessage.role === LLM_MESSAGE_ROLE.user) {
-    return LLM_MESSAGE_ROLE.assistant;
-  }
-
-  return LLM_MESSAGE_ROLE.user;
-};
+): LLM_MESSAGE_ROLE =>
+  NEXT_MESSAGE_ROLE.get(previousMessage.role) ?? LLM_MESSAGE_ROLE.user;
 
 export const getTextFromMessageContent = (content: MessageContent): string => {
   if (typeof content === "string") {
