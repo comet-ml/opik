@@ -19,7 +19,14 @@ export default function useCustomScrollbarClass() {
     if (userAgent.includes("firefox")) {
       document.body.classList.add("firefox");
     }
-  } else if (hasClassicScrollbars()) {
-    document.body.classList.add("comet-classic-scrollbars");
+  } else {
+    if (hasClassicScrollbars()) {
+      document.body.classList.add("comet-classic-scrollbars");
+    }
+    if (
+      /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/.test(userAgent)
+    ) {
+      document.body.classList.add("safari");
+    }
   }
 }
