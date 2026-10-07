@@ -67,6 +67,8 @@ class Outcome(NamedTuple):
     cancelled: bool = False
     #: `absent`, `removed` or `removal_failed`, for a stale `opik-mcp` uv tool.
     stale_tool: str = "absent"
+    #: What is left in each registered client, for a run without a terminal.
+    next_steps: Tuple[str, ...] = ()
 
 
 NOTHING_DONE = Outcome(clients=0, skills=False)
@@ -191,4 +193,5 @@ def _outcome(
         sign_in=install.sign_in,
         cancelled=cancelled,
         stale_tool=install.stale_tool,
+        next_steps=install.next_steps,
     )

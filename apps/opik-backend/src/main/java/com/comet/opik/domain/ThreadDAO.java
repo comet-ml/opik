@@ -102,6 +102,14 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    <if(traces_partitioned && search_text)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        FROM traces
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id
+                        <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                    <endif>
                 )
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
@@ -122,6 +130,12 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND thread_id \\<> ''
                           <if(filters)> AND <filters> <endif>
                           <if(search_text)> AND <search_text> <endif>
+                          <if(traces_partitioned && search_text)>
+                          AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                              SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              FROM traces
+                              WHERE workspace_id = :workspace_id AND project_id = :project_id)
+                          <endif>
                         ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     )
@@ -177,7 +191,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           <if(search_text)> AND <search_text> <endif>
                       <else>
                           <if(traces_final_ids)>
-                              AND id IN (SELECT id FROM traces_final_ids)
+                              AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                               <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                                   >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                               <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -210,7 +224,7 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND trace_id IN (SELECT id FROM traces_final)
                   <else>
                       <if(traces_final_ids)>
-                          AND trace_id IN (SELECT id FROM traces_final_ids)
+                          AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                       <else>
                           <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -538,6 +552,14 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    <if(traces_partitioned && search_text)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        FROM traces
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id
+                        <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                    <endif>
                 )
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
@@ -563,7 +585,7 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND project_id = :project_id
                       AND thread_id \\<> ''
                       <if(traces_final_ids)>
-                          AND id IN (SELECT id FROM traces_final_ids)
+                          AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                           <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                               >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                           <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1182,6 +1204,14 @@ class ThreadDAOImpl implements ThreadDAO {
                         <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                             \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                         <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                        <if(traces_partitioned && search_text)>
+                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                            SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            FROM traces
+                            WHERE workspace_id = :workspace_id AND project_id = :project_id
+                            <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                            <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                        <endif>
                     )
                     WHERE 1 = 1
                     <if(filters)> AND <filters> <endif>
@@ -1207,7 +1237,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND project_id = :project_id
                           AND thread_id \\<> ''
                           <if(traces_final_ids)>
-                              AND id IN (SELECT id FROM traces_final_ids)
+                              AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                               <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                                   >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                               <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1236,7 +1266,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       <if(traces_final_ids)>
-                          AND trace_id IN (SELECT id FROM traces_final_ids)
+                          AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                       <else>
                           <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1559,6 +1589,7 @@ class ThreadDAOImpl implements ThreadDAO {
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
                             addExcludeFlags(template, criteria);
+                            addTracesPartitionedFlag(template);
 
                             template = template.add("offset", offset)
                                     .add("log_comment", getLogComment("find_threads_by_project", workspaceId, userName,
@@ -1609,6 +1640,12 @@ class ThreadDAOImpl implements ThreadDAO {
                                     .defaultIfEmpty(TraceThread.TraceThreadPage.empty(page,
                                             traceThreadSortingFactory.getSortableFields()));
                         })));
+    }
+
+    private void addTracesPartitionedFlag(ST template) {
+        if (traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
     }
 
     private boolean traceColumnsNonNullable() {
@@ -1712,6 +1749,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     THREAD_SEARCH_CLAUSE,
                     traceColumnsNonNullable());
             statsSQL.add("log_comment", getLogComment("thread_stats", workspaceId, userName, ""));
+            addTracesPartitionedFlag(statsSQL);
 
             if (shouldUseTracesFinalIdsPrefilter(criteria, statsSQL)) {
                 statsSQL.add("traces_final_ids", true);
@@ -1741,6 +1779,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 THREAD_SEARCH_CLAUSE,
                 traceColumnsNonNullable());
         template.add("log_comment", getLogComment("count_threads_by_project", workspaceId, userName, ""));
+        addTracesPartitionedFlag(template);
 
         if (shouldUseTracesFinalIdsPrefilter(traceSearchCriteria, template)) {
             template.add("traces_final_ids", true);

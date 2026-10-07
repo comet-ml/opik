@@ -7,7 +7,7 @@ from typing_extensions import override
 import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
 from opik.api_objects import span
-from opik.decorator import arguments_helpers, base_track_decorator
+from opik.decorator import arguments_helpers, base_track_decorator, inspect_helpers
 
 from . import stream_wrappers
 
@@ -33,6 +33,9 @@ class OllamaChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.StartSpanParameters:
         assert kwargs is not None, "Expected kwargs to be not None in chat(**kwargs)"
 
+        # chat(model, messages) may be called positionally; log it the same way
+        kwargs = _bind_call_arguments(func, args, kwargs)
+
         name = track_options.name if track_options.name is not None else func.__name__
         if kwargs.get("stream") is True:
             name = "chat_stream"
@@ -42,6 +45,8 @@ class OllamaChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
         input, new_metadata = dict_utils.split_dict_by_keys(
             kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
+        if input.get("tools"):
+            input["tools"] = _tools_as_schemas(input["tools"])
         metadata = dict_utils.deepmerge(metadata, new_metadata)
         metadata.update({"created_from": "ollama", "type": "ollama_chat"})
 
@@ -121,6 +126,11 @@ def _build_usage(result_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     OpenAI-style ``usage`` object, so there is no provider builder to reuse. The
     native counters are passed through as well, so they survive under
     ``original_usage.*`` rather than being dropped.
+
+    The ``*_duration`` fields are deliberately left out. Ollama reports them in
+    nanoseconds, so any call longer than ~2.1s overflows the backend's 32-bit
+    usage values and the whole span batch is rejected. They are still logged in
+    the span metadata.
     """
     prompt_tokens = result_dict.get("prompt_eval_count")
     completion_tokens = result_dict.get("eval_count")
@@ -132,16 +142,56 @@ def _build_usage(result_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
     }
-    for key in (
-        "prompt_eval_count",
-        "eval_count",
-        "prompt_eval_duration",
-        "eval_duration",
-        "total_duration",
-        "load_duration",
-    ):
+    for key in ("prompt_eval_count", "eval_count"):
         value = result_dict.get(key)
         if value is not None:
             usage[key] = value
 
     return llm_usage.build_opik_usage_from_unknown_provider(usage)
+
+
+def _bind_call_arguments(
+    func: Callable, args: Tuple, kwargs: Dict[str, Any]
+) -> Dict[str, Any]:
+    if not args:
+        return kwargs
+    try:
+        arguments = inspect_helpers.extract_inputs(func, args, kwargs)
+    except ValueError:  # chat's signature can't be inspected
+        return kwargs
+    # extract_inputs fills in every default; keep only what the caller passed
+    positional_names = list(arguments)[: len(args)]
+    return {
+        key: value
+        for key, value in arguments.items()
+        if key in kwargs or key in positional_names
+    }
+
+
+def _tools_as_schemas(tools: Any) -> Any:
+    """Log Python-function tools as the JSON schema ollama sends to the model.
+
+    ollama accepts plain functions as tools and converts them itself, so the
+    raw kwarg would otherwise be logged as ``<function name at 0x...>``. A tool
+    that can't be converted is logged by its name; logging never fails the
+    user's call.
+    """
+    if not isinstance(tools, (list, tuple)):
+        return tools
+
+    from ollama._utils import convert_function_to_tool
+
+    schemas = []
+    for tool in tools:
+        try:
+            if callable(tool):
+                tool = convert_function_to_tool(tool)
+            if hasattr(tool, "model_dump"):
+                tool = tool.model_dump(exclude_none=True)
+        except Exception:
+            LOGGER.debug(
+                "Failed to convert ollama tool %r to a schema", tool, exc_info=True
+            )
+            tool = getattr(tool, "__name__", str(tool))
+        schemas.append(tool)
+    return schemas
