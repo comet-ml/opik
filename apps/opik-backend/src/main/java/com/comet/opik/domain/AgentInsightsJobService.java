@@ -188,14 +188,16 @@ public class AgentInsightsJobService {
                     var failures = handle.attach(ReportFailureDAO.class);
                     long earlier = failures.countByReason(job.workspaceId(), ReportFailureDAO.AGENT_INSIGHTS_TYPE,
                             job.projectId(), AgentInsightsJob.FailureReason.TIMED_OUT);
+                    boolean retry = earlier < maxRetries;
+                    if (handle.attach(AgentInsightsJobDAO.class).reapTimedOutAutoFirstRun(job.workspaceId(),
+                            job.projectId(), runTimeout.toSeconds(), retry, RequestContext.SYSTEM_USER) == 0) {
+                        log.info("Skipping reap of automatic Agent Insights run for project '{}': it reported "
+                                + "back after being selected", job.projectId());
+                        return null;
+                    }
                     failures.insert(idGenerator.generateId(), job.workspaceId(),
                             ReportFailureDAO.AGENT_INSIGHTS_TYPE, job.projectId(),
                             AgentInsightsJob.FailureReason.TIMED_OUT, null, RequestContext.SYSTEM_USER);
-                    boolean retry = earlier < maxRetries;
-                    if (retry) {
-                        handle.attach(AgentInsightsJobDAO.class)
-                                .clearAutoFirstRunClaim(List.of(job.projectId()), RequestContext.SYSTEM_USER);
-                    }
                     log.warn("Automatic Agent Insights run for project '{}' timed out (retries so far: {} of {}), {}",
                             job.projectId(), earlier, maxRetries, retry ? "retrying" : "giving up");
                     return null;
@@ -211,6 +213,9 @@ public class AgentInsightsJobService {
     // Internal, cross-workspace: enrols the given projects in the rollout, or clears them. Idempotent, so
     // re-sending the same list is a no-op. Projects whose automatic run already happened are reported rather
     // than enrolled, since enrolling them again would have no effect.
+    // Clearing then re-enrolling a project whose automatic run never finished gives it one more free run. It does
+    // not restore spent retries: the reaper counts every timed_out row the project has had, so a project that
+    // already used them up gets that single attempt, and another manual reset if it dies too.
     public AgentInsightsEnrollment.Response enrolInAutoFirstRun(boolean enrol, @NonNull List<UUID> projectIds) {
         return enrolInAutoFirstRun(enrol, projectIds, reportConfig.getAutoFirstRunTimeout().toJavaDuration());
     }
@@ -223,11 +228,11 @@ public class AgentInsightsJobService {
 
             if (!enrol) {
                 // Clearing also forgets an automatic run that never finished and is no longer live
-                Set<UUID> reset = dao.findUnfinishedAutoFirstRuns(projectIds, runTimeout.toSeconds());
+                Set<UUID> reset = projectIds.stream()
+                        .filter(projectId -> dao.clearUnfinishedAutoFirstRunClaim(projectId,
+                                runTimeout.toSeconds(), RequestContext.SYSTEM_USER) > 0)
+                        .collect(Collectors.toSet());
                 int cleared = dao.clearEnrolment(projectIds, RequestContext.SYSTEM_USER);
-                if (!reset.isEmpty()) {
-                    dao.clearAutoFirstRunClaim(reset, RequestContext.SYSTEM_USER);
-                }
                 log.info("Cleared Agent Insights enrolment for {} of {} projects (unfinished runs reset: {})",
                         cleared, projectIds.size(), reset);
                 return AgentInsightsEnrollment.Response.builder()

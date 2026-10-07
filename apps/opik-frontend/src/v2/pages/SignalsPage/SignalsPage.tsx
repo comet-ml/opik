@@ -325,10 +325,11 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
     }
 
     // Nothing to show yet. Enrolled projects get progress towards the run that is coming to them;
-    // everyone else gets something to click.
+    // everyone else gets something to click. A failure doesn't hide the progress while the automatic
+    // run is still coming (a timed-out run being retried, or a run reset by hand).
     if (
       !showRunning &&
-      !failedReason &&
+      (!failedReason || awaitsAutoFirstRun) &&
       !hasData &&
       !job?.last_scan_at &&
       (awaitsAutoFirstRun || !isJobEnabled)

@@ -49,6 +49,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
@@ -67,6 +68,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -159,6 +161,7 @@ class AgentInsightsJobsResourceTest {
     private AgentInsightsReportJob reportJob;
     private AgentInsightsAutoFirstRunJob autoFirstRunJob;
     private AgentInsightsJobService jobService;
+    private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Injector injector) {
@@ -173,6 +176,7 @@ class AgentInsightsJobsResourceTest {
         this.reportJob = injector.getInstance(AgentInsightsReportJob.class);
         this.autoFirstRunJob = injector.getInstance(AgentInsightsAutoFirstRunJob.class);
         this.jobService = injector.getInstance(AgentInsightsJobService.class);
+        this.mySqlTemplate = injector.getInstance(TransactionTemplate.class);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_2, WORKSPACE_NAME_2, WORKSPACE_ID_2, USER_2);
@@ -261,9 +265,19 @@ class AgentInsightsJobsResourceTest {
         }
     }
 
-    // A zero-timeout reap is cross-workspace, so it also frees the claims other tests left behind. The sweep that
-    // follows one is uncapped, so it re-claims them all rather than leaving them to crowd other tests' sweeps.
+    // Other tests leave enrolled projects behind; an uncapped sweep keeps them from crowding out the one under test.
     private static final int SWEEP_ALL = 1_000;
+
+    private static final Duration RUN_TIMEOUT = Duration.ofMinutes(40);
+
+    // Makes this project's claim older than RUN_TIMEOUT, so it reads as dead. The reaper runs across workspaces, so
+    // aging one claim rather than reaping with a zero timeout leaves other tests' live runs alone.
+    private void backdateAutoFirstRunClaim(UUID projectId) {
+        mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                UPDATE agent_insights_jobs SET auto_first_run_at = NOW(6) - INTERVAL 2 HOUR
+                WHERE project_id = :projectId
+                """).bind("projectId", projectId.toString()).execute());
+    }
 
     // Enrols a new project and lets the sweep claim its automatic run, as the rollout does.
     private UUID createProjectWithClaimedAutoFirstRun() {
@@ -362,8 +376,8 @@ class AgentInsightsJobsResourceTest {
     void reapTimedOutAutoFirstRuns__recordsTheRunAndRetriesIt() {
         var projectId = createProjectWithClaimedAutoFirstRun();
 
-        // A zero timeout makes the claim just made count as dead, without waiting out the real one.
-        jobService.reapTimedOutAutoFirstRuns(Duration.ZERO, 1);
+        backdateAutoFirstRunClaim(projectId);
+        jobService.reapTimedOutAutoFirstRuns(RUN_TIMEOUT, 1);
 
         var job = getJob(projectId);
         assertThat(job.lastFailureReason()).isEqualTo(AgentInsightsJob.FailureReason.TIMED_OUT);
@@ -379,11 +393,13 @@ class AgentInsightsJobsResourceTest {
     void reapTimedOutAutoFirstRuns__givesUpAfterMaxRetries() {
         var projectId = createProjectWithClaimedAutoFirstRun();
 
-        jobService.reapTimedOutAutoFirstRuns(Duration.ZERO, 1);
+        backdateAutoFirstRunClaim(projectId);
+        jobService.reapTimedOutAutoFirstRuns(RUN_TIMEOUT, 1);
         autoFirstRunJob.runSweep(Instant.now(), SWEEP_ALL).block();
         await().atMost(10, SECONDS).untilAsserted(() -> assertThat(triggerCount(projectId)).isEqualTo(2));
 
-        jobService.reapTimedOutAutoFirstRuns(Duration.ZERO, 1);
+        backdateAutoFirstRunClaim(projectId);
+        jobService.reapTimedOutAutoFirstRuns(RUN_TIMEOUT, 1);
 
         // The second timeout is recorded, but the claim stays, so no sweep runs it again.
         var job = getJob(projectId);
@@ -394,11 +410,26 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
+    @DisplayName("Reaping skips a project no longer enrolled, since it would never be run again")
+    void reapTimedOutAutoFirstRuns__skipsProjectNoLongerEnrolled() {
+        var projectId = createProjectWithClaimedAutoFirstRun();
+        // Within the timeout the run is still live, so un-enrolling keeps its claim; only then does it age past it.
+        jobsClient.enrolInAutoFirstRun(false, List.of(projectId)).close();
+        backdateAutoFirstRunClaim(projectId);
+
+        jobService.reapTimedOutAutoFirstRuns(RUN_TIMEOUT, 1);
+
+        var job = getJob(projectId);
+        assertThat(job.lastFailureReason()).isNull();
+        assertThat(job.autoFirstRunAt()).isNotNull();
+    }
+
+    @Test
     @DisplayName("Reaping leaves an automatic run still within the timeout alone")
     void reapTimedOutAutoFirstRuns__leavesLiveRunAlone() {
         var projectId = createProjectWithClaimedAutoFirstRun();
 
-        jobService.reapTimedOutAutoFirstRuns();
+        jobService.reapTimedOutAutoFirstRuns(RUN_TIMEOUT, 1);
 
         var job = getJob(projectId);
         assertThat(job.lastFailureReason()).isNull();
