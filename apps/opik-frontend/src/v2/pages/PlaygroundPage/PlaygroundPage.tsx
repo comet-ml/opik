@@ -300,6 +300,7 @@ const PlaygroundPage = () => {
             onChangeDatasetId={setDatasetId}
             onReset={resetPlayground}
             onRunAll={runAll}
+            onRunSingle={runSingle}
             onStopAll={stopAll}
             maxWidth={headerMaxWidth}
           />
