@@ -16,7 +16,7 @@ type Output = {
 let output: Output;
 
 vi.mock("@/store/PlaygroundStore", () => ({
-  useOutputByPromptDatasetItemId: () => output,
+  useOutputByPromptId: () => output,
 }));
 
 vi.mock("@/v2/pages/PlaygroundPage/usePromptModelDisplay", () => ({
