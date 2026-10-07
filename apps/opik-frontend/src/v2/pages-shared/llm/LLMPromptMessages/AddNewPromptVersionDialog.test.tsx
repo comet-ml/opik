@@ -1,9 +1,10 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import AddNewPromptVersionDialog from "./AddNewPromptVersionDialog";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { DEFAULT_PERMISSIONS } from "@/types/permissions";
+import { Toast, ToastProvider, ToastViewport } from "@/ui/toast";
 import {
   PROMPT_TEMPLATE_STRUCTURE,
   PromptVersion,
@@ -93,10 +94,43 @@ const saveButton = () =>
 
 const clickSave = () => fireEvent.click(saveButton());
 
+const saveNewPrompt = () => {
+  renderDialog({});
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "My prompt" },
+  });
+  clickSave();
+  const [, { onSuccess }] = mockCreatePrompt.mock.calls[0];
+  return onSuccess;
+};
+
+const saveNewVersion = () => {
+  renderDialog({ prompt: EXISTING_PROMPT });
+  clickSave();
+  const [{ onSuccess }] = mockCreateVersion.mock.calls[0];
+  return onSuccess;
+};
+
+const toastActions = () => mockToast.mock.calls[0][0].actions;
+
+const clickViewPrompt = () => {
+  render(
+    <ToastProvider>
+      <Toast open>{toastActions()}</Toast>
+      <ToastViewport />
+    </ToastProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "View prompt" }));
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockIsSavingVersion = false;
   mockIsCreatingPrompt = false;
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("AddNewPromptVersionDialog success toast", () => {
@@ -120,7 +154,9 @@ describe("AddNewPromptVersionDialog success toast", () => {
       onSuccess({ ...EXISTING_PROMPT, name: "My prompt" });
 
       expect(mockToast).toHaveBeenCalledTimes(1);
-      expect(mockToast).toHaveBeenCalledWith({ description: expected });
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ description: expected }),
+      );
       expect(onSave).toHaveBeenCalledWith(VERSION, "My prompt", "prompt-1");
     },
   );
@@ -148,10 +184,61 @@ describe("AddNewPromptVersionDialog success toast", () => {
       onSuccess(VERSION);
 
       expect(mockToast).toHaveBeenCalledTimes(1);
-      expect(mockToast).toHaveBeenCalledWith({ description: expected });
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ description: expected }),
+      );
       expect(onSave).toHaveBeenCalledWith(VERSION, "Support bot", "prompt-1");
     },
   );
+});
+
+describe("AddNewPromptVersionDialog success toast link", () => {
+  beforeEach(() => {
+    vi.spyOn(window, "open").mockImplementation(() => null);
+  });
+
+  it("opens the new prompt in a new tab", () => {
+    saveNewPrompt()({ ...EXISTING_PROMPT, name: "My prompt" });
+
+    clickViewPrompt();
+
+    expect(window.open).toHaveBeenCalledWith(
+      `${window.location.origin}/test-workspace/projects/test-project-id/prompts/prompt-1`,
+      "_blank",
+    );
+  });
+
+  it("opens the new version of an existing prompt in a new tab", () => {
+    saveNewVersion()(VERSION);
+
+    clickViewPrompt();
+
+    expect(window.open).toHaveBeenCalledWith(
+      `${window.location.origin}/test-workspace/projects/test-project-id/prompts/prompt-1?activeVersionId=version-2`,
+      "_blank",
+    );
+  });
+
+  it("keeps the app base path in the link", () => {
+    vi.stubEnv("VITE_BASE_URL", "/opik/");
+    saveNewVersion()(VERSION);
+
+    clickViewPrompt();
+
+    expect(window.open).toHaveBeenCalledWith(
+      `${window.location.origin}/opik/test-workspace/projects/test-project-id/prompts/prompt-1?activeVersionId=version-2`,
+      "_blank",
+    );
+  });
+
+  it("shows no link when the created prompt comes back without an id", () => {
+    saveNewPrompt()({ name: "My prompt" });
+
+    expect(mockToast).toHaveBeenCalledWith({
+      description: 'Saved new prompt "My prompt"',
+    });
+    expect(toastActions()).toBeUndefined();
+  });
 });
 
 describe("AddNewPromptVersionDialog while a save is in flight", () => {

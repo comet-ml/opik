@@ -28,6 +28,7 @@ import {
   AccordionTrigger,
 } from "@/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
@@ -35,6 +36,7 @@ import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSele
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
+import { generatePromptURL } from "@/lib/prompt";
 import {
   PromptVersion,
   PromptWithLatestVersion,
@@ -172,6 +174,33 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
     hasValidTemplate &&
     (canSaveNewPrompt || canSaveExistingPrompt);
 
+  const getViewPromptActions = (savedPromptId?: string, versionId?: string) =>
+    savedPromptId && activeProjectId
+      ? [
+          <ToastAction
+            key="view-prompt"
+            variant="link"
+            size="sm"
+            className="px-0"
+            altText="View prompt"
+            onClick={() =>
+              window.open(
+                generatePromptURL(
+                  workspaceName,
+                  activeProjectId,
+                  savedPromptId,
+                  versionId,
+                ),
+                "_blank",
+              )
+            }
+          >
+            View prompt
+            <ExternalLink className="ml-1 size-3.5 shrink-0" />
+          </ToastAction>,
+        ]
+      : undefined;
+
   const handleClickEditPrompt = () => {
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
 
@@ -202,6 +231,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           onSuccess: (data) => {
             toast({
               description: `Saved new version of ${promptLabel} "${selectedPrompt.name}"`,
+              actions: getViewPromptActions(data.prompt_id, data.id),
             });
             onSave(data, selectedPrompt.name, selectedPrompt.id);
           },
@@ -224,7 +254,10 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
         },
         {
           onSuccess: (data?: PromptWithLatestVersion) => {
-            toast({ description: `Saved new ${promptLabel} "${name}"` });
+            toast({
+              description: `Saved new ${promptLabel} "${name}"`,
+              actions: getViewPromptActions(data?.id),
+            });
             if (data?.latest_version)
               onSave(data.latest_version, data.name, data.id);
           },

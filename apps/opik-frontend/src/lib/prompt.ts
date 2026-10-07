@@ -224,3 +224,21 @@ export const formatPromptDataAsText = (
   }
   return formatNamedPromptsAsText(extracted.data);
 };
+
+export const generatePromptURL = (
+  workspace: string,
+  projectId: string,
+  promptId: string,
+  versionId?: string,
+): string => {
+  const basePath = import.meta.env.VITE_BASE_URL || "/";
+  const search = versionId
+    ? `?${new URLSearchParams({ activeVersionId: versionId }).toString()}`
+    : "";
+  const relativePath = `${workspace}/projects/${projectId}/prompts/${promptId}${search}`;
+
+  const normalizedBasePath =
+    basePath === "/" ? "" : basePath.replace(/\/$/, "");
+  const fullPath = `${normalizedBasePath}/${relativePath}`;
+  return new URL(fullPath, window.location.origin).toString();
+};
