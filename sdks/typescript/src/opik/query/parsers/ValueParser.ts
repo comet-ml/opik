@@ -37,16 +37,22 @@ export class ValueParser {
     // Skip opening quote
     tokenizer.advance();
 
-    const valueStart = tokenizer.getPosition();
+    let value = "";
     let foundClosingQuote = false;
 
     // Parse until closing quote or end of string
     while (!tokenizer.isAtEnd()) {
       if (tokenizer.peekChar() === '"') {
+        // A doubled quote is an escaped quote, as in quoted keys
+        if (tokenizer.peekCharAt(1) === '"') {
+          value += '"';
+          tokenizer.advance(2);
+          continue;
+        }
         foundClosingQuote = true;
         break;
       }
-      tokenizer.advance();
+      value += tokenizer.consumeChar();
     }
 
     validateClosingQuote(
@@ -54,8 +60,6 @@ export class ValueParser {
       startPos,
       `value starting at position ${startPos}`
     );
-
-    const value = tokenizer.sliceFrom(valueStart);
 
     // Skip closing quote
     tokenizer.advance();
