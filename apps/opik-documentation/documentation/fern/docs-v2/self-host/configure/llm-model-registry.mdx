@@ -45,14 +45,14 @@ Fields:
 - `qualifiedName` (optional) — disambiguates models that exist under multiple providers (e.g. Gemini via Vertex AI vs. the Gemini API directly). Used as the routing key when set.
 - `label` (optional) — the human-readable name shown in dropdowns. Falls back to `id` when omitted.
 - `structuredOutput` (optional, default `false`) — whether the model supports JSON schema / tool-calling structured output mode.
-- `reasoning` (optional, default `false`) — whether the model is a reasoning model (enforces temperature = 1.0 and unlocks reasoning-effort parameters in the UI).
+- `reasoning` (optional, default `false`) — whether the model is a reasoning model (enforces temperature = 1.0 and unlocks reasoning-effort parameters in the UI). Unlike the other fields, an override that leaves it out keeps the lower layer's value (see below).
 
 ## Merge behavior
 
 Models are keyed by `id` across every provider. `qualifiedName` is used for routing lookups (to disambiguate `gemini-2.5-pro` under the Gemini direct API vs. Vertex AI), but override deduplication always uses `id`. When a merge happens:
 
 - **Add**: an `id` not present in lower layers is appended to that provider's list.
-- **Override**: an `id` that matches a lower layer replaces the full definition. Partial overrides are not supported — supply all fields you want on the final model.
+- **Override**: an `id` that matches a lower layer replaces the full definition. Partial overrides are not supported — supply all fields you want on the final model. One exception: if the overriding entry leaves out `reasoning`, the lower layer's value is kept, so an older remote copy can't turn off the backend's reasoning-model handling for models your release already flags. To turn the flag off, set `reasoning: false` explicitly.
 - **Remove**: not currently supported. Contact support if you need to hide a default model entirely.
 
 ## Configuration scenarios
