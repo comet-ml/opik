@@ -117,9 +117,11 @@ public class TestSuiteAssertionSampler {
         }
 
         var connectedProviders = getConnectedProviders(tracesBatch.workspaceId());
-        String modelName = SupportedJudgeProvider.resolveModel(connectedProviders)
+        var judgeModels = SupportedJudgeProvider.resolveModels(connectedProviders);
+        String modelName = judgeModels.stream().findFirst()
                 .or(() -> getMetadataString(completeTraces.getFirst(), TestSuiteMetadataKeys.MODEL))
                 .orElse(null);
+        var judgeFallbackModels = judgeModels.stream().skip(1).toList();
 
         if (modelName == null) {
             log.warn("No LLM model resolved for test suite batch in workspace '{}' — "
@@ -140,7 +142,7 @@ public class TestSuiteAssertionSampler {
         decrementIncomplete
                 .thenMany(Flux.fromIterable(completeTraces)
                         .concatMap(trace -> processTrace(trace, tracesBatch,
-                                datasetEvaluatorsCache, modelName, fetchTimeout)))
+                                datasetEvaluatorsCache, modelName, judgeFallbackModels, fetchTimeout)))
                 .flatMapIterable(list -> list)
                 .collectList()
                 .flatMap(messages -> {
@@ -162,7 +164,7 @@ public class TestSuiteAssertionSampler {
     private Mono<List<TraceToScoreLlmAsJudge>> processTrace(
             Trace trace, TracesCreated tracesBatch,
             Map<String, Mono<DatasetEvaluatorsResult>> datasetEvaluatorsCache,
-            String modelName, Duration fetchTimeout) {
+            String modelName, List<String> judgeFallbackModels, Duration fetchTimeout) {
 
         var experimentId = getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
                 .flatMap(id -> parseUUID(id, trace.id()))
@@ -253,6 +255,7 @@ public class TestSuiteAssertionSampler {
                                             .scoreNameMapping(prepared.scoreNameMapping())
                                             .promptType(PromptType.PYTHON)
                                             .experimentId(experimentId)
+                                            .judgeFallbackModels(judgeFallbackModels)
                                             .build())
                                     .toList());
                 })
