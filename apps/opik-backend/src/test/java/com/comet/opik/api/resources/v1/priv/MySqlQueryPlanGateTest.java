@@ -104,6 +104,10 @@ class MySqlQueryPlanGateTest {
     @AfterAll
     void tearDownAll() {
         setup.wireMock.server().stop();
+        // A reused MySQL is shared with other test classes; only a dedicated one is this class's to stop.
+        if (!setup.MYSQL.isShouldBeReused()) {
+            setup.MYSQL.stop();
+        }
     }
 
     @Test
