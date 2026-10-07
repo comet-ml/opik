@@ -330,6 +330,24 @@ class DatabaseAnalyticsFactoryIntegrationTest {
         }
     }
 
+    @Test
+    @DisplayName("the container's config.d/timezone.xml keeps the server on UTC on a non-UTC host")
+    void containerTimezoneConfigOverridesANonUtcHost() {
+        // The image already defaults to UTC, so only a non-UTC host shows whether the mounted file takes effect.
+        try (var container = ClickHouseContainerUtils.newClickHouseContainer(false).withEnv("TZ", "America/New_York")) {
+            container.start();
+
+            try (var client = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(container, "default")
+                    .buildClient()) {
+                var records = client.queryAll("""
+                        SELECT serverTimezone() AS tz
+                        """);
+
+                assertThat(records.getFirst().getString("tz")).isEqualTo("UTC");
+            }
+        }
+    }
+
     private Map<String, String> readSettings(ConnectionFactory connectionFactory, String... names) {
         return readSettings(connectionFactory, List.of(names));
     }
