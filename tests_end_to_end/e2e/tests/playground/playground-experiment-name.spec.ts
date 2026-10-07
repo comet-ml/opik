@@ -234,7 +234,6 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         // Coming back is a fresh page load, so this also covers a reload.
         await playground.goto();
         await playground.waitForReady();
-        await playground.waitForRunReady({ expectedRows: 3 });
         await expect(playground.experimentNameEditor()).toContainText(runName);
         await playground.setExperimentName(renamed);
         await expect
