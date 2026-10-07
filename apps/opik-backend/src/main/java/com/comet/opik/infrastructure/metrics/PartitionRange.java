@@ -99,7 +99,8 @@ public record PartitionRange(@NonNull LocalDate from, @NonNull LocalDate to) {
                         .computeIfAbsent(key.get(0), table -> new LinkedHashMap<>(Map.of(
                                 IN_RANGE, 0L, OUT_OF_RANGE_FUTURE, 0L, OUT_OF_RANGE_PAST, 0L)))
                         .merge(range(key.get(1)), 1L, Long::sum));
-        return counts;
+        return counts.entrySet().stream()
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Map.copyOf(entry.getValue())));
     }
 
     private static <T> List<T> groupBy(List<T> stats, Function<T, String> table, Function<T, T> relabel,

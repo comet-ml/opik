@@ -5,6 +5,7 @@ import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PastOrPresent;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -46,9 +47,10 @@ public class PartitionMetricsConfig {
     /**
      * Earliest legitimate weekly partition date. Weekly partitions dated before it, or after next
      * week, report as one {@code out_of_range_past} / {@code out_of_range_future} series per table
-     * instead of one series each, which keeps the gauges under the OTel cardinality limit.
+     * instead of one series each, which keeps the gauges under the OTel cardinality limit. Must not be
+     * in the future, or the in-range window would invert and every weekly partition would be out of range.
      */
-    @NotNull @JsonProperty
+    @NotNull @PastOrPresent @JsonProperty
     private LocalDate inRangeFrom;
 
     /** Derived: the parsed, stripped, blank-free list of LWD tables. */
