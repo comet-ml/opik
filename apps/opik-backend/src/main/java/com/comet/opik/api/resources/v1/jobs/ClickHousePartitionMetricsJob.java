@@ -213,7 +213,8 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
             Tuple4<List<PartitionStat>, List<LwdStat>, LocalDate, Optional<LocalDate>> result) {
         // ClickHouse's date, not the JVM's: partition ids are computed in the ClickHouse server timezone.
         var serverDate = result.getT3();
-        // No projects means no legitimate data: any leftover past partition groups, keeping series bounded.
+        // No projects means no legitimate data: start at the current week so any leftover past partitions
+        // group into out_of_range_past, keeping series bounded.
         var start = result.getT4()
                 .orElseGet(() -> serverDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)));
         var range = PartitionRange.of(start, serverDate);
