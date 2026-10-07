@@ -366,3 +366,54 @@ describe("the reasoning effort a playground run sends", () => {
     },
   );
 });
+
+describe("the penalties a playground run sends", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const sentBody = async (mode?: OpenAiPipelineMode) => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(""));
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    await result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {
+        temperature: 0.4,
+        maxCompletionTokens: 4000,
+        topP: 1,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.3,
+      } as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+      openAiPipelineMode: mode,
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    return JSON.parse(init?.body as string);
+  };
+
+  it("sends neither on a Responses API key", async () => {
+    const body = await sentBody("responses_api");
+
+    expect(body).not.toHaveProperty("frequency_penalty");
+    expect(body).not.toHaveProperty("presence_penalty");
+    expect(body.temperature).toBe(0.4);
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "sends both when the mode is %s",
+    async (mode) => {
+      const body = await sentBody(mode);
+
+      expect(body.frequency_penalty).toBe(0.5);
+      expect(body.presence_penalty).toBe(0.3);
+    },
+  );
+});

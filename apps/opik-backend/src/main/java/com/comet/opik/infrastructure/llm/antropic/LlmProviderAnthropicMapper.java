@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Mapper
@@ -65,6 +66,7 @@ interface LlmProviderAnthropicMapper {
     @Mapping(source = "request", target = "maxTokens", qualifiedByName = "resolveMaxTokens")
     @Mapping(source = "request", target = "messages", qualifiedByName = "mapToMessages")
     @Mapping(source = "request", target = "system", qualifiedByName = "mapToSystemMessages")
+    @Mapping(source = "request", target = "customParameters", qualifiedByName = "resolveCustomParameters")
     AnthropicCreateMessageRequest toCreateMessageRequest(@NonNull ChatCompletionRequest request);
 
     @Named("resolveTemperature")
@@ -90,6 +92,14 @@ interface LlmProviderAnthropicMapper {
     private boolean samplingParamsAllowed(ChatCompletionRequest request) {
         return !ModelCapabilities.rejectsSamplingParams(request.model())
                 && !SamplingParamsNormalizer.thinkingEnabled(request);
+    }
+
+    // langchain4j's AnthropicOutputConfig has no effort field, so the whole output_config rides customParameters,
+    // which AnthropicCreateMessageRequest flattens into the top level of the body. Mapping outputConfig as well
+    // would put a second output_config key on the wire.
+    @Named("resolveCustomParameters")
+    default Map<String, Object> resolveCustomParameters(@NonNull ChatCompletionRequest request) {
+        return AnthropicEffort.toCustomParameters(request.model(), request.customParameters()).orElse(null);
     }
 
     @Named("resolveMaxTokens")

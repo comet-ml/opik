@@ -7,6 +7,10 @@
  * Anthropic sampling pair are gated on the model's capabilities instead, and the runner controls
  * (plus Anthropic's max output tokens) fall back to a default rather than hiding, so absence from
  * the config says nothing.
+ *
+ * The plain max-output-tokens sliders check this list too, so it still holds when a config carries
+ * the key. Temperature is left out on purpose: every surface stores it, and listing it would also
+ * mean teaching the Claude sampling choice about it.
  */
 export type ModelConfigParam =
   | "topP"
@@ -19,12 +23,12 @@ export type ModelConfigParam =
 /**
  * An evaluator rule persists only LlmAsJudgeModelParameters — name, temperature, seed and the
  * free-form custom_parameters. Everything else the rule form used to render was dropped on save.
+ * The Anthropic effort is kept because it is saved inside custom_parameters.output_config.
  */
 export const RULE_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> = new Set([
   "topP",
   "maxCompletionTokens",
   "reasoningEffort",
-  "thinkingEffort",
   "throttling",
   "maxConcurrentRequests",
 ]);
