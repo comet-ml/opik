@@ -9,6 +9,8 @@ import { generateCompareExperimentsURL } from "@/lib/experiments";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { toPlainDatasetId } from "@/utils/datasetVersionStorage";
 
+const NAME_LOOKUP_TIMEOUT_MS = 3000;
+
 const withServerName = async (
   experiment: LogExperiment,
 ): Promise<LogExperiment> => {
@@ -16,7 +18,7 @@ const withServerName = async (
 
   try {
     const { name } = await getExperimentById(
-      {},
+      { signal: AbortSignal.timeout(NAME_LOOKUP_TIMEOUT_MS) },
       { experimentId: experiment.id },
     );
     return { ...experiment, name };

@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { TooltipProvider } from "@/ui/tooltip";
 import usePlaygroundStore from "@/store/PlaygroundStore";
+import { PermissionsProvider } from "@/contexts/PermissionsContext";
+import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 import PlaygroundExperimentName from "./PlaygroundExperimentName";
 
 const patch = vi.fn();
@@ -25,16 +27,26 @@ vi.mock("@/ui/use-toast", () => ({
 
 const DATASET_ID = "dataset-1";
 
-const renderName = (datasetId = DATASET_ID) =>
+const renderName = (datasetId = DATASET_ID, canCreateExperiments = true) =>
   render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { mutations: { retry: false } } })
       }
     >
-      <TooltipProvider>
-        <PlaygroundExperimentName datasetId={datasetId} />
-      </TooltipProvider>
+      <PermissionsProvider
+        value={{
+          ...DEFAULT_PERMISSIONS,
+          permissions: {
+            ...DEFAULT_PERMISSIONS.permissions,
+            canCreateExperiments,
+          },
+        }}
+      >
+        <TooltipProvider>
+          <PlaygroundExperimentName datasetId={datasetId} />
+        </TooltipProvider>
+      </PermissionsProvider>
     </QueryClientProvider>,
   );
 
@@ -142,6 +154,25 @@ describe("PlaygroundExperimentName", () => {
     ]);
   });
 
+  it("lists every distinct reason when several renames fail", async () => {
+    patch
+      .mockRejectedValueOnce({ response: { data: { message: "Conflict" } } })
+      .mockRejectedValueOnce({ response: { data: { message: "Not found" } } });
+    finishedRun("foo");
+    renderName();
+
+    commitName("bar");
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Couldn't rename the run",
+          description: "Conflict; Not found",
+        }),
+      ),
+    );
+  });
+
   it("names an auto-named run's experiments", async () => {
     patch.mockResolvedValue({});
     finishedRun(null);
@@ -189,6 +220,20 @@ describe("PlaygroundExperimentName", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("counts every experiment of the run even when a name cannot be read", async () => {
+    get.mockImplementation(async (url: string) => {
+      if (url.endsWith("/e1")) throw new Error("Network Error");
+      return { data: { id: "e2", name: "calm_river_5678" } };
+    });
+    finishedRun(null);
+    renderName();
+
+    await waitFor(() => expect(editor()).toHaveTextContent("calm_river_5678"));
+    expect(
+      screen.getByTestId("playground-experiment-name-more"),
+    ).toHaveTextContent("+1 more");
+  });
+
   it("clearing the box lets the next run be auto-named instead", () => {
     finishedRun("foo");
     renderName();
@@ -211,5 +256,17 @@ describe("PlaygroundExperimentName", () => {
     expect(patch).not.toHaveBeenCalled();
     expect(usePlaygroundStore.getState().experimentName).toBe("bar");
     expect(preview()).toHaveTextContent("Creates: bar_a");
+  });
+
+  it("only names the next run when the user cannot create experiments", () => {
+    finishedRun("foo");
+    renderName(DATASET_ID, false);
+
+    expect(screen.getByText("New Experiment:")).toBeInTheDocument();
+
+    commitName("bar");
+
+    expect(patch).not.toHaveBeenCalled();
+    expect(usePlaygroundStore.getState().experimentName).toBe("bar");
   });
 });

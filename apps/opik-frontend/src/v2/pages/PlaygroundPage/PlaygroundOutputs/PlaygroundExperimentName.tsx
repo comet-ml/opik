@@ -13,6 +13,7 @@ import {
 import { buildExperimentName } from "@/lib/experiments";
 import useRenameLastRunMutation from "@/api/playground/useRenameLastRunMutation";
 import useLastRunExperiments from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useLastRunExperiments";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type PlaygroundExperimentNameProps = {
   datasetId?: string;
@@ -24,7 +25,10 @@ const PlaygroundExperimentName = ({
   const experimentName = useExperimentName();
   const setExperimentName = useSetExperimentName();
   const promptIds = usePromptIds();
-  const lastRun = useLastRun(datasetId);
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
+  const lastRun = useLastRun(canCreateExperiments ? datasetId : undefined);
   const {
     mutate: renameLastRun,
     isPending: isRenaming,
@@ -44,6 +48,9 @@ const PlaygroundExperimentName = ({
     lastRun && !shownName
       ? lastRunExperiments.flatMap((e) => (e.name ? [e.name] : []))
       : [];
+  const moreExperimentsCount = serverNames.length
+    ? lastRunExperiments.length - 1
+    : 0;
 
   const handleChangeName = useCallback(
     (value: string) => {
@@ -80,13 +87,13 @@ const PlaygroundExperimentName = ({
           alwaysShowEditIcon
         />
       </div>
-      {serverNames.length > 1 && (
+      {moreExperimentsCount > 0 && (
         <TooltipWrapper content={serverNames.join(", ")}>
           <span
             className="shrink-0 cursor-default text-sm text-muted-slate underline"
             data-testid="playground-experiment-name-more"
           >
-            +{serverNames.length - 1} more
+            +{moreExperimentsCount} more
           </span>
         </TooltipWrapper>
       )}
