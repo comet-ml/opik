@@ -40,8 +40,8 @@ public enum Source {
     }
 
     /**
-     * Returns the additional DB value to include alongside the given filter value in equality and
-     * {@code IN} filters (a comma-separated list), to capture legacy rows that predate source tracking.
+     * Returns the additional DB value to include alongside the given filter value in equality
+     * filters, to capture legacy rows that predate source tracking.
      * <p>
      * Only {@code sdk} includes legacy {@code unknown} rows, since SDK was the predominant
      * ingestion path before source tracking was introduced. Playground, experiment, and other
@@ -49,9 +49,7 @@ public enum Source {
      * </p>
      */
     public static Optional<String> legacyFallbackDbValue(String filterValue) {
-        if (filterValue != null && Arrays.stream(filterValue.split(","))
-                .map(String::trim)
-                .anyMatch(SDK.getValue()::equals)) {
+        if (SDK.getValue().equals(filterValue)) {
             return Optional.of(UNKNOWN_VALUE);
         }
         return Optional.empty();

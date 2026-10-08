@@ -8707,6 +8707,48 @@ class TracesResourceTest {
                     List.of(playgroundTrace),
                     List.of(sdkTrace, unknownSourceTrace, experimentTrace), USER);
         }
+
+        @Test
+        @DisplayName("Filter by source EQUAL unknown returns only legacy traces with unknown source")
+        void filterBySourceUnknownReturnsOnlyUnknownSourceTraces() {
+            var projectName = "source-filter-unknown-" + UUID.randomUUID();
+            var sdkTrace = buildTrace(projectName, Source.SDK);
+            var unknownSourceTrace = buildTrace(projectName, null);
+
+            traceResourceClient.createTrace(sdkTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(unknownSourceTrace, API_KEY, TEST_WORKSPACE);
+
+            var actual = getTracesBySource(projectName, Operator.EQUAL, Source.UNKNOWN_VALUE);
+
+            TraceAssertions.assertTraces(actual, List.of(unknownSourceTrace), List.of(sdkTrace), USER);
+        }
+
+        static Stream<Arguments> filterBySourceWithInvalidValueReturnsBadRequest() {
+            return Stream.of(
+                    arguments(Operator.EQUAL, "sdk,playground"),
+                    arguments(Operator.NOT_EQUAL, "sdk,playground"),
+                    arguments(Operator.EQUAL, "SDK"),
+                    arguments(Operator.IN, "sdk,not-a-source"),
+                    arguments(Operator.IN, " , "),
+                    arguments(Operator.NOT_IN, " , "));
+        }
+
+        @ParameterizedTest(name = "{0} \"{1}\"")
+        @MethodSource
+        @DisplayName("Filter by source with a value that is not a source returns bad request")
+        void filterBySourceWithInvalidValueReturnsBadRequest(Operator operator, String value) {
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.SOURCE)
+                    .operator(operator)
+                    .value(value)
+                    .build());
+
+            try (var response = traceResourceClient.callGetTracesWithQueryParams(API_KEY, TEST_WORKSPACE,
+                    Map.of("project_name", "source-filter-empty-list-" + UUID.randomUUID(),
+                            "filters", toURLEncodedQueryParam(filters)))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
     }
 
     @Nested

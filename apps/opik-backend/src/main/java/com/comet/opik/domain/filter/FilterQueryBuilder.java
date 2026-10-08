@@ -1044,7 +1044,8 @@ public class FilterQueryBuilder {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
         var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i, columnsNonNullable);
         var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
-        return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
+        return filter.field().getType().buildFilter(template, dbField, i, filter.operator(), filter.value(),
+                enumFallbackTemplate);
     }
 
     private static String getAnalyticsDbField(
