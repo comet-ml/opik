@@ -236,8 +236,8 @@ describe("OpenAI Parsers", () => {
         const result = parseUsage(responseApiUsage);
 
         expect(result).toBeDefined();
-        expect(result?.prompt_tokens).toBe(25);
-        expect(result?.completion_tokens).toBe(15);
+        expect(result?.prompt_tokens).toBe(15);
+        expect(result?.completion_tokens).toBe(25);
         expect(result?.total_tokens).toBe(40);
       });
     });

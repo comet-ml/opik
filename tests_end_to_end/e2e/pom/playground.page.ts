@@ -465,8 +465,9 @@ export class PlaygroundPage {
 
   // ── per-column run / stop ───────────────────────────────────────────────
   //
-  // `PlaygroundRunButton` is mounted per variant, and in experiment mode (a
-  // dataset or suite loaded) it renders inside the variant card — in free mode
+  // `PlaygroundRunButton` is mounted per variant, but only once there are two
+  // or more; with one, it would duplicate the header's Run. In experiment mode
+  // (a dataset or suite loaded) it renders inside the variant card — in free mode
   // the same component renders under the OUTPUT column instead, which is why
   // these are scoped to the card rather than looked up page-wide. It carries no
   // testid and its label swaps between Run and Stop with the variant's own
@@ -1487,18 +1488,53 @@ export class PlaygroundPage {
     });
   }
 
-  /** The `scrollLeft` of a panel's sticky header half and its body half. */
-  async panelScrollOffsets(
-    panel: 'variables' | 'outputs',
-  ): Promise<{ header: number; body: number }> {
-    return test.step(`read ${panel} panel header/body scroll offsets`, async () => {
+  async panelBodyScrollLeft(panel: 'variables' | 'outputs'): Promise<number> {
+    return test.step(`read the ${panel} panel body scroll offset`, async () => {
+      const body = panel === 'variables' ? this.variablesPanel('body') : this.outputsPanel('body');
+      return body.evaluate((el) => el.scrollLeft);
+    });
+  }
+
+  // Compared by position, not scrollLeft: with scroll-driven animations the header
+  // never scrolls, it is translated. Cells pair up by column: `data-header-id` is the
+  // column id and `data-cell-id` is `<rowId>_<columnId>`.
+  async panelColumnDrift(panel: 'variables' | 'outputs'): Promise<number> {
+    return test.step(`measure ${panel} panel header/body column drift`, async () => {
       const half = (h: 'header' | 'body') =>
         panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
-      const [header, body] = await Promise.all([
-        half('header').evaluate((el) => el.scrollLeft),
-        half('body').evaluate((el) => el.scrollLeft),
-      ]);
-      return { header, body };
+      const headerCells = await half('header')
+        .locator('th[data-header-id]')
+        .evaluateAll((cells) =>
+          cells.map((c) => [c.getAttribute('data-header-id') ?? '', c.getBoundingClientRect().left] as const),
+        );
+      const firstRow = half('body').locator('tr[data-row-id]').first();
+      const cellIdPrefix = `${await firstRow.getAttribute('data-row-id')}_`;
+      const bodyLefts = await firstRow.locator('td[data-cell-id]').evaluateAll(
+        (cells, prefix) =>
+          cells.map((c) => {
+            const columnId = (c.getAttribute('data-cell-id') ?? '').slice(prefix.length);
+            return [columnId, c.getBoundingClientRect().left] as const;
+          }),
+        cellIdPrefix,
+      );
+      const columnIds = (cells: ReadonlyArray<readonly [string, number]>) =>
+        cells.map(([columnId]) => columnId).sort();
+      const headerLefts = new Map(headerCells);
+
+      expect(bodyLefts.length).toBeGreaterThan(0);
+      expect(columnIds(bodyLefts)).toEqual(columnIds(headerCells));
+      return Math.max(
+        ...bodyLefts.map(([columnId, left]) => Math.abs(left - (headerLefts.get(columnId) ?? Number.NaN))),
+      );
+    });
+  }
+
+  async wheelOverPanelHeader(panel: 'variables' | 'outputs', deltaX: number): Promise<void> {
+    return test.step(`wheel ${deltaX}px sideways over the ${panel} panel header`, async () => {
+      const header = panel === 'variables' ? this.variablesPanel('header') : this.outputsPanel('header');
+      await header.hover();
+      await this.page.mouse.wheel(deltaX, 0);
+      await this.settle();
     });
   }
 

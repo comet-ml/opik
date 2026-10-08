@@ -77,7 +77,8 @@ def _describe_block(
 
     env = block.get("env") or {}
     status.transport = TRANSPORT_LOCAL
-    status.workspace = env.get("COMET_WORKSPACE")
+    # `COMET_WORKSPACE` is what older SDKs wrote.
+    status.workspace = env.get("OPIK_WORKSPACE") or env.get("COMET_WORKSPACE")
 
     if "OPIK_URL" in env:
         api_url = str(env["OPIK_URL"])

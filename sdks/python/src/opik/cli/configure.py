@@ -138,7 +138,9 @@ def _setup_assistants(
         assume_confirmed=mcp_verdict.reason is consent.Reason.REQUESTED,
     )
     # This path does not redirect, so it ends the run itself, if anything was written.
-    if outcome.clients or outcome.skills:
+    if outcome.clients and not interactive:
+        install_view.render_next_steps(outcome.next_steps)
+    elif outcome.clients or outcome.skills:
         install_view.render_restart_note(mcp_installed=bool(outcome.clients))
 
     # `mcp_decision` stays the answer to the question; a skipped picker is

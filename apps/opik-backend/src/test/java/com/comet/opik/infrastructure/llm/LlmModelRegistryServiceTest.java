@@ -9,6 +9,8 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -142,6 +144,25 @@ class LlmModelRegistryServiceTest {
         assertThat(registry.get("openrouter")).isNotEmpty();
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "gpt-5-mini, true",
+            "gpt-5.4, true",
+            "gpt-5-codex, true",
+            "o3, true",
+            "gpt-5-chat-latest, false",
+            "gpt-4o, false"
+    })
+    void defaultResourceFlagsOpenAiReasoningModels(String model, boolean reasoning) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(model);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_AI);
+        assertThat(result.get().model().reasoning()).isEqualTo(reasoning);
+    }
+
     @Test
     void missingClasspathResourceThrows() {
         var config = new LlmModelRegistryConfig();
@@ -175,6 +196,33 @@ class LlmModelRegistryServiceTest {
         assertThat(merged.get("openai").get(2).id()).isEqualTo("new-model");
 
         assertThat(merged.get("anthropic")).hasSize(1);
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "o3     | label: O3 from override | true",
+            "o3     | reasoning: false        | false",
+            "gpt-4o | reasoning: true         | true",
+            "gpt-4o | label: GPT 4o           | false"
+    })
+    void localOverrideChangesReasoningFlagOnlyWhenItSetsIt(String model, String overrideField,
+            boolean expectedReasoning, @TempDir Path tempDir) throws IOException {
+        var overridePath = tempDir.resolve("override.yaml");
+        Files.writeString(overridePath, """
+                openai:
+                  - id: "%s"
+                    %s
+                """.formatted(model, overrideField));
+
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setLocalOverridePath(overridePath.toString());
+
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(service.findModel(model)).get()
+                .extracting(result -> result.model().reasoning())
+                .isEqualTo(expectedReasoning);
     }
 
     @Test
@@ -272,6 +320,33 @@ class LlmModelRegistryServiceTest {
         // Classpath default models + remote model merged
         assertThat(openai.stream().anyMatch(m -> m.id().equals("gpt-4o"))).isTrue();
         assertThat(openai.stream().anyMatch(m -> m.id().equals("remote-new-model"))).isTrue();
+    }
+
+    @Test
+    void remoteFetchKeepsClasspathReasoningFlagWhenRemoteEntryLacksIt() {
+        var remoteYaml = """
+                openai:
+                  - id: "o3"
+                    label: "O3 from remote"
+                  - id: "gpt-4o"
+                    structuredOutput: true
+                    reasoning: true
+                """;
+        var client = mockHttpClient(200, remoteYaml);
+
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setRemoteEnabled(true);
+        config.setRemoteUrl("https://cdn.example.com/models.yaml");
+
+        var service = new LlmModelRegistryService(config, client);
+
+        assertThat(service.findModel("o3")).get()
+                .extracting(LlmModelRegistryService.ModelLookupResult::model)
+                .isEqualTo(LlmModelDefinition.builder().id("o3").label("O3 from remote").reasoning(true).build());
+        assertThat(service.findModel("gpt-4o")).get()
+                .extracting(result -> result.model().reasoning())
+                .isEqualTo(true);
     }
 
     @Test
