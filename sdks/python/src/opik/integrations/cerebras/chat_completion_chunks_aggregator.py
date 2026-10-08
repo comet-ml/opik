@@ -34,6 +34,7 @@ def aggregate(
         }
 
         text_chunks: List[str] = []
+        reasoning_chunks: List[str] = []
 
         for chunk in items:
             if chunk.choices and chunk.choices[0].delta:
@@ -48,6 +49,11 @@ def aggregate(
                 if delta.content:
                     text_chunks.append(delta.content)
 
+                # Cerebras streams reasoning separately from content; without this the
+                # aggregated span would show an empty answer for reasoning models.
+                if delta.reasoning:
+                    reasoning_chunks.append(delta.reasoning)
+
             if chunk.choices and chunk.choices[0].finish_reason:
                 aggregated_response["choices"][0]["finish_reason"] = chunk.choices[
                     0
@@ -57,6 +63,13 @@ def aggregate(
                 aggregated_response["usage"] = chunk.usage.model_dump()
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
+        if reasoning_chunks:
+            # reasoning_content is the name opik's own API types use
+            # (rest_api/types/assistant_message.py, delta.py), so the renderer
+            # and the persisted payload agree.
+            aggregated_response["choices"][0]["message"]["reasoning_content"] = "".join(
+                reasoning_chunks
+            )
         result = ChatCompletionChunksAggregated(**aggregated_response)
 
         return result
