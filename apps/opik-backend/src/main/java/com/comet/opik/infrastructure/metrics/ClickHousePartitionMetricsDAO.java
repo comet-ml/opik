@@ -53,12 +53,9 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
      * partition key uses {@code partition_id} so it aligns with the {@code _partition_id} virtual
      * column used by the LWD query.
      *
-     * <p>Tier storage: {@code cold_bytes} is what sits on object-storage disks, and
-     * {@code ttl_move_due_parts} counts parts whose move TTL has expired but which are still on a
-     * local disk (a backlog that should drain). Only date-shaped partitions in the past count
-     * ({@code YYYYMMDD} or {@code YYYYMM}, the layouts move TTLs are set on): {@code system.parts}
-     * shows TTL times as 32-bit {@code DateTime}, so an {@code id_at} past 2106 looks long expired
-     * while ClickHouse, which keeps the full value, never moves it.
+     * <p>{@code ttl_move_due_parts} counts only past {@code YYYYMMDD}/{@code YYYYMM} partitions:
+     * {@code system.parts} shows TTL times as 32-bit {@code DateTime}, so an {@code id_at} past 2106
+     * looks expired there while ClickHouse never moves it.
      */
     private static final String PARTITION_STATS_SQL = """
             WITH (SELECT groupArray(name) FROM system.disks WHERE type = 'ObjectStorage') AS object_storage_disks

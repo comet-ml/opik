@@ -143,7 +143,7 @@ class ClickHousePartitionMetricsDAOTest {
             assertThat(traces.parts()).isPositive();
             assertThat(traces.lastActivityEpochSeconds())
                     .isGreaterThan(Instant.now().minusSeconds(600).getEpochSecond());
-            // The test ClickHouse has no object-storage disk, so nothing is cold and nothing is due to move.
+            // No object-storage disk in the test container.
             assertThat(traces.coldBytes()).isZero();
             assertThat(traces.ttlMoveDueParts()).isZero();
         });
@@ -170,8 +170,7 @@ class ClickHousePartitionMetricsDAOTest {
 
     @Test
     void countsTtlMoveDuePartsOnlyForPastDatePartitions() {
-        // TO DISK 'default' records move-TTL info but never moves (the part is already there): a
-        // deterministic overdue part without an object-storage disk.
+        // A TTL to the part's own disk is recorded but never moved: an overdue part without object storage.
         var table = "ttl_due_" + RandomStringUtils.secure().nextAlphabetic(16).toLowerCase();
         execute("""
                 CREATE TABLE %s (id String, id_at DateTime64(0, 'UTC'))
@@ -186,7 +185,7 @@ class ClickHousePartitionMetricsDAOTest {
                 Map<String, Long> due = partitionMetricsDAO.getPartitionStats().block().stream()
                         .filter(stat -> stat.table().equals(table))
                         .collect(Collectors.toMap(PartitionStat::partition, PartitionStat::ttlMoveDueParts));
-                // The future row's TTL shows as 2005 in system.parts (32-bit DateTime) and must not count.
+                // The 2141 row's TTL shows as 2005 in system.parts and must not count.
                 assertThat(due).hasSize(3).containsEntry("20200106", 1L).containsEntry("21410522", 0L);
                 assertThat(due.values().stream().mapToLong(Long::longValue).sum()).isEqualTo(1L);
             });
