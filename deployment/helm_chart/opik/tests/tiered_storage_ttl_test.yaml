@@ -151,3 +151,19 @@ tests:
           content:
             valueFrom:
               secretKeyRef: {name: unrelated}
+
+  - it: skips a source whose prefix is a whole variable name (it would map to an empty key)
+    set:
+      component.backend.envFrom:
+        - configMapRef:
+            name: opik-backend
+        - prefix: ANALYTICS_DB_HOST
+          configMapRef:
+            name: exact-cm
+        - prefix: ANALYTICS_DB_MIGRATIONS_PASS
+          secretRef:
+            name: exact-secret
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 4
