@@ -2032,6 +2032,8 @@ class PromptResourceTest {
                 }
             } finally {
                 executor.shutdownNow();
+                // A timed-out request must not keep writing into the tests that follow
+                assertThat(executor.awaitTermination(30, TimeUnit.SECONDS)).isTrue();
             }
 
             List<PromptVersion> expectedVersions = createdVersions.stream()
