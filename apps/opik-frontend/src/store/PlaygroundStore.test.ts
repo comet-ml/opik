@@ -96,3 +96,92 @@ describe("PlaygroundStore updatePrompt", () => {
     expect(isOutputStale()).toBe(false);
   });
 });
+
+describe("PlaygroundStore staleChanges", () => {
+  const getOutput = () => usePlaygroundStore.getState().outputMap[PROMPT_ID];
+  const getStaleChanges = () => {
+    const output = getOutput();
+    return "staleChanges" in output ? output.staleChanges : undefined;
+  };
+  const updatePrompt = (changes: Partial<PlaygroundPromptType>) =>
+    usePlaygroundStore.getState().updatePrompt(PROMPT_ID, changes);
+
+  beforeEach(() => {
+    const { setPromptMap, updateOutput } = usePlaygroundStore.getState();
+    setPromptMap([PROMPT_ID], { [PROMPT_ID]: createPrompt() });
+    updateOutput(PROMPT_ID, "", { isLoading: false, value: "Hi!" });
+  });
+
+  it.each<[string, Partial<PlaygroundPromptType>, string[]]>([
+    [
+      "a message edit",
+      { messages: [createMessage({ content: "Say bye" })] },
+      ["prompt"],
+    ],
+    [
+      "a parameter edit",
+      { configs: { ...CONFIGS, temperature: 1 } },
+      ["parameters"],
+    ],
+    [
+      "a model switch that resets the parameters",
+      {
+        model: PROVIDER_MODEL_TYPE.GPT_4O,
+        configs: { ...CONFIGS, temperature: 1 },
+      },
+      ["model"],
+    ],
+  ])("should record %s", (_, changes, expected) => {
+    updatePrompt(changes);
+
+    expect(getStaleChanges()).toEqual(expected);
+  });
+
+  it("should add up every kind of change until the next run", () => {
+    updatePrompt({ configs: { ...CONFIGS, temperature: 1 } });
+    updatePrompt({ model: PROVIDER_MODEL_TYPE.GPT_4O });
+    updatePrompt({ configs: { ...CONFIGS, temperature: 0 } });
+
+    expect(getStaleChanges()).toEqual(["parameters", "model"]);
+  });
+
+  it("should keep the same output object when nothing new changed", () => {
+    updatePrompt({ messages: [createMessage({ content: "Say bye" })] });
+    const staleOutput = getOutput();
+
+    updatePrompt({ messages: [createMessage({ content: "Say bye!" })] });
+
+    expect(getOutput()).toBe(staleOutput);
+  });
+
+  it("should forget the changes once the prompt runs again", () => {
+    updatePrompt({ model: PROVIDER_MODEL_TYPE.GPT_4O });
+
+    usePlaygroundStore
+      .getState()
+      .updateOutput(PROMPT_ID, "", { isLoading: true, value: null });
+
+    expect(getOutput()).toMatchObject({ stale: false });
+    expect(getStaleChanges()).toBeUndefined();
+
+    updatePrompt({ configs: { ...CONFIGS, temperature: 1 } });
+
+    expect(getStaleChanges()).toEqual(["parameters"]);
+  });
+
+  it("should record the change on every dataset item", () => {
+    const { setPromptMap, updateOutput } = usePlaygroundStore.getState();
+    setPromptMap([PROMPT_ID], { [PROMPT_ID]: createPrompt() });
+    usePlaygroundStore.setState({ outputMap: {} });
+    updateOutput(PROMPT_ID, "item-1", { isLoading: false, value: "A" });
+    updateOutput(PROMPT_ID, "item-2", { isLoading: false, value: "B" });
+
+    updatePrompt({ configs: { ...CONFIGS, temperature: 1 } });
+
+    const output = getOutput();
+    expect("datasetItemMap" in output && output.datasetItemMap).toMatchObject({
+      "item-1": { stale: true, staleChanges: ["parameters"] },
+      "item-2": { stale: true, staleChanges: ["parameters"] },
+    });
+  });
+});

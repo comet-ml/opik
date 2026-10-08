@@ -162,7 +162,13 @@ const PlaygroundOutputCell: React.FunctionComponent<
               </Button>
             </TooltipWrapper>
           )}
-          {stale && <PlaygroundStaleOutputNote compact className="mb-1" />}
+          {stale && (
+            <PlaygroundStaleOutputNote
+              changes={output?.staleChanges}
+              compact
+              className="mb-1"
+            />
+          )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
             {error ? (
               <PlaygroundOutputError message={error} stale={stale} />

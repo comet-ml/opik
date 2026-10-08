@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { CellContext } from "@tanstack/react-table";
 
 import { DATASET_TYPE } from "@/types/datasets";
+import { PlaygroundRunInputChange } from "@/types/playground";
 import { TooltipProvider } from "@/ui/tooltip";
 import PlaygroundOutputCell from "./PlaygroundOutputCell";
 
@@ -16,6 +17,7 @@ type Output = {
   value: string | null;
   error?: string;
   stale: boolean;
+  staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;
   selectedRuleIds?: string[] | null;
 };
@@ -193,6 +195,24 @@ describe("PlaygroundOutputCell", () => {
 
       expect(await screen.findByRole("tooltip")).toHaveTextContent(
         STALE_NOTE_TOOLTIP,
+      );
+    });
+
+    it("should name what changed, with the full sentence in the tooltip", async () => {
+      output = {
+        isLoading: false,
+        value: "the answer",
+        stale: true,
+        staleChanges: ["model"],
+      };
+
+      renderCell();
+      const note = screen.getByTestId("playground-stale-output-note");
+      expect(note).toHaveTextContent("Model changed");
+      fireEvent.pointerMove(note, { pointerType: "mouse" });
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        "Model changed since the last run. Re-run to update results.",
       );
     });
 

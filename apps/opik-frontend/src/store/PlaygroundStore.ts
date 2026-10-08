@@ -2,9 +2,15 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
 import mapValues from "lodash/mapValues";
+import union from "lodash/union";
 import isEqual from "fast-deep-equal";
 
-import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
+import {
+  LogExperiment,
+  PlaygroundPromptType,
+  PlaygroundRunInputChange,
+} from "@/types/playground";
+import { LLMMessage } from "@/types/llm";
 import { restoreMissingConfigKeys } from "@/lib/playground";
 import { buildExperimentName } from "@/lib/experiments";
 import { JsonObject } from "@/types/shared";
@@ -19,6 +25,7 @@ interface PlaygroundOutput {
   value: string | null;
   error?: string;
   stale: boolean;
+  staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;
   selectedRuleIds?: string[] | null;
   usage?: {
@@ -45,74 +52,79 @@ const isPlaygroundOutputWithDatasetItem = (
   return "datasetItemMap" in output;
 };
 
-const updateAllStaleStatusesForPromptOutput = (
+// Returns the same object when nothing new changed, so cells subscribed to an
+// already stale output don't re-render on every keystroke in the prompt.
+const markOutputStale = (
+  output: PlaygroundOutput,
+  changes: PlaygroundRunInputChange[],
+): PlaygroundOutput => {
+  const previousChanges = output.stale ? output.staleChanges ?? [] : [];
+  const staleChanges = union(previousChanges, changes);
+
+  if (output.stale && staleChanges.length === previousChanges.length) {
+    return output;
+  }
+
+  return { ...output, stale: true, staleChanges };
+};
+
+const markPromptOutputStale = (
   promptId: string,
   outputMap: PlaygroundOutputMap,
-  value: boolean,
+  changes: PlaygroundRunInputChange[],
 ) => {
-  if (!outputMap[promptId]) {
-    return outputMap;
-  }
-
   const promptOutput = outputMap[promptId];
 
-  if (!isPlaygroundOutputWithDatasetItem(promptOutput)) {
-    const currentStaleStatus = promptOutput.stale;
-    if (currentStaleStatus !== value) {
-      return {
-        ...outputMap,
-        [promptId]: {
-          ...promptOutput,
-          stale: value,
-        },
-      };
-    }
+  if (!promptOutput) {
     return outputMap;
   }
-
-  const datasetItemMap = promptOutput.datasetItemMap;
-  const datasetItemIds = Object.keys(datasetItemMap);
-
-  const updatedDatasetItemMap = datasetItemIds.reduce<
-    PlaygroundOutputWithDatasetItem["datasetItemMap"]
-  >((updatedMap, datasetItemId) => {
-    const datasetItem = datasetItemMap[datasetItemId];
-    const currentStaleStatus = datasetItem.stale;
-
-    if (currentStaleStatus !== value) {
-      updatedMap[datasetItemId] = {
-        ...datasetItem,
-        stale: value,
-      };
-    } else {
-      updatedMap[datasetItemId] = datasetItem;
-    }
-
-    return updatedMap;
-  }, {});
 
   return {
     ...outputMap,
-    [promptId]: {
-      datasetItemMap: updatedDatasetItemMap,
-    },
+    [promptId]: isPlaygroundOutputWithDatasetItem(promptOutput)
+      ? {
+          datasetItemMap: mapValues(promptOutput.datasetItemMap, (output) =>
+            markOutputStale(output, changes),
+          ),
+        }
+      : markOutputStale(promptOutput, changes),
   };
 };
 
 // Only what a run sends. Library links, message ids and one-off flags also go
 // through updatePrompt, often with no user edit (a reload re-applies the loaded
 // prompt), and must not hide the output.
-const getRunInput = ({
-  model,
-  provider,
-  configs,
-  messages,
-}: PlaygroundPromptType) => ({
-  model,
-  provider,
-  configs,
-  messages: messages.map(({ role, content }) => ({ role, content })),
-});
+const toRunMessages = (messages: LLMMessage[]) =>
+  messages.map(({ role, content }) => ({ role, content }));
+
+const getRunInputChanges = (
+  prompt: PlaygroundPromptType,
+  updatedPrompt: PlaygroundPromptType,
+): PlaygroundRunInputChange[] => {
+  const changes: PlaygroundRunInputChange[] = [];
+
+  if (
+    !isEqual(
+      toRunMessages(prompt.messages),
+      toRunMessages(updatedPrompt.messages),
+    )
+  ) {
+    changes.push("prompt");
+  }
+
+  if (
+    prompt.model !== updatedPrompt.model ||
+    prompt.provider !== updatedPrompt.provider
+  ) {
+    changes.push("model");
+  } else if (!isEqual(prompt.configs, updatedPrompt.configs)) {
+    // Not counted on a model switch: it swaps in the new model's default
+    // parameters, which the user didn't change themselves.
+    changes.push("parameters");
+  }
+
+  return changes;
+};
 
 export type PlaygroundStore = {
   lastActiveProjectId: string | null;
@@ -214,10 +226,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
         set((state) => {
           const prompt = state.promptMap[promptId];
           const updatedPrompt = { ...prompt, ...changes };
-          const hasRunInputChanged = !isEqual(
-            getRunInput(prompt),
-            getRunInput(updatedPrompt),
-          );
+          const runInputChanges = getRunInputChanges(prompt, updatedPrompt);
 
           return {
             ...state,
@@ -225,11 +234,11 @@ const usePlaygroundStore = create<PlaygroundStore>()(
               ...state.promptMap,
               [promptId]: updatedPrompt,
             },
-            outputMap: hasRunInputChanged
-              ? updateAllStaleStatusesForPromptOutput(
+            outputMap: runInputChanges.length
+              ? markPromptOutputStale(
                   promptId,
                   state.outputMap,
-                  true,
+                  runInputChanges,
                 )
               : state.outputMap,
           };
@@ -296,7 +305,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             : [promptId];
 
           const output = get(state.outputMap, key);
-          const newOutput = { ...output, stale: false, ...changes };
+          const newOutput = {
+            ...output,
+            stale: false,
+            staleChanges: undefined,
+            ...changes,
+          };
           const newOutputMap = { ...state.outputMap };
 
           lodashSet(newOutputMap, key, newOutput);

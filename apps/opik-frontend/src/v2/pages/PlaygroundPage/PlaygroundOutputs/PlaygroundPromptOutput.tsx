@@ -115,7 +115,12 @@ const PlaygroundPromptOutput = ({
               </span>
             )}
           </div>
-          {stale && <PlaygroundStaleOutputNote className="mb-3" />}
+          {stale && (
+            <PlaygroundStaleOutputNote
+              changes={output?.staleChanges}
+              className="mb-3"
+            />
+          )}
           <div className="comet-body-s">{renderContent()}</div>
         </div>
       ) : (

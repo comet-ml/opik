@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "@/ui/tooltip";
+import { PlaygroundRunInputChange } from "@/types/playground";
 import PlaygroundPromptOutput from "./PlaygroundPromptOutput";
 
 const PROMPT_ID = "prompt-1";
@@ -13,6 +14,7 @@ type Output = {
   value: string | null;
   error?: string;
   stale: boolean;
+  staleChanges?: PlaygroundRunInputChange[];
 };
 
 let output: Output;
@@ -129,6 +131,21 @@ describe("PlaygroundPromptOutput", () => {
     expect(screen.getByText("Output A")).toHaveClass("text-muted-gray");
     expect(queryStaleNote()).toHaveTextContent(STALE_NOTE);
     expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+  });
+
+  it("should say what changed since the last run", () => {
+    output = {
+      isLoading: false,
+      value: "the answer",
+      stale: true,
+      staleChanges: ["parameters", "prompt"],
+    };
+
+    renderOutput();
+
+    expect(queryStaleNote()).toHaveTextContent(
+      "Prompt and parameters changed since the last run. Re-run to update results.",
+    );
   });
 
   it("should drop the note as soon as the prompt is run again", () => {
