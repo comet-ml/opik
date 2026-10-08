@@ -122,12 +122,15 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   // — "the model automatically controls how much it thinks up to a maximum of 8,192 tokens" — and
   // without it, merely opening the control would pin a hard budget over that default.
   //
-  // Only Flash Lite gets "off": it is the one 2.5 model Google ships with thinking already off, and
-  // 2.5 Pro cannot disable thinking at all.
+  // 2.5 Pro gets no "off": it cannot disable thinking, and Google answers a zero budget with "Budget 0
+  // is invalid. This model only works in thinking mode." 2.5 Flash and Flash Lite both accept it.
   [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
-  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, ["auto", ...LOW_TO_HIGH]],
-  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, ["auto", "off", ...LOW_TO_HIGH]],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    ["auto", "off", ...LOW_TO_HIGH],
+  ],
   [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, ["auto", "off", ...LOW_TO_HIGH]],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
@@ -571,6 +574,10 @@ export const getOpenAIReasoningEffortOptions = (
 // Single reconciler called by every model-change handler (playground, judge
 // dialog). Keeping the rules here means the form state stays valid even when
 // the user switches models without opening the config dropdown.
+// An effort or thinking level equal to previousModel's default was never picked
+// by the user, so the next model's own default replaces it: otherwise Sonnet
+// 4.6's high would override Opus 5.5's medium. Without previousModel (a loaded
+// config being normalised) a stored value the model offers is kept.
 export const updateProviderConfig = <
   T extends {
     temperature?: number;
@@ -585,6 +592,7 @@ export const updateProviderConfig = <
     model: PROVIDER_MODEL_TYPE | "";
     provider: COMPOSED_PROVIDER_TYPE;
     openAiPipelineMode?: OpenAiPipelineMode;
+    previousModel?: PROVIDER_MODEL_TYPE | "";
   },
 ): T | undefined => {
   if (!currentConfig) {
@@ -607,6 +615,8 @@ export const updateProviderConfig = <
     // An unknown mode (keys still loading) is checked against the Responses
     // API list, a superset of the Chat Completions one, so a stored max is
     // kept: assuming Chat Completions here would rewrite it to high for good.
+    // Every OpenAI reasoning model defaults to high, so previousModel's
+    // default needs no handling here.
     const effortOptions = getOpenAIReasoningEffortOptions(
       params.model,
       params.openAiPipelineMode ?? "responses_api",
@@ -632,6 +642,11 @@ export const updateProviderConfig = <
     let changed = false;
 
     const effortOptions = getAnthropicThinkingEffortOptions(params.model);
+    const previousDefault = supportsAnthropicThinkingEffort(
+      params.previousModel,
+    )
+      ? getDefaultThinkingEffort(params.previousModel)
+      : undefined;
     if (effortOptions.length === 0) {
       if (next.thinkingEffort !== undefined) {
         next.thinkingEffort = undefined;
@@ -639,10 +654,14 @@ export const updateProviderConfig = <
       }
     } else if (
       next.thinkingEffort !== undefined &&
-      !effortOptions.some((o) => o.value === next.thinkingEffort)
+      (!effortOptions.some((o) => o.value === next.thinkingEffort) ||
+        next.thinkingEffort === previousDefault)
     ) {
-      next.thinkingEffort = getDefaultThinkingEffort(params.model);
-      changed = true;
+      const nextDefault = getDefaultThinkingEffort(params.model);
+      if (next.thinkingEffort !== nextDefault) {
+        next.thinkingEffort = nextDefault;
+        changed = true;
+      }
     }
 
     return changed ? next : currentConfig;
@@ -661,14 +680,24 @@ export const updateProviderConfig = <
     // the control honest: the dropdown falls back to the default for display, so leaving the config
     // empty would show a level that never gets sent. Mirrors the handling above.
     const levelOptions = getThinkingLevelOptions(params.model);
+    const previousDefault =
+      getThinkingLevelOptions(params.previousModel).length > 0
+        ? getDefaultThinkingLevel(params.previousModel)
+        : undefined;
     if (levelOptions.length === 0) {
       if (next.thinkingLevel !== undefined) {
         next.thinkingLevel = undefined;
         changed = true;
       }
-    } else if (!levelOptions.some((o) => o.value === next.thinkingLevel)) {
-      next.thinkingLevel = getDefaultThinkingLevel(params.model);
-      changed = true;
+    } else if (
+      !levelOptions.some((o) => o.value === next.thinkingLevel) ||
+      next.thinkingLevel === previousDefault
+    ) {
+      const nextDefault = getDefaultThinkingLevel(params.model);
+      if (next.thinkingLevel !== nextDefault) {
+        next.thinkingLevel = nextDefault;
+        changed = true;
+      }
     }
 
     return changed ? next : currentConfig;

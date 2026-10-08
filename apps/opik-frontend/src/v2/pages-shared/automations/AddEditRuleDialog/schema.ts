@@ -635,7 +635,11 @@ export const updateConfigForModelChange = <
   previous: { model: string; provider: COMPOSED_PROVIDER_TYPE | "" },
   next: { model: PROVIDER_MODEL_TYPE; provider: COMPOSED_PROVIDER_TYPE },
 ): T => {
-  const adjusted = updateProviderConfig(config, next) ?? config;
+  const adjusted =
+    updateProviderConfig(config, {
+      ...next,
+      previousModel: previous.model as PROVIDER_MODEL_TYPE,
+    }) ?? config;
 
   // updateProviderConfig leaves custom_parameters alone because opening a rule must keep the effort
   // stored for a Claude model with no row. On a switch that copy belongs to the previous model; the

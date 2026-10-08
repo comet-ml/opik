@@ -224,6 +224,7 @@ const PlaygroundPrompt = ({
           model: newModel,
           provider: newProvider,
           openAiPipelineMode,
+          previousModel: model,
         });
         newConfigs = adjustedConfigs || configs;
       }
@@ -239,6 +240,7 @@ const PlaygroundPrompt = ({
       updatePrompt,
       promptId,
       provider,
+      model,
       configs,
       setLastPickedModel,
       openAiPipelineMode,
