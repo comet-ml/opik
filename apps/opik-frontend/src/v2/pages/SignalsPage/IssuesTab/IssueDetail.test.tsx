@@ -56,6 +56,7 @@ const closedIssue: AgentInsightsIssue = {
   ...baseIssue,
   status: AGENT_INSIGHTS_ISSUE_STATUS.closed,
   close_note: "This is expected behavior",
+  cause: "The planner has no fast path.",
   status_changed_by: "Olesya",
   status_changed_at: "2026-10-06T14:37:00",
 };
@@ -165,6 +166,7 @@ describe("IssueDetail status actions", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Olesya, 6 Oct 2026, 14:37")).toBeInTheDocument();
     expect(screen.getByText("This is expected behavior")).toBeInTheDocument();
+    expect(screen.queryByText("Ollie fix")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Reopen" }));
 
