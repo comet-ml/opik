@@ -36,6 +36,8 @@ export interface PlaygroundPromptType {
   skipInitialPromptLoad?: boolean;
 }
 
+export type PlaygroundRunInputChange = "prompt" | "model" | "parameters";
+
 export interface ChatCompletionMessageChoiceType {
   delta: {
     content: string;
