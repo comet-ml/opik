@@ -96,7 +96,7 @@ const PlaygroundPage = () => {
   const isRunning = useIsRunning();
   const promptCount = usePromptCount();
 
-  const { datasetId, versionName, versionHash, setDatasetId } =
+  const { datasetId, versionName, versionHash, itemsTotal, setDatasetId } =
     usePlaygroundDataset();
 
   const setPromptMap = useSetPromptMap();
@@ -297,6 +297,7 @@ const PlaygroundPage = () => {
             datasetId={datasetId}
             datasetName={datasetName}
             versionName={versionName}
+            versionItemsTotal={itemsTotal}
             onChangeDatasetId={setDatasetId}
             onReset={resetPlayground}
             onRunAll={runAll}
