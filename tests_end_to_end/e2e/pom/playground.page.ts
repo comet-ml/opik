@@ -427,7 +427,11 @@ export class PlaygroundPage {
   }
 
   messageEditor(variantIndex: number, messageIndex: number): Locator {
-    return this.variantMessages(variantIndex).nth(messageIndex).locator('.cm-content').first();
+    return this.variantCard(variantIndex)
+      .getByTestId('playground-message-row')
+      .nth(messageIndex)
+      .locator('.cm-content')
+      .first();
   }
 
   async addMessage(variantIndex: number): Promise<void> {
@@ -436,9 +440,9 @@ export class PlaygroundPage {
     });
   }
 
-  async focusFirstMessageAtLineStart(): Promise<void> {
-    return test.step('put the cursor at the start of the first message', async () => {
-      await this.variantMessages(0).first().locator('.cm-content').first().click();
+  async focusUserMessageAtLineStart(): Promise<void> {
+    return test.step('put the cursor at the start of the user message', async () => {
+      await this.variantMessage(0, 'user').locator('.cm-content').first().click();
       await this.page.keyboard.press('Home');
     });
   }
@@ -450,10 +454,9 @@ export class PlaygroundPage {
    * stick out past the scroll box's left edge and get cut off (OPIK-5298);
    * zero or negative means the cursor is fully inside.
    */
-  async firstMessageCursorLeftOverflowPx(): Promise<number> {
-    return test.step('measure how far the first message cursor sticks out on the left', async () => {
-      return this.variantMessages(0)
-        .first()
+  async userMessageCursorLeftOverflowPx(): Promise<number> {
+    return test.step('measure how far the user message cursor sticks out on the left', async () => {
+      return this.variantMessage(0, 'user')
         .locator('.cm-editor')
         .first()
         .evaluate((editor) => {
@@ -465,10 +468,9 @@ export class PlaygroundPage {
     });
   }
 
-  async firstMessageCursorHeightPx(): Promise<number> {
-    return test.step('measure the height of the first message cursor', async () => {
-      return this.variantMessages(0)
-        .first()
+  async userMessageCursorHeightPx(): Promise<number> {
+    return test.step('measure the height of the user message cursor', async () => {
+      return this.variantMessage(0, 'user')
         .locator('.cm-cursor')
         .first()
         .evaluate((cursor) => cursor.getBoundingClientRect().height);
