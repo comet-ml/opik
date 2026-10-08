@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { PlaygroundPromptType } from "@/types/playground";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import PlaygroundAddVariant from "./PlaygroundAddVariant";
@@ -35,8 +36,12 @@ describe("PlaygroundAddVariant", () => {
     ];
     expect(position).toBeUndefined();
     expect(added.model).toBe(PROVIDER_MODEL_TYPE.GPT_4O_MINI);
-    expect(added.messages).toHaveLength(1);
-    expect(added.messages[0].content).toBe("");
+    expect(
+      added.messages.map(({ role, content }) => ({ role, content })),
+    ).toEqual([
+      { role: LLM_MESSAGE_ROLE.system, content: "" },
+      { role: LLM_MESSAGE_ROLE.user, content: "" },
+    ]);
     expect(screen.queryByText("Duplicate variant")).not.toBeInTheDocument();
   });
 });
