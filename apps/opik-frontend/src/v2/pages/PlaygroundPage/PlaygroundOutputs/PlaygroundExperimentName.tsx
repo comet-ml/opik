@@ -12,6 +12,7 @@ import {
 } from "@/store/PlaygroundStore";
 import { buildExperimentName } from "@/lib/experiments";
 import useRenameLastRunMutation from "@/api/playground/useRenameLastRunMutation";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type PlaygroundExperimentNameProps = {
   datasetId?: string;
@@ -23,7 +24,10 @@ const PlaygroundExperimentName = ({
   const experimentName = useExperimentName();
   const setExperimentName = useSetExperimentName();
   const promptIds = usePromptIds();
-  const lastRun = useLastRun(datasetId);
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
+  const lastRun = useLastRun(canCreateExperiments ? datasetId : undefined);
   const {
     mutate: renameLastRun,
     isPending: isRenaming,
