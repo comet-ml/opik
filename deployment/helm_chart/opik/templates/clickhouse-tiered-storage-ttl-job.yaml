@@ -58,18 +58,21 @@ spec:
         - name: apply-ttl
           image: {{ .Values.clickhouse.image }}
           # Only the four settings this needs, read from the backend's sources in the backend's
-          # order: a later source wins and a missing optional key is skipped, as with envFrom.
+          # order (honouring envFrom prefixes): a later source wins, a missing key is skipped.
           env:
             {{- range $var := list "ANALYTICS_DB_HOST" "ANALYTICS_DB_DATABASE_NAME" "ANALYTICS_DB_MIGRATIONS_USER" "ANALYTICS_DB_MIGRATIONS_PASS" }}
             {{- range $backend.envFrom }}
+            {{- $prefix := .prefix | default "" }}
+            {{- if hasPrefix $prefix $var }}
             {{- if .configMapRef }}
             - name: {{ $var }}
               valueFrom:
-                configMapKeyRef: {name: {{ .configMapRef.name }}, key: {{ $var }}, optional: true}
+                configMapKeyRef: {name: {{ .configMapRef.name }}, key: {{ trimPrefix $prefix $var }}, optional: true}
             {{- else if .secretRef }}
             - name: {{ $var }}
               valueFrom:
-                secretKeyRef: {name: {{ .secretRef.name }}, key: {{ $var }}, optional: true}
+                secretKeyRef: {name: {{ .secretRef.name }}, key: {{ trimPrefix $prefix $var }}, optional: true}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- range $backend.secretRefs }}

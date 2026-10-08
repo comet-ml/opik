@@ -123,3 +123,31 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: 'clickhouse.tieredStorage.ttl.tables: moveAfterWeeks for "traces_local" must be a positive integer'
+
+  - it: maps variables through an envFrom prefix and skips sources that cannot supply them
+    set:
+      component.backend.envFrom:
+        - configMapRef:
+            name: opik-backend
+        - prefix: ANALYTICS_DB_
+          secretRef:
+            name: ch-creds
+        - prefix: OTHER_
+          secretRef:
+            name: unrelated
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 8
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ANALYTICS_DB_MIGRATIONS_PASS
+            valueFrom:
+              secretKeyRef: {name: ch-creds, key: MIGRATIONS_PASS, optional: true}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            valueFrom:
+              secretKeyRef: {name: unrelated}
