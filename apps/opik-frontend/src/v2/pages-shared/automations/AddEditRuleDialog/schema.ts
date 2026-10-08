@@ -19,6 +19,7 @@ import {
   getAnthropicThinkingEffortOptions,
   getNestedThinkingEffort,
   getThinkingLevelOptions,
+  knowsAnthropicEffortLevels,
   resolveSamplingParams,
   updateProviderConfig,
   withThinkingEffort,
@@ -774,11 +775,13 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     ...thinkingCustomParameters,
   };
 
-  // Only an Anthropic rule's effort is the form's to manage. A custom provider's JSON editor may hold an
-  // output_config the user typed for their own gateway, and it must survive a save untouched.
+  // Only an Anthropic rule's effort is the form's to manage, and only on a model this build knows. A
+  // custom provider's JSON editor may hold an output_config the user typed for their own gateway, and
+  // it must survive a save untouched.
   const finalCustomParameters =
     getProviderFromModel(data.model as PROVIDER_MODEL_TYPE) ===
-    PROVIDER_TYPE.ANTHROPIC
+      PROVIDER_TYPE.ANTHROPIC &&
+    knowsAnthropicEffortLevels(data.model as PROVIDER_MODEL_TYPE)
       ? withThinkingEffort(
           mergedCustomParameters,
           getAnthropicThinkingEffortOptions(

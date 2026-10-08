@@ -474,6 +474,13 @@ export const supportsAnthropicThinkingEffort = (
   !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.thinkingEffortOptions;
 
+// A Claude model with no row is one this build does not know yet. The backend lets Anthropic judge
+// its effort, so a stored custom_parameters.output_config.effort must pass through untouched rather
+// than be dropped as unsupported. A row without thinkingEffortOptions means the model takes none.
+export const knowsAnthropicEffortLevels = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
+
 export const getDefaultThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): AnthropicThinkingEffort =>
@@ -925,7 +932,10 @@ export const sanitizeConfigForRequest = (
     // Anthropic reads output_config.effort, and a flat thinking_effort is one more unknown top-level
     // field the backend's ChatCompletionRequest drops, so the effort travels in custom_parameters.
     delete sanitized.thinkingEffort;
-    if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    if (
+      provider === PROVIDER_TYPE.ANTHROPIC &&
+      knowsAnthropicEffortLevels(model)
+    ) {
       const customParameters = withThinkingEffort(
         sanitized.custom_parameters,
         effort.thinkingEffort,

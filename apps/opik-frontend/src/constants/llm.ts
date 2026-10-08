@@ -196,6 +196,9 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
@@ -215,6 +218,10 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
     thinkingEffortOptions: ["low", "medium", "high", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
+    supportsSamplingParams: true,
+    thinkingEffortOptions: ["low", "medium", "high", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high", "max"],
   },
