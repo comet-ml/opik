@@ -426,6 +426,57 @@ export class PlaygroundPage {
     });
   }
 
+  messageEditor(variantIndex: number, messageIndex: number): Locator {
+    return this.variantCard(variantIndex)
+      .getByTestId('playground-message-row')
+      .nth(messageIndex)
+      .locator('.cm-content')
+      .first();
+  }
+
+  async addMessage(variantIndex: number): Promise<void> {
+    return test.step(`click + Message on variant ${variantIndex}`, async () => {
+      await this.variantCard(variantIndex).getByRole('button', { name: 'Message' }).click();
+    });
+  }
+
+  async focusUserMessageAtLineStart(): Promise<void> {
+    return test.step('put the cursor at the start of the user message', async () => {
+      await this.variantMessage(0, 'user').locator('.cm-content').first().click();
+      await this.page.keyboard.press('Home');
+    });
+  }
+
+  /**
+   * CodeMirror draws its own blinking `.cm-cursor` and `.cm-scroller` clips it,
+   * so "is the cursor visible" is asked as geometry: a pixel check would depend
+   * on the blink phase. Signed: positive is how many CSS pixels of the cursor
+   * stick out past the scroll box's left edge and get cut off (OPIK-5298);
+   * zero or negative means the cursor is fully inside.
+   */
+  async userMessageCursorLeftOverflowPx(): Promise<number> {
+    return test.step('measure how far the user message cursor sticks out on the left', async () => {
+      return this.variantMessage(0, 'user')
+        .locator('.cm-editor')
+        .first()
+        .evaluate((editor) => {
+          const cursor = editor.querySelector('.cm-cursor');
+          const scroller = editor.querySelector('.cm-scroller');
+          if (!cursor || !scroller) return Number.POSITIVE_INFINITY;
+          return scroller.getBoundingClientRect().left - cursor.getBoundingClientRect().left;
+        });
+    });
+  }
+
+  async userMessageCursorHeightPx(): Promise<number> {
+    return test.step('measure the height of the user message cursor', async () => {
+      return this.variantMessage(0, 'user')
+        .locator('.cm-cursor')
+        .first()
+        .evaluate((cursor) => cursor.getBoundingClientRect().height);
+    });
+  }
+
   /**
    * The "Run experiment" entry control — present only while NO dataset or test
    * suite is loaded. Its return after a reset is what says the reset really

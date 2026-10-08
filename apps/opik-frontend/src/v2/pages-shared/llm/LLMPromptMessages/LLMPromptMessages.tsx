@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import keyBy from "lodash/keyBy";
 import { Plus } from "lucide-react";
@@ -42,6 +42,7 @@ interface LLMPromptMessagesProps {
   hideAddButton?: boolean;
   jsonTreeData?: JsonObject | null;
   compact?: boolean;
+  autoFocusFirstMessage?: boolean;
 }
 
 const LLMPromptMessages = ({
@@ -57,10 +58,30 @@ const LLMPromptMessages = ({
   hideAddButton = false,
   jsonTreeData,
   compact = false,
+  autoFocusFirstMessage = false,
 }: LLMPromptMessagesProps) => {
   const lastFocusedMessageIdRef = useRef<string | null>(null);
   const messageRefsMap = useRef<Map<string, LLMPromptMessageHandle>>(new Map());
   const listRef = useRef<HTMLDivElement>(null);
+  const idsBeforeAddRef = useRef<Set<string> | null>(null);
+  const didAutoFocusRef = useRef(false);
+
+  useEffect(() => {
+    const idsBeforeAdd = idsBeforeAddRef.current;
+    if (!idsBeforeAdd) return;
+    const addedMessage = messages.find(({ id }) => !idsBeforeAdd.has(id));
+    if (!addedMessage) return;
+    idsBeforeAddRef.current = null;
+    messageRefsMap.current.get(addedMessage.id)?.focus();
+  }, [messages]);
+
+  useEffect(() => {
+    if (!autoFocusFirstMessage || didAutoFocusRef.current) return;
+    didAutoFocusRef.current = true;
+    const { activeElement } = document;
+    if (activeElement && activeElement !== document.body) return;
+    messageRefsMap.current.get(messages[0]?.id)?.focus();
+  }, [autoFocusFirstMessage, messages]);
 
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -177,6 +198,7 @@ const LLMPromptMessages = ({
           size="2xs"
           className="mt-1 self-start px-1"
           onClick={() => {
+            idsBeforeAddRef.current = new Set(messages.map(({ id }) => id));
             onAddMessage();
             requestAnimationFrame(() => {
               const scrollContainer = listRef.current?.closest(
