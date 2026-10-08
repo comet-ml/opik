@@ -15,6 +15,7 @@ from llm_constants import (
     ANTHROPIC_CLAUDE_OPUS,
     GATEWAY_CLAUDE_HAIKU,
     GATEWAY_CLAUDE_OPUS,
+    GEMINI_3_FLASH,
 )
 
 from opik_backend.jobs import optimizer_runner
@@ -124,6 +125,14 @@ def test_task_model_temperature_is_pinned_on_the_prompt():
     assert prompt.model_kwargs.get("temperature") == OPTIMIZER_TASK_TEMPERATURE
     # The reflection model needs sampling diversity — it must NOT be pinned.
     assert "temperature" not in optimizer.model_parameters
+
+
+def test_gemini_3_task_model_is_not_pinned_on_the_prompt():
+    config = OptimizationConfig.from_dict(_config(task_model=GEMINI_3_FLASH))
+
+    _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert "temperature" not in prompt.model_kwargs
 
 
 def test_task_model_explicit_temperature_survives_the_pin():
