@@ -220,6 +220,20 @@ describe("PlaygroundExperimentName", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("counts every experiment of the run even when a name cannot be read", async () => {
+    get.mockImplementation(async (url: string) => {
+      if (url.endsWith("/e1")) throw new Error("Network Error");
+      return { data: { id: "e2", name: "calm_river_5678" } };
+    });
+    finishedRun(null);
+    renderName();
+
+    await waitFor(() => expect(editor()).toHaveTextContent("calm_river_5678"));
+    expect(
+      screen.getByTestId("playground-experiment-name-more"),
+    ).toHaveTextContent("+1 more");
+  });
+
   it("clearing the box lets the next run be auto-named instead", () => {
     finishedRun("foo");
     renderName();

@@ -78,6 +78,30 @@ describe("useRunCompletionToast names", () => {
     expect(toast.mock.calls[0][0].description).toBe("1 experiment created");
   });
 
+  it("announces the run without the name when the lookup hangs", async () => {
+    const lookupTimeout = new AbortController();
+    const timeoutSpy = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockReturnValue(lookupTimeout.signal);
+    get.mockImplementation(
+      (_url: string, { signal }: { signal: AbortSignal }) =>
+        new Promise((_, reject) =>
+          signal.addEventListener("abort", () => reject(signal.reason)),
+        ),
+    );
+
+    announce([experiment("e1")]);
+    expect(timeoutSpy).toHaveBeenCalledWith(3000);
+    await Promise.resolve();
+    expect(toast).not.toHaveBeenCalled();
+
+    lookupTimeout.abort();
+
+    await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
+    expect(toast.mock.calls[0][0].description).toBe("1 experiment created");
+    timeoutSpy.mockRestore();
+  });
+
   it("announces a named run right away", () => {
     announce([experiment("e1", "foo_a"), experiment("e2", "foo_b")]);
 
