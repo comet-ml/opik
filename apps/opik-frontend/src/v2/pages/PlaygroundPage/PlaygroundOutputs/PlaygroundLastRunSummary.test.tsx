@@ -119,6 +119,21 @@ describe("PlaygroundLastRunSummary", () => {
     );
   });
 
+  it("keeps an experiment whose name cannot be read", async () => {
+    get.mockImplementation(async (url: string) => {
+      if (url.endsWith("/e2")) throw new Error("Network Error");
+      return { data: { name: SERVER_NAMES[url] } };
+    });
+    setLastRun(twoExperimentRun(null));
+    await renderSummary();
+
+    expect(
+      await screen.findByRole("link", { name: "brave_tiger_1234" }),
+    ).toHaveAttribute("href", compareHref(["e1"]));
+    expect(hrefOf("Prompt B experiment")).toBe(compareHref(["e2"]));
+    expect(hrefOf("Compare results")).toBe(compareHref(["e1", "e2"]));
+  });
+
   it("stays hidden for a run that made one experiment", async () => {
     setLastRun({
       name: "foo",
