@@ -434,6 +434,23 @@ def render_next_steps(steps: Sequence[str]) -> None:
         console.print(padding.Padding(_emphasize(step), (0, 0, 0, 2)))
 
 
+def render_not_working() -> None:
+    """The ending for a run without a terminal whose connection check failed, in
+    place of the next steps, which would send the agent on to a new session."""
+    console.print()
+    console.print(
+        text.Text.assemble(
+            ("Not working yet", "bold red"),
+            (
+                ": Opik MCP is added, but the connection check above failed. Fix "
+                "what it names, such as the URL, the API key or a VPN, then run "
+                "this command again.",
+                "",
+            ),
+        )
+    )
+
+
 def render_note(message: str, hint: Optional[str] = None) -> None:
     """A line the user should notice but does not have to act on, plus its fix."""
     console.print(_emphasize(message, base="yellow"))

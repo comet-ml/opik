@@ -824,13 +824,16 @@ class TestHostFlag:
         setup_spy.assert_not_called()
 
 
-def _run_unattended(args, *, saved=None, local_opik_answers=False):
+def _run_unattended(
+    args, *, saved=None, local_opik_answers=False, outcome=assistants.NOTHING_DONE
+):
     """`opik mcp configure` with no terminal; returns the result and setup's params.
 
-    ``saved`` is the Opik configuration on disk, none by default.
+    ``saved`` is the Opik configuration on disk, none by default; ``outcome`` is
+    what the install step reports.
     """
     runner = CliRunner()
-    setup_spy = Mock(return_value=assistants.NOTHING_DONE)
+    setup_spy = Mock(return_value=outcome)
     track_spy = Mock()
     with (
         patch.object(
@@ -1009,6 +1012,9 @@ class TestUnattendedWithoutConfig:
                 f"opik mcp configure --ai-client claude-code --deployment {deployment}"
                 in run.result.output
             )
+        assert "ask them which one rather than picking it" in " ".join(
+            run.result.output.split()
+        )
         assert run.params is None
 
     def test_a_saved_opik_without_a_key__asks_for_the_key_not_localhost(
@@ -1053,6 +1059,44 @@ class TestUnattendedEnding:
         out = " ".join(capture.get().split())
         assert "Claude Code: signed in; check with `claude mcp list`." in out
         assert out.index("claude mcp list") < out.index("Start a new session")
+
+    @pytest.mark.usefixtures("configure_opik_not_configured")
+    def test_a_failed_connection_check__ends_on_not_working_and_exits_1(self):
+        """The agent that ran it reads the exit status and the last line."""
+        outcome = assistants.NOTHING_DONE._replace(
+            clients=1,
+            registered_clients=("claude-code",),
+            verified=False,
+            next_steps=("Claude Code: signed in; check with `claude mcp list`.",),
+        )
+        with install_view.console.capture() as capture:
+            run = _run_unattended([], local_opik_answers=True, outcome=outcome)
+
+        assert run.result.exit_code == 1, run.result.output
+        out = " ".join(capture.get().split())
+        assert out.endswith(
+            "Not working yet: Opik MCP is added, but the connection check above "
+            "failed. Fix what it names, such as the URL, the API key or a VPN, "
+            "then run this command again."
+        )
+        assert "Start a new session" not in out
+        # Reported before the exit, as any finished run is.
+        result_event = run.track.call_args_list[-1].kwargs
+        assert result_event["verification_succeeded"] is False
+        assert result_event["handoff"] == "no_terminal"
+
+    @pytest.mark.usefixtures("configure_opik_not_configured")
+    def test_a_passing_connection_check__exits_0(self):
+        outcome = assistants.NOTHING_DONE._replace(
+            clients=1, registered_clients=("claude-code",), verified=True
+        )
+        with install_view.console.capture() as capture:
+            run = _run_unattended([], local_opik_answers=True, outcome=outcome)
+
+        assert run.result.exit_code == 0, run.result.output
+        out = " ".join(capture.get().split())
+        assert "Start a new session" in out
+        assert "Not working yet" not in out
 
 
 class TestAiClientAlias:
