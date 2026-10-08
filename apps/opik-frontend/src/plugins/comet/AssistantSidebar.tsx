@@ -27,7 +27,13 @@ import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
 import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
-import { BASE_API_URL, DASHBOARDS_KEY, INSIGHTS_VIEWS_KEY } from "@/api/api";
+import {
+  BASE_API_URL,
+  DASHBOARD_KEY,
+  DASHBOARDS_KEY,
+  INSIGHTS_VIEW_KEY,
+  INSIGHTS_VIEWS_KEY,
+} from "@/api/api";
 import {
   DASHBOARD_EXTERNAL_UPDATE_EVENT,
   isTemplateId,
@@ -260,9 +266,19 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
 
   const queryClient = useQueryClient();
   const onDashboardUpdatedRef = useLatestRef(
-    ({ id }: SidebarEventMap["dashboard:updated"]) => {
+    ({ id, kind }: SidebarEventMap["dashboard:updated"]) => {
       for (const key of [DASHBOARDS_KEY, INSIGHTS_VIEWS_KEY]) {
         queryClient.invalidateQueries({ queryKey: [key] });
+      }
+      // A dashboard that isn't open loads its config once on open, from this cache first; drop the stale copy so
+      // opening it shows the new widget. The open one reloads through the event below.
+      if (context.dashboard?.id !== id) {
+        queryClient.removeQueries({
+          queryKey: [
+            kind === "insights_view" ? INSIGHTS_VIEW_KEY : DASHBOARD_KEY,
+            { dashboardId: id },
+          ],
+        });
       }
       window.dispatchEvent(
         new CustomEvent(DASHBOARD_EXTERNAL_UPDATE_EVENT, { detail: { id } }),
