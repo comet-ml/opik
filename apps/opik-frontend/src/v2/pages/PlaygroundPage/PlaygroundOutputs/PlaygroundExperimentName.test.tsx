@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { TooltipProvider } from "@/ui/tooltip";
 import usePlaygroundStore from "@/store/PlaygroundStore";
+import { PermissionsProvider } from "@/contexts/PermissionsContext";
+import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 import PlaygroundExperimentName from "./PlaygroundExperimentName";
 
 const patch = vi.fn();
@@ -21,16 +23,26 @@ vi.mock("@/ui/use-toast", () => ({
 
 const DATASET_ID = "dataset-1";
 
-const renderName = (datasetId = DATASET_ID) =>
+const renderName = (datasetId = DATASET_ID, canCreateExperiments = true) =>
   render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { mutations: { retry: false } } })
       }
     >
-      <TooltipProvider>
-        <PlaygroundExperimentName datasetId={datasetId} />
-      </TooltipProvider>
+      <PermissionsProvider
+        value={{
+          ...DEFAULT_PERMISSIONS,
+          permissions: {
+            ...DEFAULT_PERMISSIONS.permissions,
+            canCreateExperiments,
+          },
+        }}
+      >
+        <TooltipProvider>
+          <PlaygroundExperimentName datasetId={datasetId} />
+        </TooltipProvider>
+      </PermissionsProvider>
     </QueryClientProvider>,
   );
 
@@ -137,6 +149,25 @@ describe("PlaygroundExperimentName", () => {
     ]);
   });
 
+  it("lists every distinct reason when several renames fail", async () => {
+    patch
+      .mockRejectedValueOnce({ response: { data: { message: "Conflict" } } })
+      .mockRejectedValueOnce({ response: { data: { message: "Not found" } } });
+    finishedRun("foo");
+    renderName();
+
+    commitName("bar");
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Couldn't rename the run",
+          description: "Conflict; Not found",
+        }),
+      ),
+    );
+  });
+
   it("names an auto-named run's experiments", async () => {
     patch.mockResolvedValue({});
     finishedRun(null);
@@ -174,5 +205,17 @@ describe("PlaygroundExperimentName", () => {
     expect(patch).not.toHaveBeenCalled();
     expect(usePlaygroundStore.getState().experimentName).toBe("bar");
     expect(preview()).toHaveTextContent("Creates: bar_a");
+  });
+
+  it("only names the next run when the user cannot create experiments", () => {
+    finishedRun("foo");
+    renderName(DATASET_ID, false);
+
+    expect(screen.getByText("New Experiment:")).toBeInTheDocument();
+
+    commitName("bar");
+
+    expect(patch).not.toHaveBeenCalled();
+    expect(usePlaygroundStore.getState().experimentName).toBe("bar");
   });
 });

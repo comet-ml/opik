@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import sortBy from "lodash/sortBy";
+import uniq from "lodash/uniq";
 
 import api, { EXPERIMENTS_REST_ENDPOINT } from "@/api/api";
 import { buildExperimentName } from "@/lib/experiments";
@@ -34,14 +35,16 @@ const useRenameLastRunMutation = () => {
       const renamed = lastRun.experiments.filter(
         (_, i) => results[i].status === "fulfilled",
       );
-      const failure = results.find(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      );
+      const errors = results
+        .filter(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected",
+        )
+        .map((result) => result.reason as AxiosError);
 
-      return { renamed, error: failure?.reason as AxiosError | undefined };
+      return { renamed, errors };
     },
-    onSuccess: ({ renamed, error }, { lastRun, name }) => {
+    onSuccess: ({ renamed, errors }, { lastRun, name }) => {
       applyLastRunRename(
         name,
         renamed.map((e) => e.id),
@@ -52,7 +55,7 @@ const useRenameLastRunMutation = () => {
         .map((e) => buildExperimentName(name, e.index))
         .join(" • ");
 
-      if (!error) {
+      if (!errors.length) {
         toast({
           title: "Run renamed",
           description: `${total} ${
@@ -62,7 +65,7 @@ const useRenameLastRunMutation = () => {
         return;
       }
 
-      const message = extractErrorMessage(error);
+      const message = uniq(errors.map(extractErrorMessage)).join("; ");
       toast({
         title: renamed.length
           ? "Run partly renamed"
