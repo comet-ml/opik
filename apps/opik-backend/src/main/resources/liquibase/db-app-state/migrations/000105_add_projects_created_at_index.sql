@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000104_add_projects_created_at_index
+--changeset thiagohora:000105_add_projects_created_at_index
 --comment: Index projects by created_at so MIN(created_at), the partition-metrics floor, reads one index entry instead of the whole table (OPIK-8631)
 
 -- The partition-health metrics floor weekly partitions at the install date, MIN(projects.created_at). Without
