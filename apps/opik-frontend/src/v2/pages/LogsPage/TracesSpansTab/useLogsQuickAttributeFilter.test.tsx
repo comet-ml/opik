@@ -4,6 +4,8 @@ import { act, renderHook } from "@testing-library/react";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
+import { ChipDefinition } from "@/shared/filter-chips/types";
+import { COLUMN_TYPE } from "@/types/shared";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { useLogsQuickAttributeFilter } from "./useLogsQuickAttributeFilter";
 
@@ -39,6 +41,24 @@ const readRemembered = (urlKey: string, projectId = PROJECT_ID) => {
   return raw ? JSON.parse(raw) : undefined;
 };
 
+const typeDefinition: ChipDefinition = {
+  id: "type",
+  field: "type",
+  label: "Type",
+  kind: "single-select",
+  options: [
+    { label: "LLM", value: "llm" },
+    { label: "Tool", value: "tool" },
+  ],
+  columnType: COLUMN_TYPE.category,
+  operator: "=",
+};
+
+const DEFINITIONS_BY_TYPE = {
+  [TRACE_DATA_TYPE.traces]: [typeDefinition],
+  [TRACE_DATA_TYPE.spans]: [typeDefinition],
+};
+
 const setup = (type: TRACE_DATA_TYPE) => {
   const onLogsTypeChange = vi.fn();
   const { result } = renderHook(
@@ -46,6 +66,7 @@ const setup = (type: TRACE_DATA_TYPE) => {
       useLogsQuickAttributeFilter({
         type,
         projectId: PROJECT_ID,
+        definitionsByType: DEFINITIONS_BY_TYPE,
         onLogsTypeChange,
       }),
     { wrapper },
@@ -180,19 +201,18 @@ describe("useLogsQuickAttributeFilter", () => {
   });
 
   describe("span selected after a bare landing", () => {
+    const valid = {
+      id: "x",
+      field: "type",
+      type: COLUMN_TYPE.category,
+      operator: "=",
+      value: "llm",
+    };
+
     it("appends to the remembered spans filters when the param is absent", async () => {
-      const remembered = [
-        {
-          id: "x",
-          field: "name",
-          type: "string",
-          operator: "=",
-          value: "chat",
-        },
-      ];
       localStorage.setItem(
         `logs-filters:${PROJECT_ID}:spans_filters`,
-        JSON.stringify(remembered),
+        JSON.stringify([valid]),
       );
       setUrl({ trace: "t1", span: "s1" });
       const { result } = setup(TRACE_DATA_TYPE.traces);
@@ -203,7 +223,33 @@ describe("useLogsQuickAttributeFilter", () => {
 
       const filters = readFilters("spans_filters");
       expect(filters).toHaveLength(2);
-      expect(filters[0]).toEqual(remembered[0]);
+      expect(filters[0]).toMatchObject({ field: "type", value: "llm" });
+      expect(readRemembered("spans_filters")).toEqual(filters);
+    });
+
+    it("drops malformed and obsolete remembered entries instead of copying them", async () => {
+      const obsolete = {
+        id: "o",
+        field: "no_such_field",
+        type: "string",
+        operator: "=",
+        value: "x",
+      };
+      localStorage.setItem(
+        `logs-filters:${PROJECT_ID}:spans_filters`,
+        JSON.stringify([{}, obsolete, valid]),
+      );
+      setUrl({ trace: "t1", span: "s1" });
+      const { result } = setup(TRACE_DATA_TYPE.traces);
+
+      await act(async () => {
+        result.current.filter("input", "query", "hi");
+      });
+
+      const filters = readFilters("spans_filters");
+      expect(filters).toHaveLength(2);
+      expect(filters[0]).toMatchObject({ field: "type", value: "llm" });
+      expect(filters[1]).toMatchObject({ field: "custom", key: "input.query" });
       expect(readRemembered("spans_filters")).toEqual(filters);
     });
   });

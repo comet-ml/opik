@@ -763,9 +763,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     pinChip,
   });
 
+  const quickFilterDefinitions = useMemo(
+    () => ({
+      [TRACE_DATA_TYPE.traces]: traceChipDefinitions,
+      [TRACE_DATA_TYPE.spans]: spanChipDefinitions,
+    }),
+    [traceChipDefinitions, spanChipDefinitions],
+  );
+
   const quickAttributeFilterApi = useLogsQuickAttributeFilter({
     type,
     projectId,
+    definitionsByType: quickFilterDefinitions,
     onLogsTypeChange,
   });
 

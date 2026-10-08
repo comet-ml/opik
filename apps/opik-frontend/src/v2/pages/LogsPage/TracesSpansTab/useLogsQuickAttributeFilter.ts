@@ -2,6 +2,9 @@ import { useCallback, useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { Filter } from "@/types/filters";
+import { ChipDefinition } from "@/shared/filter-chips/types";
+import { chipsToFilters } from "@/shared/filter-chips/lib/chipsToFilters";
+import { sanitizeFilters } from "@/shared/filter-chips/lib/sanitizeFilters";
 import { JsonValue } from "@/types/shared";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
@@ -53,12 +56,14 @@ const usePinChip = (type: TRACE_DATA_TYPE) => {
 type UseLogsQuickAttributeFilterArgs = {
   type: TRACE_DATA_TYPE;
   projectId: string;
+  definitionsByType: Record<TRACE_DATA_TYPE, ChipDefinition[]>;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
 };
 
 export const useLogsQuickAttributeFilter = ({
   type,
   projectId,
+  definitionsByType,
   onLogsTypeChange,
 }: UseLogsQuickAttributeFilterArgs): QuickAttributeFilterApi => {
   const [spanId] = useQueryParam("span", StringParam);
@@ -74,7 +79,13 @@ export const useLogsQuickAttributeFilter = ({
     getLogsFiltersMemoryKey(projectId, filtersUrlKey),
     { storageSync: false },
   );
-  const savedFilters = Array.isArray(saved) ? (saved as Filter[]) : NO_FILTERS;
+  const definitions = definitionsByType[entityType];
+  // Canonicalized so malformed or obsolete saved entries aren't copied into the URL.
+  const savedFilters = useMemo(() => {
+    if (!Array.isArray(saved)) return NO_FILTERS;
+    const { values } = sanitizeFilters(saved as Filter[], definitions);
+    return chipsToFilters(definitions, values);
+  }, [saved, definitions]);
   const pinTraceChip = usePinChip(TRACE_DATA_TYPE.traces);
   const pinSpanChip = usePinChip(TRACE_DATA_TYPE.spans);
 
