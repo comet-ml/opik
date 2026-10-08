@@ -13,7 +13,6 @@ import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -29,18 +28,32 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class AgentInsightsJobService {
 
     private static final Duration TRIGGER_WINDOW = Duration.ofHours(24);
 
-    private final @NonNull TransactionTemplate transactionTemplate;
-    private final @NonNull IdGenerator idGenerator;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull ProjectService projectService;
-    private final @NonNull AgentInsightsReportPublisher reportPublisher;
-    private final @NonNull @Config("agentInsightsReport") AgentInsightsReportConfig reportConfig;
+    private final TransactionTemplate transactionTemplate;
+    private final IdGenerator idGenerator;
+    private final Provider<RequestContext> requestContext;
+    private final ProjectService projectService;
+    private final AgentInsightsReportPublisher reportPublisher;
+    private final AgentInsightsReportConfig reportConfig;
+
+    @Inject
+    public AgentInsightsJobService(@NonNull TransactionTemplate transactionTemplate,
+            @NonNull IdGenerator idGenerator,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull ProjectService projectService,
+            @NonNull AgentInsightsReportPublisher reportPublisher,
+            @NonNull @Config("agentInsightsReport") AgentInsightsReportConfig reportConfig) {
+        this.transactionTemplate = transactionTemplate;
+        this.idGenerator = idGenerator;
+        this.requestContext = requestContext;
+        this.projectService = projectService;
+        this.reportPublisher = reportPublisher;
+        this.reportConfig = reportConfig;
+    }
 
     // Creates the job; 409 if one already exists for the (workspace, project).
     public AgentInsightsJob create(@NonNull UUID projectId) {
@@ -202,8 +215,8 @@ public class AgentInsightsJobService {
                     return new ReapOutcome(earlier, retry);
                 });
                 if (outcome == null) {
-                    log.info("Skipping reap of automatic Agent Insights run for project '{}': it reported back after "
-                            + "being selected", job.projectId());
+                    log.info("Skipping reap of automatic Agent Insights run for project '{}': it reported back or "
+                            + "was unenrolled after being selected", job.projectId());
                 } else {
                     log.warn("Automatic Agent Insights run for project '{}' timed out (retries so far: {} of {}), {}",
                             job.projectId(), outcome.earlierTimeouts(), maxRetries,
@@ -235,9 +248,10 @@ public class AgentInsightsJobService {
 
             if (!enrol) {
                 // Clearing also forgets an automatic run that never finished and is no longer live
-                Set<UUID> reset = projectIds.stream()
-                        .filter(projectId -> dao.clearUnfinishedAutoFirstRunClaim(projectId,
+                Set<UUID> reset = dao.findByProjectIds(projectIds).stream()
+                        .filter(job -> dao.clearUnfinishedAutoFirstRunClaim(job.workspaceId(), job.projectId(),
                                 runTimeout.toSeconds(), RequestContext.SYSTEM_USER) > 0)
+                        .map(EnabledJob::projectId)
                         .collect(Collectors.toSet());
                 int cleared = dao.clearEnrolment(projectIds, RequestContext.SYSTEM_USER);
                 log.info("Cleared Agent Insights enrolment for {} of {} projects (unfinished runs reset: {})",

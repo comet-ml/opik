@@ -36,6 +36,6 @@ public class AgentInsightsEnrollment {
             int cleared,
             @Schema(description = "Ids that match no project") Set<UUID> unknownProjectIds,
             @Schema(description = "Ids whose automatic run already happened, so enrolling has no effect") Set<UUID> alreadyRunProjectIds,
-            @Schema(description = "Ids whose automatic run never finished, so clearing forgot it and enrolling them again runs it anew") Set<UUID> resetProjectIds) {
+            @Schema(description = "Ids whose automatic run never finished, so clearing forgot it and enrolling them again gives it one more free run") Set<UUID> resetProjectIds) {
     }
 }

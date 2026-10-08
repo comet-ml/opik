@@ -122,6 +122,17 @@ interface AgentInsightsJobDAO {
     @SqlQuery("SELECT id FROM projects WHERE id IN (<projectIds>)")
     Set<UUID> findExistingProjectIds(@BindList("projectIds") Collection<UUID> projectIds);
 
+    // The job rows of the given projects, resolved through the projects primary key so callers can address each row
+    // by its (workspace_id, project_id) unique key rather than scanning on project_id.
+    @SqlQuery("""
+            SELECT j.id, j.workspace_id, j.project_id
+            FROM projects p
+            INNER JOIN agent_insights_jobs j ON j.workspace_id = p.workspace_id AND j.project_id = p.id
+            WHERE p.id IN (<projectIds>)
+            """)
+    @RegisterConstructorMapper(EnabledJob.class)
+    List<EnabledJob> findByProjectIds(@BindList("projectIds") Collection<UUID> projectIds);
+
     @SqlQuery("""
             SELECT project_id FROM agent_insights_jobs
             WHERE project_id IN (<projectIds>) AND auto_first_run_at IS NOT NULL
@@ -156,7 +167,7 @@ interface AgentInsightsJobDAO {
     @SqlUpdate("""
             UPDATE agent_insights_jobs j
             SET j.auto_first_run_at = NULL, j.last_updated_by = :userName
-            WHERE j.project_id = :projectId
+            WHERE j.workspace_id = :workspaceId AND j.project_id = :projectId
                 AND j.auto_first_run_at IS NOT NULL
                 AND (j.last_scan_at IS NULL OR j.last_scan_at < j.auto_first_run_at)
                 AND (j.auto_first_run_at < CURRENT_TIMESTAMP(6) - INTERVAL :timeoutSeconds SECOND
@@ -166,7 +177,8 @@ interface AgentInsightsJobDAO {
                             AND f.type = 'agent_insights' AND f.created_at >= j.auto_first_run_at
                     ))
             """)
-    int clearUnfinishedAutoFirstRunClaim(@Bind("projectId") UUID projectId,
+    int clearUnfinishedAutoFirstRunClaim(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
             @Bind("timeoutSeconds") long timeoutSeconds,
             @Bind("userName") String userName);
 
@@ -192,14 +204,16 @@ interface AgentInsightsJobDAO {
     @RegisterConstructorMapper(EnabledJob.class)
     List<EnabledJob> findTimedOutAutoFirstRuns(@Bind("timeoutSeconds") long timeoutSeconds);
 
-    // Reaps one candidate of findTimedOutAutoFirstRuns, re-checking that it is still timed out in the same
-    // statement: a scan or failure that landed after the candidates were read means the run did not die, and the
-    // UPDATE matches nothing. Clears the claim only when retrying; returns the matched rows (the driver reports
-    // matched, not changed, rows), so a give-up that changes nothing still counts.
+    // Reaps one candidate of findTimedOutAutoFirstRuns, re-checking that it is still enrolled and timed out in the
+    // same statement: a scan or failure that landed after the candidates were read means the run did not die, and a
+    // rollout cancelled in between must keep the claim that marks it as run, so either way the UPDATE matches
+    // nothing. Clears the claim only when retrying; returns the matched rows (the driver reports matched, not
+    // changed, rows), so a give-up that changes nothing still counts.
     @SqlUpdate("""
             UPDATE agent_insights_jobs j
             SET j.auto_first_run_at = IF(:clearClaim, NULL, j.auto_first_run_at), j.last_updated_by = :userName
             WHERE j.workspace_id = :workspaceId AND j.project_id = :projectId
+                AND j.auto_first_run_enrolled
                 AND j.auto_first_run_at < CURRENT_TIMESTAMP(6) - INTERVAL :timeoutSeconds SECOND
                 AND (j.last_scan_at IS NULL OR j.last_scan_at < j.auto_first_run_at)
                 AND NOT EXISTS (

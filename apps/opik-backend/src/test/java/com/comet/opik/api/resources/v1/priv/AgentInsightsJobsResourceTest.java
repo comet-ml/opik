@@ -191,6 +191,15 @@ class AgentInsightsJobsResourceTest {
         return projectResourceClient.createProject("project-" + UUID.randomUUID(), API_KEY, WORKSPACE_NAME);
     }
 
+    // An enrolment response in which nothing happened; each test sets only what it expects to change, and compares
+    // the whole response so a field it doesn't mention can't change unnoticed.
+    private static AgentInsightsEnrollment.Response.ResponseBuilder enrolmentResult() {
+        return AgentInsightsEnrollment.Response.builder()
+                .unknownProjectIds(Set.of())
+                .alreadyRunProjectIds(Set.of())
+                .resetProjectIds(Set.of());
+    }
+
     @Test
     @DisplayName("Enrolment creates a job row for a project that has none, enrolled and disabled")
     void enrol__createsRowForProjectWithoutJob() {
@@ -198,10 +207,8 @@ class AgentInsightsJobsResourceTest {
 
         try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
-            assertThat(result.enrolled()).isEqualTo(1);
-            assertThat(result.unknownProjectIds()).isEmpty();
-            assertThat(result.alreadyRunProjectIds()).isEmpty();
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class))
+                    .isEqualTo(enrolmentResult().enrolled(1).build());
         }
 
         try (var created = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
@@ -221,7 +228,8 @@ class AgentInsightsJobsResourceTest {
         jobsClient.update(projectId, AgentInsightsJob.Status.ENABLED, API_KEY, WORKSPACE_NAME).close();
 
         try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
-            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class).enrolled()).isEqualTo(1);
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class))
+                    .isEqualTo(enrolmentResult().enrolled(1).build());
         }
 
         try (var updated = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
@@ -240,9 +248,8 @@ class AgentInsightsJobsResourceTest {
         jobsClient.enrolInAutoFirstRun(true, List.of(projectId)).close();
 
         try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId, unknownProjectId))) {
-            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
-            assertThat(result.unknownProjectIds()).containsExactly(unknownProjectId);
-            assertThat(result.alreadyRunProjectIds()).isEmpty();
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class)).isEqualTo(
+                    enrolmentResult().enrolled(1).unknownProjectIds(Set.of(unknownProjectId)).build());
         }
 
         try (var job = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
@@ -257,7 +264,8 @@ class AgentInsightsJobsResourceTest {
         jobsClient.enrolInAutoFirstRun(true, List.of(projectId)).close();
 
         try (var response = jobsClient.enrolInAutoFirstRun(false, List.of(projectId))) {
-            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class).cleared()).isEqualTo(1);
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class))
+                    .isEqualTo(enrolmentResult().cleared(1).build());
         }
 
         try (var job = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
@@ -313,16 +321,14 @@ class AgentInsightsJobsResourceTest {
                 API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
 
         try (var response = jobsClient.enrolInAutoFirstRun(false, List.of(projectId))) {
-            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
-            assertThat(result.cleared()).isEqualTo(1);
-            assertThat(result.resetProjectIds()).containsExactly(projectId);
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class)).isEqualTo(
+                    enrolmentResult().cleared(1).resetProjectIds(Set.of(projectId)).build());
         }
         assertThat(getJob(projectId).autoFirstRunAt()).isNull();
 
         try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
-            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
-            assertThat(result.enrolled()).isEqualTo(1);
-            assertThat(result.alreadyRunProjectIds()).isEmpty();
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class))
+                    .isEqualTo(enrolmentResult().enrolled(1).build());
         }
         autoFirstRunJob.runSweep(Instant.now(), 10).block();
         await().atMost(10, SECONDS).untilAsserted(() -> assertThat(triggerCount(projectId)).isEqualTo(2));
@@ -336,7 +342,7 @@ class AgentInsightsJobsResourceTest {
         // A zero timeout makes the claim just made count as dead, without waiting out the real one.
         var result = jobService.enrolInAutoFirstRun(false, List.of(projectId), Duration.ZERO);
 
-        assertThat(result.resetProjectIds()).containsExactly(projectId);
+        assertThat(result).isEqualTo(enrolmentResult().cleared(1).resetProjectIds(Set.of(projectId)).build());
         assertThat(getJob(projectId).autoFirstRunAt()).isNull();
     }
 
@@ -346,13 +352,14 @@ class AgentInsightsJobsResourceTest {
         var projectId = createProjectWithClaimedAutoFirstRun();
 
         try (var response = jobsClient.enrolInAutoFirstRun(false, List.of(projectId))) {
-            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class).resetProjectIds()).isEmpty();
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class))
+                    .isEqualTo(enrolmentResult().cleared(1).build());
         }
         assertThat(getJob(projectId).autoFirstRunAt()).isNotNull();
 
         try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
-            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class).alreadyRunProjectIds())
-                    .containsExactly(projectId);
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class)).isEqualTo(
+                    enrolmentResult().alreadyRunProjectIds(Set.of(projectId)).build());
         }
     }
 
@@ -367,7 +374,7 @@ class AgentInsightsJobsResourceTest {
 
         var result = jobService.enrolInAutoFirstRun(false, List.of(projectId), Duration.ZERO);
 
-        assertThat(result.resetProjectIds()).isEmpty();
+        assertThat(result).isEqualTo(enrolmentResult().cleared(1).build());
         assertThat(getJob(projectId).autoFirstRunAt()).isNotNull();
     }
 
@@ -679,9 +686,8 @@ class AgentInsightsJobsResourceTest {
 
         // And re-enrolling reports it rather than relabelling it.
         try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
-            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
-            assertThat(result.alreadyRunProjectIds()).containsExactly(projectId);
-            assertThat(result.enrolled()).isZero();
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class)).isEqualTo(
+                    enrolmentResult().alreadyRunProjectIds(Set.of(projectId)).build());
         }
     }
 
