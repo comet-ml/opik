@@ -8,6 +8,9 @@
 {{- fail (printf "clickhouse.tieredStorage.ttl.tables: moveAfterWeeks for %q must be a positive integer" (toString .name)) }}
 {{- end }}
 {{- end }}
+{{- if not (and (regexMatch "^[0-9]+$" (toString $ttl.activeDeadlineSeconds)) (gt (int $ttl.activeDeadlineSeconds) 0)) }}
+{{- fail (printf "clickhouse.tieredStorage.ttl.activeDeadlineSeconds (%v) must be a positive integer" $ttl.activeDeadlineSeconds) }}
+{{- end }}
 {{- $backend := .Values.component.backend }}
 {{- $vars := list "ANALYTICS_DB_HOST" "ANALYTICS_DB_DATABASE_NAME" "ANALYTICS_DB_MIGRATIONS_USER" "ANALYTICS_DB_MIGRATIONS_PASS" }}
 {{- /* The backend's env sources in its own order: envFrom, then secretRefs. */}}
@@ -109,11 +112,11 @@ spec:
 
               replicas=$(ch "SELECT count() FROM system.clusters WHERE cluster = getMacro('cluster')")
               [ "${replicas:-0}" -gt 0 ] || { echo "ERROR: no replicas found for the cluster macro." >&2; exit 1; }
-              have_policy=$(ch "SELECT count() FROM clusterAllReplicas(getMacro('cluster'), system.storage_policies) WHERE policy_name = 'tiered_replicated' AND volume_name = 'cold'")
-              [ "$have_policy" = "$replicas" ] || { echo "ERROR: tiered_replicated policy with a cold volume is on ${have_policy} of ${replicas} replicas." >&2; exit 1; }
+              policy_replica_count=$(ch "SELECT count() FROM clusterAllReplicas(getMacro('cluster'), system.storage_policies) WHERE policy_name = 'tiered_replicated' AND volume_name = 'cold'")
+              [ "$policy_replica_count" = "$replicas" ] || { echo "ERROR: tiered_replicated policy with a cold volume is on ${policy_replica_count} of ${replicas} replicas." >&2; exit 1; }
 
               apply() {  # table weeks
-                local t="$1" w="$2" exists policy same want want_sql
+                local t="$1" w="$2" exists policy same want want_sql matching_replica_count
                 exists=$(ch "EXISTS TABLE ${DB}.${t}")
                 case "$exists" in
                   1) ;;
@@ -135,8 +138,8 @@ spec:
                   ch "ALTER TABLE ${DB}.${t} ON CLUSTER '{cluster}' MODIFY TTL id_at + INTERVAL ${w} WEEK TO DISK 'cold' SETTINGS materialize_ttl_after_modify = 0"
                 fi
                 # Settings are per replica, so check every one.
-                ok=$(ch "SELECT count() FROM clusterAllReplicas(getMacro('cluster'), system.tables) WHERE database = '${DB}' AND name = '${t}' AND storage_policy = 'tiered_replicated' AND extract(create_table_query, 'TTL (.+?) SETTINGS ') = ${want_sql}")
-                [ "$ok" = "$replicas" ] || { echo "ERROR: ${DB}.${t} matches on ${ok} of ${replicas} replicas." >&2; return 1; }
+                matching_replica_count=$(ch "SELECT count() FROM clusterAllReplicas(getMacro('cluster'), system.tables) WHERE database = '${DB}' AND name = '${t}' AND storage_policy = 'tiered_replicated' AND extract(create_table_query, 'TTL (.+?) SETTINGS ') = ${want_sql}")
+                [ "$matching_replica_count" = "$replicas" ] || { echo "ERROR: ${DB}.${t} matches on ${matching_replica_count} of ${replicas} replicas." >&2; return 1; }
                 echo "OK: ${DB}.${t} tiered_replicated, TTL ${want}, on all ${replicas} replicas"
               }
               {{- range $ttl.tables }}
