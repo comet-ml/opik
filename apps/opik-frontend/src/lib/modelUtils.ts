@@ -1,4 +1,5 @@
 import {
+  ANTHROPIC_THINKING_EFFORT_VALUES,
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
@@ -474,9 +475,9 @@ export const supportsAnthropicThinkingEffort = (
   !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.thinkingEffortOptions;
 
-// A Claude model with no row is one this build does not know yet. The backend lets Anthropic judge
-// its effort, so a stored custom_parameters.output_config.effort must pass through untouched rather
-// than be dropped as unsupported. A row without thinkingEffortOptions means the model takes none.
+// A Claude model with no row is one this build does not know yet. The backend checks its effort only
+// against the known level names and lets Anthropic judge the rest, so a stored level must pass through
+// rather than be dropped as unsupported. A row without thinkingEffortOptions means the model takes none.
 export const knowsAnthropicEffortLevels = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
@@ -499,9 +500,7 @@ export const getNestedThinkingEffort = (
   customParameters: unknown,
 ): AnthropicThinkingEffort | undefined => {
   const effort = asRecord(asRecord(customParameters).output_config).effort;
-  return typeof effort === "string"
-    ? (effort as AnthropicThinkingEffort)
-    : undefined;
+  return ANTHROPIC_THINKING_EFFORT_VALUES.find((level) => level === effort);
 };
 
 // Keeps every other key, inside output_config too, so fields no form control shows survive a save.
@@ -932,13 +931,12 @@ export const sanitizeConfigForRequest = (
     // Anthropic reads output_config.effort, and a flat thinking_effort is one more unknown top-level
     // field the backend's ChatCompletionRequest drops, so the effort travels in custom_parameters.
     delete sanitized.thinkingEffort;
-    if (
-      provider === PROVIDER_TYPE.ANTHROPIC &&
-      knowsAnthropicEffortLevels(model)
-    ) {
+    if (provider === PROVIDER_TYPE.ANTHROPIC) {
       const customParameters = withThinkingEffort(
         sanitized.custom_parameters,
-        effort.thinkingEffort,
+        knowsAnthropicEffortLevels(model)
+          ? effort.thinkingEffort
+          : getNestedThinkingEffort(sanitized.custom_parameters),
       );
       if (customParameters) {
         sanitized.custom_parameters = customParameters;

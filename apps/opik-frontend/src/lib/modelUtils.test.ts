@@ -2254,7 +2254,23 @@ describe("Anthropic request contract", () => {
       resetModelRegistryStoreForTesting();
     });
 
-    it("sends its nested effort as stored, for Anthropic to judge", () => {
+    it.each<[string, Record<string, unknown>, unknown]>([
+      [
+        "sends a stored level as is, for Anthropic to judge",
+        { output_config: { effort: "xhigh" } },
+        { output_config: { effort: "xhigh" } },
+      ],
+      [
+        "drops a value that is not a level name, which the backend rejects",
+        { output_config: { effort: "adaptive", format: "x" }, other: 1 },
+        { output_config: { format: "x" }, other: 1 },
+      ],
+      [
+        "sends no custom_parameters once an invalid effort was all they held",
+        { output_config: { effort: "adaptive" } },
+        undefined,
+      ],
+    ])("%s", (_, stored, expected) => {
       setLatestProviderModelsSnapshot({
         ...getLatestProviderModelsSnapshot(),
         [PROVIDER_TYPE.ANTHROPIC]: [{ value: UNLISTED, label: UNLISTED }],
@@ -2263,9 +2279,9 @@ describe("Anthropic request contract", () => {
       expect(
         sanitizeConfigForRequest(UNLISTED, {
           maxCompletionTokens: 4000,
-          custom_parameters: { output_config: { effort: "xhigh" } },
+          custom_parameters: stored,
         }).custom_parameters,
-      ).toEqual({ output_config: { effort: "xhigh" } });
+      ).toEqual(expected);
     });
   });
 

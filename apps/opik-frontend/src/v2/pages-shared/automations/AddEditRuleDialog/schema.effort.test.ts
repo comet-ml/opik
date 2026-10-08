@@ -184,6 +184,17 @@ describe("LLM judge Anthropic effort round trip", () => {
       expect(unchangedSave(model, stored)).toEqual(stored);
     });
 
+    it("drops a stored value that is not a level name from a Claude model with no row", () => {
+      const model = "claude-opus-9" as PROVIDER_MODEL_TYPE;
+      registerAnthropicModels(model);
+
+      expect(
+        unchangedSave(model, {
+          output_config: { effort: "adaptive", format: "x" },
+        }),
+      ).toEqual({ output_config: { format: "x" } });
+    });
+
     it("still drops an effort from a model known to take none", () => {
       expect(
         unchangedSave(PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, {
