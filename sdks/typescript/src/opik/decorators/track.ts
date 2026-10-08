@@ -145,78 +145,14 @@ function logSuccess({
     Object.assign(spanUpdate, enrichedData);
   }
 
-  // Output already on the span/trace was set by the user through getTrackContext()
-  // during the call, so it wins over the captured return value (as in the Python SDK).
-  spanUpdate.output = mergeExplicitOutputOverCaptured(
-    spanUpdate.output,
-    span.data.output
-  );
+  // Output set through getTrackContext() during the call is final: the return value doesn't
+  // replace it (the same rule as the Python SDK).
+  spanUpdate.output = span.data.output ?? spanUpdate.output;
   span.update(spanUpdate);
 
   if (trace) {
-    trace.update({
-      endTime,
-      output: mergeExplicitOutputOverCaptured(output, trace.data.output),
-    });
+    trace.update({ endTime, output: trace.data.output ?? output });
   }
-}
-
-const MAX_OUTPUT_MERGE_DEPTH = 10;
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-/**
- * Nothing in here may propagate: this runs inside `logSuccess`, so an exception (a throwing
- * getter on either output, say) would turn the caller's successful call into a failure. When the
- * outputs can't be merged, the explicit one is kept.
- */
-function mergeExplicitOutputOverCaptured(captured: any, explicit: any): any {
-  try {
-    return deepMergeOutputs(captured, explicit, 0);
-  } catch (error) {
-    logger.debug(
-      "Could not merge the return value into the output set during the call:",
-      error
-    );
-    return explicit;
-  }
-}
-
-/**
- * Mirrors the Python SDK's deep merge: plain objects are merged key by key, the explicit value
- * wins wherever either side isn't a plain object, and the depth is capped so a self-referencing
- * value can't recurse forever.
- */
-function deepMergeOutputs(captured: any, explicit: any, depth: number): any {
-  if (explicit === undefined) {
-    return captured;
-  }
-  if (
-    depth >= MAX_OUTPUT_MERGE_DEPTH ||
-    !isPlainObject(captured) ||
-    !isPlainObject(explicit)
-  ) {
-    return explicit;
-  }
-
-  // Collisions are looked up in the entries snapshot rather than re-read from `captured`, so a
-  // getter runs once and a non-enumerable field can't slip into the merge. Object.fromEntries
-  // defines own properties, so a "__proto__" key stays a key instead of going through the
-  // prototype setter.
-  const capturedEntries = new Map(Object.entries(captured));
-  return Object.fromEntries([
-    ...capturedEntries,
-    ...Object.entries(explicit).map(([key, value]) => [
-      key,
-      deepMergeOutputs(capturedEntries.get(key), value, depth + 1),
-    ]),
-  ]);
 }
 
 /**

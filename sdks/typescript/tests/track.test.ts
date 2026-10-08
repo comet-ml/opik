@@ -501,7 +501,7 @@ describe("@track output set through getTrackContext()", () => {
     updateSpansSpy.mockRestore();
   });
 
-  it("keeps the span output set during the call when it collides with the return value", async () => {
+  it("keeps the span output set during the call instead of the return value", async () => {
     const inner = track({ name: "inner" }, () => {
       getTrackContext()?.span.update({ output: { result: "explicit-result" } });
       return "returned-result";
@@ -520,7 +520,7 @@ describe("@track output set through getTrackContext()", () => {
     });
   });
 
-  it("keeps the trace output set during the call and adds the returned keys", async () => {
+  it("keeps the trace output set during the call and doesn't add the returned keys", async () => {
     const root = track({ name: "root" }, () => {
       getTrackContext()?.trace.update({
         output: { answer: "explicit-answer" },
@@ -531,18 +531,15 @@ describe("@track output set through getTrackContext()", () => {
     root();
     await trackOpikClient.flush();
 
-    expect(sentTraces()[0]?.output).toEqual({
-      answer: "explicit-answer",
-      sources: ["doc-1"],
-    });
+    expect(sentTraces()[0]?.output).toEqual({ answer: "explicit-answer" });
     expect(sentSpans()[0]?.output).toEqual({
       answer: "returned-answer",
       sources: ["doc-1"],
     });
   });
 
-  it("merges nested returned keys under the nested output set during an async call", async () => {
-    const tracked = track({ name: "nested" }, async () => {
+  it("keeps the span output set during an async call and doesn't add the returned keys", async () => {
+    const tracked = track({ name: "async" }, async () => {
       getTrackContext()?.span.update({
         output: { details: { source: "explicit-source" } },
       });
@@ -556,37 +553,11 @@ describe("@track output set through getTrackContext()", () => {
     await trackOpikClient.flush();
 
     expect(sentSpans()[0]?.output).toEqual({
-      details: { source: "explicit-source", score: 0.9 },
-      answer: "returned-answer",
+      details: { source: "explicit-source" },
     });
   });
 
-  class ReturnedResult {
-    constructor(public text: string) {}
-  }
-
-  it.each([
-    ["an array", () => ["returned-1", "returned-2"]],
-    ["null", () => null],
-    ["a class instance", () => new ReturnedResult("returned-text")],
-  ])(
-    "keeps only the output set during the call when the return value is %s",
-    async (_, makeResult) => {
-      const tracked = track({ name: "non-plain" }, () => {
-        getTrackContext()?.span.update({
-          output: { answer: "explicit-answer" },
-        });
-        return makeResult();
-      });
-
-      tracked();
-      await trackOpikClient.flush();
-
-      expect(sentSpans()[0]?.output).toEqual({ answer: "explicit-answer" });
-    }
-  );
-
-  it("keeps the span output set during the call over the output enrichSpan returns", async () => {
+  it("keeps the span output set during the call instead of the output enrichSpan returns", async () => {
     const tracked = track(
       {
         name: "enriched",
@@ -605,95 +576,6 @@ describe("@track output set through getTrackContext()", () => {
     tracked();
     await trackOpikClient.flush();
 
-    expect(sentSpans()[0]?.output).toEqual({
-      answer: "explicit-answer",
-      tokens: 3,
-    });
-  });
-
-  it("still returns the result and keeps the explicit output when the return value can't be read", async () => {
-    const unreadable = {
-      get broken(): never {
-        throw new Error("getter exploded");
-      },
-    };
-    const inner = track({ name: "unreadable" }, () => {
-      getTrackContext()?.span.update({
-        output: { answer: "explicit-answer" },
-      });
-      return unreadable;
-    });
-    const outer = track({ name: "outer" }, () => {
-      inner();
-      return "outer-result";
-    });
-
-    expect(outer()).toBe("outer-result");
-    await trackOpikClient.flush();
-
-    const innerSpan = sentSpans().find((span) => span.name === "unreadable");
-    expect(innerSpan?.output).toEqual({ answer: "explicit-answer" });
-    expect(innerSpan?.endTime).toBeDefined();
-  });
-
-  it("leaves out a non-enumerable field of the return value that collides with the output set during the call", async () => {
-    const returned = { sources: ["doc-1"] };
-    Object.defineProperty(returned, "details", {
-      value: { internal: "returned-internal" },
-      enumerable: false,
-    });
-    const tracked = track({ name: "hidden-field" }, () => {
-      getTrackContext()?.span.update({
-        output: { details: { source: "explicit-source" } },
-      });
-      return returned;
-    });
-
-    tracked();
-    await trackOpikClient.flush();
-
-    expect(sentSpans()[0]?.output).toEqual({
-      sources: ["doc-1"],
-      details: { source: "explicit-source" },
-    });
-  });
-
-  it("keeps a __proto__ key from the output set during the call", async () => {
-    const tracked = track({ name: "proto-key" }, () => {
-      getTrackContext()?.span.update({
-        output: JSON.parse(
-          '{"__proto__": {"nested": true}, "answer": "explicit-answer"}'
-        ),
-      });
-      return { sources: ["doc-1"] };
-    });
-
-    tracked();
-    await trackOpikClient.flush();
-
-    expect(JSON.stringify(sentSpans()[0]?.output)).toBe(
-      '{"sources":["doc-1"],"__proto__":{"nested":true},"answer":"explicit-answer"}'
-    );
-  });
-
-  it("doesn't throw when both outputs reference themselves", async () => {
-    const explicitOutput: Record<string, unknown> = {
-      answer: "explicit-answer",
-    };
-    explicitOutput.self = explicitOutput;
-    const returned: Record<string, unknown> = { sources: ["doc-1"] };
-    returned.self = returned;
-
-    const tracked = track({ name: "cyclic" }, () => {
-      getTrackContext()?.span.update({ output: explicitOutput });
-      return returned;
-    });
-
-    expect(tracked()).toBe(returned);
-    await trackOpikClient.flush();
-
-    // A self-referencing output can't be serialized, so its payload is replaced before
-    // sending; what matters here is that the merge neither throws nor drops the span.
-    expect(sentSpans()[0]?.endTime).toBeDefined();
+    expect(sentSpans()[0]?.output).toEqual({ answer: "explicit-answer" });
   });
 });
