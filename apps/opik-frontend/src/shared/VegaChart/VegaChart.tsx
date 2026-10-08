@@ -5,6 +5,7 @@ import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 import { renderVegaChart, VegaRows, VegaSpec } from "@/lib/charts/vega";
 import { cn } from "@/lib/utils";
 import ChartSkeleton from "./ChartSkeleton";
+import RowsTable, { tableColumns } from "./RowsTable";
 
 type VegaChartProps = {
   spec: VegaSpec;
@@ -13,7 +14,19 @@ type VegaChartProps = {
   className?: string;
 };
 
-const VegaChart: React.FunctionComponent<VegaChartProps> = ({
+const VegaChart: React.FunctionComponent<VegaChartProps> = (props) => {
+  const columns = tableColumns(props.spec);
+  if (columns) {
+    return (
+      <div className={cn("size-full", props.className)}>
+        <RowsTable rows={props.rows ?? []} columns={columns} />
+      </div>
+    );
+  }
+  return <VegaSpecChart {...props} />;
+};
+
+const VegaSpecChart: React.FunctionComponent<VegaChartProps> = ({
   spec,
   rows,
   height = "container",
@@ -59,6 +72,15 @@ const VegaChart: React.FunctionComponent<VegaChartProps> = ({
   }, [spec, rows, height, colorMap, themeMode]);
 
   if (error) {
+    // The data is still worth showing when the spec can't be drawn.
+    if (rows?.length) {
+      return (
+        <RowsTable
+          rows={rows}
+          note="Couldn't draw the chart; showing the data."
+        />
+      );
+    }
     return (
       <div className="comet-body-s flex size-full items-center justify-center p-2 text-center text-muted-slate">
         {error}
