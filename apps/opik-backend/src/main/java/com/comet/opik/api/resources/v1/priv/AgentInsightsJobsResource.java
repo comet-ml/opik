@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.AgentInsightsGuidanceUpdate;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJobUpdate;
 import com.comet.opik.domain.AgentInsightsJobService;
@@ -19,6 +20,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -78,6 +80,22 @@ public class AgentInsightsJobsResource {
     public Response update(@PathParam("projectId") @NotNull UUID projectId,
             @Valid @NotNull AgentInsightsJobUpdate update) {
         AgentInsightsJob job = service.update(projectId, update.status());
+
+        return Response.ok(job).build();
+    }
+
+    @PUT
+    @Path("/{projectId}/guidance")
+    @Operation(operationId = "updateAgentInsightsGuidance", summary = "Update Agent Insights project guidance", description = "Saves the project guidance sent to every Agent Insights run, creating the job (disabled) if the project has none. Empty or whitespace-only clears it. The guidance version is bumped only when the text changes. 404 while guidance is not enabled.", responses = {
+            @ApiResponse(responseCode = "200", description = "Job with the saved guidance", content = @Content(schema = @Schema(implementation = AgentInsightsJob.class))),
+            @ApiResponse(responseCode = "400", description = "Guidance over the length limit"),
+            @ApiResponse(responseCode = "403", description = "Forbidden"),
+            @ApiResponse(responseCode = "404", description = "Project not found, or guidance not enabled")
+    })
+    @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
+    public Response updateGuidance(@PathParam("projectId") @NotNull UUID projectId,
+            @Valid @NotNull AgentInsightsGuidanceUpdate update) {
+        AgentInsightsJob job = service.updateGuidance(projectId, update.guidance());
 
         return Response.ok(job).build();
     }

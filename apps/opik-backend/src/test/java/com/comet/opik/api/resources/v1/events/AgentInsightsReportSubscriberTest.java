@@ -67,12 +67,12 @@ class AgentInsightsReportSubscriberTest {
     private static AgentInsightsReportMessage message(String triggerSource) {
         Instant periodEnd = Instant.now();
         return new AgentInsightsReportMessage("report-1", PROJECT_ID, WORKSPACE_ID,
-                periodEnd.minusSeconds(86_400), periodEnd, triggerSource);
+                periodEnd.minusSeconds(86_400), periodEnd, triggerSource, null, null);
     }
 
     private void failTriggerWith(RuntimeException failure) {
         doThrow(failure).when(reportClient)
-                .triggerAgentInsights(any(), any(), any(), any(), any(), any());
+                .triggerAgentInsights(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -132,5 +132,17 @@ class AgentInsightsReportSubscriberTest {
         StepVerifier.create(subscriber.processEvent(message())).verifyComplete();
 
         verify(jobService, never()).markRunFailed(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("The guidance read at enqueue is passed on to the trigger")
+    void processEvent__messageWithGuidance__triggersWithIt() {
+        var message = message().toBuilder().guidance("Only report billing failures").guidanceVersion(3).build();
+
+        StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
+
+        verify(reportClient).triggerAgentInsights(message.reportId(), PROJECT_ID, WORKSPACE_ID,
+                message.periodStart(), message.periodEnd(), AgentInsightsMetrics.MANUAL,
+                "Only report billing failures");
     }
 }
