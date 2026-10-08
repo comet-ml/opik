@@ -3,6 +3,7 @@ package com.comet.opik.api;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -13,5 +14,9 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AgentInsightsIssueUpdate(
         @NotNull UUID projectId,
-        @NotNull AgentInsightsIssueStatus status) {
+        @NotNull AgentInsightsIssueStatus status,
+        @Schema(maxLength = CLOSE_NOTE_MAX_LENGTH, description = "Why the issue is closed as not useful. Stored only with status closed; any other status clears it") String closeNote) {
+
+    // Checked by the service rather than @Size, so an over-limit note is a 400 like guidance, not a 422.
+    public static final int CLOSE_NOTE_MAX_LENGTH = 500;
 }

@@ -19,6 +19,7 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
@@ -28,8 +29,10 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterConstructorMapper(AgentInsightsIssue.class)
@@ -41,6 +44,15 @@ import java.util.UUID;
 @RegisterArgumentFactory(AgentInsightsIssueSeverityColumnMapper.class)
 @RegisterColumnMapper(AgentInsightsIssueSeverityColumnMapper.class)
 interface AgentInsightsIssueDAO {
+
+    @SqlQuery("""
+            SELECT id FROM agent_insights_issues
+            WHERE id IN (<ids>) AND NOT (workspace_id = :workspace_id AND project_id = :project_id)
+            """)
+    Set<UUID> findIdsOutsideScope(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId,
+            @BindList("ids") List<UUID> ids);
 
     @SqlBatch("""
             INSERT INTO agent_insights_issues
@@ -96,6 +108,7 @@ interface AgentInsightsIssueDAO {
             SELECT i.id, i.name, i.description, i.cause, i.suggested_fix, i.status, i.severity, i.traces_query,
                    agg.total_occurrences, latest.`count` AS latest_count, agg.total,
                    agg.users_impacted, agg.total_users, agg.first_seen, agg.last_seen, agg.days_reported,
+                   i.close_note, i.status_changed_by, i.status_changed_at,
                    i.created_by, i.created_at, i.last_updated_by, i.last_updated_at
             FROM agent_insights_issues i
             JOIN (
@@ -165,7 +178,9 @@ interface AgentInsightsIssueDAO {
             @Define("severity") @Bind("severity") AgentInsightsIssueSeverity severity);
 
     @SqlQuery("""
-            SELECT id, name, description, cause, suggested_fix, status, severity, traces_query, created_by, created_at, last_updated_by, last_updated_at
+            SELECT id, name, description, cause, suggested_fix, status, severity, traces_query,
+                   close_note, status_changed_by, status_changed_at,
+                   created_by, created_at, last_updated_by, last_updated_at
             FROM agent_insights_issues
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND id = :id
             """)
@@ -192,7 +207,9 @@ interface AgentInsightsIssueDAO {
 
     @SqlUpdate("""
             UPDATE agent_insights_issues
-            SET status = :status, last_updated_by = :user_name
+            SET status = :status, close_note = :close_note,
+                status_changed_by = :user_name, status_changed_at = CURRENT_TIMESTAMP(6),
+                last_updated_by = :user_name
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND id = :id
             """)
     int updateStatus(
@@ -200,6 +217,7 @@ interface AgentInsightsIssueDAO {
             @Bind("project_id") UUID projectId,
             @Bind("id") UUID id,
             @Bind("status") AgentInsightsIssueStatus status,
+            @Bind("close_note") String closeNote,
             @Bind("user_name") String userName);
 
     class IssueWithDetailsRowMapper implements RowMapper<AgentInsightsIssueWithDetails> {
@@ -207,6 +225,7 @@ interface AgentInsightsIssueDAO {
         @Override
         public AgentInsightsIssueWithDetails map(ResultSet rs, StatementContext ctx) throws SQLException {
             String severityStr = rs.getString("severity");
+            Timestamp statusChangedAt = rs.getTimestamp("status_changed_at");
             return AgentInsightsIssueWithDetails.builder()
                     .id(UUID.fromString(rs.getString("id")))
                     .name(rs.getString("name"))
@@ -216,6 +235,9 @@ interface AgentInsightsIssueDAO {
                     .status(AgentInsightsIssueStatus.fromString(rs.getString("status")))
                     .severity(severityStr != null ? AgentInsightsIssueSeverity.fromString(severityStr) : null)
                     .tracesQuery(rs.getString("traces_query"))
+                    .closeNote(rs.getString("close_note"))
+                    .statusChangedBy(rs.getString("status_changed_by"))
+                    .statusChangedAt(statusChangedAt != null ? statusChangedAt.toInstant() : null)
                     .createdBy(rs.getString("created_by"))
                     .createdAt(rs.getTimestamp("created_at").toInstant())
                     .lastUpdatedBy(rs.getString("last_updated_by"))

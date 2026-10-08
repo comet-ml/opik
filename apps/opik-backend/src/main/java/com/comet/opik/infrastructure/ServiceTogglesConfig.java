@@ -60,6 +60,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean agentInsightsEnabled = true;
     @JsonProperty
+    @NotNull boolean agentInsightsGuidanceEnabled;
+    @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
     @NotNull boolean onlineScoringTracingEnabled;
