@@ -78,11 +78,16 @@ def ensure_default_model_params(
     sampling diversity to propose varied candidates.
     """
     params = dict(model_params or {})
-    if params.get("max_tokens") is None:
+    # OpenAI rejects a request carrying both limits, so a max_completion_tokens
+    # from the run counts as the limit.
+    if params.get("max_tokens") is None and params.get("max_completion_tokens") is None:
         params["max_tokens"] = LLM_MAX_TOKENS
+    # A top_p is a sampling choice too: Claude takes only one of the pair, and the
+    # gateway keeps temperature when both arrive, so the pin would erase it.
     if (
         deterministic
         and params.get("temperature") is None
+        and params.get("top_p") is None
         and not keeps_default_temperature(model)
     ):
         params["temperature"] = OPTIMIZER_TASK_TEMPERATURE

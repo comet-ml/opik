@@ -22,6 +22,7 @@ from llm_constants import (
 
 from opik_backend.jobs import optimizer_runner
 from opik_backend.studio.config import OPTIMIZER_TASK_TEMPERATURE
+from opik_backend.studio.optimizers import LLM_MAX_TOKENS
 from opik_backend.studio.types import OptimizationConfig
 
 
@@ -183,6 +184,68 @@ def test_task_model_request_body_sent_to_the_gateway(
     body = httpserver.log[-1][0].get_json()
     assert body["model"] == task_model
     assert body.get("temperature", "absent") == expected_temperature
+
+
+@pytest.mark.parametrize(
+    "task_model,task_params",
+    [
+        (
+            ANTHROPIC_CLAUDE_HAIKU,
+            {"top_p": 0.55, "max_completion_tokens": 77},
+        ),
+        (
+            "gpt-5-nano",
+            {"reasoning_effort": "low", "max_completion_tokens": 500},
+        ),
+        (
+            "gpt-4o-mini",
+            {
+                "temperature": 0.3,
+                "max_completion_tokens": 123,
+                "top_p": 0.5,
+                "frequency_penalty": 0.1,
+                "presence_penalty": 0.2,
+            },
+        ),
+    ],
+)
+def test_task_model_request_body_carries_the_run_settings(
+    httpserver, task_model, task_params
+):
+    httpserver.expect_request(
+        "/v1/private/chat/completions", method="POST"
+    ).respond_with_json(_GATEWAY_REPLY)
+    config = OptimizationConfig.from_dict(
+        _config(task_model=task_model, task_params=task_params)
+    )
+    _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    litellm.completion(
+        model=prompt.model,
+        messages=[{"role": "user", "content": "hi"}],
+        api_base=httpserver.url_for("/v1/private"),
+        api_key="test",
+        **prompt.model_kwargs,
+    )
+
+    body = httpserver.log[-1][0].get_json()
+    assert {key: body.get(key) for key in task_params} == task_params
+    assert "max_tokens" not in body
+    if "top_p" in task_params and "temperature" not in task_params:
+        assert "temperature" not in body
+
+
+def test_algorithm_inheriting_the_prompt_model_keeps_its_own_output_limit():
+    config = OptimizationConfig.from_dict(
+        _config(task_params={"temperature": 0.3, "max_completion_tokens": 77})
+    )
+
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert prompt.model_kwargs.get("max_completion_tokens") == 77
+    assert optimizer.model_parameters.get("temperature") == 0.3
+    assert "max_completion_tokens" not in optimizer.model_parameters
+    assert optimizer.model_parameters.get("max_tokens") == LLM_MAX_TOKENS
 
 
 def test_task_model_explicit_temperature_survives_the_pin():

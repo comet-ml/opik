@@ -235,10 +235,17 @@ def build_optimizer_and_prompt(config):
         # optimizer model_parameters if the config set them without a model
         # (saved configs / API clients), instead of silently dropping them.
         optimizer_model = task_model
+        # The prompt's output limit is sized for its answers. The algorithm writes
+        # whole prompts and JSON analyses, so it keeps the factory's larger default
+        # instead of truncating every reflection.
         optimizer_model_params = (
             _with_stream(config.optimizer_model_params)
             if config.optimizer_model_params is not None
-            else task_params
+            else {
+                key: value
+                for key, value in task_params.items()
+                if key not in ("max_tokens", "max_completion_tokens")
+            }
         )
 
     # The factory injects defaults (e.g. max_tokens) into the optimizer params.
