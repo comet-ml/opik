@@ -5,9 +5,10 @@ import { ArrowUpRight, X } from "lucide-react";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
-import { getAlphabetLetter } from "@/lib/utils";
 import { useLastRun } from "@/store/PlaygroundStore";
-import useLastRunExperiments from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useLastRunExperiments";
+import useLastRunExperiments, {
+  getLastRunExperimentLabel,
+} from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useLastRunExperiments";
 
 const EXPERIMENTS_COMPARE_ROUTE =
   "/$workspaceName/projects/$projectId/experiments/$datasetId/compare";
@@ -83,8 +84,7 @@ const PlaygroundLastRunSummary = ({
               search={{ experiments: [experiment.id] }}
               className="comet-body-s inline-flex items-center gap-0.5 text-foreground underline underline-offset-4 hover:text-primary"
             >
-              {experiment.name ??
-                `Prompt ${getAlphabetLetter(experiment.index)} experiment`}
+              {getLastRunExperimentLabel(experiment)}
               <ArrowUpRight className="size-3.5 shrink-0" />
             </Link>
           </li>
