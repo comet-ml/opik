@@ -23,8 +23,9 @@ type AnalyticsQueryResponse = {
 
 type ErrorBody = { message?: string; errors?: string[] };
 
-// A widget added or duplicated in this browser is only saved by the next autosave, so its query 404s until then.
-const MAX_RETRIES_WHILE_UNSAVED = 3;
+// Retried, with react-query's backoff: a widget added or duplicated in this browser 404s until the next autosave,
+// and a dashboard loading many widgets at once can hit the account's concurrent-query cap (429).
+const RETRIES_BY_STATUS: Record<number, number> = { 404: 3, 429: 4 };
 
 const getDashboardWidgetQuery = async (
   { signal }: QueryFunctionContext,
@@ -74,7 +75,7 @@ export default function useDashboardWidgetQuery(
       const status =
         (error as { status?: number }).status ??
         (error as AxiosError).response?.status;
-      return status === 404 && failureCount < MAX_RETRIES_WHILE_UNSAVED;
+      return failureCount < (RETRIES_BY_STATUS[status ?? 0] ?? 0);
     },
     ...options,
   });
