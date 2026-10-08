@@ -5,6 +5,7 @@ import { ArrowUpRight, X } from "lucide-react";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import { getAlphabetLetter } from "@/lib/utils";
 import { useLastRun } from "@/store/PlaygroundStore";
 import useLastRunExperiments from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useLastRunExperiments";
 
@@ -21,7 +22,7 @@ const PlaygroundLastRunSummary = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const projectId = useActiveProjectId();
   const lastRun = useLastRun(datasetId);
-  const experiments = useLastRunExperiments(lastRun).filter((e) => e.name);
+  const experiments = useLastRunExperiments(lastRun);
   const [dismissedRunKey, setDismissedRunKey] = useState<string | null>(null);
 
   const runKey = lastRun?.experiments.map((e) => e.id).join() ?? null;
@@ -82,7 +83,8 @@ const PlaygroundLastRunSummary = ({
               search={{ experiments: [experiment.id] }}
               className="comet-body-s inline-flex items-center gap-0.5 text-foreground underline underline-offset-4 hover:text-primary"
             >
-              {experiment.name}
+              {experiment.name ??
+                `Prompt ${getAlphabetLetter(experiment.index)} experiment`}
               <ArrowUpRight className="size-3.5 shrink-0" />
             </Link>
           </li>
