@@ -622,6 +622,9 @@ navigation:
               - page: Service Accounts
                 path: ./docs-v2/administration/admin-dashboard/service_accounts.mdx
                 slug: service_accounts
+              - page: Opik Usage
+                path: ./docs-v2/administration/admin-dashboard/opik_usage.mdx
+                slug: opik_usage
           - section: Authentication
             slug: /authentication
             contents:
