@@ -15,11 +15,14 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -83,6 +86,7 @@ class DashboardServiceImpl implements DashboardService {
         // Generate ID if not provided
         var dashboardId = dashboard.id() != null ? dashboard.id() : idGenerator.generateId();
         IdGenerator.validateVersion(dashboardId, "dashboard");
+        validateOllieCharts(dashboard.config());
 
         final UUID resolvedProjectId;
         if (StringUtils.isNotBlank(dashboard.projectName()) && dashboard.projectId() == null) {
@@ -232,6 +236,10 @@ class DashboardServiceImpl implements DashboardService {
 
         log.info("Updating dashboard with id '{}' and scope '{}' in workspace '{}'", id, scope, workspaceId);
 
+        if (dashboardUpdate.config() != null) {
+            validateOllieCharts(dashboardUpdate.config());
+        }
+
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DashboardDAO.class);
 
@@ -309,4 +317,10 @@ class DashboardServiceImpl implements DashboardService {
                 ids.size(), scope, workspaceId);
     }
 
+    private static void validateOllieCharts(JsonNode config) {
+        var errors = OllieChartWidgets.validate(config);
+        if (!errors.isEmpty()) {
+            throw new ClientErrorException(Response.status(422).entity(new ErrorMessage(errors)).build());
+        }
+    }
 }

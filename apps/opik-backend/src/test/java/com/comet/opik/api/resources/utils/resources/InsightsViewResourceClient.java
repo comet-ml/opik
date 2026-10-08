@@ -4,6 +4,7 @@ import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardUpdate;
+import com.comet.opik.api.DashboardWidgetQueryRequest;
 import com.comet.opik.api.filter.DashboardFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
@@ -77,6 +78,19 @@ public class InsightsViewResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get();
+    }
+
+    public Response callRunWidgetQuery(UUID id, String widgetId, DashboardWidgetQueryRequest request, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .path("widgets")
+                .path(widgetId)
+                .path("query")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
     }
 
     public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
