@@ -101,6 +101,12 @@ class FreeFormSqlPolicyCheckTest {
                         new FreeFormSqlSubqueries.SubqueryReads(Set.of("opik.feedback_scores"),
                                 Set.of("opik.feedback_scores"), false),
                         "opik.feedback_scores", "read without a row policy"),
+                arguments("a local table read in a scalar subquery while its wrapper is under IN", List.of(
+                        entry(true, USER, List.of("opik.spans", "opik.traces", "opik.traces_local"), List.of())),
+                        plan("ReadFromMergeTree|opik.spans_local|filtered"),
+                        new FreeFormSqlSubqueries.SubqueryReads(Set.of("opik.traces_local"), Set.of("opik.traces"),
+                                false),
+                        "opik.traces_local", "read without a row policy"),
                 arguments("a wrapper read on a shard is not covered by another shard's local read", List.of(
                         entry(true, USER, List.of("opik.traces"), List.of()),
                         entry(false, "default", List.of("opik.traces_local"), List.of("opik.traces_local")),

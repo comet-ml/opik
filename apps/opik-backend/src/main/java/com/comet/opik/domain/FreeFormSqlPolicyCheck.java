@@ -99,11 +99,15 @@ class FreeFormSqlPolicyCheck {
                 }
                 // The initiator's entry has no policies for its nested reads: a planned one shows its filter in the
                 // plan, and one absent from the plan must be shown by the query tree to sit under IN or EXISTS. The
-                // tree names a local table read in-process by its Distributed wrapper (traces_local as traces).
-                String treeName = StringUtils.removeEnd(table, "_local");
+                // tree names a local table read in-process by its Distributed wrapper (traces_local as traces), and
+                // a scalar read under either name excludes it.
+                String distributedTable = StringUtils.removeEnd(table, "_local");
+                boolean underFilter = subqueryReads.filter().contains(table)
+                        || subqueryReads.filter().contains(distributedTable);
+                boolean underScalar = subqueryReads.scalar().contains(table)
+                        || subqueryReads.scalar().contains(distributedTable);
                 boolean shownElsewhere = entry.initial() && (filteredReads.contains(table)
-                        || (!plannedReads.contains(table) && subqueryReads.filter().contains(treeName)
-                                && !subqueryReads.scalar().contains(treeName)));
+                        || (!plannedReads.contains(table) && underFilter && !underScalar));
                 if (!shownElsewhere) {
                     return Optional.of(FreeFormSqlPolicyViolation.builder().table(table).reason(
                             entry.initial() ? "read without a row policy" : "read without a row policy on a shard")
