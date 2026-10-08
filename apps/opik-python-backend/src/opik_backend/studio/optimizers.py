@@ -38,7 +38,7 @@ _LOW_TEMPERATURE_UNVERSIONED_GEMINI_IDS = frozenset({"gemini-pro-vision"})
 # Only Google's own routes: native, Vertex AI and OpenRouter. A custom provider's
 # model name (custom-llm/<provider>/<name>) says nothing about what serves it, so
 # it keeps the pin, as it keeps its sliders in the frontend.
-_GOOGLE_ROUTE_PREFIXES = ("vertex_ai/", "google/")
+_GOOGLE_ROUTE_PREFIXES = ("vertex_ai/", "google/", "~google/")
 
 
 def keeps_default_temperature(model: str | None) -> bool:

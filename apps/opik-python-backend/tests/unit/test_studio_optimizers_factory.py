@@ -211,6 +211,8 @@ class TestTaskModelTemperaturePinning:
             "google/gemini-3-flash-preview",
             "google/gemini-3-flash-preview:free",
             "gemini-flash-latest",
+            "~google/gemini-flash-latest",
+            "~google/gemini-pro-latest",
         ],
     )
     def test_task_params__gemini_3_and_newer_on_a_google_route__keep_their_default_temperature(
