@@ -8,12 +8,14 @@ from .routes import (
     experiments,
     feedback_definitions,
     health,
+    integrations,
     metrics,
     projects,
     prompts,
     test_suites,
     threads,
     traces,
+    tracked_generators,
 )
 
 app = FastAPI(title="opik-sdk-driver", version="0.0.1")
@@ -38,3 +40,5 @@ app.include_router(prompts.router)
 app.include_router(test_suites.router)
 app.include_router(annotation_queues.router)
 app.include_router(threads.router)
+app.include_router(integrations.router)
+app.include_router(tracked_generators.router)

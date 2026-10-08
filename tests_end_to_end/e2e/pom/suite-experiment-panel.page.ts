@@ -43,6 +43,59 @@ export class SuiteExperimentPanelPage {
   }
 
   /**
+   * The sidebar's link out to the open row's suite item — the "View evaluation
+   * item" tag (OPIK-8600).
+   *
+   * The second of the two call sites that carry the originating compare view in
+   * `from`; the dataset-method one is `CompareExperimentsPage.datasetItemTag`.
+   * Separate locators for the two because they are separate components
+   * rendering different labels at different routes, and the Items tab mounts
+   * exactly one of them on `evaluation_method` — so one can break while the
+   * other keeps working, which is the same argument this POM exists for.
+   *
+   * A plain `Link` here, not a `NavigationTag`: it raises no tooltip, so there
+   * is deliberately no tooltip reader beside this.
+   */
+  get evaluationItemTag(): Locator {
+    return this.page.getByRole('link', { name: 'View evaluation item' });
+  }
+
+  /**
+   * The evaluation-item tag's `href`, once it has rendered.
+   *
+   * The `toHaveCount(1)` is load-bearing, not decoration: the tag renders a
+   * beat after the sidebar root becomes visible, so a read taken as soon as
+   * `gotoItemRow` returns finds nothing and would report an absent link on a
+   * good build. Generous timeout because the sidebar's own reads have to land
+   * first.
+   */
+  async readEvaluationItemTagHref(): Promise<string> {
+    return test.step('read the evaluation-item tag href from the sidebar', async () => {
+      await expect(
+        this.evaluationItemTag,
+        'exactly one evaluation-item tag in the suite sidebar',
+      ).toHaveCount(1, { timeout: 60_000 });
+      const href = await this.evaluationItemTag.getAttribute('href');
+      // Asserted, not defaulted — an href-less tag navigates nowhere while
+      // looking entirely correct.
+      expect(href, 'the evaluation-item tag carries an href').not.toBeNull();
+      return href as string;
+    });
+  }
+
+  /** Follow the evaluation-item tag and settle on the suite items page. */
+  async clickEvaluationItemTag(): Promise<void> {
+    await test.step('click the evaluation-item tag', async () => {
+      await expect(
+        this.evaluationItemTag,
+        'exactly one evaluation-item tag in the suite sidebar',
+      ).toHaveCount(1, { timeout: 60_000 });
+      await this.evaluationItemTag.click();
+      await this.page.waitForURL((url) => url.pathname.endsWith('/items'), { timeout: 30_000 });
+    });
+  }
+
+  /**
    * The run tabs, in the order the panel renders them.
    *
    * `MultiRunTabs` labels them "Run 1", "Run 2", … and renders no tab list at

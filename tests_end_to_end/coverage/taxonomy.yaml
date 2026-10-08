@@ -305,6 +305,51 @@ areas:
       # this under either would retire the question permanently.
       logs-open-ended-window: { covered: false, note: "A date-range preset ending today sends no interval_end, on the kpi-cards read and on the chart's metrics read alike: the KPI cards, their period-over-period deltas and the table footer then report one population including a row whose UUIDv7 id instant is mid-2200, on the Traces, Spans and Threads tabs. Pinned against the same seed read with interval_end = now, where every current-period number differs and the prior period is identical" }
       filter-traces:          { covered: true,  tier: t2-cuj }
+      # New for 2.2.94, from the release pass's own exploration of opik#8797.
+      #
+      # Where the trace panel's tree puts a span whose `parent_span_id` names a
+      # span that is NOT in the loaded set. `TraceTreeViewer` attached such a
+      # span to nothing and rendered it nowhere, while "Spans (n)" went on
+      # counting it — a panel that says five and shows four, with no error.
+      #
+      # Its own key rather than folded into `span-tree-expand`, which the
+      # exploration's candidate came closest to. That key is the tree's
+      # expand/collapse behaviour over a connected hierarchy, and it is already
+      # `covered: true` — carried by trace-spans-depth.spec.ts and by
+      # span-read-mapping-and-parent-guard.spec.ts, BOTH of which seed fully
+      # connected trees and so have no orphan to lose. Folding this under it
+      # would retire the question permanently while nothing had tested it. Not
+      # `toggle-spans-view` either, which the candidate proposed: that names the
+      # Logs page's Spans TAB and the table it pages, a different surface from
+      # the panel's span tree.
+      #
+      # Deliberately names the tree's SHAPE and not the hidden-spans toggle. The
+      # eye control is driven here only because the two tree modes are the two
+      # code paths the fix unified; what a reader should take from this key is
+      # that an unresolvable parent lands at the trace root, in both modes.
+      orphan-span-at-trace-root: { covered: false, note: "A span whose parent_span_id names an id that was never written renders at the TRACE root rather than vanishing, in both tree modes, with the Spans (n) label agreeing with the tree in each. Asserted as a depth map over the whole tree read from each node's paddingLeft (the row element is absolute left-0, so every node reports the same bounding-box x and a position-based measure would find the whole tree at depth 0), compared whole so a missing node — the regression — an extra node, and a tree flattened to the root all fail distinctly. The fixture proves it can discriminate before the browser opens: it asserts over the API that the server stored the dangling parent VERBATIM, since a backend that nulled it would make the orphan an ordinary second root span and the tree builder would never reach the branch under test. Show-all is the discriminating half — pre-fix, excludeHiddenSpans blanked a missing parent as a side effect, so hide mode reached the root anyway; the hiding test guards that removed side effect, plus the re-parenting of a hidden span's child to its nearest visible ancestor, and the round trip back through the toggle. Not covered: an orphan whose own parent chain is several unwritten levels deep, and the tree's search/filter modes" }
+      # New for 2.2.93, from the release pass's own exploration of opik#8767.
+      #
+      # The Logs page's "Search by anything" box and the `search` param behind
+      # it — `ilike('%term%')` across a trace's id/name/input/output/metadata/
+      # error_info/tags/thread_id and a span's id/trace_id/name/type/input/
+      # output/metadata/tags/model/provider — plus the week pre-pass opik#8767
+      # put in front of it, which bounds the scan to the weeks the project
+      # actually holds rows in.
+      #
+      # Its own key rather than folded into `filter-traces`, which the
+      # exploration's candidate reached for. That key is the structured filter
+      # CHIPS: its three specs (trace-filters, trace-source-merge,
+      # span-quick-filter-routing) build `traces_filters` entries and never
+      # render `search_text`, so they cannot reach this branch at all — and
+      # `filter-traces` is already `covered: true`, so folding search under it
+      # would retire the question permanently while nothing had tested it.
+      #
+      # Deliberately names BOTH surfaces, because one spec drives each: the two
+      # API-level tests assert the listing, the page walk and the stats on
+      # traces and on spans, and the third types into the box and asserts the
+      # table agrees with the API for the identical term.
+      free-text-search:       { covered: false, note: "Free-text `search` over traces and spans, asserted as EXACTNESS rather than membership on a seeded 25-row project (14 carrying a needle token in name/input/output, 11 decoys carrying none, one span mirroring each trace): the id SET and the envelope's `total` both pinned, a one-character term resolving to the same set (the fixture asserts the character appears in no decoy and in no seeded id, since the span clause matches on id and trace_id), the set surviving a walk at size 3 with no duplicate and no short-page early exit, /traces/stats and /spans/stats agreeing under the search and without it — read as the raw stats list, because this endpoint answers `{\"stats\": []}` rather than a zeroed count when it matches nothing — and the search composed with a `name contains` filter whose group deliberately spans matching AND decoy rows, so the intersection is strictly smaller than either side alone. The UI half types into the box and asserts the footer total, the rendered row set and every decoy's absence against the API's answer for the same term, then that clearing it restores the project. PARTIAL on the thing opik#8767 changed: the week spread is a fixture parameter (3 requested) asserted as a per-week census of the answer, but an environment running UUIDv7 validation in reject mode with a sub-week window (staging: PT24H) refuses backdated ids and the seed falls back to one week, which it reports as `weeksCovered` rather than claiming. Needs uuidValidation.auditOnly=true to drive the bound. Not covered: thread search (ThreadDAO has its own clause), and search under a from_time/to_time window" }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
       # New for 2.2.86, from the release pass's own exploration of opik#8411.
@@ -320,9 +365,75 @@ areas:
       # asserted as set equality against a direct REST enumeration rather than
       # as a count.
       sdk-multipage-stream-reads: { covered: false }
+      # New for 2.2.93, from the release pass's own exploration of opik#8518.
+      #
+      # `@opik.track` on a GENERATOR, specifically one the consumer stops
+      # reading before it is exhausted. A different code path from a tracked
+      # function: `SyncTrackedGenerator` opens its span on the first next() and,
+      # before opik#8518, ended it only on StopIteration — so an early exit left
+      # the span open and the WHOLE TRACE was dropped, which a user reads as
+      # "the SDK logged nothing".
+      #
+      # Its own key, and NOT `list-traces`, which the exploration's candidate
+      # reached for. The OPEN note at the top of this area already records that
+      # `list-traces` is carrying `sdk-track-non-error-throw.spec.ts` for want
+      # of a better key and warns in its own note against reading its
+      # `covered: true` as evidence about the SDK trace lifecycle — folding a
+      # second SDK-lifecycle spec under it would make that worse, and would also
+      # conflate the TypeScript SDK (that spec's subject) with the Python one.
+      #
+      # Deliberately narrower than the `traces.sdk-trace-lifecycle` the OPEN
+      # note proposes as a candidate: this spec exercises generators under
+      # @track and nothing else, and a capability counted as covered is never
+      # re-derived. Whether to add that broader key and re-home the TypeScript
+      # spec is still the open question it was.
+      sdk-track-generator-spans: { covered: false, note: "A tracked generator stopped early still logs its trace and its span, in all four ways a consumer stops one: a for-loop break, a bare next(), itertools.islice, and an exception raised in the CONSUMER's loop body and caught outside (the generator itself does not fail, so that one must read as a partial success and carry no error). Asserted beyond presence on the recorded OUTPUT, which the fix defines as the items actually yielded before the consumer stopped — a distinct expected string per shape, on the trace AND on its span, so a build that recorded the whole generator or none of it fails. Population asserted by exhaustion (exactly one span per call, label set compared whole, held across a quiet period) so an extra or missing span fails rather than hiding behind the rows that were looked for; plus a non-null positive duration per trace, which is what ending the span produces. A fully exhausted generator and a plain tracked function run beside them as controls, so a red early-exit shape next to a green control is a product finding rather than the SDK failing to reach the environment. The UI half pins the same fact where a user sees it: every trace a row in the Logs table and its duration cell an elapsed time rather than the 'NA' a never-ended span renders as. Driven through a new opik-sdk-driver route (/traces/track-generator); the bridge drove @opik.track only on a plain function before. Not covered: the ASYNC generator wrapper (aclose, and the loop-shutdown path), an explicit close() by the caller, the atexit backstop for a generator still alive at interpreter exit, and a generations_aggregator override" }
+      # New for 2.2.92, from the release pass's own exploration of opik#8368.
+      #
+      # The spans an `opik.integrations.*` TRACKER writes — here `track_ollama`,
+      # which wraps `ollama.Client.chat` / `AsyncClient.chat` including
+      # `stream=True`. Nothing in the estate drove any tracker before this: the
+      # `opik-sdk-driver` had no `integrations` route and no spec imported one,
+      # so the only guard was the PR's own `test_ollama.py` behind a new
+      # workflow that needs a live Ollama.
+      #
+      # Deliberately named for THIS tracker and not for the family. A generic
+      # key would read as a claim about every `opik.integrations.*` module, of
+      # which this spec exercises exactly one — and a capability counted as
+      # covered is never re-derived.
+      #
+      # Its own key rather than folded into `span-model-cost-tokens`, which the
+      # exploration's candidate reached for. That key is about server-side PRICE
+      # resolution over hand-seeded spans: its spec writes the usage map itself,
+      # so it cannot see a tracker that mapped the provider's counters onto the
+      # wrong keys, which is the silent-wrongness half here. Folding this under
+      # it would retire the question permanently.
+      # New for 2.2.94, from the release pass's own exploration of opik#8782.
+      #
+      # The spans a TYPESCRIPT `opik-openai` tracker writes — here `trackOpenAI`
+      # over the OpenAI **Responses** API, whose `usage` reports
+      # `input_tokens`/`output_tokens`. opik#8782 had those assigned to
+      # `completion_tokens`/`prompt_tokens`: literally transposed, so every
+      # Responses-API span was billed at the wrong per-token rate while looking
+      # entirely healthy.
+      #
+      # Named for THIS tracker and this endpoint, not for the family. The spec
+      # exercises one of five integration packages (`opik-openai`, `opik-gemini`,
+      # `opik-langchain`, `opik-otel`, `opik-vercel`) on one of its two endpoints,
+      # and a capability counted as covered is never re-derived.
+      #
+      # Its own key rather than folded into `span-model-cost-tokens`, which the
+      # exploration's candidate reached for — the same call the 2.2.92 pass made
+      # for `sdk-ollama-tracker-spans`, and for the same reason. That key is about
+      # server-side PRICE resolution over hand-seeded spans: its fixture writes
+      # the usage map itself, so it cannot see a tracker that filled the map in
+      # wrongly, which is the entire defect here. It is already `covered: true`,
+      # so folding this under it would retire the question permanently.
+      ts-sdk-openai-tracker-usage: { covered: false, note: "opik-openai's trackOpenAI over the OpenAI Responses API, driven against a local stub provider (127.0.0.1, no key, no network, so both token counts and the model are fixed by the fixture): the provider's deliberately lopsided input_tokens=1,000,000 / output_tokens=1,000 asserted to land on prompt_tokens / completion_tokens the right way round, as a WHOLE usage map including the native counters kept under original_usage.* — which is what makes it a mapping rather than a rename, and what rules out a tracker that had swapped both sides. Priced on that mapping at gpt-4o's published rates ($2.5e-06 in, $1e-05 out) to exactly $2.51, beside a control span this spec seeds by hand with the two counts TRANSPOSED, asserted to price at $10.0025 and strictly more — so the cost comparison is shown to discriminate rather than merely asserted on one side. gpt-4o chosen because its two rates are an order of magnitude apart, which the spec asserts before relying on. Population pinned by exhaustion (exactly one span per tracked call, so a span-per-chunk or a request/response pair fails) and the stub records any path it was not asked to serve, so a client that fell back to /v1/chat/completions — a different usage shape needing no mapping — fails loudly instead of passing while saying nothing. Also records, without endorsing, that this tracker types its generation span `general` where the Python track_ollama tracker types it `llm`. Needs `openai` + `opik-openai` as e2e devDependencies, with an `overrides` entry because opik-openai@2.2.94 still declares peer opik@^1.8.61 while the suite pins opik@^2.2.74; plain `npm ci` was verified to resolve. NOT covered: streaming (`stream: true`), the chat-completions endpoint, tool calls, cached or reasoning tokens as non-zero, an explicit `parent`, and every other opik-* integration package" }
+      sdk-ollama-tracker-spans: { covered: false, note: "track_ollama writing one llm span per chat() call against a mock /api/chat: a streamed call aggregated into ONE span carrying the concatenated text the done chunk does not, prompt_eval_count/eval_count mapped onto prompt_tokens/completion_tokens with the native COUNTERS kept under original_usage.* and the four nanosecond *_duration fields deliberately kept OUT of the usage map (opik#8771, 2.2.94: they overflow the backend's 32-bit usage values and the whole span batch is rejected, so the SDK appears to log nothing) while still being recorded in the span metadata, the provider default and its override, the stream-renamed span, a call nested under an @opik.track parent, and AsyncClient behaving identically. Span population pinned by exhaustion over the whole project, so a span-per-chunk fails. Not covered: any other opik.integrations.* tracker, tool_calls, thinking, and cost (a mock model name resolves no price)" }
       add-trace-to-dataset:   { covered: true,  tier: t2-cuj, note: "AddToDatasetDialog, and the create-dataset-items-from-{traces,spans} endpoints behind it: field_mappings resolving a path, taking precedence over enrichment_options on a collision, being dropped when the path resolves to nothing, and being ignored for a TEST_SUITE dataset; plus the four validation rejections (blank name, blank path, uncompilable path, over the 100-entry cap) and that none of them writes. Driven through the dialog's Advanced mapping section for one trace — defaults, Preview, re-pointing a row through the JSON tree — and read back through the API" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
-      messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details. Not covered from the traces side; the playground-written shape is covered under playground.trace-messages-tab, which does not generalise to SDK-logged traces." }
+      messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details. Covered from the traces side by trace-panel-raw-html-sanitize.spec.ts for an SDK-logged OpenAI chat-completion shape ({messages:[…]} in, {choices:[{message}]} out): the tab asserted as the DEFAULT one rather than clicked into, which is the observable half of detectLLMMessages having claimed the trace, both turns rendered, and the assistant's raw HTML put through the rehypeSanitize config this release moved MarkdownPreview onto — <details>, <table> and <img> surviving as parsed ELEMENTS with every text marker on screen, against a <script>, an onerror handler, a javascript: href and an inline style all filtered while the elements and a safe href beside them are kept. Gated on a <strong> from the answer's own markdown, since MarkdownPreview stamps comet-markdown on its plain-text fallback too and both tests would otherwise pass over a build with no sanitizer at all. The playground-written bare {output: string} shape is covered separately under playground.trace-messages-tab. Still uncovered: a tool turn's second label, the fallback to Details when detectLLMMessages rejects a trace, and the audio/image/video blocks." }
       agent-graph-tab:        { covered: false }
       prompts-tab:            { covered: false, note: "PromptsTab — conditional on opik_prompts metadata + canViewPrompts, like agent-graph-tab" }
       attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel; also the mirror-image path where the caller DOES declare a mime_type — sent on both upload-start and upload-complete, since only the latter reaches the stored row — asserted stored verbatim (case included) against file names whose extensions resolve to nothing, so a type dropped on the wire fails loudly instead of being re-derived; and the two classifier fall-throughs underneath the lookup table, a well-formed type outside it taken by its top-level type (image/avif) and the RFC 2045 case-insensitive match (IMAGE/PNG), against an application/octet-stream control asserted NOT to render as an image" }
@@ -410,6 +521,27 @@ areas:
       turn-order-io:           { covered: true,  tier: t1-smoke }
       thread-feedback-score:   { covered: true,  tier: t2-cuj }
       thread-actions-panel:    { covered: false }
+      # New for 2.2.94, from the release pass's own exploration of opik#8778.
+      #
+      # The Threads tab's "Search by anything" box and the `search` param behind
+      # it — `ThreadDAO`'s own clause, `ilike` over a thread's `thread_id` and
+      # `id` plus the `input` and `output` of the traces it aggregates — and the
+      # week pre-pass opik#8778 put in front of it
+      # (`traces_partitioned && search_text`), which no other combination of
+      # parameters reaches.
+      #
+      # Its own key, and NOT `list-threads`, which the exploration's candidate
+      # reached for. That key is the Threads table listing seeded conversations
+      # and is already `covered: true` at t1 — folding search under it would
+      # retire the question permanently while nothing had tested it. Not
+      # `traces.free-text-search` either, though it is the direct sibling: that
+      # key's note names thread search as explicitly NOT covered, because this is
+      # a third clause over different columns on a different endpoint, and its
+      # `@area:` is traces rather than threads.
+      #
+      # The capability is in the `threads` area even though the spec lives in
+      # trace-explore/ — that is this area's `spec_dir`, shared with traces.
+      free-text-search:        { covered: false, note: "Free-text `search` over threads, asserted as EXACTNESS rather than membership on a seeded 12-thread project (7 carrying one marker in their trace's input and a DIFFERENT marker in its output, 5 decoys carrying neither, one trace and one usage-carrying llm span per thread): the thread-id SET and the envelope's `total` both pinned, each marker asserted separately because each sits on one column only — so a clause that lost `input` or `output` fails one step and passes the other — each thread's own per-column token resolving to exactly its one thread, /traces/threads/stats agreeing with the listing under each search and without one (an independently written query, read through numericStat so an empty stats list cannot pass as a zero), and a trace NAME searched as the negative control, which must return nothing because the thread clause does not read it. The fixture proves it can discriminate before writing: the clause matches `thread_id`, and the ids are built from the run prefix and the test's own title, so it asserts no marker occurs in any thread id and that each token occurs in exactly one thread's searchable text. Searched rows are also asserted to still carry number_of_messages, duration, total_estimated_cost and usage, since the right ids with empty aggregates is a blank table no count assertion would notice. The UI half types into the box and asserts the footer total, the rendered row set and every decoy's absence against the API's answer for the same term, then that clearing it restores the project; and pins, as the one place two numbers on this page legitimately disagree, that the KPI count card above the table does NOT narrow — `useProjectKpiCards` takes the chip filters and the window and no `search`, so it stays a project-level overview while the footer is the searched total. NOT covered, and not claimed: the week bound itself — the Threads tab excludes the `alltime` preset so its read is always windowed, and an environment running UUIDv7 validation in reject mode with a sub-week window (staging: PT24H) refuses backdated ids, so every row is seeded at `now`; driving the bound needs uuidValidation.auditOnly=true. Also not covered: search composed with a thread filter chip, and a multi-turn thread's aggregate under a search" }
       thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'" }
 
     visual:
@@ -658,6 +790,22 @@ areas:
       version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache; also API-level, the single version a multi-batch insert cuts whatever its num_threads or its compression arm, and the v1/v2 pair either side of a rejected insert; plus the counters a single non-JSON-native item cuts (one version, itemsAdded 1, itemsModified 0) and the absence of any second version once the repeat insert deduplicates" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
+      # New for 2.2.94, from the release pass's own exploration of opik#8605.
+      #
+      # The create sidebar's "Upload a file" mode and the two endpoints behind it
+      # — `/datasets/items/from-csv` and `/datasets/items/from-json` — including
+      # the SYNCHRONOUS validation opik#8605 added. No spec in the estate
+      # uploaded a file before this one.
+      #
+      # Its own key rather than folded into `create-dataset-ui`, which the
+      # exploration's candidate reached for. That key is the sidebar's SDK mode —
+      # type a name, submit — and it is already `covered: true` at t1 from
+      # dataset-crud-smoke.spec.ts, so folding the upload path under it would
+      # retire the question permanently while nothing had driven a file through
+      # either endpoint. The two share a sidebar component and nothing else: the
+      # upload mode has a dropzone, a derived name, a second request after the
+      # create, and a validation surface of its own.
+      upload-file-items:      { covered: false, note: "A file uploaded through the Create dataset -> Upload a file sidebar, asserted on the three malformed shapes opik#8605 made synchronous plus a valid CSV as the control: a CSV whose headers differ only in case (the parser folds case, so it would have merged them), a JSON array with a syntax error in its SECOND element, and a JSONL with a non-object on its SECOND line — each malformed PAST the point the old head-only validation looked at, which is what makes them regression tests rather than smoke tests. Three independent facts per case, since any one can be right while the flow is broken: the response status (400 for each malformed file, 202 for the valid one — the only place 'synchronously' is observable rather than inferred); what the user is told, as the error toast carrying the server's own sentence AND the load-bearing negative that NO 'is ready to use' toast was raised, read through the shared toast recorder because Radix dismisses a toast in ~5s and a live locator cannot tell 'never raised' from 'already gone'; and what is stored, 0 items against the valid file's 2. Also pins the fix's other UI half, that a refused upload opens the dataset it created instead of claiming success. Self-seeding: the fixture writes its own four files, named inside the run prefix because the sidebar derives the dataset name from the FILE name and a dataset named otherwise escapes the teardown sweep. NOT covered, and deliberately not: the failed-import banner. opik#8605's final commit dropped the synchronous markFailed on purpose (it could overwrite a still-processing upload and left healthy datasets FAILED after one bad file), so a 400 leaves the dataset at status unknown with no banner — the banner belongs to a row-level failure during ASYNC processing (a JSONL whose id is not a UUID), which is a separate flow. Also not covered: a client-side rejection (wrong extension, over the size cap), drag-and-drop as opposed to the file picker, the 2000MB cap, and the 409 name collision the exploration saw produce no feedback at all" }
       # New for 2.2.86, from the release pass's own exploration of opik#8607.
       #
       # A dataset's last-experiment bookkeeping (most_recent_experiment_at,
@@ -786,6 +934,27 @@ areas:
       # the other run's media is caught rather than read as a normal-looking
       # panel.
       suite-item-sidebar:      { covered: false }
+      # From opik#8654, applied by the release job for 2.2.93.
+      #
+      # Why a new key rather than the two the exploration proposed:
+      #
+      #   compare-row-detail is the CompareExperimentsPanel's CONTENT — per-
+      #   experiment output and score, and the inline-image mapping. Its note
+      #   above says so in full. The flow here starts in that panel but ends two
+      #   pages away, on the dataset items page's own header and item sidebar,
+      #   which that key does not name and cannot speak for.
+      #
+      #   suite-item-sidebar is the evaluation-suite sidebar's content and its
+      #   multi-run media axis, already claimed by suite-item-sidebar-run-media.
+      #   Tagging navigation onto it would read as that axis being covered.
+      #
+      # Both would have been stretched, and a capability counted as covered is
+      # never re-derived — so the UI nobody tested would read as tested for
+      # good. The thing actually asserted is the ROUND TRIP, which spans both
+      # call sites and is one implementation (parseExperimentReturnHref +
+      # ViewInExperimentButton), so it is one key covered by two specs rather
+      # than two keys.
+      return-to-experiment:    { covered: false, note: "Getting back to the experiment from an evaluation item (OPIK-8600). Both call sites: the compare row-detail panel's dataset-item tag (CompareExperimentsPanel, dataset method) and the evaluation-suite sidebar's 'View evaluation item' tag (TestSuiteExperimentPanel) each carry the originating compare view in `from`; the items page that lands reads it back as a 'Back to experiment' button restoring that view's WHOLE search, and the item side panel grows an 'Experiment' button that reopens the compare view on the item the PANEL is showing rather than the one `from` was built with. Asserted on exact search params, since a back button that returns to a compare view with its filters or search dropped looks perfectly healthy. Reject path covered on both pages: an absent, off-site, protocol-relative or in-app-non-compare `from` falls back to 'Back to datasets'/'Back to test suites' with no Experiment button, against a good `from` on the same page as the control; plus the valid-compare-`from`-carrying-no-`experiments` middle case, where the back button still resolves while the Experiment button is correctly hidden. Pins both tooltip branches — plural over two experiments on the dataset side, singular over one on the suite side. The non-root-basepath branch of parseExperimentReturnHref is covered too, as of the 2.2.93 release pass: on a deployment served under a path prefix whose workspace name STARTS WITH that prefix (staging's opik-testing under /opik — the 'opik-demo under /opik' shape the helper's own comment names), the honoured href is asserted VERBATIM, so a basepath stripped by string prefix cannot pass as a plausible-looking one; beside it the reject cases a basepath makes possible — the same compare route with the basepath stripped, a protocol-relative URL whose host is the basepath segment, a backslash-escaped off-site URL, and an in-app non-compare path under the basepath as the discriminator — each asserted on the label AND on the href staying inside the app origin, since a button labelled 'Back to datasets' that still pointed off-site would satisfy a label-only check. That test states the deployment shape as a precondition and skips where it does not hold, because on a root-served install the guard never evaluates its basepath check at all and every case would be decided for another reason. NOT covered, and not claimed: the canViewExperiments: false permission gate (this OSS install grants everything), which has vitest coverage." }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
       # Whether a scoring metric in an evaluate() run computes with the LOCALE

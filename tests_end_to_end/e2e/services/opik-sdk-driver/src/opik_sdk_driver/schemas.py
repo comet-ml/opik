@@ -787,3 +787,145 @@ class StreamReadsRequest(BaseModel):
 class StreamReadsResponse(BaseModel):
     traces: list[StreamReadResult] = []
     spans: list[StreamReadResult] = []
+
+
+class OllamaChatCall(BaseModel):
+    """One `chat()` call the ollama-integration route is to make.
+
+    Each field selects a branch of `track_ollama` that is reached no other way,
+    so a caller describes the call rather than the assertion:
+
+    - `stream` takes the aggregator path, where the decorator folds a chunk
+      sequence into one span instead of ending the span on a `ChatResponse`.
+    - `use_async` swaps `ollama.Client` for `ollama.AsyncClient`, which the
+      decorator wraps through a separate stream wrapper.
+    - `provider` overrides the `ollama` default recorded on every span.
+    - `parent_name`, when set, makes the call from inside an `@opik.track`
+      function, so the chat span has a parent to be attached to.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Echoed back so a caller can match a result to its call without relying on
+    # order, the same reason `StreamReadShape` carries `key`.
+    label: str
+    stream: bool = False
+    use_async: bool = False
+    provider: str | None = None
+    parent_name: str | None = None
+
+
+class OllamaChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # Echoed by the mock responder onto every chunk, and read back off the span
+    # by the caller — so a tracker that stopped recording the requested model
+    # fails rather than matching a hardcoded name.
+    model: str
+    prompt: str
+    calls: list[OllamaChatCall]
+    workspace: str | None = None
+
+
+class OllamaChatResult(BaseModel):
+    label: str
+    # What the caller's own `chat()` returned, aggregated for a streamed call.
+    # The tracker must not change it: a wrapper that swallowed the last chunk
+    # would be invisible in Opik and obvious here.
+    content: str
+    model: str
+    # How many chunks a streamed call yielded, and 0 for a non-streamed one.
+    # Load-bearing: "the streamed call produced ONE span" is only a claim about
+    # aggregation if the stream really arrived in several chunks, and a caller
+    # that could not see this would pass identically against a one-chunk mock.
+    chunk_count: int
+
+
+class OllamaChatResponse(BaseModel):
+    """What the calls returned, plus the facts that live only in the process.
+
+    `double_track_is_noop` is the `opik_tracked` guard: `track_ollama` called
+    twice on one client must return the same object with the same bound `chat`,
+    and a second wrap would be invisible from the outside except as doubled
+    spans — which is a weaker and much slower way to observe it.
+    """
+
+    double_track_is_noop: bool
+    calls: list[OllamaChatResult]
+
+
+class TrackedGeneratorCall(BaseModel):
+    """One `@opik.track`ed call the generator route is to make.
+
+    `shape` selects HOW the consumer stops, and each value is a way a user stops
+    reading a streamed response early — the thing that left no trace at all
+    before opik#8518:
+
+    - `break_after` — a `for` loop that `break`s after `take` items, the
+      ordinary case.
+    - `bare_next` — a single `next()` and nothing more, i.e. a peek.
+    - `islice` — `itertools.islice` stopping short of the end, where the
+      consumer never touches the generator itself.
+    - `consumer_raises` — an exception raised in the CONSUMER's loop body after
+      `take` items and caught outside the loop. The generator itself does not
+      fail, so this must still be reported as a successful partial span rather
+      than an errored one.
+
+    And two controls, which are not early exits at all:
+
+    - `exhaust` — a generator read to the end, which raises `StopIteration` and
+      so was always reported.
+    - `plain_function` — a tracked NON-generator. Both exist so that "the trace
+      is there" cannot be confused with "the SDK reached this environment": a
+      red result on an early-exit shape next to a green one on a control is a
+      product finding, and a red everywhere is a connectivity problem.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Also the tracked function's `name`, so the trace is addressable by it.
+    # Echoed back for the same reason `OllamaChatCall.label` is: a result is
+    # matched to its call rather than to its position.
+    label: str
+    shape: Literal[
+        "break_after",
+        "bare_next",
+        "islice",
+        "consumer_raises",
+        "exhaust",
+        "plain_function",
+    ]
+    # How many items the consumer takes before stopping. Ignored by `exhaust`
+    # and `plain_function`.
+    take: int = 1
+
+
+class TrackedGeneratorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # What the generator yields, in order. Supplied by the caller rather than
+    # fixed here so the caller can derive the span output it expects — the
+    # decorator records `"".join(str(item) for item in consumed)` — without a
+    # second copy of the list living in this file.
+    items: list[str]
+    calls: list[TrackedGeneratorCall]
+    workspace: str | None = None
+
+
+class TrackedGeneratorResult(BaseModel):
+    label: str
+    # What the consumer actually received before it stopped. The one fact that
+    # exists only inside this process, and what makes the span's output
+    # assertable: a span recording more or less than this is wrong, and a
+    # caller that could not see it could only assert presence.
+    consumed: list[str]
+    # The exception type the consumer caught, for `consumer_raises`; null
+    # otherwise. Asserted rather than decoration: if the raise never happened,
+    # that shape degenerates into `break_after` and proves nothing extra.
+    caught: str | None = None
+
+
+class TrackedGeneratorResponse(BaseModel):
+    calls: list[TrackedGeneratorResult]

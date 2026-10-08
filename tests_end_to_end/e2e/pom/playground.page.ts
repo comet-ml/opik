@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
+import { readRecordedToasts, startRecordingToasts } from './toast-recorder';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
@@ -37,9 +38,6 @@ const RUN_ERROR_TEXT = /\bnot defined\b|returned an empty response/i;
  */
 const hasProducedOutput = (text: string): boolean =>
   text.trim() !== '' && !text.includes(IDLE_CELL_TEXT);
-
-/** Window key the toast recorder writes into — see `startRecordingToasts`. */
-const TOAST_RECORD_KEY = '__opikRecordedToasts';
 
 /** The title `useRunCompletionToast` gives the toast a finished run raises. */
 const RUN_COMPLETE_TEXT = /Run complete/;
@@ -235,15 +233,7 @@ export class PlaygroundPage {
 
   /**
    * Start recording every toast the page raises, from before the first one can
-   * appear. Must be called BEFORE `goto()` — it installs an init script, which
-   * runs on every document, so the recorder is in place for any navigation.
-   *
-   * It does NOT accumulate across navigations. The init script re-runs in each
-   * fresh document and assigns a new array, so a `page.reload()` drops every
-   * toast raised before it — `recordedToasts()` then describes the current
-   * document only. None of the specs using this reload mid-run; a spec that
-   * needs history to survive one has to hold the array test-side (an exposed
-   * binding the init script appends through) instead of on `window`.
+   * appear. Must be called BEFORE `goto()`.
    *
    * `completionToast()` above reads a LIVE locator, which only works when the
    * run is slow enough that the toast is still on screen when the assertion
@@ -254,61 +244,20 @@ export class PlaygroundPage {
    * already gone", which is exactly the distinction a spec asserting that a
    * STOPPED run stays silent depends on.
    *
-   * Scoped to the notification region for the same reason `completionToast()`
-   * is: Radix also portals a visually-hidden `role="status"` announcer carrying
-   * the same text, outside the region, and recording both would double every
-   * toast.
+   * The mechanism lives in `pom/toast-recorder.ts`, shared with the datasets
+   * POM, which needs the same guarantee for an upload that must not raise a
+   * success toast. Kept as methods here so every existing caller is unchanged.
    */
   async startRecordingToasts(): Promise<void> {
-    return test.step('start recording toasts', async () => {
-      await this.page.addInitScript((key: string) => {
-        const recorded: Element[] = [];
-        (window as unknown as Record<string, unknown>)[key] = recorded;
-
-        const isToast = (el: Element): boolean =>
-          el.matches('[role="status"]') && el.closest('[role="region"]') !== null;
-
-        new MutationObserver((mutations) => {
-          for (const mutation of mutations) {
-            for (const node of Array.from(mutation.addedNodes)) {
-              if (!(node instanceof Element)) continue;
-              if (isToast(node)) recorded.push(node);
-              // A toast can also arrive nested, when the region itself is the
-              // node that was inserted.
-              for (const nested of Array.from(node.querySelectorAll('[role="status"]'))) {
-                if (isToast(nested)) recorded.push(nested);
-              }
-            }
-          }
-        }).observe(document, { childList: true, subtree: true });
-      }, TOAST_RECORD_KEY);
-    });
+    return startRecordingToasts(this.page);
   }
 
   /**
    * The text of every toast raised since `startRecordingToasts()`, oldest
-   * first, whether or not it is still on screen.
-   *
-   * Read out of the recorded elements rather than snapshotted when they were
-   * inserted: a detached node keeps its text, and reading late also picks up
-   * any content React committed into the toast after appending it.
-   *
-   * Throws rather than returning `[]` when the recorder was never installed —
-   * an empty array is what half of these assertions are looking for, so a
-   * missing recorder would read as "no toast was raised" and pass.
+   * first, whether or not it is still on screen. See `pom/toast-recorder.ts`.
    */
   async recordedToasts(): Promise<string[]> {
-    return test.step('read the recorded toasts', async () => {
-      return this.page.evaluate((key: string) => {
-        const recorded = (window as unknown as Record<string, unknown>)[key];
-        if (!Array.isArray(recorded)) {
-          throw new Error(
-            'no toast recorder on this page — startRecordingToasts() must run before goto()',
-          );
-        }
-        return (recorded as Element[]).map((el) => (el.textContent ?? '').trim());
-      }, TOAST_RECORD_KEY);
-    });
+    return readRecordedToasts(this.page);
   }
 
   /** Recorded toasts that announce a finished run. */
