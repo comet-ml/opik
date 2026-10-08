@@ -5,10 +5,18 @@ templates:
 
 set:
   clickhouse.tieredStorage.enabled: true
+  clickhouse.tieredStorage.ttl.enabled: true
   clickhouse.tieredStorage.cold.s3.endpoint: https://b.s3.us-east-1.amazonaws.com
   clickhouse.tieredStorage.cold.s3.region: us-east-1
 
 tests:
+  - it: is off by default even with the cold tier on
+    set:
+      clickhouse.tieredStorage.ttl.enabled: null
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: renders nothing when the cold tier is disabled
     set:
       clickhouse.tieredStorage.enabled: false

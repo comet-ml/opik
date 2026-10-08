@@ -1118,8 +1118,9 @@ clickhouse:
     # Post-sync job that puts each listed table on the tiered_replicated policy with a
     # move-to-cold TTL, idempotently. It never moves existing data: that is a paced
     # operator step (ALTER TABLE ... MATERIALIZE TTL). Tables that do not exist yet are skipped.
+    # Off unless turned on per environment.
     ttl:
-      enabled: true
+      enabled: false
       tables:
         - name: traces_local
           moveAfterWeeks: 13
