@@ -903,16 +903,17 @@ class AgentInsightsJobsResourceTest {
         assertThat(awaitSingleTrigger(projectId).guidance()).isEqualTo("Only report billing failures");
         assertThat(getJob(projectId).resultsGuidanceVersion()).isNull();
 
+        // Guidance edited while the run is in flight: its report must record the version the run carried.
+        assertThat(updateGuidance(projectId, "Only report billing and auth failures").guidanceVersion())
+                .isEqualTo(2);
         insightsClient.reportIssues(
                 AgentInsightsReport.builder().projectId(projectId).reportDay(LocalDate.now()).issues(List.of())
                         .build(),
                 API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
-        assertThat(getJob(projectId).resultsGuidanceVersion()).isEqualTo(1);
 
-        // Guidance edited after the run: the results are now from older guidance.
-        var edited = updateGuidance(projectId, "Only report billing and auth failures");
-        assertThat(edited.guidanceVersion()).isEqualTo(2);
-        assertThat(edited.resultsGuidanceVersion()).isEqualTo(1);
+        var job = getJob(projectId);
+        assertThat(job.guidanceVersion()).isEqualTo(2);
+        assertThat(job.resultsGuidanceVersion()).isEqualTo(1);
     }
 
     @Test
@@ -920,8 +921,10 @@ class AgentInsightsJobsResourceTest {
     void cronSweep__withGuidance__carriesIt() {
         String projectName = "project-" + UUID.randomUUID();
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        updateGuidance(projectId, "Ignore retries");
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
         jobsClient.update(projectId, AgentInsightsJob.Status.ENABLED, API_KEY, WORKSPACE_NAME).close();
+        // Saving guidance on an existing job leaves its schedule as it was.
+        assertThat(updateGuidance(projectId, "Ignore retries").status()).isEqualTo(AgentInsightsJob.Status.ENABLED);
         traceResourceClient.createTrace(
                 podamFactory.manufacturePojo(Trace.class).toBuilder().projectName(projectName).build(),
                 API_KEY, WORKSPACE_NAME);
@@ -930,6 +933,26 @@ class AgentInsightsJobsResourceTest {
         reportJob.runSweep(now.minusSeconds(3600), now.plusSeconds(3600)).block();
 
         assertThat(awaitSingleTrigger(projectId).guidance()).isEqualTo("Ignore retries");
+    }
+
+    @Test
+    @DisplayName("Guidance: the automatic first run sends it too")
+    void autoFirstRunSweep__withGuidance__carriesIt() {
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        jobsClient.enrolInAutoFirstRun(true, List.of(projectId)).close();
+        updateGuidance(projectId, "Ignore retries");
+        traceResourceClient.batchCreateTraces(IntStream.range(0, AgentInsightsAutoFirstRunJob.MIN_TRACES)
+                .mapToObj(__ -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .build())
+                .toList(), API_KEY, WORKSPACE_NAME);
+
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+
+        var trigger = awaitSingleTrigger(projectId);
+        assertThat(trigger.triggerSource()).isEqualTo("auto_first_run");
+        assertThat(trigger.guidance()).isEqualTo("Ignore retries");
     }
 
     @Test
