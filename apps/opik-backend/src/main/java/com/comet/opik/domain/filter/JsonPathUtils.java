@@ -85,6 +85,26 @@ public class JsonPathUtils {
                 : toBracketNotation(segments);
     }
 
+    /**
+     * A plain dictionary key whose segments are all dot-notation-safe reads as a nested path
+     * ({@code a.b.c} → {@code $.a.b.c}) but may instead name a single flat key that contains
+     * dots ({@code "a.b.c"}). Callers that cannot know which the author intended must try both.
+     */
+    public static boolean hasAmbiguousDottedPlainKey(@NonNull String key) {
+        if (!key.contains(PATH_SEPARATOR) || isPathExpression(key)) {
+            return false;
+        }
+
+        return isExpressibleInDotNotation(key.split("\\.", -1));
+    }
+
+    /**
+     * JSONPath for a single top-level key whose name is {@code key} in full, including any dots.
+     */
+    public static String toAnalyticsDbLiteralFlatKeyPath(@NonNull String key) {
+        return JSONPATH_ROOT + quoteSegment(key);
+    }
+
     private static boolean isPathExpression(String key) {
         if (isRooted(key) || key.startsWith("[") || key.startsWith(PATH_SEPARATOR)) {
             return true;
