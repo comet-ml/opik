@@ -129,7 +129,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
   // Results read back from a run carry no stale styling, so once the prompt is edited its cells show
   // No runs yet rather than output that no longer answers the prompt in front of you.
   const hasOutput = isBackendRun
-    ? !stale && (value !== null || Boolean(error) || isLoading)
+    ? !stale
     : value !== null || Boolean(error) || isLoading;
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
