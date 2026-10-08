@@ -96,6 +96,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -1994,7 +1996,7 @@ class PromptResourceTest {
 
         @Test
         @DisplayName("when versions are created concurrently, then id order matches version number order")
-        void when__versionsCreatedConcurrently__thenIdOrderMatchesVersionNumberOrder() {
+        void when__versionsCreatedConcurrently__thenIdOrderMatchesVersionNumberOrder() throws Exception {
 
             var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
@@ -2005,17 +2007,32 @@ class PromptResourceTest {
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             // id and commit left null so the server mints them; that is the path the per-prompt lock orders
-            var createdVersions = IntStream.range(0, 20)
-                    .parallel()
-                    .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
-                            .id(null)
-                            .commit(null)
-                            .createdBy(USER)
-                            .build())
-                    .map(version -> createPromptVersion(
-                            createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
-                            API_KEY, TEST_WORKSPACE))
-                    .toList();
+            int concurrency = 20;
+            var createdVersions = new ArrayList<PromptVersion>();
+            var executor = Executors.newFixedThreadPool(concurrency);
+            try {
+                // One latch releases every request together, so they all contend for the per-prompt lock
+                var start = new CountDownLatch(1);
+                var futures = IntStream.range(0, concurrency)
+                        .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                .id(null)
+                                .commit(null)
+                                .createdBy(USER)
+                                .build())
+                        .map(version -> executor.submit(() -> {
+                            start.await();
+                            return createPromptVersion(
+                                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                                    API_KEY, TEST_WORKSPACE);
+                        }))
+                        .toList();
+                start.countDown();
+                for (var future : futures) {
+                    createdVersions.add(future.get(30, TimeUnit.SECONDS));
+                }
+            } finally {
+                executor.shutdownNow();
+            }
 
             List<PromptVersion> expectedVersions = createdVersions.stream()
                     .sorted(Comparator.comparing(
