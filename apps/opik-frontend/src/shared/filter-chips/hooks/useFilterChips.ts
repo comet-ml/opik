@@ -57,7 +57,7 @@ export const getPinnedChipsStorageKey = (tableId: string) =>
 
 const EMPTY_VALUES: ChipValueMap = {};
 const EMPTY_FILTERS: Filter[] = [];
-const UNUSED_PERSIST_KEY = "filter-chips:unused-persist-key";
+const NON_PERSISTING_STORAGE_KEY = "filter-chips:unused-persist-key";
 
 const useFilterChips = ({
   tableId,
@@ -79,7 +79,7 @@ const useFilterChips = ({
 
   // Hooks can't be conditional, so non-persisting callers read a key that is never written.
   const [saved, setSaved, { removeItem: removeSaved }] =
-    useLocalStorageState<unknown>(persistKey ?? UNUSED_PERSIST_KEY, {
+    useLocalStorageState<unknown>(persistKey ?? NON_PERSISTING_STORAGE_KEY, {
       storageSync: false,
     });
   const savedFilters =
