@@ -13803,6 +13803,9 @@ components:
         cachedTokens:
           type: integer
           format: int32
+        cacheWriteTokens:
+          type: integer
+          format: int32
     ToolCall:
       type: object
       properties:
@@ -13901,6 +13904,10 @@ components:
           type: string
         serviceTier:
           type: string
+        promptCacheKey:
+          type: string
+        promptCacheOptions:
+          $ref: "#/components/schemas/PromptCacheOptions"
         logprobs:
           type: boolean
         topLogprobs:
@@ -13947,6 +13954,13 @@ components:
           type: string
         content:
           $ref: "#/components/schemas/JsonNode"
+    PromptCacheOptions:
+      type: object
+      properties:
+        mode:
+          type: string
+        ttl:
+          type: string
     ResponseFormat:
       type: object
       properties:
