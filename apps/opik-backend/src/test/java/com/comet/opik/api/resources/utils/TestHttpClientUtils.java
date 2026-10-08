@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.utils;
 import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.http.HttpModule;
+import com.comet.opik.infrastructure.http.MatrixParameterRequestFilter;
 import io.dropwizard.client.JerseyClientBuilder;
 import jakarta.ws.rs.client.Client;
 import lombok.Getter;
@@ -28,6 +29,8 @@ public class TestHttpClientUtils {
     public static final String PROJECT_NAME_NOT_FOUND_MESSAGE = "Project name: %s not found";
     public static final io.dropwizard.jersey.errors.ErrorMessage NO_API_KEY_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
             401, MISSING_API_KEY);
+    public static final io.dropwizard.jersey.errors.ErrorMessage MATRIX_PARAMETERS_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
+            404, MatrixParameterRequestFilter.MESSAGE);
 
     /**
      * Returns a static {@link Client} for direct unit tests that construct services manually
