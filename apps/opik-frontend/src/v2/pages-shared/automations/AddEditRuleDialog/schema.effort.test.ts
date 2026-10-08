@@ -1,12 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
   convertLLMJudgeObjectToLLMJudgeData,
 } from "./schema";
 import { LLMJudgeObject } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { LLM_JUDGE } from "@/types/llm";
 import { resolveEffort } from "@/lib/modelUtils";
+import {
+  getLatestProviderModelsSnapshot,
+  resetModelRegistryStoreForTesting,
+  setLatestProviderModelsSnapshot,
+} from "@/lib/modelRegistryStore";
 
 const persisted = (
   model: PROVIDER_MODEL_TYPE,
@@ -30,6 +35,34 @@ const asFormData = (model: PROVIDER_MODEL_TYPE, config: unknown) =>
     maxCostUsd: null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any;
+
+// The backend's model registry lists these ids under Anthropic, while the static picker list the
+// tests otherwise read does not.
+const registerAnthropicModels = (...models: string[]) => {
+  const snapshot = getLatestProviderModelsSnapshot();
+  setLatestProviderModelsSnapshot({
+    ...snapshot,
+    [PROVIDER_TYPE.ANTHROPIC]: [
+      ...(snapshot[PROVIDER_TYPE.ANTHROPIC] ?? []),
+      ...models.map((value) => ({
+        value: value as PROVIDER_MODEL_TYPE,
+        label: value,
+      })),
+    ],
+  });
+};
+
+const unchangedSave = (
+  model: PROVIDER_MODEL_TYPE,
+  custom_parameters: Record<string, unknown>,
+) =>
+  convertLLMJudgeDataToLLMJudgeObject(
+    asFormData(
+      model,
+      convertLLMJudgeObjectToLLMJudgeData(persisted(model, custom_parameters))
+        .config,
+    ),
+  ).model.custom_parameters;
 
 describe("LLM judge Anthropic effort round trip", () => {
   it("reads the persisted effort back out of custom_parameters", () => {
@@ -116,5 +149,47 @@ describe("LLM judge Anthropic effort round trip", () => {
     );
 
     expect(object.model.custom_parameters).toEqual(customParameters);
+  });
+
+  describe("on models the backend registry lists", () => {
+    afterEach(() => {
+      resetModelRegistryStoreForTesting();
+    });
+
+    it.each<[PROVIDER_MODEL_TYPE, string]>([
+      [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416, "xhigh"],
+      [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205, "max"],
+    ])(
+      "keeps the effort of the dated %s through an unchanged save",
+      (model, effort) => {
+        registerAnthropicModels(model);
+        const stored = {
+          output_config: { effort },
+          unrelated_marker: "keep-me",
+        };
+
+        expect(unchangedSave(model, stored)).toEqual(stored);
+      },
+    );
+
+    it("keeps the effort of a Claude model this build has no row for", () => {
+      const model = "claude-opus-9" as PROVIDER_MODEL_TYPE;
+      registerAnthropicModels(model);
+      const stored = { output_config: { effort: "xhigh", format: "x" } };
+
+      expect(
+        convertLLMJudgeObjectToLLMJudgeData(persisted(model, stored)).config
+          .thinkingEffort,
+      ).toBeUndefined();
+      expect(unchangedSave(model, stored)).toEqual(stored);
+    });
+
+    it("still drops an effort from a model known to take none", () => {
+      expect(
+        unchangedSave(PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, {
+          output_config: { effort: "low", format: "x" },
+        }),
+      ).toEqual({ output_config: { format: "x" } });
+    });
   });
 });

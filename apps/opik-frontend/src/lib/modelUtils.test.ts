@@ -2109,6 +2109,7 @@ describe("Anthropic request contract", () => {
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1, LOW_TO_MAX],
@@ -2116,6 +2117,7 @@ describe("Anthropic request contract", () => {
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW, LOW_TO_MAX_WITHOUT_XHIGH],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205, LOW_TO_MAX_WITHOUT_XHIGH],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, ["low", "medium", "high"]],
   ])(
@@ -2243,6 +2245,28 @@ describe("Anthropic request contract", () => {
         custom_parameters: { output_config: { effort: "xhigh" } },
       }),
     ).toEqual({ thinkingEffort: "high" });
+  });
+
+  describe("on a Claude model this build has no row for", () => {
+    const UNLISTED = "claude-opus-9" as PROVIDER_MODEL_TYPE;
+
+    afterEach(() => {
+      resetModelRegistryStoreForTesting();
+    });
+
+    it("sends its nested effort as stored, for Anthropic to judge", () => {
+      setLatestProviderModelsSnapshot({
+        ...getLatestProviderModelsSnapshot(),
+        [PROVIDER_TYPE.ANTHROPIC]: [{ value: UNLISTED, label: UNLISTED }],
+      });
+
+      expect(
+        sanitizeConfigForRequest(UNLISTED, {
+          maxCompletionTokens: 4000,
+          custom_parameters: { output_config: { effort: "xhigh" } },
+        }).custom_parameters,
+      ).toEqual({ output_config: { effort: "xhigh" } });
+    });
   });
 
   it("sends the valid nested effort rather than replacing it over a stale flat one", () => {
