@@ -18,7 +18,6 @@ import {
   ChipValue,
   ChipValueMap,
 } from "@/shared/filter-chips/types";
-import { createLocalStorageMemory } from "@/lib/localStorageMemory";
 
 export type { FilterRemovedSource };
 
@@ -58,6 +57,7 @@ export const getPinnedChipsStorageKey = (tableId: string) =>
 
 const EMPTY_VALUES: ChipValueMap = {};
 const EMPTY_FILTERS: Filter[] = [];
+const UNUSED_PERSIST_KEY = "filter-chips:unused-persist-key";
 
 const useFilterChips = ({
   tableId,
@@ -77,23 +77,24 @@ const useFilterChips = ({
     { updateType: "replaceIn" },
   );
 
-  const memory = useMemo(
-    () =>
-      persistKey ? createLocalStorageMemory<Filter[]>(persistKey) : undefined,
-    [persistKey],
-  );
+  // Hooks can't be conditional, so non-persisting callers read a key that is never written.
+  const [saved, setSaved, { removeItem: removeSaved }] =
+    useLocalStorageState<unknown>(persistKey ?? UNUSED_PERSIST_KEY, {
+      storageSync: false,
+    });
+  const savedFilters =
+    persistKey && Array.isArray(saved) && saved.length > 0
+      ? (saved as Filter[])
+      : undefined;
 
   // Computed during render so the first render is already filtered.
-  const restored = useMemo(
-    () => (rawFilters === undefined && memory ? memory.load() : undefined),
-    [rawFilters, memory],
-  );
+  const restored = rawFilters === undefined ? savedFilters : undefined;
   const filtersParamAbsent = rawFilters === undefined;
   const sourceFilters = rawFilters ?? restored;
 
   // Re-runs on every URL change: re-clicking the current page's link doesn't remount it.
   useEffect(() => {
-    if (restored && restored.length > 0) setRawFilters(restored);
+    if (restored) setRawFilters(restored);
   }, [restored, setRawFilters]);
 
   const urlFilters: Filter[] = useMemo(
@@ -153,7 +154,7 @@ const useFilterChips = ({
         // An edit before the restore effect has run must build on the remembered filters.
         const prevFilters = Array.isArray(prevRaw)
           ? prevRaw
-          : memory?.load() ?? EMPTY_FILTERS;
+          : savedFilters ?? EMPTY_FILTERS;
         const prevValues = sanitizeFilters(prevFilters, definitions).values;
         const nextValues = updater(prevValues);
 
@@ -177,11 +178,22 @@ const useFilterChips = ({
 
         const nextFilters = chipsToFilters(definitions, nextValues);
         const next = nextFilters.length > 0 ? nextFilters : undefined;
-        memory?.save(next);
+        if (persistKey) {
+          if (next) setSaved(next);
+          else removeSaved();
+        }
         return next;
       });
     },
-    [definitions, setRawFilters, analytics, memory],
+    [
+      definitions,
+      setRawFilters,
+      analytics,
+      persistKey,
+      savedFilters,
+      setSaved,
+      removeSaved,
+    ],
   );
 
   const previousFiltersRef = useRef(filters);

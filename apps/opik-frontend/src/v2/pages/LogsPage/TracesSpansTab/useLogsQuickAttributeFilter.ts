@@ -5,7 +5,6 @@ import { Filter } from "@/types/filters";
 import { JsonValue } from "@/types/shared";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
-import { createLocalStorageMemory } from "@/lib/localStorageMemory";
 import {
   QuickAttributeFilterApi,
   QuickFilterSection,
@@ -23,6 +22,8 @@ import {
   getLogsFiltersMemoryKey,
   getLogsFiltersUrlKey,
 } from "@/v2/pages/LogsPage/TracesSpansTab/constants";
+
+const NO_FILTERS: Filter[] = [];
 
 const LOGS_TYPE_BY_DATA_TYPE: Record<TRACE_DATA_TYPE, LOGS_TYPE> = {
   [TRACE_DATA_TYPE.traces]: LOGS_TYPE.traces,
@@ -69,13 +70,11 @@ export const useLogsQuickAttributeFilter = ({
     JsonParam,
     { updateType: "replaceIn" },
   );
-  const filtersMemory = useMemo(
-    () =>
-      createLocalStorageMemory<Filter[]>(
-        getLogsFiltersMemoryKey(projectId, filtersUrlKey),
-      ),
-    [projectId, filtersUrlKey],
+  const [saved, setSaved] = useLocalStorageState<unknown>(
+    getLogsFiltersMemoryKey(projectId, filtersUrlKey),
+    { storageSync: false },
   );
+  const savedFilters = Array.isArray(saved) ? (saved as Filter[]) : NO_FILTERS;
   const pinTraceChip = usePinChip(TRACE_DATA_TYPE.traces);
   const pinSpanChip = usePinChip(TRACE_DATA_TYPE.spans);
 
@@ -93,11 +92,11 @@ export const useLogsQuickAttributeFilter = ({
       setFilters((current) => {
         // An absent param (bare landing) still has remembered filters to build on.
         const next = addQuickFilter(
-          Array.isArray(current) ? current : filtersMemory.load() ?? [],
+          Array.isArray(current) ? current : savedFilters,
           target,
           stringifyFilterValue(value),
         );
-        filtersMemory.save(next);
+        setSaved(next);
         return next;
       });
 
@@ -123,7 +122,8 @@ export const useLogsQuickAttributeFilter = ({
       entityType,
       type,
       setFilters,
-      filtersMemory,
+      savedFilters,
+      setSaved,
       pinSpanChip,
       pinTraceChip,
       onLogsTypeChange,

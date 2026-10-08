@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { useCallback, useEffect } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import { StringParam, useQueryParam } from "use-query-params";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import { ENVIRONMENT_UNTAGGED_VALUE } from "@/lib/filters";
-import { createLocalStorageMemory } from "@/lib/localStorageMemory";
 import { getLogsEnvironmentMemoryKey } from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 
 type UseLogsEnvironmentOptions = {
@@ -19,16 +19,12 @@ export const useLogsEnvironment = (
     StringParam,
     { updateType: "replaceIn" },
   );
-  const [, forceRender] = useReducer((n: number) => n + 1, 0);
 
-  const memory = useMemo(
-    () =>
-      createLocalStorageMemory<string>(getLogsEnvironmentMemoryKey(projectId)),
-    [projectId],
-  );
-
-  // Read on every render: the first render is already restored, and a forgotten value stays gone.
-  const saved: unknown = memory.load();
+  // Read synchronously, so the first render is already restored.
+  const [saved, setSaved, { removeItem: removeSaved }] =
+    useLocalStorageState<unknown>(getLogsEnvironmentMemoryKey(projectId), {
+      storageSync: false,
+    });
   const savedIsMalformed = saved !== undefined && typeof saved !== "string";
   const savedEnvironment = typeof saved === "string" ? saved : "";
   const environment = urlEnvironment || (canRestore ? savedEnvironment : "");
@@ -51,24 +47,23 @@ export const useLogsEnvironment = (
   }, [urlEnvironment, environment, envIsValid, setEnvironment]);
 
   useEffect(() => {
-    if (savedIsMalformed) memory.save(undefined);
-  }, [savedIsMalformed, memory]);
+    if (savedIsMalformed) removeSaved();
+  }, [savedIsMalformed, removeSaved]);
 
   useEffect(() => {
     if (envIsValid !== false) return;
     // An invalid inbound value must not wipe a different remembered one.
-    if (memory.load() === environment) memory.save(undefined);
+    if (saved === environment) removeSaved();
     setEnvironment(undefined);
-    // A restored value isn't in the URL, so clearing it there may not re-render.
-    forceRender();
-  }, [envIsValid, environment, memory, setEnvironment]);
+  }, [envIsValid, environment, saved, removeSaved, setEnvironment]);
 
   const changeEnvironment = useCallback(
     (next: string) => {
-      memory.save(next);
+      if (next) setSaved(next);
+      else removeSaved();
       setEnvironment(next || undefined);
     },
-    [memory, setEnvironment],
+    [setSaved, removeSaved, setEnvironment],
   );
 
   return { environment, envIsValid, changeEnvironment };

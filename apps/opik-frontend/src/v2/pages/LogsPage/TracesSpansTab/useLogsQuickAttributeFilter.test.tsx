@@ -56,7 +56,6 @@ const setup = (type: TRACE_DATA_TYPE) => {
 describe("useLogsQuickAttributeFilter", () => {
   beforeEach(() => {
     localStorage.clear();
-    localStorage.clear();
     vi.mocked(trackEvent).mockClear();
     setUrl({});
   });

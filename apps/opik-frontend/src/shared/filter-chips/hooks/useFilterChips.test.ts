@@ -15,9 +15,17 @@ vi.mock("use-query-params", () => ({
   useQueryParam: vi.fn(() => [mockRawFilters, setRawFilters]),
 }));
 
-vi.mock("use-local-storage-state", () => ({
-  default: vi.fn(() => [mockPinnedIds, setPinnedIds]),
-}));
+// Only the pinned-ids storage is faked; filter memory uses the real library.
+vi.mock("use-local-storage-state", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("use-local-storage-state")>();
+  return {
+    default: (key: string, options?: Parameters<typeof actual.default>[1]) =>
+      key.startsWith("chips:pinnedConfig:")
+        ? [mockPinnedIds, setPinnedIds]
+        : actual.default(key, options),
+  };
+});
 
 import useFilterChips from "./useFilterChips";
 
@@ -601,6 +609,7 @@ describe("useFilterChips", () => {
       expect(setRawFilters).toHaveBeenCalledOnce();
       expect(setRawFilters.mock.calls[0][0](undefined)).toHaveLength(1);
       expect(readRemembered()).toBeUndefined();
+      expect(localStorage.length).toBe(0);
     });
   });
 
