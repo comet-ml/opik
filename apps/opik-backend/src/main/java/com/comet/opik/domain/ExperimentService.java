@@ -386,7 +386,7 @@ public class ExperimentService {
     }
 
     private void triggerLazyAggregationIfNeeded(UUID experimentId, ExperimentStatus status, ContextView ctx) {
-        if (status != ExperimentStatus.COMPLETED && status != ExperimentStatus.CANCELLED) {
+        if (status == null || !status.isTerminal()) {
             return;
         }
 

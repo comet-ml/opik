@@ -14,14 +14,31 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.redisson.client.codec.Codec;
 
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Data
 public class ExperimentExecutionConfig implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
-    public static final String BATCH_COUNTER_KEY_PREFIX = "experiment:batch:";
+    public static final String ITEM_COUNTER_KEY_PREFIX = "opik:experiment:items:";
     public static final String TEST_SUITE_ASSERTION_COUNTER_KEY_PREFIX = "opik:experiment:assertion:";
+    public static final String CANCELLED_EXPERIMENT_KEY_PREFIX = "opik:experiment:cancelled:";
+    public static final String QUEUED_IDS_KEY_PREFIX = "opik:experiment:queued-ids:";
+    public static final String FINISH_CLAIM_KEY_PREFIX = "opik:experiment:finish-claim:";
+
+    /**
+     * Outstanding items for one prompt variant of a run. Scoped to the experiment rather than to the
+     * run so each variant settles on its own work: one that finishes is not held open by its
+     * siblings, and one that is cancelled takes nothing down with it.
+     */
+    public static String itemCounterKey(UUID experimentId) {
+        return ITEM_COUNTER_KEY_PREFIX + experimentId;
+    }
+
+    public static String itemFailureCounterKey(UUID experimentId) {
+        return itemCounterKey(experimentId) + ":failures";
+    }
 
     @Valid @NotBlank @JsonProperty
     private String defaultProjectName = "playground";
@@ -48,7 +65,7 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
     private Duration longPollingDuration = Duration.seconds(5);
 
     @JsonProperty
-    @Min(1000) @Max(10_000_000) private int streamMaxLen = 10_000;
+    @Min(1000) @Max(10_000_000) private int streamMaxLen = 50_000;
 
     @JsonProperty
     @Min(0) @Max(10_000) private int streamTrimLimit = 100;
