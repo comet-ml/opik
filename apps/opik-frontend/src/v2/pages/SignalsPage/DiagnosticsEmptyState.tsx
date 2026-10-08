@@ -10,7 +10,7 @@ import sampleIssuesDarkUrl from "/images/diagnostics-sample-issues-dark.svg";
 
 import { AUTO_FIRST_RUN_MIN_TRACES as TRACE_THRESHOLD } from "@/constants/diagnostics";
 
-const DIAGNOSTICS_DOCS_URL = buildDocsUrl("/tracing/diagnostics");
+export const DIAGNOSTICS_DOCS_URL = buildDocsUrl("/tracing/diagnostics");
 
 type DiagnosticsEmptyStateProps = {
   awaitsAutoFirstRun: boolean;

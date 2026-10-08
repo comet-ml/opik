@@ -264,9 +264,9 @@ const diagnosticsRoute = createRoute({
 const diagnosticsResolvedRoute = createRoute({
   path: "/diagnostics/resolved",
   getParentRoute: () => projectScopedRoute,
-  component: () => <SignalsPage showResolved />,
+  component: () => <SignalsPage showClosed />,
   staticData: {
-    title: "Resolved issues",
+    title: "Closed issues",
   },
 });
 
