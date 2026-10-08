@@ -300,7 +300,11 @@ const PlaygroundPrompt = ({
           configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
-        updateOutput(promptId, "", { value: null });
+        updateOutput(promptId, "", {
+          value: null,
+          error: undefined,
+          errorHint: undefined,
+        });
       } else {
         const restored = restoreMissingProviderAndConfigKeys(
           prompt,
