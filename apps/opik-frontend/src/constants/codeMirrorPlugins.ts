@@ -5,9 +5,32 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
-import { Compartment, Facet } from "@codemirror/state";
+import {
+  Compartment,
+  EditorSelection,
+  EditorState,
+  Facet,
+} from "@codemirror/state";
 
-export const codeMirrorPromptTheme = EditorView.theme({
+// Backspace leaves the cursor facing the text before it. In an empty editor
+// that is the 1em-tall widget buffer in front of the placeholder, and
+// @codemirror/view 6.28 sizes the cursor from it, so the cursor shrinks
+// below the text height. Facing forward sizes it from the placeholder text.
+const keepEmptyEditorCursorFullHeight = EditorState.transactionFilter.of(
+  (tr) => {
+    const { main } = tr.newSelection;
+    if (tr.newDoc.length > 0 || !main.empty || main.assoc >= 0) return tr;
+    return [
+      tr,
+      {
+        selection: EditorSelection.create([EditorSelection.cursor(0, 1)]),
+        sequential: true,
+      },
+    ];
+  },
+);
+
+const promptEditorStyles = EditorView.theme({
   "&": {
     fontSize: "0.875rem",
     cursor: "text",
@@ -46,6 +69,11 @@ export const codeMirrorPromptTheme = EditorView.theme({
     padding: "1px 2px 1px 5px",
   },
 });
+
+export const codeMirrorPromptTheme = [
+  promptEditorStyles,
+  keepEmptyEditorCursorFullHeight,
+];
 
 export const mustachePlugin = ViewPlugin.fromClass(
   class {

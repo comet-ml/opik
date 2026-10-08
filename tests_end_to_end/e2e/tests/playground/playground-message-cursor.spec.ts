@@ -8,6 +8,7 @@ test.describe('Playground — message editor cursor', { tag: ['@t3-nightly', '@a
     async ({ page, project, providerKeys, testNamespace }) => {
       const playground = new PlaygroundPage(page, project.id);
       let emptyMessageOverflowPx = Number.NaN;
+      let emptyMessageCursorHeightPx = Number.NaN;
 
       await test.step('Give the workspace a provider so the Playground mounts', async () => {
         await providerKeys.createUnreachable({ providerName: `${testNamespace}-unreachable` });
@@ -26,6 +27,7 @@ test.describe('Playground — message editor cursor', { tag: ['@t3-nightly', '@a
           })
           .toBeLessThanOrEqual(0);
         emptyMessageOverflowPx = await playground.firstMessageCursorLeftOverflowPx();
+        emptyMessageCursorHeightPx = await playground.firstMessageCursorHeightPx();
       });
 
       await test.step('The start of a line with text shows the whole cursor', async () => {
@@ -40,6 +42,21 @@ test.describe('Playground — message editor cursor', { tag: ['@t3-nightly', '@a
           await playground.firstMessageCursorLeftOverflowPx(),
           'px of the cursor cut off by the editor edge',
         ).toBeLessThanOrEqual(0);
+      });
+
+      await test.step('Deleting the only character keeps the cursor full height', async () => {
+        await page.keyboard.press('ControlOrMeta+A');
+        await page.keyboard.type('a');
+        await page.keyboard.press('Backspace');
+        await expect
+          .poll(() => playground.firstMessageCursorLeftOverflowPx(), {
+            message: 'the cursor is redrawn at column 0 after Backspace',
+          })
+          .toBeCloseTo(emptyMessageOverflowPx, 1);
+        expect(
+          await playground.firstMessageCursorHeightPx(),
+          'cursor height in the emptied message, compared with the never-typed one',
+        ).toBeCloseTo(emptyMessageCursorHeightPx, 1);
       });
     },
   );
