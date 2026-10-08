@@ -11,7 +11,10 @@ import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
+import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.WebIdentityTokenFileCredentialsProvider;
 import software.amazon.awssdk.awscore.retry.AwsRetryStrategy;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
@@ -76,20 +79,33 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
     @Provides
     @Singleton
     public Optional<EventBridgeClient> eventBridgeClient(@Config("serviceToggles") ServiceTogglesConfig toggles,
-            @Config("alertsEventBridge") AlertsEventBridgeConfig config,
-            @NonNull AwsCredentialsProvider credentialsProvider) {
+            @Config("alertsEventBridge") AlertsEventBridgeConfig config) {
         if (!toggles.isEventBridgeAlertsEnabled()) {
             return Optional.empty();
         }
 
         // Retries are bounded by the publisher, which also retries throttled entries of partial failures
         var builder = EventBridgeClient.builder()
-                .credentialsProvider(credentialsProvider)
+                .credentialsProvider(eventBridgeCredentialsProvider())
                 .overrideConfiguration(override -> override.retryStrategy(AwsRetryStrategy.doNotRetry()));
 
         eventBridgeRegion(config).ifPresent(builder::region);
 
         return Optional.of(builder.build());
+    }
+
+    /**
+     * IRSA and EKS Pod Identity first, then the default chain. Not the shared S3 provider: the default chain reads
+     * AWS_ACCESS_KEY_ID before web identity, so a deployment with static S3 keys there (e.g. MinIO) would sign
+     * PutEvents with them and never assume the role it was given for EventBridge.
+     */
+    static AwsCredentialsProvider eventBridgeCredentialsProvider() {
+        return AwsCredentialsProviderChain.builder()
+                .credentialsProviders(
+                        WebIdentityTokenFileCredentialsProvider.create(),
+                        ContainerCredentialsProvider.builder().build(),
+                        DefaultCredentialsProvider.create())
+                .build();
     }
 
     static Optional<Region> eventBridgeRegion(@NonNull AlertsEventBridgeConfig config) {

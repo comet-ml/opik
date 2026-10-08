@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 
 import java.util.Optional;
@@ -44,8 +43,7 @@ class AwsModuleTest {
         var toggles = new ServiceTogglesConfig();
         toggles.setEventBridgeAlertsEnabled(false);
 
-        assertThat(new AwsModule().eventBridgeClient(toggles, new AlertsEventBridgeConfig(),
-                AnonymousCredentialsProvider.create())).isEmpty();
+        assertThat(new AwsModule().eventBridgeClient(toggles, new AlertsEventBridgeConfig())).isEmpty();
     }
 
     @Test
@@ -55,7 +53,7 @@ class AwsModuleTest {
         var config = new AlertsEventBridgeConfig();
         config.setEventBus(ARN_BUS);
 
-        var client = new AwsModule().eventBridgeClient(toggles, config, AnonymousCredentialsProvider.create());
+        var client = new AwsModule().eventBridgeClient(toggles, config);
 
         assertThat(client).isPresent();
         try (var eventBridgeClient = client.get()) {
