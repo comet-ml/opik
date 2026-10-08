@@ -1338,6 +1338,26 @@ export class PlaygroundPage {
     });
   }
 
+  /**
+   * Wait until a free-mode run has finished and the playground is idle again.
+   *
+   * The Run button is the signal: it is swapped for Stop while a run is in
+   * flight, so "back in run/re-run mode" is exactly "safe to touch the model
+   * picker or the parameters panel again". A spec that drives several models in
+   * one page session needs that between cases — the completion POST goes out as
+   * the run STARTS, so capturing the body says nothing about the run being
+   * over. `waitForRunSettled` is the dataset-mode counterpart and watches the
+   * experiment-name editor, which free mode never renders.
+   */
+  async waitForFreeRunIdle(timeoutMs = 60_000): Promise<void> {
+    return test.step('wait for the free-mode run to go idle', async () => {
+      await expect(
+        this.runButton(),
+        'the run finished and the playground is idle again',
+      ).toBeVisible({ timeout: timeoutMs });
+    });
+  }
+
   // ── private helpers ─────────────────────────────────────────────────────
 
   /**

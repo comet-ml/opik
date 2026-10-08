@@ -1,4 +1,4 @@
-export { test, expect } from './moved-trace-threads.fixture';
+export { test, expect } from './open-router-native-models.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -342,4 +342,15 @@ export type {
   MovedTraceThreadsRef,
   MovedTraceThreadsFixtures,
 } from './moved-trace-threads.fixture';
+export type {
+  OpenRouterNativeModelsRef,
+  OpenRouterNativeModelsFixtures,
+} from './open-router-native-models.fixture';
+export {
+  OPEN_ROUTER_GROUP,
+  OPEN_ROUTER_MODEL,
+  SAMPLING_AND_PENALTY_KEYS,
+  SAMPLING_CONTROLS,
+  PENALTY_CONTROLS,
+} from './open-router-native-models.fixture';
 export type { ProjectRef } from '../core/backend';

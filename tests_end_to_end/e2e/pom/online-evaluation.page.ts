@@ -141,6 +141,54 @@ export class OnlineEvaluationPage {
     });
   }
 
+  /**
+   * Pick the judge model from a NAMED provider group, and stop there.
+   *
+   * `selectJudgeModel` takes the first option matching the display name, which
+   * is ambiguous for a built-in OpenRouter id: the picker renders the id itself
+   * as the display name, and a Custom provider called `openrouter` — which
+   * `ensureModelAvailable` and the `@provider-sanity` matrix both create —
+   * offers models under the same labels. Taking `.first()` would then read the
+   * custom provider's panel and call it OpenRouter's.
+   *
+   * While the search box holds text the picker renders a flat list grouped by
+   * provider, each group labelled, which is what makes the scope available.
+   */
+  async selectJudgeModelFromProvider(
+    providerGroup: string,
+    modelDisplayName: string,
+  ): Promise<void> {
+    return test.step(
+      `select judge model "${modelDisplayName}" from the ${providerGroup} group`,
+      async () => {
+        assertAllowedModelDisplayName(modelDisplayName);
+        const modelCombobox = this.judgeModelCombobox;
+        const listbox = this.page.getByRole('listbox');
+        await expect(async () => {
+          await modelCombobox.click();
+          await expect(listbox).toBeVisible({ timeout: 2_000 });
+        }).toPass({ timeout: 15_000 });
+
+        // Re-filtered and re-clicked for the same reason as selectJudgeModel:
+        // the option list remounts when /llm/models resolves, detaching
+        // options mid-click.
+        await expect(async () => {
+          await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+          // By the group's accessible NAME, which Radix takes from its
+          // `SelectLabel`. Exact and asserted to be unique, so a provider
+          // label that stopped being unique fails here rather than selecting
+          // from whichever group matched first.
+          const group = listbox.getByRole('group', { name: providerGroup, exact: true });
+          await expect(group, `the ${providerGroup} provider group`).toHaveCount(1);
+          const option = group.getByRole('option', { name: modelDisplayName, exact: true });
+          await expect(option, `"${modelDisplayName}" under ${providerGroup}`).toHaveCount(1);
+          await option.click({ timeout: 2_000 });
+          await expect(modelCombobox).toContainText(modelDisplayName, { timeout: 2_000 });
+        }).toPass({ timeout: 30_000 });
+      },
+    );
+  }
+
   /** The dialog's LLM-model combobox. */
   private get judgeModelCombobox(): Locator {
     return this.dialog
