@@ -200,12 +200,10 @@ const promptIds = () => usePlaygroundStore.getState().promptIds;
 
 describe("addPrompt", () => {
   beforeEach(() => {
-    usePlaygroundStore
-      .getState()
-      .setPromptMap(["a", "b"], {
-        a: createEmptyPrompt("a"),
-        b: createEmptyPrompt("b"),
-      });
+    usePlaygroundStore.getState().setPromptMap(["a", "b"], {
+      a: createEmptyPrompt("a"),
+      b: createEmptyPrompt("b"),
+    });
   });
 
   it("inserts the prompt at the given position", () => {
