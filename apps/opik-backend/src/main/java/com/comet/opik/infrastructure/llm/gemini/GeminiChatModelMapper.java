@@ -23,7 +23,7 @@ interface GeminiChatModelMapper {
     // them — matching how Gemini 2.5/3 already behaves (Gemini suppresses
     // thought parts API-side unless the client explicitly opts in).
     @Mapping(expression = "java(request.model())", target = "modelName")
-    @Mapping(expression = "java(GeminiMaxOutputTokens.of(request).orElse(null))", target = "maxOutputTokens")
+    @Mapping(expression = "java(GeminiMaxOutputTokens.firstPositive(request).orElse(null))", target = "maxOutputTokens")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.topP())", target = "topP")
@@ -34,7 +34,7 @@ interface GeminiChatModelMapper {
             boolean logRequests, boolean logResponses);
 
     @Mapping(expression = "java(request.model())", target = "modelName")
-    @Mapping(expression = "java(GeminiMaxOutputTokens.of(request).orElse(null))", target = "maxOutputTokens")
+    @Mapping(expression = "java(GeminiMaxOutputTokens.firstPositive(request).orElse(null))", target = "maxOutputTokens")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.topP())", target = "topP")

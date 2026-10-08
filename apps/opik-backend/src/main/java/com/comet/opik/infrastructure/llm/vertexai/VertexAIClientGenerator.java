@@ -49,7 +49,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
             Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
             Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
-            GeminiMaxOutputTokens.of(request).ifPresent(builder::maxOutputTokens);
+            GeminiMaxOutputTokens.firstPositive(request).ifPresent(builder::maxOutputTokens);
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
@@ -70,7 +70,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
             Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
             Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
-            GeminiMaxOutputTokens.of(request).ifPresent(builder::maxOutputTokens);
+            GeminiMaxOutputTokens.firstPositive(request).ifPresent(builder::maxOutputTokens);
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());

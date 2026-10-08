@@ -53,11 +53,6 @@ class GeminiClientGeneratorTest {
 
     private GeminiClientGenerator generator;
 
-    enum Client {
-        CHAT,
-        STREAMING
-    }
-
     @BeforeAll
     void setUpAll() {
         var clientConfig = new LlmProviderClientConfig();
@@ -86,82 +81,81 @@ class GeminiClientGeneratorTest {
     }
 
     static Stream<Arguments> samplingCases() {
-        return Stream.of(Client.values()).flatMap(client -> Stream.of(
-                arguments(client, "both as set", 0.3, 0.8, "{\"temperature\": 0.3, \"topP\": 0.8}"),
-                arguments(client, "a temperature of 0 is still sent", 0.0, null, "{\"temperature\": 0.0}"),
-                arguments(client, "neither set sends neither", null, null, "{}")));
+        return Stream.of(
+                arguments("both as set", 0.3, 0.8, "{\"temperature\": 0.3, \"topP\": 0.8}"),
+                arguments("a temperature of 0 is still sent", 0.0, null, "{\"temperature\": 0.0}"),
+                arguments("neither set sends neither", null, null, "{}"));
     }
 
-    @ParameterizedTest(name = "{0}: {1}")
+    @ParameterizedTest(name = "chat: {0}")
     @MethodSource("samplingCases")
-    @DisplayName("playground: the panel's temperature and top_p")
-    void playgroundSendsTheSamplingParams(Client client, String name, Double temperature, Double topP,
-            String expected) throws Exception {
-        var request = ChatCompletionRequest.builder()
-                .model(GEMINI_2_5_MODEL)
-                .addUserMessage("hello")
-                .temperature(temperature)
-                .topP(topP)
-                .build();
+    @DisplayName("playground chat: the panel's temperature and top_p")
+    void chatSendsTheSamplingParams(String name, Double temperature, Double topP, String expected) {
+        assertThat(only(sendChat(samplingRequest(temperature, topP)), "temperature", "topP"))
+                .isEqualTo(JsonUtils.getJsonNodeFromString(expected));
+    }
 
-        var generationConfig = send(client, request);
-
-        assertThat(only(generationConfig, "temperature", "topP"))
+    @ParameterizedTest(name = "streaming: {0}")
+    @MethodSource("samplingCases")
+    @DisplayName("playground streaming: the panel's temperature and top_p")
+    void streamingSendsTheSamplingParams(String name, Double temperature, Double topP, String expected)
+            throws Exception {
+        assertThat(only(sendStreaming(samplingRequest(temperature, topP)), "temperature", "topP"))
                 .isEqualTo(JsonUtils.getJsonNodeFromString(expected));
     }
 
     static Stream<Arguments> maxOutputTokensCases() {
-        return Stream.of(Client.values()).flatMap(client -> Stream.of(
-                arguments(client, "only max_completion_tokens", 2048, null, 2048),
-                arguments(client, "only max_tokens", null, 512, 512),
-                arguments(client, "both, max_completion_tokens wins", 2048, 512, 2048),
-                arguments(client, "max_completion_tokens 0 falls back to max_tokens", 0, 512, 512),
-                arguments(client, "max_completion_tokens 0, the slider's minimum", 0, null, null),
-                arguments(client, "max_tokens 0", null, 0, null),
-                arguments(client, "neither", null, null, null)));
+        return Stream.of(
+                arguments("only max_completion_tokens", 2048, null, 2048),
+                arguments("only max_tokens", null, 512, 512),
+                arguments("both, max_completion_tokens wins", 2048, 512, 2048),
+                arguments("max_completion_tokens 0 falls back to max_tokens", 0, 512, 512),
+                arguments("max_completion_tokens 0, the slider's minimum", 0, null, null),
+                arguments("max_tokens 0", null, 0, null),
+                arguments("negative max_completion_tokens only", -1, null, null),
+                arguments("negative max_completion_tokens falls back to max_tokens", -1, 512, 512),
+                arguments("both negative", -1, -5, null),
+                arguments("neither", null, null, null));
     }
 
-    @ParameterizedTest(name = "{0}: {1}")
+    @ParameterizedTest(name = "chat: {0}")
     @MethodSource("maxOutputTokensCases")
-    @DisplayName("playground: the max output tokens cap, never 0, the same rule as Vertex AI")
-    void playgroundSendsTheResolvedCap(Client client, String name, Integer maxCompletionTokens, Integer maxTokens,
-            Integer expected) throws Exception {
-        var request = ChatCompletionRequest.builder()
-                .model(GEMINI_2_5_MODEL)
-                .addUserMessage("hello")
-                .maxCompletionTokens(maxCompletionTokens)
-                .maxTokens(maxTokens)
-                .build();
+    @DisplayName("playground chat: the max output tokens cap, never 0 or below, the same rule as Vertex AI")
+    void chatSendsTheResolvedCap(String name, Integer maxCompletionTokens, Integer maxTokens, Integer expected) {
+        assertSentMaxOutputTokens(sendChat(capRequest(maxCompletionTokens, maxTokens)), expected);
+    }
 
-        var generationConfig = send(client, request);
-
-        assertThat(generationConfig.has("maxOutputTokens") ? generationConfig.get("maxOutputTokens").asInt() : null)
-                .isEqualTo(expected);
+    @ParameterizedTest(name = "streaming: {0}")
+    @MethodSource("maxOutputTokensCases")
+    @DisplayName("playground streaming: the max output tokens cap, never 0 or below, the same rule as Vertex AI")
+    void streamingSendsTheResolvedCap(String name, Integer maxCompletionTokens, Integer maxTokens, Integer expected)
+            throws Exception {
+        assertSentMaxOutputTokens(sendStreaming(capRequest(maxCompletionTokens, maxTokens)), expected);
     }
 
     static Stream<Arguments> thinkingCases() {
-        return Stream.of(Client.values()).flatMap(client -> Stream.of(
-                arguments(client, GEMINI_3_MODEL, Map.of("thinking", Map.of("level", "low")),
+        return Stream.of(
+                arguments(GEMINI_3_MODEL, Map.of("thinking", Map.of("level", "low")),
                         "{\"thinkingLevel\": \"low\"}"),
-                arguments(client, GEMINI_2_5_MODEL, Map.of("thinking", Map.of("level", "low")),
+                arguments(GEMINI_2_5_MODEL, Map.of("thinking", Map.of("level", "low")),
                         "{\"thinkingBudget\": 2048}"),
-                arguments(client, GEMINI_3_MODEL, Map.of(), null)));
+                arguments(GEMINI_3_MODEL, Map.of(), null));
     }
 
-    @ParameterizedTest(name = "{0}: {1} with {2}")
+    @ParameterizedTest(name = "chat: {0} with {1}")
     @MethodSource("thinkingCases")
-    @DisplayName("playground: the thinking level from custom_parameters")
-    void playgroundSendsTheThinkingLevel(Client client, String model, Map<String, Object> customParameters,
-            String expected) throws Exception {
-        var request = ChatCompletionRequest.builder()
-                .model(model)
-                .addUserMessage("hello")
-                .customParameters(customParameters)
-                .build();
+    @DisplayName("playground chat: the thinking level from custom_parameters")
+    void chatSendsTheThinkingLevel(String model, Map<String, Object> customParameters, String expected) {
+        assertThat(sendChat(thinkingRequest(model, customParameters)).get("thinkingConfig"))
+                .isEqualTo(expected == null ? null : JsonUtils.getJsonNodeFromString(expected));
+    }
 
-        var generationConfig = send(client, request);
-
-        assertThat(generationConfig.get("thinkingConfig"))
+    @ParameterizedTest(name = "streaming: {0} with {1}")
+    @MethodSource("thinkingCases")
+    @DisplayName("playground streaming: the thinking level from custom_parameters")
+    void streamingSendsTheThinkingLevel(String model, Map<String, Object> customParameters, String expected)
+            throws Exception {
+        assertThat(sendStreaming(thinkingRequest(model, customParameters)).get("thinkingConfig"))
                 .isEqualTo(expected == null ? null : JsonUtils.getJsonNodeFromString(expected));
     }
 
@@ -182,28 +176,59 @@ class GeminiClientGeneratorTest {
                         "{\"temperature\": 0.2, \"seed\": 7, \"thinkingConfig\": {\"thinkingLevel\": \"high\"}}"));
     }
 
-    private JsonNode send(Client client, ChatCompletionRequest request) throws Exception {
-        switch (client) {
-            case CHAT -> GeminiTestClients.pointedAt(generator.newGeminiClient("test-key", request), stubBaseUrl())
-                    .chat(UserMessage.from("hello"));
-            case STREAMING -> {
-                var completed = new CompletableFuture<ChatResponse>();
-                GeminiTestClients.pointedAt(generator.newGeminiStreamingClient("test-key", request), stubBaseUrl())
-                        .chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
-                            @Override
-                            public void onCompleteResponse(ChatResponse response) {
-                                completed.complete(response);
-                            }
+    private static ChatCompletionRequest samplingRequest(Double temperature, Double topP) {
+        return ChatCompletionRequest.builder()
+                .model(GEMINI_2_5_MODEL)
+                .addUserMessage("hello")
+                .temperature(temperature)
+                .topP(topP)
+                .build();
+    }
 
-                            @Override
-                            public void onError(Throwable error) {
-                                completed.completeExceptionally(error);
-                            }
-                        });
-                completed.get(10, TimeUnit.SECONDS);
-            }
-        }
-        return sentGenerationConfig(client == Client.CHAT ? GENERATE_CONTENT_PATH : STREAM_GENERATE_CONTENT_PATH);
+    private static ChatCompletionRequest capRequest(Integer maxCompletionTokens, Integer maxTokens) {
+        return ChatCompletionRequest.builder()
+                .model(GEMINI_2_5_MODEL)
+                .addUserMessage("hello")
+                .maxCompletionTokens(maxCompletionTokens)
+                .maxTokens(maxTokens)
+                .build();
+    }
+
+    private static ChatCompletionRequest thinkingRequest(String model, Map<String, Object> customParameters) {
+        return ChatCompletionRequest.builder()
+                .model(model)
+                .addUserMessage("hello")
+                .customParameters(customParameters)
+                .build();
+    }
+
+    private static void assertSentMaxOutputTokens(JsonNode generationConfig, Integer expected) {
+        assertThat(generationConfig.has("maxOutputTokens") ? generationConfig.get("maxOutputTokens").asInt() : null)
+                .isEqualTo(expected);
+    }
+
+    private JsonNode sendChat(ChatCompletionRequest request) {
+        GeminiTestClients.pointedAt(generator.newGeminiClient("test-key", request), stubBaseUrl())
+                .chat(UserMessage.from("hello"));
+        return sentGenerationConfig(GENERATE_CONTENT_PATH);
+    }
+
+    private JsonNode sendStreaming(ChatCompletionRequest request) throws Exception {
+        var completed = new CompletableFuture<ChatResponse>();
+        GeminiTestClients.pointedAt(generator.newGeminiStreamingClient("test-key", request), stubBaseUrl())
+                .chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
+                    @Override
+                    public void onCompleteResponse(ChatResponse response) {
+                        completed.complete(response);
+                    }
+
+                    @Override
+                    public void onError(Throwable error) {
+                        completed.completeExceptionally(error);
+                    }
+                });
+        completed.get(10, TimeUnit.SECONDS);
+        return sentGenerationConfig(STREAM_GENERATE_CONTENT_PATH);
     }
 
     private String stubBaseUrl() {
