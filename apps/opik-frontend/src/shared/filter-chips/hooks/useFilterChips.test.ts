@@ -503,23 +503,6 @@ describe("useFilterChips", () => {
       });
     });
 
-    describe("filtersParamAbsent", () => {
-      it("is true when the URL has no filter param", () => {
-        const { result } = setup({ persistKey: PERSIST_KEY });
-        expect(result.current.filtersParamAbsent).toBe(true);
-      });
-
-      it("is false when the URL has filters", () => {
-        const { result } = setup({ raw: [tool], persistKey: PERSIST_KEY });
-        expect(result.current.filtersParamAbsent).toBe(false);
-      });
-
-      it("is false for an explicit empty list", () => {
-        const { result } = setup({ raw: [], persistKey: PERSIST_KEY });
-        expect(result.current.filtersParamAbsent).toBe(false);
-      });
-    });
-
     describe("save", () => {
       it("saves the next filters on applyValue", () => {
         const { result } = setup({ persistKey: PERSIST_KEY });

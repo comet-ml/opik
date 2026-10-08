@@ -731,7 +731,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     chipsUnpinned,
     values: chipValues,
     filters: chipFilters,
-    filtersParamAbsent,
     applyValue: applyChipValue,
     clearValue: clearChipValue,
     clearAll: clearAllChips,
@@ -750,10 +749,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     persistKey: getLogsFiltersMemoryKey(projectId, filtersUrlKey),
   });
 
-  const { environment, envIsValid, changeEnvironment } = useLogsEnvironment(
-    projectId,
-    { canRestore: filtersParamAbsent },
-  );
+  const { environment, envIsValid, changeEnvironment } =
+    useLogsEnvironment(projectId);
 
   useEffect(() => {
     if (envIsValid === false) setPage(1);

@@ -36,8 +36,7 @@ const readRemembered = () => {
 };
 
 // The window adapter doesn't re-render on its own; rerender() stands in for the router.
-const setup = (canRestore = true) =>
-  renderHook(() => useLogsEnvironment("p1", { canRestore }), { wrapper });
+const setup = () => renderHook(() => useLogsEnvironment("p1"), { wrapper });
 
 describe("useLogsEnvironment", () => {
   beforeEach(() => {
@@ -61,7 +60,7 @@ describe("useLogsEnvironment", () => {
       const renders: string[] = [];
       renderHook(
         () => {
-          const hook = useLogsEnvironment("p1", { canRestore: true });
+          const hook = useLogsEnvironment("p1");
           renders.push(hook.environment);
           return hook;
         },
@@ -71,15 +70,24 @@ describe("useLogsEnvironment", () => {
       expect(renders[0]).toBe("prod");
     });
 
-    it("does not restore when canRestore is false (URL arrived with filters)", () => {
-      localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
-      const { result, rerender } = setup(false);
-      rerender();
+    it.each([
+      ["traces_filters", JSON.stringify([{ field: "tags" }])],
+      ["spans_filters", JSON.stringify([{ field: "tags" }])],
+      ["threads_filters", JSON.stringify([{ field: "tags" }])],
+      ["traces_filters", "[]"],
+    ])(
+      "does not restore or write the environment when the URL has %s=%s",
+      (key, value) => {
+        localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+        setUrl({ [key]: value });
+        const { result, rerender } = setup();
+        rerender();
 
-      expect(result.current.environment).toBe("");
-      expect(readUrlEnvironment()).toBeNull();
-      expect(readRemembered()).toBe("prod");
-    });
+        expect(result.current.environment).toBe("");
+        expect(readUrlEnvironment()).toBeNull();
+        expect(readRemembered()).toBe("prod");
+      },
+    );
 
     it("does not restore over an environment that arrives in the URL", () => {
       localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
@@ -160,7 +168,7 @@ describe("useLogsEnvironment", () => {
         const { result } = renderHook(
           () => {
             renders += 1;
-            return useLogsEnvironment("p1", { canRestore: true });
+            return useLogsEnvironment("p1");
           },
           { wrapper },
         );
@@ -184,8 +192,11 @@ describe("useLogsEnvironment", () => {
 
     it("does not wipe a different remembered environment", async () => {
       localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
-      setUrl({ environment: "deleted-env" });
-      setup(false);
+      setUrl({
+        environment: "deleted-env",
+        traces_filters: JSON.stringify([{ field: "tags" }]),
+      });
+      setup();
 
       await waitFor(() => expect(readUrlEnvironment()).toBeNull());
       expect(readRemembered()).toBe("prod");

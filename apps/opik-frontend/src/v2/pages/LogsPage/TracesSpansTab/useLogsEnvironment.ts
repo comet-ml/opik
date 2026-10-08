@@ -1,24 +1,34 @@
 import { useCallback, useEffect } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import { StringParam, useQueryParam } from "use-query-params";
+import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
+import { TRACE_DATA_TYPE } from "@/constants/traces";
 import { ENVIRONMENT_UNTAGGED_VALUE } from "@/lib/filters";
-import { getLogsEnvironmentMemoryKey } from "@/v2/pages/LogsPage/TracesSpansTab/constants";
+import {
+  THREADS_FILTERS_URL_KEY,
+  getLogsEnvironmentMemoryKey,
+  getLogsFiltersUrlKey,
+} from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 
-type UseLogsEnvironmentOptions = {
-  // False when the URL arrived with filters from a link: show it as-is.
-  canRestore: boolean;
-};
+const TRACES_FILTERS_KEY = getLogsFiltersUrlKey(TRACE_DATA_TYPE.traces);
+const SPANS_FILTERS_KEY = getLogsFiltersUrlKey(TRACE_DATA_TYPE.spans);
 
-export const useLogsEnvironment = (
-  projectId: string,
-  { canRestore }: UseLogsEnvironmentOptions,
-) => {
+export const useLogsEnvironment = (projectId: string) => {
   const [urlEnvironment = "", setEnvironment] = useQueryParam(
     "environment",
     StringParam,
     { updateType: "replaceIn" },
   );
+
+  // The environment param is shared by all Logs tabs, so any filter param means
+  // the URL came from a link (or a tab switch) and is shown as-is.
+  const [tracesFilters] = useQueryParam(TRACES_FILTERS_KEY, JsonParam);
+  const [spansFilters] = useQueryParam(SPANS_FILTERS_KEY, JsonParam);
+  const [threadsFilters] = useQueryParam(THREADS_FILTERS_URL_KEY, JsonParam);
+  const canRestore =
+    tracesFilters === undefined &&
+    spansFilters === undefined &&
+    threadsFilters === undefined;
 
   // Read synchronously, so the first render is already restored.
   const [saved, setSaved, { removeItem: removeSaved }] =

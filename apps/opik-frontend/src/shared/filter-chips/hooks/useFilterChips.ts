@@ -40,7 +40,6 @@ interface UseFilterChipsResult {
   chipsUnpinned: ChipDefinition[];
   values: ChipValueMap;
   filters: Filter[];
-  filtersParamAbsent: boolean;
   applyValue: (id: string, value: ChipValue) => void;
   clearValue: (id: string, source?: FilterRemovedSource) => void;
   clearAll: () => void;
@@ -89,7 +88,6 @@ const useFilterChips = ({
 
   // Computed during render so the first render is already filtered.
   const restored = rawFilters === undefined ? savedFilters : undefined;
-  const filtersParamAbsent = rawFilters === undefined;
   const sourceFilters = rawFilters ?? restored;
 
   // Re-runs on every URL change: re-clicking the current page's link doesn't remount it.
@@ -268,7 +266,6 @@ const useFilterChips = ({
     chipsUnpinned,
     values,
     filters,
-    filtersParamAbsent,
     applyValue,
     clearValue,
     clearAll,
