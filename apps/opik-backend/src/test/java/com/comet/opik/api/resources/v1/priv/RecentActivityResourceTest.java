@@ -23,6 +23,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.RecentActivityResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -115,9 +116,11 @@ class RecentActivityResourceTest {
     private PromptResourceClient promptResourceClient;
     private TraceResourceClient traceResourceClient;
     private RecentActivityResourceClient recentActivityResourceClient;
+    private IdGenerator idGenerator;
 
     @BeforeAll
-    void beforeAll(ClientSupport client) {
+    void beforeAll(ClientSupport client, IdGenerator idGenerator) {
+        this.idGenerator = idGenerator;
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
@@ -245,8 +248,8 @@ class RecentActivityResourceTest {
         }
 
         @Test
-        @DisplayName("Counts only SDK-logged traces in the daily trace count")
-        void countsOnlySdkLoggedTraces() {
+        @DisplayName("Counts only SDK and legacy unknown-source traces in the daily trace count")
+        void countsSdkAndLegacyUnknownTraces() {
             var projectName = "project-" + UUID.randomUUID();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE_NAME);
 
@@ -254,10 +257,14 @@ class RecentActivityResourceTest {
             var countedSources = Arrays.asList(Source.SDK, Source.SDK, null);
             var skippedSources = List.of(Source.PLAYGROUND, Source.PLAYGROUND, Source.EXPERIMENT,
                     Source.OPTIMIZATION, Source.EVALUATOR);
+            // The daily bucket comes from the time inside the trace id, not start_time, so every id shares one
+            // instant; otherwise a run across midnight UTC splits the traces into two days
+            var traceTime = Instant.now();
             Stream.concat(countedSources.stream(), skippedSources.stream())
                     .forEach(source -> traceResourceClient.createTrace(Trace.builder()
+                            .id(idGenerator.generateId(traceTime))
                             .projectName(projectName)
-                            .startTime(Instant.now())
+                            .startTime(traceTime)
                             .source(source)
                             .build(), API_KEY, TEST_WORKSPACE_NAME));
 
