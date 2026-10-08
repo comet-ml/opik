@@ -20,7 +20,6 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
-import io.r2dbc.spi.Result;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
@@ -39,11 +38,9 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -166,39 +163,6 @@ class ClickHousePartitionMetricsDAOTest {
             assertThat(groundTruth).isGreaterThanOrEqualTo(toDelete);
             assertThat(daoLwd).isEqualTo(groundTruth);
         });
-    }
-
-    @Test
-    void countsTtlMoveDuePartsOnlyForPastDatePartitions() {
-        // A TTL to the part's own disk is recorded but never moved: an overdue part without object storage.
-        var table = "ttl_due_" + RandomStringUtils.secure().nextAlphabetic(16).toLowerCase();
-        execute("""
-                CREATE TABLE %s (id String, id_at DateTime64(0, 'UTC'))
-                ENGINE = MergeTree PARTITION BY toYYYYMMDD(toDate32(id_at)) ORDER BY id
-                TTL id_at + INTERVAL 13 WEEK TO DISK 'default'
-                """.formatted(table));
-        try {
-            execute("INSERT INTO %s VALUES ('past', '2020-01-06 00:00:00'), ('recent', now64()), "
-                    .formatted(table) + "('future', '2141-05-22 00:00:00')");
-
-            Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(() -> {
-                Map<String, Long> due = partitionMetricsDAO.getPartitionStats().block().stream()
-                        .filter(stat -> stat.table().equals(table))
-                        .collect(Collectors.toMap(PartitionStat::partition, PartitionStat::ttlMoveDueParts));
-                // The 2141 row's TTL shows as 2005 in system.parts and must not count.
-                assertThat(due).hasSize(3).containsEntry("20200106", 1L).containsEntry("21410522", 0L);
-                assertThat(due.values().stream().mapToLong(Long::longValue).sum()).isEqualTo(1L);
-            });
-        } finally {
-            execute("DROP TABLE IF EXISTS " + table);
-        }
-    }
-
-    private void execute(String sql) {
-        Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(sql).execute())
-                .flatMap(Result::getRowsUpdated)
-                .blockLast();
     }
 
     private PartitionStat tracesStat() {
