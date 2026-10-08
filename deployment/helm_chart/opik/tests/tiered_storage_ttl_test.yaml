@@ -64,11 +64,28 @@ tests:
           path: spec.template.spec.containers[0].args[0]
           pattern: "apply traces_local 13\\s+apply spans_local 26"
 
-  - it: connects with the backend's env
+  - it: takes only its four settings from the backend's sources, never the whole env
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].envFrom[0].configMapRef.name
-          value: opik-backend
+          path: spec.template.spec.containers[0].env[0].valueFrom.configMapKeyRef
+          value: {name: opik-backend, key: ANALYTICS_DB_HOST, optional: true}
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 4
+      - notExists:
+          path: spec.template.spec.containers[0].envFrom
+
+  - it: lets a backend secret override the ConfigMap, as envFrom does
+    set:
+      component.backend.secretRefs:
+        - name: opik-backend
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 8
+      - equal:
+          path: spec.template.spec.containers[0].env[7].valueFrom.secretKeyRef
+          value: {name: opik-backend, key: ANALYTICS_DB_MIGRATIONS_PASS, optional: true}
 
   - it: runs as an ArgoCD PostSync hook after the cold-tier migration
     set:
