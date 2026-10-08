@@ -7,3 +7,4 @@
 CREATE INDEX projects_created_at_idx ON projects(created_at);
 
 --rollback DROP INDEX projects_created_at_idx ON projects;
+

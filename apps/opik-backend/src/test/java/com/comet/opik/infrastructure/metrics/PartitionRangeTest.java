@@ -42,7 +42,7 @@ class PartitionRangeTest {
             "2024-03-13, 2024-03-04",
             "2024-03-17, 2024-03-04"
     })
-    void floorForIsTheMondayAWeekBeforeTheInstallationsWeek(String installationDate, String expected) {
+    void floorForIsTheMondayAWeekBeforeTheInstallationWeek(String installationDate, String expected) {
         assertThat(PartitionRange.floorFor(LocalDate.parse(installationDate))).isEqualTo(LocalDate.parse(expected));
     }
 
