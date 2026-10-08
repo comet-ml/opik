@@ -73,6 +73,9 @@ class ExperimentItemProcessingSubscriberTest {
         // One item left of a larger batch: the batch does not drain, so the finish path stays out of
         // these tests and they describe the skip alone.
         lenient().when(atomicLong.decrementAndGet()).thenReturn(Mono.just(5L));
+        // The drain hands the finish to one caller; these tests are always that caller.
+        lenient().when(cancellationService.claimFinish(anyString(), any(UUID.class)))
+                .thenReturn(Mono.just(true));
     }
 
     private ExperimentItemToProcess buildMessage(UUID experimentId) {
@@ -154,6 +157,32 @@ class ExperimentItemProcessingSubscriberTest {
         verify(experimentService).update(eq(failing), argThat(
                 update -> update.status() == ExperimentStatus.FAILED));
         verify(experimentService, never()).update(eq(sibling), any());
+    }
+
+    // Stop pressed on a run that had already seen a row fail: the earlier failure is still counted
+    // when the last item drains. The stop is why the run ended, so it stays CANCELLED — FAILED is for
+    // a run that ended on its own with faults.
+    @Test
+    @DisplayName("should keep a cancelled experiment cancelled when an earlier item had failed")
+    void cancelledExperimentIsNotRelabelledFailed() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
+        // The cancelled item is skipped rather than run, and draining it is what reaches the finish.
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.get()).thenReturn(Mono.just(1L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId)).block();
+
+        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+        verify(experimentService).update(eq(experimentId), captor.capture());
+        assertThat(captor.getValue().status())
+                .as("the stop it was given stands, whatever its items did")
+                .isNull();
+        assertThat(captor.getValue().finished())
+                .as("it still drained, which is what stops the page waiting on it")
+                .isTrue();
     }
 
     // A cancelled test suite never reaches its assertions, so stamping only there would leave its
