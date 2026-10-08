@@ -36,8 +36,10 @@ tracing manually with the SDK.
     <Steps>
       <Step title="Install the Opik skill">
         ```bash
-        npx skills add comet-ml/opik-skills
+        uvx opik mcp configure
         ```
+
+        It installs the Opik skills and connects the Opik MCP server. It needs [`uv`](https://docs.astral.sh/uv/).
       </Step>
       <Step title="Run the integration">
         Ask your coding agent to instrument your code:

@@ -4,7 +4,7 @@ import { Pause, Play } from "lucide-react";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
 import { useIsPromptRunning, usePromptById } from "@/store/PlaygroundStore";
-import { hasUnsupportedMedia } from "@/lib/playground";
+import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 
 interface PlaygroundRunButtonProps {
   promptId: string;
@@ -22,17 +22,15 @@ const PlaygroundRunButton = ({
   const prompt = usePromptById(promptId);
   const isPromptRunning = useIsPromptRunning(promptId);
 
-  const hasEmptyMessages = prompt?.messages.some(
-    (m) => !m.content || m.content.length === 0,
-  );
+  const hasUnrunnableMessages = !!prompt && !canRunMessages(prompt.messages);
   const hasMediaCompatibilityIssue = !!prompt && hasUnsupportedMedia(prompt);
   const isPromptRunDisabled =
-    !prompt?.model || !!hasEmptyMessages || hasMediaCompatibilityIssue;
+    !prompt?.model || hasUnrunnableMessages || hasMediaCompatibilityIssue;
 
   let promptRunDisabledReason: string | null = null;
   if (!prompt?.model) {
     promptRunDisabledReason = "Please select an LLM model for this prompt";
-  } else if (hasEmptyMessages) {
+  } else if (hasUnrunnableMessages) {
     promptRunDisabledReason =
       "Message is empty. Please add some text to proceed";
   } else if (hasMediaCompatibilityIssue) {
