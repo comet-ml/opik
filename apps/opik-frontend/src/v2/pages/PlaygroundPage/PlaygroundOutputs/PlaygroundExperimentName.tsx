@@ -12,6 +12,9 @@ import {
 } from "@/store/PlaygroundStore";
 import { buildExperimentName } from "@/lib/experiments";
 import useRenameLastRunMutation from "@/api/playground/useRenameLastRunMutation";
+import useLastRunExperiments, {
+  getLastRunExperimentLabel,
+} from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useLastRunExperiments";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 type PlaygroundExperimentNameProps = {
@@ -41,6 +44,12 @@ const PlaygroundExperimentName = ({
     : promptIds.map((_, index) => index);
   const [firstPreview, ...restPreview] = shownName
     ? previewIndexes.map((index) => buildExperimentName(shownName, index))
+    : [];
+  const lastRunExperiments = useLastRunExperiments(lastRun);
+  const showRunLabels =
+    lastRun && !shownName && lastRunExperiments.some((e) => e.name);
+  const [firstRunLabel, ...moreRunLabels] = showRunLabels
+    ? lastRunExperiments.map(getLastRunExperimentLabel)
     : [];
 
   const handleChangeName = useCallback(
@@ -72,12 +81,22 @@ const PlaygroundExperimentName = ({
       <div className="min-w-0" data-testid="playground-experiment-name-editor">
         <InlineEditableText
           value={shownName ?? ""}
-          placeholder="Auto-generated name"
+          placeholder={firstRunLabel ?? "Auto-generated name"}
           onChange={handleChangeName}
           className="max-w-64 [&_input]:w-48"
           alwaysShowEditIcon
         />
       </div>
+      {moreRunLabels.length > 0 && (
+        <TooltipWrapper content={moreRunLabels.join(", ")}>
+          <span
+            className="shrink-0 cursor-default text-sm text-muted-slate underline"
+            data-testid="playground-experiment-name-more"
+          >
+            +{moreRunLabels.length} more
+          </span>
+        </TooltipWrapper>
+      )}
 
       {firstPreview && (
         <div
