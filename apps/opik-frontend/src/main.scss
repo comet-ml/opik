@@ -867,6 +867,28 @@
   }
 }
 
+.comet-scroll-linked {
+  timeline-scope: --comet-scroll-linked-x;
+}
+
+.comet-scroll-linked-source {
+  scroll-timeline: --comet-scroll-linked-x x;
+}
+
+// A fixed px range (far wider than any table) maps animation progress 1:1 to
+// the source's scrollLeft, so the follower needs no measured scroll width.
+.comet-scroll-linked-follower {
+  animation: comet-scroll-linked-follow linear;
+  animation-timeline: --comet-scroll-linked-x;
+  animation-range: 0px 1000000px;
+}
+
+@keyframes comet-scroll-linked-follow {
+  to {
+    transform: translateX(-1000000px);
+  }
+}
+
 // rewrite padding for first cell for tables that takes full width with sticky behaviour
 .comet-compare-optimizations-table {
   thead[data-sticky-vertical] {
