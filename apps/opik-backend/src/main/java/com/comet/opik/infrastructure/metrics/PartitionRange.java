@@ -73,7 +73,8 @@ public record PartitionRange(@NonNull LocalDate from, @NonNull LocalDate to) {
             date = LocalDate.parse(partition, BASIC_ISO_DATE);
         } catch (DateTimeParseException exception) {
             // Weekly partition ids are always valid dates, so this means an unexpected partition expression.
-            log.warn("ClickHouse partition metrics: unparsable day partition '{}', reported as in range", partition);
+            log.warn("ClickHouse partition metrics: unparsable day partition '{}', reported as in range", partition,
+                    exception);
             return Range.IN_RANGE;
         }
         if (date.isAfter(to)) {

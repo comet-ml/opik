@@ -198,7 +198,7 @@ class ClickHousePartitionMetricsDAOTest {
     }
 
     @Test
-    void installationDateIsNotAfterAnyProjectsCreation() {
+    void installationDateIsNotAfterProjectCreation() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(),

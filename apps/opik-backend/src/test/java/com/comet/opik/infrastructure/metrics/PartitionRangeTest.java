@@ -6,11 +6,10 @@ import com.comet.opik.infrastructure.metrics.PartitionRange.Range;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -22,13 +21,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PartitionRangeTest {
 
-    private final LocalDate today = LocalDate.now(ZoneOffset.UTC)
-            .plusDays(RandomUtils.secure().randomInt(0, 3_650));
-    private final LocalDate from = PartitionRange.floorFor(today.minusDays(RandomUtils.secure().randomInt(30, 3_650)));
-    private final PartitionRange range = PartitionRange.of(from, today);
+    // Built directly rather than through floorFor/of, so the classification tests don't share their arithmetic.
+    private final LocalDate from = LocalDate.of(2000, 1, 3).plusWeeks(RandomUtils.secure().randomInt(0, 2_000));
+    private final LocalDate lastInRange = from.plusWeeks(RandomUtils.secure().randomInt(1, 500));
+    private final PartitionRange range = new PartitionRange(from, lastInRange);
 
     // Boundary weeks: the first and last in range, and their out-of-range neighbours.
-    private final LocalDate lastInRange = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).plusWeeks(1);
     private final String firstWeek = week(from);
     private final String lastWeek = week(lastInRange);
     private final String nextWeek = week(lastInRange.plusWeeks(1));
@@ -36,6 +34,31 @@ class PartitionRangeTest {
 
     private final String table = randomName("table");
     private final String otherTable = randomName("table");
+
+    @ParameterizedTest
+    @CsvSource({
+            // installation date, floor (the Monday a week before the installation's week)
+            "2024-03-11, 2024-03-04",
+            "2024-03-13, 2024-03-04",
+            "2024-03-17, 2024-03-04"
+    })
+    void floorForIsTheMondayAWeekBeforeTheInstallationsWeek(String installationDate, String expected) {
+        assertThat(PartitionRange.floorFor(LocalDate.parse(installationDate))).isEqualTo(LocalDate.parse(expected));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            // today, last in-range week (next week's Monday)
+            "2026-10-05, 2026-10-12",
+            "2026-10-07, 2026-10-12",
+            "2026-10-11, 2026-10-12"
+    })
+    void ofEndsAtNextWeeksMonday(String today, String expectedTo) {
+        var from = LocalDate.parse("2024-03-04");
+
+        assertThat(PartitionRange.of(from, LocalDate.parse(today)))
+                .isEqualTo(new PartitionRange(from, LocalDate.parse(expectedTo)));
+    }
 
     @Test
     void rangeClassifiesBoundariesAndPassesNonDayPartitionsThrough() {
