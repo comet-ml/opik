@@ -2,9 +2,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
   convertLLMJudgeObjectToLLMJudgeData,
+  updateConfigForModelChange,
 } from "./schema";
 import { LLMJudgeObject } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { LLM_JUDGE } from "@/types/llm";
 import { resolveEffort } from "@/lib/modelUtils";
 import {
@@ -202,5 +207,97 @@ describe("LLM judge Anthropic effort round trip", () => {
         }),
       ).toEqual({ output_config: { format: "x" } });
     });
+  });
+});
+
+describe("LLM judge Anthropic effort on a model switch", () => {
+  const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
+  const NO_ROW_MODEL = "claude-opus-9" as PROVIDER_MODEL_TYPE;
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  const openThenSwitch = (
+    from: { model: PROVIDER_MODEL_TYPE; provider: COMPOSED_PROVIDER_TYPE },
+    to: { model: PROVIDER_MODEL_TYPE; provider: COMPOSED_PROVIDER_TYPE },
+    stored: Record<string, unknown>,
+  ) => {
+    const opened = convertLLMJudgeObjectToLLMJudgeData(
+      persisted(from.model, stored),
+    ).config;
+    const switched = updateConfigForModelChange(opened, from, to);
+    return {
+      opened,
+      switched,
+      saved: convertLLMJudgeDataToLLMJudgeObject(asFormData(to.model, switched))
+        .model.custom_parameters,
+    };
+  };
+
+  it.each<[string, PROVIDER_MODEL_TYPE, Record<string, unknown>]>([
+    [
+      "keeps xhigh on a model that offers it",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      { output_config: { format: "x", effort: "xhigh" } },
+    ],
+    [
+      "falls back to the default on a model without xhigh",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      { output_config: { format: "x", effort: "high" } },
+    ],
+    [
+      "drops it on a model known to take no effort",
+      PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+      { output_config: { format: "x" } },
+    ],
+    [
+      "drops it on a model this build has no row for",
+      NO_ROW_MODEL,
+      { output_config: { format: "x" } },
+    ],
+  ])("switching away from Sonnet 5 at xhigh %s", (_, next, expected) => {
+    registerAnthropicModels(NO_ROW_MODEL);
+
+    const { saved } = openThenSwitch(
+      { model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, provider: ANTHROPIC },
+      { model: next, provider: ANTHROPIC },
+      { output_config: { effort: "xhigh", format: "x" } },
+    );
+
+    expect(saved).toEqual(expected);
+  });
+
+  it("keeps the stored effort when the same model with no row is picked again", () => {
+    registerAnthropicModels(NO_ROW_MODEL);
+    const stored = { output_config: { effort: "xhigh", format: "x" } };
+
+    const { opened, switched, saved } = openThenSwitch(
+      { model: NO_ROW_MODEL, provider: ANTHROPIC },
+      { model: NO_ROW_MODEL, provider: ANTHROPIC },
+      stored,
+    );
+
+    expect(switched).toBe(opened);
+    expect(saved).toEqual(stored);
+  });
+
+  it("leaves the output_config a custom gateway's JSON holds when switching between its models", () => {
+    const gateway = "custom-llm:gw" as COMPOSED_PROVIDER_TYPE;
+    const stored = { output_config: { effort: "low" } };
+
+    const { saved } = openThenSwitch(
+      {
+        model: "custom-llm/gw/claude-sonnet-4-6" as PROVIDER_MODEL_TYPE,
+        provider: gateway,
+      },
+      {
+        model: "custom-llm/gw/claude-opus-4-7" as PROVIDER_MODEL_TYPE,
+        provider: gateway,
+      },
+      stored,
+    );
+
+    expect(saved).toEqual(stored);
   });
 });

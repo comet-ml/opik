@@ -1,4 +1,5 @@
 import { z } from "zod";
+import has from "lodash/has";
 import uniq from "lodash/uniq";
 import omit from "lodash/omit";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/types/automations";
 import {
   ANTHROPIC_THINKING_EFFORT_VALUES,
+  AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
   PROVIDER_MODEL_TYPE,
@@ -24,7 +26,10 @@ import {
   updateProviderConfig,
   withThinkingEffort,
 } from "@/lib/modelUtils";
-import { getProviderFromModel } from "@/lib/provider";
+import {
+  getProviderFromModel,
+  parseComposedProviderType,
+} from "@/lib/provider";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -619,6 +624,37 @@ const convertProviderToLLMMessages = (
     content: m.content_array ?? m.content ?? "",
     id: generateRandomString(),
   }));
+
+export const updateConfigForModelChange = <
+  T extends {
+    thinkingEffort?: AnthropicThinkingEffort;
+    custom_parameters?: Record<string, unknown> | null;
+  },
+>(
+  config: T,
+  previous: { model: string; provider: COMPOSED_PROVIDER_TYPE | "" },
+  next: { model: PROVIDER_MODEL_TYPE; provider: COMPOSED_PROVIDER_TYPE },
+): T => {
+  const adjusted = updateProviderConfig(config, next) ?? config;
+
+  // updateProviderConfig leaves custom_parameters alone because opening a rule must keep the effort
+  // stored for a Claude model with no row. On a switch that copy belongs to the previous model; the
+  // flat thinkingEffort, already fitted to the next model, is what carries the user's choice.
+  if (
+    previous.model === next.model ||
+    !previous.provider ||
+    parseComposedProviderType(previous.provider) !== PROVIDER_TYPE.ANTHROPIC ||
+    !has(adjusted.custom_parameters, ["output_config", "effort"])
+  ) {
+    return adjusted;
+  }
+
+  return {
+    ...adjusted,
+    custom_parameters:
+      withThinkingEffort(adjusted.custom_parameters, undefined) ?? null,
+  };
+};
 
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   const model = data.model?.name ?? "";
