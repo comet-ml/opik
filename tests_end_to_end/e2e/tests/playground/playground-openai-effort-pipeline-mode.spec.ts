@@ -251,7 +251,7 @@ test.describe(
           // The positive control for the coercion below: without it, "the body
           // says high" is equally satisfied by a build that can never send max
           // at all, which would be the silent downgrade rather than the fix.
-          await playground.fillFirstMessage('Reply with the single word OK.');
+          await playground.fillUserMessage('Reply with the single word OK.');
           const body = await captureCompletionBody(page, () => playground.clickRun());
           expect(body.model, 'the request names the selected model').toBe('gpt-5.6-sol');
           expect(body.reasoning_effort, 'a Responses API key may send max').toBe('max');
