@@ -451,7 +451,13 @@ describe("useFilterChips", () => {
         remember([llm]);
         setup({ persistKey: PERSIST_KEY });
         expect(setRawFilters).toHaveBeenCalledOnce();
-        expect(setRawFilters).toHaveBeenCalledWith([llm]);
+        expect(setRawFilters).toHaveBeenCalledWith([
+          expect.objectContaining({
+            field: "type",
+            operator: "=",
+            value: "llm",
+          }),
+        ]);
       });
 
       it("does not restore when the URL has filters", () => {
@@ -493,13 +499,82 @@ describe("useFilterChips", () => {
 
         mockRawFilters = undefined;
         rerender();
-        expect(setRawFilters).toHaveBeenCalledWith([llm]);
+        expect(setRawFilters).toHaveBeenCalledWith([
+          expect.objectContaining({
+            field: "type",
+            operator: "=",
+            value: "llm",
+          }),
+        ]);
       });
 
       it("never saves on its own", () => {
         remember([llm]);
         setup({ persistKey: PERSIST_KEY });
         expect(readRemembered()).toEqual([llm]);
+      });
+
+      describe("malformed or obsolete saved data", () => {
+        const unknownField = f({
+          field: "no_such_field",
+          operator: "=",
+          value: "x",
+          type: COLUMN_TYPE.string,
+        });
+
+        it("restores only the valid filters, in render and in the URL", () => {
+          localStorage.setItem(
+            PERSIST_KEY,
+            JSON.stringify([{}, true, unknownField, llm]),
+          );
+          const renders: Array<Record<string, unknown>> = [];
+          renderHook(() => {
+            const hook = useFilterChips({
+              tableId: "test",
+              urlKey: "test_filters",
+              definitions: DEFINITIONS,
+              defaultPinned: [],
+              persistKey: PERSIST_KEY,
+            });
+            renders.push({ values: hook.values, filters: hook.filters });
+            return hook;
+          });
+
+          expect(renders[0]).toMatchObject({
+            values: { type: { value: "llm" } },
+            filters: [expect.objectContaining({ field: "type", value: "llm" })],
+          });
+          expect(setRawFilters).toHaveBeenCalledOnce();
+          const written = setRawFilters.mock.calls[0][0];
+          expect(written).toHaveLength(1);
+          expect(written[0]).toMatchObject({ field: "type", value: "llm" });
+        });
+
+        it("restores nothing but keeps the entry when nothing survives", () => {
+          const saved = [{}, true, unknownField];
+          localStorage.setItem(PERSIST_KEY, JSON.stringify(saved));
+          const { result } = setup({ persistKey: PERSIST_KEY });
+
+          expect(result.current.values).toEqual({});
+          expect(setRawFilters).not.toHaveBeenCalled();
+          expect(readRemembered()).toEqual(saved);
+        });
+
+        it("removes a saved value that is not an array", () => {
+          localStorage.setItem(PERSIST_KEY, JSON.stringify({ a: 1 }));
+          const { result } = setup({ persistKey: PERSIST_KEY });
+
+          expect(result.current.values).toEqual({});
+          expect(setRawFilters).not.toHaveBeenCalled();
+          expect(readRemembered()).toBeUndefined();
+        });
+
+        it("leaves storage alone when the URL already has filters", () => {
+          localStorage.setItem(PERSIST_KEY, JSON.stringify([{}]));
+          setup({ raw: [tool], persistKey: PERSIST_KEY });
+
+          expect(readRemembered()).toEqual([{}]);
+        });
       });
     });
 

@@ -81,14 +81,28 @@ const useFilterChips = ({
     useLocalStorageState<unknown>(persistKey ?? NON_PERSISTING_STORAGE_KEY, {
       storageSync: false,
     });
-  const savedFilters =
-    persistKey && Array.isArray(saved) && saved.length > 0
-      ? (saved as Filter[])
-      : undefined;
+  // Saved data may be malformed or obsolete, so only what still sanitizes is restored.
+  const savedFilters = useMemo(() => {
+    if (!persistKey || !Array.isArray(saved)) return undefined;
+    const { values: savedValues } = sanitizeFilters(
+      saved as Filter[],
+      definitions,
+    );
+    const sanitized = chipsToFilters(definitions, savedValues);
+    return sanitized.length > 0 ? sanitized : undefined;
+  }, [persistKey, saved, definitions]);
 
   // Computed during render so the first render is already filtered.
   const restored = rawFilters === undefined ? savedFilters : undefined;
   const sourceFilters = rawFilters ?? restored;
+
+  // Only drop values of the wrong shape: an array that fails sanitizing may just
+  // be missing a definition right now, so it is kept until the next edit.
+  useEffect(() => {
+    if (persistKey && saved !== undefined && !Array.isArray(saved)) {
+      removeSaved();
+    }
+  }, [persistKey, saved, removeSaved]);
 
   // Re-runs on every URL change: re-clicking the current page's link doesn't remount it.
   useEffect(() => {
