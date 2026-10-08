@@ -3,16 +3,12 @@
 import typing
 
 import pydantic
-import typing_extensions
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from ..core.serialization import FieldMetadata
 
 
-class PromptTokensDetails(UniversalBaseModel):
-    cached_tokens: typing_extensions.Annotated[typing.Optional[int], FieldMetadata(alias="cachedTokens")] = None
-    cache_write_tokens: typing_extensions.Annotated[typing.Optional[int], FieldMetadata(alias="cacheWriteTokens")] = (
-        None
-    )
+class PromptCacheOptions(UniversalBaseModel):
+    mode: typing.Optional[str] = None
+    ttl: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
