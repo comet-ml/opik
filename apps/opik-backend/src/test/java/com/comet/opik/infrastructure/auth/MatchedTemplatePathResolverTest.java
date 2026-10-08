@@ -2,58 +2,65 @@ package com.comet.opik.infrastructure.auth;
 
 import jakarta.ws.rs.core.UriInfo;
 import org.glassfish.jersey.server.ExtendedUriInfo;
+import org.glassfish.jersey.uri.PathTemplate;
 import org.glassfish.jersey.uri.UriTemplate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @DisplayName("MatchedTemplatePathResolver")
 class MatchedTemplatePathResolverTest {
 
-    @Test
-    @DisplayName("uses the single matched template as is")
-    void singleTemplate() {
-        assertThat(resolve("/v1/private/projects")).isEqualTo("/v1/private/projects");
+    static Stream<Arguments> matchedTemplates() {
+        return Stream.of(
+                arguments(templates("/v1/private/projects"), "/v1/private/projects"),
+                arguments(templates("/v1/private/projects", "/{id}"), "/v1/private/projects/{id}"),
+                arguments(templates("/v1/private/datasets", "/{id}", "/items/{itemId}"),
+                        "/v1/private/datasets/{id}/items/{itemId}"),
+                arguments(templates("/v1/private/projects", "stats/"), "/v1/private/projects/stats/"),
+                arguments(templates("/v1/private/", "/toggles"), "/v1/private/toggles"),
+                arguments(templates("/v1/private/projects", "/"), "/v1/private/projects/"));
     }
 
-    @Test
-    @DisplayName("joins the templates in matching order, keeping template variables")
-    void nestedTemplates() {
-        assertThat(resolve("/{id}", "/v1/private/projects")).isEqualTo("/v1/private/projects/{id}");
-        assertThat(resolve("/items/{itemId}", "/{id}", "/v1/private/datasets"))
-                .isEqualTo("/v1/private/datasets/{id}/items/{itemId}");
-    }
-
-    @Test
-    @DisplayName("collapses duplicate slashes between and around templates")
-    void normalizesSlashes() {
-        assertThat(resolve("stats/", "/v1/private/projects")).isEqualTo("/v1/private/projects/stats/");
-        assertThat(resolve("/toggles", "/v1/private/")).isEqualTo("/v1/private/toggles");
+    @ParameterizedTest(name = "{1}")
+    @MethodSource("matchedTemplates")
+    @DisplayName("joins the templates in matching order with single slashes, keeping template variables")
+    void resolve(List<UriTemplate> matched, String expected) {
+        assertThat(MatchedTemplatePathResolver.resolve(uriInfo(matched))).contains(expected);
     }
 
     @Test
     @DisplayName("resolves nothing when no template matched")
     void noTemplates() {
-        assertThat(resolve()).isNull();
+        assertThat(MatchedTemplatePathResolver.resolve(uriInfo(List.of()))).isEmpty();
     }
 
     @Test
     @DisplayName("resolves nothing for a uri info without matching information")
     void plainUriInfo() {
-        assertThat(MatchedTemplatePathResolver.resolve(mock(UriInfo.class))).isNull();
+        assertThat(MatchedTemplatePathResolver.resolve(mock(UriInfo.class))).isEmpty();
     }
 
-    private static String resolve(String... templatesInReverseMatchingOrder) {
-        List<UriTemplate> templates = java.util.Arrays.stream(templatesInReverseMatchingOrder)
-                .map(UriTemplate::new)
-                .toList();
+    private static List<UriTemplate> templates(String... templatesInMatchingOrder) {
+        return Stream.of(templatesInMatchingOrder)
+                .map(template -> (UriTemplate) new PathTemplate(template))
+                .toList()
+                .reversed();
+    }
+
+    private static ExtendedUriInfo uriInfo(List<UriTemplate> matched) {
         ExtendedUriInfo uriInfo = mock(ExtendedUriInfo.class);
-        when(uriInfo.getMatchedTemplates()).thenReturn(templates);
-        return MatchedTemplatePathResolver.resolve(uriInfo);
+        when(uriInfo.getMatchedTemplates()).thenReturn(matched);
+        return uriInfo;
     }
 }

@@ -72,8 +72,10 @@ public class RedactionRequestFilter implements ContainerRequestFilter {
         if (!redactionService.isEnabled()) {
             return;
         }
-        String templatePath = MatchedTemplatePathResolver.resolve(context.getUriInfo());
-        if (templatePath != null && !coversPath(templatePath)) {
+        boolean covered = MatchedTemplatePathResolver.resolve(context.getUriInfo())
+                .map(RedactionRequestFilter::coversPath)
+                .orElse(true);
+        if (!covered) {
             return;
         }
 

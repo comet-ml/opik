@@ -122,6 +122,7 @@ import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.MATRIX_PARAMETERS_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
@@ -411,6 +412,114 @@ class ProjectsResourceTest {
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
+        }
+
+        Stream<Arguments> matrixParameterRequests() {
+            var paths = List.of(
+                    "/v1;version=1/private/projects",
+                    "/v1/private;scope=all/projects",
+                    "/v1/private/projects;page=2",
+                    "/v1/private/projects/;page=2");
+            var methods = List.of("GET", "POST", "OPTIONS");
+            return credentials().flatMap(credential -> paths.stream()
+                    .flatMap(path -> methods.stream().map(method -> arguments(credential.get()[0], method, path))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("matrixParameterRequests")
+        @DisplayName("any request: when the path carries matrix parameters, then not found regardless of credentials")
+        void anyRequest__whenPathCarriesMatrixParameters__thenNotFound(String apiKey, String method, String path) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.target(baseURI + path)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .method(method)) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(404);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(MATRIX_PARAMETERS_RESPONSE);
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("create project: when the query string carries a semicolon, then the request is authenticated as usual")
+        void createProject__whenQueryStringCarriesSemicolon__thenAuthenticatedAsUsual(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+            var project = factory.manufacturePojo(Project.class);
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("source", "a;b")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.entity(project, MediaType.APPLICATION_JSON_TYPE))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(201);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(401);
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(errorMessage);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("get project by id: when the path parameter carries an encoded semicolon, then the request is authenticated as usual")
+        void getProjectById__whenPathParameterCarriesEncodedSemicolon__thenAuthenticatedAsUsual(String apiKey,
+                boolean success, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.getClient().target(URL_TEMPLATE.formatted(baseURI) + "/%3B")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(404);
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isNotEqualTo(MATRIX_PARAMETERS_RESPONSE);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(401);
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(errorMessage);
+                }
+            }
+        }
+
+        Stream<Arguments> normalizationVariants() {
+            return Stream.of(
+                    arguments("/v1//private/projects", 400),
+                    arguments("/v1%2Fprivate/projects", 400),
+                    arguments("/v1/./private/projects", 404),
+                    arguments("/v1/private/../private/projects", 404),
+                    arguments("/v1/%70rivate/projects", 404));
+        }
+
+        @ParameterizedTest
+        @MethodSource("normalizationVariants")
+        @DisplayName("find projects: when the path is not in canonical form, then it is rejected before routing")
+        void findProjects__whenPathIsNotCanonical__thenRejected(String path, int expectedStatus) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.getClient().target(baseURI + path)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(expectedStatus);
+            }
         }
 
         @ParameterizedTest
