@@ -690,12 +690,12 @@ export const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
 // OpenRouter names OpenAI's and Google's models `<vendor>/<native id>`, with routing variants after a
 // colon (`:free`, `:batch`). The native id is used only when that provider's list has it: ids only
 // OpenRouter uses (o3-mini-high, gpt-5-chat) have no row to read, and guessing would hide working sliders.
-const OPEN_ROUTER_NATIVE_ID = /^(openai|google)\/([^:]+)/;
+const OPEN_ROUTER_NATIVE_ID_PATTERN = /^(openai|google)\/([^:]+)/;
 
 const getNativeModelBehindOpenRouter = (
   model: PROVIDER_MODEL_TYPE,
 ): PROVIDER_MODEL_TYPE | undefined => {
-  const match = OPEN_ROUTER_NATIVE_ID.exec(model);
+  const match = OPEN_ROUTER_NATIVE_ID_PATTERN.exec(model);
   if (!match) {
     return undefined;
   }
