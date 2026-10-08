@@ -204,29 +204,41 @@ class TestTaskModelTemperaturePinning:
         assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
 
     @pytest.mark.parametrize(
-        "model,pinned",
+        "model",
         [
-            ("gemini-3-flash-preview", False),
-            ("vertex_ai/gemini-3.1-pro-preview", False),
-            ("google/gemini-3-flash-preview", False),
-            ("openai/gemini-3.8-flash", False),
-            ("gemini-flash-latest", False),
-            ("gemini-2.5-flash", True),
-            ("vertex_ai/gemini-2.0-flash-001", True),
-            ("gemini-1.5-pro", True),
-            ("gemini-pro-vision", True),
-            ("claude-haiku-4-5-20251001", True),
-            ("gpt-4o-mini", True),
-            (None, True),
+            "gemini-3-flash-preview",
+            "vertex_ai/gemini-3.1-pro-preview",
+            "google/gemini-3-flash-preview",
+            "google/gemini-3-flash-preview:free",
+            "gemini-flash-latest",
         ],
     )
-    def test_task_params__gemini_3_and_newer__keep_their_default_temperature(
-        self, model, pinned
+    def test_task_params__gemini_3_and_newer_on_a_google_route__keep_their_default_temperature(
+        self, model
     ):
-        """Google asks to keep Gemini 3 at its default temperature, and the
-        gateway's openai/ prefix stops litellm's drop_params from removing it."""
         params = ensure_default_model_params({}, deterministic=True, model=model)
-        assert ("temperature" in params) is pinned
+        assert "temperature" not in params
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "gemini-2.5-flash",
+            "vertex_ai/gemini-2.0-flash-001",
+            "google/gemini-2.5-flash:free",
+            "gemini-1.5-pro",
+            "gemini-pro-vision",
+            "custom-llm/acme/gemini-3-chat",
+            "custom-llm/ollama/gemini-3-flash-preview",
+            "claude-haiku-4-5-20251001",
+            "gpt-4o-mini",
+            None,
+        ],
+    )
+    def test_task_params__older_gemini_custom_routes_and_other_providers__keep_the_pin(
+        self, model
+    ):
+        params = ensure_default_model_params({}, deterministic=True, model=model)
+        assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
 
     def test_task_params__explicit_temperature_on_gemini_3__still_wins(self):
         params = ensure_default_model_params(

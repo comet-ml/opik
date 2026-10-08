@@ -10,6 +10,8 @@ tests verify, deterministically and offline:
 - the optimizer defaults to the prompt model when none is set.
 """
 
+import litellm
+import pytest
 from llm_constants import (
     ANTHROPIC_CLAUDE_HAIKU,
     ANTHROPIC_CLAUDE_OPUS,
@@ -133,6 +135,54 @@ def test_gemini_3_task_model_is_not_pinned_on_the_prompt():
     _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
 
     assert "temperature" not in prompt.model_kwargs
+
+
+_GATEWAY_REPLY = {
+    "id": "chatcmpl-test",
+    "object": "chat.completion",
+    "created": 0,
+    "model": "stub",
+    "choices": [
+        {
+            "index": 0,
+            "message": {"role": "assistant", "content": "ok"},
+            "finish_reason": "stop",
+        }
+    ],
+    "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+}
+
+
+@pytest.mark.parametrize(
+    "task_model,expected_temperature",
+    [
+        (GEMINI_3_FLASH, "absent"),
+        ("vertex_ai/gemini-3.1-pro-preview", "absent"),
+        ("gemini-2.5-flash", OPTIMIZER_TASK_TEMPERATURE),
+        ("custom-llm/acme/gemini-3-chat", OPTIMIZER_TASK_TEMPERATURE),
+        ("gpt-4o-mini", OPTIMIZER_TASK_TEMPERATURE),
+    ],
+)
+def test_task_model_request_body_sent_to_the_gateway(
+    httpserver, task_model, expected_temperature
+):
+    httpserver.expect_request(
+        "/v1/private/chat/completions", method="POST"
+    ).respond_with_json(_GATEWAY_REPLY)
+    config = OptimizationConfig.from_dict(_config(task_model=task_model))
+    _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    litellm.completion(
+        model=prompt.model,
+        messages=[{"role": "user", "content": "hi"}],
+        api_base=httpserver.url_for("/v1/private"),
+        api_key="test",
+        **prompt.model_kwargs,
+    )
+
+    body = httpserver.log[-1][0].get_json()
+    assert body["model"] == task_model
+    assert body.get("temperature", "absent") == expected_temperature
 
 
 def test_task_model_explicit_temperature_survives_the_pin():
