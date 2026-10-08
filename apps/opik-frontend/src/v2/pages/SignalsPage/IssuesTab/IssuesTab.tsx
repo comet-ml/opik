@@ -99,7 +99,7 @@ const ClosedIssuesButton: React.FC<{ count: number; onClick: () => void }> = ({
   <Button
     variant="outline"
     size="2xs"
-    className="w-full shrink-0 justify-between"
+    className="h-7 w-full shrink-0 justify-between rounded px-2"
     onClick={onClick}
   >
     Closed issues{count > 0 && ` (${count})`}

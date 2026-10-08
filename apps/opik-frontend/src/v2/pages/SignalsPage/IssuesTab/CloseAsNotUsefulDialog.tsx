@@ -36,7 +36,7 @@ const CloseAsNotUsefulDialog: React.FC<CloseAsNotUsefulDialogProps> = ({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg gap-1.5 p-5 sm:max-w-screen-sm">
         <DialogHeader className="pb-0">
-          <DialogTitle className="text-base">
+          <DialogTitle className="text-base leading-5">
             Close issue as Not useful
           </DialogTitle>
           <DialogDescription className="text-muted-slate">

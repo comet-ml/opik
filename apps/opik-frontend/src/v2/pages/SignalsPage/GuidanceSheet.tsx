@@ -74,7 +74,7 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
           <SheetTopBar
             variant="info"
             title={
-              <span className="comet-title-xs text-base">
+              <span className="comet-title-xs text-base leading-5">
                 Diagnostics guidance
               </span>
             }
@@ -134,13 +134,15 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
           <ButtonWithDropdown>
             <ButtonWithDropdownTrigger
               size="sm"
+              triggerClassName="w-8 border-l border-[var(--click-blue)] px-0 [&>svg]:size-3.5"
               disabled={isPending}
               onPrimaryClick={() => save(false)}
             >
               Save guidance
             </ButtonWithDropdownTrigger>
-            <ButtonWithDropdownContent align="end">
+            <ButtonWithDropdownContent align="end" className="w-[227px] p-1.5">
               <ButtonWithDropdownItem
+                className="h-6 p-1"
                 disabled={!onRun}
                 onSelect={() => save(true)}
               >

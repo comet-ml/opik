@@ -44,6 +44,13 @@ type IssueDetailProps = {
   canCloseAsNotUseful?: boolean;
 };
 
+// Figma: 24px outline buttons with 14px text and icons, 4px radius.
+const ACTION_BUTTON_CLASS = "h-6 gap-1 rounded px-2 text-sm font-medium";
+
+// Figma: 227px menu, 24px items with 14px regular text.
+const MENU_CONTENT_CLASS = "w-[227px] p-1.5";
+const MENU_ITEM_CLASS = "h-6 gap-1.5 p-1";
+
 type StatusChange = {
   status: AGENT_INSIGHTS_ISSUE_STATUS;
   closeNote?: string;
@@ -149,13 +156,16 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
           onSuccess?.();
           if (!undoToast) return;
           toast({
-            ...undoToast,
+            title: undoToast.title,
+            description: undoToast.description && (
+              <span className="text-muted-slate">{undoToast.description}</span>
+            ),
             actions: [
               <ToastAction
                 key="undo"
                 variant="link"
                 size="sm"
-                className="h-auto gap-1 px-0"
+                className="comet-body-s h-6 gap-1 px-0 font-normal"
                 altText="Undo"
                 onClick={() =>
                   updateMutation.mutate({
@@ -218,10 +228,11 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
         <Button
           variant="outline"
           size="2xs"
+          className={ACTION_BUTTON_CLASS}
           disabled={updateMutation.isPending}
           onClick={handleReopen}
         >
-          <Undo2 className="mr-1 size-3" />
+          <Undo2 className="size-3.5" />
           Reopen
         </Button>
       );
@@ -229,7 +240,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
 
     const closeLabel = (
       <>
-        <CircleCheck className="mr-1 size-3" />
+        <CircleCheck className="size-3.5" />
         Close issue
       </>
     );
@@ -239,6 +250,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
         <Button
           variant="outline"
           size="2xs"
+          className={ACTION_BUTTON_CLASS}
           disabled={updateMutation.isPending}
           onClick={handleResolve}
         >
@@ -252,14 +264,16 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
         <ButtonWithDropdownTrigger
           variant="outline"
           size="2xs"
+          className={ACTION_BUTTON_CLASS}
+          triggerClassName="-ml-px w-6 rounded px-0 [&>svg]:size-3"
           disabled={updateMutation.isPending}
           onPrimaryClick={handleResolve}
         >
           {closeLabel}
         </ButtonWithDropdownTrigger>
-        <ButtonWithDropdownContent align="end">
+        <ButtonWithDropdownContent align="end" className={MENU_CONTENT_CLASS}>
           <ButtonWithDropdownItem
-            className="gap-1.5"
+            className={MENU_ITEM_CLASS}
             onSelect={() => setNotUsefulOpen(true)}
           >
             <ThumbsDown className="size-3" />

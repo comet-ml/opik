@@ -52,7 +52,7 @@ const DiagnosticsSettingsMenu: React.FC<DiagnosticsSettingsMenuProps> = ({
           Settings
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56 p-1.5">
+      <DropdownMenuContent align="end" className="w-[227px] p-1.5">
         <DropdownMenuItem
           size="sm"
           role="menuitemcheckbox"
@@ -73,7 +73,7 @@ const DiagnosticsSettingsMenu: React.FC<DiagnosticsSettingsMenuProps> = ({
             </span>
           </div>
           <Switch
-            size="xs"
+            size="2xs"
             checked={enabled}
             tabIndex={-1}
             aria-hidden
@@ -82,7 +82,7 @@ const DiagnosticsSettingsMenu: React.FC<DiagnosticsSettingsMenuProps> = ({
         </DropdownMenuItem>
         {onEditGuidance && (
           <>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="mx-0 bg-border" />
             <DropdownMenuItem
               size="sm"
               className="comet-body-xs h-6 p-1"
@@ -94,7 +94,7 @@ const DiagnosticsSettingsMenu: React.FC<DiagnosticsSettingsMenuProps> = ({
         )}
         {BillingLink && (
           <DropdownMenuItem asChild>
-            <BillingLink label="Manage billing" variant="popover" />
+            <BillingLink label="Manage billing" variant="menu" />
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
