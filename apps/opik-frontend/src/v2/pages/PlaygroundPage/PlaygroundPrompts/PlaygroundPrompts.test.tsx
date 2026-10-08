@@ -49,6 +49,7 @@ const renderPrompts = () =>
       workspaceName="default"
       providerKeys={[]}
       isPendingProviderKeys={false}
+      hasLoadedProviderKeys
       runSingle={runSingle}
       stopSingle={stopSingle}
     />,

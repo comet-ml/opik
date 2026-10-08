@@ -39,6 +39,11 @@ const videoContent: MessageContent = [
   { type: "video_url", video_url: { url: "https://example.com/cat.mp4" } },
 ];
 
+const audioContent: MessageContent = [
+  { type: "text", text: "Transcribe this" },
+  { type: "audio_url", audio_url: { url: "https://example.com/cat.mp3" } },
+];
+
 const onRun = vi.fn();
 
 const renderButton = () =>
@@ -85,6 +90,18 @@ describe("PlaygroundRunButton", () => {
       );
     });
 
+    it("should disable Run for audio on a model without audio support", async () => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, audioContent);
+
+      renderButton();
+      hoverRunButton();
+
+      expect(getRunButton()).toBeDisabled();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        MEDIA_REASON,
+      );
+    });
+
     it("should not call onRun when the disabled button is clicked", () => {
       prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, imageContent);
 
@@ -106,8 +123,31 @@ describe("PlaygroundRunButton", () => {
       expect(onRun).toHaveBeenCalledTimes(1);
     });
 
+    it("should enable Run for audio on a model that accepts audio", () => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, audioContent);
+
+      renderButton();
+
+      expect(getRunButton()).toBeEnabled();
+    });
+
     it("should enable Run for text only on a non-vision model", () => {
       prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+
+      renderButton();
+
+      expect(getRunButton()).toBeEnabled();
+    });
+
+    it("should enable Run when the system message is left empty", () => {
+      const userPrompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+      prompt = {
+        ...userPrompt,
+        messages: [
+          { id: "system", role: LLM_MESSAGE_ROLE.system, content: "" },
+          ...userPrompt.messages,
+        ],
+      };
 
       renderButton();
 

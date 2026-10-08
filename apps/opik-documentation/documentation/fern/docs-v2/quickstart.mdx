@@ -251,13 +251,15 @@ stack and follow the three steps to log your first trace:
   </Tab>
   <Tab title="AI integration">
     If you already use a coding agent (Claude Code, Codex, Cursor, OpenCode, etc.), you can let it
-    instrument your app for you with the Opik Skill. Requires Node.js installed.
+    instrument your app for you with the Opik skills.
 
     <Steps>
       <Step title="Install the Opik skill">
         ```bash
-        npx skills add comet-ml/opik-skills
+        uvx opik mcp configure
         ```
+
+        It installs the Opik skills and connects the Opik MCP server. It needs [`uv`](https://docs.astral.sh/uv/).
       </Step>
       <Step title="Run the integration">
         Once the skill is installed, you can integrate with Opik using the following prompt:
