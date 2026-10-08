@@ -1,3 +1,6 @@
+import first from "lodash/first";
+import isNil from "lodash/isNil";
+import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
 import {
@@ -241,7 +244,13 @@ export const generateDefaultPrompt = ({
   modelResolver,
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
   const modelByDefault = modelResolver(lastPickedModel || "", setupProviders);
-  const provider = providerResolver(modelByDefault);
+  // The model resolver can pick the first set-up provider's static default model before the model
+  // registry loads, but mapping that model back to a provider needs the registry. A picked model
+  // that maps to no provider can only be that default, so it belongs to the first set-up provider.
+  const provider =
+    providerResolver(modelByDefault) ||
+    (modelByDefault && first(setupProviders)) ||
+    "";
 
   return {
     name: "Prompt",
@@ -251,6 +260,32 @@ export const generateDefaultPrompt = ({
     configs: getDefaultConfigByProvider(provider, modelByDefault),
     ...initPrompt,
     id: generateRandomString(),
+  };
+};
+
+export const restoreMissingProviderAndConfigKeys = (
+  prompt: PlaygroundPromptType,
+  providerResolver: ProviderResolver,
+): PlaygroundPromptType => {
+  if (prompt.provider) {
+    return prompt;
+  }
+
+  const provider = providerResolver(prompt.model);
+
+  if (!provider) {
+    return prompt;
+  }
+
+  // Not restoreMissingConfigKeys: without a provider the prompt never had its provider's settings,
+  // so nothing it lacks was the user's choice, Claude's temperature/Top P pair included.
+  return {
+    ...prompt,
+    provider,
+    configs: {
+      ...getDefaultConfigByProvider(provider, prompt.model),
+      ...omitBy(prompt.configs, isNil),
+    } as LLMPromptConfigsType,
   };
 };
 
