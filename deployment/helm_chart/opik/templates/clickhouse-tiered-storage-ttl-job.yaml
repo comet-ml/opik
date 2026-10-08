@@ -9,6 +9,19 @@
 {{- end }}
 {{- end }}
 {{- $backend := .Values.component.backend }}
+{{- $vars := list "ANALYTICS_DB_HOST" "ANALYTICS_DB_DATABASE_NAME" "ANALYTICS_DB_MIGRATIONS_USER" "ANALYTICS_DB_MIGRATIONS_PASS" }}
+{{- /* The backend's env sources in its own order: envFrom, then secretRefs. */}}
+{{- $sources := list }}
+{{- range $backend.envFrom }}
+{{- if or .configMapRef .secretRef }}
+{{- $sources = append $sources . }}
+{{- end }}
+{{- end }}
+{{- range $backend.secretRefs }}
+{{- if .name }}
+{{- $sources = append $sources (dict "secretRef" (dict "name" .name)) }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -57,29 +70,20 @@ spec:
       containers:
         - name: apply-ttl
           image: {{ .Values.clickhouse.image }}
-          # Only the four settings this needs, read from the backend's sources in the backend's
-          # order (honouring envFrom prefixes): a later source wins, a missing key is skipped.
+          # Only the four settings this needs, once per backend source (SRC<i>_<name>, so no name
+          # repeats under server-side apply). The script takes the last source that has a value.
           env:
-            {{- range $var := list "ANALYTICS_DB_HOST" "ANALYTICS_DB_DATABASE_NAME" "ANALYTICS_DB_MIGRATIONS_USER" "ANALYTICS_DB_MIGRATIONS_PASS" }}
-            {{- range $backend.envFrom }}
-            {{- $prefix := .prefix | default "" }}
+            {{- range $i, $src := $sources }}
+            {{- $prefix := $src.prefix | default "" }}
+            {{- range $var := $vars }}
             {{- if and (hasPrefix $prefix $var) (ne $prefix $var) }}
-            {{- if .configMapRef }}
-            - name: {{ $var }}
+            - name: SRC{{ $i }}_{{ $var }}
               valueFrom:
-                configMapKeyRef: {name: {{ .configMapRef.name }}, key: {{ trimPrefix $prefix $var }}, optional: true}
-            {{- else if .secretRef }}
-            - name: {{ $var }}
-              valueFrom:
-                secretKeyRef: {name: {{ .secretRef.name }}, key: {{ trimPrefix $prefix $var }}, optional: true}
-            {{- end }}
-            {{- end }}
-            {{- end }}
-            {{- range $backend.secretRefs }}
-            {{- if .name }}
-            - name: {{ $var }}
-              valueFrom:
-                secretKeyRef: {name: {{ .name }}, key: {{ $var }}, optional: true}
+                {{- if $src.configMapRef }}
+                configMapKeyRef: {name: {{ $src.configMapRef.name }}, key: {{ trimPrefix $prefix $var }}, optional: true}
+                {{- else }}
+                secretKeyRef: {name: {{ $src.secretRef.name }}, key: {{ trimPrefix $prefix $var }}, optional: true}
+                {{- end }}
             {{- end }}
             {{- end }}
             {{- end }}
@@ -87,6 +91,13 @@ spec:
           args:
             - |
               set -euo pipefail
+              # As with envFrom, a later source with a value wins.
+              for v in {{ join " " $vars }}; do
+                for ((i = 0; i < {{ len $sources }}; i++)); do
+                  n="SRC${i}_${v}"
+                  if [ -n "${!n:-}" ]; then printf -v "$v" '%s' "${!n}"; fi
+                done
+              done
               for v in ANALYTICS_DB_HOST ANALYTICS_DB_DATABASE_NAME ANALYTICS_DB_MIGRATIONS_USER ANALYTICS_DB_MIGRATIONS_PASS; do
                 [ -n "${!v:-}" ] || { echo "ERROR: $v is not set; it comes from the opik-backend env." >&2; exit 1; }
               done
