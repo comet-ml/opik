@@ -46,6 +46,50 @@ public class TracesDAO { }
 public class TracesService { }
 ```
 
+## Imports
+
+**Import types at the top of the file and use the simple name. Don't write a fully-qualified name inline.** This holds for any external package — `java.*`, `jakarta.*`, `io.dropwizard.*`, `lombok.*`, `reactor.*`, third-party — not just the JDK. Enforced by the PMD `InlineFullyQualifiedName` rule (`apps/opik-backend/pmd-ruleset.xml`) via the `☕ pmd — java inline FQNs` hook on changed files.
+
+```java
+// ✅ GOOD - imported at the top, simple name in the body
+import java.util.Locale;
+import io.dropwizard.jersey.errors.ErrorMessage;
+...
+return name.toLowerCase(Locale.ROOT);
+throw new ClientErrorException(new ErrorMessage(409, msg));
+
+// ❌ BAD - fully qualified inline, any namespace
+return name.toLowerCase(java.util.Locale.ROOT);
+throw new ClientErrorException(new io.dropwizard.jersey.errors.ErrorMessage(409, msg));
+
+// ❌ BAD - inline FQN in a field or signature
+private static final java.util.regex.Pattern P = java.util.regex.Pattern.compile("[a-z_]+");
+```
+
+It's a heuristic, so there are legitimate exceptions — a simple-name collision in one file (`java.util.Date` vs `java.sql.Date`), or any case where the inline form is deliberate. Take the exception with an inline suppression **and a reason**; the reason is enforced, so a bare suppression fails the hook:
+
+```java
+import java.util.Date;
+...
+java.sql.Date sqlDate; // NOPMD - collides with the imported java.util.Date
+```
+
+`@SuppressWarnings("PMD.InlineFullyQualifiedName")` works too, but the annotation can't carry prose — pair it with a `// NOPMD - <reason>` marker on its own line or directly above:
+
+```java
+// NOPMD - collides with the imported java.util.Date
+@SuppressWarnings("PMD.InlineFullyQualifiedName")
+java.sql.Date sqlDate;
+```
+
+An ordinary comment isn't enough: the marker is what distinguishes a justification from unrelated Javadoc. Suppressions of *other* PMD rules are unaffected. Don't disable the rule repo-wide.
+
+Two things are **not** violations and aren't reported:
+- **Nested-type access** — `Alert.View.Public.class`, `Schema.AccessMode.READ_ONLY`. That's how you reference a nested type, not an inline FQN.
+- **FQNs in comments, javadoc, and string literals** — the rule matches the AST, so MapStruct's `@Mapping(expression = "java(java.util.Map.of())")`, where the FQN is required and no import can satisfy it, is fine as-is.
+
+Inline `com.comet.opik.*` self-references are the same smell but currently out of scope for the hook.
+
 ## Lombok Conventions
 
 ### Records and DTOs

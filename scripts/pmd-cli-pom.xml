@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Resolution-only pom used by scripts/precommit-pmd.sh to pull the PMD CLI and
+  its dependencies into a cache dir. Not part of the build reactor; it exists
+  because pmd/pmd publishes no pre-commit hook and maven-pmd-plugin cannot be
+  scoped to a changed-file list. The version is passed in as -Dpmd.version.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.comet.opik.tooling</groupId>
+    <artifactId>pmd-cli-fetch</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <dependencies>
+        <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-cli</artifactId>
+            <version>${pmd.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-java</artifactId>
+            <version>${pmd.version}</version>
+        </dependency>
+    </dependencies>
+</project>
