@@ -33,6 +33,7 @@ export interface PlaygroundPromptType {
   configs: LLMPromptConfigsType;
   loadedChatPromptId?: string;
   loadedChatPromptVersionId?: string;
+  appliedChatPromptVersionId?: string;
   skipInitialPromptLoad?: boolean;
 }
 
