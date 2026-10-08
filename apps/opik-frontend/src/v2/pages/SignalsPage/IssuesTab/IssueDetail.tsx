@@ -349,7 +349,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
           </SectionCard>
         )}
 
-        {(issue.cause || issue.suggested_fix) && (
+        {isOpen && (issue.cause || issue.suggested_fix) && (
           <SectionCard
             style={{ borderColor: "var(--color-ollie)" }}
             title={
