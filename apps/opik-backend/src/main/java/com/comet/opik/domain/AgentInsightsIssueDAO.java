@@ -54,19 +54,21 @@ interface AgentInsightsIssueDAO {
             @Bind("project_id") UUID projectId,
             @BindList("ids") List<UUID> ids);
 
+    // The guards are the security boundary (POST /issues is ungated): the service's findIdsOutsideScope pre-check
+    // takes no lock, so it only drops the details rows; a foreign row appearing after it must still be left alone.
     @SqlBatch("""
             INSERT INTO agent_insights_issues
                 (id, workspace_id, project_id, name, description, cause, suggested_fix, traces_query, severity, created_by, last_updated_by)
             VALUES (:id, :workspace_id, :project_id, :bean.name, :bean.description, :bean.cause, :bean.suggestedFix,
                     :bean.tracesQuery, :bean.severity, :user_name, :user_name)
             ON DUPLICATE KEY UPDATE
-                name = :bean.name,
-                description = :bean.description,
-                cause = :bean.cause,
-                suggested_fix = :bean.suggestedFix,
-                traces_query = :bean.tracesQuery,
-                severity = :bean.severity,
-                last_updated_by = :user_name
+                name = IF(workspace_id = :workspace_id AND project_id = :project_id, :bean.name, name),
+                description = IF(workspace_id = :workspace_id AND project_id = :project_id, :bean.description, description),
+                cause = IF(workspace_id = :workspace_id AND project_id = :project_id, :bean.cause, cause),
+                suggested_fix = IF(workspace_id = :workspace_id AND project_id = :project_id, :bean.suggestedFix, suggested_fix),
+                traces_query = IF(workspace_id = :workspace_id AND project_id = :project_id, :bean.tracesQuery, traces_query),
+                severity = IF(workspace_id = :workspace_id AND project_id = :project_id, :bean.severity, severity),
+                last_updated_by = IF(workspace_id = :workspace_id AND project_id = :project_id, :user_name, last_updated_by)
             """)
     void upsertIssues(
             @Bind("workspace_id") String workspaceId,
