@@ -465,6 +465,16 @@ export class PlaygroundPage {
     });
   }
 
+  async firstMessageCursorHeightPx(): Promise<number> {
+    return test.step('measure the height of the first message cursor', async () => {
+      return this.variantMessages(0)
+        .first()
+        .locator('.cm-cursor')
+        .first()
+        .evaluate((cursor) => cursor.getBoundingClientRect().height);
+    });
+  }
+
   /**
    * The "Run experiment" entry control — present only while NO dataset or test
    * suite is loaded. Its return after a reset is what says the reset really
