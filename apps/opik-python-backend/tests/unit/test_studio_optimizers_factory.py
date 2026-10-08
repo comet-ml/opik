@@ -203,6 +203,49 @@ class TestTaskModelTemperaturePinning:
         )
         assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
 
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "gemini-3-flash-preview",
+            "vertex_ai/gemini-3.1-pro-preview",
+            "google/gemini-3-flash-preview",
+            "google/gemini-3-flash-preview:free",
+            "gemini-flash-latest",
+        ],
+    )
+    def test_task_params__gemini_3_and_newer_on_a_google_route__keep_their_default_temperature(
+        self, model
+    ):
+        params = ensure_default_model_params({}, deterministic=True, model=model)
+        assert "temperature" not in params
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "gemini-2.5-flash",
+            "vertex_ai/gemini-2.0-flash-001",
+            "google/gemini-2.5-flash:free",
+            "gemini-1.5-pro",
+            "gemini-pro-vision",
+            "custom-llm/acme/gemini-3-chat",
+            "custom-llm/ollama/gemini-3-flash-preview",
+            "claude-haiku-4-5-20251001",
+            "gpt-4o-mini",
+            None,
+        ],
+    )
+    def test_task_params__older_gemini_custom_routes_and_other_providers__keep_the_pin(
+        self, model
+    ):
+        params = ensure_default_model_params({}, deterministic=True, model=model)
+        assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
+
+    def test_task_params__explicit_temperature_on_gemini_3__still_wins(self):
+        params = ensure_default_model_params(
+            {"temperature": 0.2}, deterministic=True, model="gemini-3-flash-preview"
+        )
+        assert params["temperature"] == 0.2
+
     def test_task_params__explicit_null_max_tokens__is_defaulted(self):
         params = ensure_default_model_params({"max_tokens": None})
         assert params["max_tokens"] == optimizers_module.LLM_MAX_TOKENS
