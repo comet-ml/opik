@@ -15,13 +15,14 @@ import jakarta.ws.rs.ext.Provider;
 @Singleton
 public class MatrixParameterRequestFilter implements ContainerRequestFilter {
 
-    public static final String MESSAGE = "Matrix parameters are not supported in request paths";
+    public static final String MATRIX_PARAMETERS_NOT_SUPPORTED_MESSAGE = "Matrix parameters are not supported in request paths";
 
     @Override
     public void filter(ContainerRequestContext context) {
         if (hasMatrixParameters(context.getUriInfo().getRequestUri().getRawPath())) {
             context.abortWith(Response.status(Response.Status.NOT_FOUND)
-                    .entity(new ErrorMessage(Response.Status.NOT_FOUND.getStatusCode(), MESSAGE))
+                    .entity(new ErrorMessage(Response.Status.NOT_FOUND.getStatusCode(),
+                            MATRIX_PARAMETERS_NOT_SUPPORTED_MESSAGE))
                     .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
                     .build());
         }

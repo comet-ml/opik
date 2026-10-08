@@ -30,7 +30,7 @@ public class TestHttpClientUtils {
     public static final io.dropwizard.jersey.errors.ErrorMessage NO_API_KEY_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
             401, MISSING_API_KEY);
     public static final io.dropwizard.jersey.errors.ErrorMessage MATRIX_PARAMETERS_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
-            404, MatrixParameterRequestFilter.MESSAGE);
+            404, MatrixParameterRequestFilter.MATRIX_PARAMETERS_NOT_SUPPORTED_MESSAGE);
 
     /**
      * Returns a static {@link Client} for direct unit tests that construct services manually

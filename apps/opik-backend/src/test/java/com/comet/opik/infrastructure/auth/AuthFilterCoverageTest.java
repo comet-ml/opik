@@ -19,11 +19,13 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
 import jakarta.annotation.Priority;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
+import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.glassfish.jersey.server.model.Resource;
@@ -32,7 +34,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 
+import java.lang.reflect.Method;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -45,6 +49,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
@@ -89,9 +94,10 @@ class AuthFilterCoverageTest {
     private static final ResourceExtension EXT;
 
     static {
+        var authFilter = new AuthFilter(AUTH_SERVICE, mock(McpOAuthService.class),
+                mock(CipxTokenValidationService.class), new OpikConfiguration(), RequestContext::new);
         var builder = ResourceExtension.builder()
-                .addProvider(new AuthFilter(AUTH_SERVICE, mock(McpOAuthService.class),
-                        mock(CipxTokenValidationService.class), new OpikConfiguration(), RequestContext::new))
+                .addProvider(new AuthDynamicFeature(authFilter))
                 .addProvider(new AbortAfterMatching())
                 .addProvider(InstantParamConverter.class)
                 .addProvider(LocalDateParamConverter.class);
@@ -108,7 +114,8 @@ class AuthFilterCoverageTest {
         }
     }
 
-    private record Endpoint(Class<?> resourceClass, String httpMethod, String template, MediaType consumes) {
+    private record Endpoint(Class<?> resourceClass, String httpMethod, String template, MediaType consumes,
+            boolean generated, List<String> requiredPermissions) {
 
         String requestPath() {
             return TEMPLATE_VARIABLE.matcher(template).replaceAll(UUID.randomUUID().toString());
@@ -133,12 +140,33 @@ class AuthFilterCoverageTest {
         Resource resource = Resource.from(resourceClass);
         Stream<Endpoint> own = resource.getResourceMethods().stream()
                 .map(method -> new Endpoint(resourceClass, method.getHttpMethod(), resource.getPath(),
-                        consumes(method)));
+                        consumes(method), false, requiredPermissions(resourceClass, method)));
         Stream<Endpoint> children = resource.getChildResources().stream()
                 .flatMap(child -> child.getResourceMethods().stream()
                         .map(method -> new Endpoint(resourceClass, method.getHttpMethod(),
-                                join(resource.getPath(), child.getPath()), consumes(method))));
-        return Stream.concat(own, children);
+                                join(resource.getPath(), child.getPath()), consumes(method), false,
+                                requiredPermissions(resourceClass, method))));
+        Stream<Endpoint> generatedOptions = Stream.concat(
+                resource.getResourceMethods().isEmpty() ? Stream.empty() : Stream.of(resource.getPath()),
+                resource.getChildResources().stream().map(child -> join(resource.getPath(), child.getPath())))
+                .distinct()
+                .map(path -> new Endpoint(resourceClass, HttpMethod.OPTIONS, path, MediaType.APPLICATION_JSON_TYPE,
+                        true, List.of()));
+        return Stream.of(own, children, generatedOptions).flatMap(stream -> stream);
+    }
+
+    private static List<String> requiredPermissions(Class<?> resourceClass, ResourceMethod method) {
+        return RequiredPermissionsResolver.getRequiredPermissions(new ResourceInfo() {
+            @Override
+            public Method getResourceMethod() {
+                return method.getInvocable().getHandlingMethod();
+            }
+
+            @Override
+            public Class<?> getResourceClass() {
+                return resourceClass;
+            }
+        });
     }
 
     private static MediaType consumes(ResourceMethod method) {
@@ -174,13 +202,24 @@ class AuthFilterCoverageTest {
         try (var response = Set.of("PUT", "PATCH").contains(endpoint.httpMethod())
                 ? request.method(endpoint.httpMethod(), Entity.entity("{}", endpoint.consumes()))
                 : request.method(endpoint.httpMethod())) {
+            if (endpoint.generated() && response.getStatus() == 404) {
+                verifyNoInteractions(AUTH_SERVICE);
+                return;
+            }
             assertThat(response.getStatus())
-                    .as("the request must be routed to the resource before it is aborted")
+                    .as("%s must be routed to the resource before it is aborted", endpoint)
                     .isEqualTo(204);
         }
 
         switch (expected(endpoint.resourceClass())) {
-            case AUTHENTICATED -> verify(AUTH_SERVICE).authenticate(any(), any(), any());
+            case AUTHENTICATED -> {
+                var contextInfo = ArgumentCaptor.forClass(ContextInfoHolder.class);
+                verify(AUTH_SERVICE).authenticate(any(), any(), contextInfo.capture());
+                assertThat(contextInfo.getValue().method()).isEqualTo(endpoint.httpMethod());
+                assertThat(contextInfo.getValue().requiredPermissions())
+                        .as("%s must carry its declared permissions", endpoint)
+                        .isEqualTo(endpoint.requiredPermissions());
+            }
             case SESSION -> verify(AUTH_SERVICE).authenticateSession(any());
             case PUBLIC -> {
             }
