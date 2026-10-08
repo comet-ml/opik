@@ -468,6 +468,15 @@ export class PlaygroundPage {
     });
   }
 
+  async emptyUserMessageWithBackspace(): Promise<void> {
+    return test.step('replace the user message with one character, then delete it with Backspace', async () => {
+      await this.variantMessage(0, 'user').locator('.cm-content').first().click();
+      await this.page.keyboard.press('ControlOrMeta+A');
+      await this.page.keyboard.type('a');
+      await this.page.keyboard.press('Backspace');
+    });
+  }
+
   async userMessageCursorHeightPx(): Promise<number> {
     return test.step('measure the height of the user message cursor', async () => {
       return this.variantMessage(0, 'user')

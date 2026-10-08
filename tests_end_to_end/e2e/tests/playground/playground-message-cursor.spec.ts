@@ -45,9 +45,7 @@ test.describe('Playground — message editor cursor', { tag: ['@t3-nightly', '@a
       });
 
       await test.step('Deleting the only character keeps the cursor full height', async () => {
-        await page.keyboard.press('ControlOrMeta+A');
-        await page.keyboard.type('a');
-        await page.keyboard.press('Backspace');
+        await playground.emptyUserMessageWithBackspace();
         await expect
           .poll(() => playground.userMessageCursorLeftOverflowPx(), {
             message: 'the cursor is redrawn at column 0 after Backspace',
