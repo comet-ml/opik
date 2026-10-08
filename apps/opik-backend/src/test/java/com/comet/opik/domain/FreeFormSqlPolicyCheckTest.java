@@ -63,6 +63,9 @@ class FreeFormSqlPolicyCheckTest {
                 arguments("Distributed wrapper covered by its local read filtered in the plan", List.of(
                         entry(true, USER, List.of("opik.traces", "opik.traces_local"), List.of())),
                         plan("ReadFromMergeTree|opik.traces_local|filtered"), NONE),
+                arguments("local table read under IN, named by its wrapper in the query tree", List.of(
+                        entry(true, USER, List.of("opik.spans", "opik.traces", "opik.traces_local"), List.of())),
+                        plan("ReadFromMergeTree|opik.spans_local|filtered"), filter("opik.traces")),
                 arguments("tables outside the database and row generators", List.of(entry(true, USER,
                         List.of("system.one"), List.of())), plan("ReadFromSystemOne|system.one"), NONE));
     }
