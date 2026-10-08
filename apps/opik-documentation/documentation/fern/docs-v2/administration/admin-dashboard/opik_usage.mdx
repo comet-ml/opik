@@ -18,6 +18,10 @@ The **Opik usage** page shows how many spans your organization logs over time. Y
 1. Navigate to the [Admin Dashboard](/administration/admin-dashboard/overview)
 2. Click on **Opik usage** in the sidebar
 
+<Frame>
+  <img src="/img/administration/opik_usage.png" alt="Opik usage page with workspace filters, the usage chart and the Top 10 workspaces and projects panels" />
+</Frame>
+
 ## Reading the chart
 
 The chart shows the number of spans logged per day. Use the **7d**, **30d** and **90d** buttons to change the range, or pick a custom range with the date picker. Ranges longer than six months are shown per month.
@@ -45,7 +49,13 @@ A project that was deleted in Opik keeps its last known name and is marked as **
 
 ## Exporting usage data
 
-Click **Export** to download a CSV file for the range and filters currently shown on the page. In the dialog you choose:
+Click **Export** to download a CSV file for the range and filters currently shown on the page.
+
+<Frame>
+  <img src="/img/administration/opik_usage_export.png" alt="Export usage data dialog with the content and time interval options" />
+</Frame>
+
+In the dialog you choose:
 
 - **Content**
   - **Breakdown by workspace and project** (default): one row per period, workspace and project with the columns `date, workspace_id, workspace_name, project_id, project_name, count`.
