@@ -23,6 +23,9 @@ export interface DashboardRuntimeConfig {
   projectIds?: string[];
   experimentIds?: string[];
   dashboardType?: DASHBOARD_TYPE;
+  // The saved dashboard on screen; Ollie chart widgets run their saved query through it.
+  dashboardId?: string;
+  dashboardScope?: DASHBOARD_SCOPE;
 }
 
 export enum DASHBOARD_TYPE {

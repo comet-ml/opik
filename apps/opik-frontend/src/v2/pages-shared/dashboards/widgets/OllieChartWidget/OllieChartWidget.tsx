@@ -15,13 +15,14 @@ import {
   selectReadOnly,
 } from "@/store/DashboardStore";
 import {
+  DASHBOARD_SCOPE,
   DASHBOARD_TYPE,
   DashboardWidgetComponentProps,
   OllieChartWidgetType,
 } from "@/types/dashboard";
 import { calculateIntervalConfig } from "@/v2/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/v2/pages-shared/traces/MetricDateRangeSelect/constants";
-import useAnalyticsQuery from "@/api/dashboards/useAnalyticsQuery";
+import useDashboardWidgetQuery from "@/api/dashboards/useDashboardWidgetQuery";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
@@ -68,6 +69,12 @@ const OllieChartWidget: React.FunctionComponent<
     (state) =>
       selectRuntimeConfig(state)?.dashboardType !== DASHBOARD_TYPE.EXPERIMENTS,
   );
+  const { dashboardId, dashboardScope } = useDashboardStore(
+    useShallow((state) => ({
+      dashboardId: selectRuntimeConfig(state)?.dashboardId,
+      dashboardScope: selectRuntimeConfig(state)?.dashboardScope,
+    })),
+  );
   const widget = useDashboardStore(
     useShallow((state) => {
       if (preview) {
@@ -97,15 +104,19 @@ const OllieChartWidget: React.FunctionComponent<
     error,
     refetch,
     dataUpdatedAt,
-  } = useAnalyticsQuery(
+  } = useDashboardWidgetQuery(
     {
+      dashboardId: dashboardId ?? "",
+      scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
+      widgetId: widgetId ?? "",
       sql: query?.sql ?? "",
-      projectId: query?.projectId,
       intervalStart,
       intervalEnd,
     },
-    { enabled: Boolean(query?.sql) },
+    // A preview has no saved widget to run, so it shows the rows the chart was made with.
+    { enabled: Boolean(query?.sql && dashboardId && widgetId && !preview) },
   );
+  const live = Boolean(query?.sql && !preview);
 
   if (!widget) {
     return null;
@@ -135,11 +146,11 @@ const OllieChartWidget: React.FunctionComponent<
       );
     }
 
-    if (query?.sql && isPending) {
+    if (live && isPending) {
       return <ChartSkeleton className="size-full" />;
     }
 
-    if (query?.sql && error) {
+    if (live && error) {
       return (
         <DashboardWidget.EmptyState
           title="Query failed"
@@ -148,7 +159,7 @@ const OllieChartWidget: React.FunctionComponent<
       );
     }
 
-    const chartRows = query?.sql ? rows : snapshotRows;
+    const chartRows = live ? rows : snapshotRows;
     if (!chartRows?.length) {
       return (
         <DashboardWidget.EmptyState
