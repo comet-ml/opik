@@ -1,3 +1,4 @@
+import { getPrettifyConfig } from "@/lib/traces";
 import React, { useCallback, useMemo, useState, useEffect } from "react";
 import {
   JsonParam,
@@ -199,6 +200,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "input",
+      getPrettifyConfig,
       colorIndicator: true,
     },
   },
@@ -210,6 +212,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "output",
+      getPrettifyConfig,
       colorIndicator: true,
     },
   },
