@@ -226,6 +226,8 @@ class FreeFormSqlPostRunCheckTest {
                 arguments("derived table", count("(SELECT id FROM spans)"), ROWS),
                 arguments("UNION", count("(SELECT id FROM traces UNION ALL SELECT id FROM spans)"), 2 * ROWS),
                 arguments("IN subquery", count("traces WHERE id IN (SELECT id FROM traces)"), ROWS),
+                arguments("IN over a table read nowhere else",
+                        count("spans WHERE trace_id IN (SELECT id FROM traces)"), ROWS),
                 arguments("IN over a table that is never Distributed",
                         count("traces WHERE id IN (SELECT entity_id FROM authored_feedback_scores)"), ROWS),
                 arguments("EXISTS", count("traces WHERE EXISTS (SELECT 1 FROM authored_feedback_scores)"), ROWS));
