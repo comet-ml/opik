@@ -15,12 +15,6 @@ name: 🚦 External PR Policy
 # Maintainers can add the EXEMPT_LABEL label to keep a PR out of rule 2.
 
 on:
-  # pull_request_target (not pull_request) is required so the token can comment
-  # on and close fork PRs. A pull_request run gets a read-only token on forks.
-  # This is safe because no job here checks out or executes PR-controlled code:
-  # github-script operates purely through the GitHub API on PR metadata
-  # (authors, numbers, reviews, comments). See the dangerous-triggers rationale:
-  # https://docs.zizmor.sh/audits/#dangerous-triggers
   pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened]
   schedule:
@@ -83,7 +77,6 @@ jobs:
               return;
             }
 
-            // A maintainer who reopens a PR overrides the limit.
             if (context.payload.action === "reopened" && context.payload.sender.login !== author) {
               core.info(`PR #${pr.number}: reopened by ${context.payload.sender.login}, not the author`);
               return;
@@ -97,8 +90,6 @@ jobs:
             });
             const others = open.filter((p) => p.user.login === author && p.number !== pr.number);
 
-            // For a newly opened PR, only older PRs count. When several PRs open at the
-            // same time, every run then agrees on which ones to keep: the oldest ones.
             const ahead =
               context.payload.action === "opened" ? others.filter((p) => p.number < pr.number) : others;
 
@@ -220,7 +211,6 @@ jobs:
               const lastReview = ourReviews.reduce((a, b) =>
                 Date.parse(b.submitted_at) > Date.parse(a.submitted_at) ? b : a
               );
-              // An approved PR is waiting on us, not on the author.
               if (lastReview.state === "APPROVED") continue;
               const reviewedAt = Date.parse(lastReview.submitted_at);
 
@@ -271,8 +261,6 @@ jobs:
                 continue;
               }
 
-              // Always give the full warning period, also for PRs that were already idle
-              // for a long time when this workflow was first enabled.
               const closeAt = Math.max(reviewedAt + staleDays * DAY_MS, warnedAt + (staleDays - warnDays) * DAY_MS);
               if (now < closeAt) continue;
 
