@@ -17,8 +17,10 @@ import PlaygroundOutputAssertionStatus from "@/v2/pages/PlaygroundPage/Playgroun
 import PlaygroundTestSuiteLastRunOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundTestSuiteLastRunOutput";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
+import { cn } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
+import PlaygroundStaleOutputNote from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStaleOutputNote";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import { EXPERIMENT_TAB } from "@/lib/experiments";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -108,11 +110,12 @@ const PlaygroundOutputCell: React.FunctionComponent<
   };
 
   const hasOutput =
-    !stale &&
-    (value !== null ||
-      Boolean(error) ||
-      isLoading ||
-      (isTestSuite && !!experimentId));
+    value !== null ||
+    Boolean(error) ||
+    isLoading ||
+    // Suite results have no stale styling, so a stale suite still shows No runs
+    // yet rather than old pass/fail tags that look current.
+    (isTestSuite && !!experimentId && !stale);
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
       (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
@@ -128,7 +131,15 @@ const PlaygroundOutputCell: React.FunctionComponent<
       return null;
     }
 
-    return <MarkdownPreview>{value}</MarkdownPreview>;
+    return (
+      <MarkdownPreview
+        className={cn({
+          "text-muted-gray dark:text-foreground": stale,
+        })}
+      >
+        {value}
+      </MarkdownPreview>
+    );
   };
 
   return (
@@ -151,9 +162,10 @@ const PlaygroundOutputCell: React.FunctionComponent<
               </Button>
             </TooltipWrapper>
           )}
+          {stale && <PlaygroundStaleOutputNote compact className="mb-1" />}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
             {error ? (
-              <PlaygroundOutputError message={error} />
+              <PlaygroundOutputError message={error} stale={stale} />
             ) : isTestSuite ? (
               <PlaygroundOutputAssertionStatus
                 experimentId={experimentId}
