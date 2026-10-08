@@ -282,6 +282,34 @@ describe("LLM judge Anthropic effort on a model switch", () => {
     expect(saved).toEqual(stored);
   });
 
+  it.each<
+    [string, COMPOSED_PROVIDER_TYPE | "", Record<string, unknown> | null]
+  >([
+    [
+      "the previous model's provider is unknown",
+      "",
+      { output_config: { effort: "high" } },
+    ],
+    ["the rule has no custom_parameters", ANTHROPIC, null],
+    ["output_config is not an object", ANTHROPIC, { output_config: "high" }],
+  ])(
+    "changes nothing on a switch when %s",
+    (_, previousProvider, customParameters) => {
+      const config = { temperature: 0, custom_parameters: customParameters };
+
+      const switched = updateConfigForModelChange(
+        config,
+        {
+          model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+          provider: previousProvider,
+        },
+        { model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, provider: ANTHROPIC },
+      );
+
+      expect(switched).toBe(config);
+    },
+  );
+
   it("leaves the output_config a custom gateway's JSON holds when switching between its models", () => {
     const gateway = "custom-llm:gw" as COMPOSED_PROVIDER_TYPE;
     const stored = { output_config: { effort: "low" } };
