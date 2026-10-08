@@ -21,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
@@ -47,6 +49,14 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     // The placeholders Ollie writes into a pinned query for the dashboard date range.
     static final String WINDOW_START_PLACEHOLDER = "{{window_start}}";
     static final String WINDOW_END_PLACEHOLDER = "{{window_end}}";
+
+    // ClickHouse's DateTime64 range; a bound outside it would be clamped silently rather than rejected.
+    static final Instant MIN_BOUND = Instant.parse("1900-01-01T00:00:00Z");
+    static final Instant MAX_BOUND = Instant.parse("2299-12-31T23:59:59.999999999Z");
+
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
+            .ofPattern("uuuu-MM-dd HH:mm:ss.SSSSSSSSS")
+            .withZone(ZoneOffset.UTC);
 
     private final DashboardService dashboardService;
     private final FreeFormSqlQueryService freeFormSqlQueryService;
@@ -85,6 +95,10 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
         if (start.isAfter(end)) {
             throw new BadRequestException("interval_start must not be after interval_end");
         }
+        if (start.isBefore(MIN_BOUND) || end.isAfter(MAX_BOUND)) {
+            throw new BadRequestException("interval_start and interval_end must be between %s and %s"
+                    .formatted(MIN_BOUND, MAX_BOUND));
+        }
 
         var savedQuery = OllieChartWidgets.findQuery(dashboardService.findById(dashboardId, scope).config(), widgetId)
                 .orElseThrow(() -> new NotFoundException("No saved query for widget '%s'".formatted(widgetId)));
@@ -105,8 +119,9 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     }
 
     /**
-     * Substitutes the date range as literals the server formats from parsed {@link Instant}s, so nothing the caller
-     * sends is spliced into the SQL as text.
+     * Substitutes the date range into the saved query. The caller's input is safe here because it arrives as a parsed
+     * {@link Instant} and the text spliced in is formatted by the server, digits and separators only; the
+     * {@code toDateTime64} wrapper only gives the value the {@code DateTime64(9)} type the placeholders stand for.
      */
     static String bindWindow(String sql, Instant start, Instant end) {
         return sql.replace(WINDOW_START_PLACEHOLDER, dateTimeLiteral(start))
@@ -114,6 +129,6 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     }
 
     private static String dateTimeLiteral(Instant instant) {
-        return "parseDateTime64BestEffort('%s', 9)".formatted(instant);
+        return "toDateTime64('%s', 9, 'UTC')".formatted(DATE_TIME_FORMATTER.format(instant));
     }
 }

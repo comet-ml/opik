@@ -59,8 +59,8 @@ class OllieChartWidgetsTest {
 
         assertThat(DashboardWidgetQueryServiceImpl.bindWindow(
                 "WHERE t >= {{window_start}} AND t < {{window_end}}", start, end))
-                .isEqualTo("WHERE t >= parseDateTime64BestEffort('2026-10-01T00:00:00Z', 9)"
-                        + " AND t < parseDateTime64BestEffort('2026-10-08T12:30:00Z', 9)");
+                .isEqualTo("WHERE t >= toDateTime64('2026-10-01 00:00:00.000000000', 9, 'UTC')"
+                        + " AND t < toDateTime64('2026-10-08 12:30:00.000000000', 9, 'UTC')");
     }
 
     private static JsonNode config(String type, String query) {
