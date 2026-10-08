@@ -1993,6 +1993,57 @@ class PromptResourceTest {
         }
 
         @Test
+        @DisplayName("when versions are created concurrently, then id order matches version number order")
+        void when__versionsCreatedConcurrently__thenIdOrderMatchesVersionNumberOrder() {
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            // id and commit left null so the server mints them; that is the path the per-prompt lock orders
+            var createdVersions = IntStream.range(0, 20)
+                    .parallel()
+                    .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .id(null)
+                            .commit(null)
+                            .createdBy(USER)
+                            .build())
+                    .map(version -> createPromptVersion(
+                            createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                            API_KEY, TEST_WORKSPACE))
+                    .toList();
+
+            List<PromptVersion> expectedVersions = createdVersions.stream()
+                    .sorted(Comparator.comparing(
+                            (PromptVersion version) -> Integer.parseInt(version.versionNumber().substring(1)))
+                            .reversed())
+                    .toList();
+
+            // The versions page orders by id DESC, so it only matches when ids follow version numbers
+            findPromptVersionsAndAssertPage(expectedVersions, promptId, API_KEY, TEST_WORKSPACE,
+                    expectedVersions.size(), 1, expectedVersions.size() + 1);
+
+            // The prompt view carries neither on latestVersion: promptId is not in it, template_structure is not selected
+            var expectedLatestVersion = expectedVersions.getFirst().toBuilder()
+                    .promptId(null)
+                    .templateStructure(null)
+                    .build();
+
+            assertThat(getPrompt(promptId, API_KEY, TEST_WORKSPACE).latestVersion())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(expectedLatestVersion);
+        }
+
+        @Test
         @DisplayName("when prompt does not exist, then return not found")
         void when__promptDoesNotExist__thenReturnNotFound() {
 
