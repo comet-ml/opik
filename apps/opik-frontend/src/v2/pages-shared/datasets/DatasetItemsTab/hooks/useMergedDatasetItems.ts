@@ -22,6 +22,7 @@ export const useDatasetItemsWithDraft = (
   options?: QueryConfig<UseDatasetItemsListResponse>,
 ) => {
   const isDraftMode = useIsDraftMode();
+  const isViewingVersion = Boolean(params.versionId);
   const draftAddedItems = useAddedItems();
   const draftEditedItems = useEditedItems();
   const draftDeletedIds = useDeletedIds();
@@ -31,6 +32,10 @@ export const useDatasetItemsWithDraft = (
 
   const mergedContent = useMemo(() => {
     const apiItems = query.data?.content ?? [];
+
+    if (isViewingVersion) {
+      return apiItems;
+    }
 
     let items: DatasetItemWithDraft[];
 
@@ -61,6 +66,7 @@ export const useDatasetItemsWithDraft = (
     });
   }, [
     query.data?.content,
+    isViewingVersion,
     isDraftMode,
     draftAddedItems,
     draftEditedItems,
