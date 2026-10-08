@@ -42,12 +42,13 @@ public class PythonTemplateParser implements TemplateParser {
             return "";
         }
 
+        Map<String, ?> safeContext = context != null ? context : Map.of();
         Matcher matcher = VARIABLE_PATTERN.matcher(template);
         StringBuilder result = new StringBuilder();
 
         while (matcher.find()) {
             String varName = matcher.group(1);
-            Object value = context.get(varName);
+            Object value = safeContext.get(varName);
             String replacement = value != null ? value.toString() : matcher.group(0);
             matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
         }
