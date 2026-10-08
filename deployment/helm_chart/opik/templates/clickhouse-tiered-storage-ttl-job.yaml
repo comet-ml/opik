@@ -57,19 +57,29 @@ spec:
       containers:
         - name: apply-ttl
           image: {{ .Values.clickhouse.image }}
-          # Same ClickHouse settings and credentials as the backend's own migrations.
-          {{- if or $backend.envFrom $backend.secretRefs }}
-          envFrom:
-            {{- with $backend.envFrom }}
-            {{- toYaml . | nindent 12 }}
+          # Only the four settings this needs, read from the backend's sources in the backend's
+          # order: a later source wins and a missing optional key is skipped, as with envFrom.
+          env:
+            {{- range $var := list "ANALYTICS_DB_HOST" "ANALYTICS_DB_DATABASE_NAME" "ANALYTICS_DB_MIGRATIONS_USER" "ANALYTICS_DB_MIGRATIONS_PASS" }}
+            {{- range $backend.envFrom }}
+            {{- if .configMapRef }}
+            - name: {{ $var }}
+              valueFrom:
+                configMapKeyRef: {name: {{ .configMapRef.name }}, key: {{ $var }}, optional: true}
+            {{- else if .secretRef }}
+            - name: {{ $var }}
+              valueFrom:
+                secretKeyRef: {name: {{ .secretRef.name }}, key: {{ $var }}, optional: true}
+            {{- end }}
             {{- end }}
             {{- range $backend.secretRefs }}
             {{- if .name }}
-            - secretRef:
-                name: {{ .name }}
+            - name: {{ $var }}
+              valueFrom:
+                secretKeyRef: {name: {{ .name }}, key: {{ $var }}, optional: true}
             {{- end }}
             {{- end }}
-          {{- end }}
+            {{- end }}
           command: ["/bin/bash", "-c"]
           args:
             - |
