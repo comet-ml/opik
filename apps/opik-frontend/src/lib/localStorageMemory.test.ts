@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createSessionStorageMemory } from "./sessionStorageMemory";
+import { createLocalStorageMemory } from "./localStorageMemory";
 
-describe("createSessionStorageMemory", () => {
+describe("createLocalStorageMemory", () => {
   beforeEach(() => {
-    window.sessionStorage.clear();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
@@ -11,19 +11,19 @@ describe("createSessionStorageMemory", () => {
   });
 
   it("returns undefined when nothing is saved", () => {
-    expect(createSessionStorageMemory<string>("k").load()).toBeUndefined();
+    expect(createLocalStorageMemory<string>("k").load()).toBeUndefined();
   });
 
   it("round-trips JSON values", () => {
-    const memory = createSessionStorageMemory<{ a: number[] }>("k");
+    const memory = createLocalStorageMemory<{ a: number[] }>("k");
     memory.save({ a: [1, 2] });
     expect(memory.load()).toEqual({ a: [1, 2] });
-    expect(window.sessionStorage.getItem("k")).toBe('{"a":[1,2]}');
+    expect(window.localStorage.getItem("k")).toBe('{"a":[1,2]}');
   });
 
   it("isolates keys", () => {
-    const first = createSessionStorageMemory<string>("first");
-    const second = createSessionStorageMemory<string>("second");
+    const first = createLocalStorageMemory<string>("first");
+    const second = createLocalStorageMemory<string>("second");
     first.save("one");
     expect(second.load()).toBeUndefined();
     second.save("two");
@@ -36,19 +36,19 @@ describe("createSessionStorageMemory", () => {
     ["an empty array", []],
     ["an empty string", ""],
   ])("removes the key when saving %s", (_label, empty) => {
-    const memory = createSessionStorageMemory<unknown>("k");
+    const memory = createLocalStorageMemory<unknown>("k");
     memory.save("value");
     memory.save(empty);
-    expect(window.sessionStorage.getItem("k")).toBeNull();
+    expect(window.localStorage.getItem("k")).toBeNull();
     expect(memory.load()).toBeUndefined();
   });
 
   it("returns undefined for corrupted JSON", () => {
-    window.sessionStorage.setItem("k", "{not json");
-    expect(createSessionStorageMemory<string>("k").load()).toBeUndefined();
+    window.localStorage.setItem("k", "{not json");
+    expect(createLocalStorageMemory<string>("k").load()).toBeUndefined();
   });
 
-  it("does not throw when sessionStorage throws", () => {
+  it("does not throw when localStorage throws", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });
@@ -58,7 +58,7 @@ describe("createSessionStorageMemory", () => {
     vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    const memory = createSessionStorageMemory<string>("k");
+    const memory = createLocalStorageMemory<string>("k");
 
     expect(() => memory.save("value")).not.toThrow();
     expect(() => memory.save(undefined)).not.toThrow();

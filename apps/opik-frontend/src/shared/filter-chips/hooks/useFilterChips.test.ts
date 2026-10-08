@@ -78,10 +78,10 @@ const setup = (overrides?: {
 const PERSIST_KEY = "test-memory";
 
 const remember = (filters: Filter[]) =>
-  sessionStorage.setItem(PERSIST_KEY, JSON.stringify(filters));
+  localStorage.setItem(PERSIST_KEY, JSON.stringify(filters));
 
 const readRemembered = () => {
-  const raw = sessionStorage.getItem(PERSIST_KEY);
+  const raw = localStorage.getItem(PERSIST_KEY);
   return raw ? JSON.parse(raw) : undefined;
 };
 
@@ -99,7 +99,7 @@ describe("useFilterChips", () => {
     vi.clearAllMocks();
     mockRawFilters = undefined;
     mockPinnedIds = undefined;
-    sessionStorage.clear();
+    localStorage.clear();
   });
 
   describe("initial state with empty URL", () => {

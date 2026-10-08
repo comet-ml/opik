@@ -86,7 +86,6 @@ import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
-import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import {
   THREADS_FILTERS_URL_KEY,
@@ -533,8 +532,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return compact(THREAD_CHIP_ORDER.map((id) => byId[id]));
   }, [projectId, threadScoreOptions]);
 
-  const userName = useLoggedInUserNameOrOpenSourceDefaultUser();
-
   const {
     chipsPinned: threadChipsPinned,
     chipsUnpinned: threadChipsUnpinned,
@@ -555,11 +552,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     definitions: threadChipDefinitions,
     defaultPinned: THREAD_DEFAULT_PINNED_CHIPS,
     onChange: handleChipFiltersChange,
-    persistKey: getLogsFiltersMemoryKey(
-      userName,
-      projectId,
-      THREADS_FILTERS_URL_KEY,
-    ),
+    persistKey: getLogsFiltersMemoryKey(projectId, THREADS_FILTERS_URL_KEY),
   });
 
   const { addTag: addThreadTagFilter } = useTagsChipActions({

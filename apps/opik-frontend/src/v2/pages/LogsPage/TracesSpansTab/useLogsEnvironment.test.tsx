@@ -4,7 +4,6 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import { ENVIRONMENT_UNTAGGED_VALUE } from "@/lib/filters";
-import useAppStore from "@/store/AppStore";
 import { useLogsEnvironment } from "./useLogsEnvironment";
 
 let mockEnvironments: Array<{ name: string }> | undefined;
@@ -21,7 +20,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
   </QueryParamProvider>
 );
 
-const MEMORY_KEY = "logs-environment:admin:p1";
+const MEMORY_KEY = "logs-environment:p1";
 
 const setUrl = (params: Record<string, string>) => {
   const search = new URLSearchParams(params).toString();
@@ -32,7 +31,7 @@ const readUrlEnvironment = () =>
   new URLSearchParams(window.location.search).get("environment");
 
 const readRemembered = () => {
-  const raw = sessionStorage.getItem(MEMORY_KEY);
+  const raw = localStorage.getItem(MEMORY_KEY);
   return raw ? JSON.parse(raw) : undefined;
 };
 
@@ -42,14 +41,14 @@ const setup = (canRestore = true) =>
 
 describe("useLogsEnvironment", () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
     mockEnvironments = [{ name: "prod" }, { name: "staging" }];
     setUrl({});
   });
 
   describe("restore", () => {
     it("writes the saved environment to the URL when the param is absent", async () => {
-      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
       const { result, rerender } = setup();
 
       await waitFor(() => expect(readUrlEnvironment()).toBe("prod"));
@@ -58,7 +57,7 @@ describe("useLogsEnvironment", () => {
     });
 
     it("returns the restored environment on the first render", () => {
-      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
       const renders: string[] = [];
       renderHook(
         () => {
@@ -73,7 +72,7 @@ describe("useLogsEnvironment", () => {
     });
 
     it("does not restore when canRestore is false (URL arrived with filters)", () => {
-      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
       const { result, rerender } = setup(false);
       rerender();
 
@@ -83,7 +82,7 @@ describe("useLogsEnvironment", () => {
     });
 
     it("does not restore over an environment that arrives in the URL", () => {
-      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
       setUrl({ environment: "staging" });
       const { result } = setup();
 
@@ -92,24 +91,8 @@ describe("useLogsEnvironment", () => {
       expect(readRemembered()).toBe("prod");
     });
 
-    it("does not restore another user's remembered environment", () => {
-      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
-      const original = useAppStore.getState().user;
-      useAppStore.getState().setUser({ ...original, userName: "alice" });
-      try {
-        const { result } = setup();
-        expect(result.current.environment).toBe("");
-        expect(readUrlEnvironment()).toBeNull();
-      } finally {
-        useAppStore.getState().setUser(original);
-      }
-    });
-
     it("does not restore another project's environment", () => {
-      sessionStorage.setItem(
-        "logs-environment:admin:other",
-        JSON.stringify("prod"),
-      );
+      localStorage.setItem("logs-environment:other", JSON.stringify("prod"));
       const { result } = setup();
 
       expect(result.current.environment).toBe("");
@@ -117,7 +100,7 @@ describe("useLogsEnvironment", () => {
     });
 
     it("restores when the param disappears without a remount", async () => {
-      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
       setUrl({ environment: "staging" });
       const { rerender } = setup();
       expect(readUrlEnvironment()).toBe("staging");
@@ -140,7 +123,7 @@ describe("useLogsEnvironment", () => {
     });
 
     it("forgets the environment when cleared and does not restore it", async () => {
-      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
       const { result, rerender } = setup();
       await waitFor(() => expect(readUrlEnvironment()).toBe("prod"));
       rerender();
@@ -156,7 +139,7 @@ describe("useLogsEnvironment", () => {
 
   describe("invalid environment", () => {
     it("forgets an invalid remembered value without looping back", async () => {
-      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("deleted-env"));
+      localStorage.setItem(MEMORY_KEY, JSON.stringify("deleted-env"));
       const { result, rerender } = setup();
 
       await waitFor(() => expect(readRemembered()).toBeUndefined());
@@ -172,7 +155,7 @@ describe("useLogsEnvironment", () => {
     ])(
       "ignores and clears a remembered value that is %s, without looping",
       async (_label, stored) => {
-        sessionStorage.setItem(MEMORY_KEY, JSON.stringify(stored));
+        localStorage.setItem(MEMORY_KEY, JSON.stringify(stored));
         let renders = 0;
         const { result } = renderHook(
           () => {
@@ -183,7 +166,7 @@ describe("useLogsEnvironment", () => {
         );
 
         await waitFor(() =>
-          expect(sessionStorage.getItem(MEMORY_KEY)).toBeNull(),
+          expect(localStorage.getItem(MEMORY_KEY)).toBeNull(),
         );
         expect(result.current.environment).toBe("");
         expect(result.current.envIsValid).toBeNull();
@@ -200,7 +183,7 @@ describe("useLogsEnvironment", () => {
     });
 
     it("does not wipe a different remembered environment", async () => {
-      sessionStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
+      localStorage.setItem(MEMORY_KEY, JSON.stringify("prod"));
       setUrl({ environment: "deleted-env" });
       setup(false);
 

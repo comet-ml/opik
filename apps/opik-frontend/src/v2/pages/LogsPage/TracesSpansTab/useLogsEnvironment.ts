@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
-import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import { ENVIRONMENT_UNTAGGED_VALUE } from "@/lib/filters";
-import { createSessionStorageMemory } from "@/lib/sessionStorageMemory";
+import { createLocalStorageMemory } from "@/lib/localStorageMemory";
 import { getLogsEnvironmentMemoryKey } from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 
 type UseLogsEnvironmentOptions = {
@@ -22,13 +21,10 @@ export const useLogsEnvironment = (
   );
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
 
-  const userName = useLoggedInUserNameOrOpenSourceDefaultUser();
   const memory = useMemo(
     () =>
-      createSessionStorageMemory<string>(
-        getLogsEnvironmentMemoryKey(userName, projectId),
-      ),
-    [userName, projectId],
+      createLocalStorageMemory<string>(getLogsEnvironmentMemoryKey(projectId)),
+    [projectId],
   );
 
   // Read on every render: the first render is already restored, and a forgotten value stays gone.

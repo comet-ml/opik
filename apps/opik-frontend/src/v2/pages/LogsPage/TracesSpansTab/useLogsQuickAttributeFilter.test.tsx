@@ -35,9 +35,7 @@ const readPinned = (tableId: string) =>
 const PROJECT_ID = "p1";
 
 const readRemembered = (urlKey: string, projectId = PROJECT_ID) => {
-  const raw = sessionStorage.getItem(
-    `logs-filters:admin:${projectId}:${urlKey}`,
-  );
+  const raw = localStorage.getItem(`logs-filters:${projectId}:${urlKey}`);
   return raw ? JSON.parse(raw) : undefined;
 };
 
@@ -58,7 +56,7 @@ const setup = (type: TRACE_DATA_TYPE) => {
 describe("useLogsQuickAttributeFilter", () => {
   beforeEach(() => {
     localStorage.clear();
-    sessionStorage.clear();
+    localStorage.clear();
     vi.mocked(trackEvent).mockClear();
     setUrl({});
   });
@@ -193,8 +191,8 @@ describe("useLogsQuickAttributeFilter", () => {
           value: "chat",
         },
       ];
-      sessionStorage.setItem(
-        `logs-filters:admin:${PROJECT_ID}:spans_filters`,
+      localStorage.setItem(
+        `logs-filters:${PROJECT_ID}:spans_filters`,
         JSON.stringify(remembered),
       );
       setUrl({ trace: "t1", span: "s1" });

@@ -1,4 +1,4 @@
-export type SessionStorageMemory<T> = {
+export type LocalStorageMemory<T> = {
   load: () => T | undefined;
   save: (value: T | undefined) => void;
 };
@@ -8,13 +8,13 @@ const isEmpty = (value: unknown) =>
   value === "" ||
   (Array.isArray(value) && value.length === 0);
 
-// Per-tab memory: sessionStorage can be blocked or full, so failures are swallowed.
-export const createSessionStorageMemory = <T>(
+// Best-effort memory: localStorage can be blocked or full, so failures are swallowed.
+export const createLocalStorageMemory = <T>(
   key: string,
-): SessionStorageMemory<T> => ({
+): LocalStorageMemory<T> => ({
   load: () => {
     try {
-      const raw = window.sessionStorage.getItem(key);
+      const raw = window.localStorage.getItem(key);
       return raw === null ? undefined : (JSON.parse(raw) as T);
     } catch {
       return undefined;
@@ -23,9 +23,9 @@ export const createSessionStorageMemory = <T>(
   save: (value) => {
     try {
       if (isEmpty(value)) {
-        window.sessionStorage.removeItem(key);
+        window.localStorage.removeItem(key);
       } else {
-        window.sessionStorage.setItem(key, JSON.stringify(value));
+        window.localStorage.setItem(key, JSON.stringify(value));
       }
     } catch {
       // Remembering is best-effort.

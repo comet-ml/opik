@@ -6,7 +6,7 @@ import { SidebarNav } from '@e2e/pom/sidebar.page';
 type NavLogWindow = Window & { __navLog?: string[] };
 
 /**
- * Logs filter chips are remembered per project for the browser tab and restored
+ * Logs filter chips are remembered per project in localStorage and restored
  * whenever the Logs URL carries no filter param (OPIK-8704). The sidebar's
  * "Logs" item navigates to a bare /logs URL, which is what exercises it.
  *
@@ -114,7 +114,7 @@ test.describe('Logs filter persistence', { tag: ['@t2-cuj', '@area:traces'] }, (
   );
 
   test(
-    'A new browser tab starts without the filters remembered by another tab',
+    'A new browser tab opened on bare Logs gets the remembered filters',
     { tag: ['@cap:traces.filter-persistence'] },
     async ({ filterableTraces, project, page, context }) => {
       const logs = new LogsPage(page);
@@ -132,14 +132,16 @@ test.describe('Logs filter persistence', { tag: ['@t2-cuj', '@area:traces'] }, (
         await expect(logs.traceRows).toHaveCount(tagged.length);
       });
 
-      await test.step('Open Logs in a new tab and verify nothing is restored', async () => {
+      await test.step('Open bare Logs in a new tab and verify the filter is restored', async () => {
         const newTab = await context.newPage();
         const newTabLogs = new LogsPage(newTab);
         await newTabLogs.gotoTraces(project.id);
         await newTabLogs.waitForReady();
-        await expect(newTabLogs.traceRows).toHaveCount(all.length);
-        expect(await newTabLogs.readUrlFilters('traces')).toBeNull();
-        await expect(newTabLogs.clearAllFiltersButton).toBeHidden();
+        await newTabLogs.waitForUrlFilters('traces', (fs) =>
+          fs.some((f) => f.field === 'tags' && f.value === sharedTag),
+        );
+        await expect(newTabLogs.filterChip('tags')).toBeVisible();
+        await expect(newTabLogs.traceRows).toHaveCount(tagged.length);
         await newTab.close();
       });
     },

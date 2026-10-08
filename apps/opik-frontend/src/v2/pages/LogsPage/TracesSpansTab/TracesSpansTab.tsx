@@ -53,7 +53,6 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { generateEnvironmentFilter } from "@/lib/filters";
-import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
@@ -727,8 +726,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const defaultPinned = LOGS_DEFAULT_PINNED_CHIPS[type];
   const tableId = LOGS_TABLE_ID[type];
   const filtersUrlKey = getLogsFiltersUrlKey(type);
-  const userName = useLoggedInUserNameOrOpenSourceDefaultUser();
-
   const {
     chipsPinned,
     chipsUnpinned,
@@ -750,7 +747,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     definitions: chipDefinitions,
     defaultPinned,
     onChange: handleChipFiltersChange,
-    persistKey: getLogsFiltersMemoryKey(userName, projectId, filtersUrlKey),
+    persistKey: getLogsFiltersMemoryKey(projectId, filtersUrlKey),
   });
 
   const { environment, envIsValid, changeEnvironment } = useLogsEnvironment(

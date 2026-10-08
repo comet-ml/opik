@@ -18,7 +18,7 @@ import {
   ChipValue,
   ChipValueMap,
 } from "@/shared/filter-chips/types";
-import { createSessionStorageMemory } from "@/lib/sessionStorageMemory";
+import { createLocalStorageMemory } from "@/lib/localStorageMemory";
 
 export type { FilterRemovedSource };
 
@@ -79,7 +79,7 @@ const useFilterChips = ({
 
   const memory = useMemo(
     () =>
-      persistKey ? createSessionStorageMemory<Filter[]>(persistKey) : undefined,
+      persistKey ? createLocalStorageMemory<Filter[]>(persistKey) : undefined,
     [persistKey],
   );
 
