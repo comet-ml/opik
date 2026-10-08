@@ -18,9 +18,11 @@ import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -87,6 +89,7 @@ public class FreeFormSqlQueryService {
         POLICY_UNVERIFIED("error", "policy_unverified"),
         POLICY_CHECK_FAILED("error", "policy_check_failed"),
         CH_LIMIT("error", "ch_limit"),
+        CH_BUSY("error", "ch_busy"),
         OTHER("error", "other");
 
         private final Attributes attributes;
@@ -118,6 +121,9 @@ public class FreeFormSqlQueryService {
     private static final int CH_TOO_MANY_ROWS_OR_BYTES = 396;
     private static final int CH_ACCESS_DENIED = 497;
     private static final int CH_SYNTAX_ERROR = 62;
+    /** The account's concurrent-query cap, e.g. a dashboard loading many widgets at once: worth a retry. */
+    private static final int CH_TOO_MANY_SIMULTANEOUS_QUERIES = 202;
+    private static final String RETRY_AFTER_SECONDS = "1";
     private static final Set<Integer> CH_LIMIT_CODES = Set.of(
             CH_TOO_MANY_ROWS, CH_TIMEOUT_EXCEEDED, CH_MEMORY_LIMIT_EXCEEDED, CH_TOO_MANY_ROWS_OR_BYTES);
 
@@ -452,6 +458,10 @@ public class FreeFormSqlQueryService {
             return error(Outcome.CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
                     "Query exceeded ClickHouse limits", error);
         }
+        if (code == CH_TOO_MANY_SIMULTANEOUS_QUERIES) {
+            return error(Outcome.CH_BUSY, startMillis, Response.Status.TOO_MANY_REQUESTS,
+                    "Too many queries are running; retry shortly", error);
+        }
         if (code == CH_ACCESS_DENIED) {
             return error(Outcome.PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
                     "Query rejected: access denied", error);
@@ -473,11 +483,15 @@ public class FreeFormSqlQueryService {
 
     private WebApplicationException fail(Outcome outcome, long startMillis, Response.Status status, String message) {
         duration.record(elapsed(startMillis), outcome.attributes);
-        var response = Response.status(status).entity(new ErrorMessage(List.of(message))).build();
+        var response = Response.status(status).entity(new ErrorMessage(List.of(message)));
+        if (status == Response.Status.TOO_MANY_REQUESTS) {
+            response.header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS);
+        }
         return switch (status) {
-            case BAD_REQUEST -> new BadRequestException(response);
-            case SERVICE_UNAVAILABLE -> new ServiceUnavailableException(response);
-            default -> new InternalServerErrorException(response);
+            case BAD_REQUEST -> new BadRequestException(response.build());
+            case TOO_MANY_REQUESTS -> new ClientErrorException(response.build());
+            case SERVICE_UNAVAILABLE -> new ServiceUnavailableException(response.build());
+            default -> new InternalServerErrorException(response.build());
         };
     }
 

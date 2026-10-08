@@ -175,6 +175,7 @@ public class InsightsViewsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Insights view not found, or the widget has no saved query"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "429", description = "Too many queries are running; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Ollie or Custom Charts is not enabled for this workspace")
     })
     @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
