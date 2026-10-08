@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import dev.langchain4j.data.message.AiMessage;
@@ -136,7 +137,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
     // InvalidRequestException is non-retriable, so the cut-off is not re-run (and re-billed) by the retry policy,
     // and it is classified as a 400 on both the streaming and the non-streaming path.
     private static InvalidRequestException cutOffBeforeAnswering(ChatCompletionRequest request) {
-        var limit = VertexAIClientGenerator.maxOutputTokens(request).map(" (%s)"::formatted).orElse("");
+        var limit = GeminiMaxOutputTokens.of(request).map(" (%s)"::formatted).orElse("");
         return new InvalidRequestException(CUT_OFF_BEFORE_ANSWERING.formatted(limit));
     }
 
