@@ -205,6 +205,7 @@ def parse_feedback_score_messages(
             project_name=score_dict.get("project_name") or project_name,
             reason=score_dict.get("reason"),
             category_name=score_dict.get("category_name"),
+            evaluator_revision=score_dict.get("evaluator_revision"),
         )
         for score_dict in valid_scores
     ]

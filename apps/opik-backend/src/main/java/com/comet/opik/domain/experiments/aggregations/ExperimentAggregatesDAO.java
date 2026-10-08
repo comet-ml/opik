@@ -844,7 +844,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     created_at,
                     last_updated_at,
                     author,
-                    source_queue_id
+                    source_queue_id,
+                    evaluator_revision
                 FROM (
                     SELECT
                         workspace_id,
@@ -860,7 +861,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         created_at,
                         last_updated_at,
                         feedback_scores.last_updated_by AS author,
-                        CAST('' AS FixedString(36)) AS source_queue_id
+                        CAST('' AS FixedString(36)) AS source_queue_id,
+                        evaluator_revision
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -881,7 +883,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         created_at,
                         last_updated_at,
                         author,
-                        source_queue_id
+                        source_queue_id,
+                        evaluator_revision
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -907,7 +910,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     max(last_updated_at) AS last_updated_at_max,
                     mapFromArrays(
                         groupArray(if(source_queue_id = '', author, concat(author, '_', toString(source_queue_id)))),
-                        groupArray(tuple(value, reason, category_name, source, last_updated_at, '', '', source_queue_id, author))
+                        groupArray(tuple(value, reason, category_name, source, last_updated_at, '', '', source_queue_id, author, evaluator_revision))
                     ) AS value_by_author
                 FROM feedback_scores_deduped
                 GROUP BY entity_id, name

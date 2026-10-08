@@ -21,7 +21,7 @@ import org.apache.commons.lang3.StringUtils;
 class FeedbackScoreJsonRowMapper {
 
     /**
-     * The row as {@code JSONEachRow}, rather than 8 named parameters per row — 10 for the authored
+     * The row as {@code JSONEachRow}, rather than 9 named parameters per row — 11 for the authored
      * table.
      *
      * <p>Which table it is destined for is the caller's choice, but the two are not independent:
@@ -51,6 +51,7 @@ class FeedbackScoreJsonRowMapper {
         node.put("value", score.value().toPlainString());
         node.put("reason", StringUtils.stripToEmpty(score.reason()));
         node.put("source", score.source().getValue());
+        node.put("evaluator_revision", StringUtils.stripToEmpty(score.evaluatorRevision()));
 
         if (normalizedAuthor != null) {
             node.put("author", normalizedAuthor);
