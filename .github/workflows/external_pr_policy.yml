@@ -211,14 +211,14 @@ jobs:
                   reviewComments.filter((c) => !c.in_reply_to_id).map((c) => c.pull_request_review_id)
                 );
               }
-              const raisesSomething = (review) =>
+              const isActionableBotReview = (review) =>
                 review.state !== "COMMENTED" || review.body?.trim() || reviewsWithNewThreads.has(review.id);
 
               const ourReviews = [];
               for (const review of reviews) {
                 if (review.state === "PENDING" || !review.submitted_at) continue;
                 if (reviewBots.includes(review.user?.login)) {
-                  if (raisesSomething(review)) ourReviews.push(review);
+                  if (isActionableBotReview(review)) ourReviews.push(review);
                 } else if (await isMaintainer(review.user)) {
                   ourReviews.push(review);
                 }
