@@ -1,5 +1,6 @@
 import cloneDeep from "lodash/cloneDeep";
 import uniq from "lodash/uniq";
+import type { Loader } from "vega";
 import { ChartTokens, readChartTokens } from "./chartTokens";
 import { assignSeriesColors } from "./seriesColors";
 
@@ -317,6 +318,8 @@ export const prepareVegaSpec = (
   // Styling and size belong to the renderer, never to the stored spec.
   delete prepared.$schema;
   delete prepared.config;
+  // vega-embed merges usermeta.embedOptions over ours, which would let a stored spec turn ast off or patch itself.
+  delete prepared.usermeta;
   prepared.width = "container";
   prepared.height = height;
 
@@ -439,15 +442,26 @@ const createTooltipHandler = (el: HTMLElement, tokens: ChartTokens) => {
   return { handler, dispose };
 };
 
+// Rows are injected inline, so a chart needs no resource of its own. Every URL a spec names (data.url, an image mark,
+// an href) passes through sanitize; refusing it stops a stored spec sending rows, or same-origin API reads made with
+// the viewer's session, anywhere.
+export const withoutNetwork = (vegaLoader: Loader): Loader => {
+  vegaLoader.sanitize = () =>
+    Promise.reject(new Error("Charts cannot load external resources"));
+  return vegaLoader;
+};
+
 export const renderVegaChart: RenderVegaChart = async (
   el,
   input,
   options = {},
 ) => {
-  const [{ default: embed }, { expressionInterpreter }] = await Promise.all([
-    import("vega-embed"),
-    import("vega-interpreter"),
-  ]);
+  const [{ default: embed }, { expressionInterpreter }, { loader }] =
+    await Promise.all([
+      import("vega-embed"),
+      import("vega-interpreter"),
+      import("vega"),
+    ]);
   const tokens = readChartTokens();
   const tooltip = createTooltipHandler(el, tokens);
   const fillHeight = options.height === "container";
@@ -465,6 +479,7 @@ export const renderVegaChart: RenderVegaChart = async (
   const result = await embed(el, spec as never, {
     actions: false,
     renderer: "svg",
+    loader: withoutNetwork(loader()),
     config: buildOpikVegaConfig(tokens) as never,
     // Model-written expressions are interpreted, never compiled with new Function().
     ast: true,
