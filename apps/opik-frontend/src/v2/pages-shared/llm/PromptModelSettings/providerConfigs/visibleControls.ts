@@ -135,18 +135,19 @@ export const getOpenRouterVisibleControls = ({
   const sampling = resolveSamplingPresentation(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const independent = sampling === "independent";
+  const showPenalties = supportsPenaltyParams(model);
 
   return {
     // ExclusiveSamplingParams renders nothing when it can offer no choice and neither half is live.
     samplingParams:
       sampling === "exclusive" &&
       (supports("topP") || !isUndefined(temperature) || !isUndefined(topP)),
-    temperature: independent && !isUndefined(configs.temperature),
+    temperature: independent && !isUndefined(temperature),
     maxTokens: !isUndefined(configs.maxTokens),
-    topP: independent && supports("topP") && !isUndefined(configs.topP),
+    topP: independent && supports("topP") && !isUndefined(topP),
     topK: !isUndefined(configs.topK),
-    frequencyPenalty: !isUndefined(configs.frequencyPenalty),
-    presencePenalty: !isUndefined(configs.presencePenalty),
+    frequencyPenalty: showPenalties && !isUndefined(configs.frequencyPenalty),
+    presencePenalty: showPenalties && !isUndefined(configs.presencePenalty),
     repetitionPenalty: !isUndefined(configs.repetitionPenalty),
     minP: !isUndefined(configs.minP),
     topA: !isUndefined(configs.topA),

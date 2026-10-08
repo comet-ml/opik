@@ -2045,25 +2045,12 @@ describe("max on the OpenAI Responses API only", () => {
   });
 });
 
-describe("an OpenAI reasoning model reached through another provider", () => {
+describe("an OpenAI reasoning model reached through a custom gateway", () => {
   const SAMPLING: SamplingParams = { temperature: 0.7, topP: 0.9 };
-  const OPEN_ROUTER_ID = PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA;
   const CUSTOM_ID = "custom-llm/my-gateway/gpt-6-astra" as PROVIDER_MODEL_TYPE;
 
   afterEach(() => {
     resetModelRegistryStoreForTesting();
-  });
-
-  it("keeps penalties and sampling on OpenRouter even when the registry flags it as reasoning", () => {
-    setLatestModelFlags(
-      new Map([[OPEN_ROUTER_ID, { reasoning: true, structuredOutput: true }]]),
-    );
-
-    expect(getProviderFromModel(OPEN_ROUTER_ID)).toBe(
-      PROVIDER_TYPE.OPEN_ROUTER,
-    );
-    expect(supportsPenaltyParams(OPEN_ROUTER_ID)).toBe(true);
-    expect(resolveSamplingParams(OPEN_ROUTER_ID, SAMPLING)).toEqual(SAMPLING);
   });
 
   it("keeps penalties and sampling behind a named custom gateway", () => {
@@ -2077,6 +2064,75 @@ describe("an OpenAI reasoning model reached through another provider", () => {
     expect(getProviderFromModel(CUSTOM_ID)).toBe(PROVIDER_TYPE.OPEN_AI);
     expect(supportsPenaltyParams(CUSTOM_ID)).toBe(true);
     expect(resolveSamplingParams(CUSTOM_ID, SAMPLING)).toEqual(SAMPLING);
+  });
+});
+
+describe("an OpenAI or Gemini model reached through OpenRouter", () => {
+  const SAMPLING: SamplingParams = { temperature: 0.7, topP: 0.9 };
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE, SamplingParams]>([
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA, {}],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH, {}],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3, {}],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW, {}],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW_BATCH, {}],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE, {}],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, SAMPLING],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH, SAMPLING],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_31B_IT, SAMPLING],
+    // OpenRouter-only names with no native row: left alone rather than guessed.
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, SAMPLING],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CHAT, SAMPLING],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_120B, SAMPLING],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS, SAMPLING],
+  ])("resolves sampling params on %s to %j", (model, expected) => {
+    expect(getProviderFromModel(model)).toBe(PROVIDER_TYPE.OPEN_ROUTER);
+    expect(resolveSamplingParams(model, SAMPLING)).toEqual(expected);
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE, boolean]>([
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA, false],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH, false],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3, false],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, true],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW, true],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_31B_IT, true],
+  ])("supports penalties on %s: %s", (model, expected) => {
+    expect(supportsPenaltyParams(model)).toBe(expected);
+  });
+
+  it("follows the registry for a native id only the registry lists", () => {
+    const model = PROVIDER_MODEL_TYPE.OPENAI_O3_PRO;
+    expect(resolveSamplingParams(model, SAMPLING)).toEqual(SAMPLING);
+
+    const snapshot = getLatestProviderModelsSnapshot();
+    setLatestProviderModelsSnapshot({
+      ...snapshot,
+      [PROVIDER_TYPE.OPEN_AI]: [
+        ...(snapshot[PROVIDER_TYPE.OPEN_AI] ?? []),
+        { value: "o3-pro" as PROVIDER_MODEL_TYPE, label: "o3-pro" },
+      ],
+    });
+    setLatestModelFlags(
+      new Map([["o3-pro", { reasoning: true, structuredOutput: true }]]),
+    );
+
+    expect(resolveSamplingParams(model, SAMPLING)).toEqual({});
+    expect(supportsPenaltyParams(model)).toBe(false);
+  });
+
+  it("ignores a Responses API pipeline mode, which belongs to the OpenAI key", () => {
+    expect(
+      supportsPenaltyParams(
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        "responses_api",
+      ),
+    ).toBe(true);
   });
 });
 
@@ -2562,7 +2618,17 @@ describe("OpenRouter request contract", () => {
     {
       model: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
       maxTokens: 0,
-      request: WITHOUT_MAX_TOKENS,
+      request: omit(WITHOUT_MAX_TOKENS, ["temperature", "topP"]),
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      maxTokens: 0,
+      request: omit(WITHOUT_MAX_TOKENS, [
+        "temperature",
+        "topP",
+        "frequencyPenalty",
+        "presencePenalty",
+      ]),
     },
   ])("$model with maxTokens $maxTokens", ({ model, maxTokens, request }) => {
     it("sends exactly the parameters it accepts", () => {
