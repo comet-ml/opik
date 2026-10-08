@@ -170,3 +170,29 @@ tests:
       - lengthEqual:
           path: spec.template.spec.containers[0].env
           count: 4
+
+  - it: renders the default deadline
+    asserts:
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
+
+  - it: fails the render when activeDeadlineSeconds is zero
+    set:
+      clickhouse.tieredStorage.ttl.activeDeadlineSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: "clickhouse.tieredStorage.ttl.activeDeadlineSeconds (0) must be a positive integer"
+
+  - it: fails the render when activeDeadlineSeconds is negative or not a number
+    set:
+      clickhouse.tieredStorage.ttl.activeDeadlineSeconds: "-5"
+    asserts:
+      - failedTemplate: {}
+
+  - it: fails the render when activeDeadlineSeconds is removed
+    set:
+      clickhouse.tieredStorage.ttl.activeDeadlineSeconds: null
+    asserts:
+      - failedTemplate: {}
+
