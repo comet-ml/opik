@@ -405,9 +405,18 @@ class AgentInsightsResourceTest {
                             rndUserCount())));
 
             var projectY = createProject();
+            var inScopeName = rndName();
+            var inScopeCount = rndOccurrences();
             report(projectY, DAY_2, List.of(
                     reportedIssue(issueId, rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
-                            rndUserCount())));
+                            rndUserCount()),
+                    reportedIssue(inScopeName, inScopeCount, rndTotalCount(), rndUserCount(), rndUserCount())));
+            // The in-scope issue reported alongside it is still stored, with its own details.
+            var inScope = findIssues(projectY, DAY_2, DAY_2).content();
+            assertThat(inScope).singleElement().satisfies(stored -> {
+                assertThat(stored.name()).isEqualTo(inScopeName);
+                assertThat(stored.totalOccurrences()).isEqualTo(inScopeCount);
+            });
             var projectInOtherWorkspace = projectResourceClient.createProject(UUID.randomUUID().toString(),
                     OTHER_API_KEY, OTHER_WORKSPACE);
             agentInsightsResourceClient.reportIssues(AgentInsightsReport.builder()
@@ -976,6 +985,14 @@ class AgentInsightsResourceTest {
             assertThat(listed.closeNote()).isEqualTo("Expected: retries are by design");
             assertThat(listed.statusChangedBy()).isEqualTo(USER);
             assertThat(listed.statusChangedAt()).isEqualTo(closed.statusChangedAt());
+
+            // Closing again without a note replaces the previous one.
+            agentInsightsResourceClient.updateStatus(issueId, update.toBuilder().closeNote(null).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            assertThat(agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK).closeNote()).isNull();
+            agentInsightsResourceClient.updateStatus(issueId, update, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
 
             agentInsightsResourceClient.updateStatus(issueId,
                     update.toBuilder().status(AgentInsightsIssueStatus.OPEN).closeNote(null).build(),
