@@ -215,12 +215,14 @@ jobs:
                 review.state !== "COMMENTED" || review.body?.trim() || reviewsWithNewThreads.has(review.id);
 
               const ourReviews = [];
+              let lastMaintainerReviewAt = 0;
               for (const review of reviews) {
                 if (review.state === "PENDING" || !review.submitted_at) continue;
                 if (reviewBots.includes(review.user?.login)) {
                   if (isActionableBotReview(review)) ourReviews.push(review);
                 } else if (await isMaintainer(review.user)) {
                   ourReviews.push(review);
+                  lastMaintainerReviewAt = Math.max(lastMaintainerReviewAt, Date.parse(review.submitted_at));
                 }
               }
               if (ourReviews.length === 0) continue;
@@ -250,6 +252,7 @@ jobs:
                 ...commits.map((c) => c.commit.committer?.date),
               ]);
               if (lastAuthorActivity > reviewedAt) continue;
+              if (lastMaintainerReviewAt && lastAuthorActivity > lastMaintainerReviewAt) continue;
 
               const idleMs = now - reviewedAt;
               const warnedAt = latest(
