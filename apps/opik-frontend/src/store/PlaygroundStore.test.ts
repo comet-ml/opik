@@ -131,6 +131,7 @@ describe("PlaygroundStore staleChanges", () => {
       },
       ["model"],
     ],
+    ["a provider switch", { provider: PROVIDER_TYPE.ANTHROPIC }, ["model"]],
   ])("should record %s", (_, changes, expected) => {
     updatePrompt(changes);
 
@@ -145,7 +146,7 @@ describe("PlaygroundStore staleChanges", () => {
     expect(getStaleChanges()).toEqual(["parameters", "model"]);
   });
 
-  it("should keep the same output object when nothing new changed", () => {
+  it("should keep the same output object when an edit adds no new kind of change", () => {
     updatePrompt({ messages: [createMessage({ content: "Say bye" })] });
     const staleOutput = getOutput();
 

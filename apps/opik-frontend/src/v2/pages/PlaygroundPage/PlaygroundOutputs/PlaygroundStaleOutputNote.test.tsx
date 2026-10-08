@@ -12,6 +12,8 @@ describe("describeStaleChanges", () => {
     [["parameters", "model", "prompt"], "Prompt, model and parameters changed"],
     [undefined, "Prompt changed"],
     [[], "Prompt changed"],
+    [["unknown" as PlaygroundRunInputChange], "Prompt changed"],
+    [["unknown" as PlaygroundRunInputChange, "model"], "Model changed"],
   ])("should describe %j as %s", (changes, expected) => {
     expect(describeStaleChanges(changes)).toBe(expected);
   });

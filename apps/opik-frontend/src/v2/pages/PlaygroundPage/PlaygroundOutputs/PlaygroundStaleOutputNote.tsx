@@ -11,13 +11,13 @@ const CHANGE_ORDER: PlaygroundRunInputChange[] = [
   "parameters",
 ];
 
-// Outputs saved before the store tracked what changed have no list.
+// Outputs saved in the browser before the store tracked what changed have no
+// list, and a saved list can hold values this build doesn't know.
 const UNKNOWN_CHANGES: PlaygroundRunInputChange[] = ["prompt"];
 
 export const describeStaleChanges = (changes?: PlaygroundRunInputChange[]) => {
-  const ordered = CHANGE_ORDER.filter((change) =>
-    (changes?.length ? changes : UNKNOWN_CHANGES).includes(change),
-  );
+  const known = CHANGE_ORDER.filter((change) => changes?.includes(change));
+  const ordered = known.length ? known : UNKNOWN_CHANGES;
   const listed =
     ordered.length > 1
       ? `${ordered.slice(0, -1).join(", ")} and ${ordered[ordered.length - 1]}`
