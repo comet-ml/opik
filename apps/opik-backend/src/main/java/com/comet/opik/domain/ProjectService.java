@@ -41,6 +41,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -97,8 +98,8 @@ public interface ProjectService {
 
     Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids);
 
-    /** Creation date of the oldest project across all workspaces; empty when there are no projects. */
-    Mono<Optional<LocalDate>> findEarliestCreationDate();
+    /** UTC date the install was created, from its earliest project; empty when there are no projects. */
+    Mono<Optional<LocalDate>> findInstallationDate();
 
     Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
@@ -437,9 +438,10 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Mono<Optional<LocalDate>> findEarliestCreationDate() {
+    public Mono<Optional<LocalDate>> findInstallationDate() {
         return Mono.fromCallable(() -> Optional.ofNullable(template.inTransaction(READ_ONLY,
-                handle -> handle.attach(ProjectDAO.class).findEarliestCreationDate())))
+                handle -> handle.attach(ProjectDAO.class).findInstallationTime()))
+                .map(time -> time.atZone(ZoneOffset.UTC).toLocalDate()))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 

@@ -23,12 +23,13 @@ import org.quartz.JobExecutionContext;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuple4;
+import reactor.util.function.Tuple3;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
@@ -51,7 +52,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * stop reporting — this keeps exactly one series per (table, partition) and lets partitions that
  * age out drop from Prometheus instead of lingering as stale values.
  *
- * <p>Out-of-range weekly partitions (far-future, or older than the estate's oldest project) are folded into one
+ * <p>Out-of-range weekly partitions (far-future, or older than the install) are folded into one
  * series per table per side by {@link PartitionRange}, so the series count stays bounded however many
  * junk partitions a table carries. The partition count is computed before folding and stays exact.
  */
@@ -69,7 +70,7 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     /** {@code partitionCounts}: exact distinct partitions per table, then per range. */
     @Builder(toBuilder = true)
     private record Snapshot(
-            Map<String, Map<String, Long>> partitionCounts,
+            Map<String, Map<PartitionRange.Range, Long>> partitionCounts,
             List<PartitionStat> partitionStats,
             List<LwdStat> lwdStats) {
         private static final Snapshot EMPTY = Snapshot.builder()
@@ -87,8 +88,8 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
     private final AtomicReference<Snapshot> snapshot = new AtomicReference<>(Snapshot.EMPTY);
     private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
-    // Partition-date floor derived from the oldest project; looked up on the first poll after startup and
-    // cached, since the oldest project doesn't get older.
+    // Partition-date floor derived from the install date; looked up on the first poll after startup and
+    // cached, since it never changes.
     private final AtomicReference<LocalDate> cachedPartitionRangeStart = new AtomicReference<>();
 
     @Inject
@@ -116,7 +117,7 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                         + "(in_range, out_of_range_future, out_of_range_past)")
                 .buildWithCallback(measurement -> snapshot.get().partitionCounts()
                         .forEach((table, byRange) -> byRange.forEach((range, count) -> measurement.record(count,
-                                Attributes.of(TABLE_KEY, table, RANGE_KEY, range)))));
+                                Attributes.of(TABLE_KEY, table, RANGE_KEY, range.getValue())))));
 
         // Per-(table, partition) series sourced from system.parts.
         registerPartitionGauge(meter, "opik.clickhouse.partition.size_bytes",
@@ -160,8 +161,7 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                         return Mono.just(List.of());
                     });
             return Mono
-                    .zip(partitionMetricsDAO.getPartitionStats(), lwdRowCounts, partitionMetricsDAO.getServerDate(),
-                            loadPartitionRangeStart())
+                    .zip(partitionMetricsDAO.getPartitionStats(), lwdRowCounts, loadPartitionRangeStart())
                     .doOnNext(this::updateSnapshot)
                     // A failed refresh stops reporting rather than publishing the last snapshot indefinitely.
                     .doOnError(exception -> snapshot.set(Snapshot.EMPTY))
@@ -199,25 +199,25 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
         if (cached != null) {
             return Mono.just(Optional.of(cached));
         }
-        return projectService.findEarliestCreationDate()
+        return projectService.findInstallationDate()
                 .map(earliest -> earliest.map(date -> {
                     var start = PartitionRange.floorFor(date);
                     cachedPartitionRangeStart.set(start);
-                    log.info("ClickHouse partition metrics: partition range starts '{}', from oldest project date '{}'",
+                    log.info("ClickHouse partition metrics: partition range starts '{}', from install date '{}'",
                             start, date);
                     return start;
                 }));
     }
 
     private void updateSnapshot(
-            Tuple4<List<PartitionStat>, List<LwdStat>, LocalDate, Optional<LocalDate>> result) {
-        // ClickHouse's date, not the JVM's: partition ids are computed in the ClickHouse server timezone.
-        var serverDate = result.getT3();
-        // No projects means no legitimate data: start at the current week so any leftover past partitions
-        // group into out_of_range_past, keeping series bounded.
-        var start = result.getT4()
-                .orElseGet(() -> serverDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)));
-        var range = PartitionRange.of(start, serverDate);
+            Tuple3<List<PartitionStat>, List<LwdStat>, Optional<LocalDate>> result) {
+        // UTC, not a server timezone: weekly partition ids derive from id_at, a DateTime64(0, 'UTC') column.
+        var today = LocalDate.now(ZoneOffset.UTC);
+        // No install date: start at the current week so past partitions group into out_of_range_past, keeping
+        // series bounded at the cost of per-week detail for past data.
+        var start = result.getT3()
+                .orElseGet(() -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)));
+        var range = PartitionRange.of(start, today);
         var partitionStats = range.group(result.getT1());
         var lwdStats = range.groupLwd(result.getT2());
         snapshot.set(Snapshot.builder()

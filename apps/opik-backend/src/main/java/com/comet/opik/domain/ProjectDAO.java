@@ -19,7 +19,7 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -62,10 +62,10 @@ interface ProjectDAO {
     @RegisterConstructorMapper(WorkspaceProjectName.class)
     List<WorkspaceProjectName> findNamesByIds(@BindList("ids") Collection<UUID> ids);
 
-    // DATE() in the MySQL session timezone, so callers get a calendar date without picking a zone.
-    // Null when there are no projects (MIN over an empty table).
-    @SqlQuery("SELECT DATE(MIN(created_at)) FROM projects")
-    @Nullable LocalDate findEarliestCreationDate();
+    // The earliest project is the Default Project seeded by migration 000001, so this is the install time.
+    // Served by projects_created_at_idx. Null when there are no projects.
+    @SqlQuery("SELECT MIN(created_at) FROM projects")
+    @Nullable Instant findInstallationTime();
 
     @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId")
     Set<UUID> findIdsByWorkspaceId(@Bind("workspaceId") String workspaceId);

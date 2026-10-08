@@ -23,7 +23,6 @@ import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -38,7 +37,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
-import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -97,17 +96,15 @@ class ClickHousePartitionMetricsDAOTest {
     private ClickHousePartitionMetricsDAO partitionMetricsDAO;
     private ConnectionFactory connectionFactory;
     private ProjectService projectService;
-    private Jdbi jdbi;
 
     @BeforeAll
-    void setUpAll(ClientSupport clientSupport, Injector injector, Jdbi jdbi) {
+    void setUpAll(ClientSupport clientSupport, Injector injector) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         partitionMetricsDAO = injector.getInstance(ClickHousePartitionMetricsDAO.class);
         connectionFactory = injector.getInstance(ConnectionFactory.class);
         projectService = injector.getInstance(ProjectService.class);
-        this.jdbi = jdbi;
     }
 
     @Test
@@ -201,40 +198,20 @@ class ClickHousePartitionMetricsDAOTest {
     }
 
     @Test
-    void earliestProjectCreationDateIsMappedFromMySql() {
+    void installationDateIsNotAfterAnyProjectsCreation() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(),
                 randomName("user"));
-        projectResourceClient.createProject(
+        var projectId = projectResourceClient.createProject(
                 factory.manufacturePojo(Project.class).toBuilder().name(randomName("project")).build(), apiKey,
                 workspaceName);
+        var createdDate = projectResourceClient.getProject(projectId, apiKey, workspaceName).createdAt()
+                .atZone(ZoneOffset.UTC).toLocalDate();
 
-        var expected = LocalDate.parse(jdbi.withHandle(handle -> handle
-                .createQuery("SELECT CAST(DATE(MIN(created_at)) AS CHAR) FROM projects")
-                .mapTo(String.class)
-                .one()));
+        var actual = projectService.findInstallationDate().block();
 
-        var actual = projectService.findEarliestCreationDate().block();
-
-        assertThat(actual).contains(expected);
-    }
-
-    @Test
-    void serverDateIsClickHouseToday() {
-        var before = clickHouseToday();
-
-        var actual = partitionMetricsDAO.getServerDate().block();
-
-        // Bracketed by two reads so a midnight rollover between them can't fail the test.
-        assertThat(actual).isBetween(before, clickHouseToday());
-    }
-
-    private LocalDate clickHouseToday() {
-        return LocalDate.parse(Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement("SELECT toString(today())").execute())
-                .flatMap(result -> result.map((row, metadata) -> row.get(0, String.class)))
-                .blockFirst());
+        assertThat(actual).hasValueSatisfying(date -> assertThat(date).isBeforeOrEqualTo(createdDate));
     }
 
     private PartitionStat tracesStat() {

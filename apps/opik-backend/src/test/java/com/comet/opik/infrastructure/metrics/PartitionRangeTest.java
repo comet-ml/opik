@@ -2,146 +2,155 @@ package com.comet.opik.infrastructure.metrics;
 
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.LwdStat;
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.PartitionStat;
+import com.comet.opik.infrastructure.metrics.PartitionRange.Range;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.comet.opik.infrastructure.metrics.PartitionRange.IN_RANGE;
-import static com.comet.opik.infrastructure.metrics.PartitionRange.OUT_OF_RANGE_FUTURE;
-import static com.comet.opik.infrastructure.metrics.PartitionRange.OUT_OF_RANGE_PAST;
 import static java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PartitionRangeTest {
 
-    // Wednesday: the current week starts 2026-10-05, so the last in-range week is 2026-10-12.
-    private static final PartitionRange RANGE = PartitionRange.of(
-            LocalDate.parse("2024-01-01"), LocalDate.parse("2026-10-07"));
+    private final LocalDate today = LocalDate.now(ZoneOffset.UTC)
+            .plusDays(RandomUtils.secure().randomInt(0, 3_650));
+    private final LocalDate from = PartitionRange.floorFor(today.minusDays(RandomUtils.secure().randomInt(30, 3_650)));
+    private final PartitionRange range = PartitionRange.of(from, today);
+
+    // Boundary weeks: the first and last in range, and their out-of-range neighbours.
+    private final LocalDate lastInRange = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).plusWeeks(1);
+    private final String firstWeek = week(from);
+    private final String lastWeek = week(lastInRange);
+    private final String nextWeek = week(lastInRange.plusWeeks(1));
+    private final String previousWeek = week(from.minusWeeks(1));
+
+    private final String table = randomName("table");
+    private final String otherTable = randomName("table");
 
     @Test
-    void ofEndsAtNextWeeksMonday() {
-        assertThat(RANGE).isEqualTo(new PartitionRange(LocalDate.parse("2024-01-01"), LocalDate.parse("2026-10-12")));
-    }
+    void rangeClassifiesBoundariesAndPassesNonDayPartitionsThrough() {
+        var partitions = List.of(firstWeek, lastWeek, nextWeek, "22991225", previousWeek, "19700105",
+                "all", "202610", "20261399");
 
-    @ParameterizedTest
-    @CsvSource({
-            "2024-03-13, 2024-03-04",
-            "2024-03-11, 2024-03-04",
-            "2024-03-17, 2024-03-04"
-    })
-    void floorForIsTheWeekBeforeTheOldestProjectsWeek(String earliestProjectDate, String expected) {
-        assertThat(PartitionRange.floorFor(LocalDate.parse(earliestProjectDate))).isEqualTo(LocalDate.parse(expected));
-    }
+        var expected = Map.of(
+                firstWeek, Range.IN_RANGE,
+                lastWeek, Range.IN_RANGE,
+                nextWeek, Range.OUT_OF_RANGE_FUTURE,
+                "22991225", Range.OUT_OF_RANGE_FUTURE,
+                previousWeek, Range.OUT_OF_RANGE_PAST,
+                "19700105", Range.OUT_OF_RANGE_PAST,
+                "all", Range.IN_RANGE,
+                "202610", Range.IN_RANGE,
+                "20261399", Range.IN_RANGE);
 
-    @ParameterizedTest
-    @CsvSource({
-            "20240101, in_range",
-            "20261005, in_range",
-            "20261012, in_range",
-            "20261019, out_of_range_future",
-            "22990101, out_of_range_future",
-            "20231225, out_of_range_past",
-            "19000101, out_of_range_past",
-            "all, in_range",
-            "202610, in_range",
-            "20261399, in_range"
-    })
-    void range(String partition, String expected) {
-        assertThat(RANGE.range(partition)).isEqualTo(expected);
+        assertThat(partitions.stream().collect(Collectors.toMap(Function.identity(), range::range)))
+                .isEqualTo(expected);
     }
 
     @Test
     void groupFoldsOutOfRangePartitionsPerTableAndSide() {
-        var stats = List.of(
-                stat("spans_local", "20261005", 2, 100, 1_000, 600, 50),
-                stat("spans_local", "20261019", 1, 10, 100, 100, 70),
-                stat("spans_local", "22990101", 3, 20, 300, 250, 60),
-                stat("spans_local", "20231225", 1, 5, 50, 50, 10),
-                stat("spans_local", "19700105", 2, 7, 70, 40, 20),
-                stat("traces_local", "21000104", 1, 1, 10, 10, 5),
-                stat("spans_pre_cutover_backup", "all", 4, 1_000, 9_000, 8_000, 40));
+        var inRange = randomStat(table, lastWeek);
+        var future1 = randomStat(table, nextWeek);
+        var future2 = randomStat(table, "22991225");
+        var past1 = randomStat(table, previousWeek);
+        var past2 = randomStat(table, "19700105");
+        var otherFuture = randomStat(otherTable, nextWeek);
+        var unpartitioned = randomStat(otherTable, "all");
 
         var expected = List.of(
-                stat("spans_local", "20261005", 2, 100, 1_000, 600, 50),
-                stat("spans_local", OUT_OF_RANGE_FUTURE, 4, 30, 400, 250, 70),
-                stat("spans_local", OUT_OF_RANGE_PAST, 3, 12, 120, 50, 20),
-                stat("traces_local", OUT_OF_RANGE_FUTURE, 1, 1, 10, 10, 5),
-                stat("spans_pre_cutover_backup", "all", 4, 1_000, 9_000, 8_000, 40));
+                inRange,
+                merged(future1, future2, Range.OUT_OF_RANGE_FUTURE),
+                merged(past1, past2, Range.OUT_OF_RANGE_PAST),
+                otherFuture.toBuilder().partition(Range.OUT_OF_RANGE_FUTURE.getValue()).build(),
+                unpartitioned);
 
-        assertThat(RANGE.group(stats)).isEqualTo(expected);
+        var actual = range.group(List.of(inRange, future1, future2, past1, past2, otherFuture, unpartitioned));
+
+        assertThat(actual).isEqualTo(expected);
     }
 
     @Test
     void groupLwdFoldsWithTheSameLabelsAsGroup() {
-        var stats = List.of(
-                lwd("spans_local", "20261005", 4),
-                lwd("spans_local", "20261019", 1),
-                lwd("spans_local", "22990101", 2),
-                lwd("spans_local", "20231225", 3),
-                lwd("traces", "all", 9));
+        var inRange = randomLwd(table, firstWeek);
+        var future1 = randomLwd(table, nextWeek);
+        var future2 = randomLwd(table, "22991225");
+        var past = randomLwd(table, previousWeek);
+        var unpartitioned = randomLwd(otherTable, "all");
 
         var expected = List.of(
-                lwd("spans_local", "20261005", 4),
-                lwd("spans_local", OUT_OF_RANGE_FUTURE, 3),
-                lwd("spans_local", OUT_OF_RANGE_PAST, 3),
-                lwd("traces", "all", 9));
+                inRange,
+                future1.toBuilder()
+                        .partition(Range.OUT_OF_RANGE_FUTURE.getValue())
+                        .lwdRows(future1.lwdRows() + future2.lwdRows())
+                        .build(),
+                past.toBuilder().partition(Range.OUT_OF_RANGE_PAST.getValue()).build(),
+                unpartitioned);
 
-        assertThat(RANGE.groupLwd(stats)).isEqualTo(expected);
+        var actual = range.groupLwd(List.of(inRange, future1, future2, past, unpartitioned));
+
+        assertThat(actual).isEqualTo(expected);
     }
 
     @Test
     void countByRangeIsExactAndReportsEveryRangePerTable() {
-        var stats = List.of(
-                stat("spans_local", "20261005", 1, 1, 1, 1, 1),
-                stat("spans_local", "20261012", 1, 1, 1, 1, 1),
-                stat("spans_local", "20261019", 1, 1, 1, 1, 1),
-                stat("spans_local", "22990101", 1, 1, 1, 1, 1),
-                stat("spans_local", "20231225", 1, 1, 1, 1, 1),
-                stat("traces", "all", 1, 1, 1, 1, 1));
+        var stats = Stream.of(firstWeek, lastWeek, nextWeek, "22991225", previousWeek)
+                .map(partition -> randomStat(table, partition))
+                .collect(Collectors.toList());
+        stats.add(randomStat(otherTable, "all"));
 
         var expected = Map.of(
-                "spans_local", Map.of(IN_RANGE, 2L, OUT_OF_RANGE_FUTURE, 2L, OUT_OF_RANGE_PAST, 1L),
-                "traces", Map.of(IN_RANGE, 1L, OUT_OF_RANGE_FUTURE, 0L, OUT_OF_RANGE_PAST, 0L));
+                table, Map.of(Range.IN_RANGE, 2L, Range.OUT_OF_RANGE_FUTURE, 2L, Range.OUT_OF_RANGE_PAST, 1L),
+                otherTable, Map.of(Range.IN_RANGE, 1L, Range.OUT_OF_RANGE_FUTURE, 0L, Range.OUT_OF_RANGE_PAST, 0L));
 
-        assertThat(RANGE.countByRange(stats)).isEqualTo(expected);
+        assertThat(range.countByRange(stats)).isEqualTo(expected);
     }
 
-    @Test
-    void seriesStayBoundedAsOutOfRangePartitionsGrow() {
-        var inRange = stat("spans_local", "20261005", 1, 1, 1, 1, 1);
-        var farFuture = IntStream.range(0, 15_000)
-                .mapToObj(week -> LocalDate.parse("2030-01-07").plusWeeks(week))
-                .map(date -> stat("spans_local", date.format(BASIC_ISO_DATE),
-                        1, 1, 1, 1, 1));
-        var stats = Stream.concat(Stream.of(inRange), farFuture).toList();
-
-        var expected = List.of(inRange, stat("spans_local", OUT_OF_RANGE_FUTURE, 15_000, 15_000, 15_000, 1, 1));
-
-        assertThat(RANGE.group(stats)).isEqualTo(expected);
-        assertThat(RANGE.countByRange(stats)).isEqualTo(Map.of(
-                "spans_local", Map.of(IN_RANGE, 1L, OUT_OF_RANGE_FUTURE, 15_000L, OUT_OF_RANGE_PAST, 0L)));
-    }
-
-    private static PartitionStat stat(String table, String partition, long parts, long rows, long bytes,
-            long maxPartBytes, long lastActivity) {
-        return PartitionStat.builder()
-                .table(table)
-                .partition(partition)
-                .parts(parts)
-                .rows(rows)
-                .bytes(bytes)
-                .maxPartBytes(maxPartBytes)
-                .lastActivityEpochSeconds(lastActivity)
+    private static PartitionStat merged(PartitionStat left, PartitionStat right, Range range) {
+        return left.toBuilder()
+                .partition(range.getValue())
+                .parts(left.parts() + right.parts())
+                .rows(left.rows() + right.rows())
+                .bytes(left.bytes() + right.bytes())
+                .maxPartBytes(Math.max(left.maxPartBytes(), right.maxPartBytes()))
+                .lastActivityEpochSeconds(Math.max(left.lastActivityEpochSeconds(), right.lastActivityEpochSeconds()))
                 .build();
     }
 
-    private static LwdStat lwd(String table, String partition, long lwdRows) {
-        return LwdStat.builder().table(table).partition(partition).lwdRows(lwdRows).build();
+    private static PartitionStat randomStat(String table, String partition) {
+        return PartitionStat.builder()
+                .table(table)
+                .partition(partition)
+                .parts(randomLong())
+                .rows(randomLong())
+                .bytes(randomLong())
+                .maxPartBytes(randomLong())
+                .lastActivityEpochSeconds(randomLong())
+                .build();
+    }
+
+    private static LwdStat randomLwd(String table, String partition) {
+        return LwdStat.builder().table(table).partition(partition).lwdRows(randomLong()).build();
+    }
+
+    private static long randomLong() {
+        return RandomUtils.secure().randomLong(1, 1_000_000_000L);
+    }
+
+    private static String week(LocalDate monday) {
+        return monday.format(BASIC_ISO_DATE);
+    }
+
+    private static String randomName(String prefix) {
+        return "%s_%s".formatted(prefix, RandomStringUtils.secure().nextAlphanumeric(16));
     }
 }

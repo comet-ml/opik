@@ -2,12 +2,16 @@ package com.comet.opik.infrastructure.metrics;
 
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.LwdStat;
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.PartitionStat;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.TemporalAdjusters;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,27 +29,34 @@ import static java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
  * them push the gauges past the OTel cardinality limit, where the SDK silently folds the overflow
  * into one series and can drop legitimate partitions. Out-of-range partitions therefore report as one
  * series per table per side; in-range and non-date partitions ({@code all}, monthly ids) pass through.
- * The floor is derived from the estate's oldest project (see {@link #floorFor}), so it needs no config.
+ * The floor is derived from the install date (see {@link #floorFor}), so it needs no config.
  *
  * @param from earliest in-range partition date (inclusive)
  * @param to   latest in-range partition date (inclusive): next week's Monday
  */
+@Slf4j
 public record PartitionRange(@NonNull LocalDate from, @NonNull LocalDate to) {
 
-    public static final String IN_RANGE = "in_range";
-    public static final String OUT_OF_RANGE_FUTURE = "out_of_range_future";
-    public static final String OUT_OF_RANGE_PAST = "out_of_range_past";
+    @Getter
+    @RequiredArgsConstructor
+    public enum Range {
+        IN_RANGE("in_range"),
+        OUT_OF_RANGE_FUTURE("out_of_range_future"),
+        OUT_OF_RANGE_PAST("out_of_range_past");
+
+        /** The metric label value; out-of-range ones are also the partition label their bucket reports under. */
+        private final String value;
+    }
 
     // Weekly tables partition by toYYYYMMDD of the week's Monday; monthly (YYYYMM) and 'all' don't match.
     private static final Pattern DAY_PARTITION = Pattern.compile("\\d{8}");
 
     /**
-     * Floor for an estate whose oldest project was created on {@code earliestProjectDate}: no legitimate
-     * row is older than its project. One extra week absorbs timezone skew between MySQL and ClickHouse
-     * and ids minted slightly before their project was created.
+     * Floor for an estate installed on {@code installationDate}: no legitimate row predates the install.
+     * One extra week absorbs client clocks running slightly behind.
      */
-    public static LocalDate floorFor(@NonNull LocalDate earliestProjectDate) {
-        return earliestProjectDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
+    public static LocalDate floorFor(@NonNull LocalDate installationDate) {
+        return installationDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
     }
 
     /** In range: from {@code from} through the week after the one containing {@code today}. */
@@ -53,27 +64,28 @@ public record PartitionRange(@NonNull LocalDate from, @NonNull LocalDate to) {
         return new PartitionRange(from, today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).plusWeeks(1));
     }
 
-    /** {@link #IN_RANGE}, {@link #OUT_OF_RANGE_FUTURE} or {@link #OUT_OF_RANGE_PAST}. */
-    public String range(@NonNull String partition) {
+    public Range range(@NonNull String partition) {
         if (!DAY_PARTITION.matcher(partition).matches()) {
-            return IN_RANGE;
+            return Range.IN_RANGE;
         }
         LocalDate date;
         try {
             date = LocalDate.parse(partition, BASIC_ISO_DATE);
-        } catch (DateTimeParseException e) {
-            return IN_RANGE;
+        } catch (DateTimeParseException exception) {
+            // Weekly partition ids are always valid dates, so this means an unexpected partition expression.
+            log.warn("ClickHouse partition metrics: unparsable day partition '{}', reported as in range", partition);
+            return Range.IN_RANGE;
         }
         if (date.isAfter(to)) {
-            return OUT_OF_RANGE_FUTURE;
+            return Range.OUT_OF_RANGE_FUTURE;
         }
-        return date.isBefore(from) ? OUT_OF_RANGE_PAST : IN_RANGE;
+        return date.isBefore(from) ? Range.OUT_OF_RANGE_PAST : Range.IN_RANGE;
     }
 
     /** The partition label a partition reports under: itself when in range, else its side's bucket. */
     public String label(@NonNull String partition) {
-        String range = range(partition);
-        return IN_RANGE.equals(range) ? partition : range;
+        Range range = range(partition);
+        return range == Range.IN_RANGE ? partition : range.getValue();
     }
 
     /** Folds out-of-range partitions per table: sums for counts and sizes, max for largest part and activity. */
@@ -100,14 +112,14 @@ public record PartitionRange(@NonNull LocalDate from, @NonNull LocalDate to) {
      * Exact distinct partition count per table and range. Every range is present for every table, at 0
      * when empty, so an alert on the out-of-range count's increase sees the series before it grows.
      */
-    public Map<String, Map<String, Long>> countByRange(@NonNull List<PartitionStat> stats) {
-        Map<String, Map<String, Long>> counts = new LinkedHashMap<>();
+    public Map<String, Map<Range, Long>> countByRange(@NonNull List<PartitionStat> stats) {
+        Map<String, Map<Range, Long>> counts = new LinkedHashMap<>();
         stats.stream()
                 .map(stat -> List.of(stat.table(), stat.partition()))
                 .distinct()
                 .forEach(key -> counts
-                        .computeIfAbsent(key.get(0), table -> new LinkedHashMap<>(Map.of(
-                                IN_RANGE, 0L, OUT_OF_RANGE_FUTURE, 0L, OUT_OF_RANGE_PAST, 0L)))
+                        .computeIfAbsent(key.get(0), table -> new EnumMap<>(Map.of(
+                                Range.IN_RANGE, 0L, Range.OUT_OF_RANGE_FUTURE, 0L, Range.OUT_OF_RANGE_PAST, 0L)))
                         .merge(range(key.get(1)), 1L, Long::sum));
         return counts.entrySet().stream()
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Map.copyOf(entry.getValue())));
