@@ -1,4 +1,9 @@
-import { AGENT_INSIGHTS_ISSUE_SEVERITY } from "@/types/signals";
+import {
+  AGENT_INSIGHTS_ISSUE_SEVERITY,
+  AGENT_INSIGHTS_ISSUE_STATUS,
+  AgentInsightsIssue,
+  AgentInsightsJob,
+} from "@/types/signals";
 
 export const SEVERITY_LABEL_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> =
   {
@@ -25,3 +30,15 @@ export const formatOccurrences = (
   daysReported > 1
     ? `${total.toLocaleString()} total · ${latest.toLocaleString()} latest`
     : total.toLocaleString();
+
+// The current results predate the saved guidance: the job has run and the guidance
+// version differs from the one the results were produced with (absent = 0).
+export const isGuidanceOutdated = (job?: AgentInsightsJob | null): boolean =>
+  Boolean(job?.last_scan_at) &&
+  (job?.guidance_version ?? 0) !== (job?.results_guidance_version ?? 0);
+
+// Issues closed as not useful aren't problems, so their traces don't count.
+export const countAffectedTraces = (issues: AgentInsightsIssue[]): number =>
+  issues
+    .filter((i) => i.status !== AGENT_INSIGHTS_ISSUE_STATUS.closed)
+    .reduce((sum, i) => sum + i.total_occurrences, 0);
