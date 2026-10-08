@@ -174,13 +174,14 @@ describe("IssueDetail status actions", () => {
       { issueId: "i1", projectId: "p1", status: "open" },
       expect.anything(),
     );
-    expect(toast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Issue was reopened",
-        description:
-          "The issue is open again and will no longer guide future runs",
-      }),
-    );
+    const { title, description } = toast.mock.calls.at(-1)![0];
+    expect(title).toBe("Issue was reopened");
+    renderComponent(<>{description}</>);
+    expect(
+      screen.getByText(
+        "The issue is open again and will no longer guide future runs",
+      ),
+    ).toBeInTheDocument();
 
     clickUndo();
 
