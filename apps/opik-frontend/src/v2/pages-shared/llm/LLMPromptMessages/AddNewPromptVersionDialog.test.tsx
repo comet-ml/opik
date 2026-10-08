@@ -76,11 +76,17 @@ const EXISTING_PROMPT: PromptWithLatestVersion = {
   latest_version: VERSION,
 };
 
+const CANNOT_VIEW_PROMPTS = {
+  ...DEFAULT_PERMISSIONS,
+  permissions: { ...DEFAULT_PERMISSIONS.permissions, canViewPrompts: false },
+};
+
 const renderDialog = (
   props: Partial<React.ComponentProps<typeof AddNewPromptVersionDialog>>,
+  permissions = DEFAULT_PERMISSIONS,
 ) =>
   render(
-    <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+    <PermissionsProvider value={permissions}>
       <AddNewPromptVersionDialog
         open
         setOpen={vi.fn()}
@@ -96,8 +102,8 @@ const saveButton = () =>
 
 const clickSave = () => fireEvent.click(saveButton());
 
-const saveNewPrompt = () => {
-  renderDialog({});
+const saveNewPrompt = (permissions = DEFAULT_PERMISSIONS) => {
+  renderDialog({}, permissions);
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "My prompt" },
   });
@@ -106,8 +112,8 @@ const saveNewPrompt = () => {
   return onSuccess;
 };
 
-const saveNewVersion = () => {
-  renderDialog({ prompt: EXISTING_PROMPT });
+const saveNewVersion = (permissions = DEFAULT_PERMISSIONS) => {
+  renderDialog({ prompt: EXISTING_PROMPT }, permissions);
   clickSave();
   const [{ onSuccess }] = mockCreateVersion.mock.calls[0];
   return onSuccess;
@@ -226,6 +232,27 @@ describe("AddNewPromptVersionDialog success toast link", () => {
 
     expect(mockToast).toHaveBeenCalledWith({
       description: 'Saved new prompt "My prompt"',
+    });
+    expect(toastActions()).toBeUndefined();
+  });
+
+  it("shows no link on a new prompt when the user cannot view prompts", () => {
+    saveNewPrompt(CANNOT_VIEW_PROMPTS)({
+      ...EXISTING_PROMPT,
+      name: "My prompt",
+    });
+
+    expect(mockToast).toHaveBeenCalledWith({
+      description: 'Saved new prompt "My prompt"',
+    });
+    expect(toastActions()).toBeUndefined();
+  });
+
+  it("shows no link on a new version when the user cannot view prompts", () => {
+    saveNewVersion(CANNOT_VIEW_PROMPTS)(VERSION);
+
+    expect(mockToast).toHaveBeenCalledWith({
+      description: 'Saved new version of prompt "Support bot"',
     });
     expect(toastActions()).toBeUndefined();
   });

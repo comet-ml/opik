@@ -92,7 +92,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const navigate = useNavigate();
 
   const {
-    permissions: { canCreatePrompts, canEditPrompts },
+    permissions: { canViewPrompts, canCreatePrompts, canEditPrompts },
   } = usePermissions();
 
   const [promptId, setPromptId] = useState<string | undefined>(prompt?.id);
@@ -175,7 +175,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
     (canSaveNewPrompt || canSaveExistingPrompt);
 
   const getGoToPromptActions = (savedPromptId?: string, versionId?: string) =>
-    savedPromptId && activeProjectId
+    canViewPrompts && savedPromptId && activeProjectId
       ? [
           <ToastAction
             variant="link"
