@@ -934,27 +934,43 @@ const useActionButtonActions = ({
           ),
         );
 
-        if (experiments.every((exp) => isExperimentTerminal(exp?.status))) {
-          // Finished while we were away. The per-prompt running state is not cleared by leaving,
-          // and survives navigating back, so without this the page returns offering Stop for a
-          // run that is already over.
+        // The map keeps a prompt's experiment after its run ends, while runTotalItems describes only
+        // the latest run. Picking the finished ones back up would offer Stop for a run that is over
+        // and count its traces against a total that never included them.
+        const resumable = entries
+          .map(([promptId, experimentId], index) => ({
+            promptId,
+            experimentId,
+            experiment: experiments[index],
+          }))
+          .filter(
+            ({ experiment }) => !isExperimentTerminal(experiment?.status),
+          );
+
+        if (resumable.length === 0) {
+          // All over while we were away. The per-prompt running state is not cleared by leaving and
+          // survives navigating back, so without this the page returns offering Stop for a run that
+          // has already finished.
           settleRun();
           return;
         }
 
-        entries.forEach(([promptId]) => setPromptRunning(promptId, true));
+        resumable.forEach(({ promptId }) => setPromptRunning(promptId, true));
         setIsRunInFlight(true);
         setProgressPhase("running");
         // Seeded from the traces already logged, the same count the poll uses, so a run that is
         // nearly done reopens near the end rather than at zero until the first poll lands.
-        const loggedTraces = experiments.reduce(
-          (sum, exp) => sum + (exp?.trace_count ?? 0),
+        const loggedTraces = resumable.reduce(
+          (sum, { experiment }) => sum + (experiment?.trace_count ?? 0),
           0,
         );
         setProgress(Math.min(loggedTraces, runTotalItems), runTotalItems);
-        pollExperimentCompletion(experimentIds, runTotalItems, datasetId, {
-          announceExperiments: createdExperiments,
-        });
+        pollExperimentCompletion(
+          resumable.map(({ experimentId }) => experimentId),
+          runTotalItems,
+          datasetId,
+          { announceExperiments: createdExperiments },
+        );
       } catch {
         // A run we cannot read the status of is one we cannot resume; the cells still fill in on
         // their own, so leaving the page idle is better than a progress bar that never moves.

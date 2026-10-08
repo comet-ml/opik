@@ -56,11 +56,11 @@ const wrapper = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-const renderItem = () =>
+const renderItem = (experimentId: string = EXPERIMENT_ID) =>
   renderHook(
-    () =>
-      usePlaygroundExperimentItem(EXPERIMENT_ID, DATASET_ITEM_ID, DATASET_ID),
-    { wrapper },
+    ({ id }: { id: string }) =>
+      usePlaygroundExperimentItem(id, DATASET_ITEM_ID, DATASET_ID),
+    { wrapper, initialProps: { id: experimentId } },
   );
 
 describe("usePlaygroundExperimentItem", () => {
@@ -91,6 +91,39 @@ describe("usePlaygroundExperimentItem", () => {
     const { result } = renderItem();
 
     await waitFor(() => expect(result.current.notRun).toBe(true));
+  });
+
+  // Runs from before the stamp existed have it null for ever, and the prompt map is persisted, so a
+  // stored playground pointing at one would poll its rows with no end.
+  it("should settle a run that finished before the stamp existed", async () => {
+    finishedAt = null;
+    experimentStatus = EXPERIMENT_STATUS.COMPLETED;
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+  });
+
+  it("should settle one that failed before the stamp existed", async () => {
+    finishedAt = null;
+    experimentStatus = EXPERIMENT_STATUS.FAILED;
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+  });
+
+  // Re-running a prompt hands the cell a new experiment, and a finished one is served from cache. The
+  // moment we saw the previous run finish says nothing about this one: here the new run was seen to
+  // finish after its rows were read, so those rows cannot yet show what it produced.
+  it("should pin the finish to the experiment it was seen for", async () => {
+    const first = renderItem();
+    await waitFor(() => expect(first.result.current.notRun).toBe(true));
+
+    experimentReadAt = rowsReadAt + 1_000;
+    first.rerender({ id: "experiment-2" });
+
+    expect(first.result.current.notRun).toBe(false);
   });
 
   // A stopped run's status is written the moment the stop is asked for, while items already with a
@@ -125,7 +158,7 @@ describe("usePlaygroundExperimentItem", () => {
     await waitFor(() => expect(result.current.notRun).toBe(true));
 
     experimentReadAt = rowsReadAt + 1_000;
-    rerender();
+    rerender({ id: EXPERIMENT_ID });
 
     expect(result.current.notRun).toBe(true);
   });

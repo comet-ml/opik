@@ -631,14 +631,16 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
-            // Two variants over 501 items is 1,002 messages against a queue bounded at 1,000.
+            // Two variants over 501 items is 1,002 messages against a queue bounded at 1,000. The run
+            // is refused on the first message past the bound, so the message names the bound, not a
+            // total nobody counted.
             assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
                     .datasetId(UUID.randomUUID())
                     .prompts(List.of(buildPrompt("gpt-4", "Hello"), buildPrompt("gpt-4", "Hi")))
                     .build()))
                     .isInstanceOf(BadRequestException.class)
-                    .hasMessageContaining("1,002")
+                    .hasMessageContaining("more than")
                     .hasMessageContaining("1,000");
 
             verify(itemPublisher, never()).publish(any(), any(), anyBoolean());
@@ -721,12 +723,16 @@ class ExperimentExecutionServiceTest {
         // Cancelling reads each experiment first, to leave the ones that already finished alone.
         @BeforeEach
         void stubStillRunning() {
-            lenient().when(experimentService.getById(any(UUID.class)))
+            lenient().when(experimentService.getMetadataById(any(UUID.class)))
                     .thenAnswer(invocation -> Mono.just(Experiment.builder()
                             .id(invocation.getArgument(0))
                             .datasetName("dataset")
                             .status(ExperimentStatus.RUNNING)
                             .build()));
+            // The finish goes to one caller; these tests are always it, and nothing has taken it yet.
+            lenient().when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
+            lenient().when(cancellationService.isFinishClaimed(any(), any(UUID.class)))
+                    .thenReturn(Mono.just(false));
         }
 
         @Test
@@ -759,13 +765,58 @@ class ExperimentExecutionServiceTest {
                     .allSatisfy(update -> assertThat(update.status()).isEqualTo(ExperimentStatus.CANCELLED));
         }
 
+        // They are all marked cancelled in Redis before this point, so a sibling left un-updated reads
+        // as running while its items are skipped, and its queued messages sit ahead of the next run.
+        @Test
+        void cancelCarriesOnAfterOneExperimentFailsToUpdate() {
+            var failing = UUID.randomUUID();
+            var sibling = UUID.randomUUID();
+
+            when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(false));
+            when(experimentService.update(eq(failing), any()))
+                    .thenReturn(Mono.error(new IllegalStateException("experiment is gone")));
+            when(experimentService.update(eq(sibling), any())).thenReturn(Mono.empty());
+
+            service.cancel(Set.of(failing, sibling))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER_NAME)
+                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                    .block();
+
+            verify(experimentService).update(eq(sibling), any());
+            verify(cancellationService).purgeQueued(WORKSPACE_ID, sibling);
+        }
+
+        // A consumer takes the claim the moment its last item drains, before the status it is about to
+        // write can be read back. A stop landing in that window must leave the run alone rather than
+        // relabel one that finished on its own.
+        @Test
+        void cancelLeavesAnExperimentWhoseFinishIsAlreadyClaimed() {
+            var finishing = UUID.randomUUID();
+
+            when(cancellationService.isFinishClaimed(WORKSPACE_ID, finishing)).thenReturn(Mono.just(true));
+
+            service.cancel(Set.of(finishing))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER_NAME)
+                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                    .block();
+
+            verify(experimentService, never()).update(eq(finishing), any());
+            verify(cancellationService, never()).cancel(any(), any());
+            verify(cancellationService, never()).purgeQueued(any(), any(UUID.class));
+        }
+
         // A prompt that completes before its siblings keeps its Stop button until the whole run
         // settles, so cancelling something already finished is one click away.
         @Test
         void cancelLeavesAnAlreadyFinishedExperimentAlone() {
             var finished = UUID.randomUUID();
 
-            when(experimentService.getById(finished)).thenReturn(Mono.just(Experiment.builder()
+            when(experimentService.getMetadataById(finished)).thenReturn(Mono.just(Experiment.builder()
                     .id(finished)
                     .datasetName("dataset")
                     .status(ExperimentStatus.COMPLETED)

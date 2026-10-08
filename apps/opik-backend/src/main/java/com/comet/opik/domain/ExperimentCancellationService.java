@@ -10,7 +10,9 @@ import org.redisson.api.RBucketReactive;
 import org.redisson.api.RListReactive;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.stream.PendingEntry;
 import org.redisson.api.stream.StreamMessageId;
+import org.redisson.api.stream.StreamPendingRangeArgs;
 import org.redisson.client.codec.StringCodec;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -97,15 +99,28 @@ public class ExperimentCancellationService {
                         return Mono.just(false);
                     }
 
-                    return Flux.fromIterable(Lists.partition(ids, PURGE_CHUNK_SIZE))
-                            .concatMap(chunk -> stream().remove(chunk.stream()
-                                    .map(ExperimentCancellationService::parseId)
-                                    .toArray(StreamMessageId[]::new)))
-                            .reduce(0L, Long::sum)
-                            .flatMap(removed -> {
-                                log.info("Removed '{}' queued messages for cancelled experiment '{}'",
-                                        removed, experimentId);
-                                return releaseItemSlots(experimentId, removed);
+                    return inFlightIds()
+                            .flatMap(inFlight -> {
+                                var queued = ids.stream()
+                                        .map(ExperimentCancellationService::parseId)
+                                        .filter(id -> !inFlight.contains(id))
+                                        .toList();
+
+                                if (queued.isEmpty()) {
+                                    log.info("Nothing left to purge for cancelled experiment '{}': all '{}' items"
+                                            + " are already with a consumer", experimentId, ids.size());
+                                    return Mono.just(false);
+                                }
+
+                                return Flux.fromIterable(Lists.partition(queued, PURGE_CHUNK_SIZE))
+                                        .concatMap(chunk -> stream().remove(chunk.toArray(StreamMessageId[]::new)))
+                                        .reduce(0L, Long::sum)
+                                        .flatMap(removed -> {
+                                            log.info("Removed '{}' queued messages for cancelled experiment '{}',"
+                                                    + " leaving '{}' already with a consumer",
+                                                    removed, experimentId, ids.size() - queued.size());
+                                            return releaseItemSlots(experimentId, removed);
+                                        });
                             });
                 })
                 .flatMap(drained -> list.delete().thenReturn(drained))
@@ -134,6 +149,30 @@ public class ExperimentCancellationService {
                 .map(remaining -> remaining <= 0);
     }
 
+    /**
+     * The entries a consumer already holds. XDEL does not stop the consumer that has one, so purging
+     * these would drain the counter while their calls are still running; their own consumer counts
+     * them down when it finishes.
+     */
+    private Mono<Set<StreamMessageId>> inFlightIds() {
+        return stream()
+                .listPending(StreamPendingRangeArgs.groupName(config.getConsumerGroupName())
+                        .startId(StreamMessageId.MIN)
+                        .endId(StreamMessageId.MAX)
+                        .count(config.getStreamMaxLen()))
+                .map(entries -> entries.stream()
+                        .map(PendingEntry::getId)
+                        .collect(Collectors.toSet()))
+                // No consumer group means nothing was ever delivered, so nothing is in flight
+                .onErrorResume(error -> isMissingGroup(error)
+                        ? Mono.just(Set.<StreamMessageId>of())
+                        : Mono.error(error));
+    }
+
+    private static boolean isMissingGroup(Throwable error) {
+        return error.getMessage() != null && error.getMessage().contains("NOGROUP");
+    }
+
     private RStreamReactive<String, Object> stream() {
         return redisClient.getStream(config.getStreamName(), config.getCodec());
     }
@@ -141,6 +180,29 @@ public class ExperimentCancellationService {
     private static StreamMessageId parseId(String value) {
         var parts = value.split("-");
         return new StreamMessageId(Long.parseLong(parts[0]), Long.parseLong(parts[1]));
+    }
+
+    /**
+     * True for the first caller only. A cancel emptying the queue and a consumer draining the last item
+     * can both reach the finish, and a late decrement would otherwise re-run it per item.
+     */
+    public Mono<Boolean> claimFinish(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return finishClaim(workspaceId, experimentId)
+                .setIfAbsent("1", config.getBatchCounterTtl().toJavaDuration());
+    }
+
+    private RBucketReactive<String> finishClaim(String workspaceId, UUID experimentId) {
+        return redisClient.getBucket(
+                ExperimentExecutionConfig.FINISH_CLAIM_KEY_PREFIX + workspaceId + ":" + experimentId,
+                StringCodec.INSTANCE);
+    }
+
+    /**
+     * Whether something has already taken the finish. Set the moment a consumer's counter drains, which
+     * is before its status write lands, so it answers sooner than reading the experiment back does.
+     */
+    public Mono<Boolean> isFinishClaimed(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return finishClaim(workspaceId, experimentId).isExists();
     }
 
     public Mono<Boolean> isCancelled(@NonNull String workspaceId, @NonNull UUID experimentId) {

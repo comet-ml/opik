@@ -22,7 +22,12 @@ const ROWS_REFETCH_INTERVAL = 3000;
  * logic below reads it rather than the status.
  */
 const hasFinished = (experiment: Experiment | undefined) =>
-  !!experiment?.finished_at;
+  !!experiment?.finished_at ||
+  // Transitional, for runs predating migration 000130, whose stamp is null for ever: remove once
+  // they are gone or backfilled. CANCELLED stays out — it is written when the stop is asked for,
+  // so it would settle rows whose calls are still landing.
+  experiment?.status === EXPERIMENT_STATUS.COMPLETED ||
+  experiment?.status === EXPERIMENT_STATUS.FAILED;
 
 export type PlaygroundExperimentItem = {
   /** False while the row is still being processed, which is what the cell shows a loader for. */
@@ -94,15 +99,23 @@ export default function usePlaygroundExperimentItem(
 
   const finished = hasFinished(experiment);
 
-  // The read that first told us the run had finished. Pinned rather than taken fresh: the run is
+  // The read that first told us this run had finished. Pinned rather than taken fresh: the run is
   // read again whenever a cell scrolls back, and anything else watching it can refresh it too, so a
-  // reference that moved would put the loader back on a row that had already settled.
-  const finishedObservedAt = useRef<number | null>(null);
-  if (!finished) finishedObservedAt.current = null;
-  else finishedObservedAt.current ??= experimentReadAt;
+  // reference that moved would put the loader back on a row that had already settled. Held against
+  // the experiment it was made for — a re-run gives the cell a new id, and a finished one is served
+  // from cache, so carrying the old observation over would settle its rows against a stranger's.
+  const finishedObserved = useRef<{ experimentId: string; at: number } | null>(
+    null,
+  );
+  if (!finished || finishedObserved.current?.experimentId !== experimentId) {
+    finishedObserved.current = null;
+  }
+  if (finished && experimentId) {
+    finishedObserved.current ??= { experimentId, at: experimentReadAt };
+  }
 
   const wasReadAfterFinish = (rowsAt: number) =>
-    finishedObservedAt.current !== null && rowsAt >= finishedObservedAt.current;
+    finishedObserved.current !== null && rowsAt >= finishedObserved.current.at;
 
   const { data, dataUpdatedAt: rowsReadAt } = useCompareExperimentsList(
     {

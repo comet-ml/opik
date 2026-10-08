@@ -25,6 +25,7 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
     public static final String TEST_SUITE_ASSERTION_COUNTER_KEY_PREFIX = "opik:experiment:assertion:";
     public static final String CANCELLED_EXPERIMENT_KEY_PREFIX = "opik:experiment:cancelled:";
     public static final String QUEUED_IDS_KEY_PREFIX = "opik:experiment:queued-ids:";
+    public static final String FINISH_CLAIM_KEY_PREFIX = "opik:experiment:finish-claim:";
 
     /**
      * Outstanding items for one prompt variant of a run. Scoped to the experiment rather than to the

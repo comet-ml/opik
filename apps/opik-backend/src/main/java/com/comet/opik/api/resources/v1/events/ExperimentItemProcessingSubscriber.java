@@ -114,7 +114,12 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
         return trackFailure.then(counter.decrementAndGet())
                 .flatMap(remaining -> {
                     if (remaining <= 0) {
-                        return failureCounter.get()
+                        // Claimed, not just observed: a cancel purging the queue can reach the finish at
+                        // the same moment, and a counter past zero would re-finish it per item.
+                        return cancellationService
+                                .claimFinish(message.workspaceId(), message.experimentId())
+                                .filter(Boolean::booleanValue)
+                                .flatMap(claimed -> failureCounter.get())
                                 .flatMap(failures -> {
                                     if (failures > 0) {
                                         log.warn("Experiment '{}' complete with '{}' failures, marking as FAILED",
@@ -193,8 +198,12 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 .status(ExperimentStatus.FAILED)
                 .finished(true)
                 .build();
+        // A run someone stopped is not a fault, however its items ended: keep CANCELLED
+        var drainedUpdate = ExperimentUpdate.builder().finished(true).build();
 
-        return experimentService.update(message.experimentId(), failedUpdate)
+        return cancellationService.isCancelled(message.workspaceId(), message.experimentId())
+                .flatMap(cancelled -> experimentService.update(message.experimentId(),
+                        cancelled ? drainedUpdate : failedUpdate))
                 .onErrorResume(e -> {
                     log.error("Failed to mark experiment '{}' as FAILED", message.experimentId(), e);
                     return Mono.empty();
