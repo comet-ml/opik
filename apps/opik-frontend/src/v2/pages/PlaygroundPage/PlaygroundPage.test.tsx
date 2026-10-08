@@ -292,6 +292,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  focusManager.setFocused(undefined);
   apiGet.mockRestore();
   vi.useRealTimers();
 });
@@ -363,6 +364,32 @@ describe("PlaygroundPage default prompt", () => {
     expect(requestsTo(PROVIDER_KEYS_REST_ENDPOINT)).toBe(providerKeyRequests);
   });
 
+  it("gives the default prompt a model once the provider keys answer after failing", async () => {
+    backend.providerKeys = fail;
+    renderPage();
+    await advance(1_000);
+
+    expect(
+      storedPrompts().map(({ model, provider }) => ({ model, provider })),
+    ).toEqual([{ model: "", provider: "" }]);
+
+    backend.providerKeys = reply(OPEN_ROUTER_KEYS);
+    await act(async () => {
+      focusManager.setFocused(true);
+    });
+    await advance();
+
+    const [prompt] = storedPrompts();
+    expect(prompt.model).toBe(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O);
+    expect(prompt.provider).toBe(OPEN_ROUTER);
+    expect(prompt.configs).toEqual(
+      getDefaultConfigByProvider(
+        OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      ),
+    );
+  });
+
   it("heals a stored prompt that was created without a provider", async () => {
     usePlaygroundStore.setState({
       lastActiveProjectId: PROJECT_ID,
@@ -398,10 +425,6 @@ describe("PlaygroundPage default prompt", () => {
 describe("PlaygroundPage stored models", () => {
   const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
   const GEMINI = PROVIDER_TYPE.GEMINI as COMPOSED_PROVIDER_TYPE;
-
-  afterEach(() => {
-    focusManager.setFocused(undefined);
-  });
 
   it("keeps every stored model while the model registry has failed", async () => {
     backend.providerKeys = reply(ANTHROPIC_AND_OPENAI_KEYS);
@@ -546,5 +569,21 @@ describe("PlaygroundPage setup provider dialog", () => {
     await advance(30_000);
 
     expect(setupDialog()).toBeNull();
+  });
+
+  it("opens once the provider keys answer after failing with no keys", async () => {
+    backend.providerKeys = fail;
+
+    renderPage();
+    await advance(30_000);
+    expect(setupDialog()).toBeNull();
+
+    backend.providerKeys = reply({ content: [], total: 0 });
+    await act(async () => {
+      focusManager.setFocused(true);
+    });
+    await advance();
+
+    expect(setupDialog()).not.toBeNull();
   });
 });
