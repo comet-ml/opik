@@ -84,8 +84,11 @@ tests:
           path: spec.template.spec.containers[0].env
           count: 8
       - equal:
-          path: spec.template.spec.containers[0].env[7].valueFrom.secretKeyRef
-          value: {name: opik-backend, key: ANALYTICS_DB_MIGRATIONS_PASS, optional: true}
+          path: spec.template.spec.containers[0].env[7]
+          value:
+            name: SRC1_ANALYTICS_DB_MIGRATIONS_PASS
+            valueFrom:
+              secretKeyRef: {name: opik-backend, key: ANALYTICS_DB_MIGRATIONS_PASS, optional: true}
 
   - it: runs as an ArgoCD PostSync hook after the cold-tier migration
     set:
@@ -142,7 +145,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ANALYTICS_DB_MIGRATIONS_PASS
+            name: SRC1_ANALYTICS_DB_MIGRATIONS_PASS
             valueFrom:
               secretKeyRef: {name: ch-creds, key: MIGRATIONS_PASS, optional: true}
       - notContains:

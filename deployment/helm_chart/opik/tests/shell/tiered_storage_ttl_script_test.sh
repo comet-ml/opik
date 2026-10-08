@@ -34,6 +34,7 @@ helm template opik "$WORK/chart" \
   --set clickhouse.tieredStorage.enabled=true \
   --set clickhouse.tieredStorage.ttl.enabled=true \
   --set clickhouse.tieredStorage.cold.s3.endpoint=https://s3.example/cold/ \
+  --set-json 'component.backend.envFrom=[{"configMapRef":{"name":"opik-backend"}},{"secretRef":{"name":"opik-backend"}}]' \
   -s templates/clickhouse-tiered-storage-ttl-job.yaml > "$WORK/rendered.yaml"
 
 python3 - "$WORK/rendered.yaml" "$WORK/script.sh" <<'PY'
@@ -49,6 +50,18 @@ PY
 
 bash -n "$WORK/script.sh" || { echo "rendered script is not valid bash"; exit 1; }
 
+# Server-side apply (ArgoCD) rejects a container env with a repeated name.
+python3 - "$WORK/rendered.yaml" <<'PY'
+import sys, yaml, collections
+for doc in yaml.safe_load_all(open(sys.argv[1])):
+    if doc and doc.get("kind") == "Job":
+        names = [e["name"] for e in doc["spec"]["template"]["spec"]["containers"][0]["env"]]
+        dup = [n for n, c in collections.Counter(names).items() if c > 1]
+        if dup:
+            raise SystemExit(f"duplicate env names: {dup}")
+PY
+echo "  ok   - env names are unique (server-side apply)"
+
 # --- mocked clickhouse-client -------------------------------------------------
 # Logs every query (and argv) and answers from MOCK_* state. Any query outside the
 # script's contract is rejected, so a new statement cannot slip in untested.
@@ -56,6 +69,7 @@ mkdir -p "$WORK/bin"
 cat > "$WORK/bin/clickhouse-client" <<'MOCK'
 #!/bin/sh
 printf '%s\n' "$*" >> "$CALL_LOG"
+[ -z "${MOCK_EXPECT_PASS:-}" ] || [ "$CLICKHOUSE_PASSWORD" = "$MOCK_EXPECT_PASS" ] || { echo "mock: password '$CLICKHOUSE_PASSWORD', want '$MOCK_EXPECT_PASS'" >&2; exit 65; }
 [ "$1" = --host ] && [ "$2" = clickhouse-test ] || { echo "mock: expected --host clickhouse-test, got: $*" >&2; exit 64; }
 [ "$3" = --query ] || { echo "mock: expected --query, got: $*" >&2; exit 64; }
 q="$4"
@@ -122,6 +136,11 @@ fi
 run MOCK_OK=1 && fail "a replica that does not match fails the Job" "exited 0" || pass "a replica that does not match fails the Job"
 
 run MOCK_POLICY=default MOCK_ALTER_FAIL=1 && fail "a failed ALTER fails the Job" "exited 0" || pass "a failed ALTER fails the Job"
+
+run ANALYTICS_DB_MIGRATIONS_PASS= SRC0_ANALYTICS_DB_MIGRATIONS_PASS=cm-pass SRC1_ANALYTICS_DB_MIGRATIONS_PASS=secret-pass MOCK_EXPECT_PASS=secret-pass \
+  && pass "a later source (the Secret) wins over the ConfigMap" || fail "a later source (the Secret) wins over the ConfigMap" "$(cat "$WORK/err")"
+run ANALYTICS_DB_MIGRATIONS_PASS= SRC0_ANALYTICS_DB_MIGRATIONS_PASS=cm-pass SRC1_ANALYTICS_DB_MIGRATIONS_PASS= MOCK_EXPECT_PASS=cm-pass \
+  && pass "a source without the key falls back to the earlier one" || fail "a source without the key falls back to the earlier one" "$(cat "$WORK/err")"
 
 run ANALYTICS_DB_MIGRATIONS_PASS= && fail "missing credential fails before any query" "exited 0" \
   || { [ -s "$CALL_LOG" ] && fail "missing credential fails before any query" "queried anyway" || pass "missing credential fails before any query"; }
