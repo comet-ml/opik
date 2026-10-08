@@ -557,6 +557,7 @@ from .project_stats_summary import ProjectStatsSummary
 from .project_stats_summary_item import ProjectStatsSummaryItem
 from .project_visibility import ProjectVisibility
 from .prompt import Prompt
+from .prompt_cache_options import PromptCacheOptions
 from .prompt_detail import PromptDetail
 from .prompt_detail_template_structure import PromptDetailTemplateStructure
 from .prompt_page_public import PromptPagePublic
@@ -1264,6 +1265,7 @@ __all__ = [
     "ProjectStatsSummaryItem",
     "ProjectVisibility",
     "Prompt",
+    "PromptCacheOptions",
     "PromptDetail",
     "PromptDetailTemplateStructure",
     "PromptPagePublic",

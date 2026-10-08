@@ -64,7 +64,6 @@ Go to the chart folder, set VERSION you want to install and run helm install
 
 ```bash
 cd deployment/helm_chart/opik
-helm repo add bitnami https://charts.bitnami.com/bitnami
 helm dependency build
 VERSION=0.1.0
 helm upgrade --install opik -n opik --create-namespace -f values.yaml \

@@ -102,9 +102,16 @@ test.describe(
         // which would compare two zeroes and hold even with the mirroring removed.
         expect(reached).toBeGreaterThan(0);
 
-        const variables = await playground.panelScrollOffsets('variables');
-        expect(variables.header).toBe(reached);
-        expect(variables.body).toBe(reached);
+        expect(await playground.panelColumnDrift('variables')).toBeLessThan(1);
+
+        await playground.scrollPanelHorizontallyTo('variables', 0);
+      });
+
+      await test.step('Scrolling sideways over the sticky header moves the body with it', async () => {
+        await playground.wheelOverPanelHeader('variables', 300);
+
+        await expect.poll(() => playground.panelBodyScrollLeft('variables')).toBeGreaterThan(0);
+        expect(await playground.panelColumnDrift('variables')).toBeLessThan(1);
 
         await playground.scrollPanelHorizontallyTo('variables', 0);
       });

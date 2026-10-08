@@ -4561,6 +4561,10 @@ class TraceDAOImpl implements TraceDAO {
             template.add("annotation_queues_page_keyed", true);
         }
 
+        addSpanWeeksFlag(template);
+    }
+
+    private void addSpanWeeksFlag(ST template) {
         // Unbounded, span_weeks is every week the project has spans in, so the pre-pass costs more than it prunes.
         if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()
                 && Stream.of("page_keyed_aggregates", "trace_id_prefilter", "uuid_from_time", "uuid_to_time")

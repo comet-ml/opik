@@ -55,7 +55,7 @@ class ThreadDAOImplTest {
     @DisplayName("traces_final_ids prefilter gate")
     class TracesFinalIdsPrefilterGate {
 
-        private static final String SPANS_PREFILTER = "AND trace_id IN (SELECT id FROM traces_final_ids)";
+        private static final String SPANS_PREFILTER = "AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))";
         // Rendered into the query only when searchText is set (FilterUtils#newTraceThreadFindTemplate);
         // the searchText case below is the one that exercises it.
         private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";

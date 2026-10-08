@@ -45,14 +45,17 @@ jobs:
               run: |
                 echo -e "\n\n" >> preview_url.txt
 
-                # --concurrency 500: the preview CDN serves bursts without rate-limiting;
-                # the recurse otherwise brushes the job's 15-minute timeout.
+                # --concurrency 200: at 500 the preview returns 500/502 for pages that load
+                # fine, so their links go unchecked; at 100 the crawl brushes the 15-minute
+                # timeout. --retry-errors re-fetches those 5xx responses.
                 #
                 # app.buildwithfern.com is skipped: Fern's own platform JS bundle 404s with
                 # a per-build hash, so it is a false positive we do not control.
                 npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                   --recurse \
-                  --concurrency 500 \
+                  --concurrency 200 \
+                  --retry-errors \
+                  --retry-errors-count 3 \
                   --skip "search\/v2\/key" \
                   --skip "app.buildwithfern.com" \
                   --skip "https://ai.google.dev/gemini-api" \
@@ -80,6 +83,24 @@ jobs:
                   exit 0
                 fi
 
+                # Fern serves some freshly published preview files (_fern-img, _astro) as 404
+                # for a short while after publish, so re-check 404s before calling them broken.
+                # Only preview URLs are re-checked: never curl hosts a PR author controls.
+                ALL_404=$(jq -r '[.links[] | select(.state == "BROKEN" and (.status == 404 or .status == 410)) | .url] | unique | .[]' linkinator_results.json)
+                CANDIDATES=$(printf '%s\n' "$ALL_404" | grep -F "$PREVIEW_ORIGIN/" || true)
+                EXTERNAL_404=$(printf '%s\n' "$ALL_404" | grep -vF "$PREVIEW_ORIGIN/" || true)
+                for _ in 1 2 3; do
+                  [ -z "$CANDIDATES" ] && break
+                  sleep 20
+                  STILL=""
+                  while read -r url; do
+                    status=$(curl -s -o /dev/null -L --max-time 30 -w '%{http_code}' "$url") || true
+                    case "$status" in 404|410) STILL+="$url"$'\n' ;; esac
+                  done <<< "$CANDIDATES"
+                  CANDIDATES=$(printf '%s' "$STILL")
+                done
+                STILL_BROKEN=$(printf '%s\n%s\n' "$CANDIDATES" "$EXTERNAL_404" | jq -R 'select(length > 0)' | jq -sc .)
+
                 # Only 404/410 means a link is genuinely broken — the resource is gone or
                 # renamed. That is what catches real regressions (a moved provider page, a
                 # deleted doc) from any host. Everything else non-OK (0=timeout, 403=bot
@@ -89,8 +110,9 @@ jobs:
                 # every run, so failing on those never converges. `↳ on page` strips the
                 # ephemeral preview host to leave a stable, greppable doc path; dedup by url
                 # so one bad sidebar link cannot overflow GitHub's 65,536-char comment cap.
-                BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
-                  [.links[] | select(.state == "BROKEN" and (.status == 404 or .status == 410))]
+                BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" --argjson still "$STILL_BROKEN" '
+                  [.links[] | select(.state == "BROKEN" and (.status == 404 or .status == 410))
+                            | select(.url as $u | $still | index($u))]
                   | group_by(.url) | map(.[0]) | .[]
                   | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
                 ' linkinator_results.json)

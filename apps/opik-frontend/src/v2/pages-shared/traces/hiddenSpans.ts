@@ -30,8 +30,7 @@ export const excludeHiddenSpans = (spans: Span[]): Span[] => {
     if (cached !== undefined) return cached;
 
     const parent = spanById.get(parentId);
-    // Parent not in the loaded set — treat as a trace-root child.
-    if (!parent) return "";
+    if (!parent) return parentId;
 
     const result = isSpanHiddenByDefault(parent)
       ? resolveVisibleParent(parent.parent_span_id)

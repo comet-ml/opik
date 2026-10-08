@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.93](https://img.shields.io/badge/Version-2.2.93-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.93](https://img.shields.io/badge/AppVersion-2.2.93-informational?style=flat-square)
+![Version: 2.2.94](https://img.shields.io/badge/Version-2.2.94-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.94](https://img.shields.io/badge/AppVersion-2.2.94-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -58,7 +58,6 @@ Go to the chart folder, set VERSION you want to install and run helm install
 
 ```bash
 cd deployment/helm_chart/opik
-helm repo add bitnami https://charts.bitnami.com/bitnami
 helm dependency build
 VERSION=0.1.0
 helm upgrade --install opik -n opik --create-namespace -f values.yaml \
@@ -92,6 +91,8 @@ Call opik api on http://localhost:5173/api
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
+| altinity-clickhouse-operator.crdHook.image.repository | string | `"alpine/kubectl"` |  |
+| altinity-clickhouse-operator.crdHook.image.tag | string | `"1.35.0"` |  |
 | altinity-clickhouse-operator.enabled | bool | `true` |  |
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |

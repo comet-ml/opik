@@ -137,8 +137,10 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .ifPresent(builder::customHeaders);
 
         // This generator also serves OPEN_ROUTER, whose catalog includes the Claude models that take
-        // no sampling params. The judge path never reaches ChatCompletionService, so the capability
+        // no sampling params. The judge path never reaches SamplingParamsNormalizer, so the capability
         // gate has to be here too, or an evaluator rule on one fails every scoring run with a 400.
+        // OpenAI reasoning models lose their temperature earlier, in ChatCompletionService.scoreTrace,
+        // because that check needs the model registry and must skip OPEN_ROUTER.
         if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
