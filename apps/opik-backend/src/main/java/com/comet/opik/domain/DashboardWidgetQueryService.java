@@ -3,10 +3,12 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardWidgetQueryRequest;
+import com.comet.opik.api.validation.InRangeValidator;
 import com.comet.opik.infrastructure.CustomChartsConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redaction.RedactionGuard;
+import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.google.common.base.Throwables;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -21,8 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
@@ -50,13 +50,10 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     static final String WINDOW_START_PLACEHOLDER = "{{window_start}}";
     static final String WINDOW_END_PLACEHOLDER = "{{window_end}}";
 
-    // ClickHouse's DateTime64 range; a bound outside it would be clamped silently rather than rejected.
-    static final Instant MIN_BOUND = Instant.parse("1900-01-01T00:00:00Z");
-    static final Instant MAX_BOUND = Instant.parse("2299-12-31T23:59:59.999999999Z");
-
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
-            .ofPattern("uuuu-MM-dd HH:mm:ss.SSSSSSSSS")
-            .withZone(ZoneOffset.UTC);
+    // The range trace and span timestamps are validated against; DateTime64(9) ends at the exclusive maximum, and
+    // ClickHouse would clamp a bound outside it silently rather than reject it.
+    static final Instant MIN_BOUND = Instant.parse(InRangeValidator.MIN_ANALYTICS_DB);
+    static final Instant MAX_BOUND_EXCLUSIVE = Instant.parse(InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9);
 
     private final DashboardService dashboardService;
     private final FreeFormSqlQueryService freeFormSqlQueryService;
@@ -95,9 +92,9 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
         if (start.isAfter(end)) {
             throw new BadRequestException("interval_start must not be after interval_end");
         }
-        if (start.isBefore(MIN_BOUND) || end.isAfter(MAX_BOUND)) {
-            throw new BadRequestException("interval_start and interval_end must be between %s and %s"
-                    .formatted(MIN_BOUND, MAX_BOUND));
+        if (start.isBefore(MIN_BOUND) || !end.isBefore(MAX_BOUND_EXCLUSIVE)) {
+            throw new BadRequestException("interval_start must be at or after %s and interval_end before %s"
+                    .formatted(MIN_BOUND, MAX_BOUND_EXCLUSIVE));
         }
 
         var savedQuery = OllieChartWidgets.findQuery(dashboardService.findById(dashboardId, scope).config(), widgetId)
@@ -124,11 +121,11 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
      * {@code toDateTime64} wrapper only gives the value the {@code DateTime64(9)} type the placeholders stand for.
      */
     static String bindWindow(String sql, Instant start, Instant end) {
-        return sql.replace(WINDOW_START_PLACEHOLDER, dateTimeLiteral(start))
-                .replace(WINDOW_END_PLACEHOLDER, dateTimeLiteral(end));
+        return sql.replace(WINDOW_START_PLACEHOLDER, dateTimeExpression(start))
+                .replace(WINDOW_END_PLACEHOLDER, dateTimeExpression(end));
     }
 
-    private static String dateTimeLiteral(Instant instant) {
-        return "toDateTime64('%s', 9, 'UTC')".formatted(DATE_TIME_FORMATTER.format(instant));
+    private static String dateTimeExpression(Instant instant) {
+        return "toDateTime64('%s', 9, 'UTC')".formatted(ClickHouseDateTimeFormat.formatNanos(instant));
     }
 }

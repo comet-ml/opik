@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
 import com.comet.opik.api.resources.utils.resources.InsightsViewResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.validation.InRangeValidator;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -32,6 +33,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -46,11 +50,13 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.api.resources.utils.resources.DashboardTestDataFactory.createPartialDashboard;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Dashboard Widget Query Resource Test")
@@ -244,6 +250,31 @@ class DashboardWidgetQueryResourceTest {
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardId, widgetId,
                 window(traceStartA, traceStartA.minus(Duration.ofHours(1))), API_KEY_A, WORKSPACE_NAME_A),
                 Response.Status.BAD_REQUEST);
+    }
+
+    static Stream<Arguments> dateRangeBounds() {
+        var min = Instant.parse(InRangeValidator.MIN_ANALYTICS_DB);
+        var maxExclusive = Instant.parse(InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9);
+        return Stream.of(
+                arguments("start before the minimum", min.minusNanos(1), null, Response.Status.BAD_REQUEST),
+                arguments("end at the exclusive maximum", null, maxExclusive, Response.Status.BAD_REQUEST),
+                arguments("end after the maximum", null, maxExclusive.plus(Duration.ofDays(1)),
+                        Response.Status.BAD_REQUEST),
+                arguments("start at the minimum, end just below the maximum", min, maxExclusive.minusNanos(1),
+                        Response.Status.OK));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dateRangeBounds")
+    @DisplayName("a date range outside DateTime64(9) is rejected, and its edges are accepted")
+    void runWidgetQuery__whenRangeAtBounds__thenStatus(String description, @Nullable Instant start,
+            @Nullable Instant end, Response.Status expected) {
+        String widgetId = UUID.randomUUID().toString();
+        UUID dashboardId = dashboardClient.create(dashboard(widgetId, "ollie_chart", WINDOWED_QUERY, projectIdA),
+                API_KEY_A, WORKSPACE_NAME_A);
+
+        assertStatus(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(start, end), API_KEY_A,
+                WORKSPACE_NAME_A), expected);
     }
 
     @Test
