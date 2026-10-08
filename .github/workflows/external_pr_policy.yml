@@ -253,6 +253,7 @@ jobs:
               ]);
               if (lastAuthorActivity > reviewedAt) continue;
               if (lastMaintainerReviewAt && lastAuthorActivity > lastMaintainerReviewAt) continue;
+              if (comments.some((c) => c.body?.includes(CLOSE_MARKER) && Date.parse(c.created_at) > reviewedAt)) continue;
 
               const idleMs = now - reviewedAt;
               const warnedAt = latest(
