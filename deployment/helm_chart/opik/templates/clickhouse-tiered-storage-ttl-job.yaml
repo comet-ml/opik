@@ -63,7 +63,7 @@ spec:
             {{- range $var := list "ANALYTICS_DB_HOST" "ANALYTICS_DB_DATABASE_NAME" "ANALYTICS_DB_MIGRATIONS_USER" "ANALYTICS_DB_MIGRATIONS_PASS" }}
             {{- range $backend.envFrom }}
             {{- $prefix := .prefix | default "" }}
-            {{- if hasPrefix $prefix $var }}
+            {{- if and (hasPrefix $prefix $var) (ne $prefix $var) }}
             {{- if .configMapRef }}
             - name: {{ $var }}
               valueFrom:
