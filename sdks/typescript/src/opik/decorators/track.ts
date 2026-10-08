@@ -145,10 +145,13 @@ function logSuccess({
     Object.assign(spanUpdate, enrichedData);
   }
 
+  // Output set through getTrackContext() during the call is final: the return value doesn't
+  // replace it (the same rule as the Python SDK).
+  spanUpdate.output = span.data.output ?? spanUpdate.output;
   span.update(spanUpdate);
 
   if (trace) {
-    trace.update({ endTime, output });
+    trace.update({ endTime, output: trace.data.output ?? output });
   }
 }
 
