@@ -17,7 +17,9 @@ import org.redisson.Redisson;
 import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.stream.StreamCreateGroupArgs;
 import org.redisson.api.stream.StreamMessageId;
+import org.redisson.api.stream.StreamReadGroupArgs;
 import org.redisson.config.Config;
 
 import java.util.ArrayList;
@@ -167,6 +169,93 @@ class ExperimentCancellationServiceTest {
         service.cancel(WORKSPACE_ID, List.of(experimentId)).block();
 
         assertThat(service.isCancelled("other-workspace", experimentId).block()).isFalse();
+    }
+
+    // XDEL takes an entry out of the stream without telling the consumer holding it, so purging one
+    // mid provider call would count work that is still running and settle the run early.
+    @Test
+    @DisplayName("should leave the entries a consumer is already holding, and not count them")
+    void purgeQueuedSkipsInFlightEntries() {
+        var experimentId = UUID.randomUUID();
+        publish(messages(experimentId, 5));
+
+        var inFlight = deliverWithoutAck(2);
+
+        var drained = service.purgeQueued(WORKSPACE_ID, experimentId).block();
+
+        assertThat(drained)
+                .as("two are still with a consumer, so the run has not stopped producing")
+                .isFalse();
+        assertThat(itemCounter(experimentId).get().block())
+                .as("only the three nobody had taken are accounted for here; the other two count"
+                        + " themselves down when their calls return")
+                .isEqualTo(2L);
+        assertThat(remainingStreamIds())
+                .as("the entries a consumer holds are left in the stream")
+                .containsExactlyInAnyOrderElementsOf(inFlight);
+    }
+
+    @Test
+    @DisplayName("should not claim a drain when every entry is already with a consumer")
+    void purgeQueuedWithEverythingInFlight() {
+        var experimentId = UUID.randomUUID();
+        publish(messages(experimentId, 3));
+
+        deliverWithoutAck(3);
+
+        var drained = service.purgeQueued(WORKSPACE_ID, experimentId).block();
+
+        assertThat(drained).isFalse();
+        assertThat(itemCounter(experimentId).get().block())
+                .as("nothing was purged, so every item is still owed a decrement")
+                .isEqualTo(3L);
+    }
+
+    // Both the consumer draining the last item and a cancel emptying the queue reach the finish, and
+    // a counter taken past zero would otherwise re-run it for every item that lands afterwards.
+    @Test
+    @DisplayName("should hand the finish to the first caller only")
+    void claimFinishIsTakenOnce() {
+        var experimentId = UUID.randomUUID();
+
+        assertThat(service.claimFinish(WORKSPACE_ID, experimentId).block()).isTrue();
+        assertThat(service.claimFinish(WORKSPACE_ID, experimentId).block()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should let each experiment be finished on its own")
+    void claimFinishIsPerExperiment() {
+        var experimentId = UUID.randomUUID();
+        var sibling = UUID.randomUUID();
+
+        service.claimFinish(WORKSPACE_ID, experimentId).block();
+
+        assertThat(service.claimFinish(WORKSPACE_ID, sibling).block()).isTrue();
+    }
+
+    /**
+     * Reads entries through the consumer group without acking, which is what leaves them in the PEL —
+     * the state an item sits in while its provider call is running.
+     */
+    private List<StreamMessageId> deliverWithoutAck(int count) {
+        RStreamReactive<String, ExperimentItemToProcess> stream = redissonClient
+                .getStream(config.getStreamName(), config.getCodec());
+
+        stream.createGroup(StreamCreateGroupArgs.name(config.getConsumerGroupName())
+                .id(StreamMessageId.ALL)).block();
+
+        var delivered = stream.readGroup(config.getConsumerGroupName(), "test-consumer",
+                StreamReadGroupArgs.neverDelivered().count(count)).block();
+
+        return delivered == null ? List.of() : List.copyOf(delivered.keySet());
+    }
+
+    private List<StreamMessageId> remainingStreamIds() {
+        RStreamReactive<String, ExperimentItemToProcess> stream = redissonClient
+                .getStream(config.getStreamName(), config.getCodec());
+        var entries = stream.range(StreamMessageId.MIN, StreamMessageId.MAX).block();
+
+        return entries == null ? List.of() : List.copyOf(entries.keySet());
     }
 
     @SafeVarargs

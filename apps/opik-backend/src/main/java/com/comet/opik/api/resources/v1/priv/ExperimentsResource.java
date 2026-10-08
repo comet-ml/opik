@@ -605,7 +605,7 @@ public class ExperimentsResource {
     @Operation(operationId = "cancelExperiments", summary = "Cancel running experiments", description = "Stops the given experiments: queued items are skipped and the experiments are marked cancelled", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
-    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_CREATE)
     @RateLimited
     public Response cancelExperiments(
             @RequestBody(content = @Content(schema = @Schema(implementation = IdsHolder.class))) @NotNull @Valid IdsHolder idsHolder) {
