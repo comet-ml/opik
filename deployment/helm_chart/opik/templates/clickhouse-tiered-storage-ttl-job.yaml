@@ -1,0 +1,125 @@
+{{- $ttl := .Values.clickhouse.tieredStorage.ttl | default dict -}}
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.tieredStorage.enabled $ttl.enabled }}
+{{- range $ttl.tables }}
+{{- if not (regexMatch "^[A-Za-z_][A-Za-z0-9_]*$" (toString .name)) }}
+{{- fail (printf "clickhouse.tieredStorage.ttl.tables: name %q is not a plain identifier" (toString .name)) }}
+{{- end }}
+{{- if not (and (regexMatch "^[0-9]+$" (toString .moveAfterWeeks)) (gt (int .moveAfterWeeks) 0)) }}
+{{- fail (printf "clickhouse.tieredStorage.ttl.tables: moveAfterWeeks for %q must be a positive integer" (toString .name)) }}
+{{- end }}
+{{- end }}
+{{- $backend := .Values.component.backend }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opik.fullname" . }}-ch-tiered-storage-ttl
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opik.labels" $ | nindent 4 }}
+    component: {{ include "opik.name" $ }}-ch-tiered-storage-ttl
+    {{- with $.Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    # BeforeHookCreation too: a failed Job's fixed name would otherwise wedge every later PostSync.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    # After the cold-tier migration (15): the policy needs every replica's cold disk mounted.
+    argocd.argoproj.io/sync-wave: "20"
+    {{- else }}
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "20"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- end }}
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: {{ int $ttl.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        app: ch-tiered-storage-ttl
+    spec:
+      restartPolicy: Never
+      {{- with .Values.clickhouse.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($ttl.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($ttl.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: apply-ttl
+          image: {{ .Values.clickhouse.image }}
+          # Same ClickHouse settings and credentials as the backend's own migrations.
+          {{- if or $backend.envFrom $backend.secretRefs }}
+          envFrom:
+            {{- with $backend.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- range $backend.secretRefs }}
+            {{- if .name }}
+            - secretRef:
+                name: {{ .name }}
+            {{- end }}
+            {{- end }}
+          {{- end }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              for v in ANALYTICS_DB_HOST ANALYTICS_DB_DATABASE_NAME ANALYTICS_DB_MIGRATIONS_USER ANALYTICS_DB_MIGRATIONS_PASS; do
+                [ -n "${!v:-}" ] || { echo "ERROR: $v is not set; it comes from the opik-backend env." >&2; exit 1; }
+              done
+              DB="$ANALYTICS_DB_DATABASE_NAME"
+              [[ "$DB" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "ERROR: ANALYTICS_DB_DATABASE_NAME is not a plain identifier." >&2; exit 1; }
+              # Credentials via the client's env, not argv.
+              export CLICKHOUSE_USER="$ANALYTICS_DB_MIGRATIONS_USER" CLICKHOUSE_PASSWORD="$ANALYTICS_DB_MIGRATIONS_PASS"
+              ch() { clickhouse-client --host "$ANALYTICS_DB_HOST" --query "$1" < /dev/null; }
+
+              replicas=$(ch "SELECT count() FROM system.clusters WHERE cluster = getMacro('cluster')")
+              [ "${replicas:-0}" -gt 0 ] || { echo "ERROR: no replicas found for the cluster macro." >&2; exit 1; }
+              have_policy=$(ch "SELECT count() FROM clusterAllReplicas(getMacro('cluster'), system.storage_policies) WHERE policy_name = 'tiered_replicated' AND volume_name = 'cold'")
+              [ "$have_policy" = "$replicas" ] || { echo "ERROR: tiered_replicated policy with a cold volume is on ${have_policy} of ${replicas} replicas." >&2; exit 1; }
+
+              apply() {  # table weeks
+                local t="$1" w="$2" exists policy same want want_sql
+                exists=$(ch "EXISTS TABLE ${DB}.${t}")
+                case "$exists" in
+                  1) ;;
+                  0) echo "skip ${DB}.${t}: table does not exist"; return 0 ;;
+                  *) echo "ERROR: could not tell whether ${DB}.${t} exists: '${exists}'" >&2; return 1 ;;
+                esac
+                want="id_at + toIntervalWeek(${w}) TO DISK 'cold'"
+                want_sql="'id_at + toIntervalWeek(${w}) TO DISK \\'cold\\''"
+                policy=$(ch "SELECT storage_policy FROM system.tables WHERE database = '${DB}' AND name = '${t}'")
+                if [ "$policy" != "tiered_replicated" ]; then
+                  echo "${DB}.${t}: storage_policy ${policy} -> tiered_replicated"
+                  ch "ALTER TABLE ${DB}.${t} ON CLUSTER '{cluster}' MODIFY SETTING storage_policy = 'tiered_replicated'"
+                fi
+                # Compared in SQL: the client escapes quotes in its output.
+                same=$(ch "SELECT extract(create_table_query, 'TTL (.+?) SETTINGS ') = ${want_sql} FROM system.tables WHERE database = '${DB}' AND name = '${t}'")
+                if [ "$same" != "1" ]; then
+                  echo "${DB}.${t}: TTL -> ${want}"
+                  # Moving existing data is a separate, paced operator step (MATERIALIZE TTL).
+                  ch "ALTER TABLE ${DB}.${t} ON CLUSTER '{cluster}' MODIFY TTL id_at + INTERVAL ${w} WEEK TO DISK 'cold' SETTINGS materialize_ttl_after_modify = 0"
+                fi
+                # Settings are per replica, so check every one.
+                ok=$(ch "SELECT count() FROM clusterAllReplicas(getMacro('cluster'), system.tables) WHERE database = '${DB}' AND name = '${t}' AND storage_policy = 'tiered_replicated' AND extract(create_table_query, 'TTL (.+?) SETTINGS ') = ${want_sql}")
+                [ "$ok" = "$replicas" ] || { echo "ERROR: ${DB}.${t} matches on ${ok} of ${replicas} replicas." >&2; return 1; }
+                echo "OK: ${DB}.${t} tiered_replicated, TTL ${want}, on all ${replicas} replicas"
+              }
+              {{- range $ttl.tables }}
+              apply {{ .name }} {{ int .moveAfterWeeks }}
+              {{- end }}
+          {{- with $ttl.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
