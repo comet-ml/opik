@@ -57,23 +57,28 @@ const commitName = (name: string, current = /foo|Auto-generated/) => {
   fireEvent.keyDown(input, { key: "Enter" });
 };
 
-const finishedRun = (name: string | null) =>
+const finishedRun = (name: string | null, experimentCount = 2) => {
+  const experiments = Array.from({ length: experimentCount }, (_, index) => ({
+    id: `e${index + 1}`,
+    index,
+  }));
   usePlaygroundStore.setState({
-    promptIds: ["p1", "p2"],
+    promptIds: experiments.map((_, index) => `p${index + 1}`),
     experimentName: name,
     lastSuggestedExperimentName: null,
-    lastRun: {
-      name,
-      datasetId: DATASET_ID,
-      experiments: [
-        { id: "e1", index: 0 },
-        { id: "e2", index: 1 },
-      ],
-    },
+    lastRun: { name, datasetId: DATASET_ID, experiments },
   });
+};
 
 const editor = () => screen.getByTestId("playground-experiment-name-editor");
 const preview = () => screen.getByTestId("playground-experiment-name-preview");
+const moreLink = () => screen.getByTestId("playground-experiment-name-more");
+const expectMoreTooltip = async (text: string) => {
+  fireEvent.focus(moreLink());
+  await waitFor(() =>
+    expect(screen.getByRole("tooltip").textContent).toBe(text),
+  );
+};
 
 describe("PlaygroundExperimentName", () => {
   beforeEach(() => {
@@ -202,9 +207,8 @@ describe("PlaygroundExperimentName", () => {
 
     await waitFor(() => expect(editor()).toHaveTextContent("brave_tiger_1234"));
     expect(editor()).not.toHaveTextContent("Auto-generated name");
-    expect(
-      screen.getByTestId("playground-experiment-name-more"),
-    ).toHaveTextContent("+1 more");
+    expect(moreLink()).toHaveTextContent("+1 more");
+    await expectMoreTooltip("calm_river_5678");
 
     commitName("bar", /brave_tiger_1234/);
 
@@ -220,7 +224,7 @@ describe("PlaygroundExperimentName", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("counts every experiment of the run even when a name cannot be read", async () => {
+  it("labels the first experiment by its column when its name cannot be read", async () => {
     get.mockImplementation(async (url: string) => {
       if (url.endsWith("/e1")) throw new Error("Network Error");
       return { data: { id: "e2", name: "calm_river_5678" } };
@@ -228,10 +232,28 @@ describe("PlaygroundExperimentName", () => {
     finishedRun(null);
     renderName();
 
-    await waitFor(() => expect(editor()).toHaveTextContent("calm_river_5678"));
-    expect(
-      screen.getByTestId("playground-experiment-name-more"),
-    ).toHaveTextContent("+1 more");
+    await waitFor(() =>
+      expect(editor()).toHaveTextContent("Prompt A experiment"),
+    );
+    expect(moreLink()).toHaveTextContent("+1 more");
+    await expectMoreTooltip("calm_river_5678");
+  });
+
+  it("lists exactly the other experiments when a name in the middle cannot be read", async () => {
+    const serverNames: Record<string, string> = {
+      "/v1/private/experiments/e1": "brave_tiger_1234",
+      "/v1/private/experiments/e3": "quiet_lake_9012",
+    };
+    get.mockImplementation(async (url: string) => {
+      if (!serverNames[url]) throw new Error("Network Error");
+      return { data: { id: url.split("/").pop(), name: serverNames[url] } };
+    });
+    finishedRun(null, 3);
+    renderName();
+
+    await waitFor(() => expect(editor()).toHaveTextContent("brave_tiger_1234"));
+    expect(moreLink()).toHaveTextContent("+2 more");
+    await expectMoreTooltip("Prompt B experiment, quiet_lake_9012");
   });
 
   it("clearing the box lets the next run be auto-named instead", () => {

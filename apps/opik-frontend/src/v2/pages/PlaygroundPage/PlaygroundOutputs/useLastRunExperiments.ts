@@ -3,6 +3,7 @@ import sortBy from "lodash/sortBy";
 
 import { getExperimentById } from "@/api/datasets/useExperimentById";
 import { buildExperimentName } from "@/lib/experiments";
+import { getAlphabetLetter } from "@/lib/utils";
 import { PlaygroundLastRun } from "@/store/PlaygroundStore";
 import { Experiment } from "@/types/datasets";
 
@@ -11,6 +12,9 @@ export type LastRunExperiment = {
   index: number;
   name?: string;
 };
+
+export const getLastRunExperimentLabel = ({ name, index }: LastRunExperiment) =>
+  name ?? `Prompt ${getAlphabetLetter(index)} experiment`;
 
 const useLastRunExperiments = (
   lastRun: PlaygroundLastRun | null,

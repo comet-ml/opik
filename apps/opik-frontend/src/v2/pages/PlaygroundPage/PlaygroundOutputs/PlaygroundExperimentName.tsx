@@ -12,7 +12,9 @@ import {
 } from "@/store/PlaygroundStore";
 import { buildExperimentName } from "@/lib/experiments";
 import useRenameLastRunMutation from "@/api/playground/useRenameLastRunMutation";
-import useLastRunExperiments from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useLastRunExperiments";
+import useLastRunExperiments, {
+  getLastRunExperimentLabel,
+} from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useLastRunExperiments";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 type PlaygroundExperimentNameProps = {
@@ -44,13 +46,11 @@ const PlaygroundExperimentName = ({
     ? previewIndexes.map((index) => buildExperimentName(shownName, index))
     : [];
   const lastRunExperiments = useLastRunExperiments(lastRun);
-  const serverNames =
-    lastRun && !shownName
-      ? lastRunExperiments.flatMap((e) => (e.name ? [e.name] : []))
-      : [];
-  const moreExperimentsCount = serverNames.length
-    ? lastRunExperiments.length - 1
-    : 0;
+  const showRunLabels =
+    lastRun && !shownName && lastRunExperiments.some((e) => e.name);
+  const [firstRunLabel, ...moreRunLabels] = showRunLabels
+    ? lastRunExperiments.map(getLastRunExperimentLabel)
+    : [];
 
   const handleChangeName = useCallback(
     (value: string) => {
@@ -81,19 +81,19 @@ const PlaygroundExperimentName = ({
       <div className="min-w-0" data-testid="playground-experiment-name-editor">
         <InlineEditableText
           value={shownName ?? ""}
-          placeholder={serverNames[0] ?? "Auto-generated name"}
+          placeholder={firstRunLabel ?? "Auto-generated name"}
           onChange={handleChangeName}
           className="max-w-64 [&_input]:w-48"
           alwaysShowEditIcon
         />
       </div>
-      {moreExperimentsCount > 0 && (
-        <TooltipWrapper content={serverNames.join(", ")}>
+      {moreRunLabels.length > 0 && (
+        <TooltipWrapper content={moreRunLabels.join(", ")}>
           <span
             className="shrink-0 cursor-default text-sm text-muted-slate underline"
             data-testid="playground-experiment-name-more"
           >
-            +{moreExperimentsCount} more
+            +{moreRunLabels.length} more
           </span>
         </TooltipWrapper>
       )}
