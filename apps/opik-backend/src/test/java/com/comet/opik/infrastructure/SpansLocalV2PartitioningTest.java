@@ -4,8 +4,11 @@ import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanWeek;
+import com.comet.opik.domain.SpanWeeksDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WeeklyPartitions;
@@ -34,8 +37,11 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -153,12 +159,15 @@ class SpansLocalV2PartitioningTest {
             .newClickHouseContainer(zookeeperContainer);
 
     private final TransactionTemplateAsync transactionTemplateAsync;
+    private final SpanWeeksDAO spanWeeksDAO;
 
     {
         Startables.deepStart(zookeeperContainer, clickHouseContainer).join();
         MigrationUtils.runClickhouseDbMigration(clickHouseContainer);
-        transactionTemplateAsync = TransactionTemplateAsync.create(
-                ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouseContainer, DATABASE_NAME).build());
+        var connectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouseContainer, DATABASE_NAME)
+                .build();
+        transactionTemplateAsync = TransactionTemplateAsync.create(connectionFactory);
+        spanWeeksDAO = new SpanWeeksDAO(connectionFactory, new InstantToUUIDMapper());
     }
 
     /**
@@ -627,6 +636,41 @@ class SpansLocalV2PartitioningTest {
                 .isEqualTo(String.valueOf(WeeklyPartitions.storedPartitionOf(id)));
     }
 
+    /**
+     * The backfill, reading the unpartitioned legacy spans table in id ranges that tile every id, registers the
+     * partition spans_local_v2 stores each span in: non-v7 and nil ids in whichever range holds them, far-future ones
+     * in the open last range. The expected week is the partition ClickHouse writes the same id to in spans_local_v2,
+     * not a value computed in Java.
+     */
+    @Test
+    void backfillRegistersThePartitionEachSpanIsStoredIn() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        Map<UUID, UUID> traceIdBySpanId = idsAcrossPartitionEdges()
+                .collect(Collectors.toMap(Function.identity(), id -> ID_GENERATOR.generateId()));
+        var oracleWorkspaceId = UUID.randomUUID().toString();
+        traceIdBySpanId.forEach((id, traceId) -> {
+            insert("spans", List.of(id), workspaceId, projectId, traceId, weekInstant(0));
+            insert(List.of(id), oracleWorkspaceId, projectId, traceId, weekInstant(0));
+        });
+
+        var expected = traceIdBySpanId.entrySet().stream()
+                .map(entry -> SpanWeek.builder()
+                        .projectId(projectId)
+                        .traceId(entry.getValue())
+                        .idWeek(Long.parseLong(partitionIdFor(oracleWorkspaceId, projectId, entry.getKey())))
+                        .build())
+                .toList();
+        spanWeeksDAO.backfill(0, 20250303L, 4, 600).block();
+        spanWeeksDAO.backfill(20250303L, 20250310L, 4, 600).block();
+        spanWeeksDAO.backfill(20250310L, null, 4, 600).block();
+
+        assertThat(spanWeeksDAO.findByTraceIds(traceIdBySpanId.values())
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, "user", workspaceId))
+                .block())
+                .containsExactlyInAnyOrderElementsOf(expected);
+    }
+
     private static UUID uuidV7(long epochMillis) {
         return new UUID((epochMillis << 16) | 0x7000L, 0x8000_0000_0000_0000L);
     }
@@ -683,8 +727,13 @@ class SpansLocalV2PartitioningTest {
      * tests exercise are bound — the rest take their DDL defaults.
      */
     private void insert(List<UUID> ids, String workspaceId, UUID projectId, UUID traceId, Instant lastUpdatedAt) {
+        insert("spans_local_v2", ids, workspaceId, projectId, traceId, lastUpdatedAt);
+    }
+
+    private void insert(String table, List<UUID> ids, String workspaceId, UUID projectId, UUID traceId,
+            Instant lastUpdatedAt) {
         var sql = TemplateUtils.getBatchSql("""
-                INSERT INTO spans_local_v2 (
+                INSERT INTO <table> (
                     id,
                     workspace_id,
                     project_id,
@@ -703,7 +752,7 @@ class SpansLocalV2PartitioningTest {
                         <if(item.hasNext)>,<endif>
                     }>
                 ;
-                """, ids.size()).render();
+                """, ids.size()).add("table", table).render();
         transactionTemplateAsync.nonTransaction(connection -> {
             var statement = connection.createStatement(sql)
                     .bind("workspace_id", workspaceId)

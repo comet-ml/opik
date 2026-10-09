@@ -177,6 +177,33 @@ databaseAnalyticsDataModel:
   #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
   #   indexed. Off writes nothing.
   spanWeeksWriteEnabled: false
+  #  Default: false
+  #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
+  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
+  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  spanWeeksBackfillEnabled: false
+
+# Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
+# It tiles the span ids into ranges of weeks, from the first span's created_at week to the plan's own week, open at both
+# ends, and backfills one range per run. Progress is kept in the span_weeks_backfill_chunks state table, so it resumes
+# across restarts.
+spanWeeksBackfill:
+  #  Default: 5m
+  #  Description: How often a run starts; each run backfills one chunk, so this leaves room for its insert
+  interval: 5m
+  #  Default: 4
+  #  Description: Weeks of span ids one run backfills
+  weeksPerChunk: 4
+  #  Default: 4
+  #  Description: ClickHouse threads one run may use (prod replicas have 48 vCPUs); memory is left to the server
+  #   profile's GROUP BY spill
+  maxThreads: 4
+  #  Default: 4m
+  #  Description: ClickHouse max_execution_time for one chunk, and how long a run holds the job lock. Keep it under
+  #   ~90 x httpHeadersProgressIntervalMs (270s at the default 3s): past that the R2DBC driver runs out of progress
+  #   headers and fails the statement as a connection error. A 4-week range is estimated at 1-3 minutes on prod at
+  #   4 threads (OPIK-8706); if ranges time out, lower weeksPerChunk
+  queryTimeout: 4m
 
 bulkInsert:
   # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as

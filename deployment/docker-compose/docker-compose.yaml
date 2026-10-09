@@ -210,6 +210,8 @@ services:
       ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED: ${ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED:-false}
       # Registers each written span's weekly partition in span_weeks; turn true before the span weeks backfill.
       ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED:-false}
+      # Runs the span weeks backfill job; turn true only once the write flag above is live.
+      ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
       # Readiness probes for the Hyperscale topology, both off for the single-node Compose stack: the cluster probe
       # checks the Distributed cluster definition is visible, the cold-storage probe checks the cold_s3 tiered disk.
       ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}
