@@ -418,49 +418,82 @@ describe("the penalties a playground run sends", () => {
   );
 });
 
-describe("the finish reason a run reports", () => {
+describe("the finish reason a playground run reports", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  const finishReasonOf = async (stream: string) => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(stream));
+  const sse = (...events: object[]) =>
+    events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") +
+    "data: [DONE]\n\n";
+
+  const runAgainst = async (body: string) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(body));
     const { result } = renderHook(() =>
       useCompletionProxyStreaming({ workspaceName: "default" }),
     );
 
-    const run = await result.current({
-      model: PROVIDER_MODEL_TYPE.GPT_4O,
+    return result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_5_NANO,
       messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
-      configs: {} as LLMPromptConfigsType,
+      configs: { maxCompletionTokens: 60 } as LLMPromptConfigsType,
       onAddChunk: vi.fn(),
       signal: new AbortController().signal,
     });
-    return run.finishReason;
   };
 
-  it.each([
-    {
-      name: "a finish, then a usage chunk with no choices",
-      stream:
-        'data: {"choices":[{"delta":{"content":"You are"}}]}\n' +
-        'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n' +
-        'data: {"choices":[],"usage":{"completion_tokens":4000}}\n' +
-        "data: [DONE]\n",
-      expected: "length",
-    },
-    {
-      name: "the finish on the last content chunk",
-      stream:
-        'data: {"choices":[{"delta":{"content":"You are"},"finish_reason":"stop"}]}\n',
-      expected: "stop",
-    },
-    {
-      name: "no finish",
-      stream: 'data: {"choices":[{"delta":{"content":"You are"}}]}\n',
-      expected: null,
-    },
-  ])("reports $expected for $name", async ({ stream, expected }) => {
-    expect(await finishReasonOf(stream)).toBe(expected);
+  const USAGE = { prompt_tokens: 58, completion_tokens: 60, total_tokens: 118 };
+
+  it.each<[string, string, string | null]>([
+    [
+      "keeps OpenAI's length although the usage chunk after it has no choices",
+      sse(
+        { choices: [{ index: 0, delta: { content: "" } }] },
+        { choices: [{ index: 0, delta: {}, finish_reason: "length" }] },
+        { choices: [], usage: USAGE },
+      ),
+      "length",
+    ],
+    [
+      "reads a finish reason sent together with the usage",
+      sse(
+        { choices: [{ delta: { content: "" } }] },
+        {
+          choices: [{ delta: { content: "" }, finish_reason: "length" }],
+          usage: USAGE,
+        },
+      ),
+      "length",
+    ],
+    [
+      "reports stop for an answer that finished normally",
+      sse(
+        { choices: [{ delta: { content: "hi" } }] },
+        { choices: [{ delta: { content: "" }, finish_reason: "stop" }] },
+      ),
+      "stop",
+    ],
+    [
+      "reports none when the stream carries no finish reason",
+      sse({ choices: [{ delta: { content: "" } }], usage: USAGE }),
+      null,
+    ],
+  ])("%s", async (_, body, expected) => {
+    const run = await runAgainst(body);
+
+    expect(run.finishReason).toBe(expected);
+  });
+
+  it("returns an empty result for a run that spent the limit on reasoning", async () => {
+    const run = await runAgainst(
+      sse(
+        { choices: [{ index: 0, delta: { content: "" } }] },
+        { choices: [{ index: 0, delta: {}, finish_reason: "length" }] },
+        { choices: [], usage: USAGE },
+      ),
+    );
+
+    expect(run.result).toBe("");
+    expect(run.usage).toEqual(USAGE);
   });
 });
