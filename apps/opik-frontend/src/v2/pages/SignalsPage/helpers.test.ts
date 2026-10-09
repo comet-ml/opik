@@ -5,7 +5,11 @@ import {
   AgentInsightsIssue,
   AgentInsightsJob,
 } from "@/types/signals";
-import { countAffectedTraces, isGuidanceOutdated } from "./helpers";
+import {
+  countAffectedTraces,
+  getHeaderControls,
+  isGuidanceOutdated,
+} from "./helpers";
 
 const job = (fields: Partial<AgentInsightsJob>): AgentInsightsJob => ({
   id: "j1",
@@ -70,5 +74,45 @@ describe("countAffectedTraces", () => {
         issue(AGENT_INSIGHTS_ISSUE_STATUS.closed, 20),
       ]),
     ).toBe(15);
+  });
+});
+
+describe("getHeaderControls", () => {
+  it("offers Settings before the first run, but not Run", () => {
+    expect(
+      getHeaderControls({
+        showClosed: false,
+        canConfigure: true,
+        showJobControls: false,
+      }),
+    ).toEqual({ settings: true, run: false });
+  });
+
+  it("offers both once the job has something to show", () => {
+    expect(
+      getHeaderControls({
+        showClosed: false,
+        canConfigure: true,
+        showJobControls: true,
+      }),
+    ).toEqual({ settings: true, run: true });
+  });
+
+  it("offers neither without configure permission or on Closed issues", () => {
+    const none = { settings: false, run: false };
+    expect(
+      getHeaderControls({
+        showClosed: false,
+        canConfigure: false,
+        showJobControls: true,
+      }),
+    ).toEqual(none);
+    expect(
+      getHeaderControls({
+        showClosed: true,
+        canConfigure: true,
+        showJobControls: true,
+      }),
+    ).toEqual(none);
   });
 });
