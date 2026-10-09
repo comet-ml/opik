@@ -20,6 +20,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -45,13 +46,12 @@ public class AuthFilter implements ContainerRequestFilter {
         var sessionToken = headers.getCookies().get(RequestContext.SESSION_COOKIE);
 
         UriInfo uriInfo = context.getUriInfo();
-        String path = uriInfo.getRequestUri().getPath();
+        Optional<String> templatePath = MatchedTemplatePathResolver.resolve(uriInfo);
 
         // Unlike other /v1/internal/* endpoints, the Agent Insights query executor must be authenticated: it derives
         // the bounding workspace_id from auth (see OPIK-6814 / Agent Insights technical design), so it goes through the
         // same authentication path as /v1/private/*.
-        if (PRIVATE_PATH_PATTERN.matcher(path).matches()
-                || ANALYTICS_QUERIES_PATH_PATTERN.matcher(path).matches()) {
+        if (templatePath.map(AuthFilter::requiresAuthentication).orElse(true)) {
             ContextInfoHolder contextInfo = ContextInfoHolder.builder()
                     .uriInfo(uriInfo)
                     .method(context.getMethod())
@@ -68,11 +68,16 @@ public class AuthFilter implements ContainerRequestFilter {
             } else {
                 authService.authenticate(headers, sessionToken, contextInfo);
             }
-        } else if (SESSION_PATH_PATTERN.matcher(path).matches()) {
+        } else if (templatePath.filter(path -> SESSION_PATH_PATTERN.matcher(path).matches()).isPresent()) {
             authService.authenticateSession(sessionToken);
         }
 
         requestContext.get().setHeaders(context.getHeaders());
+    }
+
+    private static boolean requiresAuthentication(String templatePath) {
+        return PRIVATE_PATH_PATTERN.matcher(templatePath).matches()
+                || ANALYTICS_QUERIES_PATH_PATTERN.matcher(templatePath).matches();
     }
 
     @SuppressWarnings("unchecked")
