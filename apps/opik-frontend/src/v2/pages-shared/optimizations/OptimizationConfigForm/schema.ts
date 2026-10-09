@@ -7,6 +7,7 @@ import isUndefined from "lodash/isUndefined";
 import mapKeys from "lodash/mapKeys";
 import omit from "lodash/omit";
 import omitBy from "lodash/omitBy";
+import pick from "lodash/pick";
 import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
@@ -265,12 +266,13 @@ const OPEN_ROUTER_CUSTOM_PARAMETER_KEYS = [
 const toFormModelConfig = (
   model: PROVIDER_MODEL_TYPE | "",
   parameters: Record<string, unknown>,
+  formKeys: string[],
 ): Record<string, unknown> => {
-  const config = mapKeys(parameters, (_, key) =>
+  const saved = mapKeys(parameters, (_, key) =>
     key === "custom_parameters" ? key : camelCase(key),
   );
-  const customParameters = isPlainObject(config.custom_parameters)
-    ? (config.custom_parameters as Record<string, unknown>)
+  const customParameters = isPlainObject(saved.custom_parameters)
+    ? (saved.custom_parameters as Record<string, unknown>)
     : {};
   const provider = model ? getProviderFromModel(model) : undefined;
 
@@ -278,8 +280,10 @@ const toFormModelConfig = (
     provider === PROVIDER_TYPE.OPEN_ROUTER
       ? ["maxTokens", "maxCompletionTokens"]
       : ["maxCompletionTokens", "maxTokens"];
-  config[tokenKey] ??= config[otherTokenKey];
-  delete config[otherTokenKey];
+  saved[tokenKey] ??= saved[otherTokenKey];
+  // A run created through the API can hold any parameter, and one the form has no control for
+  // would still be sent on re-run without the user ever seeing it.
+  const config = pick(saved, [...formKeys, "custom_parameters"]);
 
   if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
     // The nested value wins: it is the one the gateway forwards, while a flat top_k is dropped.
@@ -357,6 +361,7 @@ export const convertOptimizationStudioToFormData = (
   const existingConfig = toFormModelConfig(
     model,
     optimization?.studio_config?.llm_model?.parameters ?? {},
+    Object.keys(defaultConfig),
   );
   // Claude takes temperature or top_p, never both, and temperature wins a config holding the two,
   // so a run saved with top_p must not get the default temperature back.
