@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.clickhouse.client.api.ServerException;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
@@ -7,6 +8,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.HttpHeaders;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -178,6 +180,22 @@ class FreeFormSqlQueryServiceTest {
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
                 .join()).cause().satisfies(withheld(503));
+    }
+
+    @Test
+    @DisplayName("ClickHouse's concurrent-query cap is a retryable 429, not a failed query")
+    void tooManySimultaneousQueriesIsRetryable() {
+        givenClickHouseReturnsOneRow();
+        when(dao.execute(any(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new ServerException(202, "Too many simultaneous queries for user", 500, "query-id")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().satisfies(error -> {
+                    var response = ((WebApplicationException) error).getResponse();
+                    assertThat(response.getStatus()).isEqualTo(429);
+                    assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+                });
     }
 
     @Test
