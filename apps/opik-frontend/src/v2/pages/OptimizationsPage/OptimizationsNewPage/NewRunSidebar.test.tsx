@@ -193,7 +193,7 @@ beforeEach(() => {
   mocks.openAICompatibleModels = NO_CUSTOM_MODELS;
 });
 
-describe("NewRunSidebar — re-run of a model the picker no longer offers", () => {
+describe("NewRunSidebar — re-run model resolution", () => {
   beforeEach(() => {
     mocks.isRegistryFetched = true;
     mocks.hasRegistryModels = true;

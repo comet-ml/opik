@@ -73,7 +73,10 @@ const OptimizationsNewPageContent: React.FC<
   const isMissingProviderKey =
     providerKeysReady && Boolean(model) && !availableModels.includes(model);
 
-  const { isSubmitting } = form.formState;
+  const { isSubmitting, dirtyFields } = form.formState;
+  const replacementSettingsNote = dirtyFields.modelConfig
+    ? ""
+    : " with its default settings";
 
   // The variable-mismatch check lives outside the zod schema, so guard it here
   // even though RHF has already validated the fields.
@@ -131,7 +134,7 @@ const OptimizationsNewPageContent: React.FC<
               The saved model {savedModelReplacement.savedModel} isn&apos;t
               available here
               {savedModelReplacement.replacementModel
-                ? `, so this run uses ${savedModelReplacement.replacementLabel} with its default settings.`
+                ? `, so this run uses ${savedModelReplacement.replacementLabel}${replacementSettingsNote}.`
                 : ". Pick a model to run."}
             </span>
           )}

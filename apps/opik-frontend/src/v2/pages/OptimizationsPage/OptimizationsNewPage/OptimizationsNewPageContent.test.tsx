@@ -31,12 +31,16 @@ type MockHandlers = {
   isDatasetLoading?: boolean;
   datasetId?: string;
   isSubmitting?: boolean;
+  dirtyFields?: Record<string, unknown>;
 };
 
 // Factory that returns a mock matching useOptimizationsNewFormHandlers' shape.
 const makeHandlers = (overrides: MockHandlers) => ({
   form: {
-    formState: makeFormState({ isSubmitting: overrides.isSubmitting ?? false }),
+    formState: makeFormState({
+      isSubmitting: overrides.isSubmitting ?? false,
+      dirtyFields: overrides.dirtyFields ?? {},
+    }),
     handleSubmit: vi.fn(() => () => Promise.resolve()),
   },
   activeProjectId: "proj-1",
@@ -79,6 +83,7 @@ const renderContent = ({
   model = "openai/gpt-4o",
   isDatasetError = false,
   savedModelReplacement,
+  dirtyFields,
 }: {
   availableModels?: string[];
   providerKeysReady?: boolean;
@@ -87,11 +92,14 @@ const renderContent = ({
   savedModelReplacement?: ComponentProps<
     typeof OptimizationsNewPageContent
   >["savedModelReplacement"];
+  dirtyFields?: Record<string, unknown>;
 } = {}) => {
   mockUseHandlers.mockReturnValue(
-    makeHandlers({ model, isDatasetError }) as unknown as ReturnType<
-      typeof useOptimizationsNewFormHandlers
-    >,
+    makeHandlers({
+      model,
+      isDatasetError,
+      dirtyFields,
+    }) as unknown as ReturnType<typeof useOptimizationsNewFormHandlers>,
   );
 
   return render(
@@ -220,6 +228,19 @@ describe("OptimizationsNewPageContent — replaced saved model", () => {
     expect(
       screen.getByText(
         "The saved model openai/r3c-retired-model isn't available here, so this run uses GPT 4o with its default settings.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("stops calling the settings defaults once they are edited", () => {
+    renderContent({
+      savedModelReplacement: REPLACEMENT,
+      dirtyFields: { modelConfig: true },
+    });
+
+    expect(
+      screen.getByText(
+        "The saved model openai/r3c-retired-model isn't available here, so this run uses GPT 4o.",
       ),
     ).toBeInTheDocument();
   });

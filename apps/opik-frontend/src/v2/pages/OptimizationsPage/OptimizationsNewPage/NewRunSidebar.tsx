@@ -94,8 +94,8 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     hasRegistryModels,
   } = useLLMProviderModelsData();
 
-  // Seeding resolves providers through getProviderFromModel, which reads the store the hook above
-  // copies the registry into from an effect. In the render where isRegistryFetched turns true that
+  // Seeding resolves providers through getProviderFromModel, which reads a store that the hook above
+  // fills with the registry from an effect. In the render where isRegistryFetched turns true that
   // store still holds the bundled list, which lacks hidden and newer ids, so an OpenRouter one would
   // be seeded as OpenAI. This flag turns true one render later, after the copy.
   const [isRegistryInStore, setIsRegistryInStore] = useState(false);

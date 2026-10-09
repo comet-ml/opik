@@ -744,7 +744,7 @@ describe("convertOptimizationStudioToFormData — OpenRouter effort on re-run", 
   });
 });
 
-describe("convertOptimizationStudioToFormData — saved model the workspace can't run", () => {
+describe("convertOptimizationStudioToFormData — keeping or replacing the saved model", () => {
   const savedRun = (optimizerParameters: Record<string, unknown> = {}) =>
     ({
       studio_config: {
