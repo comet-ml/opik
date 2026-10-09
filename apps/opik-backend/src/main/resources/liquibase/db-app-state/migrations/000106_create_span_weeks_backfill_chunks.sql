@@ -15,11 +15,3 @@ CREATE TABLE IF NOT EXISTS span_weeks_backfill_chunks (
 );
 
 --rollback DROP TABLE IF EXISTS span_weeks_backfill_chunks;
-
---changeset thiagohora:000106_add_projects_span_weeks_backfilled_index
---comment: Index the projects the span weeks backfill still has to check, in id order
-
--- The backfill walks the unmarked projects by id on every step; without it each walk scans the whole table.
-CREATE INDEX projects_span_weeks_backfilled_id_idx ON projects (span_weeks_backfilled, id);
-
---rollback DROP INDEX projects_span_weeks_backfilled_id_idx ON projects;
