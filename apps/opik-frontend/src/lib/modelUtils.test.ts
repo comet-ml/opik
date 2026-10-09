@@ -10,6 +10,7 @@ import {
   isReasoningModel,
   resolveEffort,
   resolveSamplingParams,
+  resolveThinkingLevel,
   SamplingParams,
   sanitizeConfigForRequest,
   supportsAnthropicThinkingEffort,
@@ -1512,6 +1513,71 @@ describe("resolveEffort", () => {
       }),
     ).toEqual({ reasoningEffort: "low", thinkingEffort: "max" });
   });
+});
+
+describe("resolveThinkingLevel", () => {
+  it.each<[string, PROVIDER_MODEL_TYPE, Record<string, unknown>, string]>([
+    [
+      "keeps a stored level the model offers",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { thinkingLevel: "low" },
+      "low",
+    ],
+    [
+      "falls back to the default for a stored level the model does not offer",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { thinkingLevel: "minimal" },
+      "auto",
+    ],
+    [
+      "does the same on Vertex AI",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      { thinkingLevel: "minimal" },
+      "auto",
+    ],
+    [
+      "keeps minimal on a model that offers it",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      { thinkingLevel: "minimal" },
+      "minimal",
+    ],
+    [
+      "falls back to the default when nothing is stored",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      {},
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_FLASH),
+    ],
+    [
+      "reads a level nested under custom_parameters",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { custom_parameters: { thinking: { level: "high" } } },
+      "high",
+    ],
+    [
+      "lets a flat level win over a nested one",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      {
+        thinkingLevel: "medium",
+        custom_parameters: { thinking: { level: "high" } },
+      },
+      "medium",
+    ],
+  ])("%s", (_, model, configs, expected) => {
+    expect(resolveThinkingLevel(model, configs)).toBe(expected);
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])(
+    "sends what the dropdown shows for a stored level %s does not offer",
+    (model) => {
+      const configs = { thinkingLevel: "minimal" as const };
+
+      expect(resolveThinkingLevel(model, configs)).toBe("auto");
+      expect(sanitizeConfigForRequest(model, configs)).toEqual({});
+    },
+  );
 });
 
 describe("the settings panel and the request agree on effort", () => {
