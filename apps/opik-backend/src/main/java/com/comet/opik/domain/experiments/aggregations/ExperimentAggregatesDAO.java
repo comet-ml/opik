@@ -2527,6 +2527,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 createdBy,
                 lastUpdatedBy,
                 status,
+                null, // finishedAt - not in aggregates table
                 experimentScores,
                 null, // promptVersion (singular) - not in DB
                 promptVersions,

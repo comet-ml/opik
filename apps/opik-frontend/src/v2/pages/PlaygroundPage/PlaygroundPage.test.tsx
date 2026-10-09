@@ -69,6 +69,7 @@ vi.mock("@/v2/pages/PlaygroundPage/useActionButtonActions", () => {
   const actions = {
     runAll: vi.fn(),
     stopAll: vi.fn(),
+    stopWatching: vi.fn(),
     runSingle: vi.fn(),
     stopSingle: vi.fn(),
   };
