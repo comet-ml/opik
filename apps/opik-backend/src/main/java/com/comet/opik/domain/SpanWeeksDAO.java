@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.utils.template.TemplateUtils;
+import com.google.common.base.Preconditions;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -81,6 +82,7 @@ public class SpanWeeksDAO {
     }
 
     public Mono<List<SpanWeek>> findByTraceIds(@NonNull Collection<UUID> traceIds) {
+        Preconditions.checkArgument(!traceIds.isEmpty(), "Argument 'traceIds' must not be empty");
         return makeMonoContextAware((userName, workspaceId) -> Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = getSTWithLogComment(FIND_BY_TRACE_IDS, "find_span_weeks_by_trace_ids", workspaceId,
