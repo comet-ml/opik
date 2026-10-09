@@ -12,6 +12,7 @@ type UseTracesStatisticParams = {
   fromTime?: string;
   toTime?: string;
   logsSource?: LOGS_SOURCE;
+  annotationQueueId?: string;
 };
 
 export type UseTracesStatisticResponse = {
@@ -27,6 +28,7 @@ const getTracesStatistic = async (
     fromTime,
     toTime,
     logsSource,
+    annotationQueueId,
   }: UseTracesStatisticParams,
 ) => {
   const { data } = await api.get<UseTracesStatisticResponse>(
@@ -42,6 +44,9 @@ const getTracesStatistic = async (
         ...(search && { search }),
         ...(fromTime && { from_time: fromTime }),
         ...(toTime && { to_time: toTime }),
+        ...(annotationQueueId && {
+          annotation_queue_id: annotationQueueId,
+        }),
       },
     },
   );
