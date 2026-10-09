@@ -47,26 +47,19 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
 
   const isDirty = guidance !== saved;
 
-  // Unsaved edits only go away through Cancel; Esc and the close arrow keep them.
-  const handleOpenChange = (next: boolean) => {
-    if (!next && isDirty) return;
-    setOpen(next);
-  };
-
-  const save = (andRun: boolean) => {
-    const done = () => {
-      setOpen(false);
-      if (andRun) onRun?.();
-    };
-    if (!isDirty) {
-      done();
-      return;
-    }
-    mutate({ projectId, guidance }, { onSuccess: done });
-  };
+  const save = (andRun: boolean) =>
+    mutate(
+      { projectId, guidance },
+      {
+        onSuccess: () => {
+          setOpen(false);
+          if (andRun) onRun?.();
+        },
+      },
+    );
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col gap-0 p-0 sm:max-w-[560px]"
@@ -135,7 +128,7 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
             <ButtonWithDropdownTrigger
               size="sm"
               triggerClassName="w-8 border-l border-[var(--click-blue)] px-0 [&>svg]:size-3.5"
-              disabled={isPending}
+              disabled={!isDirty || isPending}
               onPrimaryClick={() => save(false)}
             >
               Save guidance
