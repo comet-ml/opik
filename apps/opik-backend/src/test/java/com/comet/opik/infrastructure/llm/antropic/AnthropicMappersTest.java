@@ -96,33 +96,29 @@ public class AnthropicMappersTest {
                             .toList());
         }
 
-        @Test
-        void toCreateMessage_appliesDefaultMaxTokens_whenNull() {
+        @ParameterizedTest(name = "max_completion_tokens={0}, max_tokens={1} -> {2}")
+        @MethodSource("maxTokensValues")
+        void toCreateMessage_resolvesMaxTokens(Integer maxCompletionTokens, Integer maxTokens, int expected) {
             var request = ChatCompletionRequest.builder()
                     .model("claude-sonnet-4-6")
                     .stream(false)
                     .addUserMessage("hi")
+                    .maxCompletionTokens(maxCompletionTokens)
+                    .maxTokens(maxTokens)
                     .build();
 
             AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
                     .toCreateMessageRequest(request);
 
-            assertThat(actual.maxTokens).isEqualTo(LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS);
+            assertThat(actual.maxTokens).isEqualTo(expected);
         }
 
-        @Test
-        void toCreateMessage_preservesExplicitMaxTokens() {
-            var request = ChatCompletionRequest.builder()
-                    .model("claude-sonnet-4-6")
-                    .stream(false)
-                    .addUserMessage("hi")
-                    .maxCompletionTokens(123)
-                    .build();
-
-            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
-                    .toCreateMessageRequest(request);
-
-            assertThat(actual.maxTokens).isEqualTo(123);
+        static Stream<Arguments> maxTokensValues() {
+            return Stream.of(
+                    Arguments.of(null, null, LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS),
+                    Arguments.of(123, null, 123),
+                    Arguments.of(null, 20, 20),
+                    Arguments.of(123, 8192, 123));
         }
 
         @ParameterizedTest

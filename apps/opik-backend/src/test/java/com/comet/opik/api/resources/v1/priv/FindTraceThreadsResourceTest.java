@@ -37,13 +37,17 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.Response;
@@ -62,8 +66,10 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -78,6 +84,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -100,6 +107,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 @DisplayName("Find Trace Threads  Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -156,9 +164,11 @@ class FindTraceThreadsResourceTest {
     private SpanResourceClient spanResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
     private IdGenerator idGenerator;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, com.comet.opik.domain.IdGenerator idGenerator) {
+    void setUpAll(ClientSupport client, com.comet.opik.domain.IdGenerator idGenerator,
+            TransactionTemplateAsync clickHouseTemplate) {
 
         var baseURI = TestUtils.getBaseUrl(client);
 
@@ -171,6 +181,7 @@ class FindTraceThreadsResourceTest {
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
         this.idGenerator = idGenerator;
+        this.clickHouseTemplate = clickHouseTemplate;
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -453,6 +464,40 @@ class FindTraceThreadsResourceTest {
 
             assertThreadPage(projectName, null, expectedThreads, List.of(), queryParams, API_KEY,
                     TEST_WORKSPACE);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = TraceThreadField.class, names = {"FIRST_MESSAGE", "LAST_MESSAGE"})
+        @DisplayName("when truncating, a message filter matching past the truncation limit lists the thread it counts")
+        void whenTruncateAndMessageMatchesPastTruncationLimit__thenThreadIsListed(TraceThreadField messageField) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var marker = RandomStringUtils.secure().nextAlphanumeric(20);
+            JsonNode payloadWithMarkerPastLimit = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("text", "x".repeat(10_001) + marker)));
+
+            traceResourceClient.batchCreateTraces(List.of(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .input(payloadWithMarkerPastLimit)
+                    .output(payloadWithMarkerPastLimit)
+                    .build()), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var messageFilter = TraceThreadFilter.builder()
+                    .field(messageField)
+                    .operator(Operator.CONTAINS)
+                    .value(marker)
+                    .build();
+
+            var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                    List.of(messageFilter), List.of(), Map.of("truncate", "true"));
+
+            assertThat(page.content()).extracting(TraceThread::id).containsExactly(threadId);
+            assertThat(page.total()).isEqualTo(1);
+            var listedThread = page.content().getFirst();
+            assertThat(List.of(listedThread.firstMessage(), listedThread.lastMessage()))
+                    .allSatisfy(message -> assertThat(message.toString()).doesNotContain(marker));
         }
 
         @Test
@@ -1184,6 +1229,192 @@ class FindTraceThreadsResourceTest {
                     .build();
 
             assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("When a thread has a trace with the epoch sentinel start time, then start, end, duration and messages skip that trace")
+        void whenThreadHasSentinelStartTrace__thenStartEndDurationAndMessagesSkipIt() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+            var realTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(250, ChronoUnit.MILLIS))
+                    .build();
+            var sentinelStartTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .environment(realTrace.environment())
+                    .startTime(Instant.EPOCH)
+                    .endTime(ranAt.plus(1000, ChronoUnit.MILLIS))
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(realTrace, sentinelStartTrace), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var expectedThread = getExpectedThreads(List.of(realTrace, sentinelStartTrace), projectId, threadId,
+                    List.of(), TraceThreadStatus.ACTIVE).getFirst().toBuilder()
+                    .startTime(realTrace.startTime())
+                    .endTime(realTrace.endTime())
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(realTrace.startTime(),
+                            realTrace.endTime()))
+                    .firstMessage(realTrace.input())
+                    .lastMessage(realTrace.output())
+                    .build();
+
+            assertThreadPage(projectName, null, List.of(expectedThread), List.of(), Map.of(), API_KEY,
+                    TEST_WORKSPACE);
+            TraceAssertions.assertThreads(List.of(expectedThread),
+                    List.of(traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE)));
+        }
+
+        @ParameterizedTest(name = "truncate={0}")
+        @ValueSource(booleans = {false, true})
+        @DisplayName("When an update-before-create placeholder trace joins a thread after a real trace, then the first message is the real trace's input")
+        void whenPlaceholderTraceJoinsThreadAfterRealTrace__thenFirstMessageIsRealTraceInput(boolean truncate) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+            var realTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(250, ChronoUnit.MILLIS))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(realTrace), API_KEY, TEST_WORKSPACE);
+
+            var placeholderTraceId = idGenerator.generateId(ranAt.plusMillis(1));
+            traceResourceClient.updateTrace(placeholderTraceId, TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            var placeholderTrace = traceResourceClient.getById(placeholderTraceId, TEST_WORKSPACE, API_KEY);
+
+            assertThat(placeholderTrace).extracting(Trace::startTime, Trace::input).containsExactly(Instant.EPOCH,
+                    null);
+
+            var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, List.of(),
+                    List.of(), Map.of("truncate", String.valueOf(truncate)));
+            var thread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY, TEST_WORKSPACE);
+
+            assertThat(Stream.concat(page.content().stream(), Stream.of(thread)))
+                    .extracting(TraceThread::id, TraceThread::startTime, TraceThread::numberOfMessages,
+                            TraceThread::firstMessage, TraceThread::lastMessage)
+                    .containsExactly(
+                            tuple(threadId, realTrace.startTime(), 4L, realTrace.input(), realTrace.output()),
+                            tuple(threadId, realTrace.startTime(), 4L, realTrace.input(), realTrace.output()));
+        }
+
+        @ParameterizedTest(name = "truncate={0}, withTimeWindow={1}")
+        @CsvSource({"false, false", "false, true", "true, false", "true, true"})
+        @DisplayName("When a thread has only an update-before-create placeholder trace, then its messages are the placeholder's input and output")
+        void whenThreadHasOnlyPlaceholderTrace__thenMessagesArePlaceholderInputAndOutput(boolean truncate,
+                boolean withTimeWindow) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            var placeholderInput = JsonUtils.getJsonNodeFromString("{\"question\":\"placeholder input\"}");
+            var placeholderOutput = JsonUtils.getJsonNodeFromString("{\"answer\":\"placeholder output\"}");
+
+            var placeholderTraceId = idGenerator.generateId(ranAt);
+            traceResourceClient.updateTrace(placeholderTraceId, TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .input(placeholderInput)
+                    .output(placeholderOutput)
+                    .endTime(ranAt.plus(250, ChronoUnit.MILLIS))
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            assertThat(traceResourceClient.getById(placeholderTraceId, TEST_WORKSPACE, API_KEY))
+                    .extracting(Trace::startTime, Trace::input, Trace::output)
+                    .containsExactly(Instant.EPOCH, placeholderInput, placeholderOutput);
+
+            var queryParams = new HashMap<>(Map.of("truncate", String.valueOf(truncate)));
+            if (withTimeWindow) {
+                queryParams.put("from_time", ranAt.minus(Duration.ofMinutes(10)).toString());
+                queryParams.put("to_time", ranAt.plus(Duration.ofMinutes(10)).toString());
+            }
+
+            // The windowed list inner-joins the thread row, which the update event registers asynchronously
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                                List.of(), List.of(), queryParams);
+                        var thread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                                TEST_WORKSPACE);
+
+                        assertThat(Stream.concat(page.content().stream(), Stream.of(thread)))
+                                .extracting(TraceThread::id, TraceThread::numberOfMessages,
+                                        TraceThread::firstMessage, TraceThread::lastMessage)
+                                .containsExactly(
+                                        tuple(threadId, 2L, placeholderInput, placeholderOutput),
+                                        tuple(threadId, 2L, placeholderInput, placeholderOutput));
+                    });
+        }
+
+        @ParameterizedTest(name = "truncate={0}")
+        @ValueSource(booleans = {false, true})
+        @DisplayName("When a placeholder trace with content precedes a real trace, then the messages and environment come from the real trace")
+        void whenPlaceholderTraceWithContentPrecedesRealTrace__thenMessagesAndEnvironmentComeFromRealTrace(
+                boolean truncate) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+            var placeholderTraceId = idGenerator.generateId(ranAt);
+            traceResourceClient.updateTrace(placeholderTraceId, TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .input(JsonUtils.getJsonNodeFromString("{\"question\":\"placeholder input\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"answer\":\"placeholder output\"}"))
+                    .endTime(ranAt.plus(1000, ChronoUnit.MILLIS))
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            // Registered from the placeholder, the thread row keeps a blank environment, so the thread falls back
+            // to its traces' environment
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(traceResourceClient
+                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId())
+                            .isNotNull());
+
+            var realTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt.plusMillis(1)))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(250, ChronoUnit.MILLIS))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(realTrace), API_KEY, TEST_WORKSPACE);
+
+            var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, List.of(),
+                    List.of(), Map.of("truncate", String.valueOf(truncate)));
+            var thread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY, TEST_WORKSPACE);
+
+            assertThat(Stream.concat(page.content().stream(), Stream.of(thread)))
+                    .extracting(TraceThread::id, TraceThread::numberOfMessages, TraceThread::firstMessage,
+                            TraceThread::lastMessage, TraceThread::environment)
+                    .containsExactly(
+                            tuple(threadId, 4L, realTrace.input(), realTrace.output(), realTrace.environment()),
+                            tuple(threadId, 4L, realTrace.input(), realTrace.output(), realTrace.environment()));
         }
 
         @ParameterizedTest
@@ -1984,6 +2215,418 @@ class FindTraceThreadsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("with a time window, the default-sort page pushdown pages through exactly the full query's ordered list")
+        void whenWindowedDefaultSort__thenPagePushdownMatchesFullQuery() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            Instant fromTime = now.minus(60, ChronoUnit.SECONDS);
+            Instant toTime = now.minus(1, ChronoUnit.SECONDS);
+            Instant beforeWindow = now.minus(90, ChronoUnit.SECONDS);
+
+            List<Trace> traces = new ArrayList<>();
+            List<String> expectedThreadIds = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                String threadId = RandomStringUtils.secure().nextAlphanumeric(10);
+                traces.add(threadTrace(projectName, threadId, now.minus(10L + i, ChronoUnit.SECONDS)));
+                expectedThreadIds.add(threadId);
+            }
+            Instant tiedStart = now.minus(20, ChronoUnit.SECONDS);
+            for (int i = 0; i < 2; i++) {
+                String threadId = RandomStringUtils.secure().nextAlphanumeric(10);
+                traces.add(threadTrace(projectName, threadId, tiedStart).toBuilder()
+                        .id(idGenerator.generateId(tiedStart.plusMillis(i)))
+                        .build());
+                expectedThreadIds.add(threadId);
+            }
+            String straddlingThreadId = RandomStringUtils.secure().nextAlphanumeric(10);
+            traces.add(threadTrace(projectName, straddlingThreadId, beforeWindow));
+            traces.add(threadTrace(projectName, straddlingThreadId, now.minus(30, ChronoUnit.SECONDS)));
+            expectedThreadIds.add(straddlingThreadId);
+            String rowAfterWindowThreadId = RandomStringUtils.secure().nextAlphanumeric(10);
+            traceResourceClient.openTraceThread(rowAfterWindowThreadId, projectId, null, API_KEY, TEST_WORKSPACE);
+            traces.add(threadTrace(projectName, rowAfterWindowThreadId, now.minus(40, ChronoUnit.SECONDS)));
+            expectedThreadIds.add(rowAfterWindowThreadId);
+            String beforeWindowThreadId = RandomStringUtils.secure().nextAlphanumeric(10);
+            traces.add(threadTrace(projectName, beforeWindowThreadId, beforeWindow.plusMillis(5)));
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            Set<String> threadIds = traces.stream().map(Trace::threadId).collect(Collectors.toSet());
+            // The closing stamp is what ties the threads
+            awaitThreadRows(threadIds, projectId);
+            traceResourceClient.closeTraceThreads(threadIds, null, projectName, API_KEY, TEST_WORKSPACE);
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(traceResourceClient
+                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).status())
+                            .isEqualTo(TraceThreadStatus.INACTIVE)));
+
+            assertPagePushdownMatchesFullQuery(projectId,
+                    Map.of("from_time", fromTime.toString(), "to_time", toTime.toString()), List.of(),
+                    expectedThreadIds);
+            assertPagePushdownMatchesFullQuery(projectId, Map.of("from_time", fromTime.toString()), List.of(),
+                    expectedThreadIds);
+            assertPagePushdownMatchesFullQuery(projectId, Map.of("to_time", toTime.toString()), List.of(),
+                    Stream.concat(expectedThreadIds.stream(), Stream.of(beforeWindowThreadId)).toList());
+        }
+
+        @Test
+        @DisplayName("with the UI's source = sdk filter and a search term, the page pushdown pages through exactly the full query's list")
+        void whenWindowedDefaultSortWithSourceFilterAndSearch__thenPagePushdownMatchesFullQuery() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            String term = RandomStringUtils.secure().nextAlphabetic(12).toLowerCase();
+            JsonNode matching = JsonUtils.getJsonNodeFromString("{\"question\":\"about " + term + "\"}");
+            JsonNode other = JsonUtils.getJsonNodeFromString("{\"question\":\"something else\"}");
+
+            List<Trace> traces = new ArrayList<>();
+            List<String> expectedThreadIds = new ArrayList<>();
+            for (int i = 0; i < 5; i++) {
+                String threadId = RandomStringUtils.secure().nextAlphanumeric(10);
+                traces.add(sourcedTrace(projectName, threadId, now.minus(10L + i, ChronoUnit.SECONDS), Source.SDK,
+                        matching));
+                expectedThreadIds.add(threadId);
+            }
+            traces.add(sourcedTrace(projectName, RandomStringUtils.secure().nextAlphanumeric(10),
+                    now.minus(20, ChronoUnit.SECONDS), Source.SDK, other));
+            traces.add(sourcedTrace(projectName, RandomStringUtils.secure().nextAlphanumeric(10),
+                    now.minus(21, ChronoUnit.SECONDS), Source.PLAYGROUND, matching));
+            String mixedPassing = RandomStringUtils.secure().nextAlphanumeric(10);
+            traces.add(sourcedTrace(projectName, mixedPassing, now.minus(30, ChronoUnit.SECONDS), Source.PLAYGROUND,
+                    matching));
+            traces.add(sourcedTrace(projectName, mixedPassing, now.minus(25, ChronoUnit.SECONDS), Source.SDK,
+                    matching));
+            expectedThreadIds.add(mixedPassing);
+            String mixedFailing = RandomStringUtils.secure().nextAlphanumeric(10);
+            traces.add(sourcedTrace(projectName, mixedFailing, now.minus(35, ChronoUnit.SECONDS), Source.SDK, other));
+            traces.add(sourcedTrace(projectName, mixedFailing, now.minus(34, ChronoUnit.SECONDS), Source.PLAYGROUND,
+                    matching));
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            awaitThreadRows(traces.stream().map(Trace::threadId).distinct().toList(), projectId);
+
+            var sdkSource = TraceThreadFilter.builder()
+                    .field(TraceThreadField.SOURCE)
+                    .operator(Operator.EQUAL)
+                    .value(Source.SDK.getValue())
+                    .build();
+            assertPagePushdownMatchesFullQuery(projectId,
+                    Map.of("from_time", now.minus(60, ChronoUnit.SECONDS).toString(), "search", term),
+                    List.of(sdkSource), expectedThreadIds);
+        }
+
+        @Test
+        @DisplayName("on a window, the page pushdown pages through exactly the full query's list for every sort and thread filter it computes")
+        void whenWindowedSortOrThreadFilter__thenPagePushdownMatchesFullQuery() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+            List<Trace> traces = new ArrayList<>();
+            List<String> threadIds = new ArrayList<>();
+            for (int i = 0; i < 8; i++) {
+                String threadId = RandomStringUtils.secure().nextAlphanumeric(10);
+                threadIds.add(threadId);
+                for (int k = 0; k <= i % 3; k++) {
+                    Instant startTime = now.minus(50L - 5L * i, ChronoUnit.SECONDS).plus(k * 300L, ChronoUnit.MILLIS);
+                    traces.add(threadTrace(projectName, threadId, startTime).toBuilder()
+                            .endTime(startTime.plusMillis(100L * (1 + (i * 7 + k) % 5)))
+                            .environment(i % 2 == 0 ? "production" : "staging")
+                            .build());
+                }
+            }
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            awaitThreadRows(threadIds, projectId);
+
+            traceResourceClient.closeTraceThreads(Set.of(threadIds.get(0), threadIds.get(4)), null, projectName,
+                    API_KEY, TEST_WORKSPACE);
+            Instant beforeTagging = Instant.now();
+            for (int i : List.of(1, 2, 6)) {
+                var threadModelId = traceResourceClient.getTraceThread(threadIds.get(i), projectId, API_KEY,
+                        TEST_WORKSPACE).threadModelId();
+                traceResourceClient.updateThread(TraceThreadUpdate.builder()
+                        .tags(i == 6 ? Set.of("alpha", "beta") : Set.of("alpha"))
+                        .build(), threadModelId, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            }
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(traceResourceClient
+                            .getTraceThread(threadIds.get(0), projectId, API_KEY, TEST_WORKSPACE).status())
+                            .isEqualTo(TraceThreadStatus.INACTIVE));
+
+            var window = Map.of("from_time", now.minus(60, ChronoUnit.SECONDS).toString());
+            for (String field : List.of(SortableFields.ID, SortableFields.START_TIME, SortableFields.END_TIME,
+                    SortableFields.DURATION, SortableFields.NUMBER_OF_MESSAGES, SortableFields.LAST_UPDATED_AT,
+                    SortableFields.CREATED_BY, SortableFields.CREATED_AT, SortableFields.STATUS,
+                    SortableFields.TAGS, SortableFields.ENVIRONMENT)) {
+                for (Direction direction : Direction.values()) {
+                    var sorting = List.of(SortingField.builder().field(field).direction(direction).build());
+                    assertThat(assertSortedPagePushdownMatchesFullQuery(projectId, window, List.of(), sorting))
+                            .as("sort %s %s", field, direction).hasSize(threadIds.size());
+                }
+            }
+
+            for (TraceThreadFilter filter : List.of(
+                    threadFilter(TraceThreadField.STATUS, Operator.EQUAL, TraceThreadStatus.INACTIVE.getValue()),
+                    threadFilter(TraceThreadField.TAGS, Operator.CONTAINS, "alpha"),
+                    threadFilter(TraceThreadField.NUMBER_OF_MESSAGES, Operator.GREATER_THAN, "2"),
+                    threadFilter(TraceThreadField.DURATION, Operator.GREATER_THAN, "300"),
+                    threadFilter(TraceThreadField.START_TIME, Operator.GREATER_THAN,
+                            now.minus(30, ChronoUnit.SECONDS).toString()),
+                    threadFilter(TraceThreadField.END_TIME, Operator.LESS_THAN,
+                            now.minus(30, ChronoUnit.SECONDS).toString()),
+                    threadFilter(TraceThreadField.LAST_UPDATED_AT, Operator.GREATER_THAN, beforeTagging.toString()),
+                    threadFilter(TraceThreadField.CREATED_AT, Operator.LESS_THAN, Instant.now().toString()),
+                    threadFilter(TraceThreadField.ID, Operator.EQUAL, threadIds.get(3)))) {
+                var sorting = List.of(
+                        SortingField.builder().field(SortableFields.DURATION).direction(Direction.DESC).build());
+                assertThat(assertSortedPagePushdownMatchesFullQuery(projectId, window, List.of(filter), sorting))
+                        .as("filter %s %s", filter.field(), filter.operator())
+                        .isNotEmpty()
+                        .hasSizeLessThanOrEqualTo(threadIds.size());
+            }
+        }
+
+        private TraceThreadFilter threadFilter(TraceThreadField field, Operator operator, String value) {
+            return TraceThreadFilter.builder().field(field).operator(operator).value(value).build();
+        }
+
+        private Trace sourcedTrace(String projectName, String threadId, Instant startTime, Source source,
+                JsonNode input) {
+            return threadTrace(projectName, threadId, startTime).toBuilder()
+                    .source(source)
+                    .input(input)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("the stream continues past its first batch from the last thread model id it returned")
+        void whenStreamPagedByLastThreadModelId__thenBatchesContinueWithoutOverlap() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> threadTrace(projectName, RandomStringUtils.secure().nextAlphanumeric(10),
+                            now.minus(10L + i, ChronoUnit.SECONDS)))
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            awaitThreadRows(traces.stream().map(Trace::threadId).toList(), projectId);
+
+            var oneBatch = traceResourceClient.searchTraceThreadsStream(TraceThreadSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .build(), API_KEY, TEST_WORKSPACE);
+            assertThat(oneBatch).hasSize(traces.size());
+
+            List<TraceThread> batched = new ArrayList<>();
+            UUID lastRetrieved = null;
+            for (int batch = 0; batch <= traces.size(); batch++) {
+                var next = traceResourceClient.searchTraceThreadsStream(TraceThreadSearchStreamRequest.builder()
+                        .projectName(projectName)
+                        .limit(2)
+                        .lastRetrievedThreadModelId(lastRetrieved)
+                        .build(), API_KEY, TEST_WORKSPACE);
+                if (next.isEmpty()) {
+                    break;
+                }
+                batched.addAll(next);
+                lastRetrieved = next.getLast().threadModelId();
+            }
+
+            assertThat(batched).extracting(TraceThread::id)
+                    .containsExactlyElementsOf(oneBatch.stream().map(TraceThread::id).toList());
+        }
+
+        @Test
+        @DisplayName("a thread whose row is missing is listed by neither path on any window, as the chart and the KPI cards skip it, and listed without a window")
+        void whenThreadRowMissing__thenWindowedListsSkipItAndUnwindowedListShowsIt() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            String withRow = RandomStringUtils.secure().nextAlphanumeric(10);
+            String withoutRow = RandomStringUtils.secure().nextAlphanumeric(10);
+            traceResourceClient.batchCreateTraces(List.of(
+                    threadTrace(projectName, withRow, now.minus(20, ChronoUnit.SECONDS)),
+                    threadTrace(projectName, withoutRow, now.minus(10, ChronoUnit.SECONDS))), API_KEY, TEST_WORKSPACE);
+            awaitThreadRows(List.of(withRow, withoutRow), projectId);
+            deleteThreadRow(projectId, withoutRow);
+
+            String fromTime = now.minus(60, ChronoUnit.SECONDS).toString();
+            String toTime = now.minus(1, ChronoUnit.SECONDS).toString();
+            for (Map<String, String> window : List.of(Map.of("from_time", fromTime, "to_time", toTime),
+                    Map.of("from_time", fromTime), Map.of("to_time", toTime), Map.<String, String>of())) {
+                // Without a window there is no chart or KPI to align with, and a just-ingested thread shows before
+                // its row is written.
+                List<String> expected = window.isEmpty() ? List.of(withoutRow, withRow) : List.of(withRow);
+                for (List<TraceThreadFilter> filters : List.of(List.<TraceThreadFilter>of(),
+                        List.of(fullQueryOnlyFilter()))) {
+                    var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, filters,
+                            List.of(), withPage(window, 1, 10));
+
+                    assertThat(page.content()).as("window %s, filters %s", window, filters)
+                            .extracting(TraceThread::id).containsExactlyInAnyOrderElementsOf(expected);
+                    assertThat(page.total()).as("window %s, filters %s", window, filters).isEqualTo(expected.size());
+                }
+            }
+        }
+
+        private void deleteThreadRow(UUID projectId, String threadId) {
+            clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                    DELETE FROM trace_threads
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND thread_id = :thread_id
+                    """)
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .bind("project_id", projectId.toString())
+                    .bind("thread_id", threadId)
+                    .execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                    .block();
+        }
+
+        private void assertPagePushdownMatchesFullQuery(UUID projectId, Map<String, String> window,
+                List<TraceThreadFilter> filters, List<String> expectedThreadIds) {
+            var fullQueryThreads = assertSortedPagePushdownMatchesFullQuery(projectId, window, filters, List.of());
+
+            assertThat(fullQueryThreads).extracting(TraceThread::id)
+                    .containsExactlyInAnyOrderElementsOf(expectedThreadIds);
+        }
+
+        private List<TraceThread> assertSortedPagePushdownMatchesFullQuery(UUID projectId,
+                Map<String, String> window, List<TraceThreadFilter> filters, List<SortingField> sorting) {
+            var fullQueryThreads = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                    Stream.concat(filters.stream(), Stream.of(fullQueryOnlyFilter())).toList(), sorting,
+                    withPage(window, 1, 50)).content();
+
+            int size = 3;
+            int pages = (fullQueryThreads.size() + size - 1) / size;
+            List<TraceThread> pushedDownContent = new ArrayList<>();
+            for (int page = 1; page <= pages; page++) {
+                var pushedDownPage = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                        filters, sorting, withPage(window, page, size));
+                assertThat(pushedDownPage.total()).isEqualTo(fullQueryThreads.size());
+                pushedDownContent.addAll(pushedDownPage.content());
+            }
+
+            TraceAssertions.assertThreads(fullQueryThreads, pushedDownContent);
+
+            var pastLastPage = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                    filters, sorting, withPage(window, pages + 1, size));
+            assertThat(pastLastPage.content()).isEmpty();
+            assertThat(pastLastPage.total()).isEqualTo(fullQueryThreads.size());
+            return fullQueryThreads;
+        }
+
+        // Always true, and a message filter, which the page pushdown cannot compute, so it forces the full query.
+        private TraceThreadFilter fullQueryOnlyFilter() {
+            return TraceThreadFilter.builder()
+                    .field(TraceThreadField.FIRST_MESSAGE)
+                    .operator(Operator.NOT_CONTAINS)
+                    .value(RandomStringUtils.secure().nextAlphabetic(24))
+                    .build();
+        }
+
+        // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
+        private void awaitThreadRows(Collection<String> threadIds, UUID projectId) {
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(traceResourceClient
+                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId())
+                            .isNotNull()));
+        }
+
+        private Trace threadTrace(String projectName, String threadId, Instant startTime) {
+            return createTrace().toBuilder()
+                    .id(idGenerator.generateId(startTime))
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .startTime(startTime)
+                    .endTime(startTime.plusMillis(500))
+                    .build();
+        }
+
+        private Map<String, String> withPage(Map<String, String> params, int page, int size) {
+            var withPage = new HashMap<>(params);
+            withPage.put("page", String.valueOf(page));
+            withPage.put("size", String.valueOf(size));
+            return withPage;
+        }
+
+        private Stream<Arguments> whenThreadRowWrittenOutsideWindow__thenListedFromItsInWindowTraces() {
+            return Stream.of(true, false)
+                    .flatMap(stream -> Stream.of(Arguments.of(stream, true), Arguments.of(stream, false)));
+        }
+
+        @ParameterizedTest(name = "stream: {0}, row written after the window: {1}")
+        @MethodSource
+        @DisplayName("a thread active in the window is listed from its in-window traces, wherever its row was written")
+        void whenThreadRowWrittenOutsideWindow__thenListedFromItsInWindowTraces(boolean stream,
+                boolean rowWrittenAfterWindow) {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            var threadId = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Instant now = Instant.now();
+            Instant fromTime = now.minus(60, ChronoUnit.SECONDS);
+            Instant toTime = now.minus(1, ChronoUnit.SECONDS);
+            Instant ranInsideWindow = now.minus(30, ChronoUnit.SECONDS);
+            Instant ranBeforeWindow = now.minus(90, ChronoUnit.SECONDS);
+
+            if (rowWrittenAfterWindow) {
+                traceResourceClient.openTraceThread(threadId, projectId, null, API_KEY, TEST_WORKSPACE);
+            }
+
+            var insideTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranInsideWindow))
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .startTime(ranInsideWindow)
+                    .endTime(ranInsideWindow.plusMillis(500))
+                    .build();
+            var traces = rowWrittenAfterWindow
+                    ? List.of(insideTrace)
+                    : List.of(createTrace().toBuilder()
+                            .id(idGenerator.generateId(ranBeforeWindow))
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .startTime(ranBeforeWindow)
+                            .endTime(ranBeforeWindow.plusMillis(500))
+                            .build(), insideTrace);
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            awaitThreadRows(List.of(threadId), projectId);
+            traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY, TEST_WORKSPACE);
+
+            Instant rowWrittenAt = RetentionUtils.extractInstant(
+                    traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId());
+            if (rowWrittenAfterWindow) {
+                assertThat(rowWrittenAt).isAfter(toTime);
+            } else {
+                assertThat(rowWrittenAt).isBefore(fromTime);
+            }
+
+            List<TraceThread> listed;
+            if (stream) {
+                listed = traceResourceClient.searchTraceThreadsStream(TraceThreadSearchStreamRequest.builder()
+                        .projectName(projectName)
+                        .fromTime(fromTime)
+                        .toTime(toTime)
+                        .build(), API_KEY, TEST_WORKSPACE);
+            } else {
+                var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, List.of(),
+                        List.of(), Map.of("from_time", fromTime.toString(), "to_time", toTime.toString()));
+                assertThat(page.total()).isEqualTo(1);
+                listed = page.content();
+            }
+
+            assertThat(listed).extracting(TraceThread::id).containsExactly(threadId);
+            assertThat(listed.getFirst().startTime()).isEqualTo(insideTrace.startTime());
+            assertThat(listed.getFirst().numberOfMessages()).isEqualTo(2L);
+        }
+
         private Stream<Arguments> provideBoundaryScenarios() {
             return Stream.of(
                     Arguments.of(false), // Non-stream (paginated)
@@ -2714,6 +3357,86 @@ class FindTraceThreadsResourceTest {
                     .untilAsserted(() -> assertThat(traceResourceClient
                             .getTraceThread(closedThreadId, projectId, apiKey, workspaceName).status())
                             .isEqualTo(TraceThreadStatus.ACTIVE));
+        }
+
+        @ParameterizedTest(name = "withTimeWindow={0}")
+        @ValueSource(booleans = {false, true})
+        @DisplayName("when a playground trace is updated before it is created, then the source = sdk filter skips its thread while both stored versions are still unmerged")
+        void whenPlaygroundTraceIsUpdatedBeforeCreate__thenSdkSourceFilterSkipsItsUnmergedVersions(
+                boolean withTimeWindow) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var baseTime = Instant.now();
+            var playgroundThreadId = UUID.randomUUID().toString();
+            var playgroundTraceId = idGenerator.generateId(baseTime);
+
+            traceResourceClient.updateTrace(playgroundTraceId, TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(playgroundThreadId)
+                    .build(), apiKey, workspaceName);
+
+            var sdkThreadId = UUID.randomUUID().toString();
+            var sdkTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(baseTime.plusMillis(1)))
+                    .projectName(projectName)
+                    .threadId(sdkThreadId)
+                    .source(Source.SDK)
+                    .lastUpdatedAt(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(sdkTrace), apiKey, workspaceName);
+            traceResourceClient.updateTrace(sdkTrace.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .tags(Set.of("updated"))
+                    .build(), apiKey, workspaceName);
+
+            var projectId = projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+            Map<String, String> queryParams = withTimeWindow
+                    ? Map.of(
+                            "from_time", baseTime.minus(Duration.ofMinutes(10)).toString(),
+                            "to_time", baseTime.plus(Duration.ofMinutes(10)).toString())
+                    : Map.of();
+
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(traceResourceClient
+                            .getTraceThreads(projectId, null, apiKey, workspaceName, List.of(), List.of(), queryParams)
+                            .content())
+                            .extracting(TraceThread::id)
+                            .containsExactlyInAnyOrder(playgroundThreadId, sdkThreadId));
+
+            traceResourceClient.batchCreateTraces(List.of(createTrace().toBuilder()
+                    .id(playgroundTraceId)
+                    .projectName(projectName)
+                    .threadId(playgroundThreadId)
+                    .source(Source.PLAYGROUND)
+                    .lastUpdatedAt(null)
+                    .build()), apiKey, workspaceName);
+
+            var sdkSourceFilter = List.of(TraceThreadFilter.builder()
+                    .field(TraceThreadField.SOURCE)
+                    .operator(Operator.EQUAL)
+                    .value(Source.SDK.getValue())
+                    .build());
+
+            var filteredPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
+                    sdkSourceFilter, List.of(), queryParams);
+
+            assertThat(filteredPage.content()).extracting(TraceThread::id).containsExactly(sdkThreadId);
+            assertThat(filteredPage.total()).isEqualTo(1);
+
+            var filteredStats = traceResourceClient.getTraceThreadStats(null, projectId, apiKey, workspaceName,
+                    sdkSourceFilter, queryParams);
+
+            assertThat(filteredStats.stats())
+                    .filteredOn(stat -> stat.getName().equals("thread_count"))
+                    .extracting(stat -> ((ProjectStats.CountValueStat) stat).getValue())
+                    .containsExactly(1L);
         }
     }
 
