@@ -87,7 +87,8 @@ class SpanWeeksListenerTest {
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(REDIS.getRedisURI())
-                .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false")))
+                .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false"),
+                        new CustomConfig("databaseAnalyticsDataModel.spanWeeksWriteEnabled", "true")))
                 .build());
     }
 

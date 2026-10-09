@@ -490,4 +490,24 @@ class SpanServiceImplTest {
             return RandomUtils.secure().randomLong(1, 1_000);
         }
     }
+
+    @Nested
+    class RegisterWeeks {
+
+        @Test
+        void registerWeeks__whenWriteDisabled__thenWritesNothing() {
+            var span = Span.builder()
+                    .id(idGenerator.generateId())
+                    .traceId(idGenerator.generateId())
+                    .projectId(idGenerator.generateId())
+                    .build();
+
+            StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder().build())
+                    .registerWeeks(List.of(span)))
+                    .expectNext(0L)
+                    .verifyComplete();
+
+            verifyNoInteractions(spanWeeksDAO);
+        }
+    }
 }

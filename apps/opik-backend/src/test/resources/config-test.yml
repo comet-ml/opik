@@ -172,6 +172,11 @@ databaseAnalyticsDataModel:
   #   direction and the backend fails readiness at startup with a message naming the flag and the observed engine,
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: false
+  #  Default: false
+  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
+  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
+  #   indexed. Off writes nothing; reads stay unbounded until a project is marked backfilled.
+  spanWeeksWriteEnabled: false
 
 bulkInsert:
   # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as

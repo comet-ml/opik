@@ -85,6 +85,11 @@ import lombok.Builder;
  * observed engine. A separate probe from the traces one — they share an implementation — because the two cutovers flip
  * independently, so an operator has to see which of the two disagrees with its table. The same source-of-truth rule
  * holds: the probe only reports, it never re-routes.</p>
+ *
+ * <p>{@code spanWeeksWriteEnabled}: when {@code true}, span writes register their weekly partitions in the
+ * {@code span_weeks} index ({@code SpanService.registerWeeks}). Left {@code false} at deploy time; turn it on before
+ * the span weeks backfill starts, so every span written after the backfill's snapshot is indexed. Off writes nothing,
+ * and reads stay unbounded until a project is marked backfilled.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -94,5 +99,6 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean spanDeletionEventsCaptureEnabled,
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
         boolean tracesDistributedWrapEnabled,
-        boolean spansDistributedWrapEnabled) {
+        boolean spansDistributedWrapEnabled,
+        boolean spanWeeksWriteEnabled) {
 }
