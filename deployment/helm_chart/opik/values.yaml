@@ -1116,14 +1116,19 @@ clickhouse:
       nodeSelector: {}
       tolerations: []
     # Post-sync job that puts each listed table on the tiered_replicated policy with a
-    # move-to-cold TTL, idempotently. It never moves existing data: that is a paced
-    # operator step (ALTER TABLE ... MATERIALIZE TTL). Tables that do not exist yet are skipped.
-    # Off unless turned on per environment.
+    # move-to-cold TTL, idempotently. By default it never moves existing data (see
+    # `materialize`). Tables that do not exist yet are skipped. Off unless turned on per environment.
     ttl:
       enabled: false
       tables:
         - name: traces_local
           moveAfterWeeks: 13
+      # Backfill: also run MATERIALIZE TTL, so data written before the TTL existed moves to cold.
+      # It runs only while some part lacks the TTL and no run is in flight, so later syncs are
+      # no-ops and it can stay on. It loads disk I/O, S3 and the move pool: on large installs,
+      # run it by hand at a quiet time instead.
+      materialize:
+        enabled: false
       activeDeadlineSeconds: 600
       resources: {}
       nodeSelector: {}
