@@ -189,6 +189,47 @@ def test_save_to_file_value_with_percent_sign(mock_expanduser, mock_open_file):
     assert parsed_config["opik"]["project_name"] == "100% coverage"
 
 
+@pytest.mark.parametrize("blank_key", ["", "   ", "\t"])
+def test_blank_opik_api_key_is_misconfigured_for_cloud(monkeypatch, blank_key):
+    """A blank ``OPIK_API_KEY`` should be treated as missing on Opik Cloud.
+
+    Pydantic reads ``OPIK_API_KEY=`` as ``""``, so ``api_key is not None``
+    used to skip the misconfiguration warning and still send an empty
+    Authorization header.
+    """
+    monkeypatch.setenv("OPIK_API_KEY", blank_key)
+    monkeypatch.setenv("OPIK_URL_OVERRIDE", "https://www.comet.com/opik/api")
+    monkeypatch.delenv("OPIK_TRACK_DISABLE", raising=False)
+
+    is_misconfigured, message = OpikConfig().get_misconfiguration_detection_results()
+
+    assert is_misconfigured is True
+    assert message is not None
+    assert "API key" in message
+
+
+def test_unset_opik_api_key_is_misconfigured_for_cloud(monkeypatch):
+    monkeypatch.delenv("OPIK_API_KEY", raising=False)
+    monkeypatch.setenv("OPIK_URL_OVERRIDE", "https://www.comet.com/opik/api")
+    monkeypatch.delenv("OPIK_TRACK_DISABLE", raising=False)
+
+    is_misconfigured, message = OpikConfig().get_misconfiguration_detection_results()
+
+    assert is_misconfigured is True
+    assert message is not None
+    assert "API key" in message
+
+
+def test_present_opik_api_key_is_not_misconfigured_for_cloud(monkeypatch):
+    monkeypatch.setenv("OPIK_API_KEY", "test-api-key")
+    monkeypatch.setenv("OPIK_URL_OVERRIDE", "https://www.comet.com/opik/api")
+
+    is_misconfigured, message = OpikConfig().get_misconfiguration_detection_results()
+
+    assert is_misconfigured is False
+    assert message is None
+
+
 def test_read_config_file_value_with_percent_sign(tmp_path, monkeypatch):
     # Reading such a value raised InterpolationSyntaxError, so every OpikConfig()
     # failed while the file contained it.
