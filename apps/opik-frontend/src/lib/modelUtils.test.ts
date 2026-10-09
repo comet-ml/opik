@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import omit from "lodash/omit";
 import {
   getAnthropicThinkingEffortOptions,
@@ -6,6 +6,7 @@ import {
   getDefaultThinkingLevel,
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
+  getOpenRouterReasoningEffortOptions,
   getThinkingLevelOptions,
   isReasoningModel,
   resolveEffort,
@@ -38,6 +39,7 @@ import {
 import { ANTHROPIC_MODEL_CAPABILITIES } from "@/constants/llm";
 import {
   getLatestProviderModelsSnapshot,
+  ModelFlags,
   resetModelRegistryStoreForTesting,
   setLatestModelFlags,
   setLatestProviderModelsSnapshot,
@@ -2729,5 +2731,286 @@ describe("OpenRouter request contract", () => {
         temperature: 0.7,
       }),
     ).toEqual({ temperature: 0.7 });
+  });
+});
+
+describe("OpenRouter parameters follow the model's OpenRouter lists", () => {
+  const LISTS: Record<
+    string,
+    Pick<ModelFlags, "supportedParameters" | "reasoningEfforts">
+  > = {
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI]: {
+      supportedParameters: [
+        "frequency_penalty",
+        "max_completion_tokens",
+        "max_tokens",
+        "presence_penalty",
+        "temperature",
+        "top_p",
+      ],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO]: {
+      supportedParameters: [
+        "max_completion_tokens",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+      ],
+      reasoningEfforts: ["high", "medium", "low", "minimal"],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_LUNA]: {
+      supportedParameters: ["max_tokens", "reasoning", "reasoning_effort"],
+      reasoningEfforts: ["max", "xhigh", "high", "medium", "low", "none"],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH]: {
+      supportedParameters: ["max_tokens", "reasoning", "reasoning_effort"],
+      reasoningEfforts: ["high"],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_O4_MINI]: {
+      supportedParameters: ["max_tokens", "reasoning"],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_0613]: {
+      supportedParameters: [
+        "frequency_penalty",
+        "max_completion_tokens",
+        "presence_penalty",
+        "temperature",
+        "top_p",
+      ],
+    },
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH]: {
+      supportedParameters: ["max_tokens", "reasoning", "temperature", "top_p"],
+    },
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW]: {
+      supportedParameters: [
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "temperature",
+        "top_p",
+      ],
+      reasoningEfforts: ["high", "medium", "low", "minimal"],
+    },
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5]: {
+      supportedParameters: [
+        "max_completion_tokens",
+        "max_tokens",
+        "reasoning",
+        "temperature",
+        "top_k",
+        "top_p",
+      ],
+    },
+    [PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT]: {
+      supportedParameters: [
+        "frequency_penalty",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "temperature",
+        "top_k",
+        "top_p",
+      ],
+    },
+  };
+
+  const CONFIG: LLMOpenRouterConfigsType = {
+    maxTokens: 512,
+    temperature: 0.7,
+    topP: 0.9,
+    topK: 40,
+    frequencyPenalty: 0.5,
+    presencePenalty: 0.5,
+    repetitionPenalty: 1.1,
+    minP: 0.05,
+    topA: 0.1,
+  };
+
+  beforeEach(() => {
+    setLatestModelFlags(
+      new Map(
+        Object.entries(LISTS).map(([model, lists]) => [
+          model,
+          { reasoning: false, structuredOutput: false, ...lists },
+        ]),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE, Record<string, unknown>]>([
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      {
+        maxTokens: 512,
+        temperature: 0.7,
+        topP: 0.9,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.5,
+      },
+    ],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, { maxTokens: 512 }],
+    [
+      PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
+      { maxTokens: 512, temperature: 0.7, topP: 0.9 },
+    ],
+    // Listed by OpenRouter, but Google asks to keep Gemini 3 at its default temperature.
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW, { maxTokens: 512 }],
+    [
+      PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
+      { maxTokens: 512, temperature: 0.7, custom_parameters: { top_k: 40 } },
+    ],
+    [
+      PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
+      {
+        maxTokens: 512,
+        temperature: 0.7,
+        topP: 0.9,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.5,
+        custom_parameters: {
+          top_k: 40,
+          min_p: 0.05,
+          repetition_penalty: 1.1,
+        },
+      },
+    ],
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_0613,
+      {
+        maxTokens: 512,
+        temperature: 0.7,
+        topP: 0.9,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.5,
+      },
+    ],
+    [
+      PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT,
+      {
+        maxTokens: 512,
+        temperature: 0.7,
+        topP: 0.9,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.5,
+        custom_parameters: {
+          top_k: 40,
+          min_p: 0.05,
+          top_a: 0.1,
+          repetition_penalty: 1.1,
+        },
+      },
+    ],
+  ])("sends %s only the parameters it lists", (model, request) => {
+    expect(sanitizeConfigForRequest(model, { ...CONFIG })).toEqual(request);
+  });
+
+  it("drops a stale nested copy of a parameter the model does not list", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, {
+        temperature: 0.7,
+        custom_parameters: { top_k: 5, transforms: ["middle-out"] },
+      }),
+    ).toEqual({
+      temperature: 0.7,
+      custom_parameters: { transforms: ["middle-out"] },
+    });
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE, OpenAIReasoningEffort[]]>([
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      ["minimal", "low", "medium", "high"],
+    ],
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_LUNA,
+      ["none", "low", "medium", "high", "xhigh", "max"],
+    ],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, ["high"]],
+    [
+      PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW,
+      ["minimal", "low", "medium", "high"],
+    ],
+    // OpenRouter lists no levels for the o-series, so OpenAI's own are used.
+    [PROVIDER_MODEL_TYPE.OPENAI_O4_MINI, ["low", "medium", "high"]],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5, []],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH, []],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, []],
+    [PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT, []],
+  ])("offers %s the effort levels %j", (model, levels) => {
+    expect(
+      getOpenRouterReasoningEffortOptions(model).map((o) => o.value),
+    ).toEqual(levels);
+  });
+
+  it.each<{
+    name: string;
+    model: PROVIDER_MODEL_TYPE;
+    configs: Record<string, unknown>;
+    customParameters: unknown;
+  }>([
+    {
+      name: "sends a picked level in OpenRouter's reasoning object",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      configs: { reasoningEffort: "low" },
+      customParameters: { reasoning: { effort: "low" } },
+    },
+    {
+      name: "sends no effort for Default",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      configs: {},
+      customParameters: undefined,
+    },
+    {
+      name: "drops a level the model does not offer",
+      model: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH,
+      configs: { reasoningEffort: "low" },
+      customParameters: undefined,
+    },
+    {
+      name: "drops a level on a model without reasoning",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      configs: { reasoningEffort: "high" },
+      customParameters: undefined,
+    },
+    {
+      name: "keeps the other reasoning fields and lets the panel's level win",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      configs: {
+        reasoningEffort: "high",
+        custom_parameters: { reasoning: { effort: "low", exclude: true } },
+      },
+      customParameters: { reasoning: { effort: "high", exclude: true } },
+    },
+    {
+      name: "clears a nested level for Default",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      configs: {
+        custom_parameters: { reasoning: { effort: "low" }, seed: 1 },
+      },
+      customParameters: { seed: 1 },
+    },
+  ])("$name", ({ model, configs, customParameters }) => {
+    const request = sanitizeConfigForRequest(model, configs);
+
+    expect(request.reasoningEffort).toBeUndefined();
+    expect(request.custom_parameters).toEqual(customParameters);
+  });
+
+  it("shows the level the request sends", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, {
+        reasoningEffort: "minimal",
+      }),
+    ).toEqual({ reasoningEffort: "minimal" });
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, {
+        reasoningEffort: "minimal",
+      }),
+    ).toEqual({});
   });
 });

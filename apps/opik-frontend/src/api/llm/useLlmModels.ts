@@ -7,6 +7,8 @@ export type LlmModelDefinition = {
   label?: string;
   structuredOutput: boolean;
   reasoning: boolean;
+  supported_parameters?: string[];
+  reasoning_efforts?: string[];
 };
 
 export type LlmModelsByProvider = Record<string, LlmModelDefinition[]>;

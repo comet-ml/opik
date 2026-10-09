@@ -286,9 +286,14 @@ const toFormModelConfig = (
   const config = pick(saved, [...formKeys, "custom_parameters"]);
 
   if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    // The nested value wins: it is the one the gateway forwards, while a flat top_k is dropped.
     for (const key of OPEN_ROUTER_CUSTOM_PARAMETER_KEYS) {
-      config[camelCase(key)] ??= customParameters[key];
+      config[camelCase(key)] = customParameters[key] ?? config[camelCase(key)];
     }
+    // Not checked against the model's levels here, unlike the thinking level below: OpenRouter's
+    // levels come from the registry, which can arrive after the form is seeded. The panel and the
+    // request both check them.
+    config.reasoningEffort ??= get(customParameters, ["reasoning", "effort"]);
   }
 
   if (supportsAnthropicThinkingEffort(model)) {

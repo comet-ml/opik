@@ -111,6 +111,8 @@ const buildFlagsIndex = (
       const flags: ModelFlags = {
         reasoning: m.reasoning,
         structuredOutput: m.structuredOutput,
+        supportedParameters: m.supported_parameters,
+        reasoningEfforts: m.reasoning_efforts,
       };
       index.set(m.id, flags);
       if (m.qualifiedName) {
