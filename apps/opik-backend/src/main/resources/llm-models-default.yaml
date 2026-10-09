@@ -378,14 +378,6 @@ vertex-ai:
   - id: "gemini-omni-1.1-flash"
     qualifiedName: "vertex_ai/gemini-omni-1.1-flash"
 openrouter:
-  - id: "ai21/jamba-large-1.7"
-    label: "ai21/jamba-large-1.7"
-  - id: "ai21/jamba-mini-1.7"
-    label: "ai21/jamba-mini-1.7"
-  - id: "aion-labs/aion-1.0"
-    label: "aion-labs/aion-1.0"
-  - id: "aion-labs/aion-1.0-mini"
-    label: "aion-labs/aion-1.0-mini"
   - id: "aion-labs/aion-2.0"
     label: "aion-labs/aion-2.0"
     structuredOutput: true
@@ -409,28 +401,6 @@ openrouter:
   - id: "aion-labs/aion-rp-llama-3.1-8b"
     label: "aion-labs/aion-rp-llama-3.1-8b"
     supportedParameters: [max_tokens, temperature, top_p]
-  - id: "alfredpros/codellama-7b-instruct-solidity"
-    label: "alfredpros/codellama-7b-instruct-solidity"
-  - id: "alibaba/tongyi-deepresearch-30b-a3b"
-    label: "alibaba/tongyi-deepresearch-30b-a3b"
-  - id: "alibaba/tongyi-deepresearch-30b-a3b:free"
-    label: "alibaba/tongyi-deepresearch-30b-a3b:free"
-  - id: "allenai/molmo-2-8b"
-    label: "allenai/molmo-2-8b"
-  - id: "allenai/olmo-2-0325-32b-instruct"
-    label: "allenai/olmo-2-0325-32b-instruct"
-  - id: "allenai/olmo-3-32b-think"
-    label: "allenai/olmo-3-32b-think"
-  - id: "allenai/olmo-3-7b-instruct"
-    label: "allenai/olmo-3-7b-instruct"
-  - id: "allenai/olmo-3-7b-think"
-    label: "allenai/olmo-3-7b-think"
-  - id: "allenai/olmo-3.1-32b-instruct"
-    label: "allenai/olmo-3.1-32b-instruct"
-  - id: "allenai/olmo-3.1-32b-think"
-    label: "allenai/olmo-3.1-32b-think"
-  - id: "alpindale/goliath-120b"
-    label: "alpindale/goliath-120b"
   - id: "amazon/nova-2-lite-v1"
     label: "amazon/nova-2-lite-v1"
     supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
@@ -450,17 +420,6 @@ openrouter:
     label: "anthracite-org/magnum-v4-72b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_a, top_k, top_p]
-  - id: "anthropic/claude-3-haiku"
-    label: "anthropic/claude-3-haiku"
-  - id: "anthropic/claude-3.5-haiku"
-    label: "anthropic/claude-3.5-haiku"
-  - id: "anthropic/claude-3.5-sonnet"
-    label: "anthropic/claude-3.5-sonnet"
-  - id: "anthropic/claude-3.7-sonnet"
-    label: "anthropic/claude-3.7-sonnet"
-  - id: "anthropic/claude-3.7-sonnet:thinking"
-    label: "anthropic/claude-3.7-sonnet:thinking"
-    reasoning: true
   - id: "anthropic/claude-fable-5"
     label: "anthropic/claude-fable-5"
     structuredOutput: true
@@ -471,96 +430,40 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "anthropic/claude-fable-5.1:batch"
-    label: "anthropic/claude-fable-5.1:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "anthropic/claude-fable-5:batch"
-    label: "anthropic/claude-fable-5:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
   - id: "anthropic/claude-haiku-4.5"
     label: "anthropic/claude-haiku-4.5"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, temperature, top_k, top_p]
-  - id: "anthropic/claude-haiku-4.5:batch"
-    label: "anthropic/claude-haiku-4.5:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
-  - id: "anthropic/claude-opus-4"
-    label: "anthropic/claude-opus-4"
   - id: "anthropic/claude-opus-4.1"
     label: "anthropic/claude-opus-4.1"
     supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
-  - id: "anthropic/claude-opus-4.1:batch"
-    label: "anthropic/claude-opus-4.1:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, temperature]
   - id: "anthropic/claude-opus-4.5"
     label: "anthropic/claude-opus-4.5"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, temperature, top_k]
-  - id: "anthropic/claude-opus-4.5:batch"
-    label: "anthropic/claude-opus-4.5:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, temperature]
   - id: "anthropic/claude-opus-4.6"
     label: "anthropic/claude-opus-4.6"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort, temperature, top_k, top_p]
-    reasoningEfforts: [max, high, medium, low]
-  - id: "anthropic/claude-opus-4.6-fast"
-    label: "anthropic/claude-opus-4.6-fast"
-  - id: "anthropic/claude-opus-4.6:batch"
-    label: "anthropic/claude-opus-4.6:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, medium, low]
   - id: "anthropic/claude-opus-4.7"
     label: "anthropic/claude-opus-4.7"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "anthropic/claude-opus-4.7-fast"
-    label: "anthropic/claude-opus-4.7-fast"
-  - id: "anthropic/claude-opus-4.7:batch"
-    label: "anthropic/claude-opus-4.7:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
   - id: "anthropic/claude-opus-4.8"
     label: "anthropic/claude-opus-4.8"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "anthropic/claude-opus-4.8-fast"
-    label: "anthropic/claude-opus-4.8-fast"
-  - id: "anthropic/claude-opus-4.8:batch"
-    label: "anthropic/claude-opus-4.8:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
   - id: "anthropic/claude-opus-5"
     label: "anthropic/claude-opus-5"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "anthropic/claude-opus-5-fast"
-    label: "anthropic/claude-opus-5-fast"
   - id: "anthropic/claude-opus-5.5"
     label: "anthropic/claude-opus-5.5"
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "anthropic/claude-opus-5.5:batch"
-    label: "anthropic/claude-opus-5.5:batch"
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "anthropic/claude-opus-5:batch"
-    label: "anthropic/claude-opus-5:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
   - id: "anthropic/claude-sonnet-4"
     label: "anthropic/claude-sonnet-4"
@@ -569,19 +472,10 @@ openrouter:
     label: "anthropic/claude-sonnet-4.5"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, temperature, top_k, top_p]
-  - id: "anthropic/claude-sonnet-4.5:batch"
-    label: "anthropic/claude-sonnet-4.5:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
   - id: "anthropic/claude-sonnet-4.6"
     label: "anthropic/claude-sonnet-4.6"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort, temperature, top_k, top_p]
-    reasoningEfforts: [max, high, medium, low]
-  - id: "anthropic/claude-sonnet-4.6:batch"
-    label: "anthropic/claude-sonnet-4.6:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, medium, low]
   - id: "anthropic/claude-sonnet-5"
     label: "anthropic/claude-sonnet-5"
@@ -592,61 +486,9 @@ openrouter:
     label: "anthropic/claude-sonnet-5.5"
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "anthropic/claude-sonnet-5.5:batch"
-    label: "anthropic/claude-sonnet-5.5:batch"
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "anthropic/claude-sonnet-5:batch"
-    label: "anthropic/claude-sonnet-5:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "arcee-ai/afm-4.5b"
-    label: "arcee-ai/afm-4.5b"
-  - id: "arcee-ai/coder-large"
-    label: "arcee-ai/coder-large"
-  - id: "arcee-ai/maestro-reasoning"
-    label: "arcee-ai/maestro-reasoning"
-  - id: "arcee-ai/spotlight"
-    label: "arcee-ai/spotlight"
-  - id: "arcee-ai/trinity-large-preview"
-    label: "arcee-ai/trinity-large-preview"
-  - id: "arcee-ai/trinity-large-preview:free"
-    label: "arcee-ai/trinity-large-preview:free"
   - id: "arcee-ai/trinity-large-thinking"
     label: "arcee-ai/trinity-large-thinking"
     supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
-  - id: "arcee-ai/trinity-large-thinking:free"
-    label: "arcee-ai/trinity-large-thinking:free"
-  - id: "arcee-ai/trinity-mini"
-    label: "arcee-ai/trinity-mini"
-  - id: "arcee-ai/trinity-mini:free"
-    label: "arcee-ai/trinity-mini:free"
-  - id: "arcee-ai/virtuoso-large"
-    label: "arcee-ai/virtuoso-large"
-  - id: "arliai/qwq-32b-arliai-rpr-v1"
-    label: "arliai/qwq-32b-arliai-rpr-v1"
-    reasoning: true
-  - id: "arliai/qwq-32b-arliai-rpr-v1:free"
-    label: "arliai/qwq-32b-arliai-rpr-v1:free"
-    reasoning: true
-  - id: "baidu/cobuddy:free"
-    label: "baidu/cobuddy:free"
-  - id: "baidu/ernie-4.5-21b-a3b"
-    label: "baidu/ernie-4.5-21b-a3b"
-  - id: "baidu/ernie-4.5-21b-a3b-thinking"
-    label: "baidu/ernie-4.5-21b-a3b-thinking"
-    reasoning: true
-  - id: "baidu/ernie-4.5-300b-a47b"
-    label: "baidu/ernie-4.5-300b-a47b"
-  - id: "baidu/ernie-4.5-vl-28b-a3b"
-    label: "baidu/ernie-4.5-vl-28b-a3b"
-  - id: "baidu/ernie-4.5-vl-424b-a47b"
-    label: "baidu/ernie-4.5-vl-424b-a47b"
-  - id: "baidu/qianfan-ocr-fast"
-    label: "baidu/qianfan-ocr-fast"
-  - id: "baidu/qianfan-ocr-fast:free"
-    label: "baidu/qianfan-ocr-fast:free"
   - id: "bytedance-seed/seed-1.6"
     label: "bytedance-seed/seed-1.6"
     structuredOutput: true
@@ -682,8 +524,6 @@ openrouter:
     label: "cognitivecomputations/dolphin-mistral-24b-venice-edition"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
-  - id: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
-    label: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
   - id: "cohere/command-a"
     label: "cohere/command-a"
     structuredOutput: true
@@ -706,16 +546,6 @@ openrouter:
   - id: "cohere/north-mini-code:free"
     label: "cohere/north-mini-code:free"
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "deepcogito/cogito-v2-preview-deepseek-671b"
-    label: "deepcogito/cogito-v2-preview-deepseek-671b"
-  - id: "deepcogito/cogito-v2-preview-llama-109b-moe"
-    label: "deepcogito/cogito-v2-preview-llama-109b-moe"
-  - id: "deepcogito/cogito-v2-preview-llama-405b"
-    label: "deepcogito/cogito-v2-preview-llama-405b"
-  - id: "deepcogito/cogito-v2-preview-llama-70b"
-    label: "deepcogito/cogito-v2-preview-llama-70b"
-  - id: "deepcogito/cogito-v2.1-671b"
-    label: "deepcogito/cogito-v2.1-671b"
   - id: "deepseek/deepseek-chat"
     label: "deepseek/deepseek-chat"
     structuredOutput: true
@@ -724,14 +554,10 @@ openrouter:
     label: "deepseek/deepseek-chat-v3-0324"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, temperature, top_k, top_p]
-  - id: "deepseek/deepseek-chat-v3-0324:free"
-    label: "deepseek/deepseek-chat-v3-0324:free"
   - id: "deepseek/deepseek-chat-v3.1"
     label: "deepseek/deepseek-chat-v3.1"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "deepseek/deepseek-prover-v2"
-    label: "deepseek/deepseek-prover-v2"
   - id: "deepseek/deepseek-r1"
     label: "deepseek/deepseek-r1"
     structuredOutput: true
@@ -742,31 +568,6 @@ openrouter:
     structuredOutput: true
     reasoning: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "deepseek/deepseek-r1-0528-qwen3-8b"
-    label: "deepseek/deepseek-r1-0528-qwen3-8b"
-    reasoning: true
-  - id: "deepseek/deepseek-r1-0528-qwen3-8b:free"
-    label: "deepseek/deepseek-r1-0528-qwen3-8b:free"
-    reasoning: true
-  - id: "deepseek/deepseek-r1-0528:free"
-    label: "deepseek/deepseek-r1-0528:free"
-    reasoning: true
-  - id: "deepseek/deepseek-r1-distill-llama-70b:free"
-    label: "deepseek/deepseek-r1-distill-llama-70b:free"
-    reasoning: true
-  - id: "deepseek/deepseek-r1-distill-qwen-14b"
-    label: "deepseek/deepseek-r1-distill-qwen-14b"
-    reasoning: true
-  - id: "deepseek/deepseek-r1-distill-qwen-32b"
-    label: "deepseek/deepseek-r1-distill-qwen-32b"
-    reasoning: true
-  - id: "deepseek/deepseek-r1:free"
-    label: "deepseek/deepseek-r1:free"
-    reasoning: true
-  - id: "deepseek/deepseek-v3.1-terminus:exacto"
-    label: "deepseek/deepseek-v3.1-terminus:exacto"
-  - id: "deepseek/deepseek-v3.2-speciale"
-    label: "deepseek/deepseek-v3.2-speciale"
   - id: "deepseek/deepseek-v4-flash"
     label: "deepseek/deepseek-v4-flash"
     structuredOutput: true
@@ -777,22 +578,11 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_a, top_k, top_p]
     reasoningEfforts: [max, high, low]
-  - id: "deepseek/deepseek-v4-flash-0731:batch"
-    label: "deepseek/deepseek-v4-flash-0731:batch"
-    structuredOutput: true
-  - id: "deepseek/deepseek-v4-flash-0731:free"
-    label: "deepseek/deepseek-v4-flash-0731:free"
-    structuredOutput: true
   - id: "deepseek/deepseek-v4-flash-vision-exp"
     label: "deepseek/deepseek-v4-flash-vision-exp"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
-  - id: "deepseek/deepseek-v4-flash-vision-exp:batch"
-    label: "deepseek/deepseek-v4-flash-vision-exp:batch"
-    structuredOutput: true
-  - id: "deepseek/deepseek-v4-flash:free"
-    label: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro"
     label: "deepseek/deepseek-v4-pro"
     structuredOutput: true
@@ -803,31 +593,15 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
-  - id: "deepseek/deepseek-v4-pro-0813:batch"
-    label: "deepseek/deepseek-v4-pro-0813:batch"
-    structuredOutput: true
   - id: "deepseek/deepseek-v4.1-flash"
     label: "deepseek/deepseek-v4.1-flash"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
-  - id: "deepseek/deepseek-v4.1-flash:batch"
-    label: "deepseek/deepseek-v4.1-flash:batch"
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
-    reasoningEfforts: [max, high, low]
-  - id: "eleutherai/llemma_7b"
-    label: "eleutherai/llemma_7b"
-  - id: "essentialai/rnj-1-instruct"
-    label: "essentialai/rnj-1-instruct"
   - id: "fireworks/ember-1"
     label: "fireworks/ember-1"
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
-  - id: "google/gemini-2.0-flash-exp:free"
-    label: "google/gemini-2.0-flash-exp:free"
-    structuredOutput: true
-  - id: "google/gemini-2.0-flash-lite-001"
-    label: "google/gemini-2.0-flash-lite-001"
   - id: "google/gemini-2.5-flash"
     label: "google/gemini-2.5-flash"
     structuredOutput: true
@@ -836,22 +610,8 @@ openrouter:
     label: "google/gemini-2.5-flash-image"
     structuredOutput: true
     supportedParameters: [max_tokens, temperature, top_p]
-  - id: "google/gemini-2.5-flash-image-preview"
-    label: "google/gemini-2.5-flash-image-preview"
   - id: "google/gemini-2.5-flash-lite"
     label: "google/gemini-2.5-flash-lite"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, temperature, top_p]
-  - id: "google/gemini-2.5-flash-lite-preview-09-2025"
-    label: "google/gemini-2.5-flash-lite-preview-09-2025"
-  - id: "google/gemini-2.5-flash-lite:batch"
-    label: "google/gemini-2.5-flash-lite:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, temperature, top_p]
-  - id: "google/gemini-2.5-flash-preview-09-2025"
-    label: "google/gemini-2.5-flash-preview-09-2025"
-  - id: "google/gemini-2.5-flash:batch"
-    label: "google/gemini-2.5-flash:batch"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
   - id: "google/gemini-2.5-pro"
@@ -862,20 +622,8 @@ openrouter:
     label: "google/gemini-2.5-pro-preview"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
-  - id: "google/gemini-2.5-pro-preview-05-06"
-    label: "google/gemini-2.5-pro-preview-05-06"
-    structuredOutput: true
-  - id: "google/gemini-2.5-pro:batch"
-    label: "google/gemini-2.5-pro:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, temperature, top_p]
   - id: "google/gemini-3-flash-preview"
     label: "google/gemini-3-flash-preview"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [high, medium, low, minimal]
-  - id: "google/gemini-3-flash-preview:batch"
-    label: "google/gemini-3-flash-preview:batch"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, minimal]
@@ -887,9 +635,6 @@ openrouter:
     label: "google/gemini-3-pro-image-preview"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
-  - id: "google/gemini-3-pro-preview"
-    label: "google/gemini-3-pro-preview"
-    structuredOutput: true
   - id: "google/gemini-3.1-flash-image"
     label: "google/gemini-3.1-flash-image"
     structuredOutput: true
@@ -915,11 +660,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, minimal]
-  - id: "google/gemini-3.1-flash-lite:batch"
-    label: "google/gemini-3.1-flash-lite:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [high, medium, low, minimal]
   - id: "google/gemini-3.1-pro-preview"
     label: "google/gemini-3.1-pro-preview"
     structuredOutput: true
@@ -927,11 +667,6 @@ openrouter:
     reasoningEfforts: [high, medium, low]
   - id: "google/gemini-3.1-pro-preview-customtools"
     label: "google/gemini-3.1-pro-preview-customtools"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [high, medium, low]
-  - id: "google/gemini-3.1-pro-preview:batch"
-    label: "google/gemini-3.1-pro-preview:batch"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low]
@@ -945,76 +680,37 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, minimal]
-  - id: "google/gemini-3.5-flash-lite:batch"
-    label: "google/gemini-3.5-flash-lite:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [high, medium, low, minimal]
-  - id: "google/gemini-3.5-flash:batch"
-    label: "google/gemini-3.5-flash:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [high, medium, low, minimal]
   - id: "google/gemini-3.6-flash"
     label: "google/gemini-3.6-flash"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [high, medium, low, minimal]
-  - id: "google/gemini-3.6-flash:batch"
-    label: "google/gemini-3.6-flash:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
   - id: "google/gemini-3.7-flash"
     label: "google/gemini-3.7-flash"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low]
-  - id: "google/gemini-3.7-flash:batch"
-    label: "google/gemini-3.7-flash:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [high, medium, low]
   - id: "google/gemini-3.8-flash"
     label: "google/gemini-3.8-flash"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low]
-  - id: "google/gemini-3.8-flash:batch"
-    label: "google/gemini-3.8-flash:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [high, medium, low]
   - id: "google/gemma-2-27b-it"
     label: "google/gemma-2-27b-it"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, repetition_penalty, temperature, top_p]
-  - id: "google/gemma-2-9b-it"
-    label: "google/gemma-2-9b-it"
   - id: "google/gemma-3-12b-it"
     label: "google/gemma-3-12b-it"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "google/gemma-3-12b-it:free"
-    label: "google/gemma-3-12b-it:free"
   - id: "google/gemma-3-27b-it"
     label: "google/gemma-3-27b-it"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "google/gemma-3-27b-it:free"
-    label: "google/gemma-3-27b-it:free"
   - id: "google/gemma-3-4b-it"
     label: "google/gemma-3-4b-it"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "google/gemma-3-4b-it:free"
-    label: "google/gemma-3-4b-it:free"
-  - id: "google/gemma-3n-e2b-it:free"
-    label: "google/gemma-3n-e2b-it:free"
-  - id: "google/gemma-3n-e4b-it"
-    label: "google/gemma-3n-e4b-it"
-  - id: "google/gemma-3n-e4b-it:free"
-    label: "google/gemma-3n-e4b-it:free"
   - id: "google/gemma-4-26b-a4b-it"
     label: "google/gemma-4-26b-a4b-it"
     structuredOutput: true
@@ -1027,8 +723,6 @@ openrouter:
     label: "google/gemma-4-31b-it"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "google/gemma-4-31b-it:batch"
-    label: "google/gemma-4-31b-it:batch"
   - id: "google/gemma-4-31b-it:free"
     label: "google/gemma-4-31b-it:free"
     structuredOutput: true
@@ -1047,15 +741,11 @@ openrouter:
     label: "ibm-granite/granite-4.0-h-micro"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "ibm-granite/granite-4.1-8b"
-    label: "ibm-granite/granite-4.1-8b"
   - id: "ibm-granite/granite-4.2-8b"
     label: "ibm-granite/granite-4.2-8b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [high, low, none]
-  - id: "inception/mercury"
-    label: "inception/mercury"
   - id: "inception/mercury-2"
     label: "inception/mercury-2"
     structuredOutput: true
@@ -1066,18 +756,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature]
     reasoningEfforts: [high, medium, low, none]
-  - id: "inception/mercury-2.5-preview"
-    label: "inception/mercury-2.5-preview"
-  - id: "inception/mercury-coder"
-    label: "inception/mercury-coder"
-  - id: "inclusionai/ling-2.6-1t"
-    label: "inclusionai/ling-2.6-1t"
-  - id: "inclusionai/ling-2.6-1t:free"
-    label: "inclusionai/ling-2.6-1t:free"
-  - id: "inclusionai/ling-2.6-flash"
-    label: "inclusionai/ling-2.6-flash"
-  - id: "inclusionai/ling-2.6-flash:free"
-    label: "inclusionai/ling-2.6-flash:free"
   - id: "inclusionai/ling-3.0-flash"
     label: "inclusionai/ling-3.0-flash"
     structuredOutput: true
@@ -1086,24 +764,10 @@ openrouter:
     label: "inclusionai/ling-3.0-flash-fin"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "inclusionai/ling-3.0-flash-fin:free"
-    label: "inclusionai/ling-3.0-flash-fin:free"
-  - id: "inclusionai/ling-3.0-flash-sante:free"
-    label: "inclusionai/ling-3.0-flash-sante:free"
   - id: "inclusionai/ling-3.0-flash-vl"
     label: "inclusionai/ling-3.0-flash-vl"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "inclusionai/ling-3.0-flash-vl:free"
-    label: "inclusionai/ling-3.0-flash-vl:free"
-  - id: "inclusionai/ling-3.0-flash:free"
-    label: "inclusionai/ling-3.0-flash:free"
-  - id: "inclusionai/ling-3.0-tiny:free"
-    label: "inclusionai/ling-3.0-tiny:free"
-  - id: "inclusionai/ring-2.6-1t"
-    label: "inclusionai/ring-2.6-1t"
-  - id: "inclusionai/ring-2.6-1t:free"
-    label: "inclusionai/ring-2.6-1t:free"
   - id: "inference-net/schematron-v2-small"
     label: "inference-net/schematron-v2-small"
     structuredOutput: true
@@ -1112,36 +776,10 @@ openrouter:
     label: "inference-net/schematron-v2-turbo"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "inflection/inflection-3-pi"
-    label: "inflection/inflection-3-pi"
-  - id: "inflection/inflection-3-productivity"
-    label: "inflection/inflection-3-productivity"
-  - id: "kwaipilot/kat-coder-air-v2.5"
-    label: "kwaipilot/kat-coder-air-v2.5"
-  - id: "kwaipilot/kat-coder-pro"
-    label: "kwaipilot/kat-coder-pro"
-  - id: "kwaipilot/kat-coder-pro-v2"
-    label: "kwaipilot/kat-coder-pro-v2"
-    structuredOutput: true
-  - id: "kwaipilot/kat-coder-pro-v2.5"
-    label: "kwaipilot/kat-coder-pro-v2.5"
-    structuredOutput: true
-  - id: "kwaipilot/kat-coder-pro:free"
-    label: "kwaipilot/kat-coder-pro:free"
-  - id: "liquid/lfm-2-24b-a2b"
-    label: "liquid/lfm-2-24b-a2b"
-  - id: "liquid/lfm-2.2-6b"
-    label: "liquid/lfm-2.2-6b"
-  - id: "liquid/lfm-2.5-1.2b-instruct:free"
-    label: "liquid/lfm-2.5-1.2b-instruct:free"
-  - id: "liquid/lfm-2.5-1.2b-thinking:free"
-    label: "liquid/lfm-2.5-1.2b-thinking:free"
   - id: "liquid/lfm-2.5-2.6b:free"
     label: "liquid/lfm-2.5-2.6b:free"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "liquid/lfm2-8b-a1b"
-    label: "liquid/lfm2-8b-a1b"
   - id: "mancer/weaver"
     label: "mancer/weaver"
     structuredOutput: true
@@ -1149,21 +787,6 @@ openrouter:
   - id: "meituan/longcat-2.0"
     label: "meituan/longcat-2.0"
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "meituan/longcat-flash-chat"
-    label: "meituan/longcat-flash-chat"
-  - id: "meituan/longcat-flash-chat:free"
-    label: "meituan/longcat-flash-chat:free"
-  - id: "meta-llama/llama-3-70b-instruct"
-    label: "meta-llama/llama-3-70b-instruct"
-    structuredOutput: true
-  - id: "meta-llama/llama-3-8b-instruct"
-    label: "meta-llama/llama-3-8b-instruct"
-    structuredOutput: true
-  - id: "meta-llama/llama-3.1-405b"
-    label: "meta-llama/llama-3.1-405b"
-  - id: "meta-llama/llama-3.1-405b-instruct"
-    label: "meta-llama/llama-3.1-405b-instruct"
-    structuredOutput: true
   - id: "meta-llama/llama-3.1-70b-instruct"
     label: "meta-llama/llama-3.1-70b-instruct"
     structuredOutput: true
@@ -1172,9 +795,6 @@ openrouter:
     label: "meta-llama/llama-3.1-8b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "meta-llama/llama-3.2-11b-vision-instruct"
-    label: "meta-llama/llama-3.2-11b-vision-instruct"
-    structuredOutput: true
   - id: "meta-llama/llama-3.2-1b-instruct"
     label: "meta-llama/llama-3.2-1b-instruct"
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
@@ -1182,17 +802,10 @@ openrouter:
     label: "meta-llama/llama-3.2-3b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "meta-llama/llama-3.2-3b-instruct:free"
-    label: "meta-llama/llama-3.2-3b-instruct:free"
-  - id: "meta-llama/llama-3.2-90b-vision-instruct"
-    label: "meta-llama/llama-3.2-90b-vision-instruct"
-    structuredOutput: true
   - id: "meta-llama/llama-3.3-70b-instruct"
     label: "meta-llama/llama-3.3-70b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "meta-llama/llama-3.3-70b-instruct:free"
-    label: "meta-llama/llama-3.3-70b-instruct:free"
   - id: "meta-llama/llama-4-maverick"
     label: "meta-llama/llama-4-maverick"
     structuredOutput: true
@@ -1201,24 +814,15 @@ openrouter:
     label: "meta-llama/llama-4-scout"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "meta-llama/llama-guard-2-8b"
-    label: "meta-llama/llama-guard-2-8b"
-  - id: "meta-llama/llama-guard-3-8b"
-    label: "meta-llama/llama-guard-3-8b"
   - id: "meta-llama/llama-guard-4-12b"
     label: "meta-llama/llama-guard-4-12b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "meta-llama/llama-guard-4-12b:free"
-    label: "meta-llama/llama-guard-4-12b:free"
   - id: "meta/muse-glimmer-30b"
     label: "meta/muse-glimmer-30b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [xhigh, high, medium, low]
-  - id: "meta/muse-glimmer-30b:batch"
-    label: "meta/muse-glimmer-30b:batch"
-    structuredOutput: true
   - id: "meta/muse-spark-1.1"
     label: "meta/muse-spark-1.1"
     structuredOutput: true
@@ -1244,27 +848,10 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, xhigh, high, medium, low, minimal]
-  - id: "microsoft/mai-ds-r1"
-    label: "microsoft/mai-ds-r1"
-  - id: "microsoft/mai-ds-r1:free"
-    label: "microsoft/mai-ds-r1:free"
-  - id: "microsoft/phi-3-medium-128k-instruct"
-    label: "microsoft/phi-3-medium-128k-instruct"
-  - id: "microsoft/phi-3-mini-128k-instruct"
-    label: "microsoft/phi-3-mini-128k-instruct"
-  - id: "microsoft/phi-3.5-mini-128k-instruct"
-    label: "microsoft/phi-3.5-mini-128k-instruct"
   - id: "microsoft/phi-4"
     label: "microsoft/phi-4"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "microsoft/phi-4-mini-instruct"
-    label: "microsoft/phi-4-mini-instruct"
-  - id: "microsoft/phi-4-multimodal-instruct"
-    label: "microsoft/phi-4-multimodal-instruct"
-  - id: "microsoft/phi-4-reasoning-plus"
-    label: "microsoft/phi-4-reasoning-plus"
-    reasoning: true
   - id: "microsoft/wizardlm-2-8x22b"
     label: "microsoft/wizardlm-2-8x22b"
     structuredOutput: true
@@ -1290,85 +877,34 @@ openrouter:
     label: "minimax/minimax-m2.5"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "minimax/minimax-m2.5:free"
-    label: "minimax/minimax-m2.5:free"
   - id: "minimax/minimax-m2.7"
     label: "minimax/minimax-m2.7"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "minimax/minimax-m2.7:free"
-    label: "minimax/minimax-m2.7:free"
-    structuredOutput: true
   - id: "minimax/minimax-m3"
     label: "minimax/minimax-m3"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "minimax/minimax-m3:batch"
-    label: "minimax/minimax-m3:batch"
-    structuredOutput: true
-  - id: "minimax/minimax-m3:free"
-    label: "minimax/minimax-m3:free"
-    structuredOutput: true
-  - id: "mistralai/codestral-2501"
-    label: "mistralai/codestral-2501"
-    structuredOutput: true
   - id: "mistralai/codestral-2508"
     label: "mistralai/codestral-2508"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/codestral-2508:batch"
-    label: "mistralai/codestral-2508:batch"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
   - id: "mistralai/devstral-2512"
     label: "mistralai/devstral-2512"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/devstral-medium"
-    label: "mistralai/devstral-medium"
-  - id: "mistralai/devstral-small"
-    label: "mistralai/devstral-small"
-  - id: "mistralai/devstral-small-2505"
-    label: "mistralai/devstral-small-2505"
-  - id: "mistralai/magistral-medium-2506"
-    label: "mistralai/magistral-medium-2506"
-  - id: "mistralai/magistral-medium-2506:thinking"
-    label: "mistralai/magistral-medium-2506:thinking"
-    reasoning: true
-  - id: "mistralai/magistral-small-2506"
-    label: "mistralai/magistral-small-2506"
   - id: "mistralai/ministral-14b-2512"
     label: "mistralai/ministral-14b-2512"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/ministral-3b"
-    label: "mistralai/ministral-3b"
-    structuredOutput: true
   - id: "mistralai/ministral-3b-2512"
     label: "mistralai/ministral-3b-2512"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/ministral-8b"
-    label: "mistralai/ministral-8b"
-    structuredOutput: true
   - id: "mistralai/ministral-8b-2512"
     label: "mistralai/ministral-8b-2512"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/ministral-8b-2512:batch"
-    label: "mistralai/ministral-8b-2512:batch"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/mistral-7b-instruct"
-    label: "mistralai/mistral-7b-instruct"
-  - id: "mistralai/mistral-7b-instruct-v0.1"
-    label: "mistralai/mistral-7b-instruct-v0.1"
-  - id: "mistralai/mistral-7b-instruct-v0.2"
-    label: "mistralai/mistral-7b-instruct-v0.2"
-  - id: "mistralai/mistral-7b-instruct-v0.3"
-    label: "mistralai/mistral-7b-instruct-v0.3"
-  - id: "mistralai/mistral-7b-instruct:free"
-    label: "mistralai/mistral-7b-instruct:free"
   - id: "mistralai/mistral-large"
     label: "mistralai/mistral-large"
     structuredOutput: true
@@ -1377,15 +913,8 @@ openrouter:
     label: "mistralai/mistral-large-2407"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/mistral-large-2411"
-    label: "mistralai/mistral-large-2411"
-    structuredOutput: true
   - id: "mistralai/mistral-large-2512"
     label: "mistralai/mistral-large-2512"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/mistral-large-2512:batch"
-    label: "mistralai/mistral-large-2512:batch"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
   - id: "mistralai/mistral-medium-3"
@@ -1397,83 +926,42 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, none]
-  - id: "mistralai/mistral-medium-3-5:batch"
-    label: "mistralai/mistral-medium-3-5:batch"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [high, none]
   - id: "mistralai/mistral-medium-3.1"
     label: "mistralai/mistral-medium-3.1"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/mistral-medium-3.1:batch"
-    label: "mistralai/mistral-medium-3.1:batch"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
   - id: "mistralai/mistral-nemo"
     label: "mistralai/mistral-nemo"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "mistralai/mistral-nemo:free"
-    label: "mistralai/mistral-nemo:free"
   - id: "mistralai/mistral-saba"
     label: "mistralai/mistral-saba"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/mistral-small"
-    label: "mistralai/mistral-small"
-    structuredOutput: true
   - id: "mistralai/mistral-small-24b-instruct-2501"
     label: "mistralai/mistral-small-24b-instruct-2501"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "mistralai/mistral-small-24b-instruct-2501:free"
-    label: "mistralai/mistral-small-24b-instruct-2501:free"
   - id: "mistralai/mistral-small-2603"
     label: "mistralai/mistral-small-2603"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [high, none]
-  - id: "mistralai/mistral-small-2603:batch"
-    label: "mistralai/mistral-small-2603:batch"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, none]
   - id: "mistralai/mistral-small-3.1-24b-instruct"
     label: "mistralai/mistral-small-3.1-24b-instruct"
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "mistralai/mistral-small-3.1-24b-instruct:free"
-    label: "mistralai/mistral-small-3.1-24b-instruct:free"
   - id: "mistralai/mistral-small-3.2-24b-instruct"
     label: "mistralai/mistral-small-3.2-24b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "mistralai/mistral-small-3.2-24b-instruct:free"
-    label: "mistralai/mistral-small-3.2-24b-instruct:free"
-  - id: "mistralai/mistral-small-creative"
-    label: "mistralai/mistral-small-creative"
-  - id: "mistralai/mistral-tiny"
-    label: "mistralai/mistral-tiny"
-    structuredOutput: true
   - id: "mistralai/mixtral-8x22b-instruct"
     label: "mistralai/mixtral-8x22b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "mistralai/mixtral-8x7b-instruct"
-    label: "mistralai/mixtral-8x7b-instruct"
-    structuredOutput: true
-  - id: "mistralai/pixtral-12b"
-    label: "mistralai/pixtral-12b"
-    structuredOutput: true
-  - id: "mistralai/pixtral-large-2411"
-    label: "mistralai/pixtral-large-2411"
-    structuredOutput: true
   - id: "mistralai/voxtral-small-24b-2507"
     label: "mistralai/voxtral-small-24b-2507"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "moonshotai/kimi-dev-72b"
-    label: "moonshotai/kimi-dev-72b"
   - id: "moonshotai/kimi-k2"
     label: "moonshotai/kimi-k2"
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, repetition_penalty, temperature, top_k, top_p]
@@ -1481,8 +969,6 @@ openrouter:
     label: "moonshotai/kimi-k2-0905"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "moonshotai/kimi-k2-0905:exacto"
-    label: "moonshotai/kimi-k2-0905:exacto"
   - id: "moonshotai/kimi-k2-thinking"
     label: "moonshotai/kimi-k2-thinking"
     structuredOutput: true
@@ -1496,28 +982,15 @@ openrouter:
     label: "moonshotai/kimi-k2.6"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "moonshotai/kimi-k2.6:free"
-    label: "moonshotai/kimi-k2.6:free"
   - id: "moonshotai/kimi-k2.7-code"
     label: "moonshotai/kimi-k2.7-code"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "moonshotai/kimi-k2.7-code:batch"
-    label: "moonshotai/kimi-k2.7-code:batch"
-  - id: "moonshotai/kimi-k2:free"
-    label: "moonshotai/kimi-k2:free"
   - id: "moonshotai/kimi-k3"
     label: "moonshotai/kimi-k3"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
-  - id: "moonshotai/kimi-k3:batch"
-    label: "moonshotai/kimi-k3:batch"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
-    reasoningEfforts: [max, high, low]
-  - id: "moonshotai/kimi-linear-48b-a3b-instruct"
-    label: "moonshotai/kimi-linear-48b-a3b-instruct"
   - id: "morph/morph-v3-fast"
     label: "morph/morph-v3-fast"
     supportedParameters: [max_tokens, temperature]
@@ -1525,42 +998,18 @@ openrouter:
     label: "morph/morph-v3-large"
     structuredOutput: true
     supportedParameters: [max_tokens, temperature]
-  - id: "neversleep/llama-3.1-lumimaid-8b"
-    label: "neversleep/llama-3.1-lumimaid-8b"
-  - id: "neversleep/noromaid-20b"
-    label: "neversleep/noromaid-20b"
-  - id: "nex-agi/deepseek-v3.1-nex-n1"
-    label: "nex-agi/deepseek-v3.1-nex-n1"
-  - id: "nex-agi/nex-n2-mini"
-    label: "nex-agi/nex-n2-mini"
-  - id: "nex-agi/nex-n2-pro"
-    label: "nex-agi/nex-n2-pro"
-  - id: "nex-agi/nex-n2-pro:free"
-    label: "nex-agi/nex-n2-pro:free"
   - id: "nex-agi/nex-n2.5-mini"
     label: "nex-agi/nex-n2.5-mini"
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_k, top_p]
     reasoningEfforts: [high, medium, none]
-  - id: "nex-agi/nex-n2.5-mini:free"
-    label: "nex-agi/nex-n2.5-mini:free"
-    structuredOutput: true
   - id: "nex-agi/nex-n2.5-pro"
     label: "nex-agi/nex-n2.5-pro"
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_k, top_p]
     reasoningEfforts: [high, medium, none]
-  - id: "nex-agi/nex-n2.5-pro:free"
-    label: "nex-agi/nex-n2.5-pro:free"
-    structuredOutput: true
-  - id: "nousresearch/deephermes-3-mistral-24b-preview"
-    label: "nousresearch/deephermes-3-mistral-24b-preview"
-  - id: "nousresearch/hermes-2-pro-llama-3-8b"
-    label: "nousresearch/hermes-2-pro-llama-3-8b"
   - id: "nousresearch/hermes-3-llama-3.1-405b"
     label: "nousresearch/hermes-3-llama-3.1-405b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "nousresearch/hermes-3-llama-3.1-405b:free"
-    label: "nousresearch/hermes-3-llama-3.1-405b:free"
   - id: "nousresearch/hermes-3-llama-3.1-70b"
     label: "nousresearch/hermes-3-llama-3.1-70b"
     structuredOutput: true
@@ -1569,20 +1018,10 @@ openrouter:
     label: "nousresearch/hermes-4-405b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "nousresearch/hermes-4-70b"
-    label: "nousresearch/hermes-4-70b"
-  - id: "nvidia/llama-3.1-nemotron-70b-instruct"
-    label: "nvidia/llama-3.1-nemotron-70b-instruct"
-  - id: "nvidia/llama-3.1-nemotron-ultra-253b-v1"
-    label: "nvidia/llama-3.1-nemotron-ultra-253b-v1"
-  - id: "nvidia/llama-3.3-nemotron-super-49b-v1.5"
-    label: "nvidia/llama-3.3-nemotron-super-49b-v1.5"
   - id: "nvidia/nemotron-3-nano-30b-a3b"
     label: "nvidia/nemotron-3-nano-30b-a3b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "nvidia/nemotron-3-nano-30b-a3b:free"
-    label: "nvidia/nemotron-3-nano-30b-a3b:free"
   - id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     label: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
@@ -1601,8 +1040,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [high, medium]
-  - id: "nvidia/nemotron-3-ultra-550b-a55b:batch"
-    label: "nvidia/nemotron-3-ultra-550b-a55b:batch"
   - id: "nvidia/nemotron-3-ultra-550b-a55b:free"
     label: "nvidia/nemotron-3-ultra-550b-a55b:free"
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
@@ -1621,18 +1058,6 @@ openrouter:
   - id: "nvidia/nemotron-3.5-lightning:free"
     label: "nvidia/nemotron-3.5-lightning:free"
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
-  - id: "nvidia/nemotron-nano-12b-v2-vl"
-    label: "nvidia/nemotron-nano-12b-v2-vl"
-  - id: "nvidia/nemotron-nano-12b-v2-vl:free"
-    label: "nvidia/nemotron-nano-12b-v2-vl:free"
-  - id: "nvidia/nemotron-nano-9b-v2"
-    label: "nvidia/nemotron-nano-9b-v2"
-  - id: "nvidia/nemotron-nano-9b-v2:free"
-    label: "nvidia/nemotron-nano-9b-v2:free"
-  - id: "openai/chatgpt-4o-latest"
-    label: "openai/chatgpt-4o-latest"
-  - id: "openai/codex-mini"
-    label: "openai/codex-mini"
   - id: "openai/gpt-3.5-turbo"
     label: "openai/gpt-3.5-turbo"
     structuredOutput: true
@@ -1649,27 +1074,12 @@ openrouter:
     label: "openai/gpt-3.5-turbo-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "openai/gpt-3.5-turbo:batch"
-    label: "openai/gpt-3.5-turbo:batch"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
   - id: "openai/gpt-4"
     label: "openai/gpt-4"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, presence_penalty, temperature, top_p]
-  - id: "openai/gpt-4-0314"
-    label: "openai/gpt-4-0314"
-  - id: "openai/gpt-4-1106-preview"
-    label: "openai/gpt-4-1106-preview"
   - id: "openai/gpt-4-turbo"
     label: "openai/gpt-4-turbo"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "openai/gpt-4-turbo-preview"
-    label: "openai/gpt-4-turbo-preview"
-    structuredOutput: true
-  - id: "openai/gpt-4-turbo:batch"
-    label: "openai/gpt-4-turbo:batch"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
   - id: "openai/gpt-4.1"
@@ -1680,22 +1090,10 @@ openrouter:
     label: "openai/gpt-4.1-mini"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, temperature, top_p]
-  - id: "openai/gpt-4.1-mini:batch"
-    label: "openai/gpt-4.1-mini:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, temperature, top_p]
   - id: "openai/gpt-4.1-nano"
     label: "openai/gpt-4.1-nano"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, temperature, top_p]
-  - id: "openai/gpt-4.1-nano:batch"
-    label: "openai/gpt-4.1-nano:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, temperature, top_p]
-  - id: "openai/gpt-4.1:batch"
-    label: "openai/gpt-4.1:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, temperature, top_p]
   - id: "openai/gpt-4o"
     label: "openai/gpt-4o"
     structuredOutput: true
@@ -1712,8 +1110,6 @@ openrouter:
     label: "openai/gpt-4o-2024-11-20"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "openai/gpt-4o-audio-preview"
-    label: "openai/gpt-4o-audio-preview"
   - id: "openai/gpt-4o-mini"
     label: "openai/gpt-4o-mini"
     structuredOutput: true
@@ -1722,32 +1118,11 @@ openrouter:
     label: "openai/gpt-4o-mini-2024-07-18"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "openai/gpt-4o-mini-search-preview"
-    label: "openai/gpt-4o-mini-search-preview"
-  - id: "openai/gpt-4o-mini:batch"
-    label: "openai/gpt-4o-mini:batch"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "openai/gpt-4o-search-preview"
-    label: "openai/gpt-4o-search-preview"
-  - id: "openai/gpt-4o:batch"
-    label: "openai/gpt-4o:batch"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "openai/gpt-4o:extended"
-    label: "openai/gpt-4o:extended"
-    structuredOutput: true
   - id: "openai/gpt-5"
     label: "openai/gpt-5"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
-  - id: "openai/gpt-5-chat"
-    label: "openai/gpt-5-chat"
-  - id: "openai/gpt-5-codex"
-    label: "openai/gpt-5-codex"
-  - id: "openai/gpt-5-codex:batch"
-    label: "openai/gpt-5-codex:batch"
   - id: "openai/gpt-5-image"
     label: "openai/gpt-5-image"
     structuredOutput: true
@@ -1761,28 +1136,13 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
-  - id: "openai/gpt-5-mini:batch"
-    label: "openai/gpt-5-mini:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [high, medium, low, minimal]
   - id: "openai/gpt-5-nano"
     label: "openai/gpt-5-nano"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
-  - id: "openai/gpt-5-nano:batch"
-    label: "openai/gpt-5-nano:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [high, medium, low, minimal]
   - id: "openai/gpt-5-pro"
     label: "openai/gpt-5-pro"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [high]
-  - id: "openai/gpt-5-pro:batch"
-    label: "openai/gpt-5-pro:batch"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high]
@@ -1791,8 +1151,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, none]
-  - id: "openai/gpt-5.1-chat"
-    label: "openai/gpt-5.1-chat"
   - id: "openai/gpt-5.1-codex"
     label: "openai/gpt-5.1-codex"
     structuredOutput: true
@@ -1808,11 +1166,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low]
-  - id: "openai/gpt-5.1:batch"
-    label: "openai/gpt-5.1:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [high, medium, low, none]
   - id: "openai/gpt-5.2"
     label: "openai/gpt-5.2"
     structuredOutput: true
@@ -1822,9 +1175,6 @@ openrouter:
     label: "openai/gpt-5.2-chat"
     structuredOutput: true
     supportedParameters: [max_completion_tokens]
-  - id: "openai/gpt-5.2-chat-latest"
-    label: "openai/gpt-5.2-chat-latest"
-    structuredOutput: true
   - id: "openai/gpt-5.2-codex"
     label: "openai/gpt-5.2-codex"
     structuredOutput: true
@@ -1835,18 +1185,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium]
-  - id: "openai/gpt-5.2-pro:batch"
-    label: "openai/gpt-5.2-pro:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [xhigh, high, medium]
-  - id: "openai/gpt-5.2:batch"
-    label: "openai/gpt-5.2:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.3-chat"
-    label: "openai/gpt-5.3-chat"
   - id: "openai/gpt-5.3-codex"
     label: "openai/gpt-5.3-codex"
     structuredOutput: true
@@ -1867,36 +1205,16 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.4-mini:batch"
-    label: "openai/gpt-5.4-mini:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [xhigh, high, medium, low, none]
   - id: "openai/gpt-5.4-nano"
     label: "openai/gpt-5.4-nano"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.4-nano:batch"
-    label: "openai/gpt-5.4-nano:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium, low, none]
   - id: "openai/gpt-5.4-pro"
     label: "openai/gpt-5.4-pro"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium]
-  - id: "openai/gpt-5.4-pro:batch"
-    label: "openai/gpt-5.4-pro:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [xhigh, high, medium]
-  - id: "openai/gpt-5.4:batch"
-    label: "openai/gpt-5.4:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [xhigh, high, medium, low, none]
   - id: "openai/gpt-5.5"
     label: "openai/gpt-5.5"
     structuredOutput: true
@@ -1907,16 +1225,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium]
-  - id: "openai/gpt-5.5-pro:batch"
-    label: "openai/gpt-5.5-pro:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [xhigh, high, medium]
-  - id: "openai/gpt-5.5:batch"
-    label: "openai/gpt-5.5:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [xhigh, high, medium, low, none]
   - id: "openai/gpt-5.6-luna"
     label: "openai/gpt-5.6-luna"
     structuredOutput: true
@@ -1926,16 +1234,6 @@ openrouter:
     label: "openai/gpt-5.6-luna-pro"
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.6-luna-pro:batch"
-    label: "openai/gpt-5.6-luna-pro:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.6-luna:batch"
-    label: "openai/gpt-5.6-luna:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
   - id: "openai/gpt-5.6-sol"
     label: "openai/gpt-5.6-sol"
@@ -1947,16 +1245,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.6-sol-pro:batch"
-    label: "openai/gpt-5.6-sol-pro:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.6-sol:batch"
-    label: "openai/gpt-5.6-sol:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
   - id: "openai/gpt-5.6-terra"
     label: "openai/gpt-5.6-terra"
     structuredOutput: true
@@ -1967,21 +1255,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.6-terra-pro:batch"
-    label: "openai/gpt-5.6-terra-pro:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.6-terra:batch"
-    label: "openai/gpt-5.6-terra:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-5:batch"
-    label: "openai/gpt-5:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [high, medium, low, minimal]
   - id: "openai/gpt-6-astra"
     label: "openai/gpt-6-astra"
     structuredOutput: true
@@ -1992,16 +1265,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "openai/gpt-6-astra-pro:batch"
-    label: "openai/gpt-6-astra-pro:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "openai/gpt-6-astra:batch"
-    label: "openai/gpt-6-astra:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
   - id: "openai/gpt-6-luna"
     label: "openai/gpt-6-luna"
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
@@ -2009,14 +1272,6 @@ openrouter:
   - id: "openai/gpt-6-luna-pro"
     label: "openai/gpt-6-luna-pro"
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-6-luna-pro:batch"
-    label: "openai/gpt-6-luna-pro:batch"
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-6-luna:batch"
-    label: "openai/gpt-6-luna:batch"
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
   - id: "openai/gpt-6-sol"
     label: "openai/gpt-6-sol"
@@ -2026,14 +1281,6 @@ openrouter:
     label: "openai/gpt-6-sol-pro"
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-6-sol-pro:batch"
-    label: "openai/gpt-6-sol-pro:batch"
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
-  - id: "openai/gpt-6-sol:batch"
-    label: "openai/gpt-6-sol:batch"
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low, none]
   - id: "openai/gpt-6.1-sol"
     label: "openai/gpt-6.1-sol"
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
@@ -2041,14 +1288,6 @@ openrouter:
   - id: "openai/gpt-6.1-sol-pro"
     label: "openai/gpt-6.1-sol-pro"
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "openai/gpt-6.1-sol-pro:batch"
-    label: "openai/gpt-6.1-sol-pro:batch"
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
-    reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "openai/gpt-6.1-sol:batch"
-    label: "openai/gpt-6.1-sol:batch"
-    supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
   - id: "openai/gpt-audio"
     label: "openai/gpt-audio"
@@ -2067,26 +1306,11 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_a, top_k, top_p]
     reasoningEfforts: [high, medium, low]
-  - id: "openai/gpt-oss-120b:batch"
-    label: "openai/gpt-oss-120b:batch"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
-    reasoningEfforts: [high, medium, low]
-  - id: "openai/gpt-oss-120b:exacto"
-    label: "openai/gpt-oss-120b:exacto"
-  - id: "openai/gpt-oss-120b:free"
-    label: "openai/gpt-oss-120b:free"
   - id: "openai/gpt-oss-20b"
     label: "openai/gpt-oss-20b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [high, medium, low]
-  - id: "openai/gpt-oss-20b:batch"
-    label: "openai/gpt-oss-20b:batch"
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
-    reasoningEfforts: [high, medium, low]
-  - id: "openai/gpt-oss-20b:free"
-    label: "openai/gpt-oss-20b:free"
   - id: "openai/gpt-oss-safeguard-20b"
     label: "openai/gpt-oss-safeguard-20b"
     structuredOutput: true
@@ -2101,18 +1325,11 @@ openrouter:
     structuredOutput: true
     reasoning: true
     supportedParameters: [max_tokens, reasoning]
-  - id: "openai/o1-pro:batch"
-    label: "openai/o1-pro:batch"
-  - id: "openai/o1:batch"
-    label: "openai/o1:batch"
   - id: "openai/o3"
     label: "openai/o3"
     structuredOutput: true
     reasoning: true
     supportedParameters: [max_tokens, reasoning]
-  - id: "openai/o3-deep-research"
-    label: "openai/o3-deep-research"
-    reasoning: true
   - id: "openai/o3-mini"
     label: "openai/o3-mini"
     structuredOutput: true
@@ -2124,45 +1341,22 @@ openrouter:
     reasoning: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high]
-  - id: "openai/o3-mini-high:batch"
-    label: "openai/o3-mini-high:batch"
-  - id: "openai/o3-mini:batch"
-    label: "openai/o3-mini:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning]
   - id: "openai/o3-pro"
     label: "openai/o3-pro"
     structuredOutput: true
     reasoning: true
-    supportedParameters: [max_tokens, reasoning]
-  - id: "openai/o3-pro:batch"
-    label: "openai/o3-pro:batch"
-  - id: "openai/o3:batch"
-    label: "openai/o3:batch"
-    structuredOutput: true
     supportedParameters: [max_tokens, reasoning]
   - id: "openai/o4-mini"
     label: "openai/o4-mini"
     structuredOutput: true
     reasoning: true
     supportedParameters: [max_tokens, reasoning]
-  - id: "openai/o4-mini-deep-research"
-    label: "openai/o4-mini-deep-research"
-    reasoning: true
   - id: "openai/o4-mini-high"
     label: "openai/o4-mini-high"
     structuredOutput: true
     reasoning: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high]
-  - id: "openai/o4-mini-high:batch"
-    label: "openai/o4-mini-high:batch"
-  - id: "openai/o4-mini:batch"
-    label: "openai/o4-mini:batch"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning]
-  - id: "opengvlab/internvl3-78b"
-    label: "opengvlab/internvl3-78b"
   - id: "openrouter/auto"
     label: "openrouter/auto"
     structuredOutput: true
@@ -2172,20 +1366,12 @@ openrouter:
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_a, top_k, top_p]
   - id: "openrouter/bodybuilder"
     label: "openrouter/bodybuilder"
-  - id: "openrouter/elephant-alpha"
-    label: "openrouter/elephant-alpha"
   - id: "openrouter/free"
     label: "openrouter/free"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
   - id: "openrouter/fusion"
     label: "openrouter/fusion"
-  - id: "openrouter/healer-alpha"
-    label: "openrouter/healer-alpha"
-  - id: "openrouter/hunter-alpha"
-    label: "openrouter/hunter-alpha"
-  - id: "openrouter/owl-alpha"
-    label: "openrouter/owl-alpha"
   - id: "openrouter/pareto-code"
     label: "openrouter/pareto-code"
   - id: "perceptron/perceptron-mk1"
@@ -2209,15 +1395,9 @@ openrouter:
     label: "perplexity/sonar-pro-search"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "perplexity/sonar-reasoning"
-    label: "perplexity/sonar-reasoning"
   - id: "perplexity/sonar-reasoning-pro"
     label: "perplexity/sonar-reasoning-pro"
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "poolside/laguna-m.1"
-    label: "poolside/laguna-m.1"
-  - id: "poolside/laguna-m.1:free"
-    label: "poolside/laguna-m.1:free"
   - id: "poolside/laguna-s-2.1"
     label: "poolside/laguna-s-2.1"
     supportedParameters: [max_tokens, reasoning, temperature]
@@ -2230,12 +1410,6 @@ openrouter:
   - id: "poolside/laguna-xs-2.1:free"
     label: "poolside/laguna-xs-2.1:free"
     supportedParameters: [max_tokens, reasoning, temperature]
-  - id: "poolside/laguna-xs.2"
-    label: "poolside/laguna-xs.2"
-  - id: "poolside/laguna-xs.2:free"
-    label: "poolside/laguna-xs.2:free"
-  - id: "prime-intellect/intellect-3"
-    label: "prime-intellect/intellect-3"
   - id: "prism-ml/ternary-bonsai-2-27b"
     label: "prism-ml/ternary-bonsai-2-27b"
     structuredOutput: true
@@ -2245,8 +1419,6 @@ openrouter:
     label: "qwen/qwen-2.5-72b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen-2.5-72b-instruct:free"
-    label: "qwen/qwen-2.5-72b-instruct:free"
   - id: "qwen/qwen-2.5-7b-instruct"
     label: "qwen/qwen-2.5-7b-instruct"
     structuredOutput: true
@@ -2255,12 +1427,6 @@ openrouter:
     label: "qwen/qwen-2.5-coder-32b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen-2.5-coder-32b-instruct:free"
-    label: "qwen/qwen-2.5-coder-32b-instruct:free"
-  - id: "qwen/qwen-2.5-vl-7b-instruct"
-    label: "qwen/qwen-2.5-vl-7b-instruct"
-  - id: "qwen/qwen-max"
-    label: "qwen/qwen-max"
   - id: "qwen/qwen-plus"
     label: "qwen/qwen-plus"
     structuredOutput: true
@@ -2269,21 +1435,6 @@ openrouter:
     label: "qwen/qwen-plus-2025-07-28"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen-plus-2025-07-28:thinking"
-    label: "qwen/qwen-plus-2025-07-28:thinking"
-    reasoning: true
-  - id: "qwen/qwen-turbo"
-    label: "qwen/qwen-turbo"
-  - id: "qwen/qwen-vl-max"
-    label: "qwen/qwen-vl-max"
-  - id: "qwen/qwen-vl-plus"
-    label: "qwen/qwen-vl-plus"
-  - id: "qwen/qwen2.5-coder-7b-instruct"
-    label: "qwen/qwen2.5-coder-7b-instruct"
-  - id: "qwen/qwen2.5-vl-32b-instruct"
-    label: "qwen/qwen2.5-vl-32b-instruct"
-  - id: "qwen/qwen2.5-vl-32b-instruct:free"
-    label: "qwen/qwen2.5-vl-32b-instruct:free"
   - id: "qwen/qwen2.5-vl-72b-instruct"
     label: "qwen/qwen2.5-vl-72b-instruct"
     structuredOutput: true
@@ -2292,8 +1443,6 @@ openrouter:
     label: "qwen/qwen3-14b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-14b:free"
-    label: "qwen/qwen3-14b:free"
   - id: "qwen/qwen3-235b-a22b"
     label: "qwen/qwen3-235b-a22b"
     structuredOutput: true
@@ -2306,8 +1455,6 @@ openrouter:
     label: "qwen/qwen3-235b-a22b-thinking-2507"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "qwen/qwen3-235b-a22b:free"
-    label: "qwen/qwen3-235b-a22b:free"
   - id: "qwen/qwen3-30b-a3b"
     label: "qwen/qwen3-30b-a3b"
     structuredOutput: true
@@ -2320,14 +1467,10 @@ openrouter:
     label: "qwen/qwen3-30b-a3b-thinking-2507"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "qwen/qwen3-30b-a3b:free"
-    label: "qwen/qwen3-30b-a3b:free"
   - id: "qwen/qwen3-32b"
     label: "qwen/qwen3-32b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_a, top_k, top_p]
-  - id: "qwen/qwen3-4b:free"
-    label: "qwen/qwen3-4b:free"
   - id: "qwen/qwen3-8b"
     label: "qwen/qwen3-8b"
     structuredOutput: true
@@ -2352,10 +1495,6 @@ openrouter:
     label: "qwen/qwen3-coder-plus"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-coder:exacto"
-    label: "qwen/qwen3-coder:exacto"
-  - id: "qwen/qwen3-coder:free"
-    label: "qwen/qwen3-coder:free"
   - id: "qwen/qwen3-max"
     label: "qwen/qwen3-max"
     structuredOutput: true
@@ -2369,8 +1508,6 @@ openrouter:
     label: "qwen/qwen3-next-80b-a3b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-next-80b-a3b-instruct:free"
-    label: "qwen/qwen3-next-80b-a3b-instruct:free"
   - id: "qwen/qwen3-next-80b-a3b-thinking"
     label: "qwen/qwen3-next-80b-a3b-thinking"
     structuredOutput: true
@@ -2427,9 +1564,6 @@ openrouter:
     label: "qwen/qwen3.5-9b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3.5-9b:batch"
-    label: "qwen/qwen3.5-9b:batch"
-    structuredOutput: true
   - id: "qwen/qwen3.5-flash-02-23"
     label: "qwen/qwen3.5-flash-02-23"
     structuredOutput: true
@@ -2462,10 +1596,6 @@ openrouter:
     label: "qwen/qwen3.6-plus"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "qwen/qwen3.6-plus-preview:free"
-    label: "qwen/qwen3.6-plus-preview:free"
-  - id: "qwen/qwen3.6-plus:free"
-    label: "qwen/qwen3.6-plus:free"
   - id: "qwen/qwen3.7-flash"
     label: "qwen/qwen3.7-flash"
     structuredOutput: true
@@ -2483,24 +1613,15 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [xhigh, medium, low]
-  - id: "qwen/qwen3.8-2.4t-a95b:batch"
-    label: "qwen/qwen3.8-2.4t-a95b:batch"
-    structuredOutput: true
   - id: "qwen/qwen3.8-27b"
     label: "qwen/qwen3.8-27b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_a, top_k, top_p]
     reasoningEfforts: [xhigh, medium, low]
-  - id: "qwen/qwen3.8-27b:free"
-    label: "qwen/qwen3.8-27b:free"
-    structuredOutput: true
   - id: "qwen/qwen3.8-flash"
     label: "qwen/qwen3.8-flash"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "qwen/qwen3.8-max"
-    label: "qwen/qwen3.8-max"
-    structuredOutput: true
   - id: "qwen/qwen3.8-max-0902"
     label: "qwen/qwen3.8-max-0902"
     structuredOutput: true
@@ -2513,14 +1634,6 @@ openrouter:
   - id: "qwen/qwen3.8-omni-flash"
     label: "qwen/qwen3.8-omni-flash"
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "qwen/qwq-32b"
-    label: "qwen/qwq-32b"
-    structuredOutput: true
-    reasoning: true
-  - id: "raifle/sorcererlm-8x22b"
-    label: "raifle/sorcererlm-8x22b"
-  - id: "reka/reka-edge"
-    label: "reka/reka-edge"
   - id: "rekaai/reka-edge"
     label: "rekaai/reka-edge"
     structuredOutput: true
@@ -2556,14 +1669,10 @@ openrouter:
     structuredOutput: true
     supportedParameters: [reasoning, reasoning_effort]
     reasoningEfforts: [high, none]
-  - id: "sao10k/l3-euryale-70b"
-    label: "sao10k/l3-euryale-70b"
   - id: "sao10k/l3-lunaris-8b"
     label: "sao10k/l3-lunaris-8b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "sao10k/l3.1-70b-hanami-x1"
-    label: "sao10k/l3.1-70b-hanami-x1"
   - id: "sao10k/l3.1-euryale-70b"
     label: "sao10k/l3.1-euryale-70b"
     structuredOutput: true
@@ -2572,27 +1681,14 @@ openrouter:
     label: "sao10k/l3.3-euryale-70b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, repetition_penalty, temperature, top_p]
-  - id: "stealth/ox-alpha"
-    label: "stealth/ox-alpha"
-  - id: "stealth/space-bunny-alpha"
-    label: "stealth/space-bunny-alpha"
-  - id: "stealth/union-alpha"
-    label: "stealth/union-alpha"
-    structuredOutput: true
-  - id: "stepfun-ai/step3"
-    label: "stepfun-ai/step3"
   - id: "stepfun/step-3.5-flash"
     label: "stepfun/step-3.5-flash"
     supportedParameters: [frequency_penalty, max_tokens, reasoning, temperature, top_k, top_p]
-  - id: "stepfun/step-3.5-flash:free"
-    label: "stepfun/step-3.5-flash:free"
   - id: "stepfun/step-3.7-flash"
     label: "stepfun/step-3.7-flash"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [high, medium, low]
-  - id: "switchpoint/router"
-    label: "switchpoint/router"
   - id: "tencent/hunyuan-a13b-instruct"
     label: "tencent/hunyuan-a13b-instruct"
     structuredOutput: true
@@ -2617,23 +1713,15 @@ openrouter:
     label: "tencent/hy3-preview"
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, low, none]
-  - id: "tencent/hy3-preview:free"
-    label: "tencent/hy3-preview:free"
-  - id: "tencent/hy3:free"
-    label: "tencent/hy3:free"
   - id: "tencent/hy4-preview"
     label: "tencent/hy4-preview"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [high, low, none]
-  - id: "thedrummer/anubis-70b-v1.1"
-    label: "thedrummer/anubis-70b-v1.1"
   - id: "thedrummer/cydonia-24b-v4.1"
     label: "thedrummer/cydonia-24b-v4.1"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "thedrummer/rocinante-12b"
-    label: "thedrummer/rocinante-12b"
   - id: "thedrummer/skyfall-36b-v2"
     label: "thedrummer/skyfall-36b-v2"
     structuredOutput: true
@@ -2650,33 +1738,14 @@ openrouter:
     label: "thinkingmachines/inkling-small"
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, medium, low, minimal, none]
-  - id: "thinkingmachines/inkling-small:batch"
-    label: "thinkingmachines/inkling-small:batch"
   - id: "thinkingmachines/inkling-small:free"
     label: "thinkingmachines/inkling-small:free"
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, medium, low, minimal, none]
-  - id: "thinkingmachines/inkling:batch"
-    label: "thinkingmachines/inkling:batch"
   - id: "thinkingmachines/inkling:free"
     label: "thinkingmachines/inkling:free"
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, medium, low, minimal, none]
-  - id: "thudm/glm-4.1v-9b-thinking"
-    label: "thudm/glm-4.1v-9b-thinking"
-    reasoning: true
-  - id: "tngtech/deepseek-r1t-chimera"
-    label: "tngtech/deepseek-r1t-chimera"
-    reasoning: true
-  - id: "tngtech/deepseek-r1t-chimera:free"
-    label: "tngtech/deepseek-r1t-chimera:free"
-    reasoning: true
-  - id: "tngtech/deepseek-r1t2-chimera"
-    label: "tngtech/deepseek-r1t2-chimera"
-    reasoning: true
-  - id: "tngtech/deepseek-r1t2-chimera:free"
-    label: "tngtech/deepseek-r1t2-chimera:free"
-    reasoning: true
   - id: "typesafe/jev-router"
     label: "typesafe/jev-router"
     supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_a, top_k, top_p]
@@ -2704,42 +1773,17 @@ openrouter:
   - id: "writer/palmyra-x5"
     label: "writer/palmyra-x5"
     supportedParameters: [max_tokens, temperature, top_k, top_p]
-  - id: "x-ai/grok-3"
-    label: "x-ai/grok-3"
-  - id: "x-ai/grok-3-beta"
-    label: "x-ai/grok-3-beta"
-  - id: "x-ai/grok-3-mini"
-    label: "x-ai/grok-3-mini"
-  - id: "x-ai/grok-3-mini-beta"
-    label: "x-ai/grok-3-mini-beta"
-  - id: "x-ai/grok-4"
-    label: "x-ai/grok-4"
-  - id: "x-ai/grok-4-fast"
-    label: "x-ai/grok-4-fast"
-  - id: "x-ai/grok-4.1-fast"
-    label: "x-ai/grok-4.1-fast"
-  - id: "x-ai/grok-4.1-fast:free"
-    label: "x-ai/grok-4.1-fast:free"
   - id: "x-ai/grok-4.20"
     label: "x-ai/grok-4.20"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
-  - id: "x-ai/grok-4.20-beta"
-    label: "x-ai/grok-4.20-beta"
   - id: "x-ai/grok-4.20-multi-agent"
     label: "x-ai/grok-4.20-multi-agent"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [xhigh, high, medium, low]
-  - id: "x-ai/grok-4.20-multi-agent-beta"
-    label: "x-ai/grok-4.20-multi-agent-beta"
   - id: "x-ai/grok-4.3"
     label: "x-ai/grok-4.3"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [high, medium, low, none]
-  - id: "x-ai/grok-4.3:batch"
-    label: "x-ai/grok-4.3:batch"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, none]
@@ -2762,14 +1806,6 @@ openrouter:
     label: "x-ai/grok-build-0.1"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
-  - id: "x-ai/grok-code-fast-1"
-    label: "x-ai/grok-code-fast-1"
-  - id: "xiaomi/mimo-v2-flash"
-    label: "xiaomi/mimo-v2-flash"
-  - id: "xiaomi/mimo-v2-omni"
-    label: "xiaomi/mimo-v2-omni"
-  - id: "xiaomi/mimo-v2-pro"
-    label: "xiaomi/mimo-v2-pro"
   - id: "xiaomi/mimo-v2.5"
     label: "xiaomi/mimo-v2.5"
     structuredOutput: true
@@ -2790,8 +1826,6 @@ openrouter:
     label: "xiaomi/mimo-v2.6-pro-ultraspeed"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_p]
-  - id: "z-ai/glm-4-32b"
-    label: "z-ai/glm-4-32b"
   - id: "z-ai/glm-4.5"
     label: "z-ai/glm-4.5"
     structuredOutput: true
@@ -2799,8 +1833,6 @@ openrouter:
   - id: "z-ai/glm-4.5-air"
     label: "z-ai/glm-4.5-air"
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "z-ai/glm-4.5-air:free"
-    label: "z-ai/glm-4.5-air:free"
   - id: "z-ai/glm-4.5v"
     label: "z-ai/glm-4.5v"
     structuredOutput: true
@@ -2809,8 +1841,6 @@ openrouter:
     label: "z-ai/glm-4.6"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "z-ai/glm-4.6:exacto"
-    label: "z-ai/glm-4.6:exacto"
   - id: "z-ai/glm-4.6v"
     label: "z-ai/glm-4.6v"
     structuredOutput: true
@@ -2840,12 +1870,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [xhigh, high]
-  - id: "z-ai/glm-5.2:batch"
-    label: "z-ai/glm-5.2:batch"
-    structuredOutput: true
-  - id: "z-ai/glm-5.2:free"
-    label: "z-ai/glm-5.2:free"
-    structuredOutput: true
   - id: "z-ai/glm-5.3"
     label: "z-ai/glm-5.3"
     structuredOutput: true
@@ -2853,11 +1877,6 @@ openrouter:
     reasoningEfforts: [max, high, low]
   - id: "z-ai/glm-5.3-flash"
     label: "z-ai/glm-5.3-flash"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
-    reasoningEfforts: [max, high, low]
-  - id: "z-ai/glm-5.3-flash:batch"
-    label: "z-ai/glm-5.3-flash:batch"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
@@ -2869,11 +1888,6 @@ openrouter:
   - id: "z-ai/glm-5.3-prime"
     label: "z-ai/glm-5.3-prime"
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_k, top_p]
-    reasoningEfforts: [max, high, low]
-  - id: "z-ai/glm-5.3:batch"
-    label: "z-ai/glm-5.3:batch"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
@@ -2934,8 +1948,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "~openai/gpt-latest"
-    label: "~openai/gpt-latest"
   - id: "~openai/gpt-luna-latest"
     label: "~openai/gpt-luna-latest"
     structuredOutput: true
@@ -2971,19 +1983,641 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
+  - id: "ai21/jamba-large-1.7"
+  - id: "ai21/jamba-mini-1.7"
+  - id: "aion-labs/aion-1.0"
+  - id: "aion-labs/aion-1.0-mini"
+  - id: "alfredpros/codellama-7b-instruct-solidity"
+  - id: "alibaba/tongyi-deepresearch-30b-a3b"
+  - id: "alibaba/tongyi-deepresearch-30b-a3b:free"
+  - id: "allenai/molmo-2-8b"
+  - id: "allenai/olmo-2-0325-32b-instruct"
+  - id: "allenai/olmo-3-32b-think"
+  - id: "allenai/olmo-3-7b-instruct"
+  - id: "allenai/olmo-3-7b-think"
+  - id: "allenai/olmo-3.1-32b-instruct"
+  - id: "allenai/olmo-3.1-32b-think"
+  - id: "alpindale/goliath-120b"
+  - id: "anthropic/claude-3-haiku"
+  - id: "anthropic/claude-3.5-haiku"
+  - id: "anthropic/claude-3.5-sonnet"
+  - id: "anthropic/claude-3.7-sonnet"
+  - id: "anthropic/claude-3.7-sonnet:thinking"
+    reasoning: true
+  - id: "anthropic/claude-fable-5.1:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "anthropic/claude-fable-5:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "anthropic/claude-haiku-4.5:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
+  - id: "anthropic/claude-opus-4"
+  - id: "anthropic/claude-opus-4.1:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, temperature]
+  - id: "anthropic/claude-opus-4.5:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, temperature]
+  - id: "anthropic/claude-opus-4.6-fast"
+  - id: "anthropic/claude-opus-4.6:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [max, high, medium, low]
+  - id: "anthropic/claude-opus-4.7-fast"
+  - id: "anthropic/claude-opus-4.7:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "anthropic/claude-opus-4.8-fast"
+  - id: "anthropic/claude-opus-4.8:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "anthropic/claude-opus-5-fast"
+  - id: "anthropic/claude-opus-5.5:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "anthropic/claude-opus-5:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "anthropic/claude-sonnet-4.5:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
+  - id: "anthropic/claude-sonnet-4.6:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [max, high, medium, low]
+  - id: "anthropic/claude-sonnet-5.5:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "anthropic/claude-sonnet-5:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "arcee-ai/afm-4.5b"
+  - id: "arcee-ai/coder-large"
+  - id: "arcee-ai/maestro-reasoning"
+  - id: "arcee-ai/spotlight"
+  - id: "arcee-ai/trinity-large-preview"
+  - id: "arcee-ai/trinity-large-preview:free"
+  - id: "arcee-ai/trinity-large-thinking:free"
+  - id: "arcee-ai/trinity-mini"
+  - id: "arcee-ai/trinity-mini:free"
+  - id: "arcee-ai/virtuoso-large"
+  - id: "arliai/qwq-32b-arliai-rpr-v1"
+    reasoning: true
+  - id: "arliai/qwq-32b-arliai-rpr-v1:free"
+    reasoning: true
+  - id: "baidu/cobuddy:free"
+  - id: "baidu/ernie-4.5-21b-a3b"
+  - id: "baidu/ernie-4.5-21b-a3b-thinking"
+    reasoning: true
+  - id: "baidu/ernie-4.5-300b-a47b"
+  - id: "baidu/ernie-4.5-vl-28b-a3b"
+  - id: "baidu/ernie-4.5-vl-424b-a47b"
+  - id: "baidu/qianfan-ocr-fast"
+  - id: "baidu/qianfan-ocr-fast:free"
+  - id: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
+  - id: "deepcogito/cogito-v2-preview-deepseek-671b"
+  - id: "deepcogito/cogito-v2-preview-llama-109b-moe"
+  - id: "deepcogito/cogito-v2-preview-llama-405b"
+  - id: "deepcogito/cogito-v2-preview-llama-70b"
+  - id: "deepcogito/cogito-v2.1-671b"
+  - id: "deepseek/deepseek-chat-v3-0324:free"
+  - id: "deepseek/deepseek-prover-v2"
+  - id: "deepseek/deepseek-r1-0528-qwen3-8b"
+    reasoning: true
+  - id: "deepseek/deepseek-r1-0528-qwen3-8b:free"
+    reasoning: true
+  - id: "deepseek/deepseek-r1-0528:free"
+    reasoning: true
   - id: "deepseek/deepseek-r1-distill-llama-70b"
+    reasoning: true
+  - id: "deepseek/deepseek-r1-distill-llama-70b:free"
+    reasoning: true
+  - id: "deepseek/deepseek-r1-distill-qwen-14b"
+    reasoning: true
+  - id: "deepseek/deepseek-r1-distill-qwen-32b"
+    reasoning: true
+  - id: "deepseek/deepseek-r1:free"
     reasoning: true
   - id: "deepseek/deepseek-v3.1-terminus"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, reasoning, temperature, top_k, top_p]
+  - id: "deepseek/deepseek-v3.1-terminus:exacto"
   - id: "deepseek/deepseek-v3.2"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
   - id: "deepseek/deepseek-v3.2-exp"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, reasoning, temperature, top_k, top_p]
+  - id: "deepseek/deepseek-v3.2-speciale"
+  - id: "deepseek/deepseek-v4-flash-0731:batch"
+    structuredOutput: true
+  - id: "deepseek/deepseek-v4-flash-0731:free"
+    structuredOutput: true
+  - id: "deepseek/deepseek-v4-flash-vision-exp:batch"
+    structuredOutput: true
+  - id: "deepseek/deepseek-v4-flash:free"
+  - id: "deepseek/deepseek-v4-pro-0813:batch"
+    structuredOutput: true
+  - id: "deepseek/deepseek-v4.1-flash:batch"
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [max, high, low]
   - id: "dots-studio/dots-3-note-preview:free"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
+  - id: "eleutherai/llemma_7b"
+  - id: "essentialai/rnj-1-instruct"
   - id: "google/gemini-2.0-flash-001"
     structuredOutput: true
+  - id: "google/gemini-2.0-flash-exp:free"
+    structuredOutput: true
+  - id: "google/gemini-2.0-flash-lite-001"
+  - id: "google/gemini-2.5-flash-image-preview"
+  - id: "google/gemini-2.5-flash-lite-preview-09-2025"
+  - id: "google/gemini-2.5-flash-lite:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, temperature, top_p]
+  - id: "google/gemini-2.5-flash-preview-09-2025"
+  - id: "google/gemini-2.5-flash:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, temperature, top_p]
+  - id: "google/gemini-2.5-pro-preview-05-06"
+    structuredOutput: true
+  - id: "google/gemini-2.5-pro:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, temperature, top_p]
+  - id: "google/gemini-3-flash-preview:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [high, medium, low, minimal]
+  - id: "google/gemini-3-pro-preview"
+    structuredOutput: true
+  - id: "google/gemini-3.1-flash-lite:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [high, medium, low, minimal]
+  - id: "google/gemini-3.1-pro-preview:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [high, medium, low]
+  - id: "google/gemini-3.5-flash-lite:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [high, medium, low, minimal]
+  - id: "google/gemini-3.5-flash:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [high, medium, low, minimal]
+  - id: "google/gemini-3.6-flash:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [high, medium, low, minimal]
+  - id: "google/gemini-3.7-flash:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [high, medium, low]
+  - id: "google/gemini-3.8-flash:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [high, medium, low]
+  - id: "google/gemma-2-9b-it"
+  - id: "google/gemma-3-12b-it:free"
+  - id: "google/gemma-3-27b-it:free"
+  - id: "google/gemma-3-4b-it:free"
+  - id: "google/gemma-3n-e2b-it:free"
+  - id: "google/gemma-3n-e4b-it"
+  - id: "google/gemma-3n-e4b-it:free"
+  - id: "google/gemma-4-31b-it:batch"
+  - id: "ibm-granite/granite-4.1-8b"
+  - id: "inception/mercury"
+  - id: "inception/mercury-2.5-preview"
+  - id: "inception/mercury-coder"
+  - id: "inclusionai/ling-2.6-1t"
+  - id: "inclusionai/ling-2.6-1t:free"
+  - id: "inclusionai/ling-2.6-flash"
+  - id: "inclusionai/ling-2.6-flash:free"
+  - id: "inclusionai/ling-3.0-flash-fin:free"
+  - id: "inclusionai/ling-3.0-flash-sante:free"
+  - id: "inclusionai/ling-3.0-flash-vl:free"
+  - id: "inclusionai/ling-3.0-flash:free"
+  - id: "inclusionai/ling-3.0-tiny:free"
+  - id: "inclusionai/ring-2.6-1t"
+  - id: "inclusionai/ring-2.6-1t:free"
+  - id: "inflection/inflection-3-pi"
+  - id: "inflection/inflection-3-productivity"
+  - id: "kwaipilot/kat-coder-air-v2.5"
+  - id: "kwaipilot/kat-coder-pro"
+  - id: "kwaipilot/kat-coder-pro-v2"
+    structuredOutput: true
+  - id: "kwaipilot/kat-coder-pro-v2.5"
+    structuredOutput: true
+  - id: "kwaipilot/kat-coder-pro:free"
+  - id: "liquid/lfm-2-24b-a2b"
+  - id: "liquid/lfm-2.2-6b"
+  - id: "liquid/lfm-2.5-1.2b-instruct:free"
+  - id: "liquid/lfm-2.5-1.2b-thinking:free"
+  - id: "liquid/lfm2-8b-a1b"
+  - id: "meituan/longcat-flash-chat"
+  - id: "meituan/longcat-flash-chat:free"
+  - id: "meta-llama/llama-3-70b-instruct"
+    structuredOutput: true
+  - id: "meta-llama/llama-3-8b-instruct"
+    structuredOutput: true
+  - id: "meta-llama/llama-3.1-405b"
+  - id: "meta-llama/llama-3.1-405b-instruct"
+    structuredOutput: true
+  - id: "meta-llama/llama-3.2-11b-vision-instruct"
+    structuredOutput: true
+  - id: "meta-llama/llama-3.2-3b-instruct:free"
+  - id: "meta-llama/llama-3.2-90b-vision-instruct"
+    structuredOutput: true
+  - id: "meta-llama/llama-3.3-70b-instruct:free"
+  - id: "meta-llama/llama-guard-2-8b"
+  - id: "meta-llama/llama-guard-3-8b"
+  - id: "meta-llama/llama-guard-4-12b:free"
+  - id: "meta/muse-glimmer-30b:batch"
+    structuredOutput: true
+  - id: "microsoft/mai-ds-r1"
+  - id: "microsoft/mai-ds-r1:free"
+  - id: "microsoft/phi-3-medium-128k-instruct"
+  - id: "microsoft/phi-3-mini-128k-instruct"
+  - id: "microsoft/phi-3.5-mini-128k-instruct"
+  - id: "microsoft/phi-4-mini-instruct"
+  - id: "microsoft/phi-4-multimodal-instruct"
+  - id: "microsoft/phi-4-reasoning-plus"
+    reasoning: true
+  - id: "minimax/minimax-m2.5:free"
+  - id: "minimax/minimax-m2.7:free"
+    structuredOutput: true
+  - id: "minimax/minimax-m3:batch"
+    structuredOutput: true
+  - id: "minimax/minimax-m3:free"
+    structuredOutput: true
+  - id: "mistralai/codestral-2501"
+    structuredOutput: true
+  - id: "mistralai/codestral-2508:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
+  - id: "mistralai/devstral-medium"
+  - id: "mistralai/devstral-small"
+  - id: "mistralai/devstral-small-2505"
+  - id: "mistralai/magistral-medium-2506"
+  - id: "mistralai/magistral-medium-2506:thinking"
+    reasoning: true
+  - id: "mistralai/magistral-small-2506"
+  - id: "mistralai/ministral-3b"
+    structuredOutput: true
+  - id: "mistralai/ministral-8b"
+    structuredOutput: true
+  - id: "mistralai/ministral-8b-2512:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
+  - id: "mistralai/mistral-7b-instruct"
+  - id: "mistralai/mistral-7b-instruct-v0.1"
+  - id: "mistralai/mistral-7b-instruct-v0.2"
+  - id: "mistralai/mistral-7b-instruct-v0.3"
+  - id: "mistralai/mistral-7b-instruct:free"
+  - id: "mistralai/mistral-large-2411"
+    structuredOutput: true
+  - id: "mistralai/mistral-large-2512:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
+  - id: "mistralai/mistral-medium-3-5:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [high, none]
+  - id: "mistralai/mistral-medium-3.1:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
+  - id: "mistralai/mistral-nemo:free"
+  - id: "mistralai/mistral-small"
+    structuredOutput: true
+  - id: "mistralai/mistral-small-24b-instruct-2501:free"
+  - id: "mistralai/mistral-small-2603:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [high, none]
+  - id: "mistralai/mistral-small-3.1-24b-instruct:free"
+  - id: "mistralai/mistral-small-3.2-24b-instruct:free"
+  - id: "mistralai/mistral-small-creative"
+  - id: "mistralai/mistral-tiny"
+    structuredOutput: true
+  - id: "mistralai/mixtral-8x7b-instruct"
+    structuredOutput: true
+  - id: "mistralai/pixtral-12b"
+    structuredOutput: true
+  - id: "mistralai/pixtral-large-2411"
+    structuredOutput: true
+  - id: "moonshotai/kimi-dev-72b"
+  - id: "moonshotai/kimi-k2-0905:exacto"
+  - id: "moonshotai/kimi-k2.6:free"
+  - id: "moonshotai/kimi-k2.7-code:batch"
+  - id: "moonshotai/kimi-k2:free"
+  - id: "moonshotai/kimi-k3:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [max, high, low]
+  - id: "moonshotai/kimi-linear-48b-a3b-instruct"
+  - id: "neversleep/llama-3.1-lumimaid-8b"
+  - id: "neversleep/noromaid-20b"
+  - id: "nex-agi/deepseek-v3.1-nex-n1"
+  - id: "nex-agi/nex-n2-mini"
+  - id: "nex-agi/nex-n2-pro"
+  - id: "nex-agi/nex-n2-pro:free"
+  - id: "nex-agi/nex-n2.5-mini:free"
+    structuredOutput: true
+  - id: "nex-agi/nex-n2.5-pro:free"
+    structuredOutput: true
+  - id: "nousresearch/deephermes-3-mistral-24b-preview"
+  - id: "nousresearch/hermes-2-pro-llama-3-8b"
+  - id: "nousresearch/hermes-3-llama-3.1-405b:free"
+  - id: "nousresearch/hermes-4-70b"
+  - id: "nvidia/llama-3.1-nemotron-70b-instruct"
+  - id: "nvidia/llama-3.1-nemotron-ultra-253b-v1"
+  - id: "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+  - id: "nvidia/nemotron-3-nano-30b-a3b:free"
+  - id: "nvidia/nemotron-3-ultra-550b-a55b:batch"
+  - id: "nvidia/nemotron-nano-12b-v2-vl"
+  - id: "nvidia/nemotron-nano-12b-v2-vl:free"
+  - id: "nvidia/nemotron-nano-9b-v2"
+  - id: "nvidia/nemotron-nano-9b-v2:free"
+  - id: "openai/chatgpt-4o-latest"
+  - id: "openai/codex-mini"
+  - id: "openai/gpt-3.5-turbo:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
+  - id: "openai/gpt-4-0314"
+  - id: "openai/gpt-4-1106-preview"
+  - id: "openai/gpt-4-turbo-preview"
+    structuredOutput: true
+  - id: "openai/gpt-4-turbo:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
+  - id: "openai/gpt-4.1-mini:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, temperature, top_p]
+  - id: "openai/gpt-4.1-nano:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, temperature, top_p]
+  - id: "openai/gpt-4.1:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, temperature, top_p]
+  - id: "openai/gpt-4o-audio-preview"
+  - id: "openai/gpt-4o-mini-search-preview"
+  - id: "openai/gpt-4o-mini:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
+  - id: "openai/gpt-4o-search-preview"
+  - id: "openai/gpt-4o:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
+  - id: "openai/gpt-4o:extended"
+    structuredOutput: true
+  - id: "openai/gpt-5-chat"
+  - id: "openai/gpt-5-codex"
+  - id: "openai/gpt-5-codex:batch"
+  - id: "openai/gpt-5-mini:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [high, medium, low, minimal]
+  - id: "openai/gpt-5-nano:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [high, medium, low, minimal]
+  - id: "openai/gpt-5-pro:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [high]
+  - id: "openai/gpt-5.1-chat"
+  - id: "openai/gpt-5.1:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [high, medium, low, none]
+  - id: "openai/gpt-5.2-chat-latest"
+    structuredOutput: true
+  - id: "openai/gpt-5.2-pro:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [xhigh, high, medium]
+  - id: "openai/gpt-5.2:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.3-chat"
+  - id: "openai/gpt-5.4-mini:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.4-nano:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.4-pro:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [xhigh, high, medium]
+  - id: "openai/gpt-5.4:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.5-pro:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [xhigh, high, medium]
+  - id: "openai/gpt-5.5:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.6-luna-pro:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.6-luna:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.6-sol-pro:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.6-sol:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.6-terra-pro:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-5.6-terra:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-5:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [high, medium, low, minimal]
+  - id: "openai/gpt-6-astra-pro:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "openai/gpt-6-astra:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "openai/gpt-6-luna-pro:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-6-luna:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-6-sol-pro:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-6-sol:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low, none]
+  - id: "openai/gpt-6.1-sol-pro:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "openai/gpt-6.1-sol:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort]
+    reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "openai/gpt-oss-120b:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [high, medium, low]
+  - id: "openai/gpt-oss-120b:exacto"
+  - id: "openai/gpt-oss-120b:free"
+  - id: "openai/gpt-oss-20b:batch"
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [high, medium, low]
+  - id: "openai/gpt-oss-20b:free"
+  - id: "openai/o1-pro:batch"
+  - id: "openai/o1:batch"
+  - id: "openai/o3-deep-research"
+    reasoning: true
+  - id: "openai/o3-mini-high:batch"
+  - id: "openai/o3-mini:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning]
+  - id: "openai/o3-pro:batch"
+  - id: "openai/o3:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning]
+  - id: "openai/o4-mini-deep-research"
+    reasoning: true
+  - id: "openai/o4-mini-high:batch"
+  - id: "openai/o4-mini:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning]
+  - id: "opengvlab/internvl3-78b"
+  - id: "openrouter/elephant-alpha"
+  - id: "openrouter/healer-alpha"
+  - id: "openrouter/hunter-alpha"
+  - id: "openrouter/owl-alpha"
+  - id: "perplexity/sonar-reasoning"
+  - id: "poolside/laguna-m.1"
+  - id: "poolside/laguna-m.1:free"
+  - id: "poolside/laguna-xs.2"
+  - id: "poolside/laguna-xs.2:free"
+  - id: "prime-intellect/intellect-3"
+  - id: "qwen/qwen-2.5-72b-instruct:free"
+  - id: "qwen/qwen-2.5-coder-32b-instruct:free"
+  - id: "qwen/qwen-2.5-vl-7b-instruct"
+  - id: "qwen/qwen-max"
+  - id: "qwen/qwen-plus-2025-07-28:thinking"
+    reasoning: true
+  - id: "qwen/qwen-turbo"
+  - id: "qwen/qwen-vl-max"
+  - id: "qwen/qwen-vl-plus"
+  - id: "qwen/qwen2.5-coder-7b-instruct"
+  - id: "qwen/qwen2.5-vl-32b-instruct"
+  - id: "qwen/qwen2.5-vl-32b-instruct:free"
+  - id: "qwen/qwen3-14b:free"
+  - id: "qwen/qwen3-235b-a22b:free"
+  - id: "qwen/qwen3-30b-a3b:free"
+  - id: "qwen/qwen3-4b:free"
+  - id: "qwen/qwen3-coder:exacto"
+  - id: "qwen/qwen3-coder:free"
+  - id: "qwen/qwen3-next-80b-a3b-instruct:free"
+  - id: "qwen/qwen3.5-9b:batch"
+    structuredOutput: true
+  - id: "qwen/qwen3.6-plus-preview:free"
+  - id: "qwen/qwen3.6-plus:free"
+  - id: "qwen/qwen3.8-2.4t-a95b:batch"
+    structuredOutput: true
+  - id: "qwen/qwen3.8-27b:free"
+    structuredOutput: true
+  - id: "qwen/qwen3.8-max"
+    structuredOutput: true
+  - id: "qwen/qwq-32b"
+    structuredOutput: true
+    reasoning: true
+  - id: "raifle/sorcererlm-8x22b"
+  - id: "reka/reka-edge"
+  - id: "sao10k/l3-euryale-70b"
+  - id: "sao10k/l3.1-70b-hanami-x1"
+  - id: "stealth/ox-alpha"
+  - id: "stealth/space-bunny-alpha"
+  - id: "stealth/union-alpha"
+    structuredOutput: true
+  - id: "stepfun-ai/step3"
+  - id: "stepfun/step-3.5-flash:free"
+  - id: "switchpoint/router"
+  - id: "tencent/hy3-preview:free"
+  - id: "tencent/hy3:free"
+  - id: "thedrummer/anubis-70b-v1.1"
+  - id: "thedrummer/rocinante-12b"
+  - id: "thinkingmachines/inkling-small:batch"
+  - id: "thinkingmachines/inkling:batch"
+  - id: "thudm/glm-4.1v-9b-thinking"
+    reasoning: true
+  - id: "tngtech/deepseek-r1t-chimera"
+    reasoning: true
+  - id: "tngtech/deepseek-r1t-chimera:free"
+    reasoning: true
+  - id: "tngtech/deepseek-r1t2-chimera"
+    reasoning: true
+  - id: "tngtech/deepseek-r1t2-chimera:free"
+    reasoning: true
+  - id: "x-ai/grok-3"
+  - id: "x-ai/grok-3-beta"
+  - id: "x-ai/grok-3-mini"
+  - id: "x-ai/grok-3-mini-beta"
+  - id: "x-ai/grok-4"
+  - id: "x-ai/grok-4-fast"
+  - id: "x-ai/grok-4.1-fast"
+  - id: "x-ai/grok-4.1-fast:free"
+  - id: "x-ai/grok-4.20-beta"
+  - id: "x-ai/grok-4.20-multi-agent-beta"
+  - id: "x-ai/grok-4.3:batch"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [high, medium, low, none]
+  - id: "x-ai/grok-code-fast-1"
+  - id: "xiaomi/mimo-v2-flash"
+  - id: "xiaomi/mimo-v2-omni"
+  - id: "xiaomi/mimo-v2-pro"
+  - id: "z-ai/glm-4-32b"
+  - id: "z-ai/glm-4.5-air:free"
+  - id: "z-ai/glm-4.6:exacto"
+  - id: "z-ai/glm-5.2:batch"
+    structuredOutput: true
+  - id: "z-ai/glm-5.2:free"
+    structuredOutput: true
+  - id: "z-ai/glm-5.3-flash:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [max, high, low]
+  - id: "z-ai/glm-5.3:batch"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [max, high, low]
+  - id: "~openai/gpt-latest"
