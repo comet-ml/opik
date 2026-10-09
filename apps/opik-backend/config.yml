@@ -202,7 +202,7 @@ databaseAnalyticsDataModel:
   #  Default: false
   #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
   #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
-  #   indexed. Off writes nothing; reads stay unbounded until a project is marked backfilled.
+  #   indexed. Off writes nothing.
   spanWeeksWriteEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED:-false}
 
 bulkInsert:
