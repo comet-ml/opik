@@ -1,12 +1,14 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Trace;
+import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Arrays;
 import java.util.List;
@@ -86,6 +88,31 @@ class TraceDAOImplTest {
             Arrays.stream(names).forEach(slot -> template.add(slot, "anything"));
 
             assertThat(TraceDAOImpl.canDedupByArgMax(template)).isEqualTo(expected);
+        }
+    }
+
+    @Nested
+    @DisplayName("annotation queue stats")
+    class AnnotationQueueStats {
+
+        @ParameterizedTest(name = "{0}")
+        @ValueSource(strings = {"SELECT_TRACES_SPANS_STATS", "SELECT_FEEDBACK_SCORES_STATS"})
+        @DisplayName("on partitioned spans, the span-week pre-pass reads only the queue's traces")
+        void spanWeeksAreNarrowedToTheQueue(String name) {
+            var query = "SELECT_TRACES_SPANS_STATS".equals(name)
+                    ? TraceDAOImpl.SELECT_TRACES_SPANS_STATS
+                    : TraceDAOImpl.SELECT_FEEDBACK_SCORES_STATS;
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .annotationQueueId(UUID.randomUUID())
+                    .build();
+            var sql = FilterUtils.newTraceThreadFindTemplate(query, criteria, "1", true)
+                    .add("spans_partitioned", true)
+                    .add("filters_present", true)
+                    .render();
+
+            var spanWeeks = sql.substring(sql.indexOf("span_weeks AS ("), sql.indexOf("spans_data AS ("));
+            assertThat(spanWeeks).contains("AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids)");
         }
     }
 }
