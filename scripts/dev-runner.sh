@@ -332,7 +332,11 @@ lint_backend() {
 }
 
 print_migrations_recovery_message() {
-    log_error "To recover, you may need to clean up Docker volumes (WARNING: ALL DATA WILL BE LOST):"
+    log_error "If a container failed to start rather than the migrations themselves, do not clean volumes yet:"
+    log_error "  a MinIO volume left root-owned by an older image is repaired in place with a chown, and"
+    log_error "  ./opik.sh reports that case with the exact command. Cleaning volumes would discard data"
+    log_error "  the chown preserves."
+    log_error "To recover from genuine migration failures, you may need to clean up Docker volumes (WARNING: ALL DATA WILL BE LOST):"
     log_error "  1. Stop all services: $0 --stop"
     log_error "  2. Clean all data volumes (DANGER): cd $PROJECT_ROOT && ./opik.sh --clean"
     log_error "  3. Run again your current flow: $ORIGINAL_COMMAND"
