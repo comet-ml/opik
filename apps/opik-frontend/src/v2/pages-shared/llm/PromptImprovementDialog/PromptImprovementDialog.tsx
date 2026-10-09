@@ -5,7 +5,14 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { Wand2, Loader2, Play, ChevronRight, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  Wand2,
+  Loader2,
+  Play,
+  ChevronRight,
+  Sparkles,
+} from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 
@@ -51,6 +58,9 @@ const PROMPT_IMPROVEMENT_PROGRESS_MESSAGES = [
 
 const PROMPT_IMPROVEMENT_LAST_PICKED_MODEL = "opik-prompt-improvement-model";
 
+const OUTPUT_LIMIT_MESSAGE =
+  "The model reached its output limit before finishing the prompt. Try a shorter instruction, or pick another model.";
+
 interface PromptImprovementDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -76,6 +86,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const editorViewRef = useRef<EditorView | null>(null);
 
@@ -122,6 +133,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
       setUserInstructions("");
       setGeneratedPrompt("");
       setError(null);
+      setWarning(null);
       setIsLoading(false);
       setIsEditorFocused(false);
     }
@@ -154,6 +166,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
 
     setIsLoading(true);
     setError(null);
+    setWarning(null);
     setGeneratedPrompt("");
 
     try {
@@ -192,9 +205,13 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
           result.opikError || result.providerError || result.pythonProxyError;
         setError(errorMsg || "An error occurred during generation");
       } else if (result?.finishReason === "length") {
-        setError(
-          "The model reached its output limit before finishing the prompt. Try a shorter instruction, or pick another model.",
-        );
+        // A cut-off prompt is still something the user can finish by hand, so
+        // it stays usable; only a cut-off with no text at all is an error.
+        if (result.result?.trim()) {
+          setWarning(OUTPUT_LIMIT_MESSAGE);
+        } else {
+          setError(OUTPUT_LIMIT_MESSAGE);
+        }
       } else if (!result?.result || !result.result.trim()) {
         setError(
           "The model did not return any content. Please try again or adjust your instructions.",
@@ -471,6 +488,12 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertTitle>{error}</AlertTitle>
+            </Alert>
+          )}
+          {warning && (
+            <Alert variant="callout" className="mb-4">
+              <AlertTriangle />
+              <AlertTitle>{warning}</AlertTitle>
             </Alert>
           )}
           {isGenerateMode ? renderGenerateContent() : renderImproveContent()}
