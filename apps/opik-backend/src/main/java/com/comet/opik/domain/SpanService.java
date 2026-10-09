@@ -14,7 +14,7 @@ import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUs
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
-import com.comet.opik.api.events.SpanInsertedByUpdate;
+import com.comet.opik.api.events.PartialSpanCreated;
 import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.api.events.SpansDeleted;
 import com.comet.opik.api.events.SpansUpdated;
@@ -29,6 +29,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.comet.opik.utils.BinaryOperatorUtils;
+import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
@@ -83,6 +84,7 @@ public class SpanService {
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
     private final @NonNull EventBus eventBus;
     private final @NonNull DeletionEventDAO deletionEventDAO;
+    private final @NonNull SpanWeeksDAO spanWeeksDAO;
     private final @NonNull @Config OpikConfiguration config;
 
     @WithSpan
@@ -296,8 +298,26 @@ public class SpanService {
                     spanUpdate, id, workspaceId, userName, projectName)
                     .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate))
                     .doOnSuccess(__ -> eventBus.post(
-                            new SpanInsertedByUpdate(id, spanUpdate.traceId(), project.id(), workspaceId, userName)));
+                            new PartialSpanCreated(id, spanUpdate.traceId(), project.id(), workspaceId, userName)));
         });
+    }
+
+    /**
+     * Records in span_weeks the weekly partition each written span is stored in, one row per distinct
+     * (project, trace, week). Spans missing an id, trace or project carry nothing to index and are skipped.
+     */
+    public Mono<Long> registerWeeks(@NonNull Collection<Span> spans) {
+        List<SpanWeeksDAO.SpanWeek> rows = spans.stream()
+                .filter(span -> span.id() != null && span.traceId() != null && span.projectId() != null)
+                .map(span -> new SpanWeeksDAO.SpanWeek(span.projectId(), span.traceId(),
+                        WeeklyPartitions.storedPartitionOf(span.id())))
+                .distinct()
+                .toList();
+        return spanWeeksDAO.insert(rows);
+    }
+
+    public Mono<List<SpanWeeksDAO.SpanWeek>> getWeeksByTraceIds(@NonNull Collection<UUID> traceIds) {
+        return spanWeeksDAO.findByTraceIds(traceIds);
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {

@@ -1,11 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Span;
-import com.comet.opik.api.events.SpanInsertedByUpdate;
+import com.comet.opik.api.events.PartialSpanCreated;
 import com.comet.opik.api.events.SpansCreated;
-import com.comet.opik.domain.SpanWeeksDAO;
-import com.comet.opik.domain.SpanWeeksDAO.SpanWeek;
-import com.comet.opik.utils.WeeklyPartitions;
+import com.comet.opik.domain.SpanService;
+import com.comet.opik.utils.AsyncUtils;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -14,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Registers in span_weeks the weekly partition of every span written, so trace-keyed spans reads can bind their
@@ -27,40 +25,29 @@ import java.util.Objects;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SpanWeeksListener {
 
-    private final @NonNull SpanWeeksDAO spanWeeksDAO;
+    private final @NonNull SpanService spanService;
 
     @Subscribe
     public void onSpansCreated(@NonNull SpansCreated event) {
-        List<SpanWeek> rows = event.spans().stream()
-                .filter(span -> span.projectId() != null && span.traceId() != null && span.id() != null)
-                .map(SpanWeeksListener::toSpanWeek)
-                .distinct()
-                .toList();
-        insert(rows, event.workspaceId(), event.userName());
+        register(event.spans(), event.workspaceId(), event.userName());
     }
 
     @Subscribe
-    public void onSpanInsertedByUpdate(@NonNull SpanInsertedByUpdate event) {
-        insert(List.of(SpanWeek.builder()
-                .projectId(event.projectId())
+    public void onPartialSpanCreated(@NonNull PartialSpanCreated event) {
+        var span = Span.builder()
+                .id(event.spanId())
                 .traceId(event.spanTraceId())
-                .idWeek(WeeklyPartitions.storedPartitionOf(event.spanId()))
-                .build()), event.workspaceId(), event.userName());
-    }
-
-    private static SpanWeek toSpanWeek(Span span) {
-        return SpanWeek.builder()
-                .projectId(span.projectId())
-                .traceId(span.traceId())
-                .idWeek(WeeklyPartitions.storedPartitionOf(Objects.requireNonNull(span.id())))
+                .projectId(event.projectId())
                 .build();
+        register(List.of(span), event.workspaceId(), event.userName());
     }
 
-    private void insert(List<SpanWeek> rows, String workspaceId, String userName) {
-        spanWeeksDAO.insert(rows, workspaceId, userName)
+    private void register(List<Span> spans, String workspaceId, String userName) {
+        spanService.registerWeeks(spans)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .subscribe(
                         null,
-                        error -> log.error("Failed to register '{}' span weeks for workspace '{}'", rows.size(),
-                                workspaceId, error));
+                        error -> log.error("Failed to register the weeks of '{}' spans for workspace '{}'",
+                                spans.size(), workspaceId, error));
     }
 }
