@@ -25,10 +25,6 @@ public class SpanWeeksBackfillConfig {
     @JsonProperty
     @Min(1) private long maxSpansPerChunk;
 
-    /** Memory a chunk's GROUP BY may use before spilling to disk. */
-    @JsonProperty
-    @Min(1) private long maxBytesBeforeExternalGroupBy;
-
     /** ClickHouse max_execution_time for one chunk, and how long a run holds the job lock. */
     @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.MINUTES)

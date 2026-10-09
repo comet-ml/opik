@@ -193,9 +193,6 @@ spanWeeksBackfill:
   #  Default: 200000000
   #  Description: Upper bound on the span rows one chunk reads; consecutive weeks are merged up to it
   maxSpansPerChunk: 200000000
-  #  Default: 10737418240 (10 GiB)
-  #  Description: Memory a chunk's GROUP BY may use before spilling to disk
-  maxBytesBeforeExternalGroupBy: 10737418240
   #  Default: 1h
   #  Description: ClickHouse max_execution_time for one chunk, and how long a run holds the job lock
   queryTimeout: 1h

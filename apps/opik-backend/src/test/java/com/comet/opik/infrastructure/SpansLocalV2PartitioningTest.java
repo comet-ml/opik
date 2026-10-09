@@ -655,7 +655,7 @@ class SpansLocalV2PartitioningTest {
         });
 
         boolean partitioned = spanWeeksDAO.isPartitioned(table).block();
-        spanWeeksDAO.backfill(table, partitioned, 19691229L, 22991225L, 1L << 30, 600).block();
+        spanWeeksDAO.backfill(table, partitioned, 19691229L, 22991225L, 600).block();
 
         assertThat(partitioned).isEqualTo(table.equals("spans_local_v2"));
         var expected = traceIdBySpanId.entrySet().stream()
