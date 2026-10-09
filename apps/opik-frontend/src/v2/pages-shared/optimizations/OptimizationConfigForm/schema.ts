@@ -285,6 +285,10 @@ const toFormModelConfig = (
     for (const key of OPEN_ROUTER_CUSTOM_PARAMETER_KEYS) {
       config[camelCase(key)] ??= customParameters[key];
     }
+    // Not checked against the model's levels here, unlike the thinking level below: OpenRouter's
+    // levels come from the registry, which can arrive after the form is seeded. The panel and the
+    // request both check them.
+    config.reasoningEffort ??= get(customParameters, ["reasoning", "effort"]);
   }
 
   if (supportsAnthropicThinkingEffort(model)) {
