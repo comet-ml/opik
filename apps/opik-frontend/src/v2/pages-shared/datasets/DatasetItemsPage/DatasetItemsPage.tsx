@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { StringParam, useQueryParam } from "use-query-params";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+  useQueryParams,
+} from "use-query-params";
 
 import useDatasetById from "@/api/datasets/useDatasetById";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
@@ -19,10 +25,14 @@ import AddTestSuiteItemPanel from "@/v2/pages-shared/datasets/TestSuiteComponent
 import DatasetItemEditor from "@/v2/pages-shared/datasets/DatasetItemEditor/DatasetItemEditor";
 import AddVersionDialog from "@/v2/pages-shared/datasets/VersionHistoryTab/AddVersionDialog";
 import VersionHistoryTab from "@/v2/pages-shared/datasets/VersionHistoryTab/VersionHistoryTab";
+import VersionRecordsSidebar, {
+  DVS_QUERY_PREFIX,
+} from "@/v2/pages-shared/datasets/VersionHistoryTab/VersionRecordsSidebar";
 import OverrideVersionDialog from "@/v2/pages-shared/datasets/OverrideVersionDialog";
 import DatasetExpansionDialog from "@/v2/pages-shared/datasets/DatasetExpansionDialog";
 import GeneratedSamplesDialog from "@/v2/pages-shared/datasets/GeneratedSamplesDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import Loader from "@/shared/Loader/Loader";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
@@ -40,6 +50,7 @@ import {
   DatasetItemColumn,
   DATASET_STATUS,
   DATASET_TYPE,
+  DatasetVersion,
 } from "@/types/datasets";
 import { DynamicColumn } from "@/types/shared";
 import { useEffectiveSuiteAssertions } from "@/hooks/useEffectiveSuiteAssertions";
@@ -64,6 +75,17 @@ function DatasetItemsPage(): React.ReactElement {
   const activeProjectId = useActiveProjectId();
 
   const [tab, setTab] = useQueryParam("tab", StringParam);
+  const [versionSheetParams, setVersionSheetParams] = useQueryParams({
+    [`${DVS_QUERY_PREFIX}version`]: StringParam,
+    [`${DVS_QUERY_PREFIX}row`]: StringParam,
+    [`${DVS_QUERY_PREFIX}page`]: NumberParam,
+    [`${DVS_QUERY_PREFIX}search`]: StringParam,
+    [`${DVS_QUERY_PREFIX}filters`]: JsonParam,
+    [`${DVS_QUERY_PREFIX}size`]: NumberParam,
+    [`${DVS_QUERY_PREFIX}height`]: StringParam,
+  });
+  const viewedVersionHash =
+    versionSheetParams[`${DVS_QUERY_PREFIX}version`] ?? undefined;
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   const hasDraft = useHasDraft();
@@ -282,6 +304,32 @@ function DatasetItemsPage(): React.ReactElement {
 
   const handleExpand = useCallback(() => setOpenExpansion(true), []);
 
+  const handleViewVersion = useCallback(
+    (version: DatasetVersion) =>
+      setVersionSheetParams(
+        { [`${DVS_QUERY_PREFIX}version`]: version.version_hash },
+        "replaceIn",
+      ),
+    [setVersionSheetParams],
+  );
+
+  const handleCloseVersion = useCallback(
+    () =>
+      setVersionSheetParams(
+        {
+          [`${DVS_QUERY_PREFIX}version`]: undefined,
+          [`${DVS_QUERY_PREFIX}row`]: undefined,
+          [`${DVS_QUERY_PREFIX}page`]: undefined,
+          [`${DVS_QUERY_PREFIX}search`]: undefined,
+          [`${DVS_QUERY_PREFIX}filters`]: undefined,
+          [`${DVS_QUERY_PREFIX}size`]: undefined,
+          [`${DVS_QUERY_PREFIX}height`]: undefined,
+        },
+        "replaceIn",
+      ),
+    [setVersionSheetParams],
+  );
+
   return (
     <div className="pt-4">
       <AddVersionDialog
@@ -359,29 +407,52 @@ function DatasetItemsPage(): React.ReactElement {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="items">
-          <DatasetItemsTab
-            datasetId={datasetId}
-            datasetName={dataset?.name}
-            datasetStatus={dataset?.status}
-            storageKeys={
-              isTestSuite ? SUITE_STORAGE_KEYS : DATASET_STORAGE_KEYS
-            }
-            defaultSelectedColumns={
-              isTestSuite
-                ? SUITE_DEFAULT_SELECTED_COLUMNS
-                : DATASET_DEFAULT_SELECTED_COLUMNS
-            }
-            entityName={entityName}
-            buildColumns={buildColumns}
-            renderEditPanel={renderEditPanel}
-            onAddItem={handleAddItem}
-            itemName={itemName}
-          />
+          {dataset ? (
+            <DatasetItemsTab
+              datasetId={datasetId}
+              datasetName={dataset?.name}
+              datasetStatus={dataset?.status}
+              storageKeys={
+                isTestSuite ? SUITE_STORAGE_KEYS : DATASET_STORAGE_KEYS
+              }
+              defaultSelectedColumns={
+                isTestSuite
+                  ? SUITE_DEFAULT_SELECTED_COLUMNS
+                  : DATASET_DEFAULT_SELECTED_COLUMNS
+              }
+              entityName={entityName}
+              buildColumns={buildColumns}
+              renderEditPanel={renderEditPanel}
+              onAddItem={handleAddItem}
+              itemName={itemName}
+            />
+          ) : (
+            <Loader />
+          )}
         </TabsContent>
         <TabsContent value="version-history">
-          <VersionHistoryTab datasetId={datasetId} />
+          <VersionHistoryTab
+            datasetId={datasetId}
+            onViewVersion={handleViewVersion}
+          />
         </TabsContent>
       </Tabs>
+      <VersionRecordsSidebar
+        datasetId={datasetId}
+        datasetName={dataset?.name}
+        versionHash={dataset ? viewedVersionHash : undefined}
+        onClose={handleCloseVersion}
+        isTestSuite={isTestSuite}
+        buildColumns={buildColumns}
+        storageKeys={isTestSuite ? SUITE_STORAGE_KEYS : DATASET_STORAGE_KEYS}
+        defaultSelectedColumns={
+          isTestSuite
+            ? SUITE_DEFAULT_SELECTED_COLUMNS
+            : DATASET_DEFAULT_SELECTED_COLUMNS
+        }
+        entityName={entityName}
+        itemName={itemName}
+      />
     </div>
   );
 }

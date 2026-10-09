@@ -33,6 +33,7 @@ type DatasetItemsActionsPanelProps = {
   totalCount?: number;
   isDraftMode?: boolean;
   entityName?: string;
+  readOnly?: boolean;
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
@@ -49,6 +50,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   totalCount = 0,
   isDraftMode = false,
   entityName = "dataset",
+  readOnly = false,
 }) => {
   const resetKeyRef = useRef(0);
   const [addTagDialogOpen, setAddTagDialogOpen] = useState<boolean>(false);
@@ -62,6 +64,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const {
     permissions: { canEditDatasets },
   } = usePermissions();
+  const canEdit = canEditDatasets && !readOnly;
 
   const deleteDatasetItemsHandler = useCallback(() => {
     if (!isAllItemsSelected) {
@@ -144,7 +147,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         search={search}
         totalCount={totalCount}
       />
-      {canEditDatasets && (
+      {canEdit && (
         <TooltipWrapper content="Manage tags">
           <Button
             variant="outline"
@@ -174,7 +177,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
             : undefined
         }
       />
-      {canEditDatasets && (
+      {canEdit && (
         <TooltipWrapper content="Delete">
           <Button
             variant="outline"

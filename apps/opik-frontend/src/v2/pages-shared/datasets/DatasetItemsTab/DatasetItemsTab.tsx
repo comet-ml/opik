@@ -129,6 +129,8 @@ interface DatasetItemsTabProps {
   renderEditPanel: (props: EditPanelRenderProps) => React.ReactNode;
   onAddItem: () => void;
   itemName: string;
+  versionHash?: string;
+  queryParamPrefix?: string;
 }
 
 const POLLING_INTERVAL_MS = 3000;
@@ -150,29 +152,46 @@ function DatasetItemsTab({
   renderEditPanel,
   onAddItem,
   itemName,
+  versionHash,
+  queryParamPrefix = "",
 }: DatasetItemsTabProps): React.ReactElement | null {
   const {
     permissions: { canEditDatasets },
   } = usePermissions();
+  const isViewingVersion = Boolean(versionHash);
+  const canEdit = canEditDatasets && !isViewingVersion;
+  const canOpenItem = canEditDatasets || isViewingVersion;
 
   const { isProcessing, showSuccessMessage } = useDatasetLoadingStatus({
     datasetStatus,
   });
 
-  const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
-    updateType: "replaceIn",
-  });
+  const [activeRowId = "", setActiveRowId] = useQueryParam(
+    `${queryParamPrefix}row`,
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
-  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
-    updateType: "replaceIn",
-  });
+  const [page = 1, setPage] = useQueryParam(
+    `${queryParamPrefix}page`,
+    NumberParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
-  const [search = "", setSearch] = useQueryParam("search", StringParam, {
-    updateType: "replaceIn",
-  });
+  const [search = "", setSearch] = useQueryParam(
+    `${queryParamPrefix}search`,
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [filters = [], setFilters] = useQueryParam<Filters, Filters>(
-    "filters",
+    `${queryParamPrefix}filters`,
     JsonParam,
     {
       updateType: "replaceIn",
@@ -183,7 +202,7 @@ function DatasetItemsTab({
     number | null | undefined
   >({
     localStorageKey: storageKeys.paginationSizeKey,
-    queryKey: "size",
+    queryKey: `${queryParamPrefix}size`,
     defaultValue: 10,
     queryParamConfig: NumberParam,
     syncQueryWithLocalStorageOnInit: true,
@@ -197,7 +216,7 @@ function DatasetItemsTab({
     string | null | undefined
   >({
     localStorageKey: storageKeys.rowHeightKey,
-    queryKey: "height",
+    queryKey: `${queryParamPrefix}height`,
     defaultValue: ROW_HEIGHT.small,
     queryParamConfig: StringParam,
     syncQueryWithLocalStorageOnInit: true,
@@ -217,10 +236,10 @@ function DatasetItemsTab({
     [filters],
   );
 
-  const isDraftMode = useIsDraftMode();
+  const isDraftMode = useIsDraftMode() && !isViewingVersion;
   const deletedIds = useDeletedIds();
 
-  const { data, isPending, isPlaceholderData, isFetching } =
+  const { data, isPending, isPlaceholderData, isFetching, isError } =
     useDatasetItemsWithDraft(
       {
         datasetId,
@@ -229,6 +248,7 @@ function DatasetItemsTab({
         size: size as number,
         search: search ?? "",
         truncate: false,
+        versionId: versionHash,
       },
       {
         placeholderData: keepPreviousData,
@@ -253,6 +273,7 @@ function DatasetItemsTab({
       size: size as number,
       search: search ?? "",
       truncate: false,
+      versionId: versionHash,
     },
     {
       enabled: false,
@@ -267,6 +288,7 @@ function DatasetItemsTab({
       size: totalCount || 1,
       search: search ?? "",
       truncate: false,
+      versionId: versionHash,
     },
     {
       enabled: false,
@@ -326,11 +348,16 @@ function DatasetItemsTab({
   });
 
   const noDataText = useMemo(() => {
+    if (isViewingVersion) {
+      return isError
+        ? "Couldn't load this version"
+        : `No ${itemName}s in this version`;
+    }
     if (isDraftMode && deletedIds.size > 0) {
       return `All ${itemName}s on this page have been deleted`;
     }
     return `No ${itemName}s yet`;
-  }, [isDraftMode, deletedIds.size, itemName]);
+  }, [isViewingVersion, isError, isDraftMode, deletedIds.size, itemName]);
 
   const handleSearchChange = useCallback(
     (newSearch: string | null) => {
@@ -464,10 +491,10 @@ function DatasetItemsTab({
           return getDraftStatusBorderClass(item);
         },
       }),
-      ...(canEditDatasets
+      ...(canOpenItem
         ? injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick)
         : convertedColumns),
-      ...(canEditDatasets
+      ...(canEdit
         ? [
             generateActionsColumDef({
               cell: DatasetItemRowActionsCell,
@@ -480,7 +507,8 @@ function DatasetItemsTab({
     columnsData,
     columnsOrder,
     selectedColumns,
-    canEditDatasets,
+    canOpenItem,
+    canEdit,
     getDraftStatusBorderClass,
     handleRowClick,
     setActiveRowId,
@@ -588,6 +616,7 @@ function DatasetItemsTab({
             totalCount={totalCount}
             isDraftMode={isDraftMode}
             entityName={entityName}
+            readOnly={isViewingVersion}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
@@ -640,7 +669,7 @@ function DatasetItemsTab({
       <DataTable
         columns={columns}
         data={rows}
-        onRowClick={canEditDatasets ? handleRowClick : undefined}
+        onRowClick={canOpenItem ? handleRowClick : undefined}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         showSkeleton={isTableLoading}
@@ -656,12 +685,12 @@ function DatasetItemsTab({
           <DataTableEmptyContent
             title={noDataText}
             description={
-              isDraftMode && deletedIds.size > 0
+              isViewingVersion || (isDraftMode && deletedIds.size > 0)
                 ? ""
                 : `Add ${itemName}s to run evaluations and measure performance.`
             }
           >
-            {!(isDraftMode && deletedIds.size > 0) && (
+            {!isViewingVersion && !(isDraftMode && deletedIds.size > 0) && (
               <button
                 onClick={onAddItem}
                 className="comet-body-s underline underline-offset-4 hover:text-primary"

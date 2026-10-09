@@ -19,14 +19,18 @@ interface DatasetItemEditorFormProps {
   onSubmit?: (data: Record<string, unknown>) => void;
   setHasUnsavedChanges?: (value: boolean) => void;
   onFieldChange?: (data: Record<string, unknown>) => void;
+  readOnly?: boolean;
 }
 
-const FieldInput: React.FC<{ field: DatasetField }> = ({ field }) => {
+const FieldInput: React.FC<{ field: DatasetField; readOnly: boolean }> = ({
+  field,
+  readOnly,
+}) => {
   const form = useFormContext<Record<string, unknown>>();
   const fieldValue = form.watch(field.key);
 
   if (field.type === FIELD_TYPE.COMPLEX) {
-    return <JsonFieldEditor fieldName={field.key} isEditing={true} />;
+    return <JsonFieldEditor fieldName={field.key} isEditing={!readOnly} />;
   }
 
   const displayValue =
@@ -39,7 +43,8 @@ const FieldInput: React.FC<{ field: DatasetField }> = ({ field }) => {
         onChange={(e) =>
           form.setValue(field.key, e.target.value, { shouldDirty: true })
         }
-        placeholder="Enter text for this field…"
+        placeholder={readOnly ? undefined : "Enter text for this field…"}
+        readOnly={readOnly}
         className={cn(
           "flex w-full rounded-md resize-none border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 font-mono hover:shadow-sm focus-visible:border-primary",
         )}
@@ -55,6 +60,7 @@ const DatasetItemEditorForm: React.FC<DatasetItemEditorFormProps> = ({
   onSubmit,
   setHasUnsavedChanges,
   onFieldChange,
+  readOnly = false,
 }) => {
   // Create schema from fields
   const schema = useMemo(() => createDynamicSchema(fields), [fields]);
@@ -115,7 +121,7 @@ const DatasetItemEditorForm: React.FC<DatasetItemEditorFormProps> = ({
                 {field.key}
               </AccordionTrigger>
               <AccordionContent>
-                <FieldInput field={field} />
+                <FieldInput field={field} readOnly={readOnly} />
               </AccordionContent>
             </AccordionItem>
           ))}
