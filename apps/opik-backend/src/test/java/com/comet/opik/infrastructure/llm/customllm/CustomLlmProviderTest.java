@@ -202,7 +202,7 @@ class CustomLlmProviderTest {
     }
 
     @Test
-    void judgeSendsAnExtraBodyKeyOnceWithTheExtraBodyValue() {
+    void judgeSendsEachRepeatedExtraBodyKeyOnceWithTheExtraBodyValue() {
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl(wireMock.baseUrl() + "/v1")
