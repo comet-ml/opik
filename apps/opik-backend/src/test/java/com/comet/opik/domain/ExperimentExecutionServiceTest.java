@@ -948,6 +948,29 @@ class ExperimentExecutionServiceTest {
             verify(cancellationService, never()).purgeQueued(any(), any(UUID.class));
         }
 
+        // Stop is offered per prompt, so one variant can be stopped while its siblings run on. The
+        // purge is chosen per experiment, and a single-prompt run cannot tell that apart from one
+        // chosen for the whole batch.
+        @Test
+        void purgeOnlyTheSiblingThatWasStopped() {
+            var stopped = UUID.randomUUID();
+            var running = UUID.randomUUID();
+            when(idGenerator.generateId()).thenReturn(stopped, running, UUID.randomUUID());
+
+            when(cancellationService.isCancelled(WORKSPACE_ID, stopped)).thenReturn(Mono.just(true));
+            when(cancellationService.isCancelled(WORKSPACE_ID, running)).thenReturn(Mono.just(false));
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(false));
+
+            executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetId(UUID.randomUUID())
+                    .datasetName("test-dataset")
+                    .prompts(List.of(buildPrompt("gpt-4", "hi"), buildPrompt("gpt-4", "there")))
+                    .build());
+
+            verify(cancellationService).purgeQueued(WORKSPACE_ID, stopped);
+            verify(cancellationService, never()).purgeQueued(WORKSPACE_ID, running);
+        }
+
         // The run is cancelled either way: the mark is set before the purge, so whatever this
         // misses a consumer skips. Failing the request over a lost optimisation would be worse.
         @Test
