@@ -98,6 +98,8 @@ class ExperimentExecutionServiceTest {
                 itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService);
 
         lenient().when(itemPublisher.publish(any(), any(), anyBoolean())).thenReturn(Mono.empty());
+        // Every publish asks whether a stop landed while it was running; almost no test is about that.
+        lenient().when(cancellationService.isCancelled(any(), any(UUID.class))).thenReturn(Mono.just(false));
         stubDatasetType(DatasetType.TEST_SUITE);
         // Default empty stub so tests that don't care about the version-info bulk lookup
         // (used by resolveOpikPromptsByVariant for prompt-name fallback) don't NPE the
@@ -875,6 +877,89 @@ class ExperimentExecutionServiceTest {
             var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
             verify(experimentService).update(eq(experimentId), captor.capture());
             assertThat(captor.getValue().finished()).isFalse();
+        }
+    }
+
+    // A stop can land between the experiment rows being written and the run recording what it
+    // queued. Its purge runs once, against a queue that is still empty, so the messages published
+    // afterwards would be left for a consumer to walk one by one.
+    @Nested
+    @DisplayName("Stopped while publishing")
+    class StoppedWhilePublishing {
+
+        @BeforeEach
+        void stubDataset() {
+            lenient().when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            lenient().when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
+            lenient().when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+        }
+
+        private ExperimentExecutionRequest singlePromptRequest() {
+            return ExperimentExecutionRequest.builder()
+                    .datasetId(UUID.randomUUID())
+                    .datasetName("test-dataset")
+                    .prompts(List.of(buildPrompt("gpt-4", "hi")))
+                    .build();
+        }
+
+        @Test
+        void purgeTheQueueAgainOnceTheRunHasRecordedIt() {
+            when(cancellationService.isCancelled(any(), any(UUID.class))).thenReturn(Mono.just(true));
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(false));
+
+            executeRequest(singlePromptRequest());
+
+            verify(cancellationService).purgeQueued(eq(WORKSPACE_ID), any(UUID.class));
+        }
+
+        // Purging everything leaves no message to reach a consumer, so nothing else would ever
+        // record that the run had stopped producing.
+        @Test
+        void recordTheFinishWhenThatPurgeDrainsTheRun() {
+            when(cancellationService.isCancelled(any(), any(UUID.class))).thenReturn(Mono.just(true));
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(true));
+
+            executeRequest(singlePromptRequest());
+
+            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+            verify(experimentService).update(any(UUID.class), captor.capture());
+            assertThat(captor.getValue().finished()).isTrue();
+            assertThat(captor.getValue().status()).isNull();
+        }
+
+        @Test
+        void leaveTheFinishToTheConsumerWhenItemsAreStillOut() {
+            when(cancellationService.isCancelled(any(), any(UUID.class))).thenReturn(Mono.just(true));
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(false));
+
+            executeRequest(singlePromptRequest());
+
+            verify(cancellationService).purgeQueued(eq(WORKSPACE_ID), any(UUID.class));
+            verify(experimentService, never()).update(any(UUID.class), any());
+        }
+
+        @Test
+        void leaveARunNobodyStoppedAlone() {
+            executeRequest(singlePromptRequest());
+
+            verify(cancellationService, never()).purgeQueued(any(), any(UUID.class));
+        }
+
+        // The run is cancelled either way: the mark is set before the purge, so whatever this
+        // misses a consumer skips. Failing the request over a lost optimisation would be worse.
+        @Test
+        void returnTheRunEvenWhenThatPurgeFails() {
+            when(cancellationService.isCancelled(any(), any(UUID.class))).thenReturn(Mono.just(true));
+            when(cancellationService.purgeQueued(any(), any(UUID.class)))
+                    .thenReturn(Mono.error(new IllegalStateException("redis down")));
+
+            var response = executeRequest(singlePromptRequest());
+
+            verify(cancellationService).purgeQueued(eq(WORKSPACE_ID), any(UUID.class));
+            assertThat(response.experiments()).hasSize(1);
         }
     }
 
