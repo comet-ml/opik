@@ -38,6 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseComposedProviderType } from "@/lib/provider";
 import { parseLLMMessageContent } from "@/lib/llm";
+import { withLowReasoning } from "./promptImprovementConfigs";
 
 const PROMPT_IMPROVEMENT_PROGRESS_MESSAGES = [
   "Analyzing your instructions...",
@@ -78,13 +79,23 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const editorViewRef = useRef<EditorView | null>(null);
 
-  // The dialog has no settings panel, so it runs the model at its defaults. The prompt's own
-  // settings are sized for its task: a small max tokens there would cut off every rewrite.
-  const { model, provider, configs, modelSelectProps } = useModelSelection({
+  // The dialog has no settings panel, so it runs the model at its defaults, with reasoning lowered
+  // by withLowReasoning. The prompt's own settings are sized for its task: a small max tokens
+  // there would cut off every rewrite.
+  const {
+    model,
+    provider,
+    configs: modelDefaults,
+    modelSelectProps,
+  } = useModelSelection({
     persistenceKey: PROMPT_IMPROVEMENT_LAST_PICKED_MODEL,
     defaultModel,
     defaultProvider,
   });
+  const configs = useMemo(
+    () => withLowReasoning(model, modelDefaults),
+    [model, modelDefaults],
+  );
 
   const { improvePrompt, generatePrompt } = usePromptImprovement({
     workspaceName,
