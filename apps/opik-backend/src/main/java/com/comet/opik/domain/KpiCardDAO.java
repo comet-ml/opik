@@ -374,6 +374,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
             SETTINGS log_comment = '<log_comment>';
             """;
 
+    // use_skip_indexes_if_final_exact_mode = 1: production turns it off (Helm profile), and then a skip index on source,
+    // environment or thread_id could hide a trace's newest row from FINAL, which would return an older row that passes
+    // the chips. Exact mode keeps the cards counting what the thread list does.
     private static final String GET_THREAD_KPI_CARDS = """
             WITH traces_final AS (
                 SELECT
@@ -589,7 +592,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 SUMIf(tc.cost, NOT tf.is_current_period) AS previous_total_cost
             FROM threads_filtered tf
             LEFT JOIN thread_costs tc ON tf.id = tc.thread_id AND tf.is_current_period = tc.is_current_period
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """;
 
     @Override
@@ -599,7 +602,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
             addTraceFilters(st, criteria.filters());
 
-            var statement = bindPeriodBounds(buildStatement(connection, st, criteria, workspaceId), criteria);
+            Instant priorStart = getPriorStart(criteria);
+            var statement = bindPeriodBounds(buildStatement(connection, st, criteria, workspaceId, priorStart),
+                    criteria, priorStart);
             bindTraceFilters(statement, criteria.filters());
 
             InstrumentAsyncUtils.Segment segment = startSegment("traceKpiCards", "Clickhouse", "kpi");
@@ -617,7 +622,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
             addSpanFilters(st, criteria.filters());
 
-            var statement = bindPeriodBounds(buildStatement(connection, st, criteria, workspaceId), criteria);
+            Instant priorStart = getPriorStart(criteria);
+            var statement = bindPeriodBounds(buildStatement(connection, st, criteria, workspaceId, priorStart),
+                    criteria, priorStart);
             bindSpanFilters(statement, criteria.filters());
 
             InstrumentAsyncUtils.Segment segment = startSegment("spanKpiCards", "Clickhouse", "kpi");
@@ -635,7 +642,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
             addThreadFilters(st, criteria.filters());
 
-            var statement = buildStatement(connection, st, criteria, workspaceId);
+            var statement = buildStatement(connection, st, criteria, workspaceId, getPriorStart(criteria));
             bindThreadFilters(statement, criteria.filters());
 
             InstrumentAsyncUtils.Segment segment = startSegment("threadKpiCards", "Clickhouse", "kpi");
@@ -663,11 +670,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
     }
 
     private Statement buildStatement(Connection connection, ST template,
-            KpiCardCriteria criteria, String workspaceId) {
-        // Without a requested end, now only sizes the prior period; the current one is open-ended.
-        Instant priorStart = getPriorStart(criteria.intervalStart(),
-                Optional.ofNullable(criteria.intervalEnd()).orElseGet(Instant::now));
-
+            KpiCardCriteria criteria, String workspaceId, Instant priorStart) {
         var statement = connection.createStatement(template.render())
                 .bind("project_id", criteria.projectId())
                 .bind("workspace_id", workspaceId)
@@ -679,10 +682,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
         return statement;
     }
 
-    private Statement bindPeriodBounds(Statement statement, KpiCardCriteria criteria) {
-        Instant priorStart = getPriorStart(criteria.intervalStart(),
-                Optional.ofNullable(criteria.intervalEnd()).orElseGet(Instant::now));
-
+    private Statement bindPeriodBounds(Statement statement, KpiCardCriteria criteria, Instant priorStart) {
         statement.bind("id_prior_start", instantToUUIDMapper.toLowerBound(priorStart).toString());
         if (criteria.intervalEnd() != null) {
             statement.bind("id_end", instantToUUIDMapper.toUpperBound(criteria.intervalEnd()).toString());
@@ -806,9 +806,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
         }));
     }
 
-    private Instant getPriorStart(Instant intervalStart, Instant intervalEnd) {
-        Duration duration = Duration.between(intervalStart, intervalEnd);
-        return intervalStart.minus(duration);
+    // Without a requested end, now only sizes the prior period; the current one is open-ended.
+    private Instant getPriorStart(KpiCardCriteria criteria) {
+        Instant intervalEnd = Optional.ofNullable(criteria.intervalEnd()).orElseGet(Instant::now);
+        return criteria.intervalStart().minus(Duration.between(criteria.intervalStart(), intervalEnd));
     }
 
     private Double filterNan(Double value) {
