@@ -24,6 +24,7 @@ import {
   knowsAnthropicEffortLevels,
   resolveSamplingParams,
   updateProviderConfig,
+  withoutThinkingAmount,
   withThinkingEffort,
 } from "@/lib/modelUtils";
 import {
@@ -748,8 +749,10 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     (custom_parameters ?? {}) as Record<string, unknown>
   ).thinking as Record<string, unknown> | undefined;
 
-  // Merge rather than replace: budget_tokens and include_thoughts also live under `thinking` and
-  // are not represented in the form, so an unchanged load -> save must not drop them.
+  // Merge rather than replace: include_thoughts also lives under `thinking` and is not represented
+  // in the form, so an unchanged load -> save must not drop it. A persisted budget_tokens is dropped:
+  // the backend lets it outrank any level, so the judge would think with that budget while the form
+  // shows Low, or keep thinking under Off.
   // "auto" is the absence of a setting — the model applies its own dynamic budget — so it is stored
   // as no thinking block rather than as a level the backend would have to special-case.
   const thinkingCustomParameters =
@@ -760,12 +763,8 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
       (o) => o.value === thinkingLevel,
     )
       ? {
-          // "off" must clear any persisted budget_tokens: an explicit budget outranks the level
-          // server-side, so keeping both would leave thinking on while the UI reads "Off".
           thinking: {
-            ...(thinkingLevel === "off"
-              ? omit(persistedThinking ?? {}, "budget_tokens")
-              : persistedThinking ?? {}),
+            ...omit(persistedThinking ?? {}, "budget_tokens"),
             level: thinkingLevel,
           },
         }
@@ -777,8 +776,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   //
   // Only for those models, though. `custom_parameters.thinking` is not Gemini-only — Anthropic reads
   // `thinking.{type,budget_tokens}` for extended thinking — so omitting it unconditionally would
-  // silently disable extended thinking on an unedited save of an Anthropic rule. Same for a Gemini
-  // 2.5 rule holding an explicit budget_tokens, whose default level is "auto".
+  // silently disable extended thinking on an unedited save of an Anthropic rule.
   const persistedCustomParameters = (custom_parameters ?? {}) as Record<
     string,
     unknown
@@ -787,24 +785,32 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // level this model rejects — a stale "off" carried onto a model that cannot disable thinking has
   // to go, which is what the level check above is for.
   //
-  // Otherwise carry the block through untouched. "auto", or no level at all, means "the form has no
-  // level of its own here", not "delete whatever else was in there": budget_tokens and
+  // Otherwise carry the block through untouched. No level at all means "the form has no level of
+  // its own here", not "delete whatever else was in there": budget_tokens and
   // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
   // this same key for extended thinking.
   // "none" is an explicit "do not think", so it removes a persisted thinking block rather than just
   // declining to add one — otherwise a level saved earlier keeps being sent. "auto" is the weaker
-  // "let the model decide" and leaves the block alone, since it may hold fields the form cannot
-  // represent (budget_tokens, include_thoughts, or Anthropic's type).
+  // "let the model decide": it drops the persisted level and budget_tokens, so the judge gets no
+  // thinking config, and keeps the rest (include_thoughts), which the form cannot represent.
+  // Anthropic's type and budget_tokens live under this key too, so this only applies to a model with
+  // a level control.
   const formClearsThinking = thinkingLevel === "none";
   const formRejectedItsLevel =
     thinkingLevel != null &&
     thinkingLevel !== "auto" &&
     thinkingLevel !== "none" &&
     !thinkingCustomParameters;
-  const otherCustomParameters =
-    thinkingCustomParameters || formRejectedItsLevel || formClearsThinking
-      ? omit(persistedCustomParameters, "thinking")
-      : persistedCustomParameters;
+  const formSetsAuto =
+    thinkingLevel === "auto" &&
+    getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).length > 0;
+  let otherCustomParameters = persistedCustomParameters;
+  if (thinkingCustomParameters || formRejectedItsLevel || formClearsThinking) {
+    otherCustomParameters = omit(persistedCustomParameters, "thinking");
+  } else if (formSetsAuto) {
+    otherCustomParameters =
+      withoutThinkingAmount(persistedCustomParameters) ?? {};
+  }
 
   const mergedCustomParameters = {
     ...otherCustomParameters,

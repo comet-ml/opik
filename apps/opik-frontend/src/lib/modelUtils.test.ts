@@ -10,6 +10,7 @@ import {
   isReasoningModel,
   resolveEffort,
   resolveSamplingParams,
+  resolveThinkingLevel,
   SamplingParams,
   sanitizeConfigForRequest,
   supportsAnthropicThinkingEffort,
@@ -20,6 +21,8 @@ import {
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
   updateProviderConfig,
+  withoutThinkingAmount,
+  withShownThinkingLevel,
 } from "@/lib/modelUtils";
 import {
   AnthropicThinkingEffort,
@@ -1089,14 +1092,25 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toBeUndefined();
   });
 
-  // auto is the weaker "let the model decide" and must not delete fields the form cannot represent.
-  it("leaves a persisted thinking block alone for auto", () => {
-    expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+  // A budget set through the API outranks any level server-side, so keeping it under Auto would
+  // pin how much the model thinks while the panel says the model decides.
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+  ])("drops a persisted budget for auto on %s", (model) => {
+    for (const configs of [
+      {
         thinkingLevel: "auto",
         custom_parameters: { thinking: { budget_tokens: 4096 } },
-      }).custom_parameters,
-    ).toEqual({ thinking: { budget_tokens: 4096 } });
+      },
+      { custom_parameters: { thinking: { budget_tokens: 4096 } } },
+    ]) {
+      expect(
+        sanitizeConfigForRequest(model, configs).custom_parameters,
+      ).toBeUndefined();
+    }
   });
 
   it("sends a low or medium level on 3.1 Flash Lite instead of resetting it to none", () => {
@@ -1188,21 +1202,34 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     expect(result.custom_parameters).toBeUndefined();
   });
 
-  it("merges the level into an existing thinking block, keeping its other fields", () => {
-    const result = sanitizeConfigForRequest(
-      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-      {
-        thinkingLevel: "low",
+  // A budget set through the API outranks any level server-side, so keeping it would send that
+  // budget while the panel shows the level.
+  it.each<[PROVIDER_MODEL_TYPE, GeminiThinkingLevel, Record<string, unknown>]>([
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, "low", { thinkingLevel: "low" }],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      "medium",
+      { thinkingLevel: "medium" },
+    ],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, "minimal", {}],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_PRO, "high", {}],
+  ])(
+    "sends %s's %s without a persisted budget, keeping the rest",
+    (model, level, flat) => {
+      const result = sanitizeConfigForRequest(model, {
+        ...flat,
         custom_parameters: {
-          thinking: { budget_tokens: 4096, include_thoughts: true },
+          thinking: { level, budget_tokens: 4096, include_thoughts: true },
+          unrelated: "keep",
         },
-      },
-    );
+      });
 
-    expect(result.custom_parameters).toEqual({
-      thinking: { budget_tokens: 4096, include_thoughts: true, level: "low" },
-    });
-  });
+      expect(result.custom_parameters).toEqual({
+        thinking: { include_thoughts: true, level },
+        unrelated: "keep",
+      });
+    },
+  );
 });
 
 describe("updateProviderConfig — Gemini thinking level", () => {
@@ -1511,6 +1538,222 @@ describe("resolveEffort", () => {
         thinkingEffort: "max",
       }),
     ).toEqual({ reasoningEffort: "low", thinkingEffort: "max" });
+  });
+});
+
+describe("resolveThinkingLevel", () => {
+  it.each<[string, PROVIDER_MODEL_TYPE, Record<string, unknown>, string]>([
+    [
+      "keeps a stored level the model offers",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { thinkingLevel: "low" },
+      "low",
+    ],
+    [
+      "falls back to the default for a stored level the model does not offer",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { thinkingLevel: "minimal" },
+      "auto",
+    ],
+    [
+      "does the same on Vertex AI",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      { thinkingLevel: "minimal" },
+      "auto",
+    ],
+    [
+      "keeps minimal on a model that offers it",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      { thinkingLevel: "minimal" },
+      "minimal",
+    ],
+    [
+      "falls back to the default when nothing is stored",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      {},
+      "high",
+    ],
+    [
+      "reads a level nested under custom_parameters",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { custom_parameters: { thinking: { level: "high" } } },
+      "high",
+    ],
+    [
+      "lets a flat level win over a nested one",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      {
+        thinkingLevel: "medium",
+        custom_parameters: { thinking: { level: "high" } },
+      },
+      "medium",
+    ],
+  ])("%s", (_, model, configs, expected) => {
+    expect(resolveThinkingLevel(model, configs)).toBe(expected);
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])(
+    "sends what the dropdown shows when %s does not offer the stored level",
+    (model) => {
+      const configs = { thinkingLevel: "minimal" as const };
+
+      expect(resolveThinkingLevel(model, configs)).toBe("auto");
+      expect(sanitizeConfigForRequest(model, configs)).toEqual({});
+    },
+  );
+});
+
+describe("Auto sends no Gemini thinking level", () => {
+  it.each<[string, Record<string, unknown>]>([
+    [
+      "a flat auto over a nested level",
+      {
+        thinkingLevel: "auto",
+        custom_parameters: { thinking: { level: "high" } },
+      },
+    ],
+    [
+      "a nested level the model does not offer",
+      { custom_parameters: { thinking: { level: "minimal" } } },
+    ],
+    [
+      "a flat level the model does not offer over a nested one",
+      {
+        thinkingLevel: "minimal",
+        custom_parameters: { thinking: { level: "high" } },
+      },
+    ],
+  ])("drops %s", (_, configs) => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    ]) {
+      expect(resolveThinkingLevel(model, configs), model).toBe("auto");
+      expect(
+        sanitizeConfigForRequest(model, configs).custom_parameters,
+        model,
+      ).toBeUndefined();
+    }
+  });
+
+  it("drops the budget too, and keeps include_thoughts and the other custom parameters", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+        custom_parameters: {
+          thinking: {
+            level: "low",
+            budget_tokens: 4096,
+            include_thoughts: true,
+          },
+          unrelated: "keep",
+        },
+      }).custom_parameters,
+    ).toEqual({
+      thinking: { include_thoughts: true },
+      unrelated: "keep",
+    });
+  });
+});
+
+describe("withoutThinkingAmount", () => {
+  it.each<[string, unknown, unknown]>([
+    ["nothing stored", undefined, undefined],
+    [
+      "a block holding only a level",
+      { thinking: { level: "high" } },
+      undefined,
+    ],
+    [
+      "other keys next to the block",
+      { thinking: { level: "high" }, seed: 1 },
+      { seed: 1 },
+    ],
+    [
+      "a block holding only a budget",
+      { thinking: { budget_tokens: 4096 }, seed: 1 },
+      { seed: 1 },
+    ],
+    [
+      "a level and a budget next to include_thoughts",
+      {
+        thinking: {
+          level: "low",
+          budget_tokens: 4096,
+          include_thoughts: false,
+        },
+      },
+      { thinking: { include_thoughts: false } },
+    ],
+    [
+      "a block with neither",
+      { thinking: { include_thoughts: true } },
+      { thinking: { include_thoughts: true } },
+    ],
+    [
+      "a thinking value that is not an object",
+      { thinking: "on" },
+      { thinking: "on" },
+    ],
+  ])("handles %s", (_, customParameters, expected) => {
+    expect(withoutThinkingAmount(customParameters)).toEqual(expected);
+  });
+});
+
+describe("a model switch carries the thinking level the panel showed", () => {
+  const GEMINI = PROVIDER_TYPE.GEMINI as COMPOSED_PROVIDER_TYPE;
+
+  it.each<
+    [PROVIDER_MODEL_TYPE, GeminiThinkingLevel, PROVIDER_MODEL_TYPE, string]
+  >([
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      "none",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      "none",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      "none",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "low",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "low",
+    ],
+  ])("%s holding %s, then %s: %s", (from, thinkingLevel, to, expected) => {
+    const switched = updateProviderConfig(
+      withShownThinkingLevel(from, { thinkingLevel }),
+      { model: to, provider: GEMINI },
+    );
+
+    expect(switched?.thinkingLevel).toBe(expected);
+  });
+
+  it("leaves a model without a level control alone", () => {
+    const configs = { temperature: 0.5 };
+
+    expect(
+      withShownThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH, configs),
+    ).toBe(configs);
   });
 });
 
