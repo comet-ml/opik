@@ -210,7 +210,7 @@ const OpenRouterModelConfigs = ({
             <Label htmlFor="reasoningEffort" className="text-sm font-medium">
               Reasoning effort
             </Label>
-            <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses. Default sends no effort, so the model uses its own." />
+            <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses. Default sends no effort: a model that always reasons uses its usual level, and a model where reasoning is optional may not reason at all." />
           </div>
           <Select
             value={reasoningEffort ?? DEFAULT_EFFORT}
