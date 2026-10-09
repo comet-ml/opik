@@ -13,6 +13,7 @@ import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { DATASET_TYPE } from "@/types/datasets";
+import PlaygroundColumnsButton from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundColumnsButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import {
@@ -225,6 +226,9 @@ const PlaygroundHeader = ({
             size="icon-2xs"
             deferOnChange
           />
+        )}
+        {plainDatasetId && (
+          <PlaygroundColumnsButton datasetId={plainDatasetId} />
         )}
       </>
     );
