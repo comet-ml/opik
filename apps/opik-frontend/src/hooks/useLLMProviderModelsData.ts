@@ -33,6 +33,11 @@ export type ModelResolver = (
   preferredProvider?: COMPOSED_PROVIDER_TYPE | "",
 ) => PROVIDER_MODEL_TYPE | "";
 
+export type DropdownModelCheck = (
+  modelName: PROVIDER_MODEL_TYPE | "",
+  provider: COMPOSED_PROVIDER_TYPE | "",
+) => boolean;
+
 // Re-exported for backwards compatibility with callers that still import
 // PROVIDER_MODELS from this module. Actual location is
 // src/constants/providerModels.ts; moved there to break the hook ↔ store
@@ -282,6 +287,17 @@ const useLLMProviderModelsData = () => {
     [fullProviderModels],
   );
 
+  const isDropdownModel: DropdownModelCheck = useCallback(
+    (modelName, provider) => {
+      if (!modelName || !provider) return false;
+      const routableModel = getRoutableProviderModelValue(provider, modelName);
+      return (providerModels[provider] ?? []).some(
+        (pm) => pm.value === routableModel,
+      );
+    },
+    [providerModels],
+  );
+
   const calculateDefaultModel: ModelResolver = useCallback(
     (lastPickedModel, setupProviders, preferredProvider?) => {
       const lastPickedModelProvider = calculateModelProvider(
@@ -319,6 +335,7 @@ const useLLMProviderModelsData = () => {
     getProviderModels,
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     isPending,
     isFetched,
     isError,

@@ -87,8 +87,6 @@ openai:
   - id: "o1"
     label: "GPT o1"
     reasoning: true
-  - id: "gpt-live-1"
-    label: "GPT Live 1"
   - id: "chatgpt-4o-latest"
     structuredOutput: true
   - id: "chatgpt-image-latest"
@@ -151,6 +149,7 @@ openai:
   - id: "gpt-image-2"
   - id: "gpt-image-2.5-flare"
   - id: "gpt-image-2.5-sunburst"
+  - id: "gpt-live-1"
   - id: "o1-2024-12-17"
     reasoning: true
   - id: "o1-mini"
@@ -268,14 +267,6 @@ gemini:
     label: "Gemma 4 31B IT"
   - id: "gemini-flash-latest-high-res-exp"
     label: "Gemini Flash Latest High Res Exp"
-  - id: "gemini-omni-1.1-flash"
-    label: "Gemini Omni 1.1 Flash"
-  - id: "lyria-3-clip-preview"
-    label: "Lyria 3 Clip Preview"
-  - id: "lyria-3-pro-preview"
-    label: "Lyria 3 Pro Preview"
-  - id: "lyria-3.5"
-    label: "Lyria 3.5"
   - id: "aqa"
   - id: "gemini-1.0-pro"
   - id: "gemini-1.5-flash-latest"
@@ -302,8 +293,12 @@ gemini:
   - id: "gemini-3.1-flash-tts-preview"
   - id: "gemini-3.8-flash-lite-tts"
   - id: "gemini-3.8-flash-tts"
+  - id: "gemini-omni-1.1-flash"
   - id: "gemini-omni-flash-preview"
   - id: "gemini-pro-vision"
+  - id: "lyria-3-clip-preview"
+  - id: "lyria-3-pro-preview"
+  - id: "lyria-3.5"
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
 vertex-ai:
@@ -362,9 +357,6 @@ vertex-ai:
   - id: "gemini-2.0-flash-lite-001"
     qualifiedName: "vertex_ai/gemini-2.0-flash-lite-001"
     label: "Gemini 2.0 Flash Lite 001"
-  - id: "gemini-omni-1.1-flash"
-    qualifiedName: "vertex_ai/gemini-omni-1.1-flash"
-    label: "Gemini Omni 1.1 Flash"
   - id: "gemini-robotics-er-2"
     qualifiedName: "vertex_ai/gemini-robotics-er-2"
     label: "Gemini Robotics Er 2"
@@ -383,6 +375,8 @@ vertex-ai:
   - id: "gemini-2.5-pro-preview-05-06"
     qualifiedName: "vertex_ai/gemini-2.5-pro-preview-05-06"
     structuredOutput: true
+  - id: "gemini-omni-1.1-flash"
+    qualifiedName: "vertex_ai/gemini-omni-1.1-flash"
 openrouter:
   - id: "ai21/jamba-large-1.7"
     label: "ai21/jamba-large-1.7"

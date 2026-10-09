@@ -35,6 +35,8 @@ vi.mock("@/hooks/useOpenAICompatibleModels", () => ({
 }));
 
 const OPEN_ROUTER = PROVIDER_TYPE.OPEN_ROUTER as COMPOSED_PROVIDER_TYPE;
+const OPEN_AI_DEFAULT_MODEL = PROVIDERS[PROVIDER_TYPE.OPEN_AI]
+  .defaultModel as PROVIDER_MODEL_TYPE;
 
 const OPEN_ROUTER_REGISTRY: LlmModelsByProvider = {
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -59,6 +61,7 @@ const renderResolvers = () => {
   return {
     providerResolver: result.current.calculateModelProvider,
     modelResolver: result.current.calculateDefaultModel,
+    isDropdownModel: result.current.isDropdownModel,
   };
 };
 
@@ -122,6 +125,34 @@ describe("generateDefaultPrompt", () => {
 
     expect(prompt.model).toBe(PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_5);
     expect(prompt.provider).toBe(OPEN_ROUTER);
+  });
+
+  it("starts on the provider default when the last picked model left the picker", () => {
+    const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
+    registry.data = {
+      [PROVIDER_TYPE.OPEN_AI]: [
+        {
+          id: OPEN_AI_DEFAULT_MODEL,
+          label: "GPT 5.5",
+          structuredOutput: true,
+          reasoning: true,
+        },
+        {
+          id: PROVIDER_MODEL_TYPE.GPT_LIVE_1,
+          structuredOutput: false,
+          reasoning: false,
+        },
+      ],
+    };
+
+    const prompt = generateDefaultPrompt({
+      setupProviders: [OPEN_AI],
+      lastPickedModel: PROVIDER_MODEL_TYPE.GPT_LIVE_1,
+      ...renderResolvers(),
+    });
+
+    expect(prompt.model).toBe(OPEN_AI_DEFAULT_MODEL);
+    expect(prompt.provider).toBe(OPEN_AI);
   });
 });
 
