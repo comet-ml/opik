@@ -225,9 +225,10 @@ spanWeeksBackfill:
   #  Description: ClickHouse threads one run may use (prod replicas have 48 vCPUs); memory is left to the server
   #   profile's GROUP BY spill
   maxThreads: ${SPAN_WEEKS_BACKFILL_MAX_THREADS:-4}
-  #  Default: 1h
-  #  Description: ClickHouse max_execution_time for one chunk, and how long a run holds the job lock
-  queryTimeout: ${SPAN_WEEKS_BACKFILL_QUERY_TIMEOUT:-1h}
+  #  Default: 10m
+  #  Description: ClickHouse max_execution_time for one chunk, and how long a run holds the job lock. A 4-week range
+  #   is estimated at 1-3 minutes on prod at 4 threads (OPIK-8706), so this leaves 3-5x headroom
+  queryTimeout: ${SPAN_WEEKS_BACKFILL_QUERY_TIMEOUT:-10m}
 
 bulkInsert:
   # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as
