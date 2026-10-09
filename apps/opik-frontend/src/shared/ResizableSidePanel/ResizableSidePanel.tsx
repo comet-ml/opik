@@ -9,6 +9,10 @@ import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { usePortalContainer } from "@/lib/portal-container";
+import {
+  isArrowKeyForFocusedControl,
+  isKeyFromLayerAbovePanel,
+} from "@/shared/ResizableSidePanel/panelHotkeys";
 
 const INITIAL_WIDTH = 0.75;
 const MIN_LEFT_POSITION = 0.1;
@@ -144,12 +148,15 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
       }
     },
     {
-      // The listener sits on the document, so it also gets keys that an open
-      // menu, select, popover or dialog inside the panel already handled.
-      // Radix marks those with preventDefault; acting on them too would close
-      // the whole panel (and lose its form) on an Escape meant for a menu.
+      // The listener sits on the document, so it also gets keys pressed in a
+      // menu or dialog opened from the panel. Acting on them would move the
+      // panel to another trace under an open Delete confirm. defaultPrevented
+      // can't tell those apart: a tooltip and the Logs sheet that hosts the
+      // panel also mark Escape, and the panel must still close then.
       ignoreEventWhen: (keyboardEvent) =>
-        ignoreHotkeys || keyboardEvent.defaultPrevented,
+        ignoreHotkeys ||
+        isKeyFromLayerAbovePanel(keyboardEvent, panelRef.current) ||
+        isArrowKeyForFocusedControl(keyboardEvent),
     },
     [verticalNavigation, horizontalNavigation, onClose, open, ignoreHotkeys],
   );

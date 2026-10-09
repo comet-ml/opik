@@ -1,4 +1,4 @@
-import { ComponentProps } from "react";
+import { ComponentProps, ReactNode, useState } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
@@ -15,22 +15,67 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/ui/select";
+import { Dialog, DialogContent, DialogTitle } from "@/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
+import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import ResizableSidePanel from "./ResizableSidePanel";
 
 const KEYS = {
   Escape: { key: "Escape", code: "Escape" },
   ArrowDown: { key: "ArrowDown", code: "ArrowDown" },
+  ArrowRight: { key: "ArrowRight", code: "ArrowRight" },
 };
+
+const buildNavigation = () => ({
+  hasPrevious: true,
+  hasNext: true,
+  onChange: vi.fn(),
+});
+
+const PanelBody = ({ extra }: { extra?: ReactNode }) => (
+  <>
+    <button>Panel body</button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button>Open menu</button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem>First item</DropdownMenuItem>
+        <DropdownMenuItem>Second item</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+    <Select>
+      <SelectTrigger aria-label="Thinking level">
+        <SelectValue placeholder="Pick a level" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="low">Low</SelectItem>
+        <SelectItem value="high">High</SelectItem>
+      </SelectContent>
+    </Select>
+    <Tabs defaultValue="messages">
+      <TabsList>
+        <TabsTrigger value="messages">Messages</TabsTrigger>
+        <TabsTrigger value="details">Details</TabsTrigger>
+      </TabsList>
+    </Tabs>
+    <ToggleGroup type="single" aria-label="Score">
+      <ToggleGroupItem value="yes">Yes</ToggleGroupItem>
+      <ToggleGroupItem value="no">No</ToggleGroupItem>
+    </ToggleGroup>
+    <div role="textbox" tabIndex={0} aria-label="Read-only code" />
+    {extra}
+  </>
+);
 
 const renderPanel = (
   props: Partial<ComponentProps<typeof ResizableSidePanel>> = {},
+  extra?: ReactNode,
 ) => {
   const onClose = vi.fn();
-  const verticalNavigation = {
-    hasPrevious: true,
-    hasNext: true,
-    onChange: vi.fn(),
-  };
+  const verticalNavigation = buildNavigation();
+  const horizontalNavigation = buildNavigation();
   render(
     <TooltipProvider>
       <ResizableSidePanel
@@ -38,31 +83,14 @@ const renderPanel = (
         open
         onClose={onClose}
         verticalNavigation={verticalNavigation}
+        horizontalNavigation={horizontalNavigation}
         {...props}
       >
-        <button>Panel body</button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button>Open menu</button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem>First item</DropdownMenuItem>
-            <DropdownMenuItem>Second item</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Select>
-          <SelectTrigger aria-label="Thinking level">
-            <SelectValue placeholder="Pick a level" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="low">Low</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-          </SelectContent>
-        </Select>
+        <PanelBody extra={extra} />
       </ResizableSidePanel>
     </TooltipProvider>,
   );
-  return { onClose, verticalNavigation };
+  return { onClose, verticalNavigation, horizontalNavigation };
 };
 
 const openMenu = () => {
@@ -78,6 +106,15 @@ const openSelect = () => {
   fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
   return screen.getByRole("listbox");
 };
+
+const confirmDialog = (
+  <Dialog open>
+    <DialogContent aria-describedby={undefined}>
+      <DialogTitle>Delete trace</DialogTitle>
+      <button>Cancel</button>
+    </DialogContent>
+  </Dialog>
+);
 
 describe("ResizableSidePanel hotkeys", () => {
   beforeEach(() => {
@@ -120,13 +157,33 @@ describe("ResizableSidePanel hotkeys", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves arrow keys to an open menu instead of moving the panel", () => {
-    const { verticalNavigation } = renderPanel();
+  it.each([KEYS.ArrowDown, KEYS.ArrowRight])(
+    "leaves $key in an open menu to the menu instead of moving the panel",
+    (arrowKey) => {
+      const { verticalNavigation, horizontalNavigation } = renderPanel();
 
-    fireEvent.keyDown(openMenu(), KEYS.ArrowDown);
+      fireEvent.keyDown(openMenu(), arrowKey);
 
-    expect(verticalNavigation.onChange).not.toHaveBeenCalled();
-  });
+      expect(verticalNavigation.onChange).not.toHaveBeenCalled();
+      expect(horizontalNavigation.onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([KEYS.ArrowDown, KEYS.ArrowRight, KEYS.Escape])(
+    "ignores $key pressed in a dialog opened from the panel",
+    (key) => {
+      const { onClose, verticalNavigation, horizontalNavigation } = renderPanel(
+        {},
+        confirmDialog,
+      );
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "Cancel" }), key);
+
+      expect(verticalNavigation.onChange).not.toHaveBeenCalled();
+      expect(horizontalNavigation.onChange).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+    },
+  );
 
   it("moves the panel on arrow keys pressed in the panel", () => {
     const { verticalNavigation } = renderPanel();
@@ -137,6 +194,79 @@ describe("ResizableSidePanel hotkeys", () => {
     );
 
     expect(verticalNavigation.onChange).toHaveBeenCalledWith(1);
+  });
+
+  it.each([
+    ["a focused tab", "tab", "Messages"],
+    ["a focused score toggle", "radio", "Yes"],
+  ])("moves the panel on → pressed on %s", (_label, role, name) => {
+    const { horizontalNavigation } = renderPanel();
+
+    fireEvent.keyDown(screen.getByRole(role, { name }), KEYS.ArrowRight);
+
+    expect(horizontalNavigation.onChange).toHaveBeenCalledWith(1);
+  });
+
+  it("leaves arrow keys in a text box to the text box, but closes on Escape", () => {
+    const { onClose, verticalNavigation } = renderPanel();
+    const textbox = screen.getByRole("textbox", { name: "Read-only code" });
+
+    fireEvent.keyDown(textbox, KEYS.ArrowDown);
+    fireEvent.keyDown(textbox, KEYS.Escape);
+
+    expect(verticalNavigation.onChange).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the panel and its tooltip on one Escape", () => {
+    const { onClose } = renderPanel();
+    const closeButton = screen.getByTestId("side-panel-close");
+    fireEvent.focus(closeButton);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+
+    fireEvent.keyDown(closeButton, KEYS.Escape);
+
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes a panel shown inside a sheet that keeps itself open on Escape", () => {
+    const onClose = vi.fn();
+    const SheetWithPanel = () => {
+      const [sheetContent, setSheetContent] = useState<HTMLDivElement | null>(
+        null,
+      );
+      return (
+        <TooltipProvider>
+          <Sheet open>
+            <SheetContent
+              ref={setSheetContent}
+              header={<SheetTitle>Logs</SheetTitle>}
+              aria-describedby={undefined}
+              onEscapeKeyDown={(event) => event.preventDefault()}
+            >
+              <ResizableSidePanel
+                panelId="test-panel"
+                open
+                onClose={onClose}
+                container={sheetContent}
+              >
+                <button>Panel body</button>
+              </ResizableSidePanel>
+            </SheetContent>
+          </Sheet>
+        </TooltipProvider>
+      );
+    };
+    render(<SheetWithPanel />);
+
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "Panel body" }),
+      KEYS.Escape,
+    );
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("ignores Escape while hotkeys are turned off", () => {

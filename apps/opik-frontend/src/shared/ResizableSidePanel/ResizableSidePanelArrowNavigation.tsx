@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 
 import { Button } from "@/ui/button";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import { Separator } from "@/ui/separator";
+import { isKeyFromLayerAbovePanel } from "@/shared/ResizableSidePanel/panelHotkeys";
 
 type ArrowNavigationConfig = {
   hasPrevious: boolean;
@@ -32,6 +33,11 @@ const ResizableSidePanelArrowNavigation: React.FunctionComponent<
   showSeparator = true,
   ignoreHotkeys = false,
 }) => {
+  const previousButtonRef = useRef<HTMLButtonElement>(null);
+  const ignoreKey = (keyboardEvent: KeyboardEvent) =>
+    ignoreHotkeys ||
+    isKeyFromLayerAbovePanel(keyboardEvent, previousButtonRef.current);
+
   useHotkeys(
     "j",
     () =>
@@ -39,7 +45,7 @@ const ResizableSidePanelArrowNavigation: React.FunctionComponent<
     {
       enabled: Boolean(horizontalNavigation),
       enableOnFormTags: false,
-      ignoreEventWhen: () => ignoreHotkeys,
+      ignoreEventWhen: ignoreKey,
     },
     [horizontalNavigation, ignoreHotkeys],
   );
@@ -49,7 +55,7 @@ const ResizableSidePanelArrowNavigation: React.FunctionComponent<
     {
       enabled: Boolean(horizontalNavigation),
       enableOnFormTags: false,
-      ignoreEventWhen: () => ignoreHotkeys,
+      ignoreEventWhen: ignoreKey,
     },
     [horizontalNavigation, ignoreHotkeys],
   );
@@ -63,6 +69,7 @@ const ResizableSidePanelArrowNavigation: React.FunctionComponent<
         <Separator orientation="vertical" className="mx-1 h-4" />
       )}
       <Button
+        ref={previousButtonRef}
         variant="outline"
         size="2xs"
         disabled={!horizontalNavigation.hasPrevious}
