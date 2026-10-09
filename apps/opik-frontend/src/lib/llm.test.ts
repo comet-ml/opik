@@ -4,6 +4,7 @@ import {
   generateDefaultLLMPromptMessage,
   getNextMessageType,
   resolveTraceEvaluatorVariableDefault,
+  toContentForRole,
 } from "./llm";
 import {
   RESERVED_SPAN_EVALUATOR_VARIABLES,
@@ -12,7 +13,7 @@ import {
   RESERVED_TRACE_LLM_JUDGE_VARIABLES,
 } from "@/constants/llm";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { LLM_MESSAGE_ROLE } from "@/types/llm";
+import { LLM_MESSAGE_ROLE, MessageContent } from "@/types/llm";
 
 /**
  * Covers the sentinel auto-fill that decides whether a reserved variable name
@@ -173,5 +174,52 @@ describe("getNextMessageType", () => {
       LLM_MESSAGE_ROLE.user,
       LLM_MESSAGE_ROLE.assistant,
     ]);
+  });
+});
+
+describe("toContentForRole", () => {
+  const mediaContent: MessageContent = [
+    { type: "text", text: "Describe {{topic}}" },
+    { type: "image_url", image_url: { url: "https://example.com/a.png" } },
+    { type: "video_url", video_url: { url: "https://example.com/a.mp4" } },
+    { type: "audio_url", audio_url: { url: "https://example.com/a.mp3" } },
+  ];
+
+  it("keeps media in a user message", () => {
+    expect(toContentForRole(mediaContent, LLM_MESSAGE_ROLE.user)).toEqual({
+      content: mediaContent,
+      mediaDropped: false,
+    });
+  });
+
+  it.each([LLM_MESSAGE_ROLE.system, LLM_MESSAGE_ROLE.assistant])(
+    "keeps only the text in a %s message",
+    (role) => {
+      expect(toContentForRole(mediaContent, role)).toEqual({
+        content: "Describe {{topic}}",
+        mediaDropped: true,
+      });
+    },
+  );
+
+  it("drops media that has no text alongside it", () => {
+    expect(
+      toContentForRole(
+        [
+          {
+            type: "image_url",
+            image_url: { url: "https://example.com/a.png" },
+          },
+        ],
+        LLM_MESSAGE_ROLE.system,
+      ),
+    ).toEqual({ content: "", mediaDropped: true });
+  });
+
+  it("leaves text-only content untouched in a system message", () => {
+    expect(toContentForRole("Be concise", LLM_MESSAGE_ROLE.system)).toEqual({
+      content: "Be concise",
+      mediaDropped: false,
+    });
   });
 });
