@@ -2,7 +2,6 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import useModelSelection from "./useModelSelection";
-import { getDefaultConfigByProvider } from "@/lib/playground";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
@@ -56,15 +55,15 @@ describe("useModelSelection", () => {
       defaultModel: PROVIDER_MODEL_TYPE.GPT_5_NANO,
       defaultProvider: PROVIDER_TYPE.OPEN_AI,
       expectedModel: PROVIDER_MODEL_TYPE.GPT_5_NANO,
-      expectedProvider: PROVIDER_TYPE.OPEN_AI,
+      expectedConfigs: { maxCompletionTokens: 4000, reasoningEffort: "high" },
     },
     {
       name: "a picked model",
-      lastPicked: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+      lastPicked: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
       defaultModel: PROVIDER_MODEL_TYPE.GPT_5_NANO,
       defaultProvider: PROVIDER_TYPE.OPEN_AI,
-      expectedModel: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
-      expectedProvider: PROVIDER_TYPE.ANTHROPIC,
+      expectedModel: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      expectedConfigs: { maxCompletionTokens: 4000, thinkingEffort: "high" },
     },
     {
       name: "the workspace default, with no caller model",
@@ -72,7 +71,7 @@ describe("useModelSelection", () => {
       defaultModel: undefined,
       defaultProvider: undefined,
       expectedModel: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
-      expectedProvider: PROVIDER_TYPE.OPEN_AI,
+      expectedConfigs: { maxCompletionTokens: 4000, temperature: 0 },
     },
   ])(
     "runs $name at that model's defaults",
@@ -81,7 +80,7 @@ describe("useModelSelection", () => {
       defaultModel,
       defaultProvider,
       expectedModel,
-      expectedProvider,
+      expectedConfigs,
     }) => {
       state.lastPicked = lastPicked;
 
@@ -94,12 +93,7 @@ describe("useModelSelection", () => {
       );
 
       expect(result.current.model).toBe(expectedModel);
-      expect(result.current.configs).toEqual(
-        getDefaultConfigByProvider(
-          expectedProvider as COMPOSED_PROVIDER_TYPE,
-          expectedModel,
-        ),
-      );
+      expect(result.current.configs).toMatchObject(expectedConfigs);
     },
   );
 });

@@ -10,7 +10,10 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 
-const sentForDefaults = (provider: PROVIDER_TYPE, model: string) => {
+const sentForDefaultsWithLowReasoning = (
+  provider: PROVIDER_TYPE,
+  model: string,
+) => {
   const defaults = getDefaultConfigByProvider(
     provider as COMPOSED_PROVIDER_TYPE,
     model as PROVIDER_MODEL_TYPE,
@@ -59,7 +62,7 @@ describe("withLowReasoning", () => {
       expected: { custom_parameters: { thinking: { level: "low" } } },
     },
   ])("sends low reasoning for $model", ({ provider, model, expected }) => {
-    expect(sentForDefaults(provider, model)).toMatchObject({
+    expect(sentForDefaultsWithLowReasoning(provider, model)).toMatchObject({
       ...expected,
       max_completion_tokens: 4000,
     });
@@ -68,7 +71,7 @@ describe("withLowReasoning", () => {
   // Lowering must never switch thinking on: these models think less than "low" by default.
   it("keeps a Gemini model whose default thinks less than low", () => {
     expect(
-      sentForDefaults(
+      sentForDefaultsWithLowReasoning(
         PROVIDER_TYPE.GEMINI,
         PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
       ),
@@ -82,7 +85,7 @@ describe("withLowReasoning", () => {
       model: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
     },
   ])("adds no effort to $model, which takes none", ({ provider, model }) => {
-    const sent = sentForDefaults(provider, model);
+    const sent = sentForDefaultsWithLowReasoning(provider, model);
 
     expect(sent).not.toHaveProperty("reasoning_effort");
     expect(sent).not.toHaveProperty("custom_parameters");
