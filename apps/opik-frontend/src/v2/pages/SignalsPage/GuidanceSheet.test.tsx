@@ -103,17 +103,35 @@ describe("GuidanceSheet", () => {
     expect(screen.getByRole("button", { name: "Save guidance" })).toBeEnabled();
   });
 
-  it("closes on Esc", () => {
+  it("closes on Esc when nothing changed", () => {
+    const setOpen = vi.fn();
+    renderSheet({ setOpen });
+
+    fireEvent.keyDown(screen.getByLabelText("About this project"), {
+      key: "Escape",
+    });
+
+    expect(setOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("asks before discarding unsaved edits", () => {
     const setOpen = vi.fn();
     renderSheet({ setOpen });
 
     fireEvent.change(screen.getByLabelText("About this project"), {
       target: { value: "Draft" },
     });
-    fireEvent.keyDown(screen.getByLabelText("About this project"), {
-      key: "Escape",
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
+    expect(screen.getByText("Discard changes?")).toBeInTheDocument();
+    expect(setOpen).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(setOpen).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("About this project")).toHaveValue("Draft");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(setOpen).toHaveBeenCalledWith(false);
   });
 

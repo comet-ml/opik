@@ -14,6 +14,8 @@ import { AgentInsightsJob } from "@/types/signals";
 import { formatDate } from "@/lib/date";
 import { DIAGNOSTICS_DOCS_URL } from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
 import useUpdateAgentInsightsGuidanceMutation from "@/api/signals/useUpdateAgentInsightsGuidanceMutation";
+import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import { useConfirmAction } from "@/shared/ConfirmDialog/useConfirmAction";
 
 export const GUIDANCE_MAX_LENGTH = 5000;
 
@@ -47,6 +49,27 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
 
   const isDirty = guidance !== saved;
 
+  // Closing with unsaved edits (Esc, close arrow, outside click, Cancel) asks first.
+  const {
+    isOpen: isConfirmOpen,
+    requestConfirm,
+    confirm,
+    cancel,
+  } = useConfirmAction();
+  const close = () => setOpen(false);
+  const requestClose = () => (isDirty ? requestConfirm(close) : close());
+  const handleOpenChange = (next: boolean) => {
+    if (next) setOpen(true);
+    else if (!isConfirmOpen) requestClose();
+  };
+  // An outside click would also dismiss the confirm it opens, so open it after
+  // the click is handled.
+  const handlePointerDownOutside = (event: Event) => {
+    if (!isDirty && !isConfirmOpen) return;
+    event.preventDefault();
+    if (!isConfirmOpen) window.setTimeout(requestClose);
+  };
+
   const save = (andRun: boolean) =>
     mutate(
       { projectId, guidance },
@@ -59,10 +82,11 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
     );
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col gap-0 p-0 sm:max-w-[560px]"
+        onPointerDownOutside={handlePointerDownOutside}
         header={
           <SheetTopBar
             variant="info"
@@ -84,7 +108,6 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
             </Button>
           </SheetTopBar>
         }
-        blockOverlayClose={isDirty}
       >
         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-5 pb-3 pt-5">
           <Label
@@ -119,7 +142,7 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setOpen(false)}
+            onClick={requestClose}
             disabled={isPending}
           >
             Cancel
@@ -145,6 +168,16 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
           </ButtonWithDropdown>
         </div>
       </SheetContent>
+      <ConfirmDialog
+        open={isConfirmOpen}
+        setOpen={cancel}
+        onConfirm={cancel}
+        onCancel={confirm}
+        title="Discard changes?"
+        description="You have unsaved changes. Do you want to discard them and close?"
+        confirmText="Keep editing"
+        cancelText="Discard changes"
+      />
     </Sheet>
   );
 };
