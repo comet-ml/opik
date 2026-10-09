@@ -1,13 +1,23 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import dspy
-import string
 
 STYLES = """
 classDef ReAct fill:#90EE90
 classDef Predict fill:#F08080
 classDef ChainOfThought fill:#ADD8E6
-classDef Tools fill:##D3D3D3
+classDef Tools fill:#D3D3D3
 """
+
+
+LM_NODE_ID = "LM"
+
+
+def get_graph_node_id(instance: Any) -> Optional[str]:
+    if isinstance(instance, dspy.Module):
+        return f"module_{id(instance)}"
+    if isinstance(instance, dspy.LM):
+        return LM_NODE_ID
+    return None
 
 
 def build_mermaid_graph_from_module(module: dspy.Module) -> str:
@@ -51,7 +61,7 @@ def _get_mermaid_state(
     current: Dict[str, Any], states: Dict[str, Any]
 ) -> Dict[str, Any]:
     if current["id"] not in states:
-        state_name = string.ascii_uppercase[len(states)]
+        state_name = current["id"]
         state_text = "<b>%s</b>" % current["name"]
         if "instructions" in current["details"]:
             state_text += "<br><i>%s</i>" % current["details"]["instructions"][
@@ -67,7 +77,7 @@ def _get_mermaid_state(
 
 def _get_dspy_module_heirarchy(module: dspy.Module, data: Dict[str, Any]) -> None:
     data["name"] = module.__class__.__name__
-    data["id"] = id(module)
+    data["id"] = get_graph_node_id(module)
     data["details"] = {}
     if hasattr(module, "tools"):
         data["details"]["tools"] = [name for name in module.tools]
@@ -82,7 +92,7 @@ def _get_dspy_module_heirarchy(module: dspy.Module, data: Dict[str, Any]) -> Non
         elif name == "lm":
             lm_data: Dict[str, Any] = {}
             lm_data["name"] = "LM"
-            lm_data["id"] = id(attribute)
+            lm_data["id"] = LM_NODE_ID
             lm_data["details"] = {}
             lm_data["sub_data"] = []
             data["sub_data"].append(lm_data)
