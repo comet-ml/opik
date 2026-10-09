@@ -1622,6 +1622,18 @@ workspaceSettings:
   # and query performance scales with row count, not data size.
   maxExperimentItemsToAllowSorting: ${WORKSPACE_SETTINGS_MAX_EXPERIMENT_ITEMS_TO_ALLOW_SORTING:-1000000}
 
+# Publishing of triggered alerts to AWS EventBridge.
+# Mechanics only. Whether it runs at all is serviceToggles.eventBridgeAlertsEnabled.
+alertsEventBridge:
+  # Default: empty
+  # Description: Name or ARN of the EventBridge bus that receives triggered alerts. Required when
+  #   serviceToggles.eventBridgeAlertsEnabled is true
+  eventBus: ${ALERTS_EVENTBRIDGE_EVENT_BUS:-}
+  # Default: empty
+  # Description: AWS region of the bus. When empty, the region in an ARN bus is used, then the default
+  #   AWS region provider chain
+  region: ${ALERTS_EVENTBRIDGE_REGION:-}
+
 # Configuration AWS S3
 s3Config:
   s3Region: ${S3_REGION:-'us-east-1'}
@@ -1802,6 +1814,10 @@ serviceToggles:
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
   #   automation controls on annotation queues.
   annotationQueueAutomationEnabled: ${TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether every triggered alert is also published to the deployment's AWS EventBridge bus
+  #   (see alertsEventBridge). Publishing is best-effort and never affects webhook delivery.
+  eventBridgeAlertsEnabled: ${ALERTS_EVENTBRIDGE_ENABLED:-"false"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
