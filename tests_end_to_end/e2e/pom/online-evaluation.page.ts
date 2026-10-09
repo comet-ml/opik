@@ -250,6 +250,29 @@ export class OnlineEvaluationPage {
   }
 
   /**
+   * The Thinking effort dropdown in the OPEN judge parameters panel.
+   *
+   * By its accessible name, not a testid: `AnthropicModelConfigs` renders a
+   * `<Label htmlFor="thinkingEffort">` beside a `SelectBox id="thinkingEffort"`,
+   * so the label is the one handle on the control that is not a utility class.
+   * `PlaygroundPage.thinkingEffortSelect` addresses the same component the same
+   * way.
+   *
+   * Not covered by `mountedJudgeParameterIds`, which reads `SliderInputControl`
+   * number inputs — this is a Radix select and has none, so a spec asserting on
+   * the effort has to come through here.
+   *
+   * Its ABSENCE is as much the assertion as its text. The control renders only
+   * while the chosen model declares effort levels, so a model whose
+   * capabilities row lists none drops it from the panel entirely rather than
+   * showing it empty — and a rule switched onto such a model should have no
+   * stored effort left either.
+   */
+  get judgeThinkingEffortSelect(): Locator {
+    return this.judgeModelParametersPanel.getByLabel('Thinking effort');
+  }
+
+  /**
    * Delete a rule through the row's kebab menu, confirming the destructive
    * dialog. Resolves once the row is gone from the list.
    *

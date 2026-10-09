@@ -81,6 +81,17 @@ export const REGISTRY_MODEL = {
   claudeWithoutSampling: 'Claude Sonnet 5',
   /** A Claude model that still offers the sampling choice. */
   claudeWithSampling: 'Claude Sonnet 4.6',
+  /**
+   * A Claude model whose `ANTHROPIC_MODEL_CAPABILITIES` row EXISTS but lists no
+   * `thinkingEffortOptions` at all, so the Thinking effort control is not
+   * rendered for it and a stored effort is dropped rather than refitted.
+   *
+   * The row existing is the whole point, and the reason this is not just "a
+   * Claude model": a model with NO row is treated as one we cannot place, and
+   * keeps whatever effort was stored for it. The two states look identical in
+   * the picker and behave oppositely.
+   */
+  claudeWithoutEffort: 'Claude Haiku 4.5',
 } as const;
 
 export interface ModelRegistryProvidersRef {
