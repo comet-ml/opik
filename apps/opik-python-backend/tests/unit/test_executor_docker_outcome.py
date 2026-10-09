@@ -74,3 +74,49 @@ def test_nonzero_exit_records_invalid_code(executor):
 
     assert response == {"code": 400, "error": "bad metric"}
     assert outcomes == ["invalid_code"]
+
+
+def test_exit_zero_with_no_scores_is_not_recorded_as_success(executor):
+    # A metric whose score() returns nothing usable prints a well-formed
+    # {"scores": []} and still exits 0. parse_execution_result hands the parsed object
+    # back verbatim, so there is no "code" to key on and the counter used to read this as
+    # a clean run — while the HTTP layer aborts the request with a 400.
+    body = {"scores": []}
+
+    response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+
+    assert response == body
+    assert outcomes == ["invalid_code"]
+
+
+def test_exit_zero_with_no_storable_score_is_not_recorded_as_success(executor):
+    # Same gap one step further on: there is a score, but the backend cannot store it —
+    # no value, or the metric itself flagged it as failed. evaluator.run_scoring rejects
+    # both with a 400, so neither may be counted as a success.
+    for score in ({"name": "m"}, {"name": "m", "value": None}, {"name": "m", "value": 0.0, "scoring_failed": True}):
+        body = {"scores": [score]}
+
+        _, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+
+        assert outcomes == ["invalid_code"], score
+
+
+def test_exit_zero_with_one_storable_score_is_still_a_success(executor):
+    # The gate is per response, not per score: a mixed list is passed through on purpose so
+    # the usable scores still reach the backend, and that has to stay a success.
+    body = {"scores": [{"name": "bad", "value": None}, {"name": "m", "value": 0.5}]}
+
+    response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+
+    assert response == body
+    assert outcomes == ["success"]
+
+
+def test_a_genuine_zero_value_is_a_usable_score(executor):
+    # has_usable_score keys on `value is not None`, so 0.0 is storable and must not be
+    # confused with the missing value above.
+    body = {"scores": [{"name": "m", "value": 0.0}]}
+
+    _, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+
+    assert outcomes == ["success"]
