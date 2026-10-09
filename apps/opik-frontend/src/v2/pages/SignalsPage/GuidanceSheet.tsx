@@ -58,16 +58,17 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
   } = useConfirmAction();
   const close = () => setOpen(false);
   const requestClose = () => (isDirty ? requestConfirm(close) : close());
+  // While saving, the sheet stays open: the save closes it when it lands.
   const handleOpenChange = (next: boolean) => {
     if (next) setOpen(true);
-    else if (!isConfirmOpen) requestClose();
+    else if (!isConfirmOpen && !isPending) requestClose();
   };
   // An outside click would also dismiss the confirm it opens, so open it after
   // the click is handled.
   const handlePointerDownOutside = (event: Event) => {
-    if (!isDirty && !isConfirmOpen) return;
+    if (!isDirty && !isConfirmOpen && !isPending) return;
     event.preventDefault();
-    if (!isConfirmOpen) window.setTimeout(requestClose);
+    if (!isConfirmOpen && !isPending) window.setTimeout(requestClose);
   };
 
   const save = (andRun: boolean) =>
@@ -120,6 +121,7 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
             id="diagnosticsGuidance"
             className="comet-body-s h-[330px] min-h-0 resize-none"
             value={guidance}
+            readOnly={isPending}
             maxLength={GUIDANCE_MAX_LENGTH}
             onChange={(e) => setGuidance(e.target.value)}
           />
