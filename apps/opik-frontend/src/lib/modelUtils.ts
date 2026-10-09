@@ -18,10 +18,7 @@ import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
-import {
-  getMaxOutputTokens,
-  isCustomProviderModel,
-} from "@/lib/modelCapabilities";
+import { getMaxOutputTokens } from "@/lib/modelCapabilities";
 import isPlainObject from "lodash/isPlainObject";
 import omit from "lodash/omit";
 import {
@@ -919,18 +916,15 @@ export const resolveMaxCompletionTokens = (
   value: number | undefined,
   openAiPipelineMode?: OpenAiPipelineMode,
 ): number => {
-  // A stored 0 was saved while the slider still went down to 0: it meant "not set", never a
-  // one-token answer, so it gets the default rather than the new floor.
-  if (!value) {
-    return MAX_COMPLETION_TOKENS_DEFAULT[provider];
-  }
-
   const { min, max } = getMaxCompletionTokensRange(
     provider,
     model,
     openAiPipelineMode,
   );
-  return Math.min(Math.max(value, min), max);
+  // A stored 0 was saved while the slider still went down to 0: it meant "not set", never a
+  // one-token answer, so it gets the default rather than the new floor.
+  const requested = value || MAX_COMPLETION_TOKENS_DEFAULT[provider];
+  return Math.min(Math.max(requested, min), max);
 };
 
 // Last-mile request hardening, complementary to updateProviderConfig: this
@@ -1006,11 +1000,14 @@ export const sanitizeConfigForRequest = (
       DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
   }
 
-  // A custom gateway's ids resolve to OpenAI too, and their limits are the gateway's own.
+  // getProviderFromModel answers OpenAI for any model the registry does not list, a custom gateway's
+  // ids included, so only a listed model is held to OpenAI's or Anthropic's limits.
   if (
     (provider === PROVIDER_TYPE.ANTHROPIC ||
       provider === PROVIDER_TYPE.OPEN_AI) &&
-    !isCustomProviderModel(model) &&
+    (getLatestProviderModelsSnapshot()[provider] ?? []).some(
+      (option) => option.value === model,
+    ) &&
     typeof sanitized.maxCompletionTokens === "number"
   ) {
     sanitized.maxCompletionTokens = resolveMaxCompletionTokens(

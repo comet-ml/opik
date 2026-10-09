@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   getMaxCompletionTokensRange,
+  resolveMaxCompletionTokens,
   sanitizeConfigForRequest,
 } from "@/lib/modelUtils";
 import {
@@ -74,6 +75,21 @@ describe("getMaxCompletionTokensRange", () => {
   );
 });
 
+describe("resolveMaxCompletionTokens", () => {
+  it.each([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, 0, 4000],
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, undefined, 4000],
+    [PROVIDER_TYPE.OPEN_AI, "computer-use-preview", 0, 1024],
+    [PROVIDER_TYPE.OPEN_AI, "computer-use-preview", undefined, 1024],
+    [PROVIDER_TYPE.OPEN_AI, "computer-use-preview", 2000, 1024],
+  ] as const)(
+    "%s %s turns a stored %s into %d",
+    (provider, model, value, expected) => {
+      expect(resolveMaxCompletionTokens(provider, model, value)).toBe(expected);
+    },
+  );
+});
+
 describe("sanitizeConfigForRequest max output tokens", () => {
   afterEach(() => {
     resetModelRegistryStoreForTesting();
@@ -142,6 +158,55 @@ describe("sanitizeConfigForRequest max output tokens", () => {
       ).toBe(expected);
     },
   );
+
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, undefined, undefined],
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, null, null],
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, NaN, 4000],
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, Infinity, 16384],
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, -Infinity, 1],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, undefined, 4000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, null, 4000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, NaN, 4000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, Infinity, 64000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, -Infinity, 1],
+  ] as const)(
+    "on %s sends a stored %s as %s",
+    (model, maxCompletionTokens, expected) => {
+      expect(
+        sanitizeConfigForRequest(model, { maxCompletionTokens })
+          .maxCompletionTokens,
+      ).toBe(expected);
+    },
+  );
+
+  it("sends the default for a stored 0 only up to the model's limit", () => {
+    const model = "computer-use-preview" as PROVIDER_MODEL_TYPE;
+    const snapshot = getLatestProviderModelsSnapshot();
+    setLatestProviderModelsSnapshot({
+      ...snapshot,
+      [PROVIDER_TYPE.OPEN_AI]: [
+        ...(snapshot[PROVIDER_TYPE.OPEN_AI] ?? []),
+        { value: model, label: model },
+      ],
+    });
+
+    expect(
+      sanitizeConfigForRequest(model, { maxCompletionTokens: 0 })
+        .maxCompletionTokens,
+    ).toBe(1024);
+  });
+
+  it("leaves a model the registry does not list alone", () => {
+    const model = "claude-unlisted" as PROVIDER_MODEL_TYPE;
+
+    for (const maxCompletionTokens of [0, 200000]) {
+      expect(
+        sanitizeConfigForRequest(model, { maxCompletionTokens })
+          .maxCompletionTokens,
+      ).toBe(maxCompletionTokens);
+    }
+  });
 
   it("leaves Gemini alone", () => {
     expect(

@@ -76,6 +76,12 @@ describe("OpenAI max output tokens", () => {
 
     expect(maxTokensInput()).toHaveValue("4000");
   });
+
+  it("shows a stored 0 on a model capped below the default as that cap", () => {
+    renderOpenAI("computer-use-preview" as PROVIDER_MODEL_TYPE, 0);
+
+    expect(maxTokensInput()).toHaveValue("1024");
+  });
 });
 
 describe("Anthropic max output tokens", () => {
