@@ -14,7 +14,6 @@ export interface UseModelSelectionParams {
   persistenceKey: string;
   defaultModel?: string;
   defaultProvider?: COMPOSED_PROVIDER_TYPE | "";
-  defaultConfigs?: LLMPromptConfigsType;
 }
 
 export interface ModelSelectProps {
@@ -39,7 +38,6 @@ const useModelSelection = ({
   persistenceKey,
   defaultModel,
   defaultProvider,
-  defaultConfigs,
 }: UseModelSelectionParams): UseModelSelectionResult => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -80,7 +78,10 @@ const useModelSelection = ({
       return {
         model: defaultModel as PROVIDER_MODEL_TYPE | "",
         provider: defaultProvider,
-        configs: defaultConfigs ?? getDefaultConfigByProvider(defaultProvider),
+        configs: getDefaultConfigByProvider(
+          defaultProvider,
+          defaultModel as PROVIDER_MODEL_TYPE,
+        ),
       };
     }
 
@@ -104,7 +105,6 @@ const useModelSelection = ({
     calculateDefaultModel,
     defaultModel,
     defaultProvider,
-    defaultConfigs,
   ]);
 
   const handleModelChange = useCallback(

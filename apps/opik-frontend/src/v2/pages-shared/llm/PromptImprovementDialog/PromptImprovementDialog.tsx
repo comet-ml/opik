@@ -26,10 +26,7 @@ import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptMod
 import usePromptImprovement from "@/hooks/usePromptImprovement";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
 import useModelSelection from "@/hooks/useModelSelection";
-import {
-  COMPOSED_PROVIDER_TYPE,
-  LLMPromptConfigsType,
-} from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
 import { MessageContent } from "@/types/llm";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -60,7 +57,6 @@ interface PromptImprovementDialogProps {
   originalPrompt?: MessageContent;
   model: string;
   provider: COMPOSED_PROVIDER_TYPE;
-  configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedPrompt: MessageContent) => void;
 }
@@ -72,7 +68,6 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   originalPrompt = "",
   model: defaultModel,
   provider: defaultProvider,
-  configs: defaultConfigs,
   workspaceName,
   onAccept,
 }) => {
@@ -83,12 +78,12 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const editorViewRef = useRef<EditorView | null>(null);
 
-  // Model selection with persistence using the reusable hook
+  // The dialog has no settings panel, so it runs the model at its defaults. The prompt's own
+  // settings are sized for its task: a small max tokens there would cut off every rewrite.
   const { model, provider, configs, modelSelectProps } = useModelSelection({
     persistenceKey: PROMPT_IMPROVEMENT_LAST_PICKED_MODEL,
     defaultModel,
     defaultProvider,
-    defaultConfigs,
   });
 
   const { improvePrompt, generatePrompt } = usePromptImprovement({
@@ -185,12 +180,9 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
         const errorMsg =
           result.opikError || result.providerError || result.pythonProxyError;
         setError(errorMsg || "An error occurred during generation");
-      } else if (
-        result?.choices?.[0]?.finish_reason === "length" ||
-        result?.choices?.some((choice) => choice.finish_reason === "length")
-      ) {
+      } else if (result?.finishReason === "length") {
         setError(
-          "The generated prompt was cut off due to token limits. Please try increasing the max_tokens setting in the model configuration or use a shorter instruction.",
+          "The model reached its output limit before finishing the prompt. Try a shorter instruction, or pick another model.",
         );
       } else if (!result?.result || !result.result.trim()) {
         setError(
@@ -288,7 +280,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
       <div className="comet-body-accented">{label}</div>
       <Description>
         This is your generated prompt, created with the selected model (
-        {modelDisplayName}) and parameters. It&apos;s editable.
+        {modelDisplayName}) at its default settings. It&apos;s editable.
       </Description>
     </div>
   );

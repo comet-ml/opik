@@ -135,6 +135,7 @@ export interface RunStreamingReturn {
   endTime: string;
   usage: UsageType | null;
   choices: ChatCompletionMessageChoiceType[] | null;
+  finishReason?: string | null;
   providerError: null | string;
   opikError: null | string;
   pythonProxyError: null | string;
@@ -164,6 +165,9 @@ const useCompletionProxyStreaming = ({
       let accumulatedValue = "";
       let usage = null;
       let choices: ChatCompletionMessageChoiceType[] = [];
+      // Kept apart from choices: with include_usage the stream ends on a usage chunk whose choices
+      // list is empty, so the last choices never carry a "length" finish.
+      let finishReason: string | null = null;
 
       // errors
       let pythonProxyError = null;
@@ -196,6 +200,9 @@ const useCompletionProxyStreaming = ({
         ) => {
           choices = parsed?.choices;
           const deltaContent = choices?.[0]?.delta?.content;
+          finishReason =
+            choices?.find((choice) => choice.finish_reason)?.finish_reason ??
+            finishReason;
 
           if (parsed?.usage) {
             usage = parsed.usage as UsageType;
@@ -281,6 +288,7 @@ const useCompletionProxyStreaming = ({
           pythonProxyError,
           usage,
           choices,
+          finishReason,
           actualModel,
           actualProvider,
         };
@@ -301,6 +309,7 @@ const useCompletionProxyStreaming = ({
           pythonProxyError,
           usage: null,
           choices,
+          finishReason,
           actualModel,
           actualProvider,
         };

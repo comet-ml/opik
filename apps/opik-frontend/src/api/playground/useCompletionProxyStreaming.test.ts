@@ -417,3 +417,50 @@ describe("the penalties a playground run sends", () => {
     },
   );
 });
+
+describe("the finish reason a run reports", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const finishReasonOf = async (stream: string) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(stream));
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    const run = await result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {} as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+    });
+    return run.finishReason;
+  };
+
+  it.each([
+    {
+      name: "a finish, then a usage chunk with no choices",
+      stream:
+        'data: {"choices":[{"delta":{"content":"You are"}}]}\n' +
+        'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n' +
+        'data: {"choices":[],"usage":{"completion_tokens":4000}}\n' +
+        "data: [DONE]\n",
+      expected: "length",
+    },
+    {
+      name: "the finish on the last content chunk",
+      stream:
+        'data: {"choices":[{"delta":{"content":"You are"},"finish_reason":"stop"}]}\n',
+      expected: "stop",
+    },
+    {
+      name: "no finish",
+      stream: 'data: {"choices":[{"delta":{"content":"You are"}}]}\n',
+      expected: null,
+    },
+  ])("reports $expected for $name", async ({ stream, expected }) => {
+    expect(await finishReasonOf(stream)).toBe(expected);
+  });
+});
