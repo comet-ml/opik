@@ -143,7 +143,14 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
           break;
       }
     },
-    { ignoreEventWhen: () => ignoreHotkeys },
+    {
+      // The listener sits on the document, so it also gets keys that an open
+      // menu, select, popover or dialog inside the panel already handled.
+      // Radix marks those with preventDefault; acting on them too would close
+      // the whole panel (and lose its form) on an Escape meant for a menu.
+      ignoreEventWhen: (keyboardEvent) =>
+        ignoreHotkeys || keyboardEvent.defaultPrevented,
+    },
     [verticalNavigation, horizontalNavigation, onClose, open, ignoreHotkeys],
   );
 
