@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000106_create_span_weeks_backfill_chunks
+--changeset thiagohora:000105_create_span_weeks_backfill_chunks
 --comment: Progress of the span weeks backfill: the span weeks it planned in chunks, and which chunks are done
 
 -- One row per chunk of consecutive spans weeks (YYYYMMDD Mondays, the spans partition ids), planned once from the
