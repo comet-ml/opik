@@ -40,6 +40,7 @@ vi.mock("@/hooks/useLLMProviderModelsData", () => ({
           ? PROVIDER_TYPE.OPEN_AI
           : "",
     calculateDefaultModel: () => PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+    isDropdownModel: () => true,
   }),
 }));
 
