@@ -80,6 +80,9 @@ tests:
           path: data.ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED
           value: "false"
       - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED
+          value: "false"
+      - equal:
           path: data.PARTITION_METRICS_ENABLED
           value: "false"
       - equal:

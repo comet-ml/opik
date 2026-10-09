@@ -10,14 +10,11 @@ import lombok.Data;
 import java.util.concurrent.TimeUnit;
 
 /**
- * The span weeks backfill job (OPIK-8706): fills span_weeks from the spans already written, then marks every project
- * as backfilled. Requires {@code databaseAnalyticsDataModel.spanWeeksWriteEnabled} live on every instance first.
+ * Tuning of the span weeks backfill job (OPIK-8706), which {@code databaseAnalyticsDataModel.spanWeeksBackfillEnabled}
+ * switches on.
  */
 @Data
 public class SpanWeeksBackfillConfig {
-
-    @JsonProperty
-    private boolean enabled;
 
     /** How often the job runs; each run backfills one chunk. */
     @NotNull @JsonProperty

@@ -53,6 +53,7 @@ data:
         "ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED" $dm.tracesDistributedWrapEnabled
         "ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED" $dm.spansDistributedWrapEnabled
         "ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED" $dm.spanWeeksWriteEnabled
+        "ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED" $dm.spanWeeksBackfillEnabled
         "PARTITION_METRICS_ENABLED" $pm.enabled
         "PARTITION_METRICS_INTERVAL" $pm.interval
         "PARTITION_METRICS_LWD_TABLES" $pm.lwdTables

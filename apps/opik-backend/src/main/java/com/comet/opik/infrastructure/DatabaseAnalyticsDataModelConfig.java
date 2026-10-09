@@ -90,6 +90,12 @@ import lombok.Builder;
  * {@code span_weeks} index ({@code SpanService.registerWeeks}). Left {@code false} at deploy time; turn it on before
  * the span weeks backfill starts, so every span written after the backfill's snapshot is indexed. Off writes
  * nothing.</p>
+ *
+ * <p>{@code spanWeeksBackfillEnabled}: when {@code true}, the span weeks backfill job is scheduled
+ * ({@code SpanWeeksBackfillJob}): it fills {@code span_weeks} from the spans already written, then marks every project
+ * as backfilled. Turn it on only once {@code spanWeeksWriteEnabled} is live on every instance: the backfill covers the
+ * spans written until its first run, and live registration everything after. Its tuning lives in
+ * {@code spanWeeksBackfill}.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -100,5 +106,6 @@ public record DatabaseAnalyticsDataModelConfig(
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
         boolean tracesDistributedWrapEnabled,
         boolean spansDistributedWrapEnabled,
-        boolean spanWeeksWriteEnabled) {
+        boolean spanWeeksWriteEnabled,
+        boolean spanWeeksBackfillEnabled) {
 }
