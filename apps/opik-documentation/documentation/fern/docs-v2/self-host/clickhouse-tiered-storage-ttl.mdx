@@ -37,6 +37,10 @@ A post-upgrade hook (or ArgoCD `PostSync` hook) then, for each listed table:
 
 It is idempotent: when everything is already in place it changes nothing, so it is safe on every upgrade. A table that does not exist yet is skipped.
 
+<Warning>
+The TTL the Job sets **replaces the table's whole TTL clause**. List only tables without a TTL of their own, such as `traces_local`. A table that already has one, for example a delete TTL for retention, would lose it.
+</Warning>
+
 ## Backfilling existing data
 
 The backfill reads data on the hot disk and writes it to S3. On a large table that is a lot of disk I/O, S3 traffic and background work, so **when to run it is your decision**. Choose one of the two ways below.
@@ -80,11 +84,11 @@ In the queries below, `<table>` is a table from `ttl.tables` (for example `trace
 
 ## What to monitor
 
-Progress (parts still without the TTL, and size per disk):
+Progress (size per disk, and parts that don't carry the expected TTL yet, including parts with a different TTL from an earlier `moveAfterWeeks`):
 
 ```sql
 SELECT disk_name, count() AS parts, formatReadableSize(sum(bytes_on_disk)) AS size,
-       countIf(NOT has(move_ttl_info.expression, 'id_at + toIntervalWeek(<moveAfterWeeks>)')) AS without_ttl
+       countIf(NOT has(move_ttl_info.expression, 'id_at + toIntervalWeek(<moveAfterWeeks>)')) AS without_expected_ttl
 FROM system.parts
 WHERE database = '<db>' AND table = '<table>' AND active
 GROUP BY disk_name
