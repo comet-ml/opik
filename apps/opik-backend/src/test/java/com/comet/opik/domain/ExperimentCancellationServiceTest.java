@@ -231,6 +231,43 @@ class ExperimentCancellationServiceTest {
         assertThat(service.claimFinish(WORKSPACE_ID, sibling).block()).isTrue();
     }
 
+    // Released only for the one that could not be written: a release reaching a sibling, or the same
+    // id in another workspace, would open a finish that something is still holding.
+    @Test
+    @DisplayName("should release the finish of one experiment without touching its neighbours")
+    void releaseFinishIsScopedToItsOwnKey() {
+        var experimentId = UUID.randomUUID();
+        var sibling = UUID.randomUUID();
+
+        service.claimFinish(WORKSPACE_ID, experimentId).block();
+        service.claimFinish(WORKSPACE_ID, sibling).block();
+        service.claimFinish("other-workspace", experimentId).block();
+
+        assertThat(service.releaseFinish(WORKSPACE_ID, experimentId).block()).isTrue();
+
+        assertThat(service.isFinishClaimed(WORKSPACE_ID, experimentId).block()).isFalse();
+        assertThat(service.isFinishClaimed(WORKSPACE_ID, sibling).block()).isTrue();
+        assertThat(service.isFinishClaimed("other-workspace", experimentId).block()).isTrue();
+    }
+
+    // The release runs from a failure handler, which a retry can reach more than once.
+    @Test
+    @DisplayName("should let the finish be claimed again, and released again, after a release")
+    void releaseFinishReopensTheClaim() {
+        var experimentId = UUID.randomUUID();
+
+        service.claimFinish(WORKSPACE_ID, experimentId).block();
+        service.releaseFinish(WORKSPACE_ID, experimentId).block();
+
+        assertThat(service.claimFinish(WORKSPACE_ID, experimentId).block())
+                .as("nothing holds it any more, so the next caller takes it")
+                .isTrue();
+        assertThat(service.releaseFinish(WORKSPACE_ID, experimentId).block()).isTrue();
+        assertThat(service.releaseFinish(WORKSPACE_ID, experimentId).block())
+                .as("already gone, so there is nothing to remove")
+                .isFalse();
+    }
+
     /**
      * Reads entries through the consumer group without acking, which is what leaves them in the PEL —
      * the state an item sits in while its provider call is running.
