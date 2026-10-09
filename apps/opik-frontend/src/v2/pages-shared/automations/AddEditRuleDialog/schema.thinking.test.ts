@@ -79,10 +79,9 @@ describe("LLM judge thinking level round trip", () => {
     });
   });
 
-  // A Gemini model whose default level is "auto" contributes no thinking block of its own, so the
-  // persisted one must be carried through rather than deleted — budget_tokens and include_thoughts
-  // are not represented in the form.
-  it("keeps a persisted thinking block when the level resolves to auto", () => {
+  // Auto contributes no thinking block of its own. It drops a persisted budget, which would pin how
+  // much the judge thinks, and carries through include_thoughts, which the form does not represent.
+  it("drops a persisted budget and keeps the rest when the level resolves to auto", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       asFormData(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
         thinkingLevel: "auto",
@@ -94,12 +93,37 @@ describe("LLM judge thinking level round trip", () => {
     );
 
     expect(object.model.custom_parameters).toEqual({
-      thinking: { budget_tokens: 4096, include_thoughts: true },
+      thinking: { include_thoughts: true },
       unrelated: "keep",
     });
   });
 
-  // "none" removes a persisted block; "auto" (above) leaves one alone.
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])(
+    "opens a rule with only an API-set budget as auto on %s and saves it without the budget",
+    (model) => {
+      const opened = convertLLMJudgeObjectToLLMJudgeData(
+        persisted(model, {
+          thinking: { budget_tokens: 4096, include_thoughts: false },
+          unrelated: "keep",
+        }),
+      );
+      expect(opened.config.thinkingLevel).toBe("auto");
+
+      const object = convertLLMJudgeDataToLLMJudgeObject(
+        asFormData(model, opened.config),
+      );
+
+      expect(object.model.custom_parameters).toEqual({
+        thinking: { include_thoughts: false },
+        unrelated: "keep",
+      });
+    },
+  );
+
+  // "none" removes a persisted block; "auto" (above) drops only its level and budget.
   it("clears a persisted thinking block when the level is none", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       asFormData(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {

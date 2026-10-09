@@ -322,17 +322,20 @@ export const withShownThinkingLevel = <T extends object>(
     : ({ ...configs, thinkingLevel: shown } as T);
 };
 
-// "auto" sends no level. Only `level` is dropped: budget_tokens and include_thoughts can sit in the
-// same block, and the form has no control for them.
-export const withoutThinkingLevel = (
+// "auto" leaves how much to think to the model, so it drops both ways of setting that: the level and
+// a budget_tokens set through the API, which outranks any level server-side. include_thoughts and the
+// other keys stay, as they do for "off".
+export const withoutThinkingAmount = (
   customParameters: unknown,
 ): Record<string, unknown> | undefined => {
   const params = (customParameters ?? {}) as Record<string, unknown>;
-  const thinking = params.thinking as Record<string, unknown> | undefined;
-  if (!thinking || !("level" in thinking)) {
+  const thinking = isPlainObject(params.thinking)
+    ? (params.thinking as Record<string, unknown>)
+    : undefined;
+  if (!thinking || !("level" in thinking || "budget_tokens" in thinking)) {
     return isEmpty(params) ? undefined : params;
   }
-  const restThinking = omit(thinking, "level");
+  const restThinking = omit(thinking, ["level", "budget_tokens"]);
   const rest = isEmpty(restThinking)
     ? omit(params, "thinking")
     : { ...params, thinking: restThinking };
@@ -1088,11 +1091,11 @@ export const sanitizeConfigForRequest = (
       }
     }
 
-    // "auto" also sends no thinkingConfig, but it is a weaker statement — "let the model decide" —
-    // so it drops only a persisted level (the one the dropdown replaced) and keeps the rest of the
-    // block, which the form cannot represent.
+    // "auto" also sends no thinkingConfig: it drops a persisted level and budget, since either would
+    // pin how much the model thinks. Unlike "none" it keeps the rest of the block, which the form
+    // cannot represent.
     if (level === "auto" && thinkingLevelOptions.length > 0) {
-      const customParameters = withoutThinkingLevel(
+      const customParameters = withoutThinkingAmount(
         sanitized.custom_parameters,
       );
       if (customParameters) {

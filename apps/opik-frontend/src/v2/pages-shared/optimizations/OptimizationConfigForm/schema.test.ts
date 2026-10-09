@@ -228,6 +228,45 @@ describe("convertFormDataToStudioConfig — Gemini thinking level", () => {
     });
   });
 
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])(
+    "re-runs a %s run saved with only an API-set budget as auto, without the budget",
+    (model) => {
+      const rerun = convertOptimizationStudioToFormData(
+        {
+          studio_config: {
+            prompt: { messages: [{ role: "user", content: "hi" }] },
+            llm_model: {
+              model,
+              parameters: {
+                temperature: 0,
+                custom_parameters: {
+                  thinking: { budget_tokens: 4096, include_thoughts: false },
+                  unrelated: "keep",
+                },
+              },
+            },
+            optimizer: { type: OPTIMIZER_TYPE.GEPA },
+            evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+          },
+        } as never,
+        [model],
+      );
+
+      const config = convertFormDataToStudioConfig(rerun, "my-dataset");
+
+      expect(
+        (config.llm_model.parameters as Record<string, unknown>)
+          .custom_parameters,
+      ).toEqual({
+        thinking: { include_thoughts: false },
+        unrelated: "keep",
+      });
+    },
+  );
+
   it("adds nothing for a model without thinking support", () => {
     const config = convertFormDataToStudioConfig(
       {

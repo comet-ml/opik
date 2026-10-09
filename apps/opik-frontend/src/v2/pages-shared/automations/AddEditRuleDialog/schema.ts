@@ -24,7 +24,7 @@ import {
   knowsAnthropicEffortLevels,
   resolveSamplingParams,
   updateProviderConfig,
-  withoutThinkingLevel,
+  withoutThinkingAmount,
   withThinkingEffort,
 } from "@/lib/modelUtils";
 import {
@@ -778,8 +778,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   //
   // Only for those models, though. `custom_parameters.thinking` is not Gemini-only — Anthropic reads
   // `thinking.{type,budget_tokens}` for extended thinking — so omitting it unconditionally would
-  // silently disable extended thinking on an unedited save of an Anthropic rule. Same for a Gemini
-  // 2.5 rule holding an explicit budget_tokens, whose default level is "auto".
+  // silently disable extended thinking on an unedited save of an Anthropic rule.
   const persistedCustomParameters = (custom_parameters ?? {}) as Record<
     string,
     unknown
@@ -788,15 +787,16 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // level this model rejects — a stale "off" carried onto a model that cannot disable thinking has
   // to go, which is what the level check above is for.
   //
-  // Otherwise carry the block through untouched. "auto", or no level at all, means "the form has no
-  // level of its own here", not "delete whatever else was in there": budget_tokens and
+  // Otherwise carry the block through untouched. No level at all means "the form has no level of
+  // its own here", not "delete whatever else was in there": budget_tokens and
   // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
   // this same key for extended thinking.
   // "none" is an explicit "do not think", so it removes a persisted thinking block rather than just
   // declining to add one — otherwise a level saved earlier keeps being sent. "auto" is the weaker
-  // "let the model decide": it drops only the persisted level (the dropdown replaced it) and keeps
-  // the rest, which may hold fields the form cannot represent (budget_tokens, include_thoughts).
-  // Anthropic's type lives under this key too, so this only applies to a model with a level control.
+  // "let the model decide": it drops the persisted level and budget_tokens, so the judge gets no
+  // thinking config, and keeps the rest (include_thoughts), which the form cannot represent.
+  // Anthropic's type and budget_tokens live under this key too, so this only applies to a model with
+  // a level control.
   const formClearsThinking = thinkingLevel === "none";
   const formRejectedItsLevel =
     thinkingLevel != null &&
@@ -811,7 +811,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     otherCustomParameters = omit(persistedCustomParameters, "thinking");
   } else if (formSetsAuto) {
     otherCustomParameters =
-      withoutThinkingLevel(persistedCustomParameters) ?? {};
+      withoutThinkingAmount(persistedCustomParameters) ?? {};
   }
 
   const mergedCustomParameters = {

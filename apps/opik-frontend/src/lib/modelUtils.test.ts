@@ -21,7 +21,7 @@ import {
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
   updateProviderConfig,
-  withoutThinkingLevel,
+  withoutThinkingAmount,
   withShownThinkingLevel,
 } from "@/lib/modelUtils";
 import {
@@ -1092,14 +1092,25 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toBeUndefined();
   });
 
-  // auto is the weaker "let the model decide" and must not delete fields the form cannot represent.
-  it("leaves a persisted thinking block alone for auto", () => {
-    expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+  // A budget set through the API outranks any level server-side, so keeping it under Auto would
+  // pin how much the model thinks while the panel says the model decides.
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+  ])("drops a persisted budget for auto on %s", (model) => {
+    for (const configs of [
+      {
         thinkingLevel: "auto",
         custom_parameters: { thinking: { budget_tokens: 4096 } },
-      }).custom_parameters,
-    ).toEqual({ thinking: { budget_tokens: 4096 } });
+      },
+      { custom_parameters: { thinking: { budget_tokens: 4096 } } },
+    ]) {
+      expect(
+        sanitizeConfigForRequest(model, configs).custom_parameters,
+      ).toBeUndefined();
+    }
   });
 
   it("sends a low or medium level on 3.1 Flash Lite instead of resetting it to none", () => {
@@ -1615,7 +1626,7 @@ describe("Auto sends no Gemini thinking level", () => {
     }
   });
 
-  it("keeps the rest of the thinking block and the other custom parameters", () => {
+  it("drops the budget too, and keeps include_thoughts and the other custom parameters", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
         thinkingLevel: "auto",
@@ -1629,13 +1640,13 @@ describe("Auto sends no Gemini thinking level", () => {
         },
       }).custom_parameters,
     ).toEqual({
-      thinking: { budget_tokens: 4096, include_thoughts: true },
+      thinking: { include_thoughts: true },
       unrelated: "keep",
     });
   });
 });
 
-describe("withoutThinkingLevel", () => {
+describe("withoutThinkingAmount", () => {
   it.each<[string, unknown, unknown]>([
     ["nothing stored", undefined, undefined],
     [
@@ -1649,12 +1660,33 @@ describe("withoutThinkingLevel", () => {
       { seed: 1 },
     ],
     [
-      "a block without a level",
-      { thinking: { type: "enabled", budget_tokens: 1024 } },
-      { thinking: { type: "enabled", budget_tokens: 1024 } },
+      "a block holding only a budget",
+      { thinking: { budget_tokens: 4096 }, seed: 1 },
+      { seed: 1 },
+    ],
+    [
+      "a level and a budget next to include_thoughts",
+      {
+        thinking: {
+          level: "low",
+          budget_tokens: 4096,
+          include_thoughts: false,
+        },
+      },
+      { thinking: { include_thoughts: false } },
+    ],
+    [
+      "a block with neither",
+      { thinking: { include_thoughts: true } },
+      { thinking: { include_thoughts: true } },
+    ],
+    [
+      "a thinking value that is not an object",
+      { thinking: "on" },
+      { thinking: "on" },
     ],
   ])("handles %s", (_, customParameters, expected) => {
-    expect(withoutThinkingLevel(customParameters)).toEqual(expected);
+    expect(withoutThinkingAmount(customParameters)).toEqual(expected);
   });
 });
 
