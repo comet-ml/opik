@@ -19,22 +19,22 @@ public class SpanWeeksBackfillConfig {
     /** How often the job runs; each run backfills one chunk. */
     @NotNull @JsonProperty
     @MinDuration(value = 10, unit = TimeUnit.SECONDS)
-    private Duration interval = Duration.minutes(1);
+    private Duration interval;
 
     /** Upper bound on the span rows one chunk reads; consecutive weeks are merged up to it. */
     @JsonProperty
-    @Min(1) private long maxSpansPerChunk = 200_000_000L;
+    @Min(1) private long maxSpansPerChunk;
 
     /** Memory a chunk's GROUP BY may use before spilling to disk. */
     @JsonProperty
-    @Min(1) private long maxBytesBeforeExternalGroupBy = 10L * 1024 * 1024 * 1024;
+    @Min(1) private long maxBytesBeforeExternalGroupBy;
 
     /** ClickHouse max_execution_time for one chunk, and how long a run holds the job lock. */
     @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-    private Duration queryTimeout = Duration.hours(1);
+    private Duration queryTimeout;
 
     /** Projects marked as backfilled per UPDATE, once every chunk is done. */
     @JsonProperty
-    @Min(1) private int projectsBatchSize = 10_000;
+    @Min(1) private int projectsBatchSize;
 }

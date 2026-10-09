@@ -16,8 +16,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
-import com.comet.opik.infrastructure.SpanWeeksBackfillConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AsyncUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -91,7 +90,9 @@ class SpanWeeksBackfillServiceTest {
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(REDIS.getRedisURI())
-                .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false")))
+                .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false"),
+                        // One span per chunk, so the backfill takes many steps.
+                        new CustomConfig("spanWeeksBackfill.maxSpansPerChunk", "1")))
                 .build());
     }
 
@@ -107,7 +108,7 @@ class SpanWeeksBackfillServiceTest {
     @BeforeAll
     void setUpAll(ClientSupport client, SpanService spanService, ProjectService projectService,
             @Jit SpanWeeksBackfillService writesOffBackfillService, TransactionTemplate template,
-            @Jit SpanWeeksDAO spanWeeksDAO) {
+            @Jit SpanWeeksDAO spanWeeksDAO, OpikConfiguration configuration) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
@@ -116,11 +117,10 @@ class SpanWeeksBackfillServiceTest {
         this.projectService = projectService;
         this.writesOffBackfillService = writesOffBackfillService;
 
-        // The backfill as it runs once span writes register their weeks; one span per chunk, so it takes many steps.
-        var backfillConfig = new SpanWeeksBackfillConfig();
-        backfillConfig.setMaxSpansPerChunk(1);
+        // The backfill as it runs once span writes register their weeks.
         this.backfillService = new SpanWeeksBackfillService(template, spanWeeksDAO, projectService,
-                DatabaseAnalyticsDataModelConfig.builder().spanWeeksWriteEnabled(true).build(), backfillConfig);
+                configuration.getDatabaseAnalyticsDataModel().toBuilder().spanWeeksWriteEnabled(true).build(),
+                configuration.getSpanWeeksBackfill());
     }
 
     @Test
