@@ -26,6 +26,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -37,9 +40,11 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -172,6 +177,34 @@ class SpanWeeksBackfillServiceTest {
         // Every chunk is done: a further step changes nothing.
         backfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
+    }
+
+    @ParameterizedTest(name = "{0} to {1} in steps of {2} weeks")
+    @MethodSource
+    void chunksTileEveryIdFromTheFirstWeekToTheLast(LocalDate first, LocalDate last, int weeks,
+            List<SpanWeeksBackfillChunkDAO.Chunk> expected) {
+        assertThat(SpanWeeksBackfillService.chunks(first, last, weeks)).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> chunksTileEveryIdFromTheFirstWeekToTheLast() {
+        var first = LocalDate.of(2026, 9, 7);
+        var last = LocalDate.of(2026, 10, 5);
+        return Stream.of(
+                // The first span is in the plan's own week: only the two open ranges.
+                Arguments.of(last, last, 4, List.of(chunk(0, 20261005L), chunk(20261005L, null))),
+                Arguments.of(first, last, 4, List.of(
+                        chunk(0, 20260907L), chunk(20260907L, 20261005L), chunk(20261005L, null))),
+                Arguments.of(first, last, 1, List.of(
+                        chunk(0, 20260907L), chunk(20260907L, 20260914L), chunk(20260914L, 20260921L),
+                        chunk(20260921L, 20260928L), chunk(20260928L, 20261005L), chunk(20261005L, null))),
+                // A step that does not divide the span: the last bounded range is shorter, never past the plan's week.
+                Arguments.of(first, last, 3, List.of(
+                        chunk(0, 20260907L), chunk(20260907L, 20260928L), chunk(20260928L, 20261005L),
+                        chunk(20261005L, null))));
+    }
+
+    private static SpanWeeksBackfillChunkDAO.Chunk chunk(long fromWeek, Long toWeek) {
+        return SpanWeeksBackfillChunkDAO.Chunk.builder().fromWeek(fromWeek).toWeek(toWeek).build();
     }
 
     private void runStepsUntil(List<UUID> traceIds, WorkspaceContext ws, int expectedRowCount) {
