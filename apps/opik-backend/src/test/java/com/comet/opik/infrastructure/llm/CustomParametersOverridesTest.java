@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,16 @@ class CustomParametersOverridesTest {
                 arguments("reasoning_effort", "high", field(ChatCompletionRequest::reasoningEffort)));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"max_tokens", "max_completion_tokens"})
+    void eitherTokenLimitNameReplacesBothTypedLimits(String key) {
+        var result = CustomParametersOverrides.apply(withCustomParameters(Map.of(key, 12)));
+
+        assertThat(result.maxTokens()).isNull();
+        assertThat(result.maxCompletionTokens()).isNull();
+        assertThat(result.customParameters()).containsExactlyEntriesOf(Map.of(key, 12));
+    }
+
     @Test
     void keepsTheTypedFieldsNoCustomKeyRepeats() {
         var result = CustomParametersOverrides.apply(withCustomParameters(Map.of("temperature", 0.95)));
@@ -65,6 +76,32 @@ class CustomParametersOverridesTest {
         assertThat(result.reasoningEffort()).isEqualTo("low");
         assertThat(result.model()).isEqualTo("gpt-4o");
         assertThat(result.messages()).isEqualTo(TYPED.messages());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void withTokenLimitUnderSendsTheLimitOnceUnderTheGivenName(String name, String limitKey,
+            Map<String, Object> customParameters, Map<String, Object> expected) {
+        assertThat(CustomParametersOverrides.withTokenLimitUnder(limitKey, customParameters))
+                .isEqualTo(expected);
+    }
+
+    private static Stream<Arguments> withTokenLimitUnderSendsTheLimitOnceUnderTheGivenName() {
+        return Stream.of(
+                arguments("max_completion_tokens moves to max_tokens", "max_tokens",
+                        Map.of("max_completion_tokens", 12, "top_k", 7), Map.of("max_tokens", 12, "top_k", 7)),
+                arguments("max_tokens moves to max_completion_tokens", "max_completion_tokens",
+                        Map.of("max_tokens", 40), Map.of("max_completion_tokens", 40)),
+                arguments("the value already under the name wins", "max_tokens",
+                        Map.of("max_tokens", 12, "max_completion_tokens", 30), Map.of("max_tokens", 12)),
+                arguments("a limit under the name stays", "max_tokens",
+                        Map.of("max_tokens", 12), Map.of("max_tokens", 12)),
+                arguments("other keys stay", "max_tokens", Map.of("top_k", 7), Map.of("top_k", 7)));
+    }
+
+    @Test
+    void withTokenLimitUnderLeavesNoCustomParametersAsIs() {
+        assertThat(CustomParametersOverrides.withTokenLimitUnder("max_tokens", null)).isNull();
     }
 
     @Test

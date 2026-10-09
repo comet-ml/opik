@@ -123,6 +123,20 @@ class OpenRouterLlmServiceProviderTest {
         assertThat(body.get("top_k").asInt()).isEqualTo(40);
     }
 
+    @Test
+    void generateSendsACustomTokenLimitUnderTheOtherNameInPlaceOfTheTypedLimit() {
+        var request = JsonUtils.readValue("""
+                {"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "hello"}], "stream": false,
+                 "max_tokens": 30, "custom_parameters": {"max_completion_tokens": 12}}
+                """, ChatCompletionRequest.class);
+
+        provider.generate(request, "workspace-id");
+
+        var body = sentBody();
+        assertThat(body.has("max_tokens")).isFalse();
+        assertThat(body.get("max_completion_tokens").asInt()).isEqualTo(12);
+    }
+
     private ChatCompletionRequest playgroundRequest(boolean stream) {
         return JsonUtils.readValue(PLAYGROUND_BODY.formatted(stream), ChatCompletionRequest.class);
     }

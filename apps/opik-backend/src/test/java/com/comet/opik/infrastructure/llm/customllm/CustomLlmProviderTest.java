@@ -161,7 +161,7 @@ class CustomLlmProviderTest {
         var request = ChatCompletionRequest.builder()
                 .from(request(66, null))
                 .temperature(0.25)
-                .customParameters(Map.of("temperature", 0.95, "max_completion_tokens", 12, "top_k", 7))
+                .customParameters(Map.of("temperature", 0.95, "top_k", 7))
                 .build();
 
         newProvider(provider).generate(request, "workspace-id");
@@ -170,9 +170,35 @@ class CustomLlmProviderTest {
         var body = JsonUtils.getJsonNodeFromString(rawBody);
         assertThat(StringUtils.countMatches(rawBody, "\"temperature\"")).isEqualTo(1);
         assertThat(body.get("temperature").asDouble()).isEqualTo(0.95);
-        assertThat(StringUtils.countMatches(rawBody, "\"max_completion_tokens\"")).isEqualTo(1);
-        assertThat(body.get("max_completion_tokens").asInt()).isEqualTo(12);
         assertThat(body.get("top_k").asInt()).isEqualTo(7);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("extraBodyTokenLimitCases")
+    void generateSendsTheExtraBodyTokenLimitOnceUnderTheNameTheProviderReads(
+            String name, LlmProvider provider, Map<String, Object> customParameters,
+            Integer expectedMaxTokens, Integer expectedMaxCompletionTokens) {
+        newProvider(provider).generate(extraBodyLimitRequest(customParameters), "workspace-id");
+
+        assertExtraBodyTokenLimit(name, sentRawBody(), expectedMaxTokens, expectedMaxCompletionTokens);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("extraBodyTokenLimitCases")
+    void generateStreamSendsTheExtraBodyTokenLimitOnceUnderTheNameTheProviderReads(
+            String name, LlmProvider provider, Map<String, Object> customParameters,
+            Integer expectedMaxTokens, Integer expectedMaxCompletionTokens) throws Exception {
+        wireMock.stubFor(post(urlEqualTo(COMPLETIONS_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "text/event-stream")
+                .withBody(COMPLETION_STREAM)));
+        var done = new CompletableFuture<Void>();
+
+        newProvider(provider).generateStream(extraBodyLimitRequest(customParameters), "workspace-id",
+                response -> {
+                }, () -> done.complete(null), done::completeExceptionally);
+        done.get(10, TimeUnit.SECONDS);
+
+        assertExtraBodyTokenLimit(name, sentRawBody(), expectedMaxTokens, expectedMaxCompletionTokens);
     }
 
     @Test
@@ -199,6 +225,24 @@ class CustomLlmProviderTest {
         assertThat(body.get("temperature").asDouble()).isEqualTo(0.95);
         assertThat(StringUtils.countMatches(rawBody, "\"seed\"")).isEqualTo(1);
         assertThat(body.get("seed").asInt()).isEqualTo(42);
+    }
+
+    private static Stream<Arguments> extraBodyTokenLimitCases() {
+        return Stream.of(
+                arguments("Ollama gets an extra body max_completion_tokens as max_tokens", LlmProvider.OLLAMA,
+                        Map.of("max_completion_tokens", 12), 12, null),
+                arguments("Ollama gets an extra body max_tokens as is", LlmProvider.OLLAMA,
+                        Map.of("max_tokens", 12), 12, null),
+                arguments("Ollama keeps the extra body max_tokens when both names are there", LlmProvider.OLLAMA,
+                        Map.of("max_tokens", 12, "max_completion_tokens", 30), 12, null),
+                arguments("Bedrock gets an extra body max_tokens as max_completion_tokens", LlmProvider.BEDROCK,
+                        Map.of("max_tokens", 40), null, 40),
+                arguments("Bedrock gets an extra body max_completion_tokens as is", LlmProvider.BEDROCK,
+                        Map.of("max_completion_tokens", 40), null, 40),
+                arguments("A custom provider gets an extra body max_tokens as typed", LlmProvider.CUSTOM_LLM,
+                        Map.of("max_tokens", 12), 12, null),
+                arguments("A custom provider gets an extra body max_completion_tokens as typed",
+                        LlmProvider.CUSTOM_LLM, Map.of("max_completion_tokens", 12), null, 12));
     }
 
     private static Stream<Arguments> penaltyCases() {
@@ -259,6 +303,13 @@ class CustomLlmProviderTest {
                 .build();
     }
 
+    private ChatCompletionRequest extraBodyLimitRequest(Map<String, Object> customParameters) {
+        return ChatCompletionRequest.builder()
+                .from(request(66, null))
+                .customParameters(customParameters)
+                .build();
+    }
+
     private ChatCompletionRequest penaltyRequest(Double penalty) {
         return ChatCompletionRequest.builder()
                 .from(request(4000, null))
@@ -284,6 +335,18 @@ class CustomLlmProviderTest {
         assertThat(body.has("presence_penalty") ? body.get("presence_penalty").asDouble() : null)
                 .as("[%s] presence_penalty", name)
                 .isEqualTo(expectedPenalty);
+    }
+
+    private void assertExtraBodyTokenLimit(
+            String name, String rawBody, Integer expectedMaxTokens, Integer expectedMaxCompletionTokens) {
+        assertThat(StringUtils.countMatches(rawBody, "\"max_tokens\""))
+                .as("[%s] max_tokens keys", name)
+                .isEqualTo(expectedMaxTokens == null ? 0 : 1);
+        assertThat(StringUtils.countMatches(rawBody, "\"max_completion_tokens\""))
+                .as("[%s] max_completion_tokens keys", name)
+                .isEqualTo(expectedMaxCompletionTokens == null ? 0 : 1);
+        assertTokenLimit(name, JsonUtils.getJsonNodeFromString(rawBody), expectedMaxTokens,
+                expectedMaxCompletionTokens);
     }
 
     private void assertTokenLimit(

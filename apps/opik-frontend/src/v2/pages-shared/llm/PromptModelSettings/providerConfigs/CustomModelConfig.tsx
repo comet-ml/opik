@@ -5,7 +5,11 @@ import { jsonLanguage } from "@codemirror/lang-json";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { LLMCustomConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  LLMCustomConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import useJsonInput from "@/hooks/useJsonInput";
@@ -20,19 +24,19 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Info } from "lucide-react";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
-// The backend sends an extra body key in place of the slider field of the same name.
-const SLIDER_REQUEST_KEYS = [
-  "temperature",
-  "top_p",
-  "max_completion_tokens",
-  "frequency_penalty",
-  "presence_penalty",
-];
+const TOKEN_LIMIT_KEYS = ["max_tokens", "max_completion_tokens"];
+
+// The backend moves an extra body token limit, typed under either name, to the one name these providers read.
+const TOKEN_LIMIT_KEY_SENT: Partial<Record<PROVIDER_TYPE, string>> = {
+  [PROVIDER_TYPE.OLLAMA]: "max_tokens",
+  [PROVIDER_TYPE.BEDROCK]: "max_completion_tokens",
+};
 
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
   onChange: (configs: Partial<LLMCustomConfigsType>) => void;
   model?: PROVIDER_MODEL_TYPE | "";
+  provider?: PROVIDER_TYPE;
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
@@ -40,6 +44,7 @@ const CustomModelConfig = ({
   configs,
   onChange,
   model,
+  provider,
   unsupportedParams,
 }: CustomModelConfigProps) => {
   const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
@@ -59,9 +64,40 @@ const CustomModelConfig = ({
       value: configs.custom_parameters,
       onChange: handleExtraBodyParametersChange,
     });
-  const sliderKeysInExtraBody = SLIDER_REQUEST_KEYS.filter(
-    (key) => configs.custom_parameters?.[key] !== undefined,
-  );
+  const inExtraBody = (key: string) =>
+    configs.custom_parameters?.[key] !== undefined;
+  const sendsTemperature = !isUndefined(temperature);
+  const sendsTopP = supports("topP") && !isUndefined(topP);
+  const sendsTokenLimit =
+    supports("maxCompletionTokens") &&
+    !isUndefined(configs.maxCompletionTokens);
+  const tokenLimitKeys = TOKEN_LIMIT_KEYS.filter(inExtraBody);
+  const tokenLimitKeySent = provider && TOKEN_LIMIT_KEY_SENT[provider];
+  const tokenLimitNames = !tokenLimitKeySent
+    ? tokenLimitKeys
+    : tokenLimitKeys.includes(tokenLimitKeySent)
+      ? [tokenLimitKeySent]
+      : tokenLimitKeys.map((key) => `${key} (as ${tokenLimitKeySent})`);
+  const sliderKeysInExtraBody = [
+    ...(sendsTemperature && inExtraBody("temperature") ? ["temperature"] : []),
+    ...(sendsTopP && inExtraBody("top_p") ? ["top_p"] : []),
+    ...(sendsTokenLimit ? tokenLimitNames : []),
+    ...(!isUndefined(configs.frequencyPenalty) &&
+    inExtraBody("frequency_penalty")
+      ? ["frequency_penalty"]
+      : []),
+    ...(!isUndefined(configs.presencePenalty) && inExtraBody("presence_penalty")
+      ? ["presence_penalty"]
+      : []),
+  ];
+  const [sliderKeyNextToExtraBody, extraBodyKeyNextToSlider] =
+    sampling !== "exclusive"
+      ? []
+      : sendsTemperature && inExtraBody("top_p")
+        ? ["temperature", "top_p"]
+        : sendsTopP && inExtraBody("temperature")
+          ? ["top_p", "temperature"]
+          : [];
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -232,11 +268,19 @@ const CustomModelConfig = ({
               : "Invalid JSON, not saved."}
           </FormErrorSkeleton>
         ) : (
-          sliderKeysInExtraBody.length > 0 && (
-            <p className="comet-body-xs text-light-slate">
-              Sent instead of the slider: {sliderKeysInExtraBody.join(", ")}
-            </p>
-          )
+          <>
+            {sliderKeysInExtraBody.length > 0 && (
+              <p className="comet-body-xs text-light-slate">
+                Sent instead of the slider: {sliderKeysInExtraBody.join(", ")}
+              </p>
+            )}
+            {extraBodyKeyNextToSlider && (
+              <p className="comet-body-xs text-light-slate">
+                {extraBodyKeyNextToSlider} is sent next to{" "}
+                {sliderKeyNextToExtraBody}. Claude may reject the two together.
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>
