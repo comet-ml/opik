@@ -35,14 +35,14 @@ export const useModelFormHandlers = (
         string,
         unknown
       >;
-      const pickedLevels = sameProvider
+      const pickedThinkingSettings = sameProvider
         ? Object.fromEntries(
             THINKING_AMOUNT_KEYS.filter(
               (key) => previousConfig[key] !== undefined,
             ).map((key) => [key, previousConfig[key]]),
           )
         : {};
-      const startConfig = { ...defaultConfig, ...pickedLevels };
+      const startConfig = { ...defaultConfig, ...pickedThinkingSettings };
       // Strip params the model doesn't accept (e.g. temperature on models that
       // deprecate it), matching the playground's reconciler.
       const adjustedConfig =
