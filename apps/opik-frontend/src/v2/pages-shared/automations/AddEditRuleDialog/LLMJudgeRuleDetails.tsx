@@ -257,6 +257,15 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       if (currentProvider === provider) {
         handleModelTransition(model, "");
         form.setValue("llmJudgeDetails.model", "");
+        // With no model left, the next pick or added provider has no previous provider to compare
+        // against, so updateConfigForModelChange could not tell the extra body belonged to this one.
+        const config = form.getValues("llmJudgeDetails.config");
+        if (config.custom_parameters != null) {
+          form.setValue("llmJudgeDetails.config", {
+            ...config,
+            custom_parameters: null,
+          });
+        }
       }
     },
     [calculateModelProvider, form, handleModelTransition],

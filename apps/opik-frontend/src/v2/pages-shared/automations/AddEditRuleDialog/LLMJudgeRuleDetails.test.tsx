@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useForm, UseFormReturn } from "react-hook-form";
@@ -23,16 +24,27 @@ vi.mock("@/hooks/useLLMProviderModelsData", () => ({
   default: () => ({
     calculateModelProvider: (model?: string) =>
       (model && PROVIDER_ROWS[model]) || "",
-    calculateDefaultModel: vi.fn(),
+    calculateDefaultModel: (
+      _lastPicked: string,
+      _setupProviders: string[],
+      provider: COMPOSED_PROVIDER_TYPE,
+    ) =>
+      Object.keys(PROVIDER_ROWS).find(
+        (model) => PROVIDER_ROWS[model] === provider,
+      ) ?? "",
   }),
 }));
 
-// The real picker reports the bare provider type, never the row's key.
+// The real picker reports the bare provider type, never the row's key; add and delete get the key.
 vi.mock("@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect", () => ({
   default: ({
     onChange,
+    onAddProvider,
+    onDeleteProvider,
   }: {
     onChange: (model: PROVIDER_MODEL_TYPE, provider: string) => void;
+    onAddProvider: (provider: COMPOSED_PROVIDER_TYPE) => void;
+    onDeleteProvider: (provider: COMPOSED_PROVIDER_TYPE) => void;
   }) => (
     <>
       {Object.entries(PROVIDER_ROWS).map(([model, row]) => (
@@ -44,6 +56,12 @@ vi.mock("@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect", () => ({
         >
           {model}
         </button>
+      ))}
+      {[...new Set(Object.values(PROVIDER_ROWS))].map((row) => (
+        <React.Fragment key={row}>
+          <button onClick={() => onAddProvider(row)}>add {row}</button>
+          <button onClick={() => onDeleteProvider(row)}>delete {row}</button>
+        </React.Fragment>
       ))}
     </>
   ),
@@ -96,7 +114,11 @@ const renderRule = (model: string) => {
     );
   };
   render(<Harness />);
-  return () => form!.getValues("llmJudgeDetails.config.custom_parameters");
+  return {
+    extraBody: () =>
+      form!.getValues("llmJudgeDetails.config.custom_parameters"),
+    model: () => form!.getValues("llmJudgeDetails.model"),
+  };
 };
 
 describe("LLMJudgeRuleDetails extra body on a model switch", () => {
@@ -112,7 +134,7 @@ describe("LLMJudgeRuleDetails extra body on a model switch", () => {
       "custom-llm/local/llama3.2:1b",
     ],
   ])("keeps it between two models of %s", (_label, from, to) => {
-    const extraBody = renderRule(from);
+    const { extraBody } = renderRule(from);
 
     fireEvent.click(screen.getByRole("button", { name: to }));
 
@@ -123,10 +145,47 @@ describe("LLMJudgeRuleDetails extra body on a model switch", () => {
     ["another Custom LLM row", "custom-llm/gw/gw-model"],
     ["another provider", "openai/gpt-4o-mini"],
   ])("drops it on a switch to %s", (_label, to) => {
-    const extraBody = renderRule("custom-llm/mock/mock-model");
+    const { extraBody } = renderRule("custom-llm/mock/mock-model");
 
     fireEvent.click(screen.getByRole("button", { name: to }));
 
     expect(extraBody()).toBeNull();
+  });
+});
+
+describe("LLMJudgeRuleDetails extra body when the rule's provider is deleted", () => {
+  it("drops it when a model of another provider is picked next", () => {
+    const { extraBody, model } = renderRule("custom-llm/mock/mock-model");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "delete custom-llm:mock" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "openai/gpt-4o-mini" }));
+
+    expect(model()).toBe("openai/gpt-4o-mini");
+    expect(extraBody()).toBeNull();
+  });
+
+  it("drops it when another provider is added next", () => {
+    const { extraBody, model } = renderRule("custom-llm/mock/mock-model");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "delete custom-llm:mock" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "add openrouter" }));
+
+    expect(model()).toBe("openai/gpt-4o-mini");
+    expect(extraBody()).toBeNull();
+  });
+
+  it("keeps it when a provider the rule does not use is deleted", () => {
+    const { extraBody, model } = renderRule("custom-llm/mock/mock-model");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "delete custom-llm:gw" }),
+    );
+
+    expect(model()).toBe("custom-llm/mock/mock-model");
+    expect(extraBody()).toEqual(EXTRA_BODY);
   });
 });
