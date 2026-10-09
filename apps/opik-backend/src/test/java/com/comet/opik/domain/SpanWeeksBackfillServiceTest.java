@@ -89,9 +89,7 @@ class SpanWeeksBackfillServiceTest {
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(REDIS.getRedisURI())
-                .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false"),
-                        // One span per chunk, so the backfill takes many steps.
-                        new CustomConfig("spanWeeksBackfill.maxSpansPerChunk", "1")))
+                .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false")))
                 .build());
     }
 
@@ -157,11 +155,12 @@ class SpanWeeksBackfillServiceTest {
         writesOffBackfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).isEmpty();
 
-        // The first step only plans, one week per chunk here.
+        // The first step only plans, reading no span week.
         backfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).isEmpty();
 
-        // Oldest week first: once the 2025-03-03 range is in, the 2300 one is still pending.
+        // Oldest range first: the ids before the first span's week (2025 and the epoch) come in before the open-ended
+        // last range, which holds the 2300 id.
         runStepsUntil(traceIds, ws, upToMonday.size());
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(upToMonday);
 
