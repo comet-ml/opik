@@ -1,4 +1,9 @@
-import { AGENT_INSIGHTS_ISSUE_SEVERITY } from "@/types/signals";
+import {
+  AGENT_INSIGHTS_ISSUE_SEVERITY,
+  AGENT_INSIGHTS_ISSUE_STATUS,
+  AgentInsightsIssue,
+  AgentInsightsJob,
+} from "@/types/signals";
 
 export const SEVERITY_LABEL_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> =
   {
@@ -15,6 +20,10 @@ export const SEVERITY_DOT_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> = {
   [AGENT_INSIGHTS_ISSUE_SEVERITY.low]: "bg-[#94A3B8]",
 };
 
+// Figma: 24px outline buttons with 14px text and icons, 4px radius (Settings,
+// Close issue, Reopen).
+export const ACTION_BUTTON_CLASS = "h-6 gap-1 rounded px-2 text-sm font-medium";
+
 // Multi-day issues show the latest day's count (matches the prose) plus the
 // cross-day total; single-day collapses to just the total.
 export const formatOccurrences = (
@@ -25,3 +34,30 @@ export const formatOccurrences = (
   daysReported > 1
     ? `${total.toLocaleString()} total · ${latest.toLocaleString()} latest`
     : total.toLocaleString();
+
+// The current results predate the saved guidance: the job has run and the guidance
+// version differs from the one the results were produced with (absent = 0).
+export const isGuidanceOutdated = (job?: AgentInsightsJob | null): boolean =>
+  Boolean(job?.last_scan_at) &&
+  (job?.guidance_version ?? 0) !== (job?.results_guidance_version ?? 0);
+
+// Issues closed as not useful aren't problems, so their traces don't count.
+export const countAffectedTraces = (issues: AgentInsightsIssue[]): number =>
+  issues
+    .filter((i) => i.status !== AGENT_INSIGHTS_ISSUE_STATUS.closed)
+    .reduce((sum, i) => sum + i.total_occurrences, 0);
+
+// Settings (auto-run, guidance) is there for configurers from the start, even before
+// the first run; Run waits until the job has something to show.
+export const getHeaderControls = ({
+  showClosed,
+  canConfigure,
+  showJobControls,
+}: {
+  showClosed: boolean;
+  canConfigure: boolean;
+  showJobControls: boolean;
+}) => ({
+  settings: !showClosed && canConfigure,
+  run: !showClosed && canConfigure && showJobControls,
+});

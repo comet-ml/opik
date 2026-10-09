@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookOpenCheck, Play, Settings2 } from "lucide-react";
+import { CircleCheck, Play, ThumbsDown } from "lucide-react";
+import { StringParam, useQueryParam } from "use-query-params";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -15,9 +16,9 @@ import {
 } from "@/api/api";
 import { formatDate } from "@/lib/date";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BackButton from "@/shared/BackButton/BackButton";
 import { Button } from "@/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
 import {
   AGENT_INSIGHTS_ISSUE_STATUS,
   AGENT_INSIGHTS_JOB_STATUS,
@@ -40,9 +41,16 @@ import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
 import AutoRunToggle from "@/v2/pages/SignalsPage/AutoRunToggle";
 import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
-import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSettingsDialog";
+import DiagnosticsSettingsMenu from "@/v2/pages/SignalsPage/DiagnosticsSettingsMenu";
+import GuidanceSheet from "@/v2/pages/SignalsPage/GuidanceSheet";
+import GuidanceChangedCallout from "@/v2/pages/SignalsPage/GuidanceChangedCallout";
 import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 import useColumnsOverflow from "@/v2/pages/SignalsPage/useColumnsOverflow";
+import {
+  countAffectedTraces,
+  getHeaderControls,
+  isGuidanceOutdated,
+} from "@/v2/pages/SignalsPage/helpers";
 import {
   AUTO_FIRST_RUN_WINDOW_MS,
   AUTO_RUN_MAX_DURATION_MS,
@@ -72,8 +80,13 @@ const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
     return Number.isFinite(t) && t > max ? t : max;
   }, 0);
 
-const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
-  showResolved = false,
+const CLOSED_TABS = {
+  resolved: "resolved",
+  notUseful: "not_useful",
+} as const;
+
+const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
+  showClosed = false,
 }) => {
   const projectId = useActiveProjectId()!;
   const navigate = useNavigate();
@@ -85,7 +98,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
       to: "/$workspaceName/projects/$projectId/diagnostics",
       params: { workspaceName, projectId },
     });
-  const goToResolved = () =>
+  const goToClosed = () =>
     navigate({
       to: "/$workspaceName/projects/$projectId/diagnostics/resolved",
       params: { workspaceName, projectId },
@@ -96,6 +109,9 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
   const agentInsightsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.AGENT_INSIGHTS_ENABLED,
+  );
+  const guidanceEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENT_INSIGHTS_GUIDANCE_ENABLED,
   );
 
   // Running / enabling / configuring diagnostics are write actions gated on
@@ -115,7 +131,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   const stats = useMemo(() => {
     const issues = issuesData?.content ?? [];
     return {
-      tracesAffected: issues.reduce((sum, i) => sum + i.total_occurrences, 0),
+      tracesAffected: countAffectedTraces(issues),
       openIssues: issues.filter(
         (i) => i.status === AGENT_INSIGHTS_ISSUE_STATUS.open,
       ).length,
@@ -124,6 +140,33 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
       ).length,
     };
   }, [issuesData]);
+
+  // Closed issues counts (size 1: only the totals are needed).
+  const { data: resolvedPage } = useAgentInsightsIssuesList({
+    projectId,
+    status: AGENT_INSIGHTS_ISSUE_STATUS.resolved,
+    page: 1,
+    size: 1,
+  });
+  const { data: notUsefulPage } = useAgentInsightsIssuesList(
+    {
+      projectId,
+      status: AGENT_INSIGHTS_ISSUE_STATUS.closed,
+      page: 1,
+      size: 1,
+    },
+    { enabled: guidanceEnabled },
+  );
+  const resolvedCount = resolvedPage?.total ?? 0;
+  const notUsefulCount = guidanceEnabled ? notUsefulPage?.total ?? 0 : 0;
+
+  const [closedTabParam, setClosedTab] = useQueryParam("tab", StringParam, {
+    updateType: "replaceIn",
+  });
+  const closedTab =
+    guidanceEnabled && closedTabParam === CLOSED_TABS.notUseful
+      ? CLOSED_TABS.notUseful
+      : CLOSED_TABS.resolved;
 
   const latestIssueUpdate = useMemo(
     () => maxUpdatedAt(issuesData?.content ?? []),
@@ -225,7 +268,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
     useTracesList(eligibilityTracesParams, { enabled: awaitsAutoFirstRun });
   const windowTraceCount = windowTracesData?.total ?? 0;
 
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [guidanceOpen, setGuidanceOpen] = useState(false);
   const columnsRef = useRef<HTMLDivElement>(null);
   const columnsOverflow = useColumnsOverflow(columnsRef, issuesData);
 
@@ -317,6 +360,44 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   };
 
   const layout = columnsOverflow ? LAYOUT.scrolling : LAYOUT.fitted;
+  const headerControls = getHeaderControls({
+    showClosed,
+    canConfigure,
+    showJobControls,
+  });
+
+  const canRun = !showRunning && !isOutOfCredits && !triggerMutation.isPending;
+
+  // Closing an issue as not useful doesn't change the guidance version.
+  const showGuidanceChanged =
+    guidanceEnabled && !showRunning && isGuidanceOutdated(job);
+
+  const closedTabs = (
+    <Tabs value={closedTab} onValueChange={setClosedTab}>
+      <TabsList variant="segmented-primary" className="shrink-0">
+        <TabsTrigger
+          value={CLOSED_TABS.resolved}
+          variant="segmented-primary"
+          size="sm"
+          className="h-6 flex-1 gap-1"
+        >
+          <CircleCheck className="size-3" />
+          Resolved ({resolvedCount})
+        </TabsTrigger>
+        {guidanceEnabled && (
+          <TabsTrigger
+            value={CLOSED_TABS.notUseful}
+            variant="segmented-primary"
+            size="sm"
+            className="h-6 flex-1 gap-1"
+          >
+            <ThumbsDown className="size-3" />
+            Not useful ({notUsefulCount})
+          </TabsTrigger>
+        )}
+      </TabsList>
+    </Tabs>
+  );
 
   const renderBody = () => {
     if (
@@ -350,7 +431,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
 
     return (
       <div className={layout.body}>
-        {!showResolved && (
+        {!showClosed && (
           <div className="hidden lg:block">
             <SignalsStatsCards
               tracesAffected={stats.tracesAffected}
@@ -362,7 +443,13 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
           </div>
         )}
 
-        {!showResolved && (
+        {!showClosed && showGuidanceChanged && (
+          <GuidanceChangedCallout
+            onRun={canConfigure && canRun ? handleRunDiagnostic : undefined}
+          />
+        )}
+
+        {!showClosed && (
           <div className="flex items-center gap-2">
             {lastScan ? (
               <span className="comet-body-xs text-muted-slate">
@@ -375,26 +462,20 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
                 </span>
               )
             )}
-            <div className="ml-auto flex items-center gap-2">
-              <TooltipWrapper content="Resolved issues">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={goToResolved}
-                  aria-label="Resolved issues"
-                >
-                  <BookOpenCheck className="size-3.5 lg:mr-1.5" />
-                  <span className="hidden lg:inline">Resolved issues</span>
-                </Button>
-              </TooltipWrapper>
-            </div>
           </div>
         )}
 
         <div ref={columnsRef} className={layout.columns}>
           <IssuesTab
             projectId={projectId}
-            showResolved={showResolved}
+            status={
+              !showClosed
+                ? AGENT_INSIGHTS_ISSUE_STATUS.open
+                : closedTab === CLOSED_TABS.notUseful
+                  ? AGENT_INSIGHTS_ISSUE_STATUS.closed
+                  : AGENT_INSIGHTS_ISSUE_STATUS.resolved
+            }
+            tabs={showClosed ? closedTabs : undefined}
             isRunning={showRunning}
             failedReason={failedReason}
             failedDetail={failedDetail}
@@ -402,8 +483,11 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
             staleTraceCount={recentTraceCount}
             staleDays={staleDays}
             canConfigure={canConfigure}
+            canCloseAsNotUseful={guidanceEnabled}
+            closedCount={resolvedCount + notUsefulCount}
             onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}
             onShowOpenIssues={goToOpenIssues}
+            onShowClosedIssues={goToClosed}
           />
         </div>
       </div>
@@ -413,14 +497,14 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   return (
     <PageBodyScrollContainer className="flex flex-col">
       <div className="mb-4 mt-6 flex shrink-0 items-center justify-between px-6">
-        {showResolved ? (
+        {showClosed ? (
           <div className="flex min-w-0 items-center gap-2">
             <BackButton
               to="/$workspaceName/projects/$projectId/diagnostics"
               tooltip="Back to diagnostics"
             />
             <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
-              Resolved issues
+              Closed issues
             </h1>
           </div>
         ) : (
@@ -437,43 +521,44 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
             )}
           </div>
         )}
-        {!showResolved && showJobControls && canConfigure && (
+        {headerControls.settings && (
           <div className="flex items-center gap-2">
-            <TooltipWrapper content="Settings">
-              <Button
-                variant="outline"
-                size="icon-2xs"
-                onClick={() => setSettingsOpen(true)}
-                aria-label="Diagnostics settings"
-              >
-                <Settings2 className="size-3" />
-              </Button>
-            </TooltipWrapper>
-            {isOutOfCredits && !showRunning ? (
-              <OutOfCreditsButton
-                label="Out of Ollie credits"
-                description="Diagnostics run on your organization's Ollie credits, and there aren't enough left for another run. Issues already found stay available."
-              />
-            ) : (
-              <Button
-                size="2xs"
-                disabled={showRunning || triggerMutation.isPending}
-                onClick={handleRunDiagnostic}
-              >
-                <Play className="mr-1.5 size-3" />
-                Run diagnostic
-              </Button>
-            )}
+            <DiagnosticsSettingsMenu
+              projectId={projectId}
+              enabled={isJobEnabled}
+              onEditGuidance={
+                guidanceEnabled ? () => setGuidanceOpen(true) : undefined
+              }
+            />
+            {headerControls.run &&
+              (isOutOfCredits && !showRunning ? (
+                <OutOfCreditsButton
+                  label="Out of Ollie credits"
+                  description="Diagnostics run on your organization's Ollie credits, and there aren't enough left for another run. Issues already found stay available."
+                />
+              ) : (
+                <Button
+                  size="2xs"
+                  disabled={showRunning || triggerMutation.isPending}
+                  onClick={handleRunDiagnostic}
+                >
+                  <Play className="mr-1.5 size-3" />
+                  Run diagnostic
+                </Button>
+              ))}
           </div>
         )}
       </div>
       {renderBody()}
-      <DiagnosticsSettingsDialog
-        open={settingsOpen}
-        setOpen={setSettingsOpen}
-        projectId={projectId}
-        enabled={isJobEnabled}
-      />
+      {guidanceEnabled && canConfigure && (
+        <GuidanceSheet
+          open={guidanceOpen}
+          setOpen={setGuidanceOpen}
+          projectId={projectId}
+          job={job}
+          onRun={canRun ? handleRunDiagnostic : undefined}
+        />
+      )}
     </PageBodyScrollContainer>
   );
 };

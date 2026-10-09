@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ArrowUpRight,
   CircleCheck,
   Eye,
   EyeOff,
   Hash,
+  ThumbsDown,
   Undo2,
   Users,
 } from "lucide-react";
@@ -14,15 +15,26 @@ import {
   AgentInsightsIssue,
 } from "@/types/signals";
 import { Button } from "@/ui/button";
+import {
+  ButtonWithDropdown,
+  ButtonWithDropdownContent,
+  ButtonWithDropdownItem,
+  ButtonWithDropdownTrigger,
+} from "@/ui/button-with-dropdown";
 import { Card } from "@/ui/card";
+import { ToastAction } from "@/ui/toast";
+import { useToast } from "@/ui/use-toast";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { Separator } from "@/ui/separator";
 import { formatDate } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import IssueSeverityBadge from "@/v2/pages/SignalsPage/IssuesTab/IssueSeverityBadge";
 import OccurrenceChart from "@/v2/pages/SignalsPage/IssuesTab/OccurrenceChart";
 import AffectedTracesSample from "@/v2/pages/SignalsPage/IssuesTab/AffectedTracesSample";
-import { formatOccurrences } from "@/v2/pages/SignalsPage/helpers";
+import CloseAsNotUsefulDialog from "@/v2/pages/SignalsPage/IssuesTab/CloseAsNotUsefulDialog";
+import {
+  ACTION_BUTTON_CLASS,
+  formatOccurrences,
+} from "@/v2/pages/SignalsPage/helpers";
 import useAgentInsightsIssue from "@/api/signals/useAgentInsightsIssue";
 import useUpdateAgentInsightsIssueMutation from "@/api/signals/useUpdateAgentInsightsIssueMutation";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
@@ -31,24 +43,18 @@ type IssueDetailProps = {
   issue: AgentInsightsIssue;
   projectId: string;
   canConfigure: boolean;
+  // Enables "Close as Not useful" (guidance feature toggle).
+  canCloseAsNotUseful?: boolean;
 };
 
-const STATUS_ACTIONS: {
+// Figma: 227px menu, 24px items with 14px regular text.
+const MENU_CONTENT_CLASS = "w-[227px] p-1.5";
+const MENU_ITEM_CLASS = "h-6 gap-1.5 p-1";
+
+type StatusChange = {
   status: AGENT_INSIGHTS_ISSUE_STATUS;
-  label: string;
-  icon: React.ElementType;
-}[] = [
-  {
-    status: AGENT_INSIGHTS_ISSUE_STATUS.resolved,
-    label: "Resolve",
-    icon: CircleCheck,
-  },
-  {
-    status: AGENT_INSIGHTS_ISSUE_STATUS.open,
-    label: "Reopen",
-    icon: Undo2,
-  },
-];
+  closeNote?: string;
+};
 
 const MetaItem: React.FC<{
   icon: React.ElementType;
@@ -76,10 +82,50 @@ const SectionCard: React.FC<{
   </Card>
 );
 
+const ClosedInfoRow: React.FC<{
+  label: string;
+  children: React.ReactNode;
+}> = ({ label, children }) => (
+  <div className="flex items-start gap-2.5">
+    <span className="comet-body-xs-accented w-16 shrink-0 text-muted-slate">
+      {label}
+    </span>
+    <span className="comet-body-xs min-w-0 flex-1 break-words text-foreground">
+      {children}
+    </span>
+  </div>
+);
+
+const ClosedInfo: React.FC<{ issue: AgentInsightsIssue }> = ({ issue }) => {
+  const isNotUseful = issue.status === AGENT_INSIGHTS_ISSUE_STATUS.closed;
+  const closedBy = [
+    issue.status_changed_by,
+    issue.status_changed_at &&
+      formatDate(issue.status_changed_at, { format: "D MMM YYYY, HH:mm" }),
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return (
+    <div className="flex flex-col gap-1 rounded-md border bg-soft-background px-3 py-2">
+      <ClosedInfoRow label="Closed as">
+        {isNotUseful
+          ? "Not useful. Diagnostics won’t raise this or similar findings in future runs."
+          : "Resolved"}
+      </ClosedInfoRow>
+      {closedBy && <ClosedInfoRow label="Closed by">{closedBy}</ClosedInfoRow>}
+      {isNotUseful && issue.close_note && (
+        <ClosedInfoRow label="Reason">{issue.close_note}</ClosedInfoRow>
+      )}
+    </div>
+  );
+};
+
 const IssueDetail: React.FC<IssueDetailProps> = ({
   issue,
   projectId,
   canConfigure,
+  canCloseAsNotUseful = false,
 }) => {
   const { data: detail } = useAgentInsightsIssue({
     issueId: issue.id,
@@ -87,15 +133,155 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
   });
 
   const updateMutation = useUpdateAgentInsightsIssueMutation();
+  const { toast } = useToast();
+  const [notUsefulOpen, setNotUsefulOpen] = useState(false);
 
-  const setStatus = (status: AGENT_INSIGHTS_ISSUE_STATUS) => {
-    trackEvent(
-      status === AGENT_INSIGHTS_ISSUE_STATUS.resolved
-        ? OpikEvent.DIAGNOSTICS_ISSUE_RESOLVED
-        : OpikEvent.DIAGNOSTICS_ISSUE_REOPENED,
-      { project_id: projectId, issue_id: issue.id, severity: issue.severity },
+  const isOpen = issue.status === AGENT_INSIGHTS_ISSUE_STATUS.open;
+
+  // Applies a status change; with `undoToast`, confirms it with a toast whose Undo
+  // re-sends the previous status and note.
+  const changeStatus = (
+    change: StatusChange,
+    undoToast?: { title: string; description?: string },
+    onSuccess?: () => void,
+  ) => {
+    const previous: StatusChange = {
+      status: issue.status,
+      closeNote: issue.close_note,
+    };
+    updateMutation.mutate(
+      { issueId: issue.id, projectId, ...change },
+      {
+        onSuccess: () => {
+          onSuccess?.();
+          if (!undoToast) return;
+          toast({
+            title: undoToast.title,
+            description: undoToast.description && (
+              <span className="text-muted-slate">{undoToast.description}</span>
+            ),
+            actions: [
+              <ToastAction
+                key="undo"
+                variant="link"
+                size="sm"
+                className="comet-body-s h-7 gap-1 px-0 font-normal"
+                altText="Undo"
+                onClick={() =>
+                  updateMutation.mutate({
+                    issueId: issue.id,
+                    projectId,
+                    ...previous,
+                  })
+                }
+              >
+                <Undo2 className="size-3.5" />
+                Undo
+              </ToastAction>,
+            ],
+          });
+        },
+      },
     );
-    updateMutation.mutate({ issueId: issue.id, projectId, status });
+  };
+
+  const handleResolve = () => {
+    trackEvent(OpikEvent.DIAGNOSTICS_ISSUE_RESOLVED, {
+      project_id: projectId,
+      issue_id: issue.id,
+      severity: issue.severity,
+    });
+    changeStatus({ status: AGENT_INSIGHTS_ISSUE_STATUS.resolved });
+  };
+
+  const handleCloseAsNotUseful = (closeNote: string) =>
+    changeStatus(
+      { status: AGENT_INSIGHTS_ISSUE_STATUS.closed, closeNote },
+      {
+        title: "Issue was closed as Not useful",
+        description: "This will help future runs avoid similar issues",
+      },
+      () => setNotUsefulOpen(false),
+    );
+
+  const handleReopen = () => {
+    trackEvent(OpikEvent.DIAGNOSTICS_ISSUE_REOPENED, {
+      project_id: projectId,
+      issue_id: issue.id,
+      severity: issue.severity,
+    });
+    changeStatus(
+      { status: AGENT_INSIGHTS_ISSUE_STATUS.open },
+      issue.status === AGENT_INSIGHTS_ISSUE_STATUS.closed
+        ? {
+            title: "Issue was reopened",
+            description:
+              "The issue is open again and will no longer guide future runs",
+          }
+        : { title: "Issue was reopened" },
+    );
+  };
+
+  const renderActions = () => {
+    if (!isOpen) {
+      return (
+        <Button
+          variant="outline"
+          size="2xs"
+          className={ACTION_BUTTON_CLASS}
+          disabled={updateMutation.isPending}
+          onClick={handleReopen}
+        >
+          <Undo2 className="size-3.5" />
+          Reopen
+        </Button>
+      );
+    }
+
+    const closeLabel = (
+      <>
+        <CircleCheck className="size-3.5" />
+        Close issue
+      </>
+    );
+
+    if (!canCloseAsNotUseful) {
+      return (
+        <Button
+          variant="outline"
+          size="2xs"
+          className={ACTION_BUTTON_CLASS}
+          disabled={updateMutation.isPending}
+          onClick={handleResolve}
+        >
+          {closeLabel}
+        </Button>
+      );
+    }
+
+    return (
+      <ButtonWithDropdown>
+        <ButtonWithDropdownTrigger
+          variant="outline"
+          size="2xs"
+          className={cn(ACTION_BUTTON_CLASS, "rounded-r-none")}
+          triggerClassName="-ml-px w-6 rounded-l-none rounded-r px-0 [&>svg]:size-3"
+          disabled={updateMutation.isPending}
+          onPrimaryClick={handleResolve}
+        >
+          {closeLabel}
+        </ButtonWithDropdownTrigger>
+        <ButtonWithDropdownContent align="end" className={MENU_CONTENT_CLASS}>
+          <ButtonWithDropdownItem
+            className={MENU_ITEM_CLASS}
+            onSelect={() => setNotUsefulOpen(true)}
+          >
+            <ThumbsDown className="size-3" />
+            Close as Not useful
+          </ButtonWithDropdownItem>
+        </ButtonWithDropdownContent>
+      </ButtonWithDropdown>
+    );
   };
 
   const handleContinueWithOllie = () => {
@@ -134,30 +320,12 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
           </TooltipWrapper>
         </div>
         {canConfigure && (
-          <div className="flex shrink-0 items-center gap-1">
-            {STATUS_ACTIONS.filter(
-              (action) => action.status !== issue.status,
-            ).map(({ status, label, icon: Icon }, index) => (
-              <React.Fragment key={status}>
-                {index > 0 && (
-                  <Separator orientation="vertical" className="h-4" />
-                )}
-                <Button
-                  variant="ghost"
-                  size="2xs"
-                  disabled={updateMutation.isPending}
-                  onClick={() => setStatus(status)}
-                >
-                  <Icon className="mr-1 size-3" />
-                  {label}
-                </Button>
-              </React.Fragment>
-            ))}
-          </div>
+          <div className="flex shrink-0 items-center">{renderActions()}</div>
         )}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
+        {!isOpen && <ClosedInfo issue={issue} />}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {issue.first_seen && (
             <MetaItem
@@ -195,7 +363,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
           </SectionCard>
         )}
 
-        {(issue.cause || issue.suggested_fix) && (
+        {isOpen && (issue.cause || issue.suggested_fix) && (
           <SectionCard
             style={{ borderColor: "var(--color-ollie)" }}
             title={
@@ -233,6 +401,14 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
           />
         </SectionCard>
       </div>
+      {canCloseAsNotUseful && (
+        <CloseAsNotUsefulDialog
+          open={notUsefulOpen}
+          setOpen={setNotUsefulOpen}
+          onConfirm={handleCloseAsNotUseful}
+          isPending={updateMutation.isPending}
+        />
+      )}
     </div>
   );
 };

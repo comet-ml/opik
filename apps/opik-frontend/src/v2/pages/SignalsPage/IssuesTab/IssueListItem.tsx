@@ -1,6 +1,9 @@
 import React from "react";
-import { Hash, ScanEye } from "lucide-react";
-import { AgentInsightsIssue } from "@/types/signals";
+import { CircleCheck, Hash, ScanEye, ThumbsDown } from "lucide-react";
+import {
+  AGENT_INSIGHTS_ISSUE_STATUS,
+  AgentInsightsIssue,
+} from "@/types/signals";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
@@ -13,11 +16,30 @@ type IssueListItemProps = {
   onClick: (issue: AgentInsightsIssue) => void;
 };
 
+const ClosedMeta: React.FC<{ issue: AgentInsightsIssue }> = ({ issue }) => {
+  const isNotUseful = issue.status === AGENT_INSIGHTS_ISSUE_STATUS.closed;
+  const Icon = isNotUseful ? ThumbsDown : CircleCheck;
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      <Icon className="size-3 shrink-0" />
+      <span className="truncate">
+        {isNotUseful ? "Closed" : "Resolved"}{" "}
+        {formatDate(issue.status_changed_at!, { format: "MMM D" })}
+        {issue.status_changed_by && ` by ${issue.status_changed_by}`}
+      </span>
+    </span>
+  );
+};
+
 const IssueListItem: React.FC<IssueListItemProps> = ({
   issue,
   isActive,
   onClick,
 }) => {
+  // Closed issues show who closed them and when; older ones without that keep "Last seen".
+  const showClosedMeta =
+    issue.status !== AGENT_INSIGHTS_ISSUE_STATUS.open &&
+    Boolean(issue.status_changed_at);
   return (
     <button
       type="button"
@@ -57,7 +79,8 @@ const IssueListItem: React.FC<IssueListItemProps> = ({
             issue.days_reported,
           )}
         </span>
-        {issue.last_seen && (
+        {showClosedMeta && <ClosedMeta issue={issue} />}
+        {!showClosedMeta && issue.last_seen && (
           <span className="flex items-center gap-1">
             <ScanEye className="size-3" />
             Last seen: {formatDate(issue.last_seen, { format: "D MMM" })}
