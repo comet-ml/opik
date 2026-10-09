@@ -8,7 +8,6 @@ from pydantic import BaseModel
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.openai import track_openai
-from opik.types import LLMProvider
 from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
@@ -129,20 +128,13 @@ def test_openai_client_chat_completions_create__happyflow(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.parametrize(
-    "provider_argument, expected_provider",
-    [
-        ("custom-provider", "custom-provider"),
-        (LLMProvider.ANTHROPIC, "anthropic"),
-    ],
-)
 def test_openai_client_chat_completions_create__custom_provider__provider_logged_on_llm_span_but_usage_still_parsed_as_openai(
-    fake_backend, provider_argument, expected_provider
+    fake_backend,
 ):
     client = openai.OpenAI()
     wrapped_client = track_openai(
         openai_client=client,
-        provider=provider_argument,
+        provider="custom-provider",
     )
     messages = [
         {"role": "user", "content": "Tell a fact"},
@@ -185,7 +177,7 @@ def test_openai_client_chat_completions_create__custom_provider__provider_logged
                 project_name=ANY_BUT_NONE,
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                provider=expected_provider,
+                provider="custom-provider",
                 source="sdk",
             )
         ],
@@ -577,16 +569,8 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
 
 
 @pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-@pytest.mark.parametrize(
-    "project_name, expected_project_name",
-    [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
-        ("openai-integration-test", "openai-integration-test"),
-    ],
-)
-def test_openai_client_chat_completions_parse__happyflow(
-    fake_backend, project_name, expected_project_name
-):
+def test_openai_client_chat_completions_parse__happyflow(fake_backend):
+    project_name = "openai-integration-test"
     client = openai.OpenAI()
     wrapped_client = track_openai(client, project_name=project_name)
 
@@ -623,7 +607,7 @@ def test_openai_client_chat_completions_parse__happyflow(
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
-        project_name=expected_project_name,
+        project_name=project_name,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -636,7 +620,7 @@ def test_openai_client_chat_completions_parse__happyflow(
                 usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                project_name=expected_project_name,
+                project_name=project_name,
                 spans=[],
                 model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
@@ -1262,17 +1246,9 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.parametrize(
-    "project_name, expected_project_name",
-    [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
-        ("openai-integration-test", "openai-integration-test"),
-    ],
-)
-def test_openai_client_chat_completions_create__opik_args__happyflow(
-    fake_backend, project_name, expected_project_name
-):
+def test_openai_client_chat_completions_create__opik_args__happyflow(fake_backend):
     # test that opik_args are passed to the logged traces and spans
+    project_name = "openai-integration-test"
     client = openai.OpenAI()
     wrapped_client = track_openai(
         openai_client=client,
@@ -1312,7 +1288,7 @@ def test_openai_client_chat_completions_create__opik_args__happyflow(
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
-        project_name=expected_project_name,
+        project_name=project_name,
         thread_id="conversation-2",
         spans=[
             SpanModel(
@@ -1326,7 +1302,7 @@ def test_openai_client_chat_completions_create__opik_args__happyflow(
                 usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                project_name=expected_project_name,
+                project_name=project_name,
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",

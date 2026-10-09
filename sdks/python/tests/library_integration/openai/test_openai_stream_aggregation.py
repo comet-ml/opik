@@ -52,7 +52,14 @@ def _span(fake_backend, name_prefix):
 
 
 def _error_records(caplog):
-    return [record for record in caplog.records if record.levelno >= logging.ERROR]
+    # Only opik's own errors count: an unclosed AsyncOpenAI client from an
+    # earlier test can be garbage-collected mid-test, and its aclose() task
+    # then logs "Event loop is closed" via asyncio.
+    return [
+        record
+        for record in caplog.records
+        if record.levelno >= logging.ERROR and record.name.startswith("opik")
+    ]
 
 
 def test_openai_chat_stream__responses_stream_created_before_it_is_read__chat_output_logged(

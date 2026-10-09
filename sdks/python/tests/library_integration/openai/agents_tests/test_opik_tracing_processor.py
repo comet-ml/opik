@@ -1,11 +1,19 @@
 import uuid
 import pytest
-from agents import Agent, Runner, set_trace_processors, function_tool, trace
+from agents import (
+    Agent,
+    ModelSettings,
+    Runner,
+    set_trace_processors,
+    function_tool,
+    trace,
+)
+from openai.types import shared as openai_shared
 
 import opik
 from opik.integrations.openai.agents import OpikTracingProcessor
 from ..constants import MODEL_FOR_TESTS, EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
-from ....llm_constants import LITELLM_VERTEX_GEMINI_FLASH
+from ....llm_constants import LITELLM_VERTEX_GEMINI_FLASH, OPENAI_REASONING_EFFORT
 from ....testlib import (
     ANY_BUT_NONE,
     ANY_LIST,
@@ -17,9 +25,14 @@ from ....testlib import (
 )
 from opik.types import LLMProvider
 
+MODEL_SETTINGS_FOR_TESTS = ModelSettings(
+    reasoning=openai_shared.Reasoning(effort=OPENAI_REASONING_EFFORT),
+    max_tokens=256,
+)
+
 
 def test_opik_tracing_processor__happy_flow(fake_backend):
-    input_message = "Write a haiku about recursion in programming."
+    input_message = "What is the capital of France? Answer in one word."
     project_name = "opik-test-openai-agents"
 
     set_trace_processors(processors=[OpikTracingProcessor(project_name)])
@@ -28,6 +41,7 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
         name="Assistant",
         instructions="You are a helpful assistant",
         model=MODEL_FOR_TESTS,
+        model_settings=MODEL_SETTINGS_FOR_TESTS,
     )
 
     Runner.run_sync(agent, input_message)
@@ -40,7 +54,7 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
         input={
             "input": [
                 {
-                    "content": "Write a haiku about recursion in programming.",
+                    "content": "What is the capital of France? Answer in one word.",
                     "role": "user",
                 }
             ]
@@ -92,7 +106,7 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
                                         input={
                                             "input": [
                                                 {
-                                                    "content": "Write a haiku about recursion in programming.",
+                                                    "content": "What is the capital of France? Answer in one word.",
                                                     "role": "user",
                                                 }
                                             ]
@@ -129,7 +143,7 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
 
 
 def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
-    input_message = "Write a haiku about recursion in programming."
+    input_message = "What is the capital of France? Answer in one word."
     project_name = "opik-test-openai-agents"
 
     set_trace_processors(processors=[OpikTracingProcessor(project_name)])
@@ -138,6 +152,7 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
         name="Assistant",
         instructions="You are a helpful assistant",
         model=MODEL_FOR_TESTS,
+        model_settings=MODEL_SETTINGS_FOR_TESTS,
     )
 
     thread_id = str(uuid.uuid4())
@@ -206,7 +221,7 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
                                         input={
                                             "input": [
                                                 {
-                                                    "content": "Write a haiku about recursion in programming.",
+                                                    "content": "What is the capital of France? Answer in one word.",
                                                     "role": "user",
                                                 }
                                             ]
@@ -253,18 +268,22 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
         name="Spanish agent",
         instructions="You only speak Spanish.",
         model=MODEL_FOR_TESTS,
+        model_settings=MODEL_SETTINGS_FOR_TESTS,
     )
 
     english_agent = Agent(
         name="English agent",
         instructions="You only speak English",
         model=MODEL_FOR_TESTS,
+        model_settings=MODEL_SETTINGS_FOR_TESTS,
     )
 
     triage_agent = Agent(
         name="Triage agent",
         instructions="Handoff to the appropriate agent based on the language of the request.",
         handoffs=[spanish_agent, english_agent],
+        # Default reasoning on purpose: at minimal effort the model sometimes
+        # answers directly instead of handing off, and the handoff is what's tested.
         model=MODEL_FOR_TESTS,
     )
 
@@ -437,6 +456,8 @@ async def test_opik_tracing_processor__functions(fake_backend):
         name="Hello world",
         instructions="You are a helpful agent.",
         tools=[get_weather],
+        # Default reasoning on purpose: the test needs the model to choose
+        # to call the tool, which minimal effort sometimes skips.
         model=MODEL_FOR_TESTS,
     )
 
@@ -610,6 +631,8 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
         name="Hello world",
         instructions="You are a helpful agent.",
         tools=[get_weather],
+        # Default reasoning on purpose: the test needs the model to choose
+        # to call the tool, which minimal effort sometimes skips.
         model=MODEL_FOR_TESTS,
     )
 
@@ -774,7 +797,7 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
 def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent_span_attached_to_existing_span__parent_decorator_project_name_is_used(
     fake_backend,
 ):
-    input_message = "Write a haiku about recursion in programming."
+    input_message = "What is the capital of France? Answer in one word."
     project_name = "opik-test-openai-agents"
     parent_decorator_project_name = "parent-decorator-project-name"
 
@@ -784,6 +807,7 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
         name="Assistant",
         instructions="You are a helpful assistant",
         model=MODEL_FOR_TESTS,
+        model_settings=MODEL_SETTINGS_FOR_TESTS,
     )
 
     @opik.track(project_name=parent_decorator_project_name)
@@ -818,7 +842,7 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
                         input={
                             "input": [
                                 {
-                                    "content": "Write a haiku about recursion in programming.",
+                                    "content": "What is the capital of France? Answer in one word.",
                                     "role": "user",
                                 }
                             ]
@@ -867,7 +891,7 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
                                                         input={
                                                             "input": [
                                                                 {
-                                                                    "content": "Write a haiku about recursion in programming.",
+                                                                    "content": "What is the capital of France? Answer in one word.",
                                                                     "role": "user",
                                                                 }
                                                             ]
