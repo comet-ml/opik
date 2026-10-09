@@ -72,6 +72,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.MATRIX_PARAMETERS_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NOT_FOUND_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -182,19 +183,26 @@ class UsageResourceTest {
             }
         }
 
-        @ParameterizedTest
-        @MethodSource("normalizationVariants")
-        @DisplayName("when the path is not in canonical form, then it is rejected before routing")
-        void whenPathIsNotCanonical__thenRejected(String path, int expectedStatus) {
-            try (var actualResponse = client.target(baseURI + path).request().get()) {
-                assertThat(actualResponse.getStatus()).isEqualTo(expectedStatus);
+        @Test
+        @DisplayName("when the path carries an empty segment, then bad request")
+        void whenPathCarriesEmptySegment__thenBadRequest() {
+            try (var actualResponse = client.target(baseURI + "/v1//internal/usage/workspace-trace-counts")
+                    .request()
+                    .get()) {
+                assertThat(actualResponse.getStatus()).isEqualTo(400);
             }
         }
 
-        Stream<Arguments> normalizationVariants() {
-            return Stream.of(
-                    arguments("/v1//internal/usage/workspace-trace-counts", 400),
-                    arguments("/v1/./internal/usage/workspace-trace-counts", 404));
+        @Test
+        @DisplayName("when the path carries a dot segment, then not found")
+        void whenPathCarriesDotSegment__thenNotFound() {
+            try (var actualResponse = client.target(baseURI + "/v1/./internal/usage/workspace-trace-counts")
+                    .request()
+                    .get()) {
+                assertThat(actualResponse.getStatus()).isEqualTo(404);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(NOT_FOUND_RESPONSE);
+            }
         }
     }
 

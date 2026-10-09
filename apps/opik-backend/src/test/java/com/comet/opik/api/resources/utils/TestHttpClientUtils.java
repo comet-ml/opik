@@ -29,6 +29,8 @@ public class TestHttpClientUtils {
     public static final String PROJECT_NAME_NOT_FOUND_MESSAGE = "Project name: %s not found";
     public static final io.dropwizard.jersey.errors.ErrorMessage NO_API_KEY_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
             401, MISSING_API_KEY);
+    public static final io.dropwizard.jersey.errors.ErrorMessage NOT_FOUND_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
+            404, "HTTP 404 Not Found");
     public static final io.dropwizard.jersey.errors.ErrorMessage MATRIX_PARAMETERS_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
             404, MatrixParameterRequestFilter.MATRIX_PARAMETERS_NOT_SUPPORTED_MESSAGE);
 

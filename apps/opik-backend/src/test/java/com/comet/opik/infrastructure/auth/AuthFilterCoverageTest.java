@@ -6,7 +6,6 @@ import com.comet.opik.api.resources.oauth.OAuthRegisterResource;
 import com.comet.opik.api.resources.oauth.OAuthTokenResource;
 import com.comet.opik.api.resources.oauth.OAuthValidateTokenResource;
 import com.comet.opik.api.resources.v1.internal.AgentInsightsEnrollmentResource;
-import com.comet.opik.api.resources.v1.internal.AnalyticsQueriesResource;
 import com.comet.opik.api.resources.v1.internal.UsageResource;
 import com.comet.opik.api.resources.v1.session.RedirectResource;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
@@ -28,6 +27,7 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import org.glassfish.jersey.server.model.Resource;
 import org.glassfish.jersey.server.model.ResourceMethod;
 import org.junit.jupiter.api.DisplayName;
@@ -41,11 +41,13 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -61,10 +63,6 @@ class AuthFilterCoverageTest {
         SESSION,
         PUBLIC
     }
-
-    private static final String PRIVATE_PACKAGE = "com.comet.opik.api.resources.v1.priv";
-
-    private static final Set<Class<?>> AUTHENTICATED_RESOURCES = Set.of(AnalyticsQueriesResource.class);
 
     private static final Set<Class<?>> SESSION_RESOURCES = Set.of(RedirectResource.class);
 
@@ -101,7 +99,7 @@ class AuthFilterCoverageTest {
                 .addProvider(new AbortAfterMatching())
                 .addProvider(InstantParamConverter.class)
                 .addProvider(LocalDateParamConverter.class);
-        RESOURCE_CLASSES.forEach(resourceClass -> builder.addResource(mock(resourceClass)));
+        RESOURCE_CLASSES.forEach(resourceClass -> builder.addResource(mock(resourceClass, RETURNS_MOCKS)));
         EXT = builder.build();
     }
 
@@ -128,31 +126,97 @@ class AuthFilterCoverageTest {
     }
 
     @TestFactory
-    Stream<DynamicTest> everyResourceMethodTakesTheExpectedBranch() {
-        assertThat(RESOURCE_CLASSES).isNotEmpty();
-        return RESOURCE_CLASSES.stream()
+    Stream<DynamicTest> authenticatedEndpointsAuthenticate() {
+        return tests(Expectation.AUTHENTICATED, endpoint -> {
+            send(endpoint);
+
+            var expectedContextInfo = ContextInfoHolder.builder()
+                    .uriInfo(mock(UriInfo.class))
+                    .method(endpoint.httpMethod())
+                    .requiredPermissions(endpoint.requiredPermissions())
+                    .build();
+            var contextInfo = ArgumentCaptor.forClass(ContextInfoHolder.class);
+            verify(AUTH_SERVICE).authenticate(any(), any(), contextInfo.capture());
+            assertThat(contextInfo.getValue())
+                    .usingRecursiveComparison()
+                    .ignoringFields("uriInfo")
+                    .isEqualTo(expectedContextInfo);
+            verifyNoMoreInteractions(AUTH_SERVICE);
+        });
+    }
+
+    @TestFactory
+    Stream<DynamicTest> sessionEndpointsCheckTheSessionCookie() {
+        return tests(Expectation.SESSION, endpoint -> {
+            send(endpoint);
+
+            verify(AUTH_SERVICE).authenticateSession(any());
+            verifyNoMoreInteractions(AUTH_SERVICE);
+        });
+    }
+
+    @TestFactory
+    Stream<DynamicTest> publicEndpointsSkipAuthentication() {
+        return tests(Expectation.PUBLIC, endpoint -> {
+            send(endpoint);
+
+            verifyNoInteractions(AUTH_SERVICE);
+        });
+    }
+
+    private static Stream<DynamicTest> tests(Expectation expectation, Consumer<Endpoint> assertion) {
+        var endpoints = RESOURCE_CLASSES.stream()
                 .flatMap(AuthFilterCoverageTest::endpoints)
-                .map(endpoint -> DynamicTest.dynamicTest(endpoint + " -> " + expected(endpoint.resourceClass()),
-                        () -> assertBranch(endpoint)));
+                .filter(endpoint -> expected(endpoint.resourceClass()) == expectation)
+                .toList();
+        assertThat(endpoints).isNotEmpty();
+        return endpoints.stream()
+                .map(endpoint -> DynamicTest.dynamicTest(endpoint.toString(), () -> assertion.accept(endpoint)));
+    }
+
+    private static void send(Endpoint endpoint) {
+        clearInvocations(AUTH_SERVICE);
+        var request = EXT.target(endpoint.requestPath()).request();
+        try (var response = Set.of("PUT", "PATCH").contains(endpoint.httpMethod())
+                ? request.method(endpoint.httpMethod(), Entity.entity("{}", endpoint.consumes()))
+                : request.method(endpoint.httpMethod())) {
+            assertThat(response.getStatus())
+                    .as("%s must be routed to the resource before it is aborted", endpoint)
+                    .isEqualTo(204);
+        }
     }
 
     private static Stream<Endpoint> endpoints(Class<?> resourceClass) {
-        Resource resource = Resource.from(resourceClass);
+        return endpoints(resourceClass, resourceClass, Resource.from(resourceClass), "");
+    }
+
+    private static Stream<Endpoint> endpoints(Class<?> resourceClass, Class<?> handlerClass, Resource resource,
+            String parentPath) {
+        String path = join(parentPath, resource.getPath());
         Stream<Endpoint> own = resource.getResourceMethods().stream()
-                .map(method -> new Endpoint(resourceClass, method.getHttpMethod(), resource.getPath(),
-                        consumes(method), false, requiredPermissions(resourceClass, method)));
+                .map(method -> new Endpoint(resourceClass, method.getHttpMethod(), path, consumes(method), false,
+                        requiredPermissions(handlerClass, method)));
         Stream<Endpoint> children = resource.getChildResources().stream()
                 .flatMap(child -> child.getResourceMethods().stream()
                         .map(method -> new Endpoint(resourceClass, method.getHttpMethod(),
-                                join(resource.getPath(), child.getPath()), consumes(method), false,
-                                requiredPermissions(resourceClass, method))));
+                                join(path, child.getPath()), consumes(method), false,
+                                requiredPermissions(handlerClass, method))));
         Stream<Endpoint> generatedOptions = Stream.concat(
-                resource.getResourceMethods().isEmpty() ? Stream.empty() : Stream.of(resource.getPath()),
-                resource.getChildResources().stream().map(child -> join(resource.getPath(), child.getPath())))
+                resource.getResourceMethods().isEmpty() ? Stream.empty() : Stream.of(path),
+                resource.getChildResources().stream()
+                        .filter(child -> !child.getResourceMethods().isEmpty())
+                        .map(child -> join(path, child.getPath())))
                 .distinct()
-                .map(path -> new Endpoint(resourceClass, HttpMethod.OPTIONS, path, MediaType.APPLICATION_JSON_TYPE,
-                        true, List.of()));
-        return Stream.of(own, children, generatedOptions).flatMap(stream -> stream);
+                .map(optionsPath -> new Endpoint(resourceClass, HttpMethod.OPTIONS, optionsPath,
+                        MediaType.APPLICATION_JSON_TYPE, true, List.of()));
+        Stream<Endpoint> located = resource.getChildResources().stream()
+                .filter(child -> child.getResourceLocator() != null)
+                .flatMap(child -> {
+                    Class<?> locatedClass = child.getResourceLocator().getInvocable().getRawResponseType();
+                    return endpoints(resourceClass, locatedClass, Resource.from(locatedClass),
+                            join(path, child.getPath()));
+                });
+        return Stream.of(own, children, generatedOptions, located).flatMap(stream -> stream);
     }
 
     private static List<String> requiredPermissions(Class<?> resourceClass, ResourceMethod method) {
@@ -176,7 +240,7 @@ class AuthFilterCoverageTest {
     }
 
     private static String join(String parent, String child) {
-        return (parent + "/" + child).replaceAll("/{2,}", "/");
+        return (parent + "/" + (child == null ? "" : child)).replaceAll("/{2,}", "/");
     }
 
     private static Expectation expected(Class<?> resourceClass) {
@@ -186,44 +250,7 @@ class AuthFilterCoverageTest {
         if (SESSION_RESOURCES.contains(resourceClass)) {
             return Expectation.SESSION;
         }
-        if (AUTHENTICATED_RESOURCES.contains(resourceClass)
-                || resourceClass.getPackageName().startsWith(PRIVATE_PACKAGE)) {
-            return Expectation.AUTHENTICATED;
-        }
-        throw new AssertionError("Resource '%s' is not classified: add it to AUTHENTICATED_RESOURCES, or make the"
-                .formatted(resourceClass.getName())
-                + " deliberate decision to list it in SESSION_RESOURCES or PUBLIC_RESOURCES");
+        return Expectation.AUTHENTICATED;
     }
 
-    private static void assertBranch(Endpoint endpoint) {
-        clearInvocations(AUTH_SERVICE);
-
-        var request = EXT.target(endpoint.requestPath()).request();
-        try (var response = Set.of("PUT", "PATCH").contains(endpoint.httpMethod())
-                ? request.method(endpoint.httpMethod(), Entity.entity("{}", endpoint.consumes()))
-                : request.method(endpoint.httpMethod())) {
-            if (endpoint.generated() && response.getStatus() == 404) {
-                verifyNoInteractions(AUTH_SERVICE);
-                return;
-            }
-            assertThat(response.getStatus())
-                    .as("%s must be routed to the resource before it is aborted", endpoint)
-                    .isEqualTo(204);
-        }
-
-        switch (expected(endpoint.resourceClass())) {
-            case AUTHENTICATED -> {
-                var contextInfo = ArgumentCaptor.forClass(ContextInfoHolder.class);
-                verify(AUTH_SERVICE).authenticate(any(), any(), contextInfo.capture());
-                assertThat(contextInfo.getValue().method()).isEqualTo(endpoint.httpMethod());
-                assertThat(contextInfo.getValue().requiredPermissions())
-                        .as("%s must carry its declared permissions", endpoint)
-                        .isEqualTo(endpoint.requiredPermissions());
-            }
-            case SESSION -> verify(AUTH_SERVICE).authenticateSession(any());
-            case PUBLIC -> {
-            }
-        }
-        verifyNoMoreInteractions(AUTH_SERVICE);
-    }
 }
