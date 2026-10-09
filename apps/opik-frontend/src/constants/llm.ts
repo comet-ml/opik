@@ -362,6 +362,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.GPT_6_1_SOL]: {
     reasoning: true,
     reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
 };
 

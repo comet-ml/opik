@@ -386,6 +386,106 @@ describe("updateProviderConfig — OpenAI", () => {
     expect(result?.reasoningEffort).toBe("high");
   });
 
+  it.each<
+    [
+      string,
+      PROVIDER_MODEL_TYPE,
+      OpenAIReasoningEffort,
+      PROVIDER_MODEL_TYPE,
+      OpenAiPipelineMode,
+      OpenAIReasoningEffort,
+    ]
+  >([
+    [
+      "moves a picked minimal to low, not to none, on GPT 5.1",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "chat_completions_api",
+      "low",
+    ],
+    [
+      "moves a picked minimal to low on a model that starts at low",
+      PROVIDER_MODEL_TYPE.GPT_5_MINI,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
+      "chat_completions_api",
+      "low",
+    ],
+    [
+      "moves a picked none to low on o4-mini",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "none",
+      PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+      "chat_completions_api",
+      "low",
+    ],
+    [
+      "moves a picked none to minimal on GPT 5 Nano",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "none",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "chat_completions_api",
+      "minimal",
+    ],
+    [
+      "moves a picked xhigh to high on GPT 5 Nano",
+      PROVIDER_MODEL_TYPE.GPT_5_4_NANO,
+      "xhigh",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "chat_completions_api",
+      "high",
+    ],
+    [
+      "moves a picked max to xhigh on a Responses API model without max",
+      PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      "max",
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      "responses_api",
+      "xhigh",
+    ],
+    [
+      "keeps a picked low the next model offers",
+      PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+      "low",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "chat_completions_api",
+      "low",
+    ],
+    [
+      "keeps the default high",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "high",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "chat_completions_api",
+      "high",
+    ],
+    [
+      "uses high for a max a Chat Completions key showed as high",
+      PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      "max",
+      PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+      "chat_completions_api",
+      "high",
+    ],
+  ])(
+    "on a switch %s",
+    (
+      _,
+      previousModel,
+      reasoningEffort,
+      model,
+      openAiPipelineMode,
+      expected,
+    ) => {
+      const result = updateProviderConfig(
+        { maxCompletionTokens: 4000, reasoningEffort },
+        { model, provider: OPEN_AI, openAiPipelineMode, previousModel },
+      );
+      expect(result?.reasoningEffort).toBe(expected);
+    },
+  );
+
   it("keeps a valid reasoningEffort across reasoning-model switches", () => {
     const config: LLMOpenAIConfigsType = {
       temperature: 1,
@@ -864,13 +964,34 @@ describe("Gemini thinking level", () => {
     expect(getThinkingLevelOptions(PROVIDER_MODEL_TYPE.GPT_4O)).toEqual([]);
   });
 
-  it("offers an off option for the 2.5 family so thinking can be disabled again", () => {
-    const values = getThinkingLevelOptions(
-      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-    ).map((o) => o.value);
-
-    expect(values).toContain("off");
+  // Both providers answer 2.5 Flash and Flash Lite at a zero budget with thinking off.
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])("offers an off option for %s so thinking can be disabled", (model) => {
+    expect(getThinkingLevelOptions(model).map((o) => o.value)).toEqual([
+      "auto",
+      "off",
+      "low",
+      "medium",
+      "high",
+    ]);
   });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])(
+    "sends off on %s as a thinking block the backend turns into a zero budget",
+    (model) => {
+      expect(
+        sanitizeConfigForRequest(model, { thinkingLevel: "off" })
+          .custom_parameters,
+      ).toEqual({ thinking: { level: "off" } });
+    },
+  );
 
   it("does not offer off for Gemini 3, which cannot disable thinking", () => {
     const values = getThinkingLevelOptions(
@@ -1251,6 +1372,114 @@ describe("updateProviderConfig — Gemini thinking level", () => {
     });
 
     expect(next).toBe(config);
+  });
+
+  it.each<
+    [
+      string,
+      PROVIDER_MODEL_TYPE,
+      GeminiThinkingLevel,
+      PROVIDER_MODEL_TYPE,
+      GeminiThinkingLevel,
+    ]
+  >([
+    [
+      "replaces the previous model's default with the next one's",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
+      "medium",
+    ],
+    [
+      "does not carry Flash Lite's default off onto 2.5 Flash",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      "off",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "auto",
+    ],
+    [
+      "keeps a level the user picked when the next model offers it",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "high",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      "high",
+    ],
+    [
+      "keeps a picked low across a family change",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "low",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+      "low",
+    ],
+    [
+      "moves a picked level the next model does not offer to the nearest one",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "low",
+    ],
+    [
+      "moves a picked medium to low, the lower of two equally near levels",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "medium",
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      "low",
+    ],
+    [
+      "moves a picked off to the least thinking a model that cannot turn it off offers",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "off",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "minimal",
+    ],
+    [
+      "moves a picked off to low on 2.5 Pro, which has no off",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "off",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      "low",
+    ],
+    [
+      "uses the next model's default for a picked auto it does not offer",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      "auto",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+    ],
+    [
+      "uses the next model's default for a level the previous one did not show",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      "high",
+    ],
+    [
+      "applies the same rule on Vertex AI",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
+      "high",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
+      "medium",
+    ],
+    [
+      "moves to the nearest level on Vertex AI too",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
+      "minimal",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      "low",
+    ],
+  ])("on a switch %s", (_, previousModel, thinkingLevel, model, expected) => {
+    const next = updateProviderConfig(
+      { thinkingLevel },
+      {
+        model,
+        provider: (model.startsWith("vertex_ai/")
+          ? PROVIDER_TYPE.VERTEX_AI
+          : PROVIDER_TYPE.GEMINI) as COMPOSED_PROVIDER_TYPE,
+        previousModel,
+      },
+    );
+
+    expect(next?.thinkingLevel).toBe(expected);
   });
 });
 
@@ -1960,7 +2189,7 @@ describe("max on the OpenAI Responses API only", () => {
     {
       model: PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
       chatCompletions: LOW_TO_XHIGH,
-      responsesApi: LOW_TO_XHIGH,
+      responsesApi: [...LOW_TO_XHIGH, "max"],
     },
     {
       model: PROVIDER_MODEL_TYPE.GPT_5_5,
@@ -2241,6 +2470,78 @@ describe("Anthropic request contract", () => {
       { model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, provider: ANTHROPIC },
     );
     expect(result?.thinkingEffort).toBe("medium");
+  });
+
+  it.each<
+    [
+      string,
+      PROVIDER_MODEL_TYPE,
+      AnthropicThinkingEffort,
+      PROVIDER_MODEL_TYPE,
+      AnthropicThinkingEffort,
+    ]
+  >([
+    [
+      "replaces Sonnet 4.6's default high with Opus 5.5's own medium",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "high",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "medium",
+    ],
+    [
+      "replaces Opus 5.5's default medium with Opus 5's own high",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "medium",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
+      "high",
+    ],
+    [
+      "keeps a level the user picked when the next model offers it",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "low",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "low",
+    ],
+    [
+      "keeps a picked high that is not the previous model's default",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "high",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "high",
+    ],
+    [
+      "moves a picked xhigh to high, the lower of two equally near levels",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      "xhigh",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "high",
+    ],
+    [
+      "moves a picked max to high on Opus 4.5",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "max",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
+      "high",
+    ],
+  ])("on a switch %s", (_, previousModel, thinkingEffort, model, expected) => {
+    const result = updateProviderConfig(
+      { maxCompletionTokens: 4000, thinkingEffort },
+      { model, provider: ANTHROPIC, previousModel },
+    );
+    expect(result?.thinkingEffort).toBe(expected);
+  });
+
+  it("returns the same config when the previous default is also the next one", () => {
+    const config: LLMAnthropicConfigsType = {
+      maxCompletionTokens: 4000,
+      thinkingEffort: "high",
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      provider: ANTHROPIC,
+      previousModel: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    });
+    expect(result).toBe(config);
   });
 
   it("coerces xhigh when switching to Sonnet 4.6, which tops out at max", () => {
