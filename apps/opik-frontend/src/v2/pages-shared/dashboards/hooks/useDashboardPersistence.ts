@@ -11,7 +11,10 @@ import {
 import useInsightsViewById from "@/api/insights-views/useInsightsViewById";
 import useInsightsViewUpdateMutation from "@/api/insights-views/useInsightsViewUpdateMutation";
 import { Dashboard, DASHBOARD_SCOPE, DashboardState } from "@/types/dashboard";
-import { isDashboardChanged } from "@/lib/dashboard/utils";
+import {
+  DASHBOARD_EXTERNAL_UPDATE_EVENT,
+  isDashboardChanged,
+} from "@/lib/dashboard/utils";
 import {
   loadLocal,
   saveLocal,
@@ -68,10 +71,11 @@ export const useDashboardPersistence = ({
 }: UseDashboardPersistenceParams): UseDashboardPersistenceReturn => {
   const apiConfig = getApiConfig(scope);
 
-  const { data: dashboard, isPending } = apiConfig.useByIdHook(
-    { dashboardId },
-    { enabled },
-  );
+  const {
+    data: dashboard,
+    isPending,
+    refetch,
+  } = apiConfig.useByIdHook({ dashboardId }, { enabled });
 
   const { mutate: syncToServer } = apiConfig.useUpdateMutationHook({
     skipDefaultError: true,
@@ -123,7 +127,31 @@ export const useDashboardPersistence = ({
     };
   }, [dashboard?.id, syncToServer]);
 
+  // Another writer (Ollie's "Add to dashboard" / "Save changes") updated this dashboard on the server. The page only
+  // loads the server config when the id changes, so reload it explicitly; otherwise the next autosave of the stale
+  // local state would overwrite the change.
+  useEffect(() => {
+    const onExternalUpdate = (event: Event) => {
+      const { id } = (event as CustomEvent<{ id: string }>).detail ?? {};
+      if (!id || id !== dashboardRef.current?.id) return;
+      refetch().then(({ data }) => {
+        if (!data?.config) return;
+        lastSavedConfigRef.current = data.config;
+        // The store still holds the pre-update state; don't let the autosave cleanup flush it over the server copy.
+        externalReloadRef.current = true;
+        setResolvedConfig(data.config);
+      });
+    };
+    window.addEventListener(DASHBOARD_EXTERNAL_UPDATE_EVENT, onExternalUpdate);
+    return () =>
+      window.removeEventListener(
+        DASHBOARD_EXTERNAL_UPDATE_EVENT,
+        onExternalUpdate,
+      );
+  }, [refetch]);
+
   const lastSavedConfigRef = useRef<DashboardState | null>(null);
+  const externalReloadRef = useRef(false);
   const [saveStatus, setSaveStatus] = useState<DashboardSaveStatus>("idle");
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -213,7 +241,9 @@ export const useDashboardPersistence = ({
       unsubscribe();
       debouncedSave.cancel();
       const state = useDashboardStore.getState();
-      if (state.lastModified !== 0) {
+      const externalReload = externalReloadRef.current;
+      externalReloadRef.current = false;
+      if (!externalReload && state.lastModified !== 0) {
         const config = state.getDashboard();
         if (isDashboardChanged(config, lastSavedConfigRef.current)) {
           performSave(dashboardId, config);

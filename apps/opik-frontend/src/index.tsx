@@ -10,6 +10,8 @@ import { APP_VERSION } from "@/constants/app";
 import { runLocalStorageMigrations } from "@/lib/ls-migrations";
 
 import "./main.scss";
+import "./styles/widget-tokens/widget-tokens.css";
+import "./styles/widget-tokens/chart-skeleton.css";
 import { IS_SENTRY_ENABLED, SENTRY_DSN, SENTRY_MODE } from "@/config";
 
 // other styles

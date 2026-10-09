@@ -36,6 +36,9 @@ export const isTemplateId = (id: string | null): boolean => {
 
 export const WIDGET_TYPES = WIDGET_TYPE;
 
+// Window event (detail: { id }) for a dashboard changed outside the page, e.g. by Ollie; the open page reloads it.
+export const DASHBOARD_EXTERNAL_UPDATE_EVENT = "opik:dashboard-external-update";
+
 export const generateEmptySection = (
   title = DEFAULT_SECTION_NAME,
 ): DashboardSection => {

@@ -1,0 +1,94 @@
+/* Loading-state animation for the chart placeholders (from src/index.css). Uses --chart-skeleton-* tokens. */
+/*
+ * Chart loading placeholders (charts/Skeletons.tsx). One sheen sweeps across every placeholder;
+ * bars breathe (a slow ~8% stretch), points, cells and pins pulse, pies turn slowly. All timed
+ * from --chart-skeleton-duration (one sweep) and switched off for reduced motion.
+ */
+.chart-skeleton-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    var(--chart-skeleton-sheen) 50%,
+    transparent 75%
+  );
+  background-size: 300% 100%;
+  animation: chart-skeleton-sweep calc(var(--chart-skeleton-duration) * 2)
+    ease-in-out infinite;
+}
+.chart-skeleton-breathe-y,
+.chart-skeleton-breathe-x {
+  transform-box: fill-box;
+  animation: chart-skeleton-breathe-y calc(var(--chart-skeleton-duration) * 2)
+    ease-in-out infinite;
+}
+.chart-skeleton-breathe-y {
+  transform-origin: 50% 100%;
+}
+.chart-skeleton-breathe-x {
+  transform-origin: 0 50%;
+  animation-name: chart-skeleton-breathe-x;
+}
+.chart-skeleton-pulse {
+  animation: chart-skeleton-pulse calc(var(--chart-skeleton-duration) * 1.5)
+    ease-in-out infinite;
+}
+.chart-skeleton-spin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: chart-skeleton-spin calc(var(--chart-skeleton-duration) * 10)
+    linear infinite;
+}
+/* The sheen crosses in the first 80% of the cycle, then rests off-frame before the next pass. */
+@keyframes chart-skeleton-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+  80%,
+  100% {
+    background-position: 0% 0;
+  }
+}
+@keyframes chart-skeleton-breathe-y {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.92);
+  }
+}
+@keyframes chart-skeleton-breathe-x {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(0.92);
+  }
+}
+@keyframes chart-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@keyframes chart-skeleton-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-skeleton-sheen,
+  .chart-skeleton-breathe-y,
+  .chart-skeleton-breathe-x,
+  .chart-skeleton-pulse,
+  .chart-skeleton-spin {
+    animation: none;
+  }
+}

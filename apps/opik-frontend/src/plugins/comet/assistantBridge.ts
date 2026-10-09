@@ -3,6 +3,7 @@ import {
   AssistantSidebarBridge,
   BRIDGE_PROTOCOL_VERSION,
   BridgeContext,
+  ChartEditRequest,
   HostEventMap,
   RunnerBridgeState,
   SidebarEventMap,
@@ -43,6 +44,7 @@ export function createHostListeners(): HostListeners {
     "explain:run": new Set(),
     "explain:cancel": new Set(),
     "chat:continue": new Set(),
+    "chart:edit": new Set(),
   };
 }
 
@@ -61,7 +63,11 @@ export interface BridgeRefs {
   >;
   context: MutableRefObject<BridgeContext>;
   listeners: MutableRefObject<HostListeners>;
+  onDashboardUpdated?: MutableRefObject<
+    (data: SidebarEventMap["dashboard:updated"]) => void
+  >;
   lastRunnerState: MutableRefObject<RunnerBridgeState | null>;
+  pendingChartEdit?: MutableRefObject<ChartEditRequest | null>;
 }
 
 /**
@@ -79,6 +85,7 @@ const SINGLE_SUBSCRIBER_EVENTS: ReadonlySet<keyof HostEventMap> = new Set([
   "explain:cancel",
   "chat:continue",
   "conversation:start",
+  "chart:edit",
 ]);
 
 export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
@@ -118,6 +125,13 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       );
     }
 
+    // An edit requested before the console subscribed (sidebar was closed or still loading) is delivered now.
+    if (event === "chart:edit" && refs.pendingChartEdit?.current) {
+      const pending = refs.pendingChartEdit.current;
+      refs.pendingChartEdit.current = null;
+      (callback as (data: ChartEditRequest) => void)(pending);
+    }
+
     return () => {
       set.delete(callback);
     };
@@ -143,6 +157,11 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       case "sidebar:request-close":
         refs.onRequestVisibility.current(false);
         break;
+      case "dashboard:updated":
+        refs.onDashboardUpdated?.current(
+          data as SidebarEventMap["dashboard:updated"],
+        );
+        break;
       case "runner:request-pair":
         refs.onRequestPair.current(
           data as SidebarEventMap["runner:request-pair"],
@@ -161,6 +180,14 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   },
   startConversation: (message: string) => {
     emitHostEvent(refs.listeners, "conversation:start", { message });
+  },
+  editChart: (request: ChartEditRequest) => {
+    refs.onRequestVisibility.current(true);
+    if (refs.listeners.current["chart:edit"].size > 0) {
+      emitHostEvent(refs.listeners, "chart:edit", request);
+    } else if (refs.pendingChartEdit) {
+      refs.pendingChartEdit.current = request;
+    }
   },
 });
 

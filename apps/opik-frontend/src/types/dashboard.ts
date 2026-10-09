@@ -23,6 +23,9 @@ export interface DashboardRuntimeConfig {
   projectIds?: string[];
   experimentIds?: string[];
   dashboardType?: DASHBOARD_TYPE;
+  // The saved dashboard on screen; Ollie chart widgets run their saved query through it.
+  dashboardId?: string;
+  dashboardScope?: DASHBOARD_SCOPE;
 }
 
 export enum DASHBOARD_TYPE {
@@ -46,6 +49,7 @@ export enum WIDGET_TYPE {
   TEXT_MARKDOWN = "text_markdown",
   EXPERIMENTS_FEEDBACK_SCORES = "experiments_feedback_scores",
   EXPERIMENT_LEADERBOARD = "experiment_leaderboard",
+  OLLIE_CHART = "ollie_chart",
 }
 
 export enum WIDGET_CATEGORY {
@@ -147,8 +151,30 @@ export interface ExperimentsLeaderboardWidgetType {
   } & Record<string, unknown>;
 }
 
+export interface OllieChartWidgetType {
+  type: WIDGET_TYPE.OLLIE_CHART;
+  config: {
+    // Vega-Lite spec with no config or size; references its data as {"name": "rows"}.
+    spec?: Record<string, unknown>;
+    // Pinned query; {{window_start}} / {{window_end}} follow the dashboard date range.
+    query?: {
+      sql: string;
+      projectId?: string | null;
+    };
+    // What the query reads: "workspace" (experiments, datasets) sits on experiments dashboards, "project" (traces,
+    // spans, scores, threads) on multi-project ones. Ollie keeps to that; the backend does not check it yet.
+    scope?: "workspace" | "project";
+    // Rows captured in chat, used when there is no query to re-run.
+    rows?: Record<string, unknown>[];
+    description?: string;
+    // Bumped by Ollie on every "Save changes".
+    version?: number;
+  } & Record<string, unknown>;
+}
+
 type WidgetConfigUnion =
   | ProjectMetricsWidget
+  | OllieChartWidgetType
   | TextMarkdownWidget
   | ProjectStatsCardWidget
   | ExperimentsFeedbackScoresWidgetType
