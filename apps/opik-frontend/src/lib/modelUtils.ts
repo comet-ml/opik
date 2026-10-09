@@ -811,6 +811,67 @@ const getNativeModelBehindOpenRouter = (
   return listed ? (id as PROVIDER_MODEL_TYPE) : undefined;
 };
 
+const OPEN_ROUTER_PARAM_NAMES = {
+  temperature: ["temperature"],
+  topP: ["top_p"],
+  maxTokens: ["max_tokens", "max_completion_tokens"],
+  topK: ["top_k"],
+  frequencyPenalty: ["frequency_penalty"],
+  presencePenalty: ["presence_penalty"],
+  repetitionPenalty: ["repetition_penalty"],
+  minP: ["min_p"],
+  topA: ["top_a"],
+} as const;
+
+export type OpenRouterParam = keyof typeof OPEN_ROUTER_PARAM_NAMES;
+
+// OpenRouter answers 200 and drops a parameter the model does not list. No list (a registry copy
+// synced before it was carried, an id OpenRouter no longer serves) keeps every control, as before.
+export const supportsOpenRouterParam = (
+  model: PROVIDER_MODEL_TYPE | "" | undefined,
+  param: OpenRouterParam,
+): boolean => {
+  const supported = getLatestModelFlags(model)?.supportedParameters;
+  return (
+    !supported ||
+    OPEN_ROUTER_PARAM_NAMES[param].some((name) => supported.includes(name))
+  );
+};
+
+const OPEN_ROUTER_EFFORT_ORDER: readonly OpenAIReasoningEffort[] = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+// OpenRouter publishes each model's levels. It publishes none for OpenAI's o-series, which still
+// take OpenAI's own levels through it.
+export const getOpenRouterReasoningEffortOptions = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): Array<{ label: string; value: OpenAIReasoningEffort }> => {
+  const flags = getLatestModelFlags(model);
+  const takesReasoning = flags?.supportedParameters?.some(
+    (name) => name === "reasoning" || name === "reasoning_effort",
+  );
+  if (!model || !takesReasoning) {
+    return [];
+  }
+
+  const listed = flags?.reasoningEfforts ?? [];
+  if (listed.length === 0) {
+    const native = getNativeModelBehindOpenRouter(model);
+    return native ? getOpenAIReasoningEffortOptions(native) : [];
+  }
+
+  return OPEN_ROUTER_EFFORT_ORDER.filter((value) => listed.includes(value)).map(
+    (value) => ({ label: OPENAI_EFFORT_LABELS[value], value }),
+  );
+};
+
 /**
  * The single interpreter of temperature/topP for a model: capability gating plus Anthropic's
  * temperature-XOR-topP rule.
@@ -829,8 +890,8 @@ export const resolveSamplingParams = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: { temperature?: number | null; topP?: number | null },
 ): SamplingParams => {
-  const temperature = configs.temperature ?? undefined;
-  const topP = configs.topP ?? undefined;
+  let temperature = configs.temperature ?? undefined;
+  let topP = configs.topP ?? undefined;
 
   if (!model) {
     return { temperature, topP };
@@ -845,9 +906,15 @@ export const resolveSamplingParams = (
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
   if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    if (!supportsOpenRouterParam(model, "temperature")) {
+      temperature = undefined;
+    }
+    if (!supportsOpenRouterParam(model, "topP")) {
+      topP = undefined;
+    }
     const native = getNativeModelBehindOpenRouter(model);
     if (native) {
-      return resolveSamplingParams(native, configs);
+      return resolveSamplingParams(native, { temperature, topP });
     }
   }
 
@@ -975,6 +1042,15 @@ export const resolveEffort = (
     return { thinkingEffort: stored ?? getDefaultThinkingEffort(model) };
   }
 
+  // No default substituted: the OpenRouter dropdown has a Default entry that sends no effort, so the
+  // model keeps the level OpenRouter picks for it.
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    const options = getOpenRouterReasoningEffortOptions(model);
+    return options.some((o) => o.value === configs.reasoningEffort)
+      ? { reasoningEffort: configs.reasoningEffort }
+      : {};
+  }
+
   return { ...configs };
 };
 
@@ -1049,6 +1125,16 @@ export const sanitizeConfigForRequest = (
     delete sanitized.presencePenalty;
   }
 
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    for (const param of Object.keys(
+      OPEN_ROUTER_PARAM_NAMES,
+    ) as OpenRouterParam[]) {
+      if (!supportsOpenRouterParam(model, param)) {
+        delete sanitized[param];
+      }
+    }
+  }
+
   if (provider === PROVIDER_TYPE.OPEN_ROUTER && sanitized.maxTokens === 0) {
     delete sanitized.maxTokens;
   }
@@ -1063,8 +1149,11 @@ export const sanitizeConfigForRequest = (
 
   // Same trap as thinking_level below: ChatCompletionRequest has no field for these, so sent flat
   // they are dropped, while custom_parameters entries reach OpenRouter as top-level keys.
+  // The effort travels the same way, as OpenRouter's reasoning object: a flat reasoning_effort would
+  // reach OpenRouter from the playground, but test-suite runs forward it for OpenAI models only.
   if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
     const nested: Record<string, unknown> = {};
+    const dropped: string[] = [];
     for (const [key, wireKey] of Object.entries({
       topK: "top_k",
       minP: "min_p",
@@ -1073,17 +1162,39 @@ export const sanitizeConfigForRequest = (
     })) {
       if (sanitized[key] != null) {
         nested[wireKey] = sanitized[key];
+      } else if (!supportsOpenRouterParam(model, key as OpenRouterParam)) {
+        dropped.push(wireKey);
       }
       delete sanitized[key];
     }
 
-    if (Object.keys(nested).length > 0) {
-      sanitized.custom_parameters = {
-        ...(isPlainObject(sanitized.custom_parameters)
-          ? (sanitized.custom_parameters as Record<string, unknown>)
-          : {}),
-        ...nested,
-      };
+    const stored: Record<string, unknown> | undefined = isPlainObject(
+      sanitized.custom_parameters,
+    )
+      ? omit(sanitized.custom_parameters as Record<string, unknown>, dropped)
+      : undefined;
+
+    const { reasoningEffort } = resolveEffort(model, configs as EffortParams);
+    delete sanitized.reasoningEffort;
+    if (getOpenRouterReasoningEffortOptions(model).length > 0) {
+      const reasoning = omit(asRecord(stored?.reasoning), "effort");
+      if (reasoningEffort) {
+        reasoning.effort = reasoningEffort;
+      }
+      if (Object.keys(reasoning).length > 0) {
+        nested.reasoning = reasoning;
+      } else {
+        delete stored?.reasoning;
+      }
+    }
+
+    if (stored || Object.keys(nested).length > 0) {
+      const customParameters = { ...stored, ...nested };
+      if (Object.keys(customParameters).length > 0) {
+        sanitized.custom_parameters = customParameters;
+      } else {
+        delete sanitized.custom_parameters;
+      }
     }
   }
 
