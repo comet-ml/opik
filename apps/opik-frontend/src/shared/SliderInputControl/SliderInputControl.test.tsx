@@ -3,7 +3,15 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import SliderInputControl from "./SliderInputControl";
 
-const renderControl = (onChange = vi.fn()) => {
+const renderControl = ({
+  onChange = vi.fn(),
+  defaultValue = 0,
+  value = 0,
+}: {
+  onChange?: (v: number) => void;
+  defaultValue?: number;
+  value?: number;
+} = {}) => {
   render(
     <SliderInputControl
       id="temperature"
@@ -11,8 +19,8 @@ const renderControl = (onChange = vi.fn()) => {
       min={0}
       max={1}
       step={0.01}
-      defaultValue={0}
-      value={0}
+      defaultValue={defaultValue}
+      value={value}
       onChange={onChange}
     />,
   );
@@ -45,6 +53,23 @@ describe("SliderInputControl typed value", () => {
     fireEvent.keyDown(input, { key: "5" });
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it.each(
+    ["Enter", "Tab", "Escape"].flatMap((key) =>
+      ["", "abc"].map((draft) => [key, draft]),
+    ),
+  )("goes back to the default on %s when the box holds %j", (key, draft) => {
+    const { onChange, input } = renderControl({
+      defaultValue: 0.5,
+      value: 0.2,
+    });
+
+    fireEvent.change(input, { target: { value: draft } });
+    fireEvent.keyDown(input, { key });
+
+    expect(onChange).toHaveBeenCalledWith(0.5);
+    expect(input).toHaveValue("0.5");
   });
 
   it("clamps a value above the max when Enter saves it", () => {
