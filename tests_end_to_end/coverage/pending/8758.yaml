@@ -1,0 +1,14 @@
+# pending capabilities from opik#8758 — applied by the release job
+#
+# `playground` has keys for composing/running a prompt, for the error info a
+# failed run shows, and for the model settings — but none for whether a
+# DISPLAYED output still matches the prompt that produced it. The two specs
+# below assert exactly that, on both surfaces, and the nearest existing keys
+# would have to be stretched to hold it: `compose-run-prompt` already carries a
+# "read this as compose, run and reset" caveat, and `run-error-info` is about
+# what a failure says, not about whether it is still current. A capability
+# counted as covered is never re-derived, so filing these there would read as
+# coverage for the wrong thing permanently.
+- area: playground
+  capability: output-staleness
+  note: "An output already on screen is marked stale when the run inputs change and left live when they do not, instead of being cleared to 'No runs yet'. Free mode (playground-stale-output.spec.ts): editing the message dims the failure tag and renders the full 'Prompt changed since the last run. Re-run to update results.' sentence, and a plain reload, a save-to-library, a reload with the library link set, a detach and an explicit library load all leave the output undimmed with no note — including where the library load regenerates every message id, which is the payload that used to grey a finished run for no user edit. Dataset grid (playground-stale-output-dataset-grid.spec.ts): every cell keeps its dimmed failure tag under a COMPACT note whose tooltip carries the same sentence, and no cell reverts to 'No runs yet'. Not covered: what a stale SUCCESSFUL answer looks like (needs a provider that answers), and the test-suite grid, which is gated differently on purpose and does revert to 'No runs yet'."

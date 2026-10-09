@@ -641,6 +641,155 @@ export class PlaygroundPage {
     });
   }
 
+  // ── output freshness (opik#8758) ────────────────────────────────────────
+  //
+  // An output whose run inputs have changed is marked `stale`: it stays on
+  // screen, dimmed, under a note naming what changed, rather than being cleared
+  // back to "No runs yet". Two surfaces again, and for the same reason the
+  // failure tags have two — the single-prompt panel and the grid cell gate on
+  // separate `hasOutput` expressions and pass `PlaygroundStaleOutputNote`
+  // different `compact` settings, so they regress apart and each needs its own
+  // locator. A page-wide lookup would let a grid assertion pass on a panel note.
+  //
+  // One trap for any spec that runs TWICE, measured on 2.2.91 and caused by this
+  // very change: `runFreeMode` and `runSimplePromptAndAwaitResponse` both treat
+  // the "No runs yet" placeholder disappearing as "the run finished", and a
+  // stale output keeps it gone — so they return the instant Run is pressed.
+  // `waitForRunReady` has the mirror problem on the grid: it requires every cell
+  // to be the idle placeholder, and a stale cell is not idle, so it times out
+  // instead. Wait on the output itself (`waitForPromptOutputErrors`) or on the
+  // run going idle (`waitForFreeRunIdle`).
+
+  /**
+   * The stale-output notes of the single-prompt panels.
+   *
+   * Page-scoped, which is safe only in free mode where no results table is
+   * mounted — the same constraint `promptOutputErrorTags` carries.
+   */
+  promptStaleOutputNotes(): Locator {
+    return this.page.getByTestId('playground-stale-output-note');
+  }
+
+  /** The stale-output notes inside the dataset-grid output cells. */
+  outputCellStaleNotes(): Locator {
+    return this.outputCells().getByTestId('playground-stale-output-note');
+  }
+
+  /**
+   * The rendered opacity of each single-prompt failure tag.
+   *
+   * The computed style and not the `opacity-50` class: the claim is that the
+   * user sees the tag dimmed, and reading what the browser resolved fails both
+   * when the class stops being applied and when it is renamed. The exact level
+   * is a design token, so callers compare against 1 rather than pinning 0.5 —
+   * "dimmed or not" is the whole of what this spec asserts, and pinning the
+   * token would turn a restyle into a test failure.
+   */
+  async promptOutputErrorOpacities(): Promise<number[]> {
+    return this.promptOutputErrorTags().evaluateAll((els) =>
+      els.map((e) => Number(window.getComputedStyle(e).opacity)),
+    );
+  }
+
+  /** The same reading for the dataset-grid failure tags. */
+  async outputErrorOpacities(): Promise<number[]> {
+    return this.outputErrorTags().evaluateAll((els) =>
+      els.map((e) => Number(window.getComputedStyle(e).opacity)),
+    );
+  }
+
+  /**
+   * Hover a grid cell's stale note and read the tooltip it raises.
+   *
+   * The grid renders the note `compact`, which trades the full sentence for a
+   * two-word summary and moves the sentence into the tooltip — so the tooltip
+   * is the only place the grid says WHY the cell is dimmed, and asserting the
+   * visible text alone would not cover it. Radix portals the content out of the
+   * cell, so it is read at page scope, exactly as `outputErrorTooltipText` does.
+   */
+  async staleNoteTooltipText(index = 0): Promise<string> {
+    return test.step(`hover grid stale note ${index} and read its tooltip`, async () => {
+      await this.outputCellStaleNotes().nth(index).hover();
+      const tooltip = this.page.getByRole('tooltip');
+      await expect(tooltip.first()).toBeVisible({ timeout: 10_000 });
+      return (await tooltip.first().innerText()).trim();
+    });
+  }
+
+  /**
+   * Detach the prompt loaded into variant 0, through `LoadedPromptDisplay`'s
+   * own control.
+   *
+   * By its icon, because the trigger is an icon-only `Button` whose only label
+   * is a `TooltipWrapper` — no testid, no accessible name — and these specs run
+   * against a deployed Opik, where an attribute added alongside them would not
+   * exist in the version under test. `lucide-circle-x` and NOT
+   * `lucide-x-circle`: `XCircle` is an alias re-exporting `CircleX` in
+   * lucide-react, and the class is built from the canonical name. Asserted
+   * unique before the click, so another CircleX arriving in the card fails here
+   * rather than silently detaching through some other button.
+   */
+  async detachLoadedPrompt(): Promise<void> {
+    return test.step('detach the loaded prompt from variant 0', async () => {
+      const card = this.variantCard(0);
+      // The chip sits in a strip that only expands on group-hover.
+      await card.hover();
+      const detach = card.locator('button:has(svg.lucide-circle-x)');
+      await expect(detach, 'the Detach loaded prompt control').toHaveCount(1);
+      await detach.click();
+      // Resolving only once the chip has gone is what makes this method a
+      // gesture rather than a click: the chip and the library menu share one
+      // slot in the card, so a caller asserting on state "after the detach"
+      // would otherwise be free to read it before the detach landed.
+      await expect(
+        detach,
+        'the loaded-prompt chip left the card, so the prompt really is detached',
+      ).toHaveCount(0);
+    });
+  }
+
+  /**
+   * The message ids variant 0's prompt currently holds, read from the persisted
+   * `PLAYGROUND_STATE`.
+   *
+   * Not an implementation detail a spec could do without — it is the
+   * discriminator for the false-stale case. Re-applying a prompt from the
+   * library rebuilds its messages with FRESH ids, and it is that payload (same
+   * roles, same content, different ids) which used to grey a finished output
+   * for no user edit. A spec asserting only "no note after a library load"
+   * would go green on a build where the load silently did nothing, so the id
+   * change is what makes the absence of a note mean something.
+   *
+   * Variant 0 is addressed through `promptIds[0]`, the store's own ordering,
+   * which is the order the cards render in; the card carries no prompt id.
+   * Reading localStorage follows `LogsPage.readStoredFilters` and
+   * `PromptDetailPage.readPinnedExperimentIds`.
+   */
+  async storedMessageIds(): Promise<string[]> {
+    return test.step('read variant 0\'s message ids from PLAYGROUND_STATE', async () => {
+      const ids = await this.page.evaluate(() => {
+        const raw = window.localStorage.getItem('PLAYGROUND_STATE');
+        if (!raw) return null;
+        const state = (JSON.parse(raw) as { state?: unknown }).state as
+          | {
+              promptIds?: string[];
+              promptMap?: Record<string, { messages?: Array<{ id?: string }> }>;
+            }
+          | undefined;
+        const first = state?.promptIds?.[0];
+        if (!first) return null;
+        const messages = state?.promptMap?.[first]?.messages;
+        if (!messages) return null;
+        return messages.map((m) => m.id ?? '');
+      });
+      // Asserted rather than defaulted to []: an absent store is a different
+      // failure from a prompt with no messages, and returning [] for both would
+      // let a comparison of "the ids changed" pass on two empty lists.
+      expect(ids, 'PLAYGROUND_STATE holds variant 0 and its messages').not.toBeNull();
+      return ids as string[];
+    });
+  }
+
   /**
    * Read the "<N>% pass rate" badge from the Prompt A column header.
    * Returns null if no run has completed yet.
