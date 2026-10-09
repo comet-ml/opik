@@ -20,6 +20,15 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Info } from "lucide-react";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
+// The backend sends an extra body key in place of the slider field of the same name.
+const SLIDER_REQUEST_KEYS = [
+  "temperature",
+  "top_p",
+  "max_completion_tokens",
+  "frequency_penalty",
+  "presence_penalty",
+];
+
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
   onChange: (configs: Partial<LLMCustomConfigsType>) => void;
@@ -50,6 +59,9 @@ const CustomModelConfig = ({
       value: configs.custom_parameters,
       onChange: handleExtraBodyParametersChange,
     });
+  const sliderKeysInExtraBody = SLIDER_REQUEST_KEYS.filter(
+    (key) => configs.custom_parameters?.[key] !== undefined,
+  );
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -213,7 +225,19 @@ const CustomModelConfig = ({
             }}
           />
         </div>
-        {showInvalidJSON && <FormErrorSkeleton>Invalid JSON</FormErrorSkeleton>}
+        {showInvalidJSON ? (
+          <FormErrorSkeleton>
+            {configs.custom_parameters
+              ? "Invalid JSON, not saved. Runs keep the last valid JSON."
+              : "Invalid JSON, not saved."}
+          </FormErrorSkeleton>
+        ) : (
+          sliderKeysInExtraBody.length > 0 && (
+            <p className="comet-body-xs text-light-slate">
+              Sent instead of the slider: {sliderKeysInExtraBody.join(", ")}
+            </p>
+          )
+        )}
       </div>
     </div>
   );

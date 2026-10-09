@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -9,6 +10,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
@@ -152,6 +155,52 @@ class CustomLlmProviderTest {
         assertPenalties(name, sentBody(), expectedPenalty);
     }
 
+    @ParameterizedTest
+    @EnumSource(value = LlmProvider.class, names = {"CUSTOM_LLM", "OLLAMA", "BEDROCK"})
+    void generateSendsAnExtraBodyKeyOnceWithTheExtraBodyValue(LlmProvider provider) {
+        var request = ChatCompletionRequest.builder()
+                .from(request(66, null))
+                .temperature(0.25)
+                .customParameters(Map.of("temperature", 0.95, "max_completion_tokens", 12, "top_k", 7))
+                .build();
+
+        newProvider(provider).generate(request, "workspace-id");
+
+        var rawBody = sentRawBody();
+        var body = JsonUtils.getJsonNodeFromString(rawBody);
+        assertThat(StringUtils.countMatches(rawBody, "\"temperature\"")).isEqualTo(1);
+        assertThat(body.get("temperature").asDouble()).isEqualTo(0.95);
+        assertThat(StringUtils.countMatches(rawBody, "\"max_completion_tokens\"")).isEqualTo(1);
+        assertThat(body.get("max_completion_tokens").asInt()).isEqualTo(12);
+        assertThat(body.get("top_k").asInt()).isEqualTo(7);
+    }
+
+    @Test
+    void judgeSendsAnExtraBodyKeyOnceWithTheExtraBodyValue() {
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey("test-key")
+                .baseUrl(wireMock.baseUrl() + "/v1")
+                .configuration(Map.of("provider_name", PROVIDER_NAME))
+                .build();
+        var parameters = LlmAsJudgeModelParameters.builder()
+                .name("custom-llm/" + PROVIDER_NAME + "/" + MODEL)
+                .temperature(0.25)
+                .seed(7)
+                .customParameters(JsonUtils.getJsonNodeFromString("""
+                        {"temperature": 0.95, "seed": 42}
+                        """))
+                .build();
+
+        clientGenerator.generateChat(config, parameters).chat("hello");
+
+        var rawBody = sentRawBody();
+        var body = JsonUtils.getJsonNodeFromString(rawBody);
+        assertThat(StringUtils.countMatches(rawBody, "\"temperature\"")).isEqualTo(1);
+        assertThat(body.get("temperature").asDouble()).isEqualTo(0.95);
+        assertThat(StringUtils.countMatches(rawBody, "\"seed\"")).isEqualTo(1);
+        assertThat(body.get("seed").asInt()).isEqualTo(42);
+    }
+
     private static Stream<Arguments> penaltyCases() {
         return Stream.of(
                 arguments("Bedrock gets no penalty of 0", LlmProvider.BEDROCK, 0.0, null),
@@ -219,9 +268,13 @@ class CustomLlmProviderTest {
     }
 
     private JsonNode sentBody() {
+        return JsonUtils.getJsonNodeFromString(sentRawBody());
+    }
+
+    private String sentRawBody() {
         var requests = wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH)));
         assertThat(requests).hasSize(1);
-        return JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString());
+        return requests.getFirst().getBodyAsString();
     }
 
     private void assertPenalties(String name, JsonNode body, Double expectedPenalty) {
