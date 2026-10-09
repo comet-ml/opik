@@ -590,6 +590,17 @@ describe("convertOptimizationStudioToFormData — re-run round trip", () => {
     });
   });
 
+  it("prefers an OpenRouter run's nested value over a flat copy of it", () => {
+    const { modelConfig, sent } = rerun(
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      { top_k: 40, custom_parameters: { top_k: 3 } },
+    );
+
+    expect(modelConfig.topK).toBe(3);
+    expect(sent).toMatchObject({ custom_parameters: { top_k: 3 } });
+    expect(sent).not.toHaveProperty("top_k");
+  });
+
   // The demo template is written with max_tokens, which OpenAI models take as max_completion_tokens
   // in the form; sending both makes OpenAI reject the request.
   it("reads max_tokens as the max output tokens of a non-OpenRouter model", () => {

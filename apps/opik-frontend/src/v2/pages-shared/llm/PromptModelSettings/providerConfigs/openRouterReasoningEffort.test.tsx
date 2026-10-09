@@ -82,7 +82,9 @@ describe("the OpenRouter reasoning effort dropdown", () => {
   it("starts at Default and offers the model's levels", () => {
     renderPanel(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO);
 
-    expect(screen.getByRole("combobox")).toHaveTextContent("Default");
+    expect(
+      screen.getByRole("combobox", { name: "Reasoning effort" }),
+    ).toHaveTextContent("Default");
     expect(openEffortDropdown()).toEqual([
       "Default",
       "Minimal",

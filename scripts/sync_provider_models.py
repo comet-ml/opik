@@ -435,6 +435,12 @@ def matches_any(s: str, patterns: list[str]) -> bool:
 # Source fetching
 # ─────────────────────────────────────────────────────────────────────────────
 
+# The YAML is uploaded to the CDN without review, so a malformed list counts as no list (every control stays)
+# instead of a string turning into single letters that hide them all.
+def _string_list(value) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
 def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
     """Fetch chat-capable models from OpenRouter API, keyed by id."""
     resp = requests.get(OPENROUTER_API_URL, timeout=30)
@@ -444,10 +450,10 @@ def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
     for m in models:
         modality = (m.get("architecture") or {}).get("modality", "")
         if "text" in modality:
-            supported = m.get("supported_parameters") or []
+            supported = _string_list(m.get("supported_parameters"))
             chat_models[m["id"]] = OpenRouterCapabilities(
                 supported_parameters=sorted(set(supported) & OPENROUTER_PANEL_PARAMETERS) if supported else None,
-                reasoning_efforts=list((m.get("reasoning") or {}).get("supported_efforts") or []),
+                reasoning_efforts=_string_list((m.get("reasoning") or {}).get("supported_efforts")),
             )
     return dict(sorted(chat_models.items()))
 
@@ -1266,11 +1272,43 @@ def _openrouter_picker_changes(
     return shown, hidden
 
 
+def _parse_yaml_openrouter_capabilities(yaml_content: str) -> dict[str, dict[str, frozenset[str]]]:
+    result: dict[str, dict[str, frozenset[str]]] = {}
+    current_provider: str | None = None
+    current_id: str | None = None
+    for line in yaml_content.splitlines():
+        provider_match = re.match(r'^(\S[^:]+):\s*$', line)
+        if provider_match:
+            current_provider = provider_match.group(1)
+            current_id = None
+            continue
+        if current_provider != "openrouter":
+            continue
+        id_match = re.match(r'^\s+- id:\s+"([^"]+)"', line)
+        if id_match:
+            current_id = id_match.group(1)
+            result[current_id] = {}
+            continue
+        capability_match = re.match(r'^\s+(supportedParameters|reasoningEfforts):\s*\[(.*)\]', line)
+        if current_id and capability_match:
+            result[current_id][capability_match.group(1)] = frozenset(
+                item.strip() for item in capability_match.group(2).split(",") if item.strip()
+            )
+    return result
+
+
+def _changed_openrouter_capability_ids(existing_yaml_content: str, regenerated_yaml_content: str) -> list[str]:
+    before = _parse_yaml_openrouter_capabilities(existing_yaml_content)
+    after = _parse_yaml_openrouter_capabilities(regenerated_yaml_content)
+    return sorted(model_id for model_id in before.keys() & after.keys() if before[model_id] != after[model_id])
+
+
 def _should_write_files(
     total_added: int,
     seeded_reasoning_ids: list[str],
     cleared_reasoning_ids: list[str],
     picker_changed_ids: list[str],
+    capability_changed_ids: list[str],
     force_regen: bool,
     fell_back: bool,
 ) -> bool:
@@ -1279,7 +1317,11 @@ def _should_write_files(
     if force_regen:
         return True
     return not fell_back and (
-        total_added > 0 or bool(seeded_reasoning_ids) or bool(cleared_reasoning_ids) or bool(picker_changed_ids)
+        total_added > 0
+        or bool(seeded_reasoning_ids)
+        or bool(cleared_reasoning_ids)
+        or bool(picker_changed_ids)
+        or bool(capability_changed_ids)
     )
 
 
@@ -1442,6 +1484,7 @@ def main():
     cleared_reasoning_ids = _cleared_reasoning_ids(llm_models_yaml_content, new_llm_models_yaml)
     openrouter_shown, openrouter_hidden = _openrouter_picker_changes(llm_models_yaml_content, new_llm_models_yaml)
     picker_changed_ids = openrouter_shown + openrouter_hidden
+    capability_changed_ids = _changed_openrouter_capability_ids(llm_models_yaml_content, new_llm_models_yaml)
 
     # 5. Print summary
     total_added = 0
@@ -1480,7 +1523,7 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_ids:
+    if seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_ids or capability_changed_ids:
         print("### Registry")
         for model_id in seeded_reasoning_ids:
             print(f"  + {model_id} (reasoning)")
@@ -1490,12 +1533,22 @@ def main():
             print(f"  + openrouter {model_id} (picker)")
         for model_id in openrouter_hidden:
             print(f"  - openrouter {model_id} (picker)")
+        for model_id in capability_changed_ids:
+            print(f"  ~ openrouter {model_id} (parameters)")
         print()
 
     if not _should_write_files(
-        total_added, seeded_reasoning_ids, cleared_reasoning_ids, picker_changed_ids, args.force_regen, fell_back,
+        total_added,
+        seeded_reasoning_ids,
+        cleared_reasoning_ids,
+        picker_changed_ids,
+        capability_changed_ids,
+        args.force_regen,
+        fell_back,
     ):
-        if fell_back and (total_added > 0 or seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_ids):
+        if fell_back and (
+            total_added > 0 or seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_ids or capability_changed_ids
+        ):
             print("A provider API call failed: fallback data not published; retry when the API is reachable, or rerun with --force-regen.")
         elif total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
