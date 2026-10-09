@@ -51,6 +51,18 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     private ChatModel newChatLanguageModel(LlmProviderClientApiConfig config,
             LlmAsJudgeModelParameters modelParameters) {
+        var outputConfig = AnthropicEffort.toOutputConfig(modelParameters.name(), modelParameters.customParameters());
+        if (outputConfig.isEmpty()) {
+            return newChatModelBuilder(config, modelParameters).build();
+        }
+        return new AnthropicOutputConfigChatModel(outputConfig.get(),
+                customParameters -> newChatModelBuilder(config, modelParameters)
+                        .customParameters(customParameters)
+                        .build());
+    }
+
+    private AnthropicChatModel.AnthropicChatModelBuilder newChatModelBuilder(LlmProviderClientApiConfig config,
+            LlmAsJudgeModelParameters modelParameters) {
         var builder = AnthropicChatModel.builder()
                 .apiKey(config.apiKey())
                 .modelName(modelParameters.name())
@@ -82,7 +94,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
         applyCustomParameters(builder, customParameters, thinking);
 
-        return builder.build();
+        return builder;
     }
 
     /**

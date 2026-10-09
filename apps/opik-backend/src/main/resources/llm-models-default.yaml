@@ -1,43 +1,59 @@
 openai:
   - id: "gpt-6.1-sol"
     label: "GPT 6.1 Sol"
+    reasoning: true
   - id: "gpt-6-astra"
     label: "GPT 6 Astra"
+    reasoning: true
   - id: "gpt-6-luna"
     label: "GPT 6 Luna"
+    reasoning: true
   - id: "gpt-6-sol"
     label: "GPT 6 Sol"
+    reasoning: true
   - id: "gpt-5.6-luna"
     label: "GPT 5.6 Luna"
+    reasoning: true
   - id: "gpt-5.6-sol"
     label: "GPT 5.6 Sol"
+    reasoning: true
   - id: "gpt-5.6-terra"
     label: "GPT 5.6 Terra"
+    reasoning: true
   - id: "gpt-5.5"
     label: "GPT 5.5"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.4"
     label: "GPT 5.4"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.4-mini"
     label: "GPT 5.4 Mini"
+    reasoning: true
   - id: "gpt-5.4-nano"
     label: "GPT 5.4 Nano"
+    reasoning: true
   - id: "gpt-5.2"
     label: "GPT 5.2"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.1"
     label: "GPT 5.1"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5"
     label: "GPT 5"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5-mini"
     label: "GPT 5 Mini"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5-nano"
     label: "GPT 5 Nano"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-4.1"
     label: "GPT 4.1"
     structuredOutput: true
@@ -98,27 +114,37 @@ openai:
   - id: "gpt-5-chat-latest"
   - id: "gpt-5-codex"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5-pro"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.1-chat-latest"
     structuredOutput: true
   - id: "gpt-5.1-codex"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.1-codex-max"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.1-codex-mini"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.2-chat-latest"
   - id: "gpt-5.2-codex"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.2-pro"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.3-chat-latest"
     structuredOutput: true
   - id: "gpt-5.3-codex"
     structuredOutput: true
+    reasoning: true
   - id: "gpt-5.4-pro"
+    reasoning: true
   - id: "gpt-5.5-pro"
+    reasoning: true
   - id: "gpt-image-1"
   - id: "gpt-image-1-mini"
   - id: "gpt-image-1.5"
@@ -148,6 +174,9 @@ openai:
     structuredOutput: true
     reasoning: true
 anthropic:
+  - id: "claude-opus-5-5"
+    label: "Claude Opus 5.5"
+    structuredOutput: true
   - id: "claude-opus-5"
     label: "Claude Opus 5"
     structuredOutput: true

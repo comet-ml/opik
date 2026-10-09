@@ -431,6 +431,33 @@ paths:
         "501":
           description: "Agent Insights is disabled, or Custom Charts is not enabled\
             \ for this workspace"
+  /v1/internal/usage/projects:
+    post:
+      tags:
+      - System usage
+      summary: Find projects across workspaces by ids or name
+      description: "Find projects across the given workspaces, optionally narrowed\
+        \ by project ids or a case-insensitive name substring. Unknown or deleted\
+        \ projects are omitted."
+      operationId: findUsageProjects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsageProjectsRequest"
+      responses:
+        "200":
+          description: UsageProjectsResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageProjectsResponse"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -8940,6 +8967,12 @@ paths:
         in: query
         schema:
           type: string
+      - name: exclude
+        in: query
+        schema:
+          type: string
+          description: "Enrichment fields to leave out of each thread, e.g. [\"annotation_queues\"\
+            ]"
       - name: search
         in: query
         schema:
@@ -9926,6 +9959,53 @@ components:
           type: string
           description: Restrict query to this project. Omit to query the whole workspace.
           format: uuid
+    UsageProjectsResponse:
+      type: object
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceProjectName"
+    WorkspaceProjectName:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    UsageProjectsRequest:
+      required:
+      - workspace_ids
+      type: object
+      properties:
+        workspace_ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
+        project_ids:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
+        limit:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
     BiInformation:
       type: object
       properties:
@@ -9958,6 +10038,8 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
         user:
           type: string
         count:
@@ -13721,6 +13803,9 @@ components:
         cachedTokens:
           type: integer
           format: int32
+        cacheWriteTokens:
+          type: integer
+          format: int32
     ToolCall:
       type: object
       properties:
@@ -13819,6 +13904,10 @@ components:
           type: string
         serviceTier:
           type: string
+        promptCacheKey:
+          type: string
+        promptCacheOptions:
+          $ref: "#/components/schemas/PromptCacheOptions"
         logprobs:
           type: boolean
         topLogprobs:
@@ -13865,6 +13954,13 @@ components:
           type: string
         content:
           $ref: "#/components/schemas/JsonNode"
+    PromptCacheOptions:
+      type: object
+      properties:
+        mode:
+          type: string
+        ttl:
+          type: string
     ResponseFormat:
       type: object
       properties:
@@ -16815,6 +16911,21 @@ components:
         experiment_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+    AnnotationQueueReference:
+      required:
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Annotation queue ID
+          format: uuid
+        name:
+          type: string
+          description: Annotation queue name
+      description: Annotation queue reference with ID and name
+      readOnly: true
     Check:
       type: object
       properties:
@@ -17172,6 +17283,12 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference"
+        annotation_queues:
+          type: array
+          description: Annotation queues this trace is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference"
         source:
           type: string
           enum:
@@ -22647,6 +22764,21 @@ components:
             \ is deleted under its full key, so a trace can be deleted without knowing\
             \ its project."
           format: uuid
+    AnnotationQueueReference_Public:
+      required:
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Annotation queue ID
+          format: uuid
+        name:
+          type: string
+          description: Annotation queue name
+      description: Annotation queue reference with ID and name
+      readOnly: true
     Check_Public:
       type: object
       properties:
@@ -22819,6 +22951,12 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference_Public"
+        annotation_queues:
+          type: array
+          description: Annotation queues this trace is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference_Public"
         source:
           type: string
           enum:
@@ -22883,6 +23021,12 @@ components:
           type: array
           items:
             type: string
+        annotation_queues:
+          type: array
+          description: Annotation queues this thread is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference"
         last_updated_at:
           type: string
           format: date-time
@@ -23108,6 +23252,7 @@ components:
             - visibility_mode
             - providers
             - experiment
+            - annotation_queues
             - source
             - environment
         from_time:

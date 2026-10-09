@@ -758,6 +758,13 @@ redis:
 
 altinity-clickhouse-operator:
   enabled: true
+  # The operator chart's CRD-install hook defaults to bitnami/kubectl:latest. Pin it to the
+  # same official kubectl image this chart uses elsewhere (the hook only runs `kubectl apply`
+  # via /bin/sh), so no Bitnami image is pulled.
+  crdHook:
+    image:
+      repository: alpine/kubectl
+      tag: "1.35.0"
   metrics:
     enabled: false
   serviceMonitor:
@@ -932,6 +939,13 @@ clickhouse:
         <yandex>
           <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
         </yandex>
+      # Server default timezone. The backend writes absolute UTC instants but compares against timezone-less
+      # literals such as the epoch end_time sentinel, so a host timezone leaking in misreads unfinished traces.
+      # Only a default: a query can still override it with SETTINGS session_timezone or a timezone argument.
+      conf.d/timezone.xml: |
+        <clickhouse>
+          <timezone>UTC</timezone>
+        </clickhouse>
       # Without these, partitioned tables prune reads but LWD-bloated parts never
       # self-merge, so masked rows are never physically reclaimed.
       conf.d/merge_tree.xml: |
@@ -1041,8 +1055,8 @@ clickhouse:
   # -- Tiered storage (hot local disk -> cold S3 with a read-through cache).
   # Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold
   # disks) and provisions a per-node EBS cache volume for the S3 cache. This is
-  # pure server-side infrastructure: it stays inert until a migration attaches
-  # the `tiered_replicated` policy to a table, so `enabled: false` (default) is
+  # pure server-side infrastructure: it stays inert until the `tiered_replicated`
+  # policy is attached to a table (see `ttl`), so `enabled: false` (default) is
   # a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros
   # ({shard}/{replica}) cannot be used because the S3 disk is read at server
   # start, before macros bind.
@@ -1099,6 +1113,19 @@ clickhouse:
       # SA with get/list/watch on statefulsets and pods, and get/patch on the
       # altinity operator Deployment (falls back to the chart-created SA).
       serviceAccountName: ""
+      nodeSelector: {}
+      tolerations: []
+    # Post-sync job that puts each listed table on the tiered_replicated policy with a
+    # move-to-cold TTL, idempotently. It never moves existing data: that is a paced
+    # operator step (ALTER TABLE ... MATERIALIZE TTL). Tables that do not exist yet are skipped.
+    # Off unless turned on per environment.
+    ttl:
+      enabled: false
+      tables:
+        - name: traces_local
+          moveAfterWeeks: 13
+      activeDeadlineSeconds: 600
+      resources: {}
       nodeSelector: {}
       tolerations: []
   adminUser:

@@ -177,7 +177,7 @@ class ConversationQualityMetric(ConversationThreadMetric):
     An LLM-as-judge metric that evaluates conversation quality.
 
     Args:
-        model: The LLM to use as a judge (e.g., "gpt-4", "claude-3-5-sonnet-20241022").
+        model: The LLM to use as a judge (e.g., "gpt-4", "claude-sonnet-4-6").
                If None, uses the default model.
         name: The name of this metric.
         track: Whether to track the metric in Opik.
@@ -273,7 +273,7 @@ from opik.evaluation import evaluate_threads
 
 # Initialize the metric with your preferred judge model
 quality_metric = ConversationQualityMetric(
-    model="gpt-4o",  # or "claude-3-5-sonnet-20241022", etc.
+    model="gpt-4o",  # or "claude-sonnet-4-6", etc.
     name="conversation_quality"
 )
 

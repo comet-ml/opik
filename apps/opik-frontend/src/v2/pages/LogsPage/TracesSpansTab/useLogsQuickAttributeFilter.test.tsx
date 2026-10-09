@@ -4,6 +4,8 @@ import { act, renderHook } from "@testing-library/react";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
+import { ChipDefinition } from "@/shared/filter-chips/types";
+import { COLUMN_TYPE } from "@/types/shared";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { useLogsQuickAttributeFilter } from "./useLogsQuickAttributeFilter";
 
@@ -32,10 +34,41 @@ const readFilters = (key: string) => {
 const readPinned = (tableId: string) =>
   JSON.parse(localStorage.getItem(`chips:pinnedConfig:${tableId}`) ?? "null");
 
+const PROJECT_ID = "p1";
+
+const readRemembered = (urlKey: string, projectId = PROJECT_ID) => {
+  const raw = localStorage.getItem(`logs-filters:${projectId}:${urlKey}`);
+  return raw ? JSON.parse(raw) : undefined;
+};
+
+const typeDefinition: ChipDefinition = {
+  id: "type",
+  field: "type",
+  label: "Type",
+  kind: "single-select",
+  options: [
+    { label: "LLM", value: "llm" },
+    { label: "Tool", value: "tool" },
+  ],
+  columnType: COLUMN_TYPE.category,
+  operator: "=",
+};
+
+const DEFINITIONS_BY_TYPE = {
+  [TRACE_DATA_TYPE.traces]: [typeDefinition],
+  [TRACE_DATA_TYPE.spans]: [typeDefinition],
+};
+
 const setup = (type: TRACE_DATA_TYPE) => {
   const onLogsTypeChange = vi.fn();
   const { result } = renderHook(
-    () => useLogsQuickAttributeFilter({ type, onLogsTypeChange }),
+    () =>
+      useLogsQuickAttributeFilter({
+        type,
+        projectId: PROJECT_ID,
+        definitionsByType: DEFINITIONS_BY_TYPE,
+        onLogsTypeChange,
+      }),
     { wrapper },
   );
   return { result, onLogsTypeChange };
@@ -72,6 +105,21 @@ describe("useLogsQuickAttributeFilter", () => {
       expect(readPinned("logs.traces")).toContain("custom");
     });
 
+    it("remembers the filters for this project under the traces key", async () => {
+      const { result } = setup(TRACE_DATA_TYPE.traces);
+
+      await act(async () => {
+        result.current.filter("input", "query", "hello");
+      });
+
+      expect(readRemembered("traces_filters")).toEqual(
+        readFilters("traces_filters"),
+      );
+      expect(readRemembered("traces_filters")).toHaveLength(1);
+      expect(readRemembered("spans_filters")).toBeUndefined();
+      expect(readRemembered("traces_filters", "other")).toBeUndefined();
+    });
+
     it("hides span-only attributes", () => {
       const { result } = setup(TRACE_DATA_TYPE.traces);
       expect(result.current.canFilter("metadata", "provider")).toBe(false);
@@ -103,6 +151,10 @@ describe("useLogsQuickAttributeFilter", () => {
       ]);
       expect(readFilters("traces_filters")).toBeUndefined();
       expect(onLogsTypeChange).toHaveBeenCalledWith(LOGS_TYPE.spans);
+      expect(readRemembered("spans_filters")).toEqual(
+        readFilters("spans_filters"),
+      );
+      expect(readRemembered("traces_filters")).toBeUndefined();
       expect(readPinned("logs.spans")).toContain("custom");
       expect(trackEvent).toHaveBeenCalledWith(OpikEvent.QUICK_FILTER_APPLIED, {
         data_type: TRACE_DATA_TYPE.spans,
@@ -140,10 +192,65 @@ describe("useLogsQuickAttributeFilter", () => {
       const filters = readFilters("spans_filters");
       expect(filters).toHaveLength(2);
       expect(filters[0]).toEqual(existing[0]);
+      expect(readRemembered("spans_filters")).toEqual(filters);
       expect(onLogsTypeChange).toHaveBeenCalledTimes(2);
       expect(onLogsTypeChange).toHaveBeenLastCalledWith(LOGS_TYPE.spans);
       expect(trackEvent).toHaveBeenCalledTimes(2);
       expect(readPinned("logs.spans")).toContain("custom");
+    });
+  });
+
+  describe("span selected after a bare landing", () => {
+    const valid = {
+      id: "x",
+      field: "type",
+      type: COLUMN_TYPE.category,
+      operator: "=",
+      value: "llm",
+    };
+
+    it("appends to the remembered spans filters when the param is absent", async () => {
+      localStorage.setItem(
+        `logs-filters:${PROJECT_ID}:spans_filters`,
+        JSON.stringify([valid]),
+      );
+      setUrl({ trace: "t1", span: "s1" });
+      const { result } = setup(TRACE_DATA_TYPE.traces);
+
+      await act(async () => {
+        result.current.filter("input", "query", "hi");
+      });
+
+      const filters = readFilters("spans_filters");
+      expect(filters).toHaveLength(2);
+      expect(filters[0]).toMatchObject({ field: "type", value: "llm" });
+      expect(readRemembered("spans_filters")).toEqual(filters);
+    });
+
+    it("drops malformed and obsolete remembered entries instead of copying them", async () => {
+      const obsolete = {
+        id: "o",
+        field: "no_such_field",
+        type: "string",
+        operator: "=",
+        value: "x",
+      };
+      localStorage.setItem(
+        `logs-filters:${PROJECT_ID}:spans_filters`,
+        JSON.stringify([{}, obsolete, valid]),
+      );
+      setUrl({ trace: "t1", span: "s1" });
+      const { result } = setup(TRACE_DATA_TYPE.traces);
+
+      await act(async () => {
+        result.current.filter("input", "query", "hi");
+      });
+
+      const filters = readFilters("spans_filters");
+      expect(filters).toHaveLength(2);
+      expect(filters[0]).toMatchObject({ field: "type", value: "llm" });
+      expect(filters[1]).toMatchObject({ field: "custom", key: "input.query" });
+      expect(readRemembered("spans_filters")).toEqual(filters);
     });
   });
 
@@ -159,6 +266,9 @@ describe("useLogsQuickAttributeFilter", () => {
       });
 
       expect(readFilters("traces_filters")).toHaveLength(1);
+      expect(readRemembered("traces_filters")).toEqual(
+        readFilters("traces_filters"),
+      );
       expect(onLogsTypeChange).toHaveBeenCalledWith(LOGS_TYPE.traces);
     });
   });
@@ -172,6 +282,7 @@ describe("useLogsQuickAttributeFilter", () => {
     });
 
     expect(readFilters("traces_filters")).toBeUndefined();
+    expect(readRemembered("traces_filters")).toBeUndefined();
     expect(onLogsTypeChange).not.toHaveBeenCalled();
     expect(trackEvent).not.toHaveBeenCalled();
   });

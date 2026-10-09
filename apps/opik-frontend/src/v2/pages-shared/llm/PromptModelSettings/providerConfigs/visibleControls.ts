@@ -7,6 +7,7 @@ import {
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
   LLMVertexAIConfigsType,
+  OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -41,16 +42,25 @@ export const getOpenAIVisibleControls = ({
   model,
   configs,
   supports,
-}: VisibleControlsInput<Partial<LLMOpenAIConfigsType>>) => {
+  openAiPipelineMode,
+}: VisibleControlsInput<Partial<LLMOpenAIConfigsType>> & {
+  openAiPipelineMode?: OpenAiPipelineMode;
+}) => {
   // The resolver owns which sampling params this model accepts and what the request will carry, so
   // both sliders follow it rather than the config's own keys. Reasoning models tune neither.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
-  const { reasoningEffort } = resolveEffort(model ?? "", configs);
-  const showPenalties = supportsPenaltyParams(model);
+  const { reasoningEffort } = resolveEffort(
+    model ?? "",
+    configs,
+    openAiPipelineMode,
+  );
+  const showPenalties = supportsPenaltyParams(model, openAiPipelineMode);
 
   return {
     temperature: !isUndefined(temperature),
-    maxCompletionTokens: !isUndefined(configs.maxCompletionTokens),
+    maxCompletionTokens:
+      supports("maxCompletionTokens") &&
+      !isUndefined(configs.maxCompletionTokens),
     topP: supports("topP") && !isUndefined(topP),
     frequencyPenalty: showPenalties && !isUndefined(configs.frequencyPenalty),
     presencePenalty: showPenalties && !isUndefined(configs.presencePenalty),
@@ -91,7 +101,9 @@ const getGeminiFamilyVisibleControls = (
 
   return {
     temperature: !isUndefined(temperature),
-    maxCompletionTokens: !isUndefined(configs.maxCompletionTokens),
+    maxCompletionTokens:
+      supports("maxCompletionTokens") &&
+      !isUndefined(configs.maxCompletionTokens),
     topP: supports("topP") && !isUndefined(topP),
     thinkingLevel: showThinkingLevel,
     throttling: supports("throttling"),
@@ -123,18 +135,19 @@ export const getOpenRouterVisibleControls = ({
   const sampling = resolveSamplingPresentation(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const independent = sampling === "independent";
+  const showPenalties = supportsPenaltyParams(model);
 
   return {
     // ExclusiveSamplingParams renders nothing when it can offer no choice and neither half is live.
     samplingParams:
       sampling === "exclusive" &&
       (supports("topP") || !isUndefined(temperature) || !isUndefined(topP)),
-    temperature: independent && !isUndefined(configs.temperature),
+    temperature: independent && !isUndefined(temperature),
     maxTokens: !isUndefined(configs.maxTokens),
-    topP: independent && supports("topP") && !isUndefined(configs.topP),
+    topP: independent && supports("topP") && !isUndefined(topP),
     topK: !isUndefined(configs.topK),
-    frequencyPenalty: !isUndefined(configs.frequencyPenalty),
-    presencePenalty: !isUndefined(configs.presencePenalty),
+    frequencyPenalty: showPenalties && !isUndefined(configs.frequencyPenalty),
+    presencePenalty: showPenalties && !isUndefined(configs.presencePenalty),
     repetitionPenalty: !isUndefined(configs.repetitionPenalty),
     minP: !isUndefined(configs.minP),
     topA: !isUndefined(configs.topA),
@@ -148,6 +161,7 @@ export const hasVisibleControls = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: Partial<LLMPromptConfigsType>,
   unsupportedParams?: ReadonlySet<ModelConfigParam>,
+  openAiPipelineMode?: OpenAiPipelineMode,
 ): boolean => {
   const supports = createSupports(unsupportedParams);
 
@@ -158,6 +172,7 @@ export const hasVisibleControls = (
           model,
           configs: configs as Partial<LLMOpenAIConfigsType>,
           supports,
+          openAiPipelineMode,
         }),
       );
     case PROVIDER_TYPE.ANTHROPIC:
@@ -193,6 +208,8 @@ export const hasVisibleControls = (
         }),
       );
     case PROVIDER_TYPE.CUSTOM:
+    case PROVIDER_TYPE.OLLAMA:
+    case PROVIDER_TYPE.BEDROCK:
       return true;
     default:
       return false;

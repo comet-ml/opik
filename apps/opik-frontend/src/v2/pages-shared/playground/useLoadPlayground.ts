@@ -9,7 +9,7 @@ import {
   useSetDatasetType,
   useSetExperimentName,
 } from "@/store/PlaygroundStore";
-import { generateDefaultPrompt } from "@/lib/playground";
+import { generateDefaultPrompt, isEmptyMessage } from "@/lib/playground";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { DATASET_TYPE } from "@/types/datasets";
 import {
@@ -84,9 +84,7 @@ function useLoadPlayground() {
     const keys = Object.keys(promptMap);
 
     return (
-      keys.length === 1 &&
-      promptMap[keys[0]]?.messages?.length === 1 &&
-      promptMap[keys[0]]?.messages[0]?.content === ""
+      keys.length === 1 && !!promptMap[keys[0]]?.messages?.every(isEmptyMessage)
     );
   }, [promptMap]);
 
@@ -179,7 +177,7 @@ function useLoadPlayground() {
             }),
           ];
         }
-      } else {
+      } else if (content || promptId) {
         newPrompt.messages = [
           generateDefaultLLMPromptMessage({
             content,

@@ -45,7 +45,6 @@ const TOAST_RECORD_KEY = '__opikRecordedToasts';
 const RUN_COMPLETE_TEXT = /Run complete/;
 
 export interface PlaygroundVariantConfig {
-  /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
   systemPrompt?: string;
   /** User prompt body. Supports `{{column}}` templating against suite/dataset items. */
   userPrompt: string;
@@ -114,35 +113,16 @@ export class PlaygroundPage {
     });
   }
 
-  /**
-   * Configure the variant at the given index.
-   * - If `systemPrompt` is set, the FIRST message row gets its role flipped to
-   *   System, then a new User message row is appended with the userPrompt.
-   * - Otherwise, the first message row (already User by default) is filled directly.
-   */
   async configureVariant(index: number, cfg: PlaygroundVariantConfig): Promise<void> {
     return test.step(`configure variant ${index}`, async () => {
       if (cfg.modelDisplayName) {
         await this.setModelForVariant(index, cfg.modelDisplayName);
       }
 
-      const messages = this.variantMessages(index);
-
       if (cfg.systemPrompt !== undefined) {
-        // Flip first message role to System and fill it.
-        const firstMessage = messages.first();
-        await firstMessage.getByRole('button', { name: 'User' }).click();
-        await this.page.getByRole('menuitemcheckbox', { name: 'System' }).click();
-        await this.fillMessageBody(firstMessage, cfg.systemPrompt);
-
-        // Add a new message; defaults to User.
-        await this.variantCard(index).getByRole('button', { name: 'Message' }).click();
-        const userMessage = messages.nth(1);
-        await this.fillMessageBody(userMessage, cfg.userPrompt);
-      } else {
-        const firstMessage = messages.first();
-        await this.fillMessageBody(firstMessage, cfg.userPrompt);
+        await this.fillMessageBody(this.variantMessage(index, 'system'), cfg.systemPrompt);
       }
+      await this.fillMessageBody(this.variantMessage(index, 'user'), cfg.userPrompt);
     });
   }
 
@@ -417,7 +397,7 @@ export class PlaygroundPage {
   /**
    * The message editors of every variant card on the page.
    *
-   * Counted rather than addressed by index so "exactly one empty message" is
+   * Counted rather than addressed by index so "exactly one empty prompt" is
    * assertable as a single statement: a second card that also happened to be
    * empty would otherwise pass an index-based check.
    */
@@ -465,8 +445,9 @@ export class PlaygroundPage {
 
   // ── per-column run / stop ───────────────────────────────────────────────
   //
-  // `PlaygroundRunButton` is mounted per variant, and in experiment mode (a
-  // dataset or suite loaded) it renders inside the variant card — in free mode
+  // `PlaygroundRunButton` is mounted per variant, but only once there are two
+  // or more; with one, it would duplicate the header's Run. In experiment mode
+  // (a dataset or suite loaded) it renders inside the variant card — in free mode
   // the same component renders under the OUTPUT column instead, which is why
   // these are scoped to the card rather than looked up page-wide. It carries no
   // testid and its label swaps between Run and Stop with the variant's own
@@ -850,8 +831,7 @@ export class PlaygroundPage {
   async runSimplePromptAndAwaitResponse(args: RunSimplePromptArgs): Promise<RunSimplePromptResult> {
     return test.step('run simple prompt and await response', async () => {
       await this.setModelForVariant(0, args.modelDisplayName);
-      const messages = this.variantMessages(0);
-      await this.fillMessageBody(messages.first(), args.prompt);
+      await this.fillMessageBody(this.variantMessage(0, 'user'), args.prompt);
 
       // Use the top-right Run button (playground-run-button testid) for inline runs.
       await this.runButton().click();
@@ -888,6 +868,160 @@ export class PlaygroundPage {
   async selectModel(index: number, modelDisplayName: string): Promise<void> {
     return test.step(`select model "${modelDisplayName}" for variant ${index}`, async () => {
       await this.setModelForVariant(index, modelDisplayName);
+    });
+  }
+
+  /**
+   * Select a model from a NAMED provider group.
+   *
+   * `selectModel` takes the first option matching the display name, which is
+   * ambiguous for a model two providers both offer under one label: "Gemini 3
+   * Flash Preview" is `gemini-3-flash-preview` under Gemini and
+   * `vertex_ai/gemini-3-flash-preview` under Vertex AI. Those are the two
+   * spellings the generation gate has to strip a prefix off, so they are
+   * exactly the pair a spec must be able to tell apart — and taking `.first()`
+   * would have it silently assert the same one twice.
+   *
+   * While the search box holds text the picker renders a flat list grouped by
+   * provider, each group labelled, which is what makes the scope available.
+   */
+  async selectModelFromProvider(
+    index: number,
+    providerGroup: string,
+    modelDisplayName: string,
+  ): Promise<void> {
+    return test.step(
+      `select "${modelDisplayName}" from the ${providerGroup} group for variant ${index}`,
+      async () => {
+        assertAllowedModelDisplayName(modelDisplayName);
+        const listbox = this.page.getByRole('listbox');
+        await expect(async () => {
+          await this.modelPicker(index).click();
+          await expect(listbox).toBeVisible({ timeout: 2_000 });
+        }).toPass({ timeout: 15_000 });
+
+        // Re-filtered and re-clicked for the same reason as setModelForVariant:
+        // the option list remounts when /llm/models resolves, detaching options
+        // mid-click.
+        await expect(async () => {
+          await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+          // By the group's accessible NAME, which Radix takes from its
+          // `SelectLabel`, not by its text: a `hasText` filter for "Gemini"
+          // also matches the Vertex AI group, whose options are all called
+          // "Gemini …". Exact, so "Gemini" cannot select "Gemini (legacy)".
+          const group = listbox.getByRole('group', { name: providerGroup, exact: true });
+          // Exactly one group, so a provider label that stopped being unique
+          // fails here instead of selecting from whichever matched first.
+          await expect(group, `the ${providerGroup} provider group`).toHaveCount(1);
+          const option = group.getByRole('option', { name: modelDisplayName, exact: true });
+          await expect(option, `"${modelDisplayName}" under ${providerGroup}`).toHaveCount(1);
+          await option.click({ timeout: 2_000 });
+          await expect(listbox).toBeHidden({ timeout: 2_000 });
+        }).toPass({ timeout: 30_000 });
+      },
+    );
+  }
+
+  /**
+   * A named control's label inside the open model-parameters panel.
+   *
+   * For the controls that are not sliders — "Reasoning effort" and "Thinking
+   * level" are a Radix `Select` whose trigger carries no id (their `<Label
+   * htmlFor>` points at nothing, so `getByLabel` cannot reach them) — the
+   * label text is the available handle. Exact, so "Max output tokens" cannot
+   * be satisfied by a longer label.
+   */
+  modelParameterLabel(label: string): Locator {
+    return this.modelParametersPanel().getByText(label, { exact: true });
+  }
+
+  /**
+   * The Reasoning effort control's trigger inside the open model-parameters
+   * panel.
+   *
+   * The control is a Radix `Select` whose `SelectTrigger` carries no id and no
+   * testid, and whose `<Label htmlFor="reasoningEffort">` points at nothing —
+   * so `getByLabel` cannot reach it. Its role is the handle: the OpenAI panel
+   * mounts exactly one combobox (every other control is a `SliderInputControl`
+   * number input), which is why callers assert `toHaveCount(1)` before reading
+   * it rather than taking `.first()`. The FE should grow a
+   * `data-testid="reasoning-effort-select"` here and this should move to it.
+   */
+  reasoningEffortTrigger(): Locator {
+    return this.modelParametersPanel().getByRole('combobox');
+  }
+
+  /**
+   * The effort the panel currently DISPLAYS.
+   *
+   * Which is not always the effort that is stored: `resolveEffort` masks a
+   * stored value the selected model and pipeline mode do not offer, so a
+   * prompt holding `max` on a Chat Completions key reads "High" here. That gap
+   * is the subject of opik#8682, not an artefact of this reader.
+   */
+  async readReasoningEffort(): Promise<string> {
+    return test.step('read the displayed reasoning effort', async () => {
+      const trigger = this.reasoningEffortTrigger();
+      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
+      return ((await trigger.textContent()) ?? '').trim();
+    });
+  }
+
+  /**
+   * Every effort the control OFFERS, in the order the panel lists them.
+   *
+   * The list is the assertion in its own right — `getOpenAIReasoningEffortOptions`
+   * appends the Responses-API-only values to the base set, so "Max is absent"
+   * and "the other five are still there" are different claims and a caller
+   * wants to make both at once. The options render in a portal, so they are
+   * read from the page's listbox rather than from inside the panel.
+   */
+  async reasoningEffortOptions(): Promise<string[]> {
+    return test.step('read the offered reasoning efforts', async () => {
+      const trigger = this.reasoningEffortTrigger();
+      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await trigger.click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      const options = await listbox.getByRole('option').allTextContents();
+      await this.page.keyboard.press('Escape');
+      await expect(listbox).toBeHidden();
+      return options.map((o) => o.trim());
+    });
+  }
+
+  /** Pick a reasoning effort by its rendered label, e.g. `Max`. */
+  async selectReasoningEffort(label: string): Promise<void> {
+    return test.step(`select reasoning effort "${label}"`, async () => {
+      const trigger = this.reasoningEffortTrigger();
+      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await trigger.click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      const option = listbox.getByRole('option', { name: label, exact: true });
+      // Exactly one, not `.first()`: "High" and "xHigh" are both offered, and
+      // an ambiguous match would silently store the wrong effort.
+      await expect(option, `"${label}" is offered`).toHaveCount(1);
+      await option.click();
+      await expect(listbox).toBeHidden();
+    });
+  }
+
+  /** Every slider control mounted in the open panel, by its control id. */
+  async mountedModelParameterIds(): Promise<string[]> {
+    return test.step('read the controls mounted in the model-parameters panel', async () => {
+      const ids = await this.modelParametersPanel()
+        .locator('input[data-testid$="-input"]')
+        .evaluateAll((els) =>
+          els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/-input$/, '')),
+        );
+      return ids;
     });
   }
 
@@ -947,14 +1081,14 @@ export class PlaygroundPage {
   }
 
   /**
-   * Open the text-prompt library menu in the first message row of variant 0,
+   * Open the text-prompt library menu in the User message row of variant 0,
    * hover the named prompt to reveal the version submenu, and click the specified
    * version label (e.g. "v1"). The button lives inside the message-row actions
    * area which is hidden until the row is hovered.
    */
   async loadTextPromptVersionFromLibrary(promptName: string, versionLabel: string): Promise<void> {
     return test.step(`load text prompt "${promptName}" version "${versionLabel}" from message-row library`, async () => {
-      const messageRow = this.variantMessages(0).first();
+      const messageRow = this.variantMessage(0, 'user');
       await messageRow.hover();
       await messageRow.getByTestId('load-text-prompt-button').click();
 
@@ -968,17 +1102,17 @@ export class PlaygroundPage {
       const card = this.variantCard(0);
       // For text prompts the loaded-prompt chip is inside the message-row actions
       // area which is only visible on hover (invisible group-hover:visible).
-      // Hovering the first message row reveals it without affecting chat-prompt cards.
-      await this.variantMessages(0).first().hover();
+      // Hovering the User message row reveals it without affecting chat-prompt cards.
+      await this.variantMessage(0, 'user').hover();
       await expect(card.getByText(promptName)).toBeVisible();
       await expect(card.getByText(versionLabel, { exact: true })).toBeVisible();
     });
   }
 
-  /** Edit the content of the first message in variant 0 directly in the Playground editor. */
-  async editFirstMessage(newContent: string): Promise<void> {
-    return test.step('edit first message in Playground', async () => {
-      const editor = this.variantMessages(0).first().locator('.cm-content').first();
+  /** Edit the content of the User message in variant 0 directly in the Playground editor. */
+  async editUserMessage(newContent: string): Promise<void> {
+    return test.step('edit the user message in Playground', async () => {
+      const editor = this.variantMessage(0, 'user').locator('.cm-content').first();
       await editor.click();
       await editor.fill(newContent);
     });
@@ -995,13 +1129,13 @@ export class PlaygroundPage {
   }
 
   /**
-   * Click the Save button (disk icon) in the first message row of variant 0 and submit the
+   * Click the Save button (disk icon) in the User message row of variant 0 and submit the
    * "Save to prompt library" dialog in "Update existing" mode (text prompts).
    * Assumes a text prompt is already loaded so the dialog defaults to update mode.
    */
   async saveTextPromptToLibrary(): Promise<void> {
     return test.step('save text prompt to library from Playground', async () => {
-      const messageRow = this.variantMessages(0).first();
+      const messageRow = this.variantMessage(0, 'user');
       await messageRow.hover();
       await messageRow.getByTestId('save-text-prompt-button').click();
       await this.submitSaveDialog();
@@ -1009,13 +1143,13 @@ export class PlaygroundPage {
   }
 
   /**
-   * Click the Save button in the first message row of variant 0 and submit the
+   * Click the Save button in the User message row of variant 0 and submit the
    * "Save to prompt library" dialog as a new text prompt.
    * Fills the given name and clicks "Save to library".
    */
   async saveNewTextPromptToLibrary(promptName: string): Promise<void> {
     return test.step(`save new text prompt "${promptName}" to library from Playground`, async () => {
-      const messageRow = this.variantMessages(0).first();
+      const messageRow = this.variantMessage(0, 'user');
       await messageRow.hover();
       await messageRow.getByTestId('save-text-prompt-button').click();
       await this.submitSaveDialog(promptName);
@@ -1115,11 +1249,29 @@ export class PlaygroundPage {
     });
   }
 
-  /** Close the model-parameters popover, and wait until it is really gone. */
+  /**
+   * Close the model-parameters popover, and wait until it is really gone.
+   *
+   * Escape is pressed until the panel actually goes, not once: the dropdown
+   * swallows the first Escape while focus is still on the menu CONTAINER, and
+   * only a second press closes it. A caller that has already clicked an
+   * interactive child (moving focus into the panel) gets out on the first
+   * press, which is why this went unnoticed — but a spec that only reads the
+   * panel never moves focus and would hang on a single press.
+   */
   async closeModelParameters(): Promise<void> {
     return test.step('close model parameters', async () => {
-      await this.page.keyboard.press('Escape');
-      await this.modelParametersPanel().waitFor({ state: 'hidden' });
+      const panel = this.modelParametersPanel();
+      await expect
+        .poll(
+          async () => {
+            if (!(await panel.isVisible().catch(() => false))) return false;
+            await this.page.keyboard.press('Escape');
+            return panel.isVisible().catch(() => false);
+          },
+          { message: 'the model-parameters panel closes', intervals: [100, 250, 500, 1000] },
+        )
+        .toBe(false);
     });
   }
 
@@ -1158,10 +1310,24 @@ export class PlaygroundPage {
     return this.page.getByTestId(`${controlId}-input`);
   }
 
-  /** Type a prompt into variant 0's first message row. */
-  async fillFirstMessage(text: string): Promise<void> {
-    return test.step('fill the first message of variant 0', async () => {
-      await this.fillMessageBody(this.variantMessages(0).first(), text);
+  /** The Thinking effort dropdown. Its text is the effort the panel claims. */
+  thinkingEffortSelect(): Locator {
+    return this.modelParametersPanel().getByLabel('Thinking effort');
+  }
+
+  /** Pick a Thinking effort by its displayed label. */
+  async selectThinkingEffort(label: string): Promise<void> {
+    return test.step(`select thinking effort "${label}"`, async () => {
+      await this.thinkingEffortSelect().click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+      await expect(this.thinkingEffortSelect()).toHaveText(label);
+    });
+  }
+
+  /** Type a prompt into variant 0's User message row. */
+  async fillUserMessage(text: string): Promise<void> {
+    return test.step('fill the user message of variant 0', async () => {
+      await this.fillMessageBody(this.variantMessage(0, 'user'), text);
     });
   }
 
@@ -1301,18 +1467,53 @@ export class PlaygroundPage {
     });
   }
 
-  /** The `scrollLeft` of a panel's sticky header half and its body half. */
-  async panelScrollOffsets(
-    panel: 'variables' | 'outputs',
-  ): Promise<{ header: number; body: number }> {
-    return test.step(`read ${panel} panel header/body scroll offsets`, async () => {
+  async panelBodyScrollLeft(panel: 'variables' | 'outputs'): Promise<number> {
+    return test.step(`read the ${panel} panel body scroll offset`, async () => {
+      const body = panel === 'variables' ? this.variablesPanel('body') : this.outputsPanel('body');
+      return body.evaluate((el) => el.scrollLeft);
+    });
+  }
+
+  // Compared by position, not scrollLeft: with scroll-driven animations the header
+  // never scrolls, it is translated. Cells pair up by column: `data-header-id` is the
+  // column id and `data-cell-id` is `<rowId>_<columnId>`.
+  async panelColumnDrift(panel: 'variables' | 'outputs'): Promise<number> {
+    return test.step(`measure ${panel} panel header/body column drift`, async () => {
       const half = (h: 'header' | 'body') =>
         panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
-      const [header, body] = await Promise.all([
-        half('header').evaluate((el) => el.scrollLeft),
-        half('body').evaluate((el) => el.scrollLeft),
-      ]);
-      return { header, body };
+      const headerCells = await half('header')
+        .locator('th[data-header-id]')
+        .evaluateAll((cells) =>
+          cells.map((c) => [c.getAttribute('data-header-id') ?? '', c.getBoundingClientRect().left] as const),
+        );
+      const firstRow = half('body').locator('tr[data-row-id]').first();
+      const cellIdPrefix = `${await firstRow.getAttribute('data-row-id')}_`;
+      const bodyLefts = await firstRow.locator('td[data-cell-id]').evaluateAll(
+        (cells, prefix) =>
+          cells.map((c) => {
+            const columnId = (c.getAttribute('data-cell-id') ?? '').slice(prefix.length);
+            return [columnId, c.getBoundingClientRect().left] as const;
+          }),
+        cellIdPrefix,
+      );
+      const columnIds = (cells: ReadonlyArray<readonly [string, number]>) =>
+        cells.map(([columnId]) => columnId).sort();
+      const headerLefts = new Map(headerCells);
+
+      expect(bodyLefts.length).toBeGreaterThan(0);
+      expect(columnIds(bodyLefts)).toEqual(columnIds(headerCells));
+      return Math.max(
+        ...bodyLefts.map(([columnId, left]) => Math.abs(left - (headerLefts.get(columnId) ?? Number.NaN))),
+      );
+    });
+  }
+
+  async wheelOverPanelHeader(panel: 'variables' | 'outputs', deltaX: number): Promise<void> {
+    return test.step(`wheel ${deltaX}px sideways over the ${panel} panel header`, async () => {
+      const header = panel === 'variables' ? this.variablesPanel('header') : this.outputsPanel('header');
+      await header.hover();
+      await this.page.mouse.wheel(deltaX, 0);
+      await this.settle();
     });
   }
 
@@ -1445,8 +1646,10 @@ export class PlaygroundPage {
     );
   }
 
-  private variantMessages(index: number): Locator {
-    return this.variantCard(index).getByTestId('playground-message-row');
+  private variantMessage(index: number, role: 'system' | 'user'): Locator {
+    return this.variantCard(index).locator(
+      `[data-testid="playground-message-row"][data-role="${role}"]`,
+    );
   }
 
   private modelPicker(index: number): Locator {

@@ -30,11 +30,12 @@ const useRunCompletionToast = (datasetId?: string | null) => {
         .sort();
       const plainDatasetId = toPlainDatasetId(datasetId ?? null);
       const count = experiments.length;
+      const isSingleExperiment = count === 1;
 
       toast({
         title: "Run complete",
         description: `${count} ${
-          count === 1 ? "experiment" : "experiments"
+          isSingleExperiment ? "experiment" : "experiments"
         } created${names.length ? `: ${names.join(" • ")}` : ""}`,
         actions:
           plainDatasetId && activeProjectId
@@ -44,7 +45,11 @@ const useRunCompletionToast = (datasetId?: string | null) => {
                   variant="link"
                   size="sm"
                   className="px-0"
-                  altText="Compare experiments"
+                  altText={
+                    isSingleExperiment
+                      ? "View experiment"
+                      : "Compare experiments"
+                  }
                   onClick={() =>
                     window.open(
                       generateCompareExperimentsURL(
@@ -57,7 +62,7 @@ const useRunCompletionToast = (datasetId?: string | null) => {
                     )
                   }
                 >
-                  Compare
+                  {isSingleExperiment ? "View experiment" : "Compare"}
                   <ExternalLink className="ml-1 size-3.5 shrink-0" />
                 </ToastAction>,
               ]

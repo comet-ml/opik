@@ -46,6 +46,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -68,6 +69,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
@@ -1029,4 +1031,262 @@ class ChatCompletionsResourceTest {
         }
     }
 
+    /// The playground sends the Anthropic effort as
+    /// custom_parameters.output_config.effort, which the langchain4j request DTO
+    /// keeps, while Anthropic reads output_config.effort at the top level of its own
+    /// body. A flat thinking_effort used to be dropped here without a trace
+    /// (OPIK-8605). These post the body exactly as the frontend writes it and assert
+    /// on what reaches Anthropic.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Anthropic provider — output_config.effort")
+    class AnthropicOutputConfigEffort {
+
+        private static final String MESSAGES_PATH = "/v1/messages";
+        private static final String MESSAGES_RESPONSE = """
+                {"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-6",\
+                "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",\
+                "usage":{"input_tokens":1,"output_tokens":1}}""";
+
+        private static final String MESSAGES_STREAM = """
+                event: message_start
+                data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant",\
+                "model":"claude-sonnet-4-6","content":[],"stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}
+
+                event: content_block_start
+                data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+                event: content_block_delta
+                data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}
+
+                event: content_block_stop
+                data: {"type":"content_block_stop","index":0}
+
+                event: message_delta
+                data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}
+
+                event: message_stop
+                data: {"type":"message_stop"}
+
+                """;
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        @ParameterizedTest(name = "{0} at {1}")
+        @CsvSource({"claude-sonnet-4-6, low", "claude-sonnet-5, xhigh"})
+        void forwardsThePlaygroundEffortToAnthropic(String model, String effort) {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, model, effortParameters(effort), false);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            var sent = WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)));
+            assertThat(sent).hasSize(1);
+            assertThat(JsonUtils.getJsonNodeFromString(sent.getFirst().getBodyAsString()).path("output_config"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"%s\"}".formatted(effort)));
+        }
+
+        @Test
+        void rejectsAStoredAdaptiveEffortWithABadRequest() {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, "claude-sonnet-4-6", effortParameters("adaptive"), false);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class))
+                    .contains("Unsupported custom_parameters.output_config.effort for the model, "
+                            + "model 'claude-sonnet-4-6', effort 'adaptive', supported '[low, medium, high, max]'");
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)))).isEmpty();
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void rejectsAMalformedOutputConfigWithABadRequest(
+                String description, String customParameters, String expectedMessage) {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, "claude-sonnet-4-6", customParameters, false);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class)).contains(expectedMessage);
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)))).isEmpty();
+        }
+
+        Stream<Arguments> rejectsAMalformedOutputConfigWithABadRequest() {
+            var notAnObject = "custom_parameters.output_config must be an object, model 'claude-sonnet-4-6'";
+            return Stream.of(
+                    arguments("output_config as a string", "{\"output_config\": \"low\"}", notAnObject),
+                    arguments("output_config as an array", "{\"output_config\": [\"low\"]}", notAnObject),
+                    arguments("effort as a number", "{\"output_config\": {\"effort\": 1}}",
+                            "custom_parameters.output_config.effort must be a string, "
+                                    + "model 'claude-sonnet-4-6', effort '1'"),
+                    arguments("effort as an object", "{\"output_config\": {\"effort\": {\"level\": \"low\"}}}",
+                            "custom_parameters.output_config.effort must be a string, "
+                                    + "model 'claude-sonnet-4-6', effort '{level=low}'"));
+        }
+
+        @Test
+        void streamsThePlaygroundEffortToAnthropic() {
+            var workspaceName = prepareWorkspace();
+            WIRE_MOCK.server().stubFor(post(urlPathEqualTo(MESSAGES_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", MediaType.SERVER_SENT_EVENTS)
+                            .withBody(MESSAGES_STREAM)));
+
+            var response = postFrontendBody(workspaceName, "claude-sonnet-4-6", effortParameters("low"), true);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(String.class)).contains("\"content\":\"ok\"");
+            var sent = WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)));
+            assertThat(sent).hasSize(1);
+            var body = JsonUtils.getJsonNodeFromString(sent.getFirst().getBodyAsString());
+            assertThat(body.path("stream").asBoolean()).isTrue();
+            assertThat(body.path("output_config"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"low\"}"));
+        }
+
+        @Test
+        void rejectsAnUnsupportedStreamedEffortWithABadRequest() {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, "claude-sonnet-4-6", effortParameters("xhigh"), true);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class))
+                    .contains("Unsupported custom_parameters.output_config.effort for the model, "
+                            + "model 'claude-sonnet-4-6', effort 'xhigh', supported '[low, medium, high, max]'");
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)))).isEmpty();
+        }
+
+        private String prepareWorkspace() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.ANTHROPIC)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + "/v1/")
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            WIRE_MOCK.server().stubFor(post(urlPathEqualTo(MESSAGES_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(MESSAGES_RESPONSE)));
+            return workspaceName;
+        }
+
+        private String effortParameters(String effort) {
+            return "{\"output_config\": {\"effort\": \"%s\"}}".formatted(effort);
+        }
+
+        private jakarta.ws.rs.core.Response postFrontendBody(
+                String workspaceName, String model, String customParameters, boolean stream) {
+            var body = """
+                    {"model": "%s", "messages": [{"role": "user", "content": "ping"}], "stream": %s,
+                    "max_completion_tokens": 100, "custom_parameters": %s}"""
+                    .formatted(model, stream, customParameters);
+            return clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(stream ? MediaType.SERVER_SENT_EVENTS_TYPE : MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(JsonUtils.getJsonNodeFromString(body)));
+        }
+    }
+
+    /// OpenAI reasoning models take temperature only at its default and reject
+    /// top_p and both penalties. The frontend leaves them out, but anything else
+    /// that calls the endpoint relied on that. These assert on what actually leaves
+    /// Opik, classified by the real model registry.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("OpenAI reasoning models — sampling params and penalties")
+    class OpenAiReasoningSamplingParams {
+
+        private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
+        private static final String OK_BODY = """
+                {"id":"chatcmpl-x","object":"chat.completion","created":1,"model":"gpt-5-mini",\
+                "choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}""";
+        private static final List<String> STRIPPED_FIELDS = List.of(
+                "temperature", "top_p", "frequency_penalty", "presence_penalty");
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"gpt-5-mini", "o3"})
+        @DisplayName("A reasoning model on the OpenAI provider reaches it without sampling params or penalties")
+        void dropsSamplingParamsAndPenalties(String model) {
+            var body = upstreamBodyFor(LlmProvider.OPEN_AI, model);
+
+            STRIPPED_FIELDS.forEach(field -> assertThat(body.has(field)).as(field).isFalse());
+            assertThat(body.path("max_completion_tokens").asInt()).isEqualTo(100);
+        }
+
+        static Stream<Arguments> modelsThatKeepTheirParams() {
+            return Stream.of(
+                    arguments(LlmProvider.OPEN_AI, "gpt-4o"),
+                    arguments(LlmProvider.OPEN_AI, "gpt-5-chat-latest"),
+                    arguments(LlmProvider.OPEN_ROUTER, "openai/gpt-5-mini"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("modelsThatKeepTheirParams")
+        @DisplayName("Any other model keeps every param")
+        void keepsParamsForOtherModels(LlmProvider provider, String model) {
+            var body = upstreamBodyFor(provider, model);
+
+            assertThat(body.path("temperature").asDouble()).isEqualTo(0.7);
+            assertThat(body.path("top_p").asDouble()).isEqualTo(0.9);
+            assertThat(body.path("frequency_penalty").asDouble()).isEqualTo(0.5);
+            assertThat(body.path("presence_penalty").asDouble()).isEqualTo(0.4);
+        }
+
+        private JsonNode upstreamBodyFor(LlmProvider provider, String model) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(provider)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl())
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(OK_BODY)));
+
+            var request = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(model)
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .frequencyPenalty(0.5)
+                    .presencePenalty(0.4)
+                    .maxCompletionTokens(100)
+                    .addUserMessage("ping")
+                    .build();
+
+            try (var response = clientSupport
+                    .target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            var upstream = WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX)));
+            assertThat(upstream).as("Opik should have forwarded the request upstream").isNotEmpty();
+            return JsonUtils.getJsonNodeFromString(upstream.getFirst().getBodyAsString());
+        }
+    }
 }

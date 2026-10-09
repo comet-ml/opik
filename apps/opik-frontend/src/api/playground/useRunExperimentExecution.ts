@@ -2,9 +2,11 @@ import { useMutation } from "@tanstack/react-query";
 import get from "lodash/get";
 import api, { EXPERIMENT_EXECUTION_REST_ENDPOINT } from "@/api/api";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import { dropEmptySystemMessages } from "@/lib/playground";
 import { snakeCaseObj } from "@/lib/utils";
 import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
 import { PlaygroundPromptType } from "@/types/playground";
+import { OpenAiPipelineMode } from "@/types/providers";
 import { useToast } from "@/ui/use-toast";
 import { AxiosError } from "axios";
 
@@ -26,6 +28,7 @@ interface UseRunExperimentExecutionParams {
   prompts: PlaygroundPromptType[];
   projectName?: string;
   experimentNames?: Record<string, string | undefined>;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const runExperimentExecution = async ({
@@ -36,6 +39,7 @@ const runExperimentExecution = async ({
   prompts,
   projectName,
   experimentNames,
+  openAiPipelineMode,
 }: UseRunExperimentExecutionParams): Promise<ExperimentExecutionResponse> => {
   const promptVariants = prompts.map((prompt) => {
     const versionRefs = collectPromptVersionRefs(prompt);
@@ -45,10 +49,13 @@ const runExperimentExecution = async ({
 
     return {
       model: prompt.model,
-      messages: prompt.messages.map((msg) => snakeCaseObj(msg)),
+      messages: dropEmptySystemMessages(prompt.messages).map((msg) =>
+        snakeCaseObj(msg),
+      ),
       configs: sanitizeConfigForRequest(
         prompt.model,
         prompt.configs as Record<string, unknown>,
+        openAiPipelineMode,
       ),
       prompt_versions: promptVersions,
       experiment_name: experimentNames?.[prompt.id],

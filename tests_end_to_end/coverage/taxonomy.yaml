@@ -253,6 +253,7 @@ areas:
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
       - trace-explore/dataset-item-field-mappings.spec.ts
+      - trace-explore/logs-filter-persistence.spec.ts
       - trace-explore/mcp-hint.spec.ts
       - trace-explore/sdk-track-non-error-throw.spec.ts
       - trace-explore/span-cached-token-cost.spec.ts
@@ -288,7 +289,24 @@ areas:
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       score-reason-render:    { covered: true,  tier: t2-cuj, note: "how a feedback score's `reason` is RENDERED in the trace panel,  where an LLM judge's reason became newline-joined text instead of a Python list literal: the parser has SDK unit tests, the display half had nothing. Asserted as rendered text (innerText through the reason tooltip), so a collapsed newline fails; the empty-list sentinel is the single-line control beside it." }
       toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "the Spans toggle and paging the table it renders: 130 seeded spans read back as an exact set through offset paging, through the /spans/search cursor and through the rendered table, plus a span whose UUIDv7 id embeds mid-2200 used as the cursor. Also the four KPI cards above the Spans table — count, error rate, avg duration and total cost — and their period-over-period deltas, asserted against the kpi-cards read for both periods" }
+      # New for 2.2.90, from opik#8685's harvest (pending/8685.yaml).
+      #
+      # The Logs page's OPEN-ENDED window: every date-range preset ends today,
+      # so `calculateIntervalStartAndEnd` returns `intervalEnd: undefined` and
+      # the page sends no `interval_end` — a branch on which the read has no
+      # upper id bound and a far-future UUIDv7 id counts in the current period.
+      #
+      # Its own key rather than folded into a neighbour. `toggle-spans-view`
+      # already carries the Spans KPI cards, but it names the Spans toggle and a
+      # window that ends now: its spec sends no `interval_end` yet seeds only
+      # past rows, so the branch is never observable there, and the key says
+      # nothing about the Traces or Threads tabs. `list-traces` names the
+      # table's listing, ordering and count — not the cards above it, and not
+      # their agreement with the footer, which is the regression here. Folding
+      # this under either would retire the question permanently.
+      logs-open-ended-window: { covered: false, note: "A date-range preset ending today sends no interval_end, on the kpi-cards read and on the chart's metrics read alike: the KPI cards, their period-over-period deltas and the table footer then report one population including a row whose UUIDv7 id instant is mid-2200, on the Traces, Spans and Threads tabs. Pinned against the same seed read with interval_end = now, where every current-period number differs and the prior period is identical" }
       filter-traces:          { covered: true,  tier: t2-cuj }
+      filter-persistence:     { covered: true,  tier: t2-cuj, note: "Logs filter chips are remembered per project in localStorage and restored when the Logs URL has no filter param. E2E proves only the Traces tag-chip restore on a bare landing: after leaving and returning via the sidebar, after re-clicking Logs while on Logs (bare navigation proven), and in a new tab; the environment picker and the Threads/Spans tables are covered by unit tests only, not e2e" }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
       # New for 2.2.86, from the release pass's own exploration of opik#8411.
@@ -494,6 +512,7 @@ areas:
       - playground/playground-failed-run-output.spec.ts
       - playground/playground-metric-selection.spec.ts
       - playground/playground-model-parameters.spec.ts
+      - playground/playground-openrouter-model-parameters.spec.ts
       - playground/playground-per-column-run.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-reset.spec.ts
@@ -528,21 +547,22 @@ areas:
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
       run-error-info:            { covered: true,  tier: t2-cuj, note: "A failed playground run is recorded as failed. Seeds an unreachable custom provider (no mock gateway, no provider key — the connection is refused before a request is written), runs against it, and asserts the logged trace carries the error block AND still renders the failure text as the run's assistant turn, since output deliberately keeps what the playground showed the user. t2 also covers the DATASET-GRID half (playground-dataset-run-failure.spec.ts, OPIK-8468): against the same unreachable provider, every one of the dataset's rows renders a 'Run failed:' tag whose tooltip carries the whole message, and NO cell renders a MarkdownPreview answer — which is the failure mode the change exists for, a dropped error falling back into the ordinary output path and reading like a reply. Two sub-checks from that change are NOT covered, and neither is claimed: stop-before-first-token, and the nested detail.detail unwrapping. Both need a provider that answers slowly or badly, not one that never answers. t2 also covers the FREE-MODE half (playground-failed-run-output.spec.ts, OPIK-8468) — the single-prompt panel PlaygroundPromptOutput, which is a different component from the grid cell and gates its body on its own `hasOutput`, so the two regress apart: the panel shows the 'Run failed: <message>' tag, renders no MarkdownPreview answer, does NOT fall back to the 'No runs yet' empty state, and carries no duration or token chip. That spec provokes the failure client-side with an undefined {{variable}}, so it needs no provider key and no reachable model. The no-chip half is scoped to that client-side throw, which lands before the proxy call and records no usage — a PROXY-level failure does still report a duration (pre-existing, untouched by OPIK-8468) — so nothing here claims failed runs are chip-free in general." }
       trace-messages-tab:        { covered: true,  tier: t2-cuj, note: "The Messages tab on a trace the playground wrote, whose completion is stored as a bare {output: string}. Asserts the tab is present at all and that its own panel renders the run as User and Assistant turns — the prior assertion only checked the prompt text was somewhere in the panel, which the Details JSON satisfies just as well, so it stayed green while the tab was missing entirely." }
-      # Scoped: the Anthropic panel only, and only the sampling pair, whose display
+      # Scoped: the Anthropic panel only, and only the two controls whose display
       # and whose request value can disagree. On claude-sonnet-4-6 the spec
       # asserts the sampling pair is one choice with one MOUNTED control (the
       # outgoing half leaves the DOM rather than dimming), then compares the
-      # panel's own Top P against the outbound
+      # panel's own Top P and Thinking effort against the outbound
       # POST /v1/private/chat/completions body — which is the only place the
-      # disagreement is observable, since neither surface alone can see it —
-      # and asserts that body carries no temperature and no thinking_effort.
+      # disagreement is observable, since neither surface alone can see it. The
+      # effort must arrive as custom_parameters.output_config.effort (what the
+      # backend forwards to Anthropic, OPIK-8605), never as a flat thinking_effort.
       #
-      # Still uncovered here: the Thinking effort control (hidden while
-      # ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND is false), the OpenAI / Gemini /
-      # Vertex / OpenRouter / Custom panels, max output tokens, throttling, max
-      # concurrent requests, and whether a persisted prompt re-hydrates its
-      # settings on reload.
-      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Anthropic only (playground-model-parameters.spec.ts): sampling pair is a single choice with exactly one mounted slider, and the displayed Top P is asserted against the outbound chat/completions body, which must carry top_p and neither temperature nor thinking_effort. The Thinking effort control is hidden while ANTHROPIC_EFFORT_FORWARDED_BY_BACKEND is false, so it is not covered. Other providers' panels, the token/throttling/concurrency sliders, and settings surviving a prompt reload are all still uncovered" }
+      # Still uncovered here: the OpenAI / Gemini / Vertex / OpenRouter / Custom
+      # panels, max output tokens, throttling, max concurrent requests, whether a
+      # persisted prompt re-hydrates its settings on reload, and the backend hop
+      # itself (the spec fulfils the request in the browser, so it never sees the
+      # body Anthropic receives).
+      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Anthropic only (playground-model-parameters.spec.ts): sampling pair is a single choice with exactly one mounted slider, and the displayed Top P and a non-default Thinking effort are asserted against the outbound chat/completions body, which must carry top_p, no temperature, the effort under custom_parameters.output_config.effort and no flat thinking_effort. Other providers' panels, the token/throttling/concurrency sliders, settings surviving a prompt reload, and the proxy-to-Anthropic hop are all still uncovered" }
 
     visual:
       playground-default: { covered: false, state: default }
@@ -874,6 +894,15 @@ areas:
       delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
       queue-configuration-tab: { covered: false }
       add-traces-to-queue:     { covered: true,  tier: t2-cuj }
+      # New for 2.2.90, from opik#8687's harvest (pending/8687.yaml).
+      #
+      # Both name the AUTOMATED fill, which is what #8687 turned on by default.
+      # `add-traces-to-queue` and `create-queue` above are already covered by
+      # the manual-add and config round-trip specs, and neither says anything
+      # about automation: a queue that stopped filling itself would leave both
+      # green. Folding these under them would retire the question permanently.
+      automated-queue-fill:    { covered: false, note: "A feedback score matching the queue's condition routes its trace in with source 'automated', and a non-matching score keeps its trace out" }
+      automation-max-items:    { covered: false, note: "max_items_in_queue caps automated adds (deterministically, lowest ids first) while a manual add still bypasses the ceiling; the list's Automation cell reads 'Cap reached'" }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
       export-annotated-data:   { covered: false }
 

@@ -90,6 +90,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .providerId(providerConfig.id())
                 .workspaceId(workspaceId)
                 .authConfig(providerConfig.authConfig())
+                .provider(providerConfig.provider())
                 .build();
     }
 
@@ -129,6 +130,14 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
         var provider = getLlmProviderFromEnums(model);
         return StructuredOutputStrategy.getStrategy(provider, model);
+    }
+
+    @Override
+    public boolean isOpenAiReasoningModel(@NonNull String model) {
+        return registryService.findModel(model)
+                .filter(result -> result.provider() == LlmProvider.OPEN_AI)
+                .map(result -> result.model().reasoning())
+                .orElse(false);
     }
 
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {

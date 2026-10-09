@@ -18,7 +18,10 @@ import {
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 
-import { getDefaultConfigByProvider } from "@/lib/playground";
+import {
+  getDefaultConfigByProvider,
+  restoreMissingProviderAndConfigKeys,
+} from "@/lib/playground";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
@@ -59,13 +62,15 @@ import {
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
+import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
   index: number;
   promptId: string;
   providerKeys: COMPOSED_PROVIDER_TYPE[];
-  isPendingProviderKeys: boolean;
+  hasLoadedProviderKeys: boolean;
+  hasRegistryModels: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
   onRun?: () => void;
@@ -77,7 +82,8 @@ const PlaygroundPrompt = ({
   promptId,
   index,
   providerKeys,
-  isPendingProviderKeys,
+  hasLoadedProviderKeys,
+  hasRegistryModels,
   providerResolver,
   modelResolver,
   onRun,
@@ -92,6 +98,7 @@ const PlaygroundPrompt = ({
   const datasetVariables = useDatasetVariables();
   const datasetSampleData = useDatasetSampleData();
   const providerValidationTrigger = useProviderValidationTrigger();
+  const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
 
   const [, setLastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -216,6 +223,7 @@ const PlaygroundPrompt = ({
         const adjustedConfigs = updateProviderConfig(configs, {
           model: newModel,
           provider: newProvider,
+          openAiPipelineMode,
         });
         newConfigs = adjustedConfigs || configs;
       }
@@ -227,7 +235,14 @@ const PlaygroundPrompt = ({
       });
       setLastPickedModel(newModel);
     },
-    [updatePrompt, promptId, provider, configs, setLastPickedModel],
+    [
+      updatePrompt,
+      promptId,
+      provider,
+      configs,
+      setLastPickedModel,
+      openAiPipelineMode,
+    ],
   );
 
   const handleAddProvider = useCallback(
@@ -265,7 +280,14 @@ const PlaygroundPrompt = ({
 
   useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
-    if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
+    // A failed request is not an empty answer: without the registry's models every stored model looks
+    // unknown, and without the keys every provider looks removed, so the model would be swapped or cleared.
+    // The check waits until both have really loaded, even after one has failed.
+    if (
+      !checkedIfModelIsValidRef.current &&
+      hasLoadedProviderKeys &&
+      hasRegistryModels
+    ) {
       checkedIfModelIsValidRef.current = true;
 
       const newModel = modelResolver(model, providerKeys);
@@ -279,17 +301,31 @@ const PlaygroundPrompt = ({
         });
 
         updateOutput(promptId, "", { value: null });
+      } else {
+        const restored = restoreMissingProviderAndConfigKeys(
+          prompt,
+          providerResolver,
+        );
+
+        if (restored !== prompt) {
+          updatePrompt(promptId, {
+            provider: restored.provider,
+            configs: restored.configs,
+          });
+        }
       }
     }
   }, [
     providerKeys,
-    isPendingProviderKeys,
+    hasLoadedProviderKeys,
+    hasRegistryModels,
     providerResolver,
     modelResolver,
     updateOutput,
     updatePrompt,
     promptId,
     model,
+    prompt,
   ]);
 
   const handleImportChatPrompt = useCallback(
@@ -367,6 +403,7 @@ const PlaygroundPrompt = ({
             model={model}
             configs={configs}
             onChange={handleUpdateConfig}
+            openAiPipelineMode={openAiPipelineMode}
             size="icon-xs"
             variant="ghost"
           />

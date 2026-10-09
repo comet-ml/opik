@@ -3,6 +3,8 @@ import {
   ProviderObject,
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
+  OPENAI_PIPELINE_MODE_VALUES,
+  OpenAiPipelineMode,
 } from "@/types/providers";
 import {
   CUSTOM_PROVIDER_MODEL_PREFIX,
@@ -48,6 +50,13 @@ export const buildComposedProviderKey = (
   }
   return providerType;
 };
+
+// The backend sends all three through the same OpenAI-compatible client, so they take the same
+// parameters and share one settings panel and one set of defaults.
+export const isOpenAICompatibleProvider = (provider: PROVIDER_TYPE) =>
+  provider === PROVIDER_TYPE.CUSTOM ||
+  provider === PROVIDER_TYPE.OLLAMA ||
+  provider === PROVIDER_TYPE.BEDROCK;
 
 export const parseComposedProviderType = (provider: COMPOSED_PROVIDER_TYPE) => {
   if (provider.startsWith(PROVIDER_TYPE.CUSTOM)) {
@@ -108,4 +117,28 @@ export const getProviderFromModel = (
     }
   }
   return PROVIDER_TYPE.OPEN_AI;
+};
+
+// Default pipeline mode applied as a fallback in form defaults, resets, and save payloads.
+// Centralised here so changing the default requires editing only one place.
+export const DEFAULT_OPENAI_PIPELINE_MODE: OpenAiPipelineMode =
+  "chat_completions_api";
+
+/**
+ * Normalises a backend-stored {@code openai_pipeline_mode} string into a typed
+ * {@link OpenAiPipelineMode}. The backend's {@code OpenAIClientGenerator.extractApiPipelineMode}
+ * accepts any casing (it uppercases before enum lookup), so the persisted value could be either
+ * lowercase or uppercase depending on how it was written (UI vs direct REST). The form schema is
+ * strict-cased lowercase, so we lowercase here and reject anything that isn't one of the known
+ * values — falling back to {@link DEFAULT_OPENAI_PIPELINE_MODE}. Keeps the Select always pointing
+ * at a valid option and prevents Zod from blocking submit on legacy/odd-cased values.
+ */
+export const normalizeOpenAiPipelineMode = (
+  value: string | undefined | null,
+): OpenAiPipelineMode => {
+  if (!value) return DEFAULT_OPENAI_PIPELINE_MODE;
+  const lowered = value.toLowerCase();
+  return (OPENAI_PIPELINE_MODE_VALUES as readonly string[]).includes(lowered)
+    ? (lowered as OpenAiPipelineMode)
+    : DEFAULT_OPENAI_PIPELINE_MODE;
 };
