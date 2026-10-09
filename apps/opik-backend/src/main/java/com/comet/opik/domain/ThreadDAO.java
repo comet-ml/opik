@@ -1707,7 +1707,7 @@ class ThreadDAOImpl implements ThreadDAO {
                             if (isPagePushdownEligible(finalTemplate, criteria)) {
                                 finalTemplate.add("page_pushdown", true);
                                 return findPageThreadIds(criteria, sortFields, size, offset, connection,
-                                        workspaceId)
+                                        workspaceId, userName)
                                         .flatMap(pageThreadIds -> pageThreadIds.isEmpty()
                                                 ? Mono.just(new TraceThread.TraceThreadPage(page, 0, count, List.of(),
                                                         traceThreadSortingFactory.getSortableFields()))
@@ -1725,11 +1725,11 @@ class ThreadDAOImpl implements ThreadDAO {
     }
 
     private Mono<List<String>> findPageThreadIds(TraceSearchCriteria criteria, String sortFields, int size,
-            int offset, Connection connection, String workspaceId) {
+            int offset, Connection connection, String workspaceId, String userName) {
         var template = newTraceThreadFindTemplate(SELECT_PAGE_THREAD_IDS, criteria, THREAD_SEARCH_CLAUSE,
                 traceColumnsNonNullable())
                 .add("offset", offset)
-                .add("log_comment", getLogComment("find_thread_page_ids", workspaceId, null,
+                .add("log_comment", getLogComment("find_thread_page_ids", workspaceId, userName,
                         "offset:" + offset + ":size:" + size));
         addTracesPartitionedFlag(template);
         Optional.ofNullable(sortFields).ifPresent(fields -> template.add("sort_fields", fields));
