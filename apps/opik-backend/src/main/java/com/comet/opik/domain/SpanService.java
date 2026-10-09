@@ -304,9 +304,13 @@ public class SpanService {
 
     /**
      * Records in span_weeks the weekly partition each written span is stored in, one row per distinct
-     * (project, trace, week). Spans missing an id, trace or project carry nothing to index and are skipped.
+     * (project, trace, week). Spans missing an id, trace or project carry nothing to index and are skipped. A no-op
+     * while {@code databaseAnalyticsDataModel.spanWeeksWriteEnabled} is off.
      */
     public Mono<Long> registerWeeks(@NonNull Collection<Span> spans) {
+        if (!config.getDatabaseAnalyticsDataModel().spanWeeksWriteEnabled()) {
+            return Mono.just(0L);
+        }
         List<SpanWeek> rows = spans.stream()
                 .filter(span -> span.id() != null && span.traceId() != null && span.projectId() != null)
                 .map(span -> new SpanWeek(span.projectId(), span.traceId(),

@@ -819,6 +819,9 @@ databaseAnalyticsDataModel:
   # disagrees with the actual `spans` engine in either direction, the backend fails readiness at startup with a
   # message naming the flag and the observed engine, and clears on the next probe once the two are back in step.
   spansDistributedWrapEnabled: false
+  # Register each written span's weekly partition in the span_weeks index. Turn true before the span weeks
+  # backfill starts.
+  spanWeeksWriteEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
