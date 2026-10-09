@@ -1583,7 +1583,7 @@ describe("resolveThinkingLevel", () => {
     PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
   ])(
-    "sends what the dropdown shows for a stored level %s does not offer",
+    "sends what the dropdown shows when %s does not offer the stored level",
     (model) => {
       const configs = { thinkingLevel: "minimal" as const };
 
