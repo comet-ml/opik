@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.r2dbc.spi.Connection;
@@ -16,6 +17,11 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -52,57 +58,46 @@ public class SpanWeeksDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
-    // The spans_local_v2 partition expression, derived from the id instead of id_at: an unpartitioned spans table
-    // declares id_at as a 32-bit DateTime, which wraps far-future ids, so its own id_at cannot give the same week.
+    // The spans_local_v2 partition expression, derived from the id instead of id_at: the legacy spans table declares
+    // id_at as a 32-bit DateTime, which wraps far-future ids, so its own id_at cannot give the same week.
     private static final String ID_WEEK = "toUInt32(toYYYYMMDD(toDate32(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'))"
             + " - toIntervalDay(toDayOfWeek(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'), 1))))";
 
-    private static final String IS_PARTITIONED = """
-            SELECT partition_key != '' AS partitioned
-            FROM system.tables
-            WHERE database = currentDatabase() AND name = :table
-            SETTINGS log_comment = '<log_comment>'
-            """;
-
-    private static final String FIND_PARTITION_WEEKS = """
-            SELECT toInt64(partition_id) AS week, toInt64(sum(rows)) AS span_count
-            FROM system.parts
-            WHERE database = currentDatabase() AND table = :table AND active
-            GROUP BY partition_id
-            ORDER BY week
-            SETTINGS log_comment = '<log_comment>'
-            """;
-
-    private static final String FIND_ID_WEEKS = """
+    private static final String FIND_WEEKS = """
             SELECT toInt64(<id_week>) AS week, toInt64(count()) AS span_count
-            FROM <table>
+            FROM spans
             GROUP BY week
             ORDER BY week
             SETTINGS log_comment = '<log_comment>', max_execution_time = <max_execution_time>
             """;
 
+    // The id range only prunes granules, through the idx_spans_id minmax index; the week filter decides membership.
     // GROUP BY rather than DISTINCT so a large chunk spills to disk, by the server's
     // max_bytes_ratio_before_external_group_by; in-order aggregation over the spans sort key measured ~200x slower.
     private static final String BACKFILL = """
             INSERT INTO span_weeks (workspace_id, project_id, trace_id, id_week)
-            SELECT workspace_id, project_id, trace_id,
-                <if(partitioned)>toUInt32(_partition_id)<else><id_week><endif> AS week
-            FROM <table>
-            WHERE <if(partitioned)>_partition_id BETWEEN :from_partition AND :to_partition<else>week BETWEEN :from_week AND :to_week<endif>
+            SELECT workspace_id, project_id, trace_id, <id_week> AS week
+            FROM spans
+            WHERE week BETWEEN :from_week AND :to_week
+            <if(from_id)>AND id >= :from_id<endif>
+            <if(to_id)>AND id \\< :to_id<endif>
             GROUP BY workspace_id, project_id, trace_id, week
             SETTINGS log_comment = '<log_comment>', optimize_aggregation_in_order = 0,
                 max_execution_time = <max_execution_time>
             """;
 
-    /**
-     * A spans week and how many span rows it holds: a partition of a weekly-partitioned spans table, or, for an
-     * unpartitioned one, the spans whose id falls in the week the partitioned table would store them in.
-     */
+    /** A spans week, the one spans_local_v2 stores a span in, and how many spans fall in it. */
     @Builder(toBuilder = true)
     public record WeekSpans(long week, long spanCount) {
     }
 
+    // Non-v7 ids, whatever their leading bits, fall in this week, so a range holding it cannot bound its ids.
+    private static final long EPOCH_WEEK = 19691229L;
+    // Ids at or past it saturate into the last week, so a range reaching it cannot bound its ids from above.
+    private static final Instant ID_CEILING = Instant.parse("2300-01-01T00:00:00Z");
+
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull InstantToUUIDMapper uuidMapper;
 
     public Mono<Long> insert(@NonNull List<SpanWeek> rows) {
         if (rows.isEmpty()) {
@@ -151,35 +146,15 @@ public class SpanWeeksDAO {
                 .collectList());
     }
 
-    public Mono<Boolean> isPartitioned(@NonNull String table) {
+    /** The weeks the spans hold, ascending, in one scan of the id column. */
+    public Mono<List<WeekSpans>> findWeeks(long maxExecutionSeconds) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(
-                        getSTWithLogComment(IS_PARTITIONED, "is_spans_partitioned", null, null, table).render())
-                        .bind("table", table)
+                        getSTWithLogComment(FIND_WEEKS, "find_spans_weeks", null, null, null)
+                                .add("id_week", ID_WEEK)
+                                .add("max_execution_time", maxExecutionSeconds)
+                                .render())
                         .execute())
-                .flatMap(result -> result.map((row, metadata) -> row.get("partitioned", Boolean.class)))
-                .next()
-                .defaultIfEmpty(false);
-    }
-
-    /**
-     * The weeks the spans table holds, ascending. A partitioned table answers from {@code system.parts} metadata; an
-     * unpartitioned one is scanned once, reading only the id column.
-     */
-    public Mono<List<WeekSpans>> findWeeks(@NonNull String table, boolean partitioned, long maxExecutionSeconds) {
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    ST template = getSTWithLogComment(partitioned ? FIND_PARTITION_WEEKS : FIND_ID_WEEKS,
-                            "find_spans_weeks", null, null, table)
-                            .add("table", table)
-                            .add("id_week", ID_WEEK)
-                            .add("max_execution_time", maxExecutionSeconds);
-                    Statement statement = connection.createStatement(template.render());
-                    if (partitioned) {
-                        statement.bind("table", table);
-                    }
-                    return statement.execute();
-                })
                 .flatMap(result -> result.map((row, metadata) -> WeekSpans.builder()
                         .week(row.get("week", Long.class))
                         .spanCount(row.get("span_count", Long.class))
@@ -188,29 +163,40 @@ public class SpanWeeksDAO {
     }
 
     /**
-     * Registers the weeks of every span in {@code [fromWeek, toWeek]} straight from the spans table. A partitioned
-     * table reads only those partitions; an unpartitioned one is scanned in full and filtered by each span's week.
+     * Registers the weeks of every span in {@code [fromWeek, toWeek]}. Unless the range holds the epoch week, its ids
+     * are bounded by the UUIDv7s of its first Monday and of the Monday after it (below 2300), so the scan skips the
+     * granules outside it.
      */
-    public Mono<Void> backfill(@NonNull String table, boolean partitioned, long fromWeek, long toWeek,
-            long maxExecutionSeconds) {
+    public Mono<Void> backfill(long fromWeek, long toWeek, long maxExecutionSeconds) {
+        boolean bounded = fromWeek > EPOCH_WEEK;
+        Instant end = monday(toWeek).plus(7, ChronoUnit.DAYS);
+        UUID fromId = bounded ? uuidMapper.toLowerBound(monday(fromWeek)) : null;
+        UUID toId = bounded && end.isBefore(ID_CEILING) ? uuidMapper.toLowerBound(end) : null;
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = getSTWithLogComment(BACKFILL, "backfill_span_weeks", null, null,
                             fromWeek + "-" + toWeek)
-                            .add("table", table)
-                            .add("partitioned", partitioned)
                             .add("id_week", ID_WEEK)
+                            .add("from_id", fromId != null)
+                            .add("to_id", toId != null)
                             .add("max_execution_time", maxExecutionSeconds);
-                    Statement statement = connection.createStatement(template.render());
-                    if (partitioned) {
-                        statement.bind("from_partition", String.valueOf(fromWeek))
-                                .bind("to_partition", String.valueOf(toWeek));
-                    } else {
-                        statement.bind("from_week", fromWeek).bind("to_week", toWeek);
+                    Statement statement = connection.createStatement(template.render())
+                            .bind("from_week", fromWeek)
+                            .bind("to_week", toWeek);
+                    if (fromId != null) {
+                        statement.bind("from_id", fromId.toString());
+                    }
+                    if (toId != null) {
+                        statement.bind("to_id", toId.toString());
                     }
                     return statement.execute();
                 })
                 .flatMap(Result::getRowsUpdated)
                 .then();
+    }
+
+    private static Instant monday(long week) {
+        return LocalDate.parse(String.valueOf(week), DateTimeFormatter.BASIC_ISO_DATE).atStartOfDay(ZoneOffset.UTC)
+                .toInstant();
     }
 }

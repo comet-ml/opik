@@ -23,9 +23,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 /**
  * Backfills span_weeks from the spans already written, one range of weeks per step.
  *
- * <p>The first step plans: it lists the weeks the spans table holds (its partitions, or, while it is unpartitioned,
- * the week of each span's id) and stores them as chunks of consecutive weeks. Each later step backfills the oldest
- * pending chunk; once none is pending, steps do nothing.
+ * <p>The first step plans: one scan of the span ids lists the weeks they fall in, stored as chunks of consecutive
+ * weeks. Each later step backfills the oldest pending chunk; once none is pending, steps do nothing. Nothing here
+ * needs spans to be partitioned: the week always comes from the id, and an id range bounds each chunk's scan.
  *
  * <p>Correct only if span writes register their weeks ({@code spanWeeksWriteEnabled}) on every instance before the
  * plan is taken: the plan covers the spans written until then, and live registration everything after. A chunk that
@@ -57,32 +57,26 @@ public class SpanWeeksBackfillService {
             log.warn("Span weeks backfill skipped: databaseAnalyticsDataModel.spanWeeksWriteEnabled is off");
             return Mono.empty();
         }
-        // Post-wrap, spans is Distributed: its partitions live in, and are read from, spans_local.
-        String table = dataModelConfig.spansDistributedWrapEnabled() ? "spans_local" : "spans";
-        return spanWeeksDAO.isPartitioned(table)
-                .flatMap(partitioned -> Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
-                    var chunks = handle.attach(SpanWeeksBackfillChunkDAO.class);
-                    return new Progress(chunks.count() > 0, chunks.findNextPending());
-                })).subscribeOn(Schedulers.boundedElastic())
-                        .flatMap(progress -> {
-                            if (!progress.planned()) {
-                                return plan(table, partitioned);
-                            }
-                            return progress.next()
-                                    .map(chunk -> backfill(table, partitioned, chunk))
-                                    .orElseGet(Mono::empty);
-                        }));
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+            var chunks = handle.attach(SpanWeeksBackfillChunkDAO.class);
+            return new Progress(chunks.count() > 0, chunks.findNextPending());
+        })).subscribeOn(Schedulers.boundedElastic())
+                .flatMap(progress -> {
+                    if (!progress.planned()) {
+                        return plan();
+                    }
+                    return progress.next().map(this::backfill).orElseGet(Mono::empty);
+                });
     }
 
     private record Progress(boolean planned, Optional<Chunk> next) {
     }
 
-    private Mono<Void> plan(String table, boolean partitioned) {
-        return spanWeeksDAO.findWeeks(table, partitioned, config.getQueryTimeout().toSeconds())
+    private Mono<Void> plan() {
+        return spanWeeksDAO.findWeeks(config.getQueryTimeout().toSeconds())
                 .flatMap(weeks -> {
                     List<Chunk> chunks = chunk(weeks, config.getMaxSpansPerChunk());
-                    log.info("Span weeks backfill planned '{}' chunks over '{}' weeks of '{}' (partitioned: '{}')",
-                            chunks.size(), weeks.size(), table, partitioned);
+                    log.info("Span weeks backfill planned '{}' chunks over '{}' weeks", chunks.size(), weeks.size());
                     return Mono.<Void>fromRunnable(() -> template.inTransaction(WRITE, handle -> {
                         handle.attach(SpanWeeksBackfillChunkDAO.class).insert(chunks);
                         return null;
@@ -90,10 +84,9 @@ public class SpanWeeksBackfillService {
                 });
     }
 
-    private Mono<Void> backfill(String table, boolean partitioned, Chunk chunk) {
+    private Mono<Void> backfill(Chunk chunk) {
         long started = System.currentTimeMillis();
-        return spanWeeksDAO.backfill(table, partitioned, chunk.fromWeek(), chunk.toWeek(),
-                config.getQueryTimeout().toSeconds())
+        return spanWeeksDAO.backfill(chunk.fromWeek(), chunk.toWeek(), config.getQueryTimeout().toSeconds())
                 .then(Mono.<Void>fromRunnable(() -> template.inTransaction(WRITE, handle -> {
                     handle.attach(SpanWeeksBackfillChunkDAO.class).markBackfilled(chunk.fromWeek());
                     return null;
