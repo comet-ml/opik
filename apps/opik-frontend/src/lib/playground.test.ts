@@ -131,6 +131,20 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
   });
 });
 
+describe("getDefaultConfigByProvider — the starting temperature", () => {
+  it.each<[PROVIDER_TYPE, PROVIDER_MODEL_TYPE]>([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+    [PROVIDER_TYPE.OPEN_ROUTER, PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI],
+    [PROVIDER_TYPE.ANTHROPIC, PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6],
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH],
+  ])("starts a new %s prompt at 0", (provider, model) => {
+    expect(
+      getDefaultConfigByProvider(provider as COMPOSED_PROVIDER_TYPE, model),
+    ).toMatchObject({ temperature: 0 });
+  });
+});
+
 describe("getDefaultConfigByProvider — OpenAI", () => {
   const defaults = (model: PROVIDER_MODEL_TYPE) =>
     getDefaultConfigByProvider(
@@ -265,6 +279,39 @@ describe("restoreMissingConfigKeys", () => {
 
     expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
   });
+
+  it("keeps the temperature an OpenRouter prompt was stored with", () => {
+    const stored = prompt(
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      { temperature: 1, topP: 1, maxTokens: 0 },
+    );
+
+    expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+      temperature: 1,
+    });
+  });
+
+  it.each([
+    { stored: "no temperature", configs: { topP: 1, maxTokens: 0 } },
+    {
+      stored: "a null temperature",
+      configs: { temperature: null, topP: 1, maxTokens: 0 },
+    },
+  ])(
+    "gives an OpenRouter prompt stored with $stored the new default 0",
+    ({ configs }) => {
+      const stored = prompt(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        configs,
+      );
+
+      expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+        temperature: 0,
+      });
+    },
+  );
 
   it("leaves a cleared Anthropic temperature cleared when Top P is the live half", () => {
     // Restoring temperature here would silently override the user's Top P: with both set the
