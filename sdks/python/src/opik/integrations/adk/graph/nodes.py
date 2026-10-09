@@ -85,6 +85,14 @@ def build_nodes_tree(agent: google.adk.agents.BaseAgent) -> AgentNode:
     return node
 
 
+def get_agent_graph_node_id(agent_name: str) -> str:
+    return _to_mermaid_compatible_name(agent_name)
+
+
+def get_tool_graph_node_id(tool: Any) -> str:
+    return _extract_tool_name(tool)
+
+
 def _extract_tool_name(tool: Any) -> str:
     if isinstance(tool, google.adk.tools.agent_tool.AgentTool):
         return _to_mermaid_compatible_name(f"AgentTool:{tool.name}")
