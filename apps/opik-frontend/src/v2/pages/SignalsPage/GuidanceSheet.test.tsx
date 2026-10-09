@@ -135,6 +135,21 @@ describe("GuidanceSheet", () => {
     expect(setOpen).toHaveBeenCalledWith(false);
   });
 
+  it("asks before discarding when clicking outside with unsaved edits", async () => {
+    const setOpen = vi.fn();
+    renderSheet({ setOpen });
+
+    fireEvent.change(screen.getByLabelText("About this project"), {
+      target: { value: "Draft" },
+    });
+    // Radix registers its outside-pointer listener on the next tick.
+    await new Promise((r) => setTimeout(r));
+    fireEvent.pointerDown(document.body);
+
+    expect(await screen.findByText("Discard changes?")).toBeInTheDocument();
+    expect(setOpen).not.toHaveBeenCalled();
+  });
+
   it("doesn't wipe typing when the saved guidance refetches while open", () => {
     const { rerender } = renderSheet({});
 
