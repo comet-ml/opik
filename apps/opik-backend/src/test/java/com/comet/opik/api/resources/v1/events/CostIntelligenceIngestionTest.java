@@ -264,6 +264,14 @@ class CostIntelligenceIngestionTest {
 
             assertEveryColumnHoldsItsOwnValue(ws.workspaceId(), rowOne);
             assertEveryColumnHoldsItsOwnValue(ws.workspaceId(), rowTwo);
+
+            // an unexpected session_mode must not reach the LowCardinality column
+            var bogusRow = CipxSpendDAO.SpanRow.from(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                    JsonUtils.getJsonNodeFromString("{\"cipx\":{\"call\":{\"session_mode\":\"bogus\"}}}"),
+                    Instant.ofEpochMilli(1_800_000_000_003L));
+            cipxSpendDAO.insert(List.of(bogusRow), ws.workspaceId(), USER).block();
+            assertThat(getCipxSpendAllColumns(bogusRow.spanId(), ws.workspaceId()).orElseThrow().sessionMode())
+                    .isEmpty();
         }
 
         @Test
@@ -946,6 +954,7 @@ class CostIntelligenceIngestionTest {
                 .maxTokens(base + 7)
                 .contextManagement("sentinel-" + n + "-context-management")
                 .speed("sentinel-" + n + "-speed")
+                .sessionMode(n == 1 ? "interactive" : "headless")
                 .aiuNano(base + 8)
                 .trigger("sentinel-" + n + "-trigger")
                 .triggerDetail("sentinel-" + n + "-trigger-detail")
@@ -977,6 +986,7 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.maxTokens()).as("max_tokens").isEqualTo(expected.maxTokens());
         assertThat(actual.contextManagement()).as("context_management").isEqualTo(expected.contextManagement());
         assertThat(actual.speed()).as("speed").isEqualTo(expected.speed());
+        assertThat(actual.sessionMode()).as("session_mode").isEqualTo(expected.sessionMode());
         assertThat(actual.aiuNano()).as("aiu_nano").isEqualTo(expected.aiuNano());
         assertThat(actual.trigger()).as("trigger").isEqualTo(expected.trigger());
         assertThat(actual.triggerDetail()).as("trigger_detail").isEqualTo(expected.triggerDetail());
@@ -995,7 +1005,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
+                    effort, thinking_type, max_tokens, context_management, speed, session_mode, aiu_nano,
                     `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
                     link_failure_reason
                 FROM cipx_spends FINAL
@@ -1024,6 +1034,7 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
+                            row.get("session_mode", String.class),
                             row.get("aiu_nano", Long.class),
                             row.get("trigger_kind", String.class),
                             row.get("trigger_detail", String.class),
@@ -1694,8 +1705,8 @@ class CostIntelligenceIngestionTest {
     private record SentinelSpendRow(String workspaceId, String projectId, String traceId, String spanId,
             Long startMs, String model, Long uInput, Long uCacheRead, Long uCacheCreation, Long uCacheCreation5m,
             Long uCacheCreation1h, Long uOutput, String effort, String thinkingType, Long maxTokens,
-            String contextManagement, String speed, Long aiuNano, String trigger, String triggerDetail,
-            String turnKey, String parentToolUseId, String linkFailureReason) {
+            String contextManagement, String speed, String sessionMode, Long aiuNano, String trigger,
+            String triggerDetail, String turnKey, String parentToolUseId, String linkFailureReason) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,

@@ -20,6 +20,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -72,6 +73,13 @@ public class CipxSpendDAO {
             @NonNull String parentToolUseId,
             @NonNull String linkFailureReason) {
 
+        private static final Set<String> SESSION_MODES = Set.of("interactive", "background", "headless", "unknown");
+
+        /** Keeps the LowCardinality column bounded: anything outside the known modes is stored as ''. */
+        private static String knownSessionMode(String value) {
+            return SESSION_MODES.contains(value) ? value : "";
+        }
+
         public static SpanRow from(UUID spanId, UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
             JsonNode usage = call.path("usage");
@@ -95,7 +103,7 @@ public class CipxSpendDAO {
                     .maxTokens(config.path("max_tokens").asLong(0))
                     .contextManagement(config.path("context_management").asText(""))
                     .speed(config.path("speed").asText(""))
-                    .sessionMode(call.path("session_mode").asText(""))
+                    .sessionMode(knownSessionMode(call.path("session_mode").asText("")))
                     .aiuNano(copilotUsage.isObject() ? copilotUsage.path("total_nano_aiu").asLong(0) : null)
                     .trigger(call.path("trigger").asText(""))
                     .triggerDetail(call.path("trigger_detail").asText(""))
