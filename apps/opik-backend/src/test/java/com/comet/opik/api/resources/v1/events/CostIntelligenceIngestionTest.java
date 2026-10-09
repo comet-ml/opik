@@ -174,6 +174,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
                 // speed: selects the rate table, so it must survive ingestion
                 assertThat(row.get().speed()).isEqualTo("fast");
+                // session_mode: how the harness invoked the call
+                assertThat(row.get().sessionMode()).isEqualTo("background");
                 assertThat(row.get().aiuNano()).isNull();
                 assertThat(row.get().trigger()).isEqualTo("subagent");
                 assertThat(row.get().triggerDetail()).isEqualTo("code-reviewer");
@@ -541,6 +543,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row).isPresent();
                 assertThat(row.get().model()).isEqualTo("github_copilot:claude-sonnet-5");
                 assertThat(row.get().aiuNano()).isEqualTo(5_919_822_000L);
+                // this provider doesn't stamp session_mode, so it must read the '' default.
+                assertThat(row.get().sessionMode()).isEmpty();
 
                 // alloc x the tier's per-token rate: the read tier splits across its two blocks by
                 // chars, the write and output blocks absorb their tiers, input lands on a residual row.
@@ -942,6 +946,7 @@ class CostIntelligenceIngestionTest {
                 .maxTokens(base + 7)
                 .contextManagement("sentinel-" + n + "-context-management")
                 .speed("sentinel-" + n + "-speed")
+                .sessionMode("sentinel-" + n + "-session-mode")
                 .aiuNano(base + 8)
                 .trigger("sentinel-" + n + "-trigger")
                 .triggerDetail("sentinel-" + n + "-trigger-detail")
@@ -973,6 +978,7 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.maxTokens()).as("max_tokens").isEqualTo(expected.maxTokens());
         assertThat(actual.contextManagement()).as("context_management").isEqualTo(expected.contextManagement());
         assertThat(actual.speed()).as("speed").isEqualTo(expected.speed());
+        assertThat(actual.sessionMode()).as("session_mode").isEqualTo(expected.sessionMode());
         assertThat(actual.aiuNano()).as("aiu_nano").isEqualTo(expected.aiuNano());
         assertThat(actual.trigger()).as("trigger").isEqualTo(expected.trigger());
         assertThat(actual.triggerDetail()).as("trigger_detail").isEqualTo(expected.triggerDetail());
@@ -991,7 +997,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
+                    effort, thinking_type, max_tokens, context_management, speed, session_mode, aiu_nano,
                     `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
                     link_failure_reason
                 FROM cipx_spends FINAL
@@ -1020,6 +1026,7 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
+                            row.get("session_mode", String.class),
                             row.get("aiu_nano", Long.class),
                             row.get("trigger_kind", String.class),
                             row.get("trigger_detail", String.class),
@@ -1242,7 +1249,8 @@ class CostIntelligenceIngestionTest {
                               "trigger": "subagent",
                               "trigger_detail": "code-reviewer",
                               "turn_key": "abc123turnkey",
-                              "parent_tool_use_id": "toolu_parent_agent"
+                              "parent_tool_use_id": "toolu_parent_agent",
+                              "session_mode": "background"
                             },
                             "blocks": [
                               {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","subcategory":"auto_memory","sha256":"a1b2c3"},
@@ -1514,7 +1522,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
+                    effort, thinking_type, max_tokens, context_management, speed, session_mode, aiu_nano,
                     `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
                     link_failure_reason
                 FROM cipx_spends FINAL
@@ -1540,6 +1548,7 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
+                            row.get("session_mode", String.class),
                             row.get("aiu_nano", Long.class),
                             row.get("trigger_kind", String.class),
                             row.get("trigger_detail", String.class),
@@ -1679,7 +1688,8 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement, String speed, Long aiuNano,
+            String thinkingType, Long maxTokens, String contextManagement, String speed, String sessionMode,
+            Long aiuNano,
             String trigger, String triggerDetail, String turnKey, String parentToolUseId,
             String linkFailureReason) {
     }
@@ -1687,8 +1697,8 @@ class CostIntelligenceIngestionTest {
     private record SentinelSpendRow(String workspaceId, String projectId, String traceId, String spanId,
             Long startMs, String model, Long uInput, Long uCacheRead, Long uCacheCreation, Long uCacheCreation5m,
             Long uCacheCreation1h, Long uOutput, String effort, String thinkingType, Long maxTokens,
-            String contextManagement, String speed, Long aiuNano, String trigger, String triggerDetail,
-            String turnKey, String parentToolUseId, String linkFailureReason) {
+            String contextManagement, String speed, String sessionMode, Long aiuNano, String trigger,
+            String triggerDetail, String turnKey, String parentToolUseId, String linkFailureReason) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
