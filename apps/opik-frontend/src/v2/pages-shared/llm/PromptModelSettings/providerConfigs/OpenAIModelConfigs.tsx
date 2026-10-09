@@ -68,7 +68,7 @@ const OpenAIModelConfigs = ({
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
           min={0}
-          max={1}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
           label="Temperature"
@@ -115,8 +115,8 @@ const OpenAIModelConfigs = ({
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
           id="frequencyPenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY}
           label="Frequency penalty"
@@ -131,8 +131,8 @@ const OpenAIModelConfigs = ({
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
           id="presencePenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY}
           label="Presence penalty"

@@ -119,7 +119,7 @@ const CustomModelConfig = ({
               onChange={(v) => onChange({ temperature: v })}
               id="temperature"
               min={0}
-              max={1}
+              max={2}
               step={0.01}
               defaultValue={DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
               label="Temperature"
@@ -171,8 +171,8 @@ const CustomModelConfig = ({
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
           id="frequencyPenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_CUSTOM_CONFIGS.FREQUENCY_PENALTY}
           label="Frequency penalty"
@@ -187,8 +187,8 @@ const CustomModelConfig = ({
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
           id="presencePenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_CUSTOM_CONFIGS.PRESENCE_PENALTY}
           label="Presence penalty"
