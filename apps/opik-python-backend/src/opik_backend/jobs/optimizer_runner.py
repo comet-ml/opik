@@ -220,6 +220,7 @@ def build_optimizer_and_prompt(config):
     """
     from opik_optimizer import ChatPrompt
     from opik_backend.studio.optimizers import (
+        LLM_MAX_TOKENS,
         OptimizerFactory,
         ensure_default_model_params,
     )
@@ -235,10 +236,21 @@ def build_optimizer_and_prompt(config):
         # optimizer model_parameters if the config set them without a model
         # (saved configs / API clients), instead of silently dropping them.
         optimizer_model = task_model
+        # The prompt's output limit is sized for its answers. The algorithm writes
+        # whole prompts and JSON analyses, so it gets at least the factory default,
+        # under the prompt's field name: the same model's gateway route reads that
+        # name, while some routes ignore the factory's max_tokens.
         optimizer_model_params = (
             _with_stream(config.optimizer_model_params)
             if config.optimizer_model_params is not None
-            else task_params
+            else {
+                key: (
+                    max(value or 0, LLM_MAX_TOKENS)
+                    if key in ("max_tokens", "max_completion_tokens")
+                    else value
+                )
+                for key, value in task_params.items()
+            }
         )
 
     # The factory injects defaults (e.g. max_tokens) into the optimizer params.
