@@ -16,10 +16,10 @@ import {
   isAnyControlVisible,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import {
-  clampMaxCompletionTokens,
   getAnthropicThinkingEffortOptions,
   getMaxCompletionTokensRange,
   resolveEffort,
+  resolveMaxCompletionTokens,
   resolveSamplingParams,
 } from "@/lib/modelUtils";
 import SelectBox from "@/shared/SelectBox/SelectBox";
@@ -69,10 +69,10 @@ const AnthropicModelConfigs = ({
 
       {visible.maxCompletionTokens && (
         <SliderInputControl
-          value={clampMaxCompletionTokens(
-            configs.maxCompletionTokens ??
-              DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
-            maxCompletionTokensRange,
+          value={resolveMaxCompletionTokens(
+            PROVIDER_TYPE.ANTHROPIC,
+            model ?? "",
+            configs.maxCompletionTokens,
           )}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxCompletionTokens"

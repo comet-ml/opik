@@ -87,7 +87,20 @@ describe("sanitizeConfigForRequest max output tokens", () => {
       undefined,
       16384,
     ],
-    ["0 on Chat Completions", PROVIDER_MODEL_TYPE.GPT_4O_MINI, 0, undefined, 1],
+    [
+      "0 on Chat Completions",
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      0,
+      undefined,
+      4000,
+    ],
+    [
+      "0 on the Responses API",
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      0,
+      "responses_api",
+      4000,
+    ],
     [
       "below 16 on the Responses API",
       PROVIDER_MODEL_TYPE.GPT_4O_MINI,
@@ -102,7 +115,7 @@ describe("sanitizeConfigForRequest max output tokens", () => {
       "chat_completions_api",
       5,
     ],
-    ["0 on Claude", PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, 0, undefined, 1],
+    ["0 on Claude", PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, 0, undefined, 4000],
     [
       "above Haiku 4.5's limit",
       PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
@@ -118,7 +131,7 @@ describe("sanitizeConfigForRequest max output tokens", () => {
       100000,
     ],
   ] as const)(
-    "clamps a stored value %s",
+    "sends a stored value %s as %d",
     (_, model, maxCompletionTokens, openAiPipelineMode, expected) => {
       expect(
         sanitizeConfigForRequest(

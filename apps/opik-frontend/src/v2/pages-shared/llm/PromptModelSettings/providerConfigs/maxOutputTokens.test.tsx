@@ -70,6 +70,12 @@ describe("OpenAI max output tokens", () => {
 
     expect(maxTokensInput()).toHaveValue("16384");
   });
+
+  it("shows a stored 0 as the default it will send", () => {
+    renderOpenAI(PROVIDER_MODEL_TYPE.GPT_4O_MINI, 0);
+
+    expect(maxTokensInput()).toHaveValue("4000");
+  });
 });
 
 describe("Anthropic max output tokens", () => {
@@ -87,9 +93,9 @@ describe("Anthropic max output tokens", () => {
     expect(onChange).toHaveBeenCalledWith({ maxCompletionTokens: saved });
   });
 
-  it("shows a stored 0 as the 1 it will send", () => {
+  it("shows a stored 0 as the default it will send", () => {
     renderAnthropic(PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, 0);
 
-    expect(maxTokensInput()).toHaveValue("1");
+    expect(maxTokensInput()).toHaveValue("4000");
   });
 });

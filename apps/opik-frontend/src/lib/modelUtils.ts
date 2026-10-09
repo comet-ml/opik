@@ -11,6 +11,7 @@ import {
 import {
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
+  DEFAULT_OPEN_AI_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
 } from "@/constants/llm";
 import {
@@ -907,10 +908,30 @@ export const getMaxCompletionTokensRange = (
   max: getMaxOutputTokens(model) ?? MAX_COMPLETION_TOKENS_FALLBACK[provider],
 });
 
-export const clampMaxCompletionTokens = (
-  value: number,
-  { min, max }: MaxCompletionTokensRange,
-) => Math.min(Math.max(value, min), max);
+const MAX_COMPLETION_TOKENS_DEFAULT = {
+  [PROVIDER_TYPE.OPEN_AI]: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
+  [PROVIDER_TYPE.ANTHROPIC]: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
+};
+
+export const resolveMaxCompletionTokens = (
+  provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
+  model: string,
+  value: number | undefined,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): number => {
+  // A stored 0 was saved while the slider still went down to 0: it meant "not set", never a
+  // one-token answer, so it gets the default rather than the new floor.
+  if (!value) {
+    return MAX_COMPLETION_TOKENS_DEFAULT[provider];
+  }
+
+  const { min, max } = getMaxCompletionTokensRange(
+    provider,
+    model,
+    openAiPipelineMode,
+  );
+  return Math.min(Math.max(value, min), max);
+};
 
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
@@ -992,9 +1013,11 @@ export const sanitizeConfigForRequest = (
     !isCustomProviderModel(model) &&
     typeof sanitized.maxCompletionTokens === "number"
   ) {
-    sanitized.maxCompletionTokens = clampMaxCompletionTokens(
+    sanitized.maxCompletionTokens = resolveMaxCompletionTokens(
+      provider,
+      model,
       sanitized.maxCompletionTokens,
-      getMaxCompletionTokensRange(provider, model, openAiPipelineMode),
+      openAiPipelineMode,
     );
   }
 

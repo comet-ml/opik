@@ -16,10 +16,10 @@ import {
 } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import {
-  clampMaxCompletionTokens,
   getMaxCompletionTokensRange,
   getOpenAIReasoningEffortOptions,
   resolveEffort,
+  resolveMaxCompletionTokens,
   resolveSamplingParams,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -88,10 +88,11 @@ const OpenAIModelConfigs = ({
 
       {visible.maxCompletionTokens && (
         <SliderInputControl
-          value={clampMaxCompletionTokens(
-            configs.maxCompletionTokens ??
-              DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
-            maxCompletionTokensRange,
+          value={resolveMaxCompletionTokens(
+            PROVIDER_TYPE.OPEN_AI,
+            model ?? "",
+            configs.maxCompletionTokens,
+            openAiPipelineMode,
           )}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxCompletionTokens"
