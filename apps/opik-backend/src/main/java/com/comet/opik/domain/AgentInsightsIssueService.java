@@ -87,8 +87,8 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                     ? Set.of()
                     : dao.findIdsOutsideScope(workspaceId, report.projectId(), explicitIds);
             if (!foreignIds.isEmpty()) {
-                log.warn("Skipping reported agent insights issues owned by another workspace or project, "
-                        + "project '{}', workspace '{}', ids '{}'", report.projectId(), workspaceId, foreignIds);
+                log.warn("Skipping '{}' reported agent insights issues that belong to another workspace or project, "
+                        + "project '{}', workspace '{}'", foreignIds.size(), report.projectId(), workspaceId);
             }
             List<AgentInsightsReport.ReportedIssue> issues = report.issues().stream()
                     .filter(issue -> issue.id() == null || !foreignIds.contains(issue.id()))
