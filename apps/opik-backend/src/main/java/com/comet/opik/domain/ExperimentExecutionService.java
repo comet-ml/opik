@@ -146,11 +146,13 @@ public class ExperimentExecutionService {
 
                                                         if (messages.size() > experimentExecutionConfig
                                                                 .getStreamMaxLen()) {
-                                                            return markExperimentsFailed(experimentIds)
+                                                            return markRunRefused(experimentIds)
                                                                     .then(Mono.error(tooLargeToRun()));
                                                         }
 
                                                         return itemPublisher.publish(batchId, messages, testSuite)
+                                                                .then(purgeIfCancelledWhilePublishing(
+                                                                        workspaceId, experimentIds))
                                                                 .then(Mono.fromCallable(() -> {
                                                                     log.info(
                                                                             "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
@@ -353,6 +355,28 @@ public class ExperimentExecutionService {
     }
 
     /**
+     * A stop that lands while this run is still publishing purges an empty queue: the messages it
+     * meant to delete are not on the stream yet, and a cancel only purges once. Repeating it here,
+     * now that they are, is what keeps those messages from being walked one by one.
+     *
+     * The run is cancelled either way — the mark is set before the purge, so a consumer skips
+     * whatever this misses. What is saved is the walk, which on a large dataset is the whole queue.
+     */
+    private Mono<Void> purgeIfCancelledWhilePublishing(String workspaceId, List<UUID> experimentIds) {
+        return Flux.fromIterable(experimentIds)
+                .filterWhen(experimentId -> cancellationService.isCancelled(workspaceId, experimentId))
+                .concatMap(experimentId -> cancellationService.purgeQueued(workspaceId, experimentId)
+                        .flatMap(drained -> recordFinishedIfDrained(workspaceId, experimentId, drained))
+                        .onErrorResume(error -> {
+                            // Only the walk is lost, and the run still settles through its consumer
+                            log.warn("Failed to purge cancelled experiment '{}' after publishing, workspaceId '{}'",
+                                    experimentId, workspaceId, error);
+                            return Mono.empty();
+                        }))
+                .then();
+    }
+
+    /**
      * A run whose remaining items were all purged has stopped producing with nothing left to notice
      * it: no message will reach a consumer to count the last one down. Anything above zero is still
      * with a consumer, which will record it on the way out.
@@ -373,7 +397,7 @@ public class ExperimentExecutionService {
      * The experiment records exist before their items are counted, so a run refused at that point
      * would otherwise be left behind reading as still running, for work that will never start.
      */
-    private Mono<Void> markExperimentsFailed(List<UUID> experimentIds) {
+    private Mono<Void> markRunRefused(List<UUID> experimentIds) {
         var statusUpdate = ExperimentUpdate.builder()
                 .status(ExperimentStatus.FAILED)
                 .finished(true)

@@ -23,9 +23,11 @@ import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -183,6 +185,110 @@ class ExperimentItemProcessingSubscriberTest {
         assertThat(captor.getValue().finished())
                 .as("it still drained, which is what stops the page waiting on it")
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("should complete a drained run that nobody stopped and had no failures")
+    void finishADrainedRunAsCompleted() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+        when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId)).block();
+
+        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+        verify(experimentService).update(eq(experimentId), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(ExperimentStatus.COMPLETED);
+        assertThat(captor.getValue().finished()).isTrue();
+        verify(experimentService).finishExperiments(Set.of(experimentId));
+    }
+
+    // Aggregates describe a run that ran. A stopped one did not, so building them would report
+    // totals over whichever rows happened to land before the stop.
+    @Test
+    @DisplayName("should not aggregate a drained run that was stopped")
+    void skipAggregationForAStoppedRun() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId)).block();
+
+        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+        verify(experimentService).update(eq(experimentId), captor.capture());
+        assertThat(captor.getValue().status())
+                .as("the stop it was given stands")
+                .isNull();
+        assertThat(captor.getValue().finished()).isTrue();
+        verify(experimentService, never()).finishExperiments(any());
+    }
+
+    // The claim is taken when the counter drains and held until a terminal state is written. If that
+    // write and its fallback both fail there is no item left to drain and try again, so holding it
+    // would only keep a stop from reaching a run that still reads as running.
+    @Test
+    @DisplayName("should hand the finish back when no terminal state could be written")
+    void releaseTheFinishWhenEveryTerminalWriteFails() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any()))
+                .thenReturn(Mono.error(new IllegalStateException("database is down")));
+        when(cancellationService.releaseFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
+
+        subscriber.processEvent(buildMessage(experimentId)).block();
+
+        verify(cancellationService).releaseFinish(WORKSPACE_ID, experimentId);
+    }
+
+    @Test
+    @DisplayName("should hand the finish back when a test suite cannot be stamped")
+    void releaseTheFinishWhenTheTestSuiteStampFails() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any()))
+                .thenReturn(Mono.error(new IllegalStateException("database is down")));
+        when(cancellationService.releaseFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
+
+        assertThatThrownBy(() -> subscriber
+                .processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build())
+                .block())
+                .hasMessage("database is down");
+
+        verify(cancellationService).releaseFinish(WORKSPACE_ID, experimentId);
+    }
+
+    // Held is the correct state once something has been written: it is what stops a second actor
+    // reaching the same finish and relabelling a run that already has its outcome.
+    @Test
+    @DisplayName("should keep the finish when the run settles normally")
+    void keepTheFinishWhenTheRunSettles() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+        when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId)).block();
+
+        verify(cancellationService, never()).releaseFinish(any(), any());
     }
 
     // A cancelled test suite never reaches its assertions, so stamping only there would leave its

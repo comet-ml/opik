@@ -205,14 +205,16 @@ public class ExperimentCancellationService {
         return finishClaim(workspaceId, experimentId).isExists();
     }
 
-    public Mono<Boolean> isCancelled(@NonNull String workspaceId, @NonNull UUID experimentId) {
-        return bucket(workspaceId, experimentId).isExists();
+    /**
+     * Gives the finish back, for a claimant that could not write how the run ended. Held, it would only
+     * keep a stop from reaching a run that no longer has any item left to settle it.
+     */
+    public Mono<Boolean> releaseFinish(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return finishClaim(workspaceId, experimentId).delete();
     }
 
-    public Mono<Set<UUID>> filterNotCancelled(@NonNull String workspaceId, @NonNull Collection<UUID> experimentIds) {
-        return Flux.fromIterable(experimentIds)
-                .filterWhen(experimentId -> isCancelled(workspaceId, experimentId).map(cancelled -> !cancelled))
-                .collect(Collectors.toSet());
+    public Mono<Boolean> isCancelled(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return bucket(workspaceId, experimentId).isExists();
     }
 
     private RListReactive<String> queuedIds(String workspaceId, UUID experimentId) {
