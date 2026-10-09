@@ -129,6 +129,12 @@ const previewDialog = (
   </Dialog>
 );
 
+const alertDialog = (
+  <div role="alertdialog" data-state="open">
+    <button>Discard</button>
+  </div>
+);
+
 const openPopover = (
   <Popover open>
     <PopoverTrigger asChild>
@@ -219,7 +225,7 @@ describe("ResizableSidePanel hotkeys", () => {
   });
 
   it.each([KEYS.ArrowDown, KEYS.ArrowRight])(
-    "leaves $key in an open menu to the menu instead of moving the panel",
+    "leaves $key for the open menu instead of moving the panel",
     (arrowKey) => {
       const { verticalNavigation, horizontalNavigation } = renderPanel();
 
@@ -230,15 +236,38 @@ describe("ResizableSidePanel hotkeys", () => {
     },
   );
 
-  it.each([KEYS.ArrowDown, KEYS.ArrowRight, KEYS.Escape])(
-    "ignores $key pressed in a dialog opened from the panel",
-    (key) => {
+  it.each(
+    [
+      {
+        layer: "a dialog",
+        extra: confirmDialog,
+        target: () => screen.getByRole("button", { name: "Cancel" }),
+      },
+      {
+        layer: "an alert dialog",
+        extra: alertDialog,
+        target: () => screen.getByRole("button", { name: "Discard" }),
+      },
+      {
+        layer: "a popover",
+        extra: openPopover,
+        target: () => screen.getByRole("dialog"),
+      },
+    ].flatMap((layer) =>
+      [KEYS.ArrowDown, KEYS.ArrowRight, KEYS.Escape].map((key) => ({
+        ...layer,
+        ...key,
+      })),
+    ),
+  )(
+    "ignores $key pressed in $layer opened from the panel",
+    ({ extra, target, key, code }) => {
       const { onClose, verticalNavigation, horizontalNavigation } = renderPanel(
         {},
-        confirmDialog,
+        extra,
       );
 
-      fireEvent.keyDown(screen.getByRole("button", { name: "Cancel" }), key);
+      fireEvent.keyDown(target(), { key, code });
 
       expect(verticalNavigation.onChange).not.toHaveBeenCalled();
       expect(horizontalNavigation.onChange).not.toHaveBeenCalled();
