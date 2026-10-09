@@ -629,7 +629,8 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "202", description = "Experiments created and processing started", content = @Content(schema = @Schema(implementation = ExperimentExecutionResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
-    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_CREATE)
+    @RateLimited
     public Response execute(@NotNull @Valid ExperimentExecutionRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
 
