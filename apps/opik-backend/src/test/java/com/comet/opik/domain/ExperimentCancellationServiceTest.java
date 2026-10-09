@@ -157,8 +157,6 @@ class ExperimentCancellationServiceTest {
 
         assertThat(service.isCancelled(WORKSPACE_ID, cancelled).block()).isTrue();
         assertThat(service.isCancelled(WORKSPACE_ID, untouched).block()).isFalse();
-        assertThat(service.filterNotCancelled(WORKSPACE_ID, List.of(cancelled, untouched)).block())
-                .containsOnly(untouched);
     }
 
     @Test

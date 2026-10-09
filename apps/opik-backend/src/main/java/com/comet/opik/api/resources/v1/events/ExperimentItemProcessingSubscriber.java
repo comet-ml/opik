@@ -159,26 +159,30 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 RequestContext.VISIBILITY, Visibility.PRIVATE);
     }
 
+    /**
+     * Writes how the run ended. A run someone stopped keeps CANCELLED however its items turned out —
+     * the stamp is what says no more are coming, which its status cannot, being written when the stop
+     * was asked for. Reports whether it was stopped, which is what decides the rest of the ending.
+     */
+    private Mono<Boolean> settle(ExperimentItemToProcess message, ExperimentStatus earned) {
+        return cancellationService.isCancelled(message.workspaceId(), message.experimentId())
+                .flatMap(cancelled -> experimentService
+                        .update(message.experimentId(), cancelled
+                                ? ExperimentUpdate.builder().finished(true).build()
+                                : ExperimentUpdate.builder().status(earned).finished(true).build())
+                        .thenReturn(cancelled));
+    }
+
     // TODO: deduplicate with TestSuiteAssertionCounterService.finishExperiment — extract into
     //  a shared ExperimentFinishListener triggered by an ExperimentProcessed event
     private Mono<Void> finishExperiment(ExperimentItemToProcess message) {
         var reactorContext = buildReactorContext(message);
         var experimentId = message.experimentId();
 
-        var statusUpdate = ExperimentUpdate.builder()
-                .status(ExperimentStatus.COMPLETED)
-                .finished(true)
-                .build();
-        // A cancelled experiment keeps its status but is still finished: the stamp is what says no
-        // more items are coming, which its status cannot, being written when the stop was asked for.
-        var drainedUpdate = ExperimentUpdate.builder().finished(true).build();
-
-        return cancellationService.isCancelled(message.workspaceId(), experimentId)
-                .flatMap(cancelled -> experimentService
-                        .update(experimentId, cancelled ? drainedUpdate : statusUpdate)
-                        .then(cancelled
-                                ? Mono.<Void>empty()
-                                : experimentService.finishExperiments(Set.of(experimentId))))
+        return settle(message, ExperimentStatus.COMPLETED)
+                .flatMap(cancelled -> cancelled
+                        ? Mono.<Void>empty()
+                        : experimentService.finishExperiments(Set.of(experimentId)))
                 .contextWrite(reactorContext)
                 .onErrorResume(error -> {
                     log.error("Failed to finish experiment '{}', marking as FAILED", experimentId, error);
@@ -190,23 +194,34 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
     private Mono<Void> stampFinished(ExperimentItemToProcess message) {
         return experimentService
                 .update(message.experimentId(), ExperimentUpdate.builder().finished(true).build())
+                .onErrorResume(error -> releaseFinishClaim(message).then(Mono.error(error)))
                 .contextWrite(buildReactorContext(message));
     }
 
-    private Mono<Void> markExperimentFailed(ExperimentItemToProcess message, Context reactorContext) {
-        var failedUpdate = ExperimentUpdate.builder()
-                .status(ExperimentStatus.FAILED)
-                .finished(true)
-                .build();
-        // A run someone stopped is not a fault, however its items ended: keep CANCELLED
-        var drainedUpdate = ExperimentUpdate.builder().finished(true).build();
-
-        return cancellationService.isCancelled(message.workspaceId(), message.experimentId())
-                .flatMap(cancelled -> experimentService.update(message.experimentId(),
-                        cancelled ? drainedUpdate : failedUpdate))
-                .onErrorResume(e -> {
-                    log.error("Failed to mark experiment '{}' as FAILED", message.experimentId(), e);
+    /**
+     * Hands the finish back when nothing could be written about how the run ended. There is no item
+     * left to drain and try again, so whoever holds this holds the only route to a terminal state —
+     * and while it is held a stop reads the run as already finished and leaves it where it is.
+     */
+    private Mono<Void> releaseFinishClaim(ExperimentItemToProcess message) {
+        return cancellationService.releaseFinish(message.workspaceId(), message.experimentId())
+                .doOnSuccess(released -> log.warn(
+                        "Released the finish of experiment '{}' so it can still be stopped",
+                        message.experimentId()))
+                .onErrorResume(error -> {
+                    log.error("Failed to release the finish of experiment '{}'", message.experimentId(), error);
                     return Mono.empty();
+                })
+                .then();
+    }
+
+    private Mono<Void> markExperimentFailed(ExperimentItemToProcess message, Context reactorContext) {
+        return settle(message, ExperimentStatus.FAILED)
+                .then()
+                .onErrorResume(e -> {
+                    // The last writer of a terminal state: past here nothing records how this ended
+                    log.error("Failed to mark experiment '{}' as FAILED", message.experimentId(), e);
+                    return releaseFinishClaim(message);
                 })
                 .contextWrite(reactorContext);
     }
