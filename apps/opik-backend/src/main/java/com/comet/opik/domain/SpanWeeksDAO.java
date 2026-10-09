@@ -7,7 +7,6 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.reactivestreams.Publisher;
@@ -31,10 +30,6 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SpanWeeksDAO {
-
-    @Builder(toBuilder = true)
-    public record SpanWeek(@NonNull UUID projectId, @NonNull UUID traceId, long idWeek) {
-    }
 
     private static final String INSERT = """
             INSERT INTO span_weeks (workspace_id, project_id, trace_id, id_week)
