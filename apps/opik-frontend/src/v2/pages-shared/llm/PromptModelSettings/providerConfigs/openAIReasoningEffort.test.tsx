@@ -70,9 +70,15 @@ describe("the OpenAI reasoning effort dropdown", () => {
   );
 
   it("does not offer Max on a Responses API key for a model without it", () => {
-    renderPanel(PROVIDER_MODEL_TYPE.GPT_6_1_SOL, "responses_api");
+    renderPanel(PROVIDER_MODEL_TYPE.GPT_5_5, "responses_api");
 
-    expect(openEffortDropdown()).toEqual(["Low", "Medium", "High", "xHigh"]);
+    expect(openEffortDropdown()).toEqual([
+      "None",
+      "Low",
+      "Medium",
+      "High",
+      "xHigh",
+    ]);
   });
 });
 

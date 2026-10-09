@@ -2,6 +2,7 @@ import { z } from "zod";
 import has from "lodash/has";
 import uniq from "lodash/uniq";
 import omit from "lodash/omit";
+import isEmpty from "lodash/isEmpty";
 import {
   LLMJudgeObject,
   EVALUATORS_RULE_SCOPE,
@@ -635,25 +636,54 @@ export const updateConfigForModelChange = <
   previous: { model: string; provider: COMPOSED_PROVIDER_TYPE | "" },
   next: { model: PROVIDER_MODEL_TYPE; provider: COMPOSED_PROVIDER_TYPE },
 ): T => {
-  const adjusted = updateProviderConfig(config, next) ?? config;
+  const adjusted =
+    updateProviderConfig(config, {
+      ...next,
+      previousModel: previous.model as PROVIDER_MODEL_TYPE,
+    }) ?? config;
 
-  // updateProviderConfig leaves custom_parameters alone because opening a rule must keep the effort
-  // stored for a Claude model with no row. On a switch that copy belongs to the previous model; the
-  // flat thinkingEffort, already fitted to the next model, is what carries the user's choice.
-  if (
-    previous.model === next.model ||
-    !previous.provider ||
-    parseComposedProviderType(previous.provider) !== PROVIDER_TYPE.ANTHROPIC ||
-    !has(adjusted.custom_parameters, ["output_config", "effort"])
-  ) {
+  if (previous.model === next.model) {
     return adjusted;
   }
 
-  return {
-    ...adjusted,
-    custom_parameters:
-      withThinkingEffort(adjusted.custom_parameters, undefined) ?? null,
-  };
+  // updateProviderConfig leaves custom_parameters alone because opening a rule must keep the effort
+  // stored for a Claude model with no row. On a switch that copy belongs to the previous model; the
+  // flat thinkingEffort, already fitted to the next model, is what carries the user's choice. The
+  // same goes for a Gemini level nested under thinking: left in, the save would send the old level
+  // while the form shows the new one.
+  let customParameters = adjusted.custom_parameters;
+  if (
+    previous.provider &&
+    parseComposedProviderType(previous.provider) === PROVIDER_TYPE.ANTHROPIC &&
+    has(customParameters, ["output_config", "effort"])
+  ) {
+    customParameters = withThinkingEffort(customParameters, undefined) ?? null;
+  }
+  if (
+    getThinkingLevelOptions(previous.model as PROVIDER_MODEL_TYPE).length > 0 &&
+    has(customParameters, ["thinking", "level"])
+  ) {
+    customParameters = withoutNestedThinkingLevel(
+      customParameters as Record<string, unknown>,
+    );
+  }
+
+  return customParameters === adjusted.custom_parameters
+    ? adjusted
+    : { ...adjusted, custom_parameters: customParameters };
+};
+
+const withoutNestedThinkingLevel = (
+  customParameters: Record<string, unknown>,
+): Record<string, unknown> | null => {
+  const thinking = omit(
+    customParameters.thinking as Record<string, unknown>,
+    "level",
+  );
+  const rest = isEmpty(thinking)
+    ? omit(customParameters, "thinking")
+    : { ...customParameters, thinking };
+  return isEmpty(rest) ? null : rest;
 };
 
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
