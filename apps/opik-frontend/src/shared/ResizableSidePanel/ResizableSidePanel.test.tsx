@@ -25,6 +25,7 @@ import ResizableSidePanel from "./ResizableSidePanel";
 const KEYS = {
   Escape: { key: "Escape", code: "Escape" },
   ArrowDown: { key: "ArrowDown", code: "ArrowDown" },
+  ArrowUp: { key: "ArrowUp", code: "ArrowUp" },
   ArrowRight: { key: "ArrowRight", code: "ArrowRight" },
 };
 
@@ -287,6 +288,25 @@ describe("ResizableSidePanel hotkeys", () => {
     const { horizontalNavigation } = renderPanel();
 
     fireEvent.keyDown(screen.getByRole(role, { name }), KEYS.ArrowRight);
+
+    expect(horizontalNavigation.onChange).toHaveBeenCalledWith(1);
+  });
+
+  it.each([KEYS.ArrowDown, KEYS.ArrowUp])(
+    "leaves $key on a closed select to the select",
+    (arrowKey) => {
+      const { verticalNavigation } = renderPanel();
+
+      fireEvent.keyDown(screen.getByRole("combobox"), arrowKey);
+
+      expect(verticalNavigation.onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it("moves the panel on → pressed on a closed select", () => {
+    const { horizontalNavigation } = renderPanel();
+
+    fireEvent.keyDown(screen.getByRole("combobox"), KEYS.ArrowRight);
 
     expect(horizontalNavigation.onChange).toHaveBeenCalledWith(1);
   });

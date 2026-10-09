@@ -8,6 +8,9 @@ const POPOVER_WRAPPER_SELECTOR = "[data-radix-popper-content-wrapper]";
 // Tabs and toggle buttons are left out on purpose: after clicking a tab or a
 // score, ← → must still move the panel to the next trace.
 const OWN_ARROWS_SELECTOR = '[role="textbox"], [role="slider"]';
+// A closed select opens on ↑ ↓ but does nothing on ← →, so those still move
+// the panel, as on a tab.
+const OWN_VERTICAL_ARROWS_SELECTOR = '[role="combobox"]';
 
 const targetElement = (event: KeyboardEvent) =>
   event.target instanceof Element ? event.target : null;
@@ -37,6 +40,14 @@ export const isKeyForLayerAbovePanel = (
         isModalOpenAbove(nodeInPanel)),
   );
 
-export const isArrowKeyForFocusedControl = (event: KeyboardEvent) =>
-  event.key.startsWith("Arrow") &&
-  Boolean(targetElement(event)?.closest(OWN_ARROWS_SELECTOR));
+const isVerticalArrow = (event: KeyboardEvent) =>
+  event.key === "ArrowUp" || event.key === "ArrowDown";
+
+export const isArrowKeyForFocusedControl = (event: KeyboardEvent) => {
+  const target = targetElement(event);
+  if (!target || !event.key.startsWith("Arrow")) return false;
+  return Boolean(
+    target.closest(OWN_ARROWS_SELECTOR) ||
+      (isVerticalArrow(event) && target.closest(OWN_VERTICAL_ARROWS_SELECTOR)),
+  );
+};
