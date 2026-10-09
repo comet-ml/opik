@@ -241,22 +241,55 @@ describe("LLM judge thinking level on a model switch", () => {
     },
   );
 
-  it.each<[GeminiThinkingLevel, GeminiThinkingLevel]>([
-    ["high", "auto"],
-    ["low", "low"],
+  it.each<
+    [
+      GeminiThinkingLevel,
+      GeminiThinkingLevel,
+      Record<string, unknown> | undefined,
+    ]
+  >([
+    ["high", "auto", undefined],
+    ["low", "low", { thinking: { level: "low" } }],
   ])(
-    "moving from Gemini 3 Pro at %s to Vertex AI 2.5 Flash leaves %s",
-    (level, expected) => {
-      const switched = updateConfigForModelChange(
-        { thinkingLevel: level, custom_parameters: null },
-        { model: PROVIDER_MODEL_TYPE.GEMINI_3_PRO, provider: GEMINI },
-        {
-          model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
-          provider: PROVIDER_TYPE.VERTEX_AI as COMPOSED_PROVIDER_TYPE,
-        },
-      );
+    "moving a rule from Gemini 3 Pro at %s to Vertex AI 2.5 Flash shows and saves %s",
+    (level, expected, saved) => {
+      const from = {
+        model: PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+        provider: GEMINI,
+      };
+      const to = {
+        model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+        provider: PROVIDER_TYPE.VERTEX_AI as COMPOSED_PROVIDER_TYPE,
+      };
+      const opened = convertLLMJudgeObjectToLLMJudgeData(
+        persisted(from.model, { thinking: { level } }),
+      ).config;
+      const switched = updateConfigForModelChange(opened, from, to);
 
       expect(switched.thinkingLevel).toBe(expected);
+      expect(
+        convertLLMJudgeDataToLLMJudgeObject(asFormData(to.model, switched))
+          .model.custom_parameters,
+      ).toEqual(saved);
     },
   );
+
+  it("keeps include_thoughts and other keys when a switch drops the old nested level", () => {
+    const switched = updateConfigForModelChange(
+      {
+        thinkingLevel: "high",
+        custom_parameters: {
+          thinking: { level: "high", include_thoughts: true },
+          unrelated: "keep",
+        },
+      },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_3_PRO, provider: GEMINI },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, provider: GEMINI },
+    );
+
+    expect(switched.custom_parameters).toEqual({
+      thinking: { include_thoughts: true },
+      unrelated: "keep",
+    });
+  });
 });
