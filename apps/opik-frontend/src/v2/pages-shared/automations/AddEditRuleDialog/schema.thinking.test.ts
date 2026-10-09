@@ -240,4 +240,23 @@ describe("LLM judge thinking level on a model switch", () => {
       ).toEqual({ thinking: { level: expected } });
     },
   );
+
+  it.each<[GeminiThinkingLevel, GeminiThinkingLevel]>([
+    ["high", "auto"],
+    ["low", "low"],
+  ])(
+    "moving from Gemini 3 Pro at %s to Vertex AI 2.5 Flash leaves %s",
+    (level, expected) => {
+      const switched = updateConfigForModelChange(
+        { thinkingLevel: level },
+        { model: PROVIDER_MODEL_TYPE.GEMINI_3_PRO, provider: GEMINI },
+        {
+          model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+          provider: PROVIDER_TYPE.VERTEX_AI as COMPOSED_PROVIDER_TYPE,
+        },
+      );
+
+      expect(switched.thinkingLevel).toBe(expected);
+    },
+  );
 });
