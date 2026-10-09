@@ -637,10 +637,10 @@ class SpansLocalV2PartitioningTest {
     }
 
     /**
-     * The backfill, reading the unpartitioned legacy spans table, registers the partition spans_local_v2 stores each
-     * span in. Each week is backfilled as its own range, so every id bound is exercised, the open ones of the epoch and
-     * 2300 weeks included. The expected week is the partition ClickHouse writes the same id to in spans_local_v2, not
-     * a value computed in Java.
+     * The backfill, reading the unpartitioned legacy spans table in id ranges that tile every id, registers the
+     * partition spans_local_v2 stores each span in: non-v7 and nil ids in whichever range holds them, far-future ones
+     * in the open last range. The expected week is the partition ClickHouse writes the same id to in spans_local_v2,
+     * not a value computed in Java.
      */
     @Test
     void backfillRegistersThePartitionEachSpanIsStoredIn() {
@@ -661,8 +661,9 @@ class SpansLocalV2PartitioningTest {
                         .idWeek(Long.parseLong(partitionIdFor(oracleWorkspaceId, projectId, entry.getKey())))
                         .build())
                 .toList();
-        expected.stream().map(SpanWeek::idWeek).distinct()
-                .forEach(week -> spanWeeksDAO.backfill(week, week, 600).block());
+        spanWeeksDAO.backfill(0, 20250303L, 600).block();
+        spanWeeksDAO.backfill(20250303L, 20250310L, 600).block();
+        spanWeeksDAO.backfill(20250310L, null, 600).block();
 
         assertThat(spanWeeksDAO.findByTraceIds(traceIdBySpanId.values())
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, "user", workspaceId))

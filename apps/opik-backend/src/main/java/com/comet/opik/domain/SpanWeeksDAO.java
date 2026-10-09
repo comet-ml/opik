@@ -9,7 +9,6 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.reactivestreams.Publisher;
@@ -21,9 +20,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -63,38 +62,27 @@ public class SpanWeeksDAO {
     private static final String ID_WEEK = "toUInt32(toYYYYMMDD(toDate32(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'))"
             + " - toIntervalDay(toDayOfWeek(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'), 1))))";
 
-    private static final String FIND_WEEKS = """
-            SELECT toInt64(<id_week>) AS week, toInt64(count()) AS span_count
+    // created_at is always set by ClickHouse (now64), never by the client, so its minimum is the first span write.
+    private static final String FIND_FIRST_CREATED_AT = """
+            SELECT toUnixTimestamp64Milli(minOrNull(created_at)) AS first_created_at
             FROM spans
-            GROUP BY week
-            ORDER BY week
             SETTINGS log_comment = '<log_comment>', max_execution_time = <max_execution_time>
             """;
 
-    // The id range only prunes granules, through the idx_spans_id minmax index; the week filter decides membership.
-    // GROUP BY rather than DISTINCT so a large chunk spills to disk, by the server's
-    // max_bytes_ratio_before_external_group_by; in-order aggregation over the spans sort key measured ~200x slower.
+    // The id range only selects which spans a chunk reads, pruning granules through the idx_spans_id minmax index;
+    // each span's week still comes from its id. GROUP BY rather than DISTINCT so a large chunk spills to disk, by the
+    // server's max_bytes_ratio_before_external_group_by; in-order aggregation over the sort key measured ~200x slower.
     private static final String BACKFILL = """
             INSERT INTO span_weeks (workspace_id, project_id, trace_id, id_week)
             SELECT workspace_id, project_id, trace_id, <id_week> AS week
             FROM spans
-            WHERE week BETWEEN :from_week AND :to_week
+            WHERE true
             <if(from_id)>AND id >= :from_id<endif>
             <if(to_id)>AND id \\< :to_id<endif>
             GROUP BY workspace_id, project_id, trace_id, week
             SETTINGS log_comment = '<log_comment>', optimize_aggregation_in_order = 0,
                 max_execution_time = <max_execution_time>
             """;
-
-    /** A spans week, the one spans_local_v2 stores a span in, and how many spans fall in it. */
-    @Builder(toBuilder = true)
-    public record WeekSpans(long week, long spanCount) {
-    }
-
-    // Non-v7 ids, whatever their leading bits, fall in this week, so a range holding it cannot bound its ids.
-    private static final long EPOCH_WEEK = 19691229L;
-    // Ids at or past it saturate into the last week, so a range reaching it cannot bound its ids from above.
-    private static final Instant ID_CEILING = Instant.parse("2300-01-01T00:00:00Z");
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull InstantToUUIDMapper uuidMapper;
@@ -146,32 +134,29 @@ public class SpanWeeksDAO {
                 .collectList());
     }
 
-    /** The weeks the spans hold, ascending, in one scan of the id column. */
-    public Mono<List<WeekSpans>> findWeeks(long maxExecutionSeconds) {
+    /** When the first span was written, if any; one scan of the created_at column. */
+    public Mono<Optional<Instant>> findFirstCreatedAt(long maxExecutionSeconds) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(
-                        getSTWithLogComment(FIND_WEEKS, "find_spans_weeks", null, null, null)
-                                .add("id_week", ID_WEEK)
+                        getSTWithLogComment(FIND_FIRST_CREATED_AT, "find_spans_first_created_at", null, null, null)
                                 .add("max_execution_time", maxExecutionSeconds)
                                 .render())
                         .execute())
-                .flatMap(result -> result.map((row, metadata) -> WeekSpans.builder()
-                        .week(row.get("week", Long.class))
-                        .spanCount(row.get("span_count", Long.class))
-                        .build()))
-                .collectList();
+                .flatMap(result -> result.map((row, metadata) -> Optional
+                        .ofNullable(row.get("first_created_at", Long.class))
+                        .map(Instant::ofEpochMilli)))
+                .next()
+                .defaultIfEmpty(Optional.empty());
     }
 
     /**
-     * Registers the weeks of every span in {@code [fromWeek, toWeek]}. Unless the range holds the epoch week, its ids
-     * are bounded by the UUIDv7s of its first Monday and of the Monday after it (below 2300), so the scan skips the
-     * granules outside it.
+     * Registers the week of every span whose id is from Monday {@code fromWeek}'s UUIDv7 up to Monday
+     * {@code toWeek}'s; {@code fromWeek} 0 and a null {@code toWeek} leave that end open. A span's week comes from
+     * its id, so one whose id sorts outside its own week (a non-v7 id) is still registered, in whichever range holds it.
      */
-    public Mono<Void> backfill(long fromWeek, long toWeek, long maxExecutionSeconds) {
-        boolean bounded = fromWeek > EPOCH_WEEK;
-        Instant end = monday(toWeek).plus(7, ChronoUnit.DAYS);
-        UUID fromId = bounded ? uuidMapper.toLowerBound(monday(fromWeek)) : null;
-        UUID toId = bounded && end.isBefore(ID_CEILING) ? uuidMapper.toLowerBound(end) : null;
+    public Mono<Void> backfill(long fromWeek, Long toWeek, long maxExecutionSeconds) {
+        UUID fromId = fromWeek > 0 ? uuidMapper.toLowerBound(monday(fromWeek)) : null;
+        UUID toId = toWeek != null ? uuidMapper.toLowerBound(monday(toWeek)) : null;
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = getSTWithLogComment(BACKFILL, "backfill_span_weeks", null, null,
@@ -180,9 +165,7 @@ public class SpanWeeksDAO {
                             .add("from_id", fromId != null)
                             .add("to_id", toId != null)
                             .add("max_execution_time", maxExecutionSeconds);
-                    Statement statement = connection.createStatement(template.render())
-                            .bind("from_week", fromWeek)
-                            .bind("to_week", toWeek);
+                    Statement statement = connection.createStatement(template.render());
                     if (fromId != null) {
                         statement.bind("from_id", fromId.toString());
                     }

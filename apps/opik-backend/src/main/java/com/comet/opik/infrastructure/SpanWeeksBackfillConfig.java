@@ -21,9 +21,9 @@ public class SpanWeeksBackfillConfig {
     @MinDuration(value = 10, unit = TimeUnit.SECONDS)
     private Duration interval;
 
-    /** Upper bound on the span rows one chunk reads; consecutive weeks are merged up to it. */
+    /** Weeks of span ids one chunk covers, between the first span's week and the plan's own week. */
     @JsonProperty
-    @Min(1) private long maxSpansPerChunk;
+    @Min(1) private int weeksPerChunk;
 
     /** ClickHouse max_execution_time for one chunk, and how long a run holds the job lock. */
     @NotNull @JsonProperty
