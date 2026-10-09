@@ -600,4 +600,33 @@ describe("convertOptimizationStudioToFormData — re-run round trip", () => {
     });
     expect(sent).not.toHaveProperty("max_tokens");
   });
+
+  it.each([
+    {
+      names: "API",
+      saved: { response_format: { type: "json_object" }, seed: 7 },
+    },
+    {
+      names: "form",
+      saved: { responseFormat: { type: "json_object" }, seed: 7 },
+    },
+  ])(
+    "drops saved parameters the form has no control for, under the $names names",
+    ({ saved }) => {
+      const { modelConfig, sent } = rerun(PROVIDER_MODEL_TYPE.GPT_4O_MINI, {
+        ...saved,
+        temperature: 0.7,
+        custom_parameters: { user: "run-1" },
+      });
+
+      expect(modelConfig).not.toHaveProperty("responseFormat");
+      expect(modelConfig).not.toHaveProperty("seed");
+      expect(sent).not.toHaveProperty("response_format");
+      expect(sent).not.toHaveProperty("seed");
+      expect(sent).toMatchObject({
+        temperature: 0.7,
+        custom_parameters: { user: "run-1" },
+      });
+    },
+  );
 });
