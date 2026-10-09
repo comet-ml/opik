@@ -1,0 +1,34 @@
+## Prompt Versions and Messages in Experiment Comparison
+
+The experiment compare view now makes it easier to see exactly what each experiment ran:
+
+- **Prompt version per experiment** — The Configuration tab has a "Prompt version" row with one value per experiment, so you can tell which prompt version produced each result. The "show differences only" toggle and diff highlighting apply to it like any other configuration field.
+- **Conversations render as messages** — Prompts and outputs in the compare side panel and dataset items are shown as role-labelled chat messages (system, user, assistant) instead of a single collapsed string. Payloads that aren't a recognised message format keep the existing JSON/YAML viewer.
+- **Prompt templates are preserved** — Playground experiments now store the authored template with its `{{variables}}` intact, so compared experiments show the shared template rather than one dataset item's rendered values.
+
+## Custom Headers for OpenAI and OpenRouter Providers
+
+When configuring an OpenAI or OpenRouter provider you can now add static custom headers, sent with every request to that provider. This is useful for gateway routing and for OpenRouter app attribution headers such as `HTTP-Referer` and `X-OpenRouter-Title`.
+
+## Bug Fixes & Improvements
+
+- **Annotation queue membership in Traces and Threads tables** — A new "Annotation queues" column shows which queues each trace or thread belongs to. It's hidden by default; enable it from the column picker.
+- **Annotation queue automation is on by default** — Automation for annotation queues is now enabled out of the box on self-hosted deployments (`TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED` defaults to `true`), and an automation's item ceiling can now be removed.
+- **Simpler `opik mcp configure` onboarding** — The command installs the Opik skill pack alongside the MCP configuration by default, and `--ignore-opik-config` lets you pick which Opik instance and workspace to connect to without changing `~/.opik.config`. The MCP server docs also gained an `npx` setup path and a Cost Intelligence MCP server page.
+- **Playground only sends parameters providers accept** — Model parameters that a provider would reject are no longer sent, the model parameters button is hidden for providers with nothing to configure, and Gemini 3.1 Flash Lite offers low and medium thinking levels.
+- **Playground Run buttons** — Run buttons no longer ignore a stale test suite or skip the media check.
+- **Filters and tables** — Quick filters route to the table of the selected entity, dotted metadata keys are bracket-quoted in filters, the grouping sort field is shown only when it's selectable, and the feedback scores table no longer has an empty column.
+- **Better rendering** — A conversation logged as span output is pretty-printed, and YAML strings containing unicode render as block scalars.
+- **Scores grouped by project resolve padded project names** — Projects whose names have leading or trailing whitespace are now matched correctly.
+- **Gemini tool-use tokens are counted and priced as input** — `tool_use_prompt_tokens` is included in `prompt_tokens` in the SDK and priced as input in the backend.
+- **Integration tracing is more reliable** — Spans now end properly when a LiteLLM stream fails mid-iteration or is abandoned early, an abandoned OpenAI Responses stream no longer logs an error, ADK LLM spans keep their usage when the inference span ends early, and Azure OpenAI Haystack components are recorded with `provider=azure`.
+- **Evaluation improvements** — TypeScript metric scores that fail during `evaluate()` are kept and reported, scorers receive only the arguments their signature declares, and conversation metrics grade the latest assistant turn that has text.
+- **SDK robustness** — Chat prompts keep `audio_url` content parts when formatted, dataset item streams no longer end at unreadable records, jq paths quote reserved-word dict keys, and queued messages are replayed before shutdown.
+- **Retired Anthropic model ids replaced** — Defaults and examples now use `claude-sonnet-4-6`.
+- **Self-hosting** — ClickHouse containers disallow privilege escalation, the Helm chart bumps `clickhouse-backup` to 2.7.4 for object-disk backups, and Python rule workers fill their pool correctly under Python 3.14.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.82...2.2.88)
+
+_Releases_: `2.2.83`, `2.2.84`, `2.2.85`, `2.2.86`, `2.2.87`, `2.2.88`
