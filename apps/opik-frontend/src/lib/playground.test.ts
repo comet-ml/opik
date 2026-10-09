@@ -7,8 +7,11 @@ import {
   getDefaultConfigByProvider,
   hasUnsupportedMedia,
   isEmptyMessage,
+  OUTPUT_LIMIT_REACHED_MESSAGE,
+  parseCompletionOutput,
   restoreMissingConfigKeys,
 } from "@/lib/playground";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMAnthropicConfigsType,
@@ -558,5 +561,55 @@ describe("canRunMessages", () => {
 
   it("blocks a run while a user message has no parts", () => {
     expect(canRunMessages([systemMessage(""), userMessage([])])).toBe(false);
+  });
+});
+
+describe("parseCompletionOutput", () => {
+  const EMPTY_RESPONSE =
+    "The AI provider returned an empty response. Please, try again.";
+
+  const run = (overrides: Partial<RunStreamingReturn>): RunStreamingReturn => ({
+    result: "",
+    startTime: "",
+    endTime: "",
+    usage: null,
+    choices: null,
+    finishReason: null,
+    providerError: null,
+    opikError: null,
+    pythonProxyError: null,
+    actualModel: null,
+    actualProvider: null,
+    ...overrides,
+  });
+
+  it.each<[string, Partial<RunStreamingReturn>, string]>([
+    [
+      "says the limit ran out when nothing was written before it",
+      { finishReason: "length" },
+      OUTPUT_LIMIT_REACHED_MESSAGE,
+    ],
+    [
+      "keeps a cut-off answer the model did write",
+      { result: "1 2 3", finishReason: "length" },
+      "1 2 3",
+    ],
+    [
+      "keeps the provider's error over the limit message",
+      { finishReason: "length", providerError: "Rate limited" },
+      "Rate limited",
+    ],
+    [
+      "keeps the generic message for an empty answer that stopped normally",
+      { finishReason: "stop" },
+      EMPTY_RESPONSE,
+    ],
+    [
+      "keeps the generic message when no finish reason arrived",
+      {},
+      EMPTY_RESPONSE,
+    ],
+  ])("%s", (_, overrides, expected) => {
+    expect(parseCompletionOutput(run(overrides))).toBe(expected);
   });
 });
