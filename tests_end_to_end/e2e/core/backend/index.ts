@@ -82,3 +82,4 @@ export {
   sumDatasetVersionField,
 } from './dataset-item-batches';
 export { type WaitForScoresSettledOpts } from './wait-for-scores-settled';
+export { deleteTracesResilient } from './trace-cleanup';
