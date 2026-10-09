@@ -642,6 +642,15 @@ export const updateConfigForModelChange = <
       previousModel: previous.model as PROVIDER_MODEL_TYPE,
     }) ?? config;
 
+  // Same rule as the playground, which resets a prompt's configs on a provider change: the extra body
+  // belongs to the previous provider. Kept, it is saved with no editor to show it and is sent again
+  // once the rule goes back to a Custom LLM.
+  if (previous.provider && previous.provider !== next.provider) {
+    return adjusted.custom_parameters == null
+      ? adjusted
+      : { ...adjusted, custom_parameters: null };
+  }
+
   if (previous.model === next.model) {
     return adjusted;
   }
