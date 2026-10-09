@@ -17,6 +17,10 @@ import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
+import {
+  getMaxOutputTokens,
+  isCustomProviderModel,
+} from "@/lib/modelCapabilities";
 import isPlainObject from "lodash/isPlainObject";
 import omit from "lodash/omit";
 import {
@@ -881,6 +885,33 @@ export const resolveEffort = (
   return { ...configs };
 };
 
+// Used for a model the pricing data does not list: the caps the panels had before it was read.
+const MAX_COMPLETION_TOKENS_FALLBACK = {
+  [PROVIDER_TYPE.OPEN_AI]: 128000,
+  [PROVIDER_TYPE.ANTHROPIC]: 64000,
+};
+
+export type MaxCompletionTokensRange = { min: number; max: number };
+
+export const getMaxCompletionTokensRange = (
+  provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
+  model: string,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): MaxCompletionTokensRange => ({
+  // Below 16, the Responses API rejects max_output_tokens. Elsewhere 0 is rejected too: OpenAI
+  // wants at least 1, and Anthropic refuses 0 on a streamed request, which every playground run is.
+  min:
+    provider === PROVIDER_TYPE.OPEN_AI && openAiPipelineMode === "responses_api"
+      ? 16
+      : 1,
+  max: getMaxOutputTokens(model) ?? MAX_COMPLETION_TOKENS_FALLBACK[provider],
+});
+
+export const clampMaxCompletionTokens = (
+  value: number,
+  { min, max }: MaxCompletionTokensRange,
+) => Math.min(Math.max(value, min), max);
+
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
 // (e.g. older persisted prompts missing maxCompletionTokens).
@@ -952,6 +983,19 @@ export const sanitizeConfigForRequest = (
   ) {
     sanitized.maxCompletionTokens =
       DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
+  }
+
+  // A custom gateway's ids resolve to OpenAI too, and their limits are the gateway's own.
+  if (
+    (provider === PROVIDER_TYPE.ANTHROPIC ||
+      provider === PROVIDER_TYPE.OPEN_AI) &&
+    !isCustomProviderModel(model) &&
+    typeof sanitized.maxCompletionTokens === "number"
+  ) {
+    sanitized.maxCompletionTokens = clampMaxCompletionTokens(
+      sanitized.maxCompletionTokens,
+      getMaxCompletionTokensRange(provider, model, openAiPipelineMode),
+    );
   }
 
   if (
