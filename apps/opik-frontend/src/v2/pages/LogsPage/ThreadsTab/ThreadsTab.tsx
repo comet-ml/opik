@@ -87,6 +87,10 @@ import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
+import {
+  THREADS_FILTERS_URL_KEY,
+  getLogsFiltersMemoryKey,
+} from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
 import {
@@ -544,10 +548,11 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     setOpenChipId: setThreadOpenChipId,
   } = useFilterChips({
     tableId: "logs.threads",
-    urlKey: "threads_filters",
+    urlKey: THREADS_FILTERS_URL_KEY,
     definitions: threadChipDefinitions,
     defaultPinned: THREAD_DEFAULT_PINNED_CHIPS,
     onChange: handleChipFiltersChange,
+    persistKey: getLogsFiltersMemoryKey(projectId, THREADS_FILTERS_URL_KEY),
   });
 
   const { addTag: addThreadTagFilter } = useTagsChipActions({

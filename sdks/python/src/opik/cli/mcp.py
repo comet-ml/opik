@@ -455,7 +455,10 @@ def run_configure(
                         if names_one
                         else f"no Opik answers at {params['base_url']}"
                     )
-                    + ". Name it:\n\n"
+                    # A coding agent read "Name it" as leave to choose, and picked
+                    # Opik Cloud for a user who had never said which Opik.
+                    + ". Name it, and if you are setting this up for someone, ask "
+                    "them which one rather than picking it:\n\n"
                     f"    opik mcp configure {clients} --deployment cloud\n"
                     f"    opik mcp configure {clients} --deployment local --url <url>\n"
                     f"    opik mcp configure {clients} --deployment self-hosted "
@@ -580,6 +583,10 @@ def run_configure(
     )
 
     _perform_handoff(handoff)
+    if handoff.not_working:
+        # A script or a coding agent goes by the exit status, not the ✗ row: one
+        # told a user a server it could not connect was "connected and working".
+        raise SystemExit(1)
 
 
 class _Handoff(NamedTuple):
@@ -602,6 +609,9 @@ class _Handoff(NamedTuple):
     quit_at_offer: bool = False
     #: What is left to do in each client, for a run without a terminal.
     next_steps: Tuple[str, ...] = ()
+    #: A run without a terminal whose connection check failed: it ends on that
+    #: instead of the next steps, and exits 1.
+    not_working: bool = False
 
 
 def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Handoff:
@@ -621,6 +631,7 @@ def _resolve_handoff(params: McpSetupParams, outcome: assistants.Outcome) -> _Ha
             outcome="no_terminal",
             wrote_config=wrote_config,
             next_steps=outcome.next_steps,
+            not_working=outcome.verified is False,
         )
     if len(outcome.registered_clients) != 1:
         return _Handoff(outcome="not_single_client", wrote_config=wrote_config)
@@ -686,7 +697,9 @@ def _perform_handoff(handoff: _Handoff) -> None:
     if handoff.display_name is None or handoff.prompt is None:
         # No one client to hand over to: tell a run that wrote config to restart
         # its client, unless the sign-in ending already said what is left.
-        if handoff.outcome == "no_terminal" and handoff.wrote_config:
+        if handoff.not_working:
+            install_view.render_not_working()
+        elif handoff.outcome == "no_terminal" and handoff.wrote_config:
             install_view.render_next_steps(handoff.next_steps)
         elif handoff.wrote_config and handoff.outcome != "sign_in_failed":
             install_view.render_restart_note(mcp_installed=True)

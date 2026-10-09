@@ -10,6 +10,11 @@ Your coding assistant already writes the code. Connect it to Opik and it can als
 see what that code does when it runs: read the traces, find the ones that failed,
 score them, and fix the code against real data instead of your description of it.
 
+<Note>
+  A coding agent installing this for a user: run `uvx opik-mcp@latest --help` first
+  and follow its steps.
+</Note>
+
 ## Install in 30 seconds
 
 One command connects your assistant to your traces and teaches it how to create
@@ -59,7 +64,7 @@ with a prompt you paste into it:
 <div className="mcp-clients no-external-icon">
   <a className="mcp-client" href="cursor:////anysphere.cursor-deeplink/mcp/install?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0=" title="Open Cursor and add the Opik MCP server (Cursor Pro or higher; MCP is not available on the Hobby plan)"><img src="/img/mcp/cursor.svg" alt="" /><span>Cursor</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
   <a className="mcp-client" href="https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D" target="_blank" rel="noreferrer" title="Open VS Code and add the Opik MCP server"><img src="/img/mcp/vscode.svg" alt="" /><span>VS Code</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
-  <a className="mcp-client" href="#" data-opik-copy="Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server). Run `uvx opik-mcp --help` and follow its install steps; if uv is missing, ask me to install it (https://docs.astral.sh/uv/getting-started/installation/). Ask me one question at a time, only what this machine can't tell you, and wait for each answer. First ask whether to set up only you or every coding agent installed here, and pass each one to the installer as --ai-client. Never print secrets you see in config files. When you are done, tell me what was installed and what is left for me to do, such as signing in or starting a new session." title="Copies an installation prompt. Paste it into any coding agent."><span>Install prompt</span><Icon icon="fa-regular fa-copy" /><Icon icon="fa-solid fa-check" /><Icon icon="fa-solid fa-xmark" /></a>
+  <a className="mcp-client" href="#" data-opik-copy="Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server). Run `uvx opik-mcp@latest --help` and follow its install steps; if uv is missing, ask me to install it (https://docs.astral.sh/uv/getting-started/installation/). Ask me one question at a time, only what this machine can't tell you, and wait for each answer. First ask whether to set up only you or every coding agent installed here, and pass each one to the installer as --ai-client. Never print secrets you see in config files. When you are done, tell me what was installed and what is left for me to do, such as signing in or starting a new session." title="Copies an installation prompt. Paste it into any coding agent."><span>Install prompt</span><Icon icon="fa-regular fa-copy" /><Icon icon="fa-solid fa-check" /><Icon icon="fa-solid fa-xmark" /></a>
 </div>
 
 Writing the config yourself, or the CLI didn't detect your client?

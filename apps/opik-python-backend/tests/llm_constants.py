@@ -24,6 +24,9 @@ OPENAI_GPT_NANO = "gpt-5-nano"
 # model-passing regression indistinguishable.
 OPENAI_GPT_MINI = "gpt-5-mini"
 
+# A Gemini 3 task model, which Google asks to keep at its default temperature.
+GEMINI_3_FLASH = "gemini-3-flash-preview"
+
 # The studio routes every LLM call through the backend gateway, which litellm
 # addresses with an "openai/"-prefixed model id regardless of the real provider.
 GATEWAY_MODEL_PREFIX = "openai/"
