@@ -359,3 +359,21 @@ describe("ResizableSidePanel hotkeys", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe("ResizableSidePanel stacking", () => {
+  it("stacks a panel opened from inside another panel above it", () => {
+    render(
+      <TooltipProvider>
+        <ResizableSidePanel panelId="trial" open onClose={vi.fn()}>
+          <ResizableSidePanel panelId="trace" open onClose={vi.fn()}>
+            <button>Trace body</button>
+          </ResizableSidePanel>
+        </ResizableSidePanel>
+      </TooltipProvider>,
+    );
+    const zIndexOf = (panelId: string) =>
+      Number(screen.getByTestId(panelId).parentElement?.style.zIndex);
+
+    expect(zIndexOf("trace")).toBeGreaterThan(zIndexOf("trial"));
+  });
+});
