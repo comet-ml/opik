@@ -71,7 +71,7 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
                             "app_name": constants.APP_NAME,
                             "user_id": constants.USER_ID,
                             "_opik_graph_definition": ANY_BUT_NONE,
-                            "_opik": {"graph_node_id": ANY_STRING},
+                            "_opik": {"graph_node_id": "TextProcessingAssistant"},
                         },
                         output=ANY_DICT.containing(
                             {

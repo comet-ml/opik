@@ -9,15 +9,16 @@ classDef Tools fill:#D3D3D3
 """
 
 
-LM_NODE_ID = "LM"
-
-
 def get_graph_node_id(instance: Any) -> Optional[str]:
     if isinstance(instance, dspy.Module):
         return f"module_{id(instance)}"
     if isinstance(instance, dspy.LM):
-        return LM_NODE_ID
+        return _get_lm_node_id(instance)
     return None
+
+
+def _get_lm_node_id(lm: Any) -> str:
+    return f"lm_{id(lm)}"
 
 
 def build_mermaid_graph_from_module(module: dspy.Module) -> str:
@@ -92,7 +93,8 @@ def _get_dspy_module_heirarchy(module: dspy.Module, data: Dict[str, Any]) -> Non
         elif name == "lm":
             lm_data: Dict[str, Any] = {}
             lm_data["name"] = "LM"
-            lm_data["id"] = LM_NODE_ID
+            lm = attribute if attribute is not None else dspy.settings.lm
+            lm_data["id"] = _get_lm_node_id(lm)
             lm_data["details"] = {}
             lm_data["sub_data"] = []
             data["sub_data"].append(lm_data)
