@@ -4893,6 +4893,58 @@ class SpansResourceTest {
                     List.of(unknownSourceSpan, sdkSpan),
                     List.of(experimentSpan), USER);
         }
+
+        static Stream<Arguments> filterBySourceList() {
+            return Stream.of(
+                    arguments(Operator.IN, "playground,experiment", Set.of("playground", "experiment")),
+                    arguments(Operator.IN, "sdk,playground", Set.of("sdk", Source.UNKNOWN_VALUE, "playground")),
+                    arguments(Operator.NOT_IN, "sdk,experiment", Set.of("playground")),
+                    arguments(Operator.NOT_IN, "playground", Set.of("sdk", Source.UNKNOWN_VALUE, "experiment")));
+        }
+
+        @ParameterizedTest(name = "{0} \"{1}\"")
+        @MethodSource
+        @DisplayName("Filter by a source list matches the listed sources, and sdk also matches legacy unknown spans")
+        void filterBySourceList(Operator operator, String value, Set<String> expectedSources) {
+            var projectName = "span-source-filter-list-" + UUID.randomUUID();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var spans = Stream.of(Source.SDK, null, Source.PLAYGROUND, Source.EXPERIMENT)
+                    .map(source -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceId)
+                            .source(source)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spans.forEach(span -> spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE));
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.SOURCE)
+                    .operator(operator)
+                    .value(value)
+                    .build());
+
+            var page = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY, projectName, null, 1, 10,
+                    null, null, filters, List.of(), List.of());
+
+            // Spans come back newest first
+            var expectedSpans = spans.reversed().stream()
+                    .filter(span -> expectedSources.contains(sourceValue(span)))
+                    .toList();
+            var unexpectedSpans = spans.stream()
+                    .filter(span -> !expectedSources.contains(sourceValue(span)))
+                    .toList();
+            SpanAssertions.assertSpan(page.content(), expectedSpans, unexpectedSpans, USER);
+        }
+
+        private String sourceValue(Span span) {
+            return Optional.ofNullable(span.source()).map(Source::getValue).orElse(Source.UNKNOWN_VALUE);
+        }
     }
 
     @Nested

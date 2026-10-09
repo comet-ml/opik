@@ -341,9 +341,11 @@ public class FilterQueryBuilder {
                             "notEmpty(%1$s)")))
                     .put(Operator.IN, new EnumMap<>(Map.of(
                             FieldType.ENUM, "%1$s IN :filter%2$d",
+                            FieldType.ENUM_LEGACY, "(%1$s IN :filter%2$d OR %1$s = '%3$s')",
                             FieldType.STRING_LIST, "%1$s IN :filter%2$d")))
                     .put(Operator.NOT_IN, new EnumMap<>(Map.of(
                             FieldType.ENUM, "%1$s NOT IN :filter%2$d",
+                            FieldType.ENUM_LEGACY, "(%1$s NOT IN :filter%2$d AND %1$s != '%3$s')",
                             FieldType.STRING_LIST, "%1$s NOT IN :filter%2$d")))
                     .build());
 
@@ -1042,7 +1044,8 @@ public class FilterQueryBuilder {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
         var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i, columnsNonNullable);
         var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
-        return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
+        return filter.field().getType().buildFilter(template, dbField, i, filter.operator(), filter.value(),
+                enumFallbackTemplate);
     }
 
     private static String getAnalyticsDbField(

@@ -8624,6 +8624,131 @@ class TracesResourceTest {
                     List.of(unknownSourceTrace, sdkTrace),
                     List.of(experimentTrace), USER);
         }
+
+        private Trace buildTrace(String projectName, Source source) {
+            return factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .source(source)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+        }
+
+        private List<Trace> getTracesBySource(String projectName, Operator operator, String value) {
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.SOURCE)
+                    .operator(operator)
+                    .value(value)
+                    .build());
+
+            return traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of()).content();
+        }
+
+        @Test
+        @DisplayName("Filter by source IN returns traces matching any of the sources")
+        void filterBySourceIn() {
+            var projectName = "source-filter-in-" + UUID.randomUUID();
+            var playgroundTrace = buildTrace(projectName, Source.PLAYGROUND);
+            var experimentTrace = buildTrace(projectName, Source.EXPERIMENT);
+            var sdkTrace = buildTrace(projectName, Source.SDK);
+            var unknownSourceTrace = buildTrace(projectName, null);
+
+            traceResourceClient.createTrace(playgroundTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(experimentTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(sdkTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(unknownSourceTrace, API_KEY, TEST_WORKSPACE);
+
+            var actual = getTracesBySource(projectName, Operator.IN, "playground,experiment");
+
+            TraceAssertions.assertTraces(actual,
+                    List.of(experimentTrace, playgroundTrace),
+                    List.of(sdkTrace, unknownSourceTrace), USER);
+        }
+
+        @Test
+        @DisplayName("Filter by source IN with sdk also returns legacy traces with unknown source")
+        void filterBySourceInWithSdkIncludesUnknownSourceTraces() {
+            var projectName = "source-filter-in-sdk-" + UUID.randomUUID();
+            var sdkTrace = buildTrace(projectName, Source.SDK);
+            var unknownSourceTrace = buildTrace(projectName, null);
+            var playgroundTrace = buildTrace(projectName, Source.PLAYGROUND);
+            var experimentTrace = buildTrace(projectName, Source.EXPERIMENT);
+
+            traceResourceClient.createTrace(sdkTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(unknownSourceTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(playgroundTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(experimentTrace, API_KEY, TEST_WORKSPACE);
+
+            var actual = getTracesBySource(projectName, Operator.IN, "sdk,playground");
+
+            TraceAssertions.assertTraces(actual,
+                    List.of(playgroundTrace, unknownSourceTrace, sdkTrace),
+                    List.of(experimentTrace), USER);
+        }
+
+        @Test
+        @DisplayName("Filter by source NOT_IN with sdk also excludes legacy traces with unknown source")
+        void filterBySourceNotInWithSdkExcludesUnknownSourceTraces() {
+            var projectName = "source-filter-not-in-" + UUID.randomUUID();
+            var sdkTrace = buildTrace(projectName, Source.SDK);
+            var unknownSourceTrace = buildTrace(projectName, null);
+            var playgroundTrace = buildTrace(projectName, Source.PLAYGROUND);
+            var experimentTrace = buildTrace(projectName, Source.EXPERIMENT);
+
+            traceResourceClient.createTrace(sdkTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(unknownSourceTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(playgroundTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(experimentTrace, API_KEY, TEST_WORKSPACE);
+
+            var actual = getTracesBySource(projectName, Operator.NOT_IN, "sdk,experiment");
+
+            TraceAssertions.assertTraces(actual,
+                    List.of(playgroundTrace),
+                    List.of(sdkTrace, unknownSourceTrace, experimentTrace), USER);
+        }
+
+        @Test
+        @DisplayName("Filter by source EQUAL unknown returns only legacy traces with unknown source")
+        void filterBySourceUnknownReturnsOnlyUnknownSourceTraces() {
+            var projectName = "source-filter-unknown-" + UUID.randomUUID();
+            var sdkTrace = buildTrace(projectName, Source.SDK);
+            var unknownSourceTrace = buildTrace(projectName, null);
+
+            traceResourceClient.createTrace(sdkTrace, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(unknownSourceTrace, API_KEY, TEST_WORKSPACE);
+
+            var actual = getTracesBySource(projectName, Operator.EQUAL, Source.UNKNOWN_VALUE);
+
+            TraceAssertions.assertTraces(actual, List.of(unknownSourceTrace), List.of(sdkTrace), USER);
+        }
+
+        static Stream<Arguments> filterBySourceWithInvalidValueReturnsBadRequest() {
+            return Stream.of(
+                    arguments(Operator.EQUAL, "sdk,playground"),
+                    arguments(Operator.NOT_EQUAL, "sdk,playground"),
+                    arguments(Operator.EQUAL, "SDK"),
+                    arguments(Operator.IN, "sdk,not-a-source"),
+                    arguments(Operator.IN, " , "),
+                    arguments(Operator.NOT_IN, " , "));
+        }
+
+        @ParameterizedTest(name = "{0} \"{1}\"")
+        @MethodSource
+        @DisplayName("Filter by source with a value that is not a source returns bad request")
+        void filterBySourceWithInvalidValueReturnsBadRequest(Operator operator, String value) {
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.SOURCE)
+                    .operator(operator)
+                    .value(value)
+                    .build());
+
+            try (var response = traceResourceClient.callGetTracesWithQueryParams(API_KEY, TEST_WORKSPACE,
+                    Map.of("project_name", "source-filter-empty-list-" + UUID.randomUUID(),
+                            "filters", toURLEncodedQueryParam(filters)))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
     }
 
     @Nested
