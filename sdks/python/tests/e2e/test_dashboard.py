@@ -56,9 +56,10 @@ def test_dashboard_lifecycle__happyflow(
     dash.add_widget(
         dashboard.DashboardWidget(
             type=dashboard.WidgetType.PROJECT_METRICS,
-            title="Duration by model",
+            title="Span duration by model",
             config=dashboard.ProjectMetricsConfig(
-                metric_type=dashboard.ProjectMetricType.DURATION,
+                metric_type=dashboard.ProjectMetricType.SPAN_DURATION,
+                duration_metrics=["p50"],
                 breakdown=dashboard.BreakdownConfig(
                     field=dashboard.BreakdownField.MODEL
                 ),
@@ -77,7 +78,8 @@ def test_dashboard_lifecycle__happyflow(
         expected_widget_configs={
             "project_stats_card": {"metric": "trace_count"},
             "project_metrics": {
-                "metricType": "DURATION",
+                "metricType": "SPAN_DURATION",
+                "durationMetrics": ["p50"],
                 "breakdown": {"field": "model"},
             },
         },
