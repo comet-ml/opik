@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Calendar,
@@ -47,6 +47,7 @@ import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import AnnotationQueuesNavigation from "@/v2/pages-shared/traces/AnnotationQueuesNavigation/AnnotationQueuesNavigation";
 import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
+import { isKeyForLayerAbovePanel } from "@/shared/ResizableSidePanel/panelHotkeys";
 import { Button } from "@/ui/button";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useThreadById from "@/api/traces/useThreadById";
@@ -398,13 +399,19 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     [hasNextRow, hasPreviousRow, onRowChange],
   );
 
+  const contentRef = useRef<HTMLDivElement>(null);
+
   useHotkeys(
     "a",
     (e) => {
       e.preventDefault();
       setActiveSection(DetailsActionSection.Annotate);
     },
-    { enableOnFormTags: false, enabled: canAnnotateTraceSpanThread },
+    {
+      enableOnFormTags: false,
+      enabled: open && canAnnotateTraceSpanThread,
+      ignoreEventWhen: (e) => isKeyForLayerAbovePanel(e, contentRef.current),
+    },
     [setActiveSection, canAnnotateTraceSpanThread],
   );
 
@@ -546,7 +553,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     }
 
     return (
-      <div className="relative size-full">
+      <div ref={contentRef} className="relative size-full">
         <ResizablePanelGroup direction="horizontal" autoSaveId="trace-sidebar">
           <ResizablePanel id="thread-viewer" defaultSize={70} minSize={50}>
             <div className="flex size-full flex-col">

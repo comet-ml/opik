@@ -32,6 +32,7 @@ import { formatCost } from "@/lib/money";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import TagsHoverCard from "@/shared/TagsHoverCard/TagsHoverCard";
+import { isKeyForLayerAbovePanel } from "@/shared/ResizableSidePanel/panelHotkeys";
 import {
   TRACE_TYPE_FOR_TREE,
   TRACE_TYPE_COLORS_MAP,
@@ -206,6 +207,9 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
       if (node?.children?.length) {
         toggleExpand(node.id);
       }
+    },
+    {
+      ignoreEventWhen: (e) => isKeyForLayerAbovePanel(e, scrollRef.current),
     },
     [flattenedTree, rowId],
   );

@@ -4,7 +4,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { Button } from "@/ui/button";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import { Separator } from "@/ui/separator";
-import { isKeyFromLayerAbovePanel } from "@/shared/ResizableSidePanel/panelHotkeys";
+import { isKeyForLayerAbovePanel } from "@/shared/ResizableSidePanel/panelHotkeys";
 
 type ArrowNavigationConfig = {
   hasPrevious: boolean;
@@ -36,7 +36,7 @@ const ResizableSidePanelArrowNavigation: React.FunctionComponent<
   const previousButtonRef = useRef<HTMLButtonElement>(null);
   const ignoreKey = (keyboardEvent: KeyboardEvent) =>
     ignoreHotkeys ||
-    isKeyFromLayerAbovePanel(keyboardEvent, previousButtonRef.current);
+    isKeyForLayerAbovePanel(keyboardEvent, previousButtonRef.current);
 
   useHotkeys(
     "j",

@@ -1,9 +1,12 @@
+import { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
+import { Dialog, DialogContent, DialogTitle } from "@/ui/dialog";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 import { Span, Trace } from "@/types/traces";
+import { DetailsActionSection } from "@/v2/pages-shared/traces/DetailsActionSection";
 import { TraceDataToolbar } from "./TraceDetailsToolbar";
 
 vi.mock("clipboard-copy", () => ({ default: vi.fn() }));
@@ -30,7 +33,7 @@ const span = {
   parent_span_id: "",
 } as unknown as Span;
 
-const renderToolbar = (props = {}) =>
+const renderToolbar = (props = {}, extra?: ReactNode) =>
   render(
     <PermissionsProvider value={DEFAULT_PERMISSIONS}>
       <TooltipProvider delayDuration={0}>
@@ -39,6 +42,7 @@ const renderToolbar = (props = {}) =>
           setActiveSection={vi.fn()}
           {...props}
         />
+        {extra}
       </TooltipProvider>
     </PermissionsProvider>,
   );
@@ -113,5 +117,37 @@ describe("TraceDataToolbar header", () => {
 
     expect(screen.queryByLabelText(/^Copy /)).toBeNull();
     expect(screen.queryByText("chat_completion_create")).toBeNull();
+  });
+});
+
+describe("TraceDataToolbar Annotate hotkey", () => {
+  const A_KEY = { key: "a", code: "KeyA" };
+
+  it("opens Annotate on A pressed in the panel", () => {
+    const setActiveSection = vi.fn();
+    renderToolbar({ setActiveSection });
+
+    fireEvent.keyDown(screen.getByLabelText("Copy span ID"), A_KEY);
+
+    expect(setActiveSection).toHaveBeenCalledWith(
+      DetailsActionSection.Annotate,
+    );
+  });
+
+  it("ignores A pressed in a confirm dialog opened over the panel", () => {
+    const setActiveSection = vi.fn();
+    renderToolbar(
+      { setActiveSection },
+      <Dialog open>
+        <DialogContent aria-describedby={undefined}>
+          <DialogTitle>Delete trace</DialogTitle>
+          <button>Cancel</button>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Cancel" }), A_KEY);
+
+    expect(setActiveSection).not.toHaveBeenCalled();
   });
 });

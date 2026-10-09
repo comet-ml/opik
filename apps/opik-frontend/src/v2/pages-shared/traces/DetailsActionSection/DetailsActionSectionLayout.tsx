@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { X } from "lucide-react";
 import { Button } from "@/ui/button";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { isKeyForLayerAbovePanel } from "@/shared/ResizableSidePanel/panelHotkeys";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { DetailsActionSectionValue } from "./types";
 import { Explainer } from "@/types/shared";
@@ -32,6 +33,8 @@ const DetailsActionSectionLayout: React.FC<DetailsActionSectionLayoutProps> = ({
   tag,
   button,
 }) => {
+  const sectionRef = useRef<HTMLDivElement>(null);
+
   useHotkeys(
     "Escape",
     (keyboardEvent: KeyboardEvent) => {
@@ -42,11 +45,18 @@ const DetailsActionSectionLayout: React.FC<DetailsActionSectionLayoutProps> = ({
         setActiveSection(null);
       }
     },
+    {
+      ignoreEventWhen: (keyboardEvent) =>
+        isKeyForLayerAbovePanel(keyboardEvent, sectionRef.current),
+    },
     [activeSection],
   );
 
   return (
-    <div className="flex size-full min-w-60 flex-col overflow-hidden">
+    <div
+      ref={sectionRef}
+      className="flex size-full min-w-60 flex-col overflow-hidden"
+    >
       <div className="flex h-10 shrink-0 items-center justify-between gap-2 overflow-x-hidden border-b bg-muted/50 px-4">
         <div className="flex items-center gap-2 overflow-x-hidden">
           <div className="comet-body-xs-accented flex w-full items-center gap-1 text-foreground">

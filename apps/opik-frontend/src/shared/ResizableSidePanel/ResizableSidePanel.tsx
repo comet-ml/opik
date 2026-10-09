@@ -11,7 +11,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { usePortalContainer } from "@/lib/portal-container";
 import {
   isArrowKeyForFocusedControl,
-  isKeyFromLayerAbovePanel,
+  isKeyForLayerAbovePanel,
 } from "@/shared/ResizableSidePanel/panelHotkeys";
 
 const INITIAL_WIDTH = 0.75;
@@ -155,7 +155,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
       // panel also mark Escape, and the panel must still close then.
       ignoreEventWhen: (keyboardEvent) =>
         ignoreHotkeys ||
-        isKeyFromLayerAbovePanel(keyboardEvent, panelRef.current) ||
+        isKeyForLayerAbovePanel(keyboardEvent, panelRef.current) ||
         isArrowKeyForFocusedControl(keyboardEvent),
     },
     [verticalNavigation, horizontalNavigation, onClose, open, ignoreHotkeys],

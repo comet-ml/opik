@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
@@ -116,6 +117,65 @@ const confirmDialog = (
   </Dialog>
 );
 
+const previewDialog = (
+  <Dialog open>
+    <DialogContent
+      aria-describedby={undefined}
+      onOpenAutoFocus={(event) => event.preventDefault()}
+    >
+      <DialogTitle>Image preview</DialogTitle>
+    </DialogContent>
+  </Dialog>
+);
+
+const openPopover = (
+  <Popover open>
+    <PopoverTrigger asChild>
+      <button>Filter</button>
+    </PopoverTrigger>
+    <PopoverContent onOpenAutoFocus={(event) => event.preventDefault()}>
+      Filter fields
+    </PopoverContent>
+  </Popover>
+);
+
+const panelBody = () =>
+  screen.getByRole("button", { name: "Panel body", hidden: true });
+
+const renderPanelInSheet = () => {
+  const onClose = vi.fn();
+  const verticalNavigation = buildNavigation();
+  const SheetWithPanel = () => {
+    const [sheetContent, setSheetContent] = useState<HTMLDivElement | null>(
+      null,
+    );
+    return (
+      <TooltipProvider>
+        <Sheet open>
+          <SheetContent
+            ref={setSheetContent}
+            header={<SheetTitle>Logs</SheetTitle>}
+            aria-describedby={undefined}
+            onEscapeKeyDown={(event) => event.preventDefault()}
+          >
+            <ResizableSidePanel
+              panelId="test-panel"
+              open
+              onClose={onClose}
+              verticalNavigation={verticalNavigation}
+              container={sheetContent}
+            >
+              <button>Panel body</button>
+            </ResizableSidePanel>
+          </SheetContent>
+        </Sheet>
+      </TooltipProvider>
+    );
+  };
+  render(<SheetWithPanel />);
+  return { onClose, verticalNavigation };
+};
+
 describe("ResizableSidePanel hotkeys", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -185,6 +245,30 @@ describe("ResizableSidePanel hotkeys", () => {
     },
   );
 
+  it.each([KEYS.ArrowDown, KEYS.ArrowRight])(
+    "ignores $key pressed in the panel while a modal it opened left focus there",
+    (key) => {
+      const { verticalNavigation, horizontalNavigation } = renderPanel(
+        {},
+        previewDialog,
+      );
+
+      fireEvent.keyDown(panelBody(), key);
+
+      expect(verticalNavigation.onChange).not.toHaveBeenCalled();
+      expect(horizontalNavigation.onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still moves the panel while a popover opened from it is open", () => {
+    const { horizontalNavigation } = renderPanel({}, openPopover);
+    expect(screen.getByRole("dialog")).toHaveTextContent("Filter fields");
+
+    fireEvent.keyDown(panelBody(), KEYS.ArrowRight);
+
+    expect(horizontalNavigation.onChange).toHaveBeenCalledWith(1);
+  });
+
   it("moves the panel on arrow keys pressed in the panel", () => {
     const { verticalNavigation } = renderPanel();
 
@@ -231,42 +315,20 @@ describe("ResizableSidePanel hotkeys", () => {
   });
 
   it("closes a panel shown inside a sheet that keeps itself open on Escape", () => {
-    const onClose = vi.fn();
-    const SheetWithPanel = () => {
-      const [sheetContent, setSheetContent] = useState<HTMLDivElement | null>(
-        null,
-      );
-      return (
-        <TooltipProvider>
-          <Sheet open>
-            <SheetContent
-              ref={setSheetContent}
-              header={<SheetTitle>Logs</SheetTitle>}
-              aria-describedby={undefined}
-              onEscapeKeyDown={(event) => event.preventDefault()}
-            >
-              <ResizableSidePanel
-                panelId="test-panel"
-                open
-                onClose={onClose}
-                container={sheetContent}
-              >
-                <button>Panel body</button>
-              </ResizableSidePanel>
-            </SheetContent>
-          </Sheet>
-        </TooltipProvider>
-      );
-    };
-    render(<SheetWithPanel />);
+    const { onClose } = renderPanelInSheet();
 
-    fireEvent.keyDown(
-      screen.getByRole("button", { name: "Panel body" }),
-      KEYS.Escape,
-    );
+    fireEvent.keyDown(panelBody(), KEYS.Escape);
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("moves a panel shown inside a sheet on arrow keys", () => {
+    const { verticalNavigation } = renderPanelInSheet();
+
+    fireEvent.keyDown(panelBody(), KEYS.ArrowDown);
+
+    expect(verticalNavigation.onChange).toHaveBeenCalledWith(1);
   });
 
   it("ignores Escape while hotkeys are turned off", () => {
