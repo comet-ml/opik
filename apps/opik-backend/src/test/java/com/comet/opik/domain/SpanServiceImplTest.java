@@ -23,6 +23,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -34,7 +37,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -509,8 +514,10 @@ class SpanServiceImplTest {
             verifyNoInteractions(spanWeeksDAO);
         }
 
-        @Test
-        void registerWeeks__whenSpansLackIdTraceOrProject__thenRegistersOnlyTheCompleteOnes() {
+        @ParameterizedTest(name = "a span without {0} registers nothing")
+        @MethodSource
+        void registerWeeks__whenASpanLacksARequiredField__thenRegistersOnlyTheCompleteOne(String field,
+                UnaryOperator<Span> strip) {
             var projectId = idGenerator.generateId();
             var traceId = idGenerator.generateId();
             // An id on Monday 2025-03-03, so its week is the literal below rather than one computed here.
@@ -522,15 +529,19 @@ class SpanServiceImplTest {
             StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder()
                     .spanWeeksWriteEnabled(true)
                     .build())
-                    .registerWeeks(List.of(
-                            complete,
-                            complete.toBuilder().id(null).build(),
-                            complete.toBuilder().traceId(null).build(),
-                            complete.toBuilder().projectId(null).build())))
+                    .registerWeeks(List.of(complete, strip.apply(complete))))
                     .verifyComplete();
 
             verify(spanWeeksDAO).insert(List.of(
                     SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(20250303L).build()));
+        }
+
+        static Stream<Arguments> registerWeeks__whenASpanLacksARequiredField__thenRegistersOnlyTheCompleteOne() {
+            return Stream.of(
+                    Arguments.of("an id", (UnaryOperator<Span>) span -> span.toBuilder().id(null).build()),
+                    Arguments.of("a trace id", (UnaryOperator<Span>) span -> span.toBuilder().traceId(null).build()),
+                    Arguments.of("a project id",
+                            (UnaryOperator<Span>) span -> span.toBuilder().projectId(null).build()));
         }
 
         @Test
