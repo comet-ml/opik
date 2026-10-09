@@ -90,7 +90,7 @@ interface AgentInsightsJobDAO {
     @SqlUpdate("""
             UPDATE agent_insights_jobs
             SET last_scan_at = CURRENT_TIMESTAMP(6), results_guidance_version = run_guidance_version,
-                last_updated_by = :userName
+                run_guidance_version = NULL, last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
     int markScanned(@Bind("workspaceId") String workspaceId,
@@ -121,7 +121,7 @@ interface AgentInsightsJobDAO {
                 last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
-    int updateGuidance(@Bind("workspaceId") String workspaceId,
+    void updateGuidance(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
             @Bind("guidance") String guidance,
             @Bind("userName") String userName);
@@ -134,15 +134,15 @@ interface AgentInsightsJobDAO {
     Optional<RunGuidance> findRunGuidance(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
-    // Stamped at enqueue with the guidance version the run carries; markScanned promotes it to
-    // results_guidance_version when that run's report lands.
+    // The guidance version the queued run carries, or NULL when it carries none. markScanned moves it to
+    // results_guidance_version and clears it. One slot per job: overlapping runs share it (known limitation).
     @SqlUpdate("""
             UPDATE agent_insights_jobs SET run_guidance_version = :guidanceVersion, last_updated_at = last_updated_at
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
-    int markRunGuidanceVersion(@Bind("workspaceId") String workspaceId,
+    void markRunGuidanceVersion(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
-            @Bind("guidanceVersion") int guidanceVersion);
+            @Bind("guidanceVersion") Integer guidanceVersion);
 
     // Cross-workspace — used only by the daily sweep (system context), never from a request thread.
     // INNER JOIN projects so jobs whose project was deleted are filtered out at the source (no per-job

@@ -16,7 +16,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -41,19 +40,19 @@ public class PlatformAgentInsightsReportClient implements AgentInsightsReportCli
     }
 
     @Override
-    public void triggerAgentInsights(@NonNull String reportId, @NonNull UUID projectId,
-            @NonNull String workspaceId, @NonNull Instant periodStart, @NonNull Instant periodEnd,
-            @NonNull String triggerSource, String guidance) {
+    public void triggerAgentInsights(@NonNull Trigger trigger) {
+        String reportId = trigger.reportId();
+        UUID projectId = trigger.projectId();
 
         var payload = AgentInsightsTriggerRequest.builder()
                 .reportType(REPORT_TYPE)
                 .reportId(reportId)
                 .projectId(projectId)
-                .workspaceId(workspaceId)
-                .periodStart(periodStart)
-                .periodEnd(periodEnd)
-                .triggerSource(triggerSource)
-                .customPrompt(guidance)
+                .workspaceId(trigger.workspaceId())
+                .periodStart(trigger.periodStart())
+                .periodEnd(trigger.periodEnd())
+                .triggerSource(trigger.triggerSource())
+                .customPrompt(trigger.guidance())
                 .build();
 
         try (Response response = httpClient.target(config.getTriggerUrl())

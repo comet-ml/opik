@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.util.UUID;
@@ -15,8 +16,7 @@ import java.util.UUID;
 public record AgentInsightsIssueUpdate(
         @NotNull UUID projectId,
         @NotNull AgentInsightsIssueStatus status,
-        @Schema(maxLength = CLOSE_NOTE_MAX_LENGTH, description = "Why the issue is closed as not useful. Stored only with status closed; any other status clears it") String closeNote) {
+        @Size(max = CLOSE_NOTE_MAX_LENGTH) @Schema(description = "Why the issue is closed as not useful. Stored only with status closed; any other status clears it") String closeNote) {
 
-    // Checked by the service rather than @Size, so an over-limit note is a 400 like guidance, not a 422.
     public static final int CLOSE_NOTE_MAX_LENGTH = 500;
 }

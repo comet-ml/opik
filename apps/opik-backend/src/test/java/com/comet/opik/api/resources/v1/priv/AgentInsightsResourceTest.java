@@ -966,7 +966,8 @@ class AgentInsightsResourceTest {
             report(projectId, DAY_1,
                     List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
                             rndUserCount())));
-            var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
+            var open = findIssues(projectId, DAY_1, DAY_1).content().getFirst();
+            var issueId = open.id();
             var update = AgentInsightsIssueUpdate.builder()
                     .projectId(projectId)
                     .status(AgentInsightsIssueStatus.CLOSED)
@@ -976,15 +977,22 @@ class AgentInsightsResourceTest {
             agentInsightsResourceClient.updateStatus(issueId, update, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 
+            var listed = findIssues(projectId, DAY_1, DAY_1).content().getFirst();
+            assertThat(listed)
+                    .usingRecursiveComparison()
+                    .ignoringFields("statusChangedAt", "lastUpdatedAt")
+                    .isEqualTo(open.toBuilder()
+                            .status(AgentInsightsIssueStatus.CLOSED)
+                            .closeNote("Expected: retries are by design")
+                            .statusChangedBy(USER)
+                            .build());
+            assertThat(listed.statusChangedAt()).isNotNull();
             var closed = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
-            assertThat(closed.closeNote()).isEqualTo("Expected: retries are by design");
-            assertThat(closed.statusChangedBy()).isEqualTo(USER);
-            assertThat(closed.statusChangedAt()).isNotNull();
-            var listed = findIssues(projectId, DAY_1, DAY_1).content().getFirst();
-            assertThat(listed.closeNote()).isEqualTo("Expected: retries are by design");
-            assertThat(listed.statusChangedBy()).isEqualTo(USER);
-            assertThat(listed.statusChangedAt()).isEqualTo(closed.statusChangedAt());
+            assertThat(closed)
+                    .usingRecursiveComparison()
+                    .comparingOnlyFields("status", "closeNote", "statusChangedBy", "statusChangedAt")
+                    .isEqualTo(listed);
 
             // Closing again without a note replaces the previous one.
             agentInsightsResourceClient.updateStatus(issueId, update.toBuilder().closeNote(null).build(),
@@ -1002,6 +1010,36 @@ class AgentInsightsResourceTest {
                     TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(reopened.closeNote()).isNull();
             assertThat(reopened.statusChangedAt()).isAfter(closed.statusChangedAt());
+        }
+
+        @ParameterizedTest
+        @MethodSource("closeNotes")
+        @DisplayName("Close note: up to 500 characters is stored, whitespace-only is stored as none")
+        void updateIssueStatusWhenClosedThenNoteNormalised(String sent, String stored) {
+            var projectId = createProject();
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
+            var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
+
+            agentInsightsResourceClient.updateStatus(issueId,
+                    AgentInsightsIssueUpdate.builder()
+                            .projectId(projectId)
+                            .status(AgentInsightsIssueStatus.CLOSED)
+                            .closeNote(sent)
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK).closeNote()).isEqualTo(stored);
+        }
+
+        Stream<Arguments> closeNotes() {
+            var longest = "x".repeat(AgentInsightsIssueUpdate.CLOSE_NOTE_MAX_LENGTH);
+            return Stream.of(
+                    Arguments.of(longest, longest),
+                    Arguments.of("  \n ", null),
+                    Arguments.of("  Expected behaviour  ", "Expected behaviour"));
         }
 
         @Test
@@ -1050,12 +1088,12 @@ class AgentInsightsResourceTest {
                             HttpStatus.SC_BAD_REQUEST),
                     Arguments.of("{\"status\":\"resolved\"}", HttpStatus.SC_UNPROCESSABLE_ENTITY),
                     Arguments.of("{\"project_id\":\"%s\",\"status\":\"closed\",\"close_note\":\"%s\"}"
-                            .formatted(UUID.randomUUID(), "x".repeat(501)), HttpStatus.SC_BAD_REQUEST));
+                            .formatted(UUID.randomUUID(), "x".repeat(501)), HttpStatus.SC_UNPROCESSABLE_ENTITY));
         }
 
         @ParameterizedTest
         @MethodSource("invalidStatusUpdatePayloads")
-        @DisplayName("Invalid status value or an over-long close note returns 400, missing project_id returns 422")
+        @DisplayName("Invalid status value returns 400, missing project_id or an over-long close note returns 422")
         void updateIssueStatusWhenPayloadIsInvalidThenClientError(String body, int expectedStatus) {
             try (var response = agentInsightsResourceClient.updateStatusWithResponse(UUID.randomUUID(), body,
                     API_KEY, TEST_WORKSPACE)) {

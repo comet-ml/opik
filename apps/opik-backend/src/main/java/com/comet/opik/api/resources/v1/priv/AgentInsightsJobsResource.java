@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AgentInsightsGuidanceUpdate;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJobUpdate;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.AgentInsightsJobService;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -88,9 +89,9 @@ public class AgentInsightsJobsResource {
     @Path("/{projectId}/guidance")
     @Operation(operationId = "updateAgentInsightsGuidance", summary = "Update Agent Insights project guidance", description = "Saves the project guidance sent to every Agent Insights run, creating the job (disabled) if the project has none. Empty or whitespace-only clears it. The guidance version is bumped only when the text changes. 404 while guidance is not enabled.", responses = {
             @ApiResponse(responseCode = "200", description = "Job with the saved guidance", content = @Content(schema = @Schema(implementation = AgentInsightsJob.class))),
-            @ApiResponse(responseCode = "400", description = "Guidance over the length limit"),
-            @ApiResponse(responseCode = "403", description = "Forbidden"),
-            @ApiResponse(responseCode = "404", description = "Project not found, or guidance not enabled")
+            @ApiResponse(responseCode = "403", description = "Forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Project not found, or guidance not enabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "422", description = "Guidance missing or over the length limit", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
     public Response updateGuidance(@PathParam("projectId") @NotNull UUID projectId,

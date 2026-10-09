@@ -1790,9 +1790,10 @@ serviceToggles:
   #   hides Diagnostics. Ollie chat and its freeform SQL path are unaffected.
   agentInsightsEnabled: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"true"}
   # Default: false
-  # Description: Whether Agent Insights (Diagnostics) project guidance and "Close as not useful" are enabled. When
-  #   false, the guidance fields are left out of the job, PUT guidance returns 404 and runs are sent without
-  #   guidance; the UI hides the guidance-specific controls.
+  # Description: Whether Agent Insights (Diagnostics) project guidance is enabled, effective only while Agent Insights
+  #   is active. When false, the guidance fields are left out of the job, PUT guidance returns 404 and runs (queued
+  #   ones included) are sent without guidance. Close notes are accepted either way; the UI hides "Close as not
+  #   useful" and the other guidance controls when it is off.
   agentInsightsGuidanceEnabled: ${TOGGLE_AGENT_INSIGHTS_GUIDANCE_ENABLED:-"false"}
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
