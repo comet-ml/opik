@@ -20,6 +20,7 @@ type TrialSidebarProps = {
   isBaseline?: boolean;
   /** The trial's experiments, resolved from the run's already-loaded list. */
   trialExperiments: Experiment[];
+  ignoreHotkeys?: boolean;
   children?: React.ReactNode;
 };
 
@@ -35,6 +36,7 @@ const TrialSidebar: React.FC<TrialSidebarProps> = ({
   trialNumber,
   isBaseline,
   trialExperiments,
+  ignoreHotkeys,
   children,
 }) => {
   const {
@@ -54,6 +56,7 @@ const TrialSidebar: React.FC<TrialSidebarProps> = ({
       entity="trial"
       open={open}
       onClose={onClose}
+      ignoreHotkeys={ignoreHotkeys}
       initialWidth={0.65}
       minWidth={640}
       // Align the header's chevron icon (6px inset in its 24px button) with the

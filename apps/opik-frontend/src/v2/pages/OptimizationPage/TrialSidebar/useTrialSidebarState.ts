@@ -110,6 +110,7 @@ export const useTrialSidebarState = () => {
     open: experimentIds.length > 0,
     experimentIds,
     trialNumber: query.trialNumber ?? undefined,
+    isTraceOpen: Boolean(query.trace),
     tab,
     promptView,
     setTab,

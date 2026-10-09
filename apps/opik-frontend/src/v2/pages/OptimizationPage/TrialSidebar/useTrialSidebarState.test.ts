@@ -38,6 +38,18 @@ describe("useTrialSidebarState", () => {
     expect(result.current.trialNumber).toBe(3);
   });
 
+  it("reports whether the embedded trace panel is open", () => {
+    mockQuery = { trials: ["exp-1"] };
+    expect(
+      renderHook(() => useTrialSidebarState()).result.current.isTraceOpen,
+    ).toBe(false);
+
+    mockQuery = { trials: ["exp-1"], trace: "trace-1" };
+    expect(
+      renderHook(() => useTrialSidebarState()).result.current.isTraceOpen,
+    ).toBe(true);
+  });
+
   it("defaults the tab to results and honours trialTab=prompt", () => {
     mockQuery = { trials: ["exp-1"], trialTab: "bogus" };
     expect(renderHook(() => useTrialSidebarState()).result.current.tab).toBe(
