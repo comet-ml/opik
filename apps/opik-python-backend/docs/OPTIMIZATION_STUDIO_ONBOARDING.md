@@ -91,12 +91,13 @@ Step by step:
      monkey-patches `litellm.completion`/`acompletion` to inject the
      `Comet-Workspace` header on every call. Without it the gateway returns
      `403 "Workspace name should be provided"`.
-   - The model string is prefixed with `openai/`
-     ([optimizer_runner.py:242-243](../src/opik_backend/jobs/optimizer_runner.py#L242-L243))
+   - The model string is always prefixed with `openai/`
+     ([`_gateway_model`](../src/opik_backend/jobs/optimizer_runner.py))
      so LiteLLM uses its OpenAI handler (the only one that honors
-     `OPENAI_API_BASE`). LiteLLM strips the prefix before the HTTP call, so the
-     gateway still receives the original provider-qualified model
-     (e.g. `vertex_ai/gemini-2.5-flash`).
+     `OPENAI_API_BASE`). LiteLLM strips exactly one prefix before the HTTP call,
+     so the gateway receives the model id exactly as the frontend stored it
+     (e.g. `vertex_ai/gemini-2.5-flash`, or OpenRouter's `openai/gpt-5-nano`,
+     sent as `openai/openai/gpt-5-nano`).
    - The optimizer (`opik_optimizer`) runs `optimize_prompt`; status transitions
      and the final result are written back via the Opik SDK from inside the
      subprocess.
