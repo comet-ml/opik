@@ -637,6 +637,15 @@ export const updateConfigForModelChange = <
 ): T => {
   const adjusted = updateProviderConfig(config, next) ?? config;
 
+  // Same rule as the playground, which resets a prompt's configs on a provider change: the extra body
+  // belongs to the previous provider. Kept, it is saved with no editor to show it and is sent again
+  // once the rule goes back to a Custom LLM.
+  if (previous.provider && previous.provider !== next.provider) {
+    return adjusted.custom_parameters == null
+      ? adjusted
+      : { ...adjusted, custom_parameters: null };
+  }
+
   // updateProviderConfig leaves custom_parameters alone because opening a rule must keep the effort
   // stored for a Claude model with no row. On a switch that copy belongs to the previous model; the
   // flat thinkingEffort, already fitted to the next model, is what carries the user's choice.
