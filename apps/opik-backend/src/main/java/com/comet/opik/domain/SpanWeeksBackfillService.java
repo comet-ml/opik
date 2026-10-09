@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.domain.SpanWeeksBackfillChunkDAO.Chunk;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
 import com.comet.opik.infrastructure.SpanWeeksBackfillConfig;
+import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -109,7 +110,9 @@ public class SpanWeeksBackfillService {
     }
 
     /** Tiles the ids: open below up to {@code first}, then every {@code weeks} weeks to {@code last}, open above. */
-    static List<Chunk> chunks(LocalDate first, LocalDate last, int weeks) {
+    static List<Chunk> chunks(@NonNull LocalDate first, @NonNull LocalDate last, int weeks) {
+        Preconditions.checkArgument(!first.isAfter(last), "Argument 'first' must not be after 'last'");
+        Preconditions.checkArgument(weeks > 0, "Argument 'weeks' must be positive");
         List<Chunk> chunks = new ArrayList<>();
         long from = 0;
         for (LocalDate boundary = first; boundary.isBefore(last); boundary = boundary.plusWeeks(weeks)) {

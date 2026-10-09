@@ -215,9 +215,9 @@ databaseAnalyticsDataModel:
 # ends, and backfills one range per run. Progress is kept in the span_weeks_backfill_chunks state table, so it resumes
 # across restarts.
 spanWeeksBackfill:
-  #  Default: 1m
-  #  Description: How often a run starts; each run backfills one chunk
-  interval: ${SPAN_WEEKS_BACKFILL_INTERVAL:-1m}
+  #  Default: 5m
+  #  Description: How often a run starts; each run backfills one chunk, so this leaves room for its insert
+  interval: ${SPAN_WEEKS_BACKFILL_INTERVAL:-5m}
   #  Default: 4
   #  Description: Weeks of span ids one run backfills
   weeksPerChunk: ${SPAN_WEEKS_BACKFILL_WEEKS_PER_CHUNK:-4}
