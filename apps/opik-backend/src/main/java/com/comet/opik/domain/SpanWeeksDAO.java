@@ -16,6 +16,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -138,6 +139,7 @@ public class SpanWeeksDAO {
 
     /** When the first span was written, if any; one scan of the created_at column. */
     public Mono<Optional<Instant>> findFirstCreatedAt(long maxExecutionSeconds) {
+        Preconditions.checkArgument(maxExecutionSeconds > 0, "Argument 'maxExecutionSeconds' must be positive");
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(
                         getSTWithLogComment(FIND_FIRST_CREATED_AT, "find_spans_first_created_at", null, null, null)
@@ -158,6 +160,11 @@ public class SpanWeeksDAO {
      * The statement uses at most {@code maxThreads} threads.
      */
     public Mono<Void> backfill(long fromWeek, Long toWeek, int maxThreads, long maxExecutionSeconds) {
+        Preconditions.checkArgument(fromWeek >= 0, "Argument 'fromWeek' must not be negative");
+        Preconditions.checkArgument(toWeek == null || toWeek > fromWeek,
+                "Argument 'toWeek' must be after 'fromWeek', or null for an open range");
+        Preconditions.checkArgument(maxThreads > 0, "Argument 'maxThreads' must be positive");
+        Preconditions.checkArgument(maxExecutionSeconds > 0, "Argument 'maxExecutionSeconds' must be positive");
         UUID fromId = fromWeek > 0 ? uuidMapper.toLowerBound(monday(fromWeek)) : null;
         UUID toId = toWeek != null ? uuidMapper.toLowerBound(monday(toWeek)) : null;
         return Mono.from(connectionFactory.create())
@@ -183,7 +190,9 @@ public class SpanWeeksDAO {
     }
 
     private static Instant monday(long week) {
-        return LocalDate.parse(String.valueOf(week), DateTimeFormatter.BASIC_ISO_DATE).atStartOfDay(ZoneOffset.UTC)
-                .toInstant();
+        LocalDate date = LocalDate.parse(String.valueOf(week), DateTimeFormatter.BASIC_ISO_DATE);
+        Preconditions.checkArgument(date.getDayOfWeek() == DayOfWeek.MONDAY,
+                "Week '%s' must be a Monday as YYYYMMDD", week);
+        return date.atStartOfDay(ZoneOffset.UTC).toInstant();
     }
 }
