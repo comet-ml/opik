@@ -326,6 +326,36 @@ class CostServiceTest {
                                 "original_usage.outputTokens", 100,
                                 "original_usage.cacheReadInputTokens", 200),
                         "0.00132"),
+                // Bedrock shape with priced cache writes on anthropic provider:
+                // 800*1e-6 + 100*5e-6 + 200*1e-7 + 50*1.25e-6. The Anthropic calculator would read neither
+                // cache bucket and bill prompt_tokens (0.00155).
+                Arguments.of("Bedrock shape with cache writes on anthropic provider", "claude-haiku-4-5",
+                        "anthropic",
+                        Map.of("prompt_tokens", 1050, "completion_tokens", 100,
+                                "original_usage.inputTokens", 800,
+                                "original_usage.outputTokens", 100,
+                                "original_usage.cacheReadInputTokens", 200,
+                                "original_usage.cacheWriteInputTokens", 50),
+                        "0.0013825"),
+                // Anthropic shape with priced cache creation on bedrock provider:
+                // 1000*8e-7 + 100*4e-6 + 200*8e-8 + 50*1e-6. The Bedrock calculator would read neither
+                // cache bucket and bill prompt_tokens (0.0014).
+                Arguments.of("Anthropic shape with cache creation on bedrock provider",
+                        "anthropic.claude-3-5-haiku-20241022-v1:0", "bedrock",
+                        Map.of("prompt_tokens", 1250, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200,
+                                "original_usage.cache_creation_input_tokens", 50),
+                        "0.001266"),
+                // OpenAI responses shape with no prompt_tokens/completion_tokens aliases (a raw span write):
+                // the OpenAI calculator reads original_usage.input_tokens and output_tokens,
+                // 800*1e-6 + 100*5e-6 + 200*1e-7.
+                Arguments.of("OpenAI responses shape without aliases", "claude-haiku-4-5", "anthropic",
+                        Map.of("original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.input_tokens_details.cached_tokens", 200),
+                        "0.00132"),
                 // Gemini shape on openai provider: 800*2.5e-6 + 100*1e-5 + 200*1.25e-6.
                 Arguments.of("Gemini shape on openai provider", "gpt-4o", "openai",
                         Map.of("prompt_tokens", 1000, "completion_tokens", 100,

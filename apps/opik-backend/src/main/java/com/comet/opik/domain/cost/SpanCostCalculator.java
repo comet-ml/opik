@@ -69,8 +69,10 @@ class SpanCostCalculator {
         // In OpenAI usage format, input tokens includes the cached input tokens, so we need to substract them to compute the correct input token count
         // Don't generalize yet as other providers seems to separate the cached tokens from non-cached tokens
 
-        // Get the input tokens (SDK version below 1.6.0 logged prompt_tokens, while 1.6.0+ logged original_usage.prompt_tokens)
-        int inputTokens = usage.getOrDefault("original_usage.prompt_tokens", usage.getOrDefault("prompt_tokens", 0));
+        // Get the input tokens (SDK version below 1.6.0 logged prompt_tokens, while 1.6.0+ logged original_usage.prompt_tokens).
+        // A raw Responses API payload with no prompt_tokens alias only has original_usage.input_tokens.
+        int inputTokens = usage.getOrDefault("original_usage.prompt_tokens",
+                usage.getOrDefault("prompt_tokens", usage.getOrDefault("original_usage.input_tokens", 0)));
         // Keep the total prompt-token count for tier evaluation: which above_NNNk rate applies is
         // decided on the whole prompt, not on the post-cache-subtraction remainder.
         int totalPromptTokens = inputTokens;
@@ -107,9 +109,10 @@ class SpanCostCalculator {
             }
         }
 
-        // Get the output tokens (SDK version below 1.6.0 logged completion_tokens, while 1.6.0+ logged original_usage.completion_tokens)
+        // Get the output tokens (SDK version below 1.6.0 logged completion_tokens, while 1.6.0+ logged original_usage.completion_tokens).
+        // Same Responses API fallback as the input side.
         int outputTokens = usage.getOrDefault("original_usage.completion_tokens",
-                usage.getOrDefault("completion_tokens", 0));
+                usage.getOrDefault("completion_tokens", usage.getOrDefault("original_usage.output_tokens", 0)));
 
         // Audio output tokens carry their own rate via output_cost_per_audio_token; same fallback shape.
         int audioOutputTokens = usage.getOrDefault("original_usage.completion_tokens_details.audio_tokens",
