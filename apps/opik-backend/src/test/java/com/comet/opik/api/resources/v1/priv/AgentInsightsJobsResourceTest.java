@@ -37,6 +37,7 @@ import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
+import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -166,6 +167,7 @@ class AgentInsightsJobsResourceTest {
     private AgentInsightsAutoFirstRunJob autoFirstRunJob;
     private AgentInsightsJobService jobService;
     private ServiceTogglesConfig serviceToggles;
+    private Jdbi jdbi;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Injector injector) {
@@ -181,6 +183,7 @@ class AgentInsightsJobsResourceTest {
         this.autoFirstRunJob = injector.getInstance(AgentInsightsAutoFirstRunJob.class);
         this.jobService = injector.getInstance(AgentInsightsJobService.class);
         this.serviceToggles = injector.getInstance(OpikConfiguration.class).getServiceToggles();
+        this.jdbi = injector.getInstance(Jdbi.class);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_2, WORKSPACE_NAME_2, WORKSPACE_ID_2, USER_2);
@@ -839,6 +842,22 @@ class AgentInsightsJobsResourceTest {
         return TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList();
     }
 
+    /**
+     * The publisher stamps the run's guidance version after the message is on the queue, so the subscriber can deliver
+     * the trigger first. A report sent before the stamp would race it.
+     */
+    private void awaitRunGuidanceVersion(UUID projectId, Integer expected) {
+        await().atMost(10, SECONDS).untilAsserted(() -> {
+            Integer stamped = jdbi.withHandle(handle -> handle.createQuery(
+                    "SELECT run_guidance_version FROM agent_insights_jobs WHERE workspace_id = :ws AND project_id = :p")
+                    .bind("ws", WORKSPACE_ID)
+                    .bind("p", projectId.toString())
+                    .mapTo(Integer.class)
+                    .one());
+            assertThat(stamped).isEqualTo(expected);
+        });
+    }
+
     private Trigger awaitSingleTrigger(UUID projectId) {
         return awaitTriggers(projectId, 1).getFirst();
     }
@@ -957,6 +976,7 @@ class AgentInsightsJobsResourceTest {
         jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
 
         assertThat(awaitSingleTrigger(projectId).guidance()).isEqualTo("Only report billing failures");
+        awaitRunGuidanceVersion(projectId, 1);
         assertThat(getJob(projectId).resultsGuidanceVersion()).isNull();
 
         // Guidance edited while the run is in flight: its report must record the version the run carried.
@@ -978,6 +998,7 @@ class AgentInsightsJobsResourceTest {
 
         jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
         assertThat(awaitSingleTrigger(projectId).guidance()).isNull();
+        awaitRunGuidanceVersion(projectId, cleared.guidanceVersion());
         reportAllClear(projectId);
 
         assertThat(getJob(projectId).resultsGuidanceVersion()).isEqualTo(cleared.guidanceVersion());
@@ -1003,10 +1024,12 @@ class AgentInsightsJobsResourceTest {
         updateGuidance(projectId, "Ignore retries");
         jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
         awaitSingleTrigger(projectId);
+        awaitRunGuidanceVersion(projectId, 1);
 
         withGuidanceDisabled(() -> {
             jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
             assertThat(awaitTriggers(projectId, 2).get(1).guidance()).isNull();
+            awaitRunGuidanceVersion(projectId, null);
         });
         reportAllClear(projectId);
 
