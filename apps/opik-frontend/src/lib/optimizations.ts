@@ -27,20 +27,6 @@ import {
   OPTIMIZER_OPTIONS,
   OPTIMIZATION_METRIC_OPTIONS,
 } from "@/constants/optimizations";
-import {
-  DEFAULT_ANTHROPIC_CONFIGS,
-  DEFAULT_OPEN_AI_CONFIGS,
-} from "@/constants/llm";
-import { supportsSamplingParams } from "@/lib/modelUtils";
-import {
-  LLMAnthropicConfigsType,
-  LLMOpenAIConfigsType,
-  LLMPromptConfigsType,
-  PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
-  COMPOSED_PROVIDER_TYPE,
-} from "@/types/providers";
-import { parseComposedProviderType } from "@/lib/provider";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Filters } from "@/types/filters";
 
@@ -358,30 +344,6 @@ export const getDefaultMetricConfig = (
     default:
       return {};
   }
-};
-
-// @ToDo: remove when we support all params
-export const getOptimizationDefaultConfigByProvider = (
-  provider: COMPOSED_PROVIDER_TYPE,
-  model?: PROVIDER_MODEL_TYPE | "",
-): LLMPromptConfigsType => {
-  const providerType = parseComposedProviderType(provider);
-
-  if (providerType === PROVIDER_TYPE.OPEN_AI) {
-    return {
-      temperature: DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE,
-    } as LLMOpenAIConfigsType;
-  }
-
-  if (providerType === PROVIDER_TYPE.ANTHROPIC) {
-    return {
-      temperature: supportsSamplingParams(model)
-        ? DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE
-        : undefined,
-    } as LLMAnthropicConfigsType;
-  }
-
-  return {};
 };
 
 export const checkIsTestSuite = (experiments: Experiment[]): boolean => {

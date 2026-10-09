@@ -6,8 +6,19 @@ import {
   OptimizationConfigFormType,
   convertFormDataToStudioConfig,
   convertOptimizationStudioToFormData,
+  getOptimizationDefaultConfigByProvider,
 } from "./schema";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
+import {
+  DEFAULT_CUSTOM_CONFIGS,
+  DEFAULT_GEMINI_CONFIGS,
+  DEFAULT_OPEN_AI_CONFIGS,
+  DEFAULT_OPEN_ROUTER_CONFIGS,
+} from "@/constants/llm";
 import { METRIC_TYPE, OPTIMIZER_TYPE } from "@/types/optimizations";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 
@@ -210,9 +221,7 @@ describe("convertFormDataToStudioConfig — Gemini thinking level", () => {
       temperature: 0.5,
       custom_parameters: { thinking: { level: "off" } },
     });
-    expect(
-      (config.llm_model.parameters as Record<string, unknown>).thinkingLevel,
-    ).toBeUndefined();
+    expect(config.llm_model.parameters).not.toHaveProperty("thinking_level");
   });
 
   // The control shows the model's default even when the config holds no level, so the request has
@@ -267,9 +276,7 @@ describe("convertFormDataToStudioConfig — controls the optimizer does not offe
       "my-dataset",
     ).llm_model.parameters as Record<string, unknown>;
 
-    expect(parameters.temperature).toBe(0.5);
-    expect(parameters.throttling).toBeUndefined();
-    expect(parameters.maxConcurrentRequests).toBeUndefined();
+    expect(parameters).toEqual({ temperature: 0.5 });
   });
 
   // The optimizer reaches OpenAI through LiteLLM on Chat Completions whatever the key's pipeline
@@ -283,7 +290,7 @@ describe("convertFormDataToStudioConfig — controls the optimizer does not offe
       "my-dataset",
     ).llm_model.parameters as Record<string, unknown>;
 
-    expect(parameters.reasoningEffort).toBe("high");
+    expect(parameters.reasoning_effort).toBe("high");
   });
 });
 
@@ -310,7 +317,7 @@ describe("convertFormDataToStudioConfig — Anthropic effort", () => {
     expect(parameters.custom_parameters).toEqual({
       output_config: { effort: "low" },
     });
-    expect(parameters.thinkingEffort).toBeUndefined();
+    expect(parameters).not.toHaveProperty("thinking_effort");
   });
 
   it("keeps a saved run's effort when the run is reloaded and resubmitted", () => {
@@ -339,4 +346,287 @@ describe("convertFormDataToStudioConfig — Anthropic effort", () => {
       output_config: { effort: "low" },
     });
   });
+});
+
+describe("getOptimizationDefaultConfigByProvider", () => {
+  it.each([
+    {
+      provider: PROVIDER_TYPE.OPEN_AI,
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      expected: {
+        temperature: 0,
+        maxCompletionTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
+        topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
+        frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
+        presencePenalty: DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY,
+      },
+    },
+    {
+      provider: PROVIDER_TYPE.GEMINI,
+      model: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      expected: {
+        temperature: 0,
+        maxCompletionTokens: DEFAULT_GEMINI_CONFIGS.MAX_COMPLETION_TOKENS,
+        topP: DEFAULT_GEMINI_CONFIGS.TOP_P,
+      },
+    },
+    {
+      provider: PROVIDER_TYPE.OPEN_ROUTER,
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      expected: {
+        maxTokens: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS,
+        temperature: 0,
+        topP: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P,
+        topK: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_K,
+        frequencyPenalty: DEFAULT_OPEN_ROUTER_CONFIGS.FREQUENCY_PENALTY,
+        presencePenalty: DEFAULT_OPEN_ROUTER_CONFIGS.PRESENCE_PENALTY,
+        repetitionPenalty: DEFAULT_OPEN_ROUTER_CONFIGS.REPETITION_PENALTY,
+        minP: DEFAULT_OPEN_ROUTER_CONFIGS.MIN_P,
+        topA: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_A,
+      },
+    },
+    {
+      provider: PROVIDER_TYPE.CUSTOM,
+      model: "custom-llm/mock-model",
+      expected: {
+        temperature: 0,
+        maxCompletionTokens: DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS,
+        topP: DEFAULT_CUSTOM_CONFIGS.TOP_P,
+        frequencyPenalty: DEFAULT_CUSTOM_CONFIGS.FREQUENCY_PENALTY,
+        presencePenalty: DEFAULT_CUSTOM_CONFIGS.PRESENCE_PENALTY,
+        custom_parameters: null,
+      },
+    },
+  ])(
+    "seeds the playground's $provider controls, without the runner ones",
+    ({ provider, model, expected }) => {
+      expect(
+        getOptimizationDefaultConfigByProvider(
+          provider as COMPOSED_PROVIDER_TYPE,
+          model as PROVIDER_MODEL_TYPE,
+        ),
+      ).toEqual(expected);
+    },
+  );
+
+  it.each([
+    { model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, temperature: 0 },
+    { model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, temperature: 0 },
+    { model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, temperature: undefined },
+    { model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, temperature: undefined },
+  ])(
+    "seeds Anthropic temperature $temperature for $model",
+    ({ model, temperature }) => {
+      const config = getOptimizationDefaultConfigByProvider(
+        PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+        model,
+      ) as Record<string, unknown>;
+
+      expect(config.temperature).toBe(temperature);
+    },
+  );
+});
+
+describe("convertFormDataToStudioConfig — parameter names", () => {
+  const formData = (model: string, modelConfig: Record<string, unknown>) =>
+    ({
+      name: "run",
+      datasetId: "d",
+      optimizerType: OPTIMIZER_TYPE.GEPA,
+      optimizerParams: {},
+      metricType: METRIC_TYPE.EQUALS,
+      metricParams: {},
+      messages: [{ id: "1", role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      modelName: model,
+      modelConfig,
+    }) as unknown as OptimizationConfigFormType;
+
+  // The runner hands these to LiteLLM unchanged, and an unknown name such as topP is dropped on the
+  // way to the provider without an error.
+  it.each([
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      modelConfig: {
+        temperature: 0.3,
+        maxCompletionTokens: 123,
+        topP: 0.5,
+        frequencyPenalty: 0.1,
+        presencePenalty: 0.2,
+      },
+      expected: {
+        temperature: 0.3,
+        max_completion_tokens: 123,
+        top_p: 0.5,
+        frequency_penalty: 0.1,
+        presence_penalty: 0.2,
+      },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      modelConfig: { maxCompletionTokens: 500, reasoningEffort: "low" },
+      expected: { max_completion_tokens: 500, reasoning_effort: "low" },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+      modelConfig: { topP: 0.55, maxCompletionTokens: 77 },
+      expected: { top_p: 0.55, max_completion_tokens: 77 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      modelConfig: { maxTokens: 300, temperature: 0.4, topK: 3 },
+      expected: {
+        max_tokens: 300,
+        temperature: 0.4,
+        custom_parameters: { top_k: 3 },
+      },
+    },
+  ])(
+    "sends $model settings under the API's names",
+    ({ model, modelConfig, expected }) => {
+      expect(
+        convertFormDataToStudioConfig(formData(model, modelConfig), "ds")
+          .llm_model.parameters,
+      ).toEqual(expected);
+    },
+  );
+});
+
+describe("convertOptimizationStudioToFormData — re-run round trip", () => {
+  const savedRun = (model: string, parameters: Record<string, unknown>) =>
+    ({
+      studio_config: {
+        prompt: { messages: [{ role: "user", content: "hi" }] },
+        llm_model: { model, parameters },
+        optimizer: { type: OPTIMIZER_TYPE.GEPA },
+        evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+      },
+    }) as never;
+
+  const rerun = (model: string, parameters: Record<string, unknown>) => {
+    const form = convertOptimizationStudioToFormData(
+      savedRun(model, parameters),
+      [model],
+    );
+    return {
+      modelConfig: form.modelConfig as Record<string, unknown>,
+      sent: convertFormDataToStudioConfig(form, "ds").llm_model.parameters,
+    };
+  };
+
+  // Runs saved before the parameters took the API's names hold the form's own keys.
+  it.each([
+    { saved: { top_p: 0.55, max_completion_tokens: 77 } },
+    { saved: { topP: 0.55, maxCompletionTokens: 77 } },
+  ])(
+    "keeps a Claude run's top P instead of the default temperature ($saved)",
+    ({ saved }) => {
+      const { modelConfig, sent } = rerun(
+        PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+        saved,
+      );
+
+      expect(modelConfig).toMatchObject({
+        topP: 0.55,
+        maxCompletionTokens: 77,
+      });
+      expect(modelConfig.temperature).toBeUndefined();
+      expect(sent).toEqual({ top_p: 0.55, max_completion_tokens: 77 });
+    },
+  );
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
+  ])(
+    "shows a %s run's saved thinking level instead of the model default",
+    (model) => {
+      const { modelConfig, sent } = rerun(model, {
+        custom_parameters: { thinking: { level: "low" } },
+      });
+
+      expect(modelConfig.thinkingLevel).toBe("low");
+      expect(sent).toMatchObject({
+        custom_parameters: { thinking: { level: "low" } },
+      });
+    },
+  );
+
+  it("shows a Claude run's saved effort instead of the model default", () => {
+    const { modelConfig, sent } = rerun(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+      temperature: 0.6,
+      max_completion_tokens: 4000,
+      custom_parameters: { output_config: { effort: "low" } },
+    });
+
+    expect(modelConfig.thinkingEffort).toBe("low");
+    expect(sent).toEqual({
+      temperature: 0.6,
+      max_completion_tokens: 4000,
+      custom_parameters: { output_config: { effort: "low" } },
+    });
+  });
+
+  it("keeps an OpenRouter run's settings nested under custom_parameters", () => {
+    const { modelConfig, sent } = rerun(
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      {
+        max_tokens: 300,
+        temperature: 0.4,
+        custom_parameters: { top_k: 3, min_p: 0.1 },
+      },
+    );
+
+    expect(modelConfig).toMatchObject({ maxTokens: 300, topK: 3, minP: 0.1 });
+    expect(sent).toMatchObject({
+      max_tokens: 300,
+      temperature: 0.4,
+      custom_parameters: { top_k: 3, min_p: 0.1 },
+    });
+  });
+
+  // The demo template is written with max_tokens, which OpenAI models take as max_completion_tokens
+  // in the form; sending both makes OpenAI reject the request.
+  it("reads max_tokens as the max output tokens of a non-OpenRouter model", () => {
+    const { modelConfig, sent } = rerun(PROVIDER_MODEL_TYPE.GPT_4O_MINI, {
+      temperature: 0.7,
+      max_tokens: 500,
+    });
+
+    expect(modelConfig.maxCompletionTokens).toBe(500);
+    expect(modelConfig).not.toHaveProperty("maxTokens");
+    expect(sent).toMatchObject({
+      temperature: 0.7,
+      max_completion_tokens: 500,
+    });
+    expect(sent).not.toHaveProperty("max_tokens");
+  });
+
+  it.each([
+    {
+      names: "API",
+      saved: { response_format: { type: "json_object" }, seed: 7 },
+    },
+    {
+      names: "form",
+      saved: { responseFormat: { type: "json_object" }, seed: 7 },
+    },
+  ])(
+    "drops saved parameters the form has no control for, under the $names names",
+    ({ saved }) => {
+      const { modelConfig, sent } = rerun(PROVIDER_MODEL_TYPE.GPT_4O_MINI, {
+        ...saved,
+        temperature: 0.7,
+        custom_parameters: { user: "run-1" },
+      });
+
+      expect(modelConfig).not.toHaveProperty("responseFormat");
+      expect(modelConfig).not.toHaveProperty("seed");
+      expect(sent).not.toHaveProperty("response_format");
+      expect(sent).not.toHaveProperty("seed");
+      expect(sent).toMatchObject({
+        temperature: 0.7,
+        custom_parameters: { user: "run-1" },
+      });
+    },
+  );
 });

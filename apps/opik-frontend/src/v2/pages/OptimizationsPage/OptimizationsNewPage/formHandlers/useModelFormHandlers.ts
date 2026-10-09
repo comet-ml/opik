@@ -2,10 +2,12 @@ import { useCallback } from "react";
 import { UseFormReturn } from "react-hook-form";
 
 import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
-import { getOptimizationDefaultConfigByProvider } from "@/lib/optimizations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
-import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
+import {
+  OptimizationConfigFormType,
+  getOptimizationDefaultConfigByProvider,
+} from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 
 const THINKING_AMOUNT_KEYS = [
   "reasoningEffort",
