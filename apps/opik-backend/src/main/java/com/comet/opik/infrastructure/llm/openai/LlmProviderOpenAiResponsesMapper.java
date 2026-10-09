@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
+import com.comet.opik.infrastructure.llm.OpenAiCompatFinishReasons;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.models.ReasoningEffort;
@@ -36,7 +37,6 @@ import dev.langchain4j.model.openai.internal.shared.PromptTokensDetails;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatRequestParameters;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialTokenUsage;
-import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -147,7 +147,7 @@ class LlmProviderOpenAiResponsesMapper {
                 .choices(List.of(ChatCompletionChoice.builder()
                         .index(0)
                         .delta(Delta.builder().build())
-                        .finishReason(toFinishReasonString(response.finishReason()))
+                        .finishReason(OpenAiCompatFinishReasons.toWireValue(response.finishReason()))
                         .build()))
                 .usage(toUsage(response.tokenUsage()))
                 .build();
@@ -211,7 +211,7 @@ class LlmProviderOpenAiResponsesMapper {
         return ChatCompletionChoice.builder()
                 .index(0)
                 .message(assistantBuilder.build())
-                .finishReason(toFinishReasonString(response.finishReason()))
+                .finishReason(OpenAiCompatFinishReasons.toWireValue(response.finishReason()))
                 .build();
     }
 
@@ -386,19 +386,6 @@ class LlmProviderOpenAiResponsesMapper {
                     .ifPresent(builder::completionTokensDetails);
         }
         return builder.build();
-    }
-
-    private String toFinishReasonString(FinishReason finishReason) {
-        if (finishReason == null) {
-            return null;
-        }
-        return switch (finishReason) {
-            case STOP -> "stop";
-            case LENGTH -> "length";
-            case TOOL_EXECUTION -> "tool_calls";
-            case CONTENT_FILTER -> "content_filter";
-            default -> "other";
-        };
     }
 
     /**

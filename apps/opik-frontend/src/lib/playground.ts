@@ -343,13 +343,19 @@ export const hasUnsupportedMedia = (
   );
 };
 
+// Kept short: the output cell shows one truncated line, with the full text only in a tooltip.
+export const OUTPUT_LIMIT_REACHED_MESSAGE =
+  "The model used up Max output tokens while thinking. Raise Max output tokens or lower the reasoning effort.";
+
 export const parseCompletionOutput = (run: RunStreamingReturn) => {
   return (
     run.result ||
     run.opikError ||
     run.providerError ||
     run.pythonProxyError ||
-    "The AI provider returned an empty response. Please, try again."
+    (run.finishReason === "length"
+      ? OUTPUT_LIMIT_REACHED_MESSAGE
+      : "The AI provider returned an empty response. Please, try again.")
   );
 };
 
