@@ -248,7 +248,7 @@ describe("LLM judge thinking level on a model switch", () => {
     "moving from Gemini 3 Pro at %s to Vertex AI 2.5 Flash leaves %s",
     (level, expected) => {
       const switched = updateConfigForModelChange(
-        { thinkingLevel: level },
+        { thinkingLevel: level, custom_parameters: null },
         { model: PROVIDER_MODEL_TYPE.GEMINI_3_PRO, provider: GEMINI },
         {
           model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
