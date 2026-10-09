@@ -71,6 +71,23 @@ class BaseBLEU(base_metric.BaseMetric):
         self.n_grams = n_grams
         self.smoothing_method = smoothing_method
 
+        # Validate the smoothing method eagerly: an unknown name used to fall
+        # through to `method0` silently (see _get_smoothing_func), producing a
+        # plausible-looking but wrong score. Raise instead, matching the
+        # existing convention for `n_grams` / `weights`.
+        self._smoother = nltk_bleu_score.SmoothingFunction()
+        _valid_smoothing = sorted(
+            a
+            for a in dir(self._smoother)
+            if a.startswith("method") and a[6:].isdigit()
+        )
+        if self.smoothing_method not in _valid_smoothing:
+            raise ValueError(
+                f"Invalid smoothing_method {self.smoothing_method!r}. "
+                f"Must be one of NLTK's SmoothingFunction methods: "
+                f"{', '.join(_valid_smoothing)}."
+            )
+
         if weights is None:
             self.weights = [1.0 / n_grams] * n_grams
         else:
@@ -82,10 +99,10 @@ class BaseBLEU(base_metric.BaseMetric):
                 raise ValueError("Weights must sum to 1.0")
             self.weights = weights
 
-        self._smoother = nltk_bleu_score.SmoothingFunction()
-
     def _get_smoothing_func(self) -> "nltk_bleu_score.SmoothingFunction":
-        return getattr(self._smoother, self.smoothing_method, self._smoother.method0)
+        # `smoothing_method` is validated in __init__, so it always resolves to a
+        # real SmoothingFunction method — no silent fallback to `method0`.
+        return getattr(self._smoother, self.smoothing_method)
 
     def _truncate_weights(self, max_len: int) -> Tuple[float, ...]:
         used_order = min(self.n_grams, max_len)
