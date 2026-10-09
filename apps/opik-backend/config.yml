@@ -1213,6 +1213,12 @@ agentInsightsReport:
   # Default: 10
   # Description: Maximum projects onboarded per auto-first-run sweep. Nothing downstream bounds how many diagnostics run at once (the Redis consumer, the platform executor and the Ollie pod all hand off and return), so this is the only control: runs arrive at this rate and last several minutes, so raising it raises concurrent runs proportionally. Must be between 1 and 1000.
   autoFirstRunMaxPerRun: ${AGENT_INSIGHTS_REPORT_AUTO_FIRST_RUN_MAX_PER_RUN:-10}
+  # Default: 40m
+  # Description: How long after being claimed an automatic first run with neither a completed scan nor a recorded failure still counts as live. Past this it is presumed dead: un-enrolling a project whose run never finished (failed, or past this timeout) clears its claim, and enrolling it again gives it one more free run. Nothing stops the original run, so one still going past this is run a second time on the free pool: must comfortably exceed Ollie's longest run, including its 402 retry backoff, and should match the frontend's AUTO_RUN_MAX_DURATION_MS; between 1m and 24h.
+  autoFirstRunTimeout: ${AGENT_INSIGHTS_REPORT_AUTO_FIRST_RUN_TIMEOUT:-40m}
+  # Default: 3
+  # Description: Times an automatic first run that timed out (claimed longer ago than autoFirstRunTimeout, with neither a scan nor a failure) is run again before giving up. 0 records the timeout but never retries. Between 0 and 10.
+  autoFirstRunMaxRetries: ${AGENT_INSIGHTS_REPORT_AUTO_FIRST_RUN_MAX_RETRIES:-3}
   # Default: 5m
   # Description: Timeout for the daily Agent Insights report job sweep (distributed lock hold time)
   jobTimeout: ${AGENT_INSIGHTS_REPORT_JOB_TIMEOUT:-5m}

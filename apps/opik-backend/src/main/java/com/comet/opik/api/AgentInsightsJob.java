@@ -42,6 +42,9 @@ public record AgentInsightsJob(
         // Comet's free-run budget is spent, not the customer's credits. Not the customer's failure: it
         // cancels the auto-first-run rollout instead of being recorded against their project.
         public static final String FREE_POOL_EXHAUSTED = "free_pool_exhausted";
+        // An automatic run claimed longer ago than the timeout, with neither a result nor a failure: it died
+        // without reporting. Retryable.
+        public static final String TIMED_OUT = "timed_out";
     }
 
     @RequiredArgsConstructor

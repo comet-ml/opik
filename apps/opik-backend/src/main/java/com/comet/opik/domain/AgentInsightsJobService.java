@@ -4,19 +4,22 @@ import com.comet.opik.api.AgentInsightsEnrollment;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJob.EnabledJob;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.infrastructure.AgentInsightsReportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.common.annotations.VisibleForTesting;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -26,17 +29,32 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class AgentInsightsJobService {
 
     private static final Duration TRIGGER_WINDOW = Duration.ofHours(24);
 
-    private final @NonNull TransactionTemplate transactionTemplate;
-    private final @NonNull IdGenerator idGenerator;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull ProjectService projectService;
-    private final @NonNull AgentInsightsReportPublisher reportPublisher;
+    private final TransactionTemplate transactionTemplate;
+    private final IdGenerator idGenerator;
+    private final Provider<RequestContext> requestContext;
+    private final ProjectService projectService;
+    private final AgentInsightsReportPublisher reportPublisher;
+    private final AgentInsightsReportConfig reportConfig;
+
+    @Inject
+    public AgentInsightsJobService(@NonNull TransactionTemplate transactionTemplate,
+            @NonNull IdGenerator idGenerator,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull ProjectService projectService,
+            @NonNull AgentInsightsReportPublisher reportPublisher,
+            @NonNull @Config("agentInsightsReport") AgentInsightsReportConfig reportConfig) {
+        this.transactionTemplate = transactionTemplate;
+        this.idGenerator = idGenerator;
+        this.requestContext = requestContext;
+        this.projectService = projectService;
+        this.reportPublisher = reportPublisher;
+        this.reportConfig = reportConfig;
+    }
 
     // Creates the job; 409 if one already exists for the (workspace, project).
     public AgentInsightsJob create(@NonNull UUID projectId) {
@@ -165,20 +183,89 @@ public class AgentInsightsJobService {
         });
     }
 
+    // Cross-workspace; the auto-first-run sweep's first step. Records each automatic run that died without
+    // reporting as timed out, so the page stops waiting, and clears its claim so the sweep runs it again, until
+    // it has been retried autoFirstRunMaxRetries times. Keeps enrolment, which is what the sweep looks for.
+    public void reapTimedOutAutoFirstRuns() {
+        reapTimedOutAutoFirstRuns(reportConfig.getAutoFirstRunTimeout().toJavaDuration(),
+                reportConfig.getAutoFirstRunMaxRetries());
+    }
+
+    private record ReapOutcome(long earlierTimeouts, boolean retry) {
+    }
+
+    @VisibleForTesting
+    public void reapTimedOutAutoFirstRuns(@NonNull Duration runTimeout, int maxRetries) {
+        List<EnabledJob> timedOut = transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(AgentInsightsJobDAO.class)
+                        .findTimedOutAutoFirstRuns(runTimeout.toSeconds()));
+        for (var job : timedOut) {
+            try {
+                reapTimedOutAutoFirstRun(job, runTimeout, maxRetries);
+            } catch (Exception e) {
+                // Per-project isolation: one failed reap must not skip the rest.
+                log.error("Failed to reap timed-out automatic Agent Insights run for project '{}'",
+                        job.projectId(), e);
+            }
+        }
+    }
+
+    @VisibleForTesting
+    public void reapTimedOutAutoFirstRun(@NonNull EnabledJob job, @NonNull Duration runTimeout, int maxRetries) {
+        ReapOutcome outcome = transactionTemplate.inTransaction(WRITE, handle -> {
+            var failures = handle.attach(ReportFailureDAO.class);
+            long earlier = failures.countByReason(job.workspaceId(), ReportFailureDAO.AGENT_INSIGHTS_TYPE,
+                    job.projectId(), AgentInsightsJob.FailureReason.TIMED_OUT);
+            boolean retry = earlier < maxRetries;
+            if (handle.attach(AgentInsightsJobDAO.class).reapTimedOutAutoFirstRun(job.workspaceId(),
+                    job.projectId(), runTimeout.toSeconds(), retry, RequestContext.SYSTEM_USER) == 0) {
+                return null;
+            }
+            failures.insert(idGenerator.generateId(), job.workspaceId(),
+                    ReportFailureDAO.AGENT_INSIGHTS_TYPE, job.projectId(),
+                    AgentInsightsJob.FailureReason.TIMED_OUT, null, RequestContext.SYSTEM_USER);
+            return new ReapOutcome(earlier, retry);
+        });
+        if (outcome == null) {
+            log.info("Skipping reap of automatic Agent Insights run for project '{}': it reported back or "
+                    + "was unenrolled after being selected", job.projectId());
+        } else {
+            log.warn("Automatic Agent Insights run for project '{}' timed out (retries so far: {} of {}), {}",
+                    job.projectId(), outcome.earlierTimeouts(), maxRetries,
+                    outcome.retry() ? "retrying" : "giving up");
+        }
+    }
+
     // Internal, cross-workspace: enrols the given projects in the rollout, or clears them. Idempotent, so
     // re-sending the same list is a no-op. Projects whose automatic run already happened are reported rather
     // than enrolled, since enrolling them again would have no effect.
+    // Clearing then re-enrolling a project whose automatic run never finished gives it one more free run. It does
+    // not restore spent retries: the reaper counts every timed_out row the project has had, so a project that
+    // already used them up gets that single attempt, and another manual reset if it dies too.
     public AgentInsightsEnrollment.Response enrolInAutoFirstRun(boolean enrol, @NonNull List<UUID> projectIds) {
+        long runTimeoutSeconds = reportConfig.getAutoFirstRunTimeout().toJavaDuration().toSeconds();
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AgentInsightsJobDAO.class);
 
             if (!enrol) {
-                int cleared = dao.clearEnrolment(projectIds, RequestContext.SYSTEM_USER);
-                log.info("Cleared Agent Insights enrolment for {} of {} projects", cleared, projectIds.size());
+                // Clearing also forgets an automatic run that never finished and is no longer live. Row by row in
+                // primary-key order (see findByProjectIds), so no other rows are locked and none in a deadlocking order.
+                Set<UUID> reset = new HashSet<>();
+                int cleared = 0;
+                for (var job : dao.findByProjectIds(projectIds)) {
+                    if (dao.clearUnfinishedAutoFirstRunClaim(job.workspaceId(), job.projectId(),
+                            runTimeoutSeconds, RequestContext.SYSTEM_USER) > 0) {
+                        reset.add(job.projectId());
+                    }
+                    cleared += dao.clearEnrolment(job.workspaceId(), job.projectId(), RequestContext.SYSTEM_USER);
+                }
+                log.info("Cleared Agent Insights enrolment for {} of {} projects (unfinished runs reset: {})",
+                        cleared, projectIds.size(), reset);
                 return AgentInsightsEnrollment.Response.builder()
                         .cleared(cleared)
                         .unknownProjectIds(Set.of())
                         .alreadyRunProjectIds(Set.of())
+                        .resetProjectIds(reset)
                         .build();
             }
 
@@ -205,6 +292,7 @@ public class AgentInsightsJobService {
                     .enrolled(enrolled)
                     .unknownProjectIds(unknown)
                     .alreadyRunProjectIds(alreadyRun)
+                    .resetProjectIds(Set.of())
                     .build();
         });
     }

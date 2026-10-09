@@ -108,18 +108,33 @@ interface AgentInsightsJobDAO {
 
     // Cross-workspace — used only by the auto-first-run sweep (system context). Projects enrolled in the
     // rollout that have not had a run enqueued yet. INNER JOIN projects so a deleted project drops out, as
-    // in findAllEnabled.
+    // in findAllEnabled. Oldest job first (ids are UUIDv7).
     @SqlQuery("""
             SELECT j.id, j.workspace_id, j.project_id
             FROM agent_insights_jobs j
             INNER JOIN projects p ON p.id = j.project_id AND p.workspace_id = j.workspace_id
             WHERE j.auto_first_run_enrolled AND j.auto_first_run_at IS NULL
+            ORDER BY j.id
             """)
     @RegisterConstructorMapper(EnabledJob.class)
     List<EnabledJob> findAwaitingFirstRun();
 
     @SqlQuery("SELECT id FROM projects WHERE id IN (<projectIds>)")
     Set<UUID> findExistingProjectIds(@BindList("projectIds") Collection<UUID> projectIds);
+
+    // The job rows of the given projects, resolved through the projects primary key so callers can address each row
+    // by its (workspace_id, project_id) unique key rather than scanning on project_id. In primary-key order, so a
+    // caller updating them one by one takes row locks in the same order as cancelAutoFirstRunRollout's scan, and the
+    // two can wait on each other but not deadlock.
+    @SqlQuery("""
+            SELECT j.id, j.workspace_id, j.project_id
+            FROM projects p
+            INNER JOIN agent_insights_jobs j ON j.workspace_id = p.workspace_id AND j.project_id = p.id
+            WHERE p.id IN (<projectIds>)
+            ORDER BY j.id
+            """)
+    @RegisterConstructorMapper(EnabledJob.class)
+    List<EnabledJob> findByProjectIds(@BindList("projectIds") Collection<UUID> projectIds);
 
     @SqlQuery("""
             SELECT project_id FROM agent_insights_jobs
@@ -141,11 +156,83 @@ interface AgentInsightsJobDAO {
             @Bind("status") String status,
             @Bind("userName") String userName);
 
+    // One row, by its unique key, so un-enrolling locks only the rows it changes.
     @SqlUpdate("""
             UPDATE agent_insights_jobs SET auto_first_run_enrolled = FALSE, last_updated_by = :userName
-            WHERE project_id IN (<projectIds>) AND auto_first_run_enrolled
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND auto_first_run_enrolled
             """)
-    int clearEnrolment(@BindList("projectIds") Collection<UUID> projectIds, @Bind("userName") String userName);
+    int clearEnrolment(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("userName") String userName);
+
+    // Un-enrolment's reset: clears the claim of an automatic run that never finished and is no longer live (it
+    // failed since the claim, or is past the timeout). The predicate is re-checked by the UPDATE itself, so a scan
+    // landing just before it leaves the claim alone instead of the run being forgotten and run again.
+    // report_failures does not say which run a failure came from, so a manual run failing after the claim also
+    // reads as the automatic run having ended: its claim is cleared even if it is still running.
+    @SqlUpdate("""
+            UPDATE agent_insights_jobs j
+            SET j.auto_first_run_at = NULL, j.last_updated_by = :userName
+            WHERE j.workspace_id = :workspaceId AND j.project_id = :projectId
+                AND j.auto_first_run_at IS NOT NULL
+                AND (j.last_scan_at IS NULL OR j.last_scan_at < j.auto_first_run_at)
+                AND (j.auto_first_run_at < CURRENT_TIMESTAMP(6) - INTERVAL :timeoutSeconds SECOND
+                    OR EXISTS (
+                        SELECT 1 FROM report_failures f
+                        WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
+                            AND f.type = 'agent_insights' AND f.created_at >= j.auto_first_run_at
+                    ))
+            """)
+    int clearUnfinishedAutoFirstRunClaim(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("timeoutSeconds") long timeoutSeconds,
+            @Bind("userName") String userName);
+
+    // Cross-workspace — used only by the auto-first-run sweep. Automatic runs that died without reporting:
+    // claimed longer ago than the timeout, with neither a scan nor a failure since the claim. report_failures does
+    // not say which run a failure came from, so a manual run failing after the claim hides an automatic run that
+    // died silently, which is then never retried.
+    // Only enrolled projects, as only those are re-run: a cancelled rollout's dead runs are reset by un-enrolling.
+    // INNER JOIN projects so a deleted project drops out, as in findAwaitingFirstRun.
+    @SqlQuery("""
+            SELECT j.id, j.workspace_id, j.project_id
+            FROM agent_insights_jobs j
+            INNER JOIN projects p ON p.id = j.project_id AND p.workspace_id = j.workspace_id
+            WHERE j.auto_first_run_enrolled
+                AND j.auto_first_run_at < CURRENT_TIMESTAMP(6) - INTERVAL :timeoutSeconds SECOND
+                AND (j.last_scan_at IS NULL OR j.last_scan_at < j.auto_first_run_at)
+                AND NOT EXISTS (
+                    SELECT 1 FROM report_failures f
+                    WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
+                        AND f.type = 'agent_insights' AND f.created_at >= j.auto_first_run_at
+                )
+            """)
+    @RegisterConstructorMapper(EnabledJob.class)
+    List<EnabledJob> findTimedOutAutoFirstRuns(@Bind("timeoutSeconds") long timeoutSeconds);
+
+    // Reaps one candidate of findTimedOutAutoFirstRuns, re-checking that it is still enrolled and timed out in the
+    // same statement: a scan or failure that landed after the candidates were read means the run did not die, and a
+    // rollout cancelled in between must keep the claim that marks it as run, so either way the UPDATE matches
+    // nothing. Clears the claim only when retrying; returns the matched rows (the driver reports matched, not
+    // changed, rows), so a give-up that changes nothing still counts.
+    @SqlUpdate("""
+            UPDATE agent_insights_jobs j
+            SET j.auto_first_run_at = IF(:clearClaim, NULL, j.auto_first_run_at), j.last_updated_by = :userName
+            WHERE j.workspace_id = :workspaceId AND j.project_id = :projectId
+                AND j.auto_first_run_enrolled
+                AND j.auto_first_run_at < CURRENT_TIMESTAMP(6) - INTERVAL :timeoutSeconds SECOND
+                AND (j.last_scan_at IS NULL OR j.last_scan_at < j.auto_first_run_at)
+                AND NOT EXISTS (
+                    SELECT 1 FROM report_failures f
+                    WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
+                        AND f.type = 'agent_insights' AND f.created_at >= j.auto_first_run_at
+                )
+            """)
+    int reapTimedOutAutoFirstRun(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("timeoutSeconds") long timeoutSeconds,
+            @Bind("clearClaim") boolean clearClaim,
+            @Bind("userName") String userName);
 
     // A run rejected before it started: clears its enqueue stamp, which would otherwise read as a run in flight
     // and then, once the rollout is cancelled around it, as a run that already happened.
