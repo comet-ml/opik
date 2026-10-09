@@ -358,11 +358,10 @@ const PlaygroundPrompt = ({
     () => ({
       model,
       provider,
-      configs,
       workspaceName,
       onAccept: handleImproveAccept,
     }),
-    [model, provider, configs, workspaceName, handleImproveAccept],
+    [model, provider, workspaceName, handleImproveAccept],
   );
 
   const promptColor =
