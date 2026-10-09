@@ -108,7 +108,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "weather_agent"},
+            **helpers.expected_graph_node_metadata("weather_agent"),
         },
         tags=["adk-test"],
         output=ANY_DICT,
@@ -172,7 +172,10 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert trace_tree.spans[1].metadata["_opik"] == {"graph_node_id": "get_weather"}
+    assert (
+        trace_tree.spans[1].metadata.items()
+        >= helpers.expected_graph_node_metadata("get_weather").items()
+    )
 
 
 def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_with_the_same_thread_id(
@@ -234,7 +237,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "weather_time_agent"},
+            **helpers.expected_graph_node_metadata("weather_time_agent"),
         },
         output=ANY_DICT,
         input={
@@ -304,7 +307,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "weather_time_agent"},
+            **helpers.expected_graph_node_metadata("weather_time_agent"),
         },
         output=ANY_DICT,
         input={
@@ -407,7 +410,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "TextProcessingAssistant"},
+            **helpers.expected_graph_node_metadata("TextProcessingAssistant"),
         },
         output=ANY_DICT,
         input={
@@ -479,8 +482,14 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert trace_tree.spans[0].metadata["_opik"] == {"graph_node_id": "Translator"}
-    assert trace_tree.spans[1].metadata["_opik"] == {"graph_node_id": "Summarizer"}
+    assert (
+        trace_tree.spans[0].metadata.items()
+        >= helpers.expected_graph_node_metadata("Translator").items()
+    )
+    assert (
+        trace_tree.spans[1].metadata.items()
+        >= helpers.expected_graph_node_metadata("Summarizer").items()
+    )
 
 
 def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the_tool_span(
@@ -552,7 +561,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "weather_time_agent"},
+            **helpers.expected_graph_node_metadata("weather_time_agent"),
         },
         tags=["adk-test"],
         output=ANY_DICT,
@@ -820,7 +829,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "TextProcessingAssistant"},
+            **helpers.expected_graph_node_metadata("TextProcessingAssistant"),
         },
         output=ANY_DICT,
         input={
@@ -948,7 +957,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "TextProcessingAssistant"},
+            **helpers.expected_graph_node_metadata("TextProcessingAssistant"),
         },
         output=ANY_DICT,
         input={
@@ -1173,7 +1182,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "weather_time_agent"},
+            **helpers.expected_graph_node_metadata("weather_time_agent"),
         },
         tags=["adk-test"],
         output=ANY_DICT,
@@ -1286,7 +1295,7 @@ def test_adk__agent_with_response_schema__happyflow(
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "Summarizer"},
+            **helpers.expected_graph_node_metadata("Summarizer"),
         },
         output=ANY_DICT,
         input={
@@ -1439,7 +1448,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
-            "_opik": {"graph_node_id": "weather_agent"},
+            **helpers.expected_graph_node_metadata("weather_agent"),
         },
         tags=["adk-test"],
         output=None,
