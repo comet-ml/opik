@@ -313,8 +313,11 @@ public class SpanService {
         }
         List<SpanWeek> rows = spans.stream()
                 .filter(span -> span.id() != null && span.traceId() != null && span.projectId() != null)
-                .map(span -> new SpanWeek(span.projectId(), span.traceId(),
-                        WeeklyPartitions.storedPartitionOf(span.id())))
+                .map(span -> SpanWeek.builder()
+                        .projectId(span.projectId())
+                        .traceId(span.traceId())
+                        .idWeek(WeeklyPartitions.storedPartitionOf(span.id()))
+                        .build())
                 .distinct()
                 .toList();
         return spanWeeksDAO.insert(rows).then();

@@ -129,11 +129,11 @@ class SpanWeeksListenerTest {
         spanResourceClient.batchCreateSpans(spans, ws.apiKey(), ws.workspaceName());
 
         var expected = List.of(
-                new SpanWeek(projectId, traceAcrossWeeks, MONDAY_WEEK),
-                new SpanWeek(projectId, traceAcrossWeeks, PREVIOUS_WEEK),
-                new SpanWeek(otherProjectId, traceAcrossWeeks, MONDAY_WEEK),
-                new SpanWeek(projectId, traceWithBoundaryIds, EPOCH_WEEK),
-                new SpanWeek(projectId, traceWithBoundaryIds, SATURATED_WEEK));
+                SpanWeek.builder().projectId(projectId).traceId(traceAcrossWeeks).idWeek(MONDAY_WEEK).build(),
+                SpanWeek.builder().projectId(projectId).traceId(traceAcrossWeeks).idWeek(PREVIOUS_WEEK).build(),
+                SpanWeek.builder().projectId(otherProjectId).traceId(traceAcrossWeeks).idWeek(MONDAY_WEEK).build(),
+                SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(EPOCH_WEEK).build(),
+                SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(SATURATED_WEEK).build());
         await().atMost(30, SECONDS).untilAsserted(() -> assertThat(
                 spanService.getWeeksByTraceIds(List.of(traceAcrossWeeks, traceWithBoundaryIds))
                         .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, ws.workspaceId()))
@@ -159,7 +159,7 @@ class SpanWeeksListenerTest {
                 spanService.getWeeksByTraceIds(List.of(traceId))
                         .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, ws.workspaceId()))
                         .block())
-                .containsExactly(new SpanWeek(projectId, traceId, MONDAY_WEEK)));
+                .containsExactly(SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(MONDAY_WEEK).build()));
     }
 
     private Span span(UUID id, UUID traceId, String projectName) {
