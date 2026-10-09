@@ -17,8 +17,7 @@ import java.util.List;
 /**
  * Registers in span_weeks the weekly partition of every span written, so trace-keyed spans reads can bind their
  * partitions. Runs on the AsyncEventBus virtual threads, off the request path; failures are logged and swallowed, since
- * the span itself was already written. A missed registration only leaves a read unbounded until the coverage job
- * re-checks the project.
+ * the span itself was already written. A failed registration leaves that span's week out of the index.
  */
 @EagerSingleton
 @Slf4j

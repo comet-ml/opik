@@ -510,6 +510,30 @@ class SpanServiceImplTest {
         }
 
         @Test
+        void registerWeeks__whenSpansLackIdTraceOrProject__thenRegistersOnlyTheCompleteOnes() {
+            var projectId = idGenerator.generateId();
+            var traceId = idGenerator.generateId();
+            // An id on Monday 2025-03-03, so its week is the literal below rather than one computed here.
+            var id = new UUID((Instant.parse("2025-03-03T00:00:00Z").toEpochMilli() << 16) | 0x7000L,
+                    0x8000_0000_0000_0000L);
+            var complete = Span.builder().id(id).traceId(traceId).projectId(projectId).build();
+            when(spanWeeksDAO.insert(any())).thenReturn(Mono.just(1L));
+
+            StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder()
+                    .spanWeeksWriteEnabled(true)
+                    .build())
+                    .registerWeeks(List.of(
+                            complete,
+                            complete.toBuilder().id(null).build(),
+                            complete.toBuilder().traceId(null).build(),
+                            complete.toBuilder().projectId(null).build())))
+                    .verifyComplete();
+
+            verify(spanWeeksDAO).insert(List.of(
+                    SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(20250303L).build()));
+        }
+
+        @Test
         void getWeeksByTraceIds__whenNoTraceIds__thenReturnsEmptyWithoutQuerying() {
             StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder().build())
                     .getWeeksByTraceIds(List.of()))
