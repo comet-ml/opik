@@ -124,6 +124,30 @@ class ModelEntry(NamedTuple):
     label: str
 
 
+# Only the parameters the playground's OpenRouter panel has a control for: OpenRouter's full lists would more than double the
+# registry every client downloads.
+OPENROUTER_PANEL_PARAMETERS = {
+    "temperature",
+    "top_p",
+    "top_k",
+    "frequency_penalty",
+    "presence_penalty",
+    "repetition_penalty",
+    "min_p",
+    "top_a",
+    "max_tokens",
+    "max_completion_tokens",
+    "reasoning",
+    "reasoning_effort",
+}
+
+
+class OpenRouterCapabilities(NamedTuple):
+    # None when OpenRouter lists no parameters at all (its router models), which says nothing about what they accept.
+    supported_parameters: list[str] | None
+    reasoning_efforts: list[str]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Dropdown filtering — only show useful models in the frontend dropdown.
 # Java enums keep all models for backend validation.
@@ -400,17 +424,21 @@ def matches_any(s: str, patterns: list[str]) -> bool:
 # Source fetching
 # ─────────────────────────────────────────────────────────────────────────────
 
-def fetch_openrouter_models() -> list[str]:
-    """Fetch chat-capable model IDs from OpenRouter API."""
+def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
+    """Fetch chat-capable models from OpenRouter API, keyed by id."""
     resp = requests.get(OPENROUTER_API_URL, timeout=30)
     resp.raise_for_status()
     models = resp.json()["data"]
-    chat_ids = []
+    chat_models = {}
     for m in models:
         modality = (m.get("architecture") or {}).get("modality", "")
         if "text" in modality:
-            chat_ids.append(m["id"])
-    return sorted(set(chat_ids))
+            supported = m.get("supported_parameters") or []
+            chat_models[m["id"]] = OpenRouterCapabilities(
+                supported_parameters=sorted(set(supported) & OPENROUTER_PANEL_PARAMETERS) if supported else None,
+                reasoning_efforts=list((m.get("reasoning") or {}).get("supported_efforts") or []),
+            )
+    return dict(sorted(chat_models.items()))
 
 
 def fetch_openai_models(api_key: str) -> list[str]:
@@ -1002,11 +1030,23 @@ def _parse_yaml_reasoning_flags(yaml_content: str) -> dict[str, dict[str, bool]]
     return result
 
 
+def _openrouter_capability_lines(capabilities: OpenRouterCapabilities | None) -> list[str]:
+    if capabilities is None:
+        return []
+    lines = []
+    if capabilities.supported_parameters is not None:
+        lines.append(f"    supportedParameters: [{', '.join(capabilities.supported_parameters)}]")
+    if capabilities.reasoning_efforts:
+        lines.append(f"    reasoningEfforts: [{', '.join(capabilities.reasoning_efforts)}]")
+    return lines
+
+
 def regenerate_llm_models_yaml(
     existing_content: str,
     models_by_provider: dict[str, list[ModelEntry]],
     dropdown_by_provider: dict[str, list[ModelEntry]] | None = None,
     openai_reasoning: dict[str, bool] | None = None,
+    openrouter_capabilities: dict[str, OpenRouterCapabilities] | None = None,
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
@@ -1032,6 +1072,7 @@ def regenerate_llm_models_yaml(
     reasoning_flags = _parse_yaml_reasoning_flags(existing_content)
     dropdown_by_provider = dropdown_by_provider or {}
     openai_reasoning = openai_reasoning or {}
+    openrouter_capabilities = openrouter_capabilities or {}
 
     lines: list[str] = []
 
@@ -1084,6 +1125,8 @@ def regenerate_llm_models_yaml(
             seeded_reasoning = is_openai and openai_reasoning.get(model_id, False)
             if not excluded_from_reasoning and (provider_reasoning.get(model_id) or seeded_reasoning):
                 lines.append("    reasoning: true")
+            if provider_key == "openrouter":
+                lines.extend(_openrouter_capability_lines(openrouter_capabilities.get(model_id)))
 
     # Preserve any provider sections not managed by the sync script
     managed_yaml_keys = set(_PROVIDER_TO_YAML_KEY.values())
@@ -1215,12 +1258,12 @@ def main():
     # OpenRouter (always from API, no key needed)
     print("Fetching OpenRouter models...", file=sys.stderr)
     try:
-        openrouter_api_models = fetch_openrouter_models()
-        print(f"  Found {len(openrouter_api_models)} chat models from API", file=sys.stderr)
+        openrouter_capabilities = fetch_openrouter_models()
+        print(f"  Found {len(openrouter_capabilities)} chat models from API", file=sys.stderr)
     except Exception as e:
         print(f"  WARNING: OpenRouter API fetch failed: {e}", file=sys.stderr)
         fell_back = True
-        openrouter_api_models = []
+        openrouter_capabilities = {}
 
     # OpenAI
     if openai_key:
@@ -1291,7 +1334,7 @@ def main():
     all_changes = {}
 
     new_or_java, or_entries, or_added, or_stale = sync_openrouter(
-        openrouter_api_models, prices, or_java,
+        list(openrouter_capabilities), prices, or_java,
     )
     all_changes["openrouter"] = {"entries": or_entries, "added": or_added, "stale": or_stale}
 
@@ -1340,6 +1383,7 @@ def main():
     new_llm_models_yaml = regenerate_llm_models_yaml(
         llm_models_yaml_content, models_by_provider, dropdown_by_provider,
         openai_reasoning=openai_reasoning,
+        openrouter_capabilities=openrouter_capabilities,
     )
     seeded_reasoning_ids = _seeded_reasoning_ids(
         llm_models_yaml_content, models_by_provider["openai"], openai_reasoning,

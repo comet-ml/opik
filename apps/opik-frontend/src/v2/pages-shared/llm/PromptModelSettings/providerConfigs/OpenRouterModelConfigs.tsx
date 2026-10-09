@@ -1,20 +1,37 @@
 import React from "react";
-import { resolveSamplingParams } from "@/lib/modelUtils";
+import {
+  getOpenRouterReasoningEffortOptions,
+  resolveEffort,
+  resolveSamplingParams,
+} from "@/lib/modelUtils";
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import {
   createSupports,
   getOpenRouterVisibleControls,
   isAnyControlVisible,
+  offersOpenRouterTopP,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import {
   LLMOpenRouterConfigsType,
+  OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
 } from "@/types/providers";
 import { DEFAULT_OPEN_ROUTER_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/select";
+import { Label } from "@/ui/label";
+import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
+
+const DEFAULT_EFFORT = "default";
 
 interface OpenRouterModelConfigsProps {
   configs: LLMOpenRouterConfigsType;
@@ -31,6 +48,7 @@ const OpenRouterModelConfigs = ({
 }: OpenRouterModelConfigsProps) => {
   const supports = createSupports(unsupportedParams);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const { reasoningEffort } = resolveEffort(model ?? "", configs);
   const visible = getOpenRouterVisibleControls({ model, configs, supports });
 
   if (!isAnyControlVisible(visible)) return null;
@@ -43,7 +61,7 @@ const OpenRouterModelConfigs = ({
           topP={topP}
           temperatureDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
           topPDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
-          offerChoice={supports("topP")}
+          offerChoice={offersOpenRouterTopP(model, supports)}
           onChange={onChange}
         />
       )}
@@ -185,6 +203,38 @@ const OpenRouterModelConfigs = ({
             />
           }
         />
+      )}
+      {visible.reasoningEffort && (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="reasoningEffort" className="text-sm font-medium">
+              Reasoning effort
+            </Label>
+            <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses. Default sends no effort, so the model uses its own." />
+          </div>
+          <Select
+            value={reasoningEffort ?? DEFAULT_EFFORT}
+            onValueChange={(
+              value: OpenAIReasoningEffort | typeof DEFAULT_EFFORT,
+            ) =>
+              onChange({
+                reasoningEffort: value === DEFAULT_EFFORT ? undefined : value,
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DEFAULT_EFFORT}>Default</SelectItem>
+              {getOpenRouterReasoningEffortOptions(model).map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
       {visible.throttling && (
         <SliderInputControl
