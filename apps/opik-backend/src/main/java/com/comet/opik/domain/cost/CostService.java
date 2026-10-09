@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 
 @Slf4j
@@ -79,6 +80,7 @@ public class CostService {
             Map.entry("azure_ai", "azure_ai"),
             Map.entry("vercel_ai_gateway", "vercel_ai_gateway"),
             Map.entry("openrouter", "openrouter"));
+    private static final Set<String> CANONICAL_PROVIDERS = Set.copyOf(PROVIDERS_MAPPING.values());
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
@@ -328,6 +330,10 @@ public class CostService {
      */
     private static String stripVersionSuffix(String modelName) {
         return modelName.toLowerCase(Locale.ROOT).replaceFirst(VERSION_SUFFIX_PATTERN, "");
+    }
+
+    public static boolean isKnownProvider(@Nullable String provider) {
+        return provider != null && CANONICAL_PROVIDERS.contains(provider);
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
