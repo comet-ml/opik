@@ -1,0 +1,198 @@
+suite: clickhouse tiered-storage TTL job (gating, tables, hooks, input validation)
+
+templates:
+  - templates/clickhouse-tiered-storage-ttl-job.yaml
+
+set:
+  clickhouse.tieredStorage.enabled: true
+  clickhouse.tieredStorage.ttl.enabled: true
+  clickhouse.tieredStorage.cold.s3.endpoint: https://b.s3.us-east-1.amazonaws.com
+  clickhouse.tieredStorage.cold.s3.region: us-east-1
+
+tests:
+  - it: is off by default even with the cold tier on
+    set:
+      clickhouse.tieredStorage.ttl.enabled: null
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when the cold tier is disabled
+    set:
+      clickhouse.tieredStorage.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when the ttl job is disabled
+    set:
+      clickhouse.tieredStorage.ttl.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when clickhouse is disabled
+    set:
+      clickhouse.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: applies the default table and TTL, and never materializes it
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "apply traces_local 13"
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "materialize_ttl_after_modify = 0"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "ALTER TABLE [^\"]* MATERIALIZE TTL"
+
+  - it: renders one apply per configured table
+    set:
+      clickhouse.tieredStorage.ttl.tables:
+        - name: traces_local
+          moveAfterWeeks: 13
+        - name: spans_local
+          moveAfterWeeks: 26
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "apply traces_local 13\\s+apply spans_local 26"
+
+  - it: takes only its four settings from the backend's sources, never the whole env
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.configMapKeyRef
+          value: {name: opik-backend, key: ANALYTICS_DB_HOST, optional: true}
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 4
+      - notExists:
+          path: spec.template.spec.containers[0].envFrom
+
+  - it: lets a backend secret override the ConfigMap, as envFrom does
+    set:
+      component.backend.secretRefs:
+        - name: opik-backend
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 8
+      - equal:
+          path: spec.template.spec.containers[0].env[7]
+          value:
+            name: SRC1_ANALYTICS_DB_MIGRATIONS_PASS
+            valueFrom:
+              secretKeyRef: {name: opik-backend, key: ANALYTICS_DB_MIGRATIONS_PASS, optional: true}
+
+  - it: runs as an ArgoCD PostSync hook after the cold-tier migration
+    set:
+      global.argocd: true
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/hook"]
+          value: PostSync
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "20"
+
+  - it: runs as a Helm post-install and post-upgrade hook without ArgoCD
+    set:
+      global.argocd: false
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+
+  - it: fails the render on a table name that is not a plain identifier
+    set:
+      clickhouse.tieredStorage.ttl.tables:
+        - name: traces-local
+          moveAfterWeeks: 13
+    asserts:
+      - failedTemplate:
+          errorMessage: 'clickhouse.tieredStorage.ttl.tables: name "traces-local" is not a plain identifier'
+
+  - it: fails the render when moveAfterWeeks is not a positive integer
+    set:
+      clickhouse.tieredStorage.ttl.tables:
+        - name: traces_local
+          moveAfterWeeks: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: 'clickhouse.tieredStorage.ttl.tables: moveAfterWeeks for "traces_local" must be a positive integer'
+
+  - it: maps variables through an envFrom prefix and skips sources that cannot supply them
+    set:
+      component.backend.envFrom:
+        - configMapRef:
+            name: opik-backend
+        - prefix: ANALYTICS_DB_
+          secretRef:
+            name: ch-creds
+        - prefix: OTHER_
+          secretRef:
+            name: unrelated
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 8
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SRC1_ANALYTICS_DB_MIGRATIONS_PASS
+            valueFrom:
+              secretKeyRef: {name: ch-creds, key: MIGRATIONS_PASS, optional: true}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            valueFrom:
+              secretKeyRef: {name: unrelated}
+
+  - it: skips a source whose prefix is a whole variable name (it would map to an empty key)
+    set:
+      component.backend.envFrom:
+        - configMapRef:
+            name: opik-backend
+        - prefix: ANALYTICS_DB_HOST
+          configMapRef:
+            name: exact-cm
+        - prefix: ANALYTICS_DB_MIGRATIONS_PASS
+          secretRef:
+            name: exact-secret
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 4
+
+  - it: renders the default deadline
+    asserts:
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
+
+  - it: fails the render when activeDeadlineSeconds is zero
+    set:
+      clickhouse.tieredStorage.ttl.activeDeadlineSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: "clickhouse.tieredStorage.ttl.activeDeadlineSeconds (0) must be a positive integer"
+
+  - it: fails the render when activeDeadlineSeconds is negative or not a number
+    set:
+      clickhouse.tieredStorage.ttl.activeDeadlineSeconds: "-5"
+    asserts:
+      - failedTemplate: {}
+
+  - it: fails the render when activeDeadlineSeconds is removed
+    set:
+      clickhouse.tieredStorage.ttl.activeDeadlineSeconds: null
+    asserts:
+      - failedTemplate: {}
+
