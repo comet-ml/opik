@@ -231,6 +231,47 @@ component:
         eks.amazonaws.com/role-arn: <your IAM Role arn>
 ```
 
+## Configure ClickHouse force-merge (LWD reclaim)
+
+Deleted traces and spans are masked by lightweight deletes and only physically removed when ClickHouse merges the
+part. ClickHouse can force that merge for parts that have stopped receiving writes. The chart does not enable it
+by default.
+
+<Warning>
+  Chart versions from 2.2.78 until this setting became opt-in enabled force-merge by default. Upgrading from one of
+  those versions removes the settings and restarts ClickHouse once. If ClickHouse is running a large merge backlog,
+  let it finish before upgrading: a restart starts in-progress merges over.
+</Warning>
+
+To enable it, add the file to your values:
+
+```yaml
+clickhouse:
+  configuration:
+    files:
+      conf.d/merge_tree.xml: |
+        <clickhouse>
+          <merge_tree>
+            <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>
+            <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>
+            <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>
+            <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+          </merge_tree>
+        </clickhouse>
+```
+
+On the first rollout, every part older than `min_age_to_force_merge_seconds` becomes eligible at once. On a large
+installation that can fill the background merge pool for hours, and mutations (deletes) cannot start while the pool
+is full. Before enabling it, check how much data sits in old parts:
+
+```sql
+SELECT table, count() AS parts, formatReadableSize(sum(bytes_on_disk)) AS size
+FROM system.parts
+WHERE active AND modification_time < now() - INTERVAL 7 DAY
+GROUP BY table
+ORDER BY sum(bytes_on_disk) DESC;
+```
+
 ## Use external Clickhouse installation
 
 Supported from Opik chart version 1.4.2

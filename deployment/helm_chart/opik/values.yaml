@@ -949,6 +949,8 @@ clickhouse:
       # Opt-in LWD reclaim (force-merge of quiet parts). Off by default: the first rollout
       # force-merges every old part at once, which on a large install fills the merge pool for
       # hours and blocks mutations (deletes). Enable only after sizing the backlog.
+      # Upgrading from a chart that set this by default (2.2.78+) drops it and rolls ClickHouse
+      # once; to keep it, uncomment this block in your own values. See the self-host Kubernetes docs.
       # conf.d/merge_tree.xml: |
       #   <clickhouse>
       #     <merge_tree>
