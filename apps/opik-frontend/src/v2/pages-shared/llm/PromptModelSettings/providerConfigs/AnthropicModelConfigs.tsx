@@ -4,6 +4,7 @@ import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import {
   LLMAnthropicConfigsType,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
   AnthropicThinkingEffort,
 } from "@/types/providers";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
@@ -16,7 +17,9 @@ import {
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import {
   getAnthropicThinkingEffortOptions,
+  getMaxCompletionTokensRange,
   resolveEffort,
+  resolveMaxCompletionTokens,
   resolveSamplingParams,
 } from "@/lib/modelUtils";
 import SelectBox from "@/shared/SelectBox/SelectBox";
@@ -44,6 +47,10 @@ const AnthropicModelConfigs = ({
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const { thinkingEffort } = resolveEffort(model ?? "", configs);
   const visible = getAnthropicVisibleControls({ model, configs, supports });
+  const maxCompletionTokensRange = getMaxCompletionTokensRange(
+    PROVIDER_TYPE.ANTHROPIC,
+    model ?? "",
+  );
 
   if (!isAnyControlVisible(visible)) return null;
 
@@ -62,19 +69,20 @@ const AnthropicModelConfigs = ({
 
       {visible.maxCompletionTokens && (
         <SliderInputControl
-          value={
-            configs.maxCompletionTokens ??
-            DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS
-          }
+          value={resolveMaxCompletionTokens(
+            PROVIDER_TYPE.ANTHROPIC,
+            model ?? "",
+            configs.maxCompletionTokens,
+          )}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxCompletionTokens"
-          min={0}
-          max={64000}
+          min={maxCompletionTokensRange.min}
+          max={maxCompletionTokensRange.max}
           step={1}
           defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent text="The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On thinking models, thinking tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
           }
         />
       )}
