@@ -139,4 +139,12 @@ interface ProjectDAO {
             @Define("project_ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "project_ids") Collection<UUID> projectIds,
             @Define("name") @Bind("name") String name,
             @Bind("limit") int limit);
+
+    // last_updated_at is kept as is: the column auto-updates on any write, and this is bookkeeping, not a user change.
+    @SqlUpdate("UPDATE projects SET span_weeks_backfilled = TRUE, last_updated_at = last_updated_at"
+            + " WHERE span_weeks_backfilled = FALSE LIMIT :limit")
+    int markSpanWeeksBackfilled(@Bind("limit") int limit);
+
+    @SqlQuery("SELECT id FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId AND span_weeks_backfilled")
+    Set<UUID> findSpanWeeksBackfilled(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
 }
