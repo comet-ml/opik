@@ -185,6 +185,34 @@ def test_task_model_request_body_sent_to_the_gateway(
     assert body.get("temperature", "absent") == expected_temperature
 
 
+def test_task_model_explicit_temperature_survives_the_pin():
+    config = OptimizationConfig.from_dict(_config(task_params={"temperature": 0.4}))
+
+    _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert prompt.model_kwargs.get("temperature") == 0.4
+
+
+def test_optimizer_params_preserved_without_separate_model():
+    # model_parameters set on the optimizer but no model — the optimizer should
+    # still default to the prompt model yet keep its own configured params
+    # (not silently drop them).
+    config = OptimizationConfig.from_dict(
+        _config(
+            task_model=ANTHROPIC_CLAUDE_HAIKU,
+            task_params={"temperature": 0.3},
+            optimizer_params={"seed": 42, "model_parameters": {"temperature": 0.9}},
+        )
+    )
+
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert optimizer.model == GATEWAY_CLAUDE_HAIKU
+    assert optimizer.model_parameters.get("temperature") == 0.9
+    # The prompt keeps its own params, independent of the optimizer's.
+    assert prompt.model_kwargs.get("temperature") == 0.3
+
+
 @pytest.mark.parametrize(
     "stored_model",
     [
@@ -228,31 +256,3 @@ def test_gateway_receives_the_stored_model_id(httpserver, stored_model):
 
     sent_models = [request.get_json()["model"] for request, _ in httpserver.log]
     assert sent_models == [stored_model, stored_model]
-
-
-def test_task_model_explicit_temperature_survives_the_pin():
-    config = OptimizationConfig.from_dict(_config(task_params={"temperature": 0.4}))
-
-    _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
-
-    assert prompt.model_kwargs.get("temperature") == 0.4
-
-
-def test_optimizer_params_preserved_without_separate_model():
-    # model_parameters set on the optimizer but no model — the optimizer should
-    # still default to the prompt model yet keep its own configured params
-    # (not silently drop them).
-    config = OptimizationConfig.from_dict(
-        _config(
-            task_model=ANTHROPIC_CLAUDE_HAIKU,
-            task_params={"temperature": 0.3},
-            optimizer_params={"seed": 42, "model_parameters": {"temperature": 0.9}},
-        )
-    )
-
-    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
-
-    assert optimizer.model == GATEWAY_CLAUDE_HAIKU
-    assert optimizer.model_parameters.get("temperature") == 0.9
-    # The prompt keeps its own params, independent of the optimizer's.
-    assert prompt.model_kwargs.get("temperature") == 0.3
