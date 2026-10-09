@@ -21,8 +21,8 @@ from llm_constants import (
 )
 
 from opik_backend.jobs import optimizer_runner
+from opik_backend.studio import metrics
 from opik_backend.studio.config import OPTIMIZER_TASK_TEMPERATURE
-from opik_backend.studio.metrics import MetricFactory
 from opik_backend.studio.types import OptimizationConfig
 
 
@@ -288,7 +288,7 @@ def test_judge_metric_sends_the_stored_model_id(httpserver, monkeypatch, stored_
     monkeypatch.setenv("OPENAI_API_KEY", "test")
     config = OptimizationConfig.from_dict(_config(task_model=stored_model))
     _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
-    judge = MetricFactory.build(
+    judge = metrics.MetricFactory.build(
         "geval",
         {"task_introduction": "Rate the answer", "evaluation_criteria": "Is it Paris"},
         prompt.model,
