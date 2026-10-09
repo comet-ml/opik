@@ -21,6 +21,8 @@ import {
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
   updateProviderConfig,
+  withoutThinkingLevel,
+  withShownThinkingLevel,
 } from "@/lib/modelUtils";
 import {
   AnthropicThinkingEffort,
@@ -1578,6 +1580,136 @@ describe("resolveThinkingLevel", () => {
       expect(sanitizeConfigForRequest(model, configs)).toEqual({});
     },
   );
+});
+
+describe("Auto sends no Gemini thinking level", () => {
+  it.each<[string, Record<string, unknown>]>([
+    [
+      "a flat auto over a nested level",
+      {
+        thinkingLevel: "auto",
+        custom_parameters: { thinking: { level: "high" } },
+      },
+    ],
+    [
+      "a nested level the model does not offer",
+      { custom_parameters: { thinking: { level: "minimal" } } },
+    ],
+    [
+      "a flat level the model does not offer over a nested one",
+      {
+        thinkingLevel: "minimal",
+        custom_parameters: { thinking: { level: "high" } },
+      },
+    ],
+  ])("drops %s", (_, configs) => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    ]) {
+      expect(resolveThinkingLevel(model, configs), model).toBe("auto");
+      expect(
+        sanitizeConfigForRequest(model, configs).custom_parameters,
+        model,
+      ).toBeUndefined();
+    }
+  });
+
+  it("keeps the rest of the thinking block and the other custom parameters", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+        custom_parameters: {
+          thinking: {
+            level: "low",
+            budget_tokens: 4096,
+            include_thoughts: true,
+          },
+          unrelated: "keep",
+        },
+      }).custom_parameters,
+    ).toEqual({
+      thinking: { budget_tokens: 4096, include_thoughts: true },
+      unrelated: "keep",
+    });
+  });
+});
+
+describe("withoutThinkingLevel", () => {
+  it.each<[string, unknown, unknown]>([
+    ["nothing stored", undefined, undefined],
+    [
+      "a block holding only a level",
+      { thinking: { level: "high" } },
+      undefined,
+    ],
+    [
+      "other keys next to the block",
+      { thinking: { level: "high" }, seed: 1 },
+      { seed: 1 },
+    ],
+    [
+      "a block without a level",
+      { thinking: { type: "enabled", budget_tokens: 1024 } },
+      { thinking: { type: "enabled", budget_tokens: 1024 } },
+    ],
+  ])("handles %s", (_, customParameters, expected) => {
+    expect(withoutThinkingLevel(customParameters)).toEqual(expected);
+  });
+});
+
+describe("a model switch carries the thinking level the panel showed", () => {
+  const GEMINI = PROVIDER_TYPE.GEMINI as COMPOSED_PROVIDER_TYPE;
+
+  it.each<
+    [PROVIDER_MODEL_TYPE, GeminiThinkingLevel, PROVIDER_MODEL_TYPE, string]
+  >([
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      "none",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      "none",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      "none",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "low",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "low",
+    ],
+  ])("%s holding %s, then %s: %s", (from, thinkingLevel, to, expected) => {
+    const switched = updateProviderConfig(
+      withShownThinkingLevel(from, { thinkingLevel }),
+      { model: to, provider: GEMINI },
+    );
+
+    expect(switched?.thinkingLevel).toBe(expected);
+  });
+
+  it("leaves a model without a level control alone", () => {
+    const configs = { temperature: 0.5 };
+
+    expect(
+      withShownThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH, configs),
+    ).toBe(configs);
+  });
 });
 
 describe("the settings panel and the request agree on effort", () => {

@@ -22,7 +22,7 @@ import {
   getDefaultConfigByProvider,
   restoreMissingProviderAndConfigKeys,
 } from "@/lib/playground";
-import { updateProviderConfig } from "@/lib/modelUtils";
+import { updateProviderConfig, withShownThinkingLevel } from "@/lib/modelUtils";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_PROMPT_COLORS,
@@ -220,7 +220,8 @@ const PlaygroundPrompt = ({
         newConfigs = getDefaultConfigByProvider(newProvider, newModel);
       } else {
         // Model changed within same provider: Adjust existing configs if needed
-        const adjustedConfigs = updateProviderConfig(configs, {
+        const shownConfigs = withShownThinkingLevel(model, configs);
+        const adjustedConfigs = updateProviderConfig(shownConfigs, {
           model: newModel,
           provider: newProvider,
           openAiPipelineMode,
@@ -239,6 +240,7 @@ const PlaygroundPrompt = ({
       updatePrompt,
       promptId,
       provider,
+      model,
       configs,
       setLastPickedModel,
       openAiPipelineMode,

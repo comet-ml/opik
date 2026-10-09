@@ -189,6 +189,39 @@ describe("LLM judge thinking level round trip", () => {
     expect(reloaded.config.thinkingLevel).toBe("auto");
   });
 
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])(
+    "saves auto picked over a stored level as no level, and reopens as auto on %s",
+    (model) => {
+      const opened = convertLLMJudgeObjectToLLMJudgeData(
+        persisted(model, {
+          thinking: { level: "high", include_thoughts: true },
+          unrelated: "keep",
+        }),
+      );
+      expect(opened.config.thinkingLevel).toBe("high");
+
+      const object = convertLLMJudgeDataToLLMJudgeObject(
+        asFormData(model, { ...opened.config, thinkingLevel: "auto" }),
+      );
+
+      expect(object.model.custom_parameters).toEqual({
+        thinking: { include_thoughts: true },
+        unrelated: "keep",
+      });
+      expect(
+        convertLLMJudgeObjectToLLMJudgeData(
+          persisted(
+            model,
+            object.model.custom_parameters as Record<string, unknown>,
+          ),
+        ).config.thinkingLevel,
+      ).toBe("auto");
+    },
+  );
+
   it("drops a persisted level the newly selected model does not accept", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       asFormData(PROVIDER_MODEL_TYPE.GEMINI_3_PRO, {

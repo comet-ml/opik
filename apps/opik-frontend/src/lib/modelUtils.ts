@@ -18,6 +18,7 @@ import {
   parseComposedProviderType,
 } from "@/lib/provider";
 import isPlainObject from "lodash/isPlainObject";
+import isEmpty from "lodash/isEmpty";
 import omit from "lodash/omit";
 import {
   getLatestModelFlags,
@@ -303,6 +304,39 @@ export const resolveThinkingLevel = (
   return getThinkingLevelOptions(model).some((o) => o.value === stored)
     ? (stored as GeminiThinkingLevel)
     : getDefaultThinkingLevel(model);
+};
+
+// A model switch has to carry the level the panel showed. Carrying a hidden stored one (a "minimal"
+// shown as Auto on Gemini 2.5 Flash) brings it back on the next model that offers it.
+export const withShownThinkingLevel = <T extends object>(
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: T,
+): T => {
+  if (getThinkingLevelOptions(model).length === 0) {
+    return configs;
+  }
+  const params = configs as ThinkingLevelParams;
+  const shown = resolveThinkingLevel(model, params);
+  return params.thinkingLevel === shown
+    ? configs
+    : ({ ...configs, thinkingLevel: shown } as T);
+};
+
+// "auto" sends no level. Only `level` is dropped: budget_tokens and include_thoughts can sit in the
+// same block, and the form has no control for them.
+export const withoutThinkingLevel = (
+  customParameters: unknown,
+): Record<string, unknown> | undefined => {
+  const params = (customParameters ?? {}) as Record<string, unknown>;
+  const thinking = params.thinking as Record<string, unknown> | undefined;
+  if (!thinking || !("level" in thinking)) {
+    return isEmpty(params) ? undefined : params;
+  }
+  const restThinking = omit(thinking, "level");
+  const rest = isEmpty(restThinking)
+    ? omit(params, "thinking")
+    : { ...params, thinking: restThinking };
+  return isEmpty(rest) ? undefined : rest;
 };
 
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
@@ -1055,7 +1089,19 @@ export const sanitizeConfigForRequest = (
     }
 
     // "auto" also sends no thinkingConfig, but it is a weaker statement — "let the model decide" —
-    // so it leaves a persisted block alone rather than deleting fields the form cannot represent.
+    // so it drops only a persisted level (the one the dropdown replaced) and keeps the rest of the
+    // block, which the form cannot represent.
+    if (level === "auto" && thinkingLevelOptions.length > 0) {
+      const customParameters = withoutThinkingLevel(
+        sanitized.custom_parameters,
+      );
+      if (customParameters) {
+        sanitized.custom_parameters = customParameters;
+      } else {
+        delete sanitized.custom_parameters;
+      }
+    }
+
     // `level` is already known to be one this model offers.
     if (
       level !== "auto" &&

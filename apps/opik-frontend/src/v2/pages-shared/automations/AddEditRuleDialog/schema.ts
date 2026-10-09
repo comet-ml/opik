@@ -24,6 +24,7 @@ import {
   knowsAnthropicEffortLevels,
   resolveSamplingParams,
   updateProviderConfig,
+  withoutThinkingLevel,
   withThinkingEffort,
 } from "@/lib/modelUtils";
 import {
@@ -793,18 +794,25 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // this same key for extended thinking.
   // "none" is an explicit "do not think", so it removes a persisted thinking block rather than just
   // declining to add one — otherwise a level saved earlier keeps being sent. "auto" is the weaker
-  // "let the model decide" and leaves the block alone, since it may hold fields the form cannot
-  // represent (budget_tokens, include_thoughts, or Anthropic's type).
+  // "let the model decide": it drops only the persisted level (the dropdown replaced it) and keeps
+  // the rest, which may hold fields the form cannot represent (budget_tokens, include_thoughts).
+  // Anthropic's type lives under this key too, so this only applies to a model with a level control.
   const formClearsThinking = thinkingLevel === "none";
   const formRejectedItsLevel =
     thinkingLevel != null &&
     thinkingLevel !== "auto" &&
     thinkingLevel !== "none" &&
     !thinkingCustomParameters;
-  const otherCustomParameters =
-    thinkingCustomParameters || formRejectedItsLevel || formClearsThinking
-      ? omit(persistedCustomParameters, "thinking")
-      : persistedCustomParameters;
+  const formSetsAuto =
+    thinkingLevel === "auto" &&
+    getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).length > 0;
+  let otherCustomParameters = persistedCustomParameters;
+  if (thinkingCustomParameters || formRejectedItsLevel || formClearsThinking) {
+    otherCustomParameters = omit(persistedCustomParameters, "thinking");
+  } else if (formSetsAuto) {
+    otherCustomParameters =
+      withoutThinkingLevel(persistedCustomParameters) ?? {};
+  }
 
   const mergedCustomParameters = {
     ...otherCustomParameters,
