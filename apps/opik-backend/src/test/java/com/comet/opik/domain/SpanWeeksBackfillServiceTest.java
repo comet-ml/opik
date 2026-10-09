@@ -174,8 +174,8 @@ class SpanWeeksBackfillServiceTest {
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
     }
 
-    private void runStepsUntil(List<UUID> traceIds, WorkspaceContext ws, int weeksCount) {
-        for (int step = 0; step < MAX_STEPS && weeks(traceIds, ws).size() < weeksCount; step++) {
+    private void runStepsUntil(List<UUID> traceIds, WorkspaceContext ws, int expectedRowCount) {
+        for (int step = 0; step < MAX_STEPS && weeks(traceIds, ws).size() < expectedRowCount; step++) {
             backfillService.runStep().block();
         }
     }

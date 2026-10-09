@@ -194,6 +194,10 @@ spanWeeksBackfill:
   #  Default: 4
   #  Description: Weeks of span ids one run backfills
   weeksPerChunk: 4
+  #  Default: 4
+  #  Description: ClickHouse threads one run may use (prod replicas have 48 vCPUs); memory is left to the server
+  #   profile's GROUP BY spill
+  maxThreads: 4
   #  Default: 1h
   #  Description: ClickHouse max_execution_time for one chunk, and how long a run holds the job lock
   queryTimeout: 1h

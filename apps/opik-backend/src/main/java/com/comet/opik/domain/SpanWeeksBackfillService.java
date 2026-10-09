@@ -98,7 +98,8 @@ public class SpanWeeksBackfillService {
 
     private Mono<Void> backfill(Chunk chunk) {
         long started = System.currentTimeMillis();
-        return spanWeeksDAO.backfill(chunk.fromWeek(), chunk.toWeek(), config.getQueryTimeout().toSeconds())
+        return spanWeeksDAO.backfill(chunk.fromWeek(), chunk.toWeek(), config.getMaxThreads(),
+                config.getQueryTimeout().toSeconds())
                 .then(Mono.<Void>fromRunnable(() -> template.inTransaction(WRITE, handle -> {
                     handle.attach(SpanWeeksBackfillChunkDAO.class).markBackfilled(chunk.fromWeek());
                     return null;
