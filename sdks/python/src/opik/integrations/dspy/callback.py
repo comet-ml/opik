@@ -10,7 +10,7 @@ from opik import llm_usage
 from opik.api_objects import helpers, span, trace
 from opik.decorator import error_info_collector
 
-from .graph import build_mermaid_graph_from_module
+from .graph import build_mermaid_graph_from_module, get_graph_node_id
 from .parsers import LMHistoryInfo, extract_lm_info_from_history, get_span_type
 from ... import analytics
 
@@ -418,22 +418,24 @@ class OpikCallback(dspy_callback.BaseCallback):
         return extract_lm_info_from_history(lm_instance, expected_messages)
 
     def _get_opik_metadata(self, instance: Any) -> Dict[str, Any]:
-        graph = None
-        if self.log_graph and isinstance(instance, dspy.Module):
+        if not self.log_graph:
+            return self._origins_metadata
+
+        metadata: Dict[str, Any] = dict(self._origins_metadata)
+        graph_node_id = get_graph_node_id(instance)
+        if graph_node_id:
+            metadata["_opik"] = {"graph_node_id": graph_node_id}
+
+        if isinstance(instance, dspy.Module):
             try:
                 graph = build_mermaid_graph_from_module(instance)
             except Exception:
                 LOGGER.warning("Unable to generate graph from DSPy module")
+                graph = None
+            if graph:
+                metadata["_opik_graph_definition"] = {
+                    "format": "mermaid",
+                    "data": graph,
+                }
 
-        if graph:
-            return {
-                **self._origins_metadata,
-                **{
-                    "_opik_graph_definition": {
-                        "format": "mermaid",
-                        "data": graph,
-                    }
-                },
-            }
-        else:
-            return self._origins_metadata
+        return metadata
