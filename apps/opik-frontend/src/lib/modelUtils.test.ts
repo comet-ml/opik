@@ -1571,7 +1571,7 @@ describe("resolveThinkingLevel", () => {
       "falls back to the default when nothing is stored",
       PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
       {},
-      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_FLASH),
+      "high",
     ],
     [
       "reads a level nested under custom_parameters",
