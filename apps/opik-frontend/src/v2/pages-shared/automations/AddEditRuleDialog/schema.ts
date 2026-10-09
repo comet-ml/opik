@@ -749,8 +749,10 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     (custom_parameters ?? {}) as Record<string, unknown>
   ).thinking as Record<string, unknown> | undefined;
 
-  // Merge rather than replace: budget_tokens and include_thoughts also live under `thinking` and
-  // are not represented in the form, so an unchanged load -> save must not drop them.
+  // Merge rather than replace: include_thoughts also lives under `thinking` and is not represented
+  // in the form, so an unchanged load -> save must not drop it. A persisted budget_tokens is dropped:
+  // the backend lets it outrank any level, so the judge would think with that budget while the form
+  // shows Low, or keep thinking under Off.
   // "auto" is the absence of a setting — the model applies its own dynamic budget — so it is stored
   // as no thinking block rather than as a level the backend would have to special-case.
   const thinkingCustomParameters =
@@ -761,12 +763,8 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
       (o) => o.value === thinkingLevel,
     )
       ? {
-          // "off" must clear any persisted budget_tokens: an explicit budget outranks the level
-          // server-side, so keeping both would leave thinking on while the UI reads "Off".
           thinking: {
-            ...(thinkingLevel === "off"
-              ? omit(persistedThinking ?? {}, "budget_tokens")
-              : persistedThinking ?? {}),
+            ...omit(persistedThinking ?? {}, "budget_tokens"),
             level: thinkingLevel,
           },
         }

@@ -1202,21 +1202,34 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     expect(result.custom_parameters).toBeUndefined();
   });
 
-  it("merges the level into an existing thinking block, keeping its other fields", () => {
-    const result = sanitizeConfigForRequest(
-      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-      {
-        thinkingLevel: "low",
+  // A budget set through the API outranks any level server-side, so keeping it would send that
+  // budget while the panel shows the level.
+  it.each<[PROVIDER_MODEL_TYPE, GeminiThinkingLevel, Record<string, unknown>]>([
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, "low", { thinkingLevel: "low" }],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      "medium",
+      { thinkingLevel: "medium" },
+    ],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, "minimal", {}],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_PRO, "high", {}],
+  ])(
+    "sends %s's %s without a persisted budget, keeping the rest",
+    (model, level, flat) => {
+      const result = sanitizeConfigForRequest(model, {
+        ...flat,
         custom_parameters: {
-          thinking: { budget_tokens: 4096, include_thoughts: true },
+          thinking: { level, budget_tokens: 4096, include_thoughts: true },
+          unrelated: "keep",
         },
-      },
-    );
+      });
 
-    expect(result.custom_parameters).toEqual({
-      thinking: { budget_tokens: 4096, include_thoughts: true, level: "low" },
-    });
-  });
+      expect(result.custom_parameters).toEqual({
+        thinking: { include_thoughts: true, level },
+        unrelated: "keep",
+      });
+    },
+  );
 });
 
 describe("updateProviderConfig — Gemini thinking level", () => {

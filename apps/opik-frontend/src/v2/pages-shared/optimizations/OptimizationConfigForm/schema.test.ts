@@ -267,6 +267,39 @@ describe("convertFormDataToStudioConfig — Gemini thinking level", () => {
     },
   );
 
+  it("submits a level picked on a re-run over an API-set budget without the budget", () => {
+    const model = PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH;
+    const rerun = convertOptimizationStudioToFormData(
+      {
+        studio_config: {
+          prompt: { messages: [{ role: "user", content: "hi" }] },
+          llm_model: {
+            model,
+            parameters: {
+              temperature: 0,
+              custom_parameters: {
+                thinking: { budget_tokens: 4096, include_thoughts: false },
+              },
+            },
+          },
+          optimizer: { type: OPTIMIZER_TYPE.GEPA },
+          evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+        },
+      } as never,
+      [model],
+    );
+
+    const config = convertFormDataToStudioConfig(
+      { ...rerun, modelConfig: { ...rerun.modelConfig, thinkingLevel: "low" } },
+      "my-dataset",
+    );
+
+    expect(
+      (config.llm_model.parameters as Record<string, unknown>)
+        .custom_parameters,
+    ).toEqual({ thinking: { include_thoughts: false, level: "low" } });
+  });
+
   it("adds nothing for a model without thinking support", () => {
     const config = convertFormDataToStudioConfig(
       {

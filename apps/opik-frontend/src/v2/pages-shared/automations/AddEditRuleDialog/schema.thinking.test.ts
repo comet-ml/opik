@@ -60,7 +60,7 @@ describe("LLM judge thinking level round trip", () => {
     });
   });
 
-  it("keeps include_thoughts across an unchanged round trip", () => {
+  it("keeps include_thoughts and drops a persisted budget across an unchanged round trip", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       asFormData(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, {
         thinkingLevel: "low",
@@ -75,9 +75,33 @@ describe("LLM judge thinking level round trip", () => {
     );
 
     expect(object.model.custom_parameters).toEqual({
-      thinking: { level: "low", budget_tokens: 4096, include_thoughts: true },
+      thinking: { level: "low", include_thoughts: true },
     });
   });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])(
+    "saves a level picked over an API-set budget without the budget on %s",
+    (model) => {
+      const opened = convertLLMJudgeObjectToLLMJudgeData(
+        persisted(model, {
+          thinking: { budget_tokens: 4096, include_thoughts: false },
+          unrelated: "keep",
+        }),
+      );
+
+      const object = convertLLMJudgeDataToLLMJudgeObject(
+        asFormData(model, { ...opened.config, thinkingLevel: "low" }),
+      );
+
+      expect(object.model.custom_parameters).toEqual({
+        thinking: { include_thoughts: false, level: "low" },
+        unrelated: "keep",
+      });
+    },
+  );
 
   // Auto contributes no thinking block of its own. It drops a persisted budget, which would pin how
   // much the judge thinks, and carries through include_thoughts, which the form does not represent.
