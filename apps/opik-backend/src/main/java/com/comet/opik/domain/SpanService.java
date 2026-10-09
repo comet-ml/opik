@@ -307,9 +307,9 @@ public class SpanService {
      * (project, trace, week). Spans missing an id, trace or project carry nothing to index and are skipped. A no-op
      * while {@code databaseAnalyticsDataModel.spanWeeksWriteEnabled} is off.
      */
-    public Mono<Long> registerWeeks(@NonNull Collection<Span> spans) {
+    public Mono<Void> registerWeeks(@NonNull Collection<Span> spans) {
         if (!config.getDatabaseAnalyticsDataModel().spanWeeksWriteEnabled()) {
-            return Mono.just(0L);
+            return Mono.empty();
         }
         List<SpanWeek> rows = spans.stream()
                 .filter(span -> span.id() != null && span.traceId() != null && span.projectId() != null)
@@ -317,10 +317,13 @@ public class SpanService {
                         WeeklyPartitions.storedPartitionOf(span.id())))
                 .distinct()
                 .toList();
-        return spanWeeksDAO.insert(rows);
+        return spanWeeksDAO.insert(rows).then();
     }
 
     public Mono<List<SpanWeek>> getWeeksByTraceIds(@NonNull Collection<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
         return spanWeeksDAO.findByTraceIds(traceIds);
     }
 

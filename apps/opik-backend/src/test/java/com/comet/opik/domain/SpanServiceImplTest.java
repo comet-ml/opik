@@ -504,7 +504,16 @@ class SpanServiceImplTest {
 
             StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder().build())
                     .registerWeeks(List.of(span)))
-                    .expectNext(0L)
+                    .verifyComplete();
+
+            verifyNoInteractions(spanWeeksDAO);
+        }
+
+        @Test
+        void getWeeksByTraceIds__whenNoTraceIds__thenReturnsEmptyWithoutQuerying() {
+            StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder().build())
+                    .getWeeksByTraceIds(List.of()))
+                    .expectNext(List.of())
                     .verifyComplete();
 
             verifyNoInteractions(spanWeeksDAO);

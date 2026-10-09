@@ -81,9 +81,6 @@ public class SpanWeeksDAO {
     }
 
     public Mono<List<SpanWeek>> findByTraceIds(@NonNull Collection<UUID> traceIds) {
-        if (traceIds.isEmpty()) {
-            return Mono.just(List.of());
-        }
         return makeMonoContextAware((userName, workspaceId) -> Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = getSTWithLogComment(FIND_BY_TRACE_IDS, "find_span_weeks_by_trace_ids", workspaceId,
