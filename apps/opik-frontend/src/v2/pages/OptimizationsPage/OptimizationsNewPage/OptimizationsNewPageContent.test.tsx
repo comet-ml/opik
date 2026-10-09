@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import OptimizationsNewPageContent from "./OptimizationsNewPageContent";
@@ -30,12 +31,16 @@ type MockHandlers = {
   isDatasetLoading?: boolean;
   datasetId?: string;
   isSubmitting?: boolean;
+  dirtyFields?: Record<string, unknown>;
 };
 
 // Factory that returns a mock matching useOptimizationsNewFormHandlers' shape.
 const makeHandlers = (overrides: MockHandlers) => ({
   form: {
-    formState: makeFormState({ isSubmitting: overrides.isSubmitting ?? false }),
+    formState: makeFormState({
+      isSubmitting: overrides.isSubmitting ?? false,
+      dirtyFields: overrides.dirtyFields ?? {},
+    }),
     handleSubmit: vi.fn(() => () => Promise.resolve()),
   },
   activeProjectId: "proj-1",
@@ -77,16 +82,24 @@ const renderContent = ({
   providerKeysReady = true,
   model = "openai/gpt-4o",
   isDatasetError = false,
+  savedModelReplacement,
+  dirtyFields,
 }: {
   availableModels?: string[];
   providerKeysReady?: boolean;
   model?: string;
   isDatasetError?: boolean;
+  savedModelReplacement?: ComponentProps<
+    typeof OptimizationsNewPageContent
+  >["savedModelReplacement"];
+  dirtyFields?: Record<string, unknown>;
 } = {}) => {
   mockUseHandlers.mockReturnValue(
-    makeHandlers({ model, isDatasetError }) as unknown as ReturnType<
-      typeof useOptimizationsNewFormHandlers
-    >,
+    makeHandlers({
+      model,
+      isDatasetError,
+      dirtyFields,
+    }) as unknown as ReturnType<typeof useOptimizationsNewFormHandlers>,
   );
 
   return render(
@@ -95,6 +108,7 @@ const renderContent = ({
       isPreparingDataset={false}
       availableModels={availableModels}
       providerKeysReady={providerKeysReady}
+      savedModelReplacement={savedModelReplacement}
     />,
   );
 };
@@ -194,5 +208,74 @@ describe("OptimizationsNewPageContent — missing provider key (F1)", () => {
 
     const submitBtn = screen.getByRole("button", { name: /Optimize prompt/i });
     expect(submitBtn).not.toBeDisabled();
+  });
+});
+
+describe("OptimizationsNewPageContent — replaced saved model", () => {
+  const REPLACEMENT = {
+    savedModel: "openai/r3c-retired-model",
+    replacementModel: "openai/gpt-4o",
+    replacementLabel: "GPT 4o",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("says which model replaced the saved one", () => {
+    renderContent({ savedModelReplacement: REPLACEMENT });
+
+    expect(
+      screen.getByText(
+        "The saved model openai/r3c-retired-model isn't available here, so this run uses GPT 4o with its default settings.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("stops calling the settings defaults once they are edited", () => {
+    renderContent({
+      savedModelReplacement: REPLACEMENT,
+      dirtyFields: { modelConfig: true },
+    });
+
+    expect(
+      screen.getByText(
+        "The saved model openai/r3c-retired-model isn't available here, so this run uses GPT 4o.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("drops the note once another model is picked", () => {
+    renderContent({
+      model: "anthropic/claude-3-5-sonnet",
+      availableModels: ["openai/gpt-4o", "anthropic/claude-3-5-sonnet"],
+      savedModelReplacement: REPLACEMENT,
+    });
+
+    expect(screen.queryByText(/The saved model/)).not.toBeInTheDocument();
+  });
+
+  it("asks for a model when nothing could replace the saved one", () => {
+    renderContent({
+      model: "",
+      availableModels: [],
+      savedModelReplacement: {
+        ...REPLACEMENT,
+        replacementModel: "",
+        replacementLabel: "",
+      },
+    });
+
+    expect(
+      screen.getByText(
+        "The saved model openai/r3c-retired-model isn't available here. Pick a model to run.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no note for a run whose saved model is kept", () => {
+    renderContent();
+
+    expect(screen.queryByText(/The saved model/)).not.toBeInTheDocument();
   });
 });
