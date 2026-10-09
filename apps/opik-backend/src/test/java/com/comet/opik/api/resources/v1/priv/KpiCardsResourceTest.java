@@ -8,6 +8,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
@@ -1401,6 +1402,57 @@ class KpiCardsResourceTest {
 
         assertMetric(unfiltered, KpiMetricType.COUNT, 3.0, 0.0);
         assertMetric(unfiltered, KpiMetricType.TOTAL_COST, COST_1 + COST_2 + COST_3 + COST_4, 0.0);
+    }
+
+    @Test
+    @DisplayName("the source = sdk filter skips a playground thread whose trace was updated before it was created, while both stored versions are still unmerged")
+    void threadSourceFilterSkipsUnmergedVersionsOfPlaygroundTraceUpdatedBeforeCreate() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        String playgroundThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        UUID playgroundTraceId = idGenerator.generateId(intervalStart.plus(1, ChronoUnit.SECONDS));
+        traceResourceClient.updateTrace(playgroundTraceId, TraceUpdate.builder()
+                .projectName(projectName)
+                .threadId(playgroundThreadId)
+                .build(), API_KEY, WORKSPACE_NAME);
+        String sdkThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        Trace sdkTrace = buildThreadTrace(projectName, sdkThreadId, Source.SDK,
+                intervalStart.plus(2, ChronoUnit.SECONDS), DURATION_1);
+        createThread(projectName, sdkThreadId, List.of(sdkTrace),
+                List.of(buildCostedSpan(projectName, sdkTrace, COST_1)));
+
+        var request = KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalStart.plus(1, ChronoUnit.MINUTES))
+                .build();
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertMetric(
+                        projectResourceClient.getKpiCards(projectId, request, API_KEY, WORKSPACE_NAME),
+                        KpiMetricType.COUNT, 2.0, 0.0));
+
+        traceResourceClient.batchCreateTraces(List.of(buildThreadTrace(projectName, playgroundThreadId,
+                Source.PLAYGROUND, intervalStart.plus(1, ChronoUnit.SECONDS), DURATION_2).toBuilder()
+                .id(playgroundTraceId)
+                .lastUpdatedAt(null)
+                .build()), API_KEY, WORKSPACE_NAME);
+
+        KpiCardResponse filtered = projectResourceClient.getKpiCards(projectId, request.toBuilder()
+                .filters(JsonUtils.writeValueAsString(List.of(TraceThreadFilter.builder()
+                        .field(TraceThreadField.SOURCE)
+                        .operator(Operator.EQUAL)
+                        .value(Source.SDK.getValue())
+                        .build())))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertMetric(filtered, KpiMetricType.COUNT, 1.0, 0.0);
+        assertMetric(filtered, KpiMetricType.AVG_DURATION, (double) DURATION_1, null);
+        assertMetric(filtered, KpiMetricType.TOTAL_COST, COST_1, 0.0);
     }
 
     @Test

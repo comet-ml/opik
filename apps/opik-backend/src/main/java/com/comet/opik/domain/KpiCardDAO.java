@@ -374,6 +374,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
             SETTINGS log_comment = '<log_comment>';
             """;
 
+    // use_skip_indexes_if_final_exact_mode = 1: production turns it off (Helm profile), and then a skip index on source,
+    // environment or thread_id could hide a trace's newest row from FINAL, which would return an older row that passes
+    // the chips. Exact mode keeps the cards counting what the thread list does.
     private static final String GET_THREAD_KPI_CARDS = """
             WITH traces_final AS (
                 SELECT
@@ -589,7 +592,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 SUMIf(tc.cost, NOT tf.is_current_period) AS previous_total_cost
             FROM threads_filtered tf
             LEFT JOIN thread_costs tc ON tf.id = tc.thread_id AND tf.is_current_period = tc.is_current_period
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """;
 
     @Override

@@ -14,6 +14,7 @@ import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadUpdate;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.SpanField;
@@ -2033,6 +2034,52 @@ class ProjectMetricsResourceTest {
                     null, Map.of(ProjectMetricsDAO.NAME_THREADS, 2L), null);
             getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
                     null, Map.of(ProjectMetricsDAO.NAME_THREADS, 3L), null);
+        }
+
+        @Test
+        @DisplayName("the source = sdk filter skips a playground thread whose trace was updated before it was created, while both stored versions are still unmerged")
+        void whenPlaygroundTraceIsUpdatedBeforeCreate_thenSdkSourceFilterSkipsItsUnmergedVersions() {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant ranAt = subtract(marker, TIME_BUCKET_1, interval);
+            String playgroundThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+            UUID playgroundTraceId = idGenerator.generateId(ranAt.plusMillis(1));
+            traceResourceClient.updateTrace(playgroundTraceId, TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(playgroundThreadId)
+                    .build(), API_KEY, WORKSPACE_NAME);
+            traceResourceClient.batchCreateTraces(List.of(buildThreadTrace(projectName,
+                    RandomStringUtils.secure().nextAlphabetic(10), Source.SDK, ranAt.plusMillis(2))), API_KEY,
+                    WORKSPACE_NAME);
+
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build();
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(10))
+                    .pollInterval(Duration.ofMillis(100))
+                    .untilAsserted(() -> getMetricsAndAssert(projectId, request, marker,
+                            List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                            null, Map.of(ProjectMetricsDAO.NAME_THREADS, 2L), null));
+
+            traceResourceClient.batchCreateTraces(List.of(buildThreadTrace(projectName, playgroundThreadId,
+                    Source.PLAYGROUND, ranAt.plusMillis(1)).toBuilder()
+                    .id(playgroundTraceId)
+                    .lastUpdatedAt(null)
+                    .build()), API_KEY, WORKSPACE_NAME);
+
+            // SUT
+            getMetricsAndAssert(projectId, request.toBuilder().threadFilters(List.of(sdkSourceThreadFilter())).build(),
+                    marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    null, Map.of(ProjectMetricsDAO.NAME_THREADS, 1L), null);
         }
 
         @Test
