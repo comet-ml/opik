@@ -52,6 +52,7 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -130,6 +131,8 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.buildCostedSpan;
 import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.buildThreadTrace;
+import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.deleteThreadRow;
+import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.withPerTraceChip;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -157,6 +160,9 @@ class ProjectMetricsResourceTest {
     private static final Random RANDOM = new Random();
 
     private static final long THREAD_TRACE_DURATION_MS = 100;
+    private static final long PLACEMENT_TRACE_DURATION_MS = 500;
+    // getMetricsAndAssert treats BigDecimals one unit apart as equal, so a cost of 1 could not tell 1 from 0 or 2.
+    private static final BigDecimal PLACEMENT_SPAN_COST = BigDecimal.valueOf(7);
     private static final int TIME_BUCKET_4 = 4;
     private static final int TIME_BUCKET_3 = 3;
     private static final int TIME_BUCKET_1 = 1;
@@ -208,9 +214,10 @@ class ProjectMetricsResourceTest {
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, IdGenerator idGenerator) {
+    void setUpAll(ClientSupport client, IdGenerator idGenerator, TransactionTemplateAsync clickHouseTemplate) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
         this.projectMetricsResourceClient = new ProjectMetricsResourceClient(client, baseURI);
@@ -225,6 +232,7 @@ class ProjectMetricsResourceTest {
 
         mockTargetWorkspace();
         this.idGenerator = idGenerator;
+        this.clickHouseTemplate = clickHouseTemplate;
     }
 
     private void mockTargetWorkspace() {
@@ -2011,10 +2019,11 @@ class ProjectMetricsResourceTest {
                     minus3, null, null);
         }
 
-        @ParameterizedTest
-        @EnumSource(value = Source.class, names = "SDK", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("the UI's source = sdk filter drops a thread whose only trace has another source, like the thread list")
-        void whenSourceFilterIsSdk_thenThreadOfOtherSourceNotCounted(Source otherSource) {
+        @ParameterizedTest(name = "{0}: {1} vs {2}")
+        @MethodSource("com.comet.opik.api.resources.utils.traces.ThreadTestUtils#perTraceChips")
+        @DisplayName("the UI's source or environment chip drops a thread whose only trace has another value, like the thread list")
+        void whenPerTraceChipFilter_thenThreadOfOtherValueNotCounted(TraceThreadField field, String matchingValue,
+                String otherValue) {
             // setup
             mockTargetWorkspace();
             TimeInterval interval = TimeInterval.HOURLY;
@@ -2022,7 +2031,8 @@ class ProjectMetricsResourceTest {
             String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            createSdkOtherSourceAndMixedThreads(projectName, subtract(marker, TIME_BUCKET_1, interval), otherSource);
+            createMatchingOtherAndMixedThreads(projectName, subtract(marker, TIME_BUCKET_1, interval), field,
+                    matchingValue, otherValue);
 
             var request = ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
@@ -2032,7 +2042,8 @@ class ProjectMetricsResourceTest {
                     .build();
 
             // SUT
-            getMetricsAndAssert(projectId, request.toBuilder().threadFilters(List.of(sdkSourceThreadFilter())).build(),
+            getMetricsAndAssert(projectId,
+                    request.toBuilder().threadFilters(List.of(equalThreadFilter(field, matchingValue))).build(),
                     marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
                     null, Map.of(ProjectMetricsDAO.NAME_THREADS, 2L), null);
             getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
@@ -2331,50 +2342,65 @@ class ProjectMetricsResourceTest {
                     .projectName(projectName)
                     .threadId(threadId)
                     .startTime(startedAt)
-                    .endTime(startedAt.plusMillis(500))
+                    .endTime(startedAt.plusMillis(PLACEMENT_TRACE_DURATION_MS))
                     .build();
             traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
             spanResourceClient.batchCreateSpans(List.of(factory.manufacturePojo(Span.class).toBuilder()
                     .projectName(projectName)
                     .traceId(trace.id())
                     .startTime(startedAt)
-                    .totalEstimatedCost(BigDecimal.ONE)
+                    .totalEstimatedCost(PLACEMENT_SPAN_COST)
                     .build()), API_KEY, WORKSPACE_NAME);
             traceResourceClient.awaitThreadRows(List.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
+            String scoreName = RandomStringUtils.secure().nextAlphabetic(10);
             traceResourceClient.threadFeedbackScores(List.of(factory.manufacturePojo(FeedbackScoreBatchItemThread.class)
                     .toBuilder()
                     .projectName(projectName)
                     .threadId(threadId)
+                    .name(scoreName)
                     .value(BigDecimal.ONE)
                     .build()), API_KEY, WORKSPACE_NAME);
 
-            var response = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
+            var request = ProjectMetricRequest.builder()
                     .metricType(metricType)
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(openEnded ? null : Instant.now())
-                    .build(), BigDecimal.class, API_KEY, WORKSPACE_NAME);
+                    .build();
+            if (metricType == MetricType.THREAD_COUNT) {
+                getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                        null, Map.of(ProjectMetricsDAO.NAME_THREADS, 1L), null);
+                return;
+            }
 
-            assertThat(response.results()).isNotEmpty().allSatisfy(series -> assertThat(series.data())
-                    .filteredOn(point -> point.value() != null && point.value().signum() != 0)
-                    .extracting(DataPoint::time)
-                    .containsExactly(mintedAt));
+            BigDecimal duration = BigDecimal.valueOf(PLACEMENT_TRACE_DURATION_MS);
+            Map<String, BigDecimal> placed = switch (metricType) {
+                case THREAD_DURATION -> Map.of(ProjectMetricsDAO.NAME_THREAD_DURATION_P50, duration,
+                        ProjectMetricsDAO.NAME_THREAD_DURATION_P90, duration,
+                        ProjectMetricsDAO.NAME_THREAD_DURATION_P99, duration);
+                case THREAD_AVERAGE_DURATION -> Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION, duration);
+                case THREAD_COST -> Map.of(ProjectMetricsDAO.NAME_THREAD_COST, PLACEMENT_SPAN_COST);
+                case THREAD_FEEDBACK_SCORES -> Map.of(scoreName, BigDecimal.ONE);
+                default -> throw new IllegalArgumentException("not a thread metric: " + metricType);
+            };
+
+            getMetricsAndAssert(projectId, request, marker, List.copyOf(placed.keySet()), BigDecimal.class, null,
+                    placed, null);
         }
 
         Stream<Arguments> threadActiveInTwoBucketsIsPlacedOnceAtItsFirstTrace() {
             return Arrays.stream(TimeInterval.values())
                     .filter(interval -> interval != TimeInterval.TOTAL)
-                    .flatMap(interval -> Stream.of(
-                            Arguments.of(interval, MetricType.THREAD_COUNT, BigDecimal.ONE),
-                            Arguments.of(interval, MetricType.THREAD_COST, BigDecimal.TWO)));
+                    .flatMap(interval -> Stream.of(MetricType.THREAD_COUNT, MetricType.THREAD_AVERAGE_DURATION,
+                            MetricType.THREAD_COST)
+                            .map(metricType -> Arguments.of(interval, metricType)));
         }
 
         @ParameterizedTest(name = "{0}, {1}")
         @MethodSource
         @DisplayName("a thread with traces in two buckets is placed once, in the bucket of its first trace, with all its traces")
-        void threadActiveInTwoBucketsIsPlacedOnceAtItsFirstTrace(TimeInterval interval, MetricType metricType,
-                BigDecimal expected) {
+        void threadActiveInTwoBucketsIsPlacedOnceAtItsFirstTrace(TimeInterval interval, MetricType metricType) {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
@@ -2382,14 +2408,15 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             Instant firstTraceAt = subtract(marker, TIME_BUCKET_3, interval);
+            Instant lastTraceAt = subtract(marker, TIME_BUCKET_1, interval);
             String threadId = RandomStringUtils.secure().nextAlphabetic(10);
-            List<Trace> traces = Stream.of(firstTraceAt, subtract(marker, TIME_BUCKET_1, interval))
+            List<Trace> traces = Stream.of(firstTraceAt, lastTraceAt)
                     .map(at -> factory.manufacturePojo(Trace.class).toBuilder()
                             .id(idGenerator.generateId(at))
                             .projectName(projectName)
                             .threadId(threadId)
                             .startTime(at)
-                            .endTime(at.plusMillis(500))
+                            .endTime(at.plusMillis(PLACEMENT_TRACE_DURATION_MS))
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
@@ -2398,26 +2425,78 @@ class ProjectMetricsResourceTest {
                             .projectName(projectName)
                             .traceId(trace.id())
                             .startTime(trace.startTime())
-                            .totalEstimatedCost(BigDecimal.ONE)
+                            .totalEstimatedCost(PLACEMENT_SPAN_COST)
                             .build())
                     .toList(), API_KEY, WORKSPACE_NAME);
             traceResourceClient.awaitThreadRows(List.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
 
-            var response = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
+            var request = ProjectMetricRequest.builder()
                     .metricType(metricType)
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), BigDecimal.class, API_KEY, WORKSPACE_NAME);
+                    .build();
+            if (metricType == MetricType.THREAD_COUNT) {
+                getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                        Map.of(ProjectMetricsDAO.NAME_THREADS, 1L), null, null);
+                return;
+            }
 
-            assertThat(response.results()).isNotEmpty().allSatisfy(series -> {
-                var placed = series.data().stream()
-                        .filter(point -> point.value() != null && point.value().signum() != 0)
-                        .toList();
-                assertThat(placed).extracting(DataPoint::time).containsExactly(firstTraceAt);
-                assertThat(placed.getFirst().value()).isEqualByComparingTo(expected);
-            });
+            Map<String, BigDecimal> placed = switch (metricType) {
+                case THREAD_AVERAGE_DURATION -> Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION,
+                        BigDecimal.valueOf(Duration.between(firstTraceAt,
+                                lastTraceAt.plusMillis(PLACEMENT_TRACE_DURATION_MS)).toMillis()));
+                case THREAD_COST -> Map.of(ProjectMetricsDAO.NAME_THREAD_COST,
+                        PLACEMENT_SPAN_COST.multiply(BigDecimal.TWO));
+                default -> throw new IllegalArgumentException("not covered here: " + metricType);
+            };
+
+            getMetricsAndAssert(projectId, request, marker, List.copyOf(placed.keySet()), BigDecimal.class, placed,
+                    null, null);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = MetricType.class, names = {"THREAD_COUNT", "THREAD_COST"})
+        @DisplayName("a thread whose row is missing is not charted, like the windowed thread list")
+        void threadWithMissingRowIsNotCharted(MetricType metricType) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant ranAt = subtract(marker, TIME_BUCKET_1, interval);
+            String withRow = RandomStringUtils.secure().nextAlphabetic(10);
+            String withoutRow = RandomStringUtils.secure().nextAlphabetic(10);
+            List<Trace> traces = List.of(
+                    buildThreadTrace(factory, idGenerator, projectName, withRow, ranAt.plusMillis(1),
+                            THREAD_TRACE_DURATION_MS),
+                    buildThreadTrace(factory, idGenerator, projectName, withoutRow, ranAt.plusMillis(2),
+                            THREAD_TRACE_DURATION_MS));
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+            spanResourceClient.batchCreateSpans(List.of(
+                    buildCostedSpan(factory, idGenerator, projectName, traces.getFirst(), MATCHING_THREAD_COST),
+                    buildCostedSpan(factory, idGenerator, projectName, traces.getLast(), OTHER_VALUE_THREAD_COST)),
+                    API_KEY, WORKSPACE_NAME);
+            traceResourceClient.awaitThreadRows(List.of(withRow, withoutRow), projectId, null, API_KEY,
+                    WORKSPACE_NAME);
+            deleteThreadRow(clickHouseTemplate, WORKSPACE_ID, projectId, withoutRow);
+
+            var request = ProjectMetricRequest.builder()
+                    .metricType(metricType)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build();
+            if (metricType == MetricType.THREAD_COUNT) {
+                getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                        null, Map.of(ProjectMetricsDAO.NAME_THREADS, 1L), null);
+            } else {
+                getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST),
+                        BigDecimal.class, null, Map.of(ProjectMetricsDAO.NAME_THREAD_COST, MATCHING_THREAD_COST),
+                        null);
+            }
         }
     }
 
@@ -3035,37 +3114,42 @@ class ProjectMetricsResourceTest {
                         Arrays.asList(1, 2, 3)));
     }
 
-    private static final BigDecimal SDK_THREAD_COST = BigDecimal.valueOf(1);
-    private static final BigDecimal OTHER_SOURCE_THREAD_COST = BigDecimal.valueOf(3);
-    private static final BigDecimal MIXED_THREAD_SDK_TRACE_COST = BigDecimal.valueOf(5);
-    private static final BigDecimal MIXED_THREAD_OTHER_SOURCE_TRACE_COST = BigDecimal.valueOf(7);
+    private static final BigDecimal MATCHING_THREAD_COST = BigDecimal.valueOf(1);
+    private static final BigDecimal OTHER_VALUE_THREAD_COST = BigDecimal.valueOf(3);
+    private static final BigDecimal MIXED_THREAD_MATCHING_TRACE_COST = BigDecimal.valueOf(5);
+    private static final BigDecimal MIXED_THREAD_OTHER_VALUE_TRACE_COST = BigDecimal.valueOf(7);
 
     private static TraceThreadFilter sdkSourceThreadFilter() {
+        return equalThreadFilter(TraceThreadField.SOURCE, Source.SDK.getValue());
+    }
+
+    private static TraceThreadFilter equalThreadFilter(TraceThreadField field, String value) {
         return TraceThreadFilter.builder()
-                .field(TraceThreadField.SOURCE)
+                .field(field)
                 .operator(EQUAL)
-                .value(Source.SDK.getValue())
+                .value(value)
                 .build();
     }
 
-    private void createSdkOtherSourceAndMixedThreads(String projectName, Instant ranAt, Source otherSource) {
-        String sdkThreadId = RandomStringUtils.secure().nextAlphabetic(10);
-        String otherSourceThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+    private void createMatchingOtherAndMixedThreads(String projectName, Instant ranAt, TraceThreadField field,
+            String matchingValue, String otherValue) {
+        String matchingThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        String otherValueThreadId = RandomStringUtils.secure().nextAlphabetic(10);
         String mixedThreadId = RandomStringUtils.secure().nextAlphabetic(10);
 
         List<Pair<Trace, BigDecimal>> tracesWithCost = List.of(
-                Pair.of(buildThreadTrace(factory, idGenerator, projectName, sdkThreadId, Source.SDK,
-                        ranAt.plusMillis(1), THREAD_TRACE_DURATION_MS),
-                        SDK_THREAD_COST),
-                Pair.of(buildThreadTrace(factory, idGenerator, projectName, otherSourceThreadId, otherSource,
-                        ranAt.plusMillis(2), THREAD_TRACE_DURATION_MS),
-                        OTHER_SOURCE_THREAD_COST),
-                Pair.of(buildThreadTrace(factory, idGenerator, projectName, mixedThreadId, Source.SDK,
-                        ranAt.plusMillis(3), THREAD_TRACE_DURATION_MS),
-                        MIXED_THREAD_SDK_TRACE_COST),
-                Pair.of(buildThreadTrace(factory, idGenerator, projectName, mixedThreadId, otherSource,
-                        ranAt.plusMillis(4), THREAD_TRACE_DURATION_MS),
-                        MIXED_THREAD_OTHER_SOURCE_TRACE_COST));
+                Pair.of(withPerTraceChip(buildThreadTrace(factory, idGenerator, projectName, matchingThreadId,
+                        ranAt.plusMillis(1), THREAD_TRACE_DURATION_MS), field, matchingValue),
+                        MATCHING_THREAD_COST),
+                Pair.of(withPerTraceChip(buildThreadTrace(factory, idGenerator, projectName, otherValueThreadId,
+                        ranAt.plusMillis(2), THREAD_TRACE_DURATION_MS), field, otherValue),
+                        OTHER_VALUE_THREAD_COST),
+                Pair.of(withPerTraceChip(buildThreadTrace(factory, idGenerator, projectName, mixedThreadId,
+                        ranAt.plusMillis(3), THREAD_TRACE_DURATION_MS), field, matchingValue),
+                        MIXED_THREAD_MATCHING_TRACE_COST),
+                Pair.of(withPerTraceChip(buildThreadTrace(factory, idGenerator, projectName, mixedThreadId,
+                        ranAt.plusMillis(4), THREAD_TRACE_DURATION_MS), field, otherValue),
+                        MIXED_THREAD_OTHER_VALUE_TRACE_COST));
 
         List<Span> spans = tracesWithCost.stream()
                 .map(traceWithCost -> buildCostedSpan(factory, idGenerator, projectName, traceWithCost.getLeft(),
@@ -3076,10 +3160,10 @@ class ProjectMetricsResourceTest {
                 WORKSPACE_NAME);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
-        traceResourceClient.awaitThreadRows(List.of(sdkThreadId, otherSourceThreadId, mixedThreadId), null,
+        traceResourceClient.awaitThreadRows(List.of(matchingThreadId, otherValueThreadId, mixedThreadId), null,
                 projectName, API_KEY, WORKSPACE_NAME);
 
-        traceResourceClient.closeTraceThreads(Set.of(sdkThreadId, otherSourceThreadId, mixedThreadId), null,
+        traceResourceClient.closeTraceThreads(Set.of(matchingThreadId, otherValueThreadId, mixedThreadId), null,
                 projectName, API_KEY, WORKSPACE_NAME);
     }
 
@@ -5064,17 +5148,19 @@ class ProjectMetricsResourceTest {
             return ProjectMetricsResourceTest.threadHappyPathWithFilterArguments();
         }
 
-        @ParameterizedTest
-        @EnumSource(value = Source.class, names = "SDK", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("the UI's source = sdk filter sums only the cost of sdk traces, like the thread list")
-        void whenSourceFilterIsSdk_thenOnlySdkTracesCostSummed(Source otherSource) {
+        @ParameterizedTest(name = "{0}: {1} vs {2}")
+        @MethodSource("com.comet.opik.api.resources.utils.traces.ThreadTestUtils#perTraceChips")
+        @DisplayName("the UI's source or environment chip sums only the cost of the matching traces, like the thread list")
+        void whenPerTraceChipFilter_thenOnlyMatchingTracesCostSummed(TraceThreadField field, String matchingValue,
+                String otherValue) {
             mockTargetWorkspace();
             TimeInterval interval = TimeInterval.HOURLY;
             Instant marker = getIntervalStart(interval);
             String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            createSdkOtherSourceAndMixedThreads(projectName, subtract(marker, TIME_BUCKET_1, interval), otherSource);
+            createMatchingOtherAndMixedThreads(projectName, subtract(marker, TIME_BUCKET_1, interval), field,
+                    matchingValue, otherValue);
 
             var request = ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COST)
@@ -5083,16 +5169,17 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build();
 
-            var sdkTracesCost = Map.of(ProjectMetricsDAO.NAME_THREAD_COST,
-                    SDK_THREAD_COST.add(MIXED_THREAD_SDK_TRACE_COST));
+            var matchingTracesCost = Map.of(ProjectMetricsDAO.NAME_THREAD_COST,
+                    MATCHING_THREAD_COST.add(MIXED_THREAD_MATCHING_TRACE_COST));
             var allTracesCost = Map.of(ProjectMetricsDAO.NAME_THREAD_COST,
-                    SDK_THREAD_COST.add(OTHER_SOURCE_THREAD_COST)
-                            .add(MIXED_THREAD_SDK_TRACE_COST)
-                            .add(MIXED_THREAD_OTHER_SOURCE_TRACE_COST));
+                    MATCHING_THREAD_COST.add(OTHER_VALUE_THREAD_COST)
+                            .add(MIXED_THREAD_MATCHING_TRACE_COST)
+                            .add(MIXED_THREAD_OTHER_VALUE_TRACE_COST));
 
-            getMetricsAndAssert(projectId, request.toBuilder().threadFilters(List.of(sdkSourceThreadFilter())).build(),
+            getMetricsAndAssert(projectId,
+                    request.toBuilder().threadFilters(List.of(equalThreadFilter(field, matchingValue))).build(),
                     marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST), BigDecimal.class,
-                    null, sdkTracesCost, null);
+                    null, matchingTracesCost, null);
             getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST),
                     BigDecimal.class, null, allTracesCost, null);
         }
