@@ -35,6 +35,7 @@ import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClie
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.traces.ThreadTestUtils;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -2557,7 +2558,7 @@ class FindTraceThreadsResourceTest {
                     threadTrace(projectName, withRow, now.minus(20, ChronoUnit.SECONDS)),
                     threadTrace(projectName, withoutRow, now.minus(10, ChronoUnit.SECONDS))), API_KEY, TEST_WORKSPACE);
             traceResourceClient.awaitThreadRows(List.of(withRow, withoutRow), projectId, null, API_KEY, TEST_WORKSPACE);
-            deleteThreadRow(projectId, withoutRow);
+            ThreadTestUtils.deleteThreadRow(clickHouseTemplate, WORKSPACE_ID, projectId, withoutRow);
 
             String fromTime = now.minus(60, ChronoUnit.SECONDS).toString();
             String toTime = now.minus(1, ChronoUnit.SECONDS).toString();
@@ -2576,19 +2577,6 @@ class FindTraceThreadsResourceTest {
                     assertThat(page.total()).as("window %s, filters %s", window, filters).isEqualTo(expected.size());
                 }
             }
-        }
-
-        private void deleteThreadRow(UUID projectId, String threadId) {
-            clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
-                    DELETE FROM trace_threads
-                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND thread_id = :thread_id
-                    """)
-                    .bind("workspace_id", WORKSPACE_ID)
-                    .bind("project_id", projectId.toString())
-                    .bind("thread_id", threadId)
-                    .execute())
-                    .flatMap(result -> Mono.from(result.getRowsUpdated())))
-                    .block();
         }
 
         private void assertPagePushdownMatchesFullQuery(UUID projectId, Map<String, String> window,
