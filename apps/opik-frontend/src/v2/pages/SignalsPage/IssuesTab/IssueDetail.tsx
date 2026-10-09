@@ -31,7 +31,10 @@ import IssueSeverityBadge from "@/v2/pages/SignalsPage/IssuesTab/IssueSeverityBa
 import OccurrenceChart from "@/v2/pages/SignalsPage/IssuesTab/OccurrenceChart";
 import AffectedTracesSample from "@/v2/pages/SignalsPage/IssuesTab/AffectedTracesSample";
 import CloseAsNotUsefulDialog from "@/v2/pages/SignalsPage/IssuesTab/CloseAsNotUsefulDialog";
-import { formatOccurrences } from "@/v2/pages/SignalsPage/helpers";
+import {
+  ACTION_BUTTON_CLASS,
+  formatOccurrences,
+} from "@/v2/pages/SignalsPage/helpers";
 import useAgentInsightsIssue from "@/api/signals/useAgentInsightsIssue";
 import useUpdateAgentInsightsIssueMutation from "@/api/signals/useUpdateAgentInsightsIssueMutation";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
@@ -43,9 +46,6 @@ type IssueDetailProps = {
   // Enables "Close as Not useful" (guidance feature toggle).
   canCloseAsNotUseful?: boolean;
 };
-
-// Figma: 24px outline buttons with 14px text and icons, 4px radius.
-const ACTION_BUTTON_CLASS = "h-6 gap-1 rounded px-2 text-sm font-medium";
 
 // Figma: 227px menu, 24px items with 14px regular text.
 const MENU_CONTENT_CLASS = "w-[227px] p-1.5";
@@ -165,7 +165,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
                 key="undo"
                 variant="link"
                 size="sm"
-                className="comet-body-s h-6 gap-1 px-0 font-normal"
+                className="comet-body-s h-7 gap-1 px-0 font-normal"
                 altText="Undo"
                 onClick={() =>
                   updateMutation.mutate({
@@ -264,8 +264,8 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
         <ButtonWithDropdownTrigger
           variant="outline"
           size="2xs"
-          className={ACTION_BUTTON_CLASS}
-          triggerClassName="-ml-px w-6 rounded px-0 [&>svg]:size-3"
+          className={cn(ACTION_BUTTON_CLASS, "rounded-r-none")}
+          triggerClassName="-ml-px w-6 rounded-l-none rounded-r px-0 [&>svg]:size-3"
           disabled={updateMutation.isPending}
           onPrimaryClick={handleResolve}
         >

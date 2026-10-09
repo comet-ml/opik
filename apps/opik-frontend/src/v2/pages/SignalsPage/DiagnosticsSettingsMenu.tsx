@@ -13,6 +13,7 @@ import { AGENT_INSIGHTS_JOB_STATUS } from "@/types/signals";
 import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsightsJobMutation";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import usePluginsStore from "@/store/PluginsStore";
+import { ACTION_BUTTON_CLASS } from "@/v2/pages/SignalsPage/helpers";
 
 type DiagnosticsSettingsMenuProps = {
   projectId: string;
@@ -47,8 +48,13 @@ const DiagnosticsSettingsMenu: React.FC<DiagnosticsSettingsMenuProps> = ({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="2xs" aria-label="Diagnostics settings">
-          <Settings2 className="mr-1.5 size-3" />
+        <Button
+          variant="outline"
+          size="2xs"
+          className={ACTION_BUTTON_CLASS}
+          aria-label="Diagnostics settings"
+        >
+          <Settings2 className="size-3.5" />
           Settings
         </Button>
       </DropdownMenuTrigger>

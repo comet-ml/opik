@@ -20,6 +20,10 @@ export const SEVERITY_DOT_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> = {
   [AGENT_INSIGHTS_ISSUE_SEVERITY.low]: "bg-[#94A3B8]",
 };
 
+// Figma: 24px outline buttons with 14px text and icons, 4px radius (Settings,
+// Close issue, Reopen).
+export const ACTION_BUTTON_CLASS = "h-6 gap-1 rounded px-2 text-sm font-medium";
+
 // Multi-day issues show the latest day's count (matches the prose) plus the
 // cross-day total; single-day collapses to just the total.
 export const formatOccurrences = (
