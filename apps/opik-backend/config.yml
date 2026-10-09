@@ -224,7 +224,8 @@ spanWeeksBackfill:
   #  Description: ClickHouse max_execution_time for one chunk, and how long a run holds the job lock
   queryTimeout: ${SPAN_WEEKS_BACKFILL_QUERY_TIMEOUT:-1h}
   #  Default: 10000
-  #  Description: Projects marked as backfilled per UPDATE, once every chunk is done
+  #  Description: Unmarked projects checked per batch, after every step; those with no spans left in a pending
+  #   week are marked as backfilled
   projectsBatchSize: ${SPAN_WEEKS_BACKFILL_PROJECTS_BATCH_SIZE:-10000}
 
 bulkInsert:

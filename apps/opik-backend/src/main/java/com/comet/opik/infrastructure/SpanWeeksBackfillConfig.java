@@ -30,7 +30,7 @@ public class SpanWeeksBackfillConfig {
     @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     private Duration queryTimeout;
 
-    /** Projects marked as backfilled per UPDATE, once every chunk is done. */
+    /** Unmarked projects checked, and those fully backfilled marked, per batch. */
     @JsonProperty
     @Min(1) private int projectsBatchSize;
 }

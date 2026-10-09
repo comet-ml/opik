@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.domain.ProjectDAO.ProjectWorkspace;
 import com.comet.opik.domain.SpanWeeksBackfillChunkDAO.Chunk;
 import com.comet.opik.domain.SpanWeeksDAO.WeekSpans;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
@@ -16,17 +17,23 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
- * Backfills span_weeks from the spans already written, one chunk of weeks per step, then marks every project as
- * backfilled.
+ * Backfills span_weeks from the spans already written, one chunk of weeks per step, marking each project as
+ * backfilled once every week it has spans in is.
  *
  * <p>The first step plans: it lists the weeks the spans table holds (its partitions, or, while it is unpartitioned,
  * the week of each span's id) and stores them as chunks of consecutive weeks. Each later step backfills the oldest
- * pending chunk. Once none is pending, every project is marked, and every later step marks the projects created since.
+ * pending chunk. Chunks go in ascending order, so every planned week before the oldest pending one is done, and a week
+ * the plan does not hold has only spans written after it, which live registration covers. A project is therefore
+ * backfilled once it has no spans from the oldest pending week on, or none is pending. Every step ends by checking the
+ * unmarked projects, by id, and marking those.
  *
  * <p>Correct only if span writes register their weeks ({@code spanWeeksWriteEnabled}) on every instance before the
  * plan is taken: the plan covers the spans written until then, and live registration everything after. A chunk that
@@ -38,7 +45,6 @@ public class SpanWeeksBackfillService {
 
     private final TransactionTemplate template;
     private final SpanWeeksDAO spanWeeksDAO;
-    private final ProjectService projectService;
     private final DatabaseAnalyticsDataModelConfig dataModelConfig;
     private final SpanWeeksBackfillConfig config;
 
@@ -46,12 +52,10 @@ public class SpanWeeksBackfillService {
     public SpanWeeksBackfillService(
             @NonNull TransactionTemplate template,
             @NonNull SpanWeeksDAO spanWeeksDAO,
-            @NonNull ProjectService projectService,
             @NonNull @Config("databaseAnalyticsDataModel") DatabaseAnalyticsDataModelConfig dataModelConfig,
             @NonNull @Config("spanWeeksBackfill") SpanWeeksBackfillConfig config) {
         this.template = template;
         this.spanWeeksDAO = spanWeeksDAO;
-        this.projectService = projectService;
         this.dataModelConfig = dataModelConfig;
         this.config = config;
     }
@@ -69,12 +73,11 @@ public class SpanWeeksBackfillService {
                     return new Progress(chunks.count() > 0, chunks.findNextPending());
                 })).subscribeOn(Schedulers.boundedElastic())
                         .flatMap(progress -> {
-                            if (!progress.planned()) {
-                                return plan(table, partitioned);
-                            }
-                            return progress.next()
-                                    .map(chunk -> backfill(table, partitioned, chunk))
-                                    .orElseGet(this::markProjects);
+                            Mono<Void> step = !progress.planned()
+                                    ? plan(table, partitioned)
+                                    : progress.next().map(chunk -> backfill(table, partitioned, chunk))
+                                            .orElseGet(Mono::empty);
+                            return step.then(markProjects(table, partitioned));
                         }));
     }
 
@@ -86,8 +89,8 @@ public class SpanWeeksBackfillService {
         return spanWeeksDAO.findWeeks(table, partitioned, timeout)
                 .flatMap(weeks -> {
                     if (weeks.isEmpty()) {
-                        // Nothing written yet, so live registration covers every span there will be.
-                        return markProjects();
+                        // Nothing written yet: no chunk to plan, and live registration covers every span there will be.
+                        return Mono.empty();
                     }
                     List<Chunk> chunks = chunk(weeks, config.getMaxSpansPerChunk());
                     log.info("Span weeks backfill planned '{}' chunks over '{}' weeks of '{}' (partitioned: '{}')",
@@ -111,19 +114,50 @@ public class SpanWeeksBackfillService {
                         chunk.fromWeek(), chunk.toWeek(), chunk.spanCount(), System.currentTimeMillis() - started));
     }
 
-    private Mono<Void> markProjects() {
+    private Mono<Void> markProjects(String table, boolean partitioned) {
         return Mono.<Void>fromRunnable(() -> {
+            Optional<Long> pendingFrom = template.inTransaction(READ_ONLY, handle -> handle
+                    .attach(SpanWeeksBackfillChunkDAO.class).findNextPending().map(Chunk::fromWeek));
             int batchSize = config.getProjectsBatchSize();
+            String cursor = "";
             long marked = 0;
-            int batch;
+            List<ProjectWorkspace> batch;
             do {
-                batch = projectService.markSpanWeeksBackfilled(batchSize);
-                marked += batch;
-            } while (batch == batchSize);
+                String after = cursor;
+                batch = template.inTransaction(READ_ONLY,
+                        handle -> handle.attach(ProjectDAO.class).findNotSpanWeeksBackfilled(after, batchSize));
+                Set<UUID> notBackfilled = pendingFrom.isEmpty()
+                        ? Set.of()
+                        : notBackfilled(table, partitioned, pendingFrom.get(), batch);
+                List<UUID> backfilled = batch.stream()
+                        .map(ProjectWorkspace::id)
+                        .filter(id -> !notBackfilled.contains(id))
+                        .toList();
+                if (!backfilled.isEmpty()) {
+                    template.inTransaction(WRITE, handle -> {
+                        handle.attach(ProjectDAO.class).markSpanWeeksBackfilled(backfilled);
+                        return null;
+                    });
+                    marked += backfilled.size();
+                }
+                if (!batch.isEmpty()) {
+                    cursor = batch.getLast().id().toString();
+                }
+            } while (batch.size() == batchSize);
             if (marked > 0) {
-                log.info("Span weeks backfill marked '{}' projects as backfilled", marked);
+                log.info("Span weeks backfill marked '{}' projects as backfilled (oldest pending week: '{}')", marked,
+                        pendingFrom.map(String::valueOf).orElse("none"));
             }
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /** Of the batch, the projects with spans in a week not backfilled yet. */
+    private Set<UUID> notBackfilled(String table, boolean partitioned, long pendingFrom, List<ProjectWorkspace> batch) {
+        return spanWeeksDAO.findProjectsWithSpansFrom(table, partitioned, pendingFrom,
+                batch.stream().map(ProjectWorkspace::workspaceId).collect(Collectors.toSet()),
+                batch.stream().map(ProjectWorkspace::id).toList(),
+                config.getQueryTimeout().toSeconds())
+                .block();
     }
 
     /** Merges consecutive weeks into chunks of at most maxSpans rows; a larger week is a chunk on its own. */
