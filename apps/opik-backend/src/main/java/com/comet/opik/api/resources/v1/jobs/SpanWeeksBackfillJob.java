@@ -55,7 +55,7 @@ public class SpanWeeksBackfillJob extends Job implements InterruptableJob {
         try {
             lockService.bestEffortLock(
                     RUN_LOCK,
-                    backfillService.runStep(),
+                    Mono.defer(backfillService::runStep),
                     Mono.fromRunnable(() -> log.debug("Span weeks backfill: another instance holds the lock")),
                     config.getQueryTimeout().toJavaDuration(),
                     Duration.ZERO)

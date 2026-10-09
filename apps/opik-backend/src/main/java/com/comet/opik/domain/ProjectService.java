@@ -98,9 +98,6 @@ public interface ProjectService {
 
     Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
-    /** Marks up to {@code limit} projects as backfilled into span_weeks; returns how many it marked. */
-    int markSpanWeeksBackfilled(int limit);
-
     /** The given projects of the context workspace whose spans are backfilled into span_weeks. */
     Mono<Set<UUID>> findSpanWeeksBackfilled(Collection<UUID> projectIds);
 
@@ -539,11 +536,6 @@ class ProjectServiceImpl implements ProjectService {
      * however many are passed. A day's active workspaces sit well inside one chunk, so this is a single query in
      * practice rather than a loop.
      */
-    @Override
-    public int markSpanWeeksBackfilled(int limit) {
-        return template.inTransaction(WRITE, handle -> handle.attach(ProjectDAO.class).markSpanWeeksBackfilled(limit));
-    }
-
     @Override
     public Mono<Set<UUID>> findSpanWeeksBackfilled(@NonNull Collection<UUID> projectIds) {
         if (projectIds.isEmpty()) {

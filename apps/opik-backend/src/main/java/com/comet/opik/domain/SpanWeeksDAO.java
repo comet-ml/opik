@@ -18,7 +18,9 @@ import reactor.core.publisher.Mono;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -92,6 +94,14 @@ public class SpanWeeksDAO {
             GROUP BY workspace_id, project_id, trace_id, week
             SETTINGS log_comment = '<log_comment>', optimize_aggregation_in_order = 0,
                 max_execution_time = <max_execution_time>
+            """;
+
+    private static final String FIND_PROJECTS_WITH_SPANS_FROM = """
+            SELECT DISTINCT project_id
+            FROM <table>
+            WHERE workspace_id IN :workspace_ids AND project_id IN :project_ids
+            AND <if(partitioned)>_partition_id >= :from_partition<else><id_week> >= :from_week<endif>
+            SETTINGS log_comment = '<log_comment>', max_execution_time = <max_execution_time>
             """;
 
     /**
@@ -212,5 +222,36 @@ public class SpanWeeksDAO {
                 })
                 .flatMap(Result::getRowsUpdated)
                 .then();
+    }
+
+    /**
+     * Of the given projects, those with spans in {@code fromWeek} or later. A partitioned table reads only those
+     * partitions; an unpartitioned one reads the given projects' rows, through its sort key.
+     */
+    public Mono<Set<UUID>> findProjectsWithSpansFrom(@NonNull String table, boolean partitioned, long fromWeek,
+            @NonNull Collection<String> workspaceIds, @NonNull Collection<UUID> projectIds, long maxExecutionSeconds) {
+        if (projectIds.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    ST template = getSTWithLogComment(FIND_PROJECTS_WITH_SPANS_FROM, "find_projects_with_spans_from",
+                            null, null, projectIds.size())
+                            .add("table", table)
+                            .add("partitioned", partitioned)
+                            .add("id_week", ID_WEEK)
+                            .add("max_execution_time", maxExecutionSeconds);
+                    Statement statement = connection.createStatement(template.render())
+                            .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                            .bind("project_ids", projectIds.stream().map(UUID::toString).toArray(String[]::new));
+                    if (partitioned) {
+                        statement.bind("from_partition", String.valueOf(fromWeek));
+                    } else {
+                        statement.bind("from_week", fromWeek);
+                    }
+                    return statement.execute();
+                })
+                .flatMap(result -> result.map((row, metadata) -> row.get("project_id", UUID.class)))
+                .collect(Collectors.toSet());
     }
 }
