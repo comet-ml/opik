@@ -92,6 +92,15 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     calculateModelProvider,
     isFetched: isRegistryFetched,
   } = useLLMProviderModelsData();
+
+  // Seeding resolves providers through getProviderFromModel, which reads the store the hook above
+  // copies the registry into from an effect. In the render where isRegistryFetched turns true that
+  // store still holds the bundled list, which lacks hidden and newer ids, so an OpenRouter one would
+  // be seeded as OpenAI. This flag turns true one render later, after the copy.
+  const [isRegistryInStore, setIsRegistryInStore] = useState(false);
+  useEffect(() => {
+    if (isRegistryFetched) setIsRegistryInStore(true);
+  }, [isRegistryFetched]);
   const { data: providerKeysData } = useProviderKeys(
     { workspaceName },
     { staleTime: 1000 },
@@ -155,7 +164,7 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
   // too, or a saved model it alone knows would look gone.
   const providersReady =
     Boolean(providerKeysData) &&
-    isRegistryFetched &&
+    isRegistryInStore &&
     (configuredProvidersList.length === 0 || availableModels.length > 0);
 
   // The converter mints fresh message ids on every call. The form below uses
