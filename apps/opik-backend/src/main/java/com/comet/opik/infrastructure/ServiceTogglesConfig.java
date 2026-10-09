@@ -60,6 +60,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean agentInsightsEnabled = true;
     @JsonProperty
+    @NotNull boolean agentInsightsGuidanceEnabled;
+    @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
     @NotNull boolean onlineScoringTracingEnabled;
@@ -72,5 +74,10 @@ public class ServiceTogglesConfig {
     @JsonIgnore
     public boolean isAgentInsightsActive() {
         return ollieEnabled && agentInsightsEnabled;
+    }
+
+    @JsonIgnore
+    public boolean isAgentInsightsGuidanceActive() {
+        return isAgentInsightsActive() && agentInsightsGuidanceEnabled;
     }
 }

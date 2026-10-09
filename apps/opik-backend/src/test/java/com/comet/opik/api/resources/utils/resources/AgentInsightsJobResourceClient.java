@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AgentInsightsEnrollment;
+import com.comet.opik.api.AgentInsightsGuidanceUpdate;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJobUpdate;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -50,6 +51,23 @@ public class AgentInsightsJobResourceClient {
         return client.target(ENROLLMENT_PATH.formatted(baseURI))
                 .request()
                 .post(Entity.json(new AgentInsightsEnrollment.Request(enrolled, projectIds)));
+    }
+
+    public Response updateGuidance(UUID projectId, String guidance, String apiKey, String workspaceName) {
+        return updateGuidance(projectId, Entity.json(AgentInsightsGuidanceUpdate.builder().guidance(guidance).build()),
+                apiKey, workspaceName);
+    }
+
+    public Response updateGuidanceWithBody(UUID projectId, Object body, String apiKey, String workspaceName) {
+        return updateGuidance(projectId, Entity.json(body), apiKey, workspaceName);
+    }
+
+    private Response updateGuidance(UUID projectId, Entity<?> body, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/" + projectId + "/guidance")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .put(body);
     }
 
     public Response trigger(UUID projectId, String apiKey, String workspaceName) {

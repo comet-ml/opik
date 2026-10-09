@@ -4,6 +4,7 @@ import com.comet.opik.api.AgentInsightsEnrollment;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJob.EnabledJob;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -13,6 +14,8 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
@@ -37,6 +40,7 @@ public class AgentInsightsJobService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull ProjectService projectService;
     private final @NonNull AgentInsightsReportPublisher reportPublisher;
+    private final @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles;
 
     // Creates the job; 409 if one already exists for the (workspace, project).
     public AgentInsightsJob create(@NonNull UUID projectId) {
@@ -53,7 +57,7 @@ public class AgentInsightsJobService {
             return EntityConstraintHandler.handle(() -> {
                 dao.create(idGenerator.generateId(), workspaceId, projectId,
                         AgentInsightsJob.Status.DISABLED.getValue(), userName);
-                return dao.findByProject(workspaceId, projectId).orElseThrow();
+                return withGuidanceGated(dao.findByProject(workspaceId, projectId).orElseThrow());
             }).withError(() -> new EntityAlreadyExistsException(new ErrorMessage(409,
                     "Agent insights job already exists for project: " + projectId)));
         });
@@ -64,6 +68,7 @@ public class AgentInsightsJobService {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(AgentInsightsJobDAO.class)
                         .findByProject(workspaceId, projectId)
+                        .map(this::withGuidanceGated)
                         .orElseThrow(() -> new NotFoundException(
                                 "Agent insights job not found for project: " + projectId)));
     }
@@ -79,8 +84,46 @@ public class AgentInsightsJobService {
                 throw new NotFoundException("Agent insights job not found for project: " + projectId);
             }
             dao.updateStatus(workspaceId, projectId, status.getValue(), userName);
+            return withGuidanceGated(dao.findByProject(workspaceId, projectId).orElseThrow());
+        });
+    }
+
+    // Saves the project guidance, creating the job (disabled) when the project has none yet. Blank clears it. The
+    // version is bumped only when the text changes, so re-saving the same guidance does not mark results stale.
+    public AgentInsightsJob updateGuidance(@NonNull UUID projectId, String guidance) {
+        if (!serviceToggles.isAgentInsightsGuidanceActive()) {
+            throw new NotFoundException("Agent insights guidance is not enabled");
+        }
+        var ctx = requestContext.get();
+        String workspaceId = ctx.getWorkspaceId();
+        String userName = ctx.getUserName();
+
+        projectService.validateProjectIdExists(projectId, workspaceId);
+        String normalized = StringUtils.trimToNull(guidance);
+
+        log.info("Updating Agent Insights guidance, project '{}', workspace '{}', cleared '{}'",
+                projectId, workspaceId, normalized == null);
+
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(AgentInsightsJobDAO.class);
+            dao.createIfAbsent(idGenerator.generateId(), workspaceId, projectId,
+                    AgentInsightsJob.Status.DISABLED.getValue(), userName);
+            dao.updateGuidance(workspaceId, projectId, normalized, userName);
             return dao.findByProject(workspaceId, projectId).orElseThrow();
         });
+    }
+
+    private AgentInsightsJob withGuidanceGated(AgentInsightsJob job) {
+        if (serviceToggles.isAgentInsightsGuidanceActive()) {
+            return job;
+        }
+        return job.toBuilder()
+                .guidance(null)
+                .guidanceUpdatedBy(null)
+                .guidanceUpdatedAt(null)
+                .guidanceVersion(null)
+                .resultsGuidanceVersion(null)
+                .build();
     }
 
     // Manual trigger: validate the project (404) and job (404) on the request thread, then enqueue the

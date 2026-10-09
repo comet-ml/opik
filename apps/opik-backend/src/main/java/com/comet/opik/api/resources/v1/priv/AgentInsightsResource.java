@@ -11,6 +11,8 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.AgentInsightsIssueSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.AgentInsightsIssueService;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -119,12 +121,15 @@ public class AgentInsightsResource {
 
     @PATCH
     @Path("/issues/{issue_id}")
-    @Operation(operationId = "updateAgentInsightsIssue", summary = "Update agent insights issue status", description = "Moves an issue through its lifecycle: open, resolved or closed", responses = {
+    @Operation(operationId = "updateAgentInsightsIssue", summary = "Update agent insights issue status", description = "Moves an issue through its lifecycle: open, resolved or closed. close_note is kept only with closed; any other status clears it", responses = {
             @ApiResponse(responseCode = "204", description = "Issue updated"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "422", description = "Missing project_id or status, or close_note over the length limit", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
     public Response updateIssue(
             @PathParam("issue_id") UUID issueId,
             @RequestBody(content = @Content(schema = @Schema(implementation = AgentInsightsIssueUpdate.class))) @NotNull @Valid AgentInsightsIssueUpdate update) {

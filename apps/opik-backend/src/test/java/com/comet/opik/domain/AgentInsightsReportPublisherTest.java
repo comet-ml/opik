@@ -46,13 +46,15 @@ class AgentInsightsReportPublisherTest {
     private RStreamReactive<Object, Object> stream;
     @Mock
     private IdGenerator idGenerator;
+    @Mock
+    private AgentInsightsRunGuidanceService runGuidanceService;
 
     private AgentInsightsReportPublisher publisher(boolean ollieEnabled, boolean agentInsightsEnabled) {
         var serviceToggles = new ServiceTogglesConfig();
         serviceToggles.setOllieEnabled(ollieEnabled);
         serviceToggles.setAgentInsightsEnabled(agentInsightsEnabled);
         return new AgentInsightsReportPublisher(redisson, new AgentInsightsReportConfig(), serviceToggles,
-                idGenerator);
+                idGenerator, runGuidanceService);
     }
 
     @Test
@@ -79,7 +81,7 @@ class AgentInsightsReportPublisherTest {
                 .enqueue(UUID.randomUUID(), WORKSPACE_ID, PERIOD_START, PERIOD_END, AgentInsightsMetrics.MANUAL))
                 .verifyComplete();
 
-        verifyNoInteractions(redisson, idGenerator);
+        verifyNoInteractions(redisson, idGenerator, runGuidanceService);
     }
 
     static Stream<Arguments> disabledToggles() {

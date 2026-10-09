@@ -57,6 +57,8 @@ interface AgentInsightsJobDAO {
             SELECT j.id, j.workspace_id, j.project_id, j.status, j.auto_first_run_enrolled, j.auto_first_run_at,
                    j.last_scan_at,
                    f.reason AS last_failure_reason, f.detail AS last_failure_detail, f.created_at AS last_failed_at,
+                   j.guidance, j.guidance_updated_by, j.guidance_updated_at, j.guidance_version,
+                   j.results_guidance_version,
                    j.created_at, j.created_by, j.last_updated_at, j.last_updated_by
             FROM agent_insights_jobs j
             LEFT JOIN (
@@ -87,12 +89,60 @@ interface AgentInsightsJobDAO {
 
     @SqlUpdate("""
             UPDATE agent_insights_jobs
-            SET last_scan_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName
+            SET last_scan_at = CURRENT_TIMESTAMP(6), results_guidance_version = run_guidance_version,
+                run_guidance_version = NULL, last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
     int markScanned(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
             @Bind("userName") String userName);
+
+    // Creates the job row, disabled, unless one exists already. Saving guidance must not depend on the job existing.
+    @SqlUpdate("""
+            INSERT INTO agent_insights_jobs
+                (id, workspace_id, project_id, status, created_by, last_updated_by)
+            VALUES (:id, :workspaceId, :projectId, :status, :userName, :userName)
+            ON DUPLICATE KEY UPDATE id = id
+            """)
+    void createIfAbsent(@Bind("id") UUID id,
+            @Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("status") String status,
+            @Bind("userName") String userName);
+
+    // guidance_version is assigned before guidance, as MySQL applies single-table assignments left to right, so the
+    // comparison reads the old text. Binary comparison: the column collation would treat a case-only edit as equal.
+    @SqlUpdate("""
+            UPDATE agent_insights_jobs
+            SET guidance_version = IF(CAST(guidance AS BINARY) <=> CAST(:guidance AS BINARY),
+                    guidance_version, guidance_version + 1),
+                guidance = :guidance,
+                guidance_updated_by = :userName, guidance_updated_at = CURRENT_TIMESTAMP(6),
+                last_updated_by = :userName
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            """)
+    void updateGuidance(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("guidance") String guidance,
+            @Bind("userName") String userName);
+
+    @SqlQuery("""
+            SELECT guidance, guidance_version FROM agent_insights_jobs
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            """)
+    @RegisterConstructorMapper(RunGuidance.class)
+    Optional<RunGuidance> findRunGuidance(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId);
+
+    // The guidance version the queued run carries, or NULL when it carries none. markScanned moves it to
+    // results_guidance_version and clears it. One slot per job: overlapping runs share it (known limitation).
+    @SqlUpdate("""
+            UPDATE agent_insights_jobs SET run_guidance_version = :guidanceVersion, last_updated_at = last_updated_at
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            """)
+    void markRunGuidanceVersion(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("guidanceVersion") Integer guidanceVersion);
 
     // Cross-workspace — used only by the daily sweep (system context), never from a request thread.
     // INNER JOIN projects so jobs whose project was deleted are filtered out at the source (no per-job
@@ -163,4 +213,7 @@ interface AgentInsightsJobDAO {
             WHERE auto_first_run_enrolled
             """)
     int cancelAutoFirstRunRollout(@Bind("userName") String userName);
+
+    record RunGuidance(String guidance, int guidanceVersion) {
+    }
 }

@@ -20,12 +20,14 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -73,39 +75,50 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
         projectService.get(report.projectId(), workspaceId);
 
-        int issueCount = report.issues().size();
-        boolean allClear = issueCount == 0;
-
         log.info("Reporting agent insights issues for project '{}' on report day '{}' in workspace '{}': {}",
-                report.projectId(), report.reportDay(), workspaceId, allClear ? "all clear" : issueCount);
+                report.projectId(), report.reportDay(), workspaceId,
+                report.issues().isEmpty() ? "all clear" : report.issues().size());
 
-        List<UUID> issueIds = report.issues().stream()
-                .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
-                .toList();
-        List<UUID> detailIds = report.issues().stream()
-                .map(issue -> idGenerator.generateId())
-                .toList();
-        List<String> metadata = report.issues().stream()
-                .map(issue -> issue.metadata() == null ? null : JsonUtils.writeValueAsString(issue.metadata()))
-                .toList();
-
-        transactionTemplate.inTransaction(WRITE, handle -> {
+        int stored = transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            if (!allClear) {
-                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
+            // The id is the whole primary key: an id owned by another workspace or project is dropped, details too.
+            Set<UUID> foreignIds = explicitIds.isEmpty()
+                    ? Set.of()
+                    : dao.findIdsOutsideScope(workspaceId, report.projectId(), explicitIds);
+            if (!foreignIds.isEmpty()) {
+                log.warn("Skipping '{}' reported agent insights issues that belong to another workspace or project, "
+                        + "project '{}', workspace '{}'", foreignIds.size(), report.projectId(), workspaceId);
+            }
+            List<AgentInsightsReport.ReportedIssue> issues = report.issues().stream()
+                    .filter(issue -> issue.id() == null || !foreignIds.contains(issue.id()))
+                    .toList();
+
+            if (!issues.isEmpty()) {
+                List<UUID> issueIds = issues.stream()
+                        .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
+                        .toList();
+                List<UUID> detailIds = issues.stream()
+                        .map(issue -> idGenerator.generateId())
+                        .toList();
+                List<String> metadata = issues.stream()
+                        .map(issue -> issue.metadata() == null
+                                ? null
+                                : JsonUtils.writeValueAsString(issue.metadata()))
+                        .toList();
+                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, issues);
                 dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
-                        detailIds, issueIds, report.issues(), metadata);
+                        detailIds, issueIds, issues, metadata);
             }
 
             handle.attach(AgentInsightsJobDAO.class)
                     .markScanned(workspaceId, report.projectId(), userName);
 
-            return null;
+            return issues.size();
         });
 
         AgentInsightsMetrics.REPORTS_RECEIVED.add(1);
-        AgentInsightsMetrics.ISSUES_REPORTED.add(report.issues().size());
+        AgentInsightsMetrics.ISSUES_REPORTED.add(stored);
     }
 
     @Override
@@ -169,13 +182,19 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        // The note explains a "not useful" close, so it is kept only with that status; any other status clears it.
+        String closeNote = update.status() == AgentInsightsIssueStatus.CLOSED
+                ? StringUtils.trimToNull(update.closeNote())
+                : null;
+
         log.info("Updating agent insights issue '{}' status to '{}' for project '{}' in workspace '{}'",
                 issueId, update.status(), update.projectId(), workspaceId);
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            int updated = dao.updateStatus(workspaceId, update.projectId(), issueId, update.status(), userName);
+            int updated = dao.updateStatus(workspaceId, update.projectId(), issueId, update.status(), closeNote,
+                    userName);
             if (updated == 0) {
                 throw new NotFoundException("Agent insights issue '%s' not found".formatted(issueId));
             }

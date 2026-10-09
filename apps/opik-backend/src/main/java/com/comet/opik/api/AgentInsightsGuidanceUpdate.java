@@ -8,15 +8,12 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
-import java.util.UUID;
-
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record AgentInsightsIssueUpdate(
-        @NotNull UUID projectId,
-        @NotNull AgentInsightsIssueStatus status,
-        @Size(max = CLOSE_NOTE_MAX_LENGTH) @Schema(description = "Why the issue is closed as not useful. Stored only with status closed; any other status clears it") String closeNote) {
+public record AgentInsightsGuidanceUpdate(
+        // Required so a body missing the key is rejected rather than read as "clear the guidance".
+        @NotNull @Size(max = GUIDANCE_MAX_LENGTH) @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Project guidance for Agent Insights runs. Empty or whitespace-only clears it") String guidance) {
 
-    public static final int CLOSE_NOTE_MAX_LENGTH = 500;
+    public static final int GUIDANCE_MAX_LENGTH = 5000;
 }

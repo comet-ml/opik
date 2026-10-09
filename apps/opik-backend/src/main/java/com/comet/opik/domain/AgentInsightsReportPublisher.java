@@ -30,16 +30,19 @@ public class AgentInsightsReportPublisher {
     private final @NonNull AgentInsightsReportConfig config;
     private final @NonNull ServiceTogglesConfig serviceToggles;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull AgentInsightsRunGuidanceService runGuidanceService;
 
     @Inject
     public AgentInsightsReportPublisher(@NonNull RedissonReactiveClient redisson,
             @NonNull @Config("agentInsightsReport") AgentInsightsReportConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
-            @NonNull IdGenerator idGenerator) {
+            @NonNull IdGenerator idGenerator,
+            @NonNull AgentInsightsRunGuidanceService runGuidanceService) {
         this.redisson = redisson;
         this.config = config;
         this.serviceToggles = serviceToggles;
         this.idGenerator = idGenerator;
+        this.runGuidanceService = runGuidanceService;
     }
 
     /**
@@ -55,29 +58,53 @@ public class AgentInsightsReportPublisher {
         }
 
         String reportId = idGenerator.generateId().toString();
-        var message = AgentInsightsReportMessage.builder()
-                .reportId(reportId)
-                .projectId(projectId)
-                .workspaceId(workspaceId)
-                .periodStart(periodStart)
-                .periodEnd(periodEnd)
-                .triggerSource(triggerSource)
-                .build();
-
-        // DEBUG: the daily sweep enqueues one per enabled project, so keep INFO for lifecycle events only.
-        log.debug("Publishing Agent Insights report trigger: reportId='{}', project='{}', workspace='{}'",
-                reportId, projectId, workspaceId);
 
         return Mono.defer(() -> {
+            // Read at enqueue so every run source (manual, scheduled, auto-first-run) carries the current guidance.
+            // Blocking JDBC, hence inside defer on the bounded-elastic scheduler.
+            var runGuidance = runGuidanceService.find(workspaceId, projectId);
+            Integer guidanceVersion = runGuidance.map(AgentInsightsJobDAO.RunGuidance::guidanceVersion).orElse(null);
+            var message = AgentInsightsReportMessage.builder()
+                    .reportId(reportId)
+                    .projectId(projectId)
+                    .workspaceId(workspaceId)
+                    .periodStart(periodStart)
+                    .periodEnd(periodEnd)
+                    .triggerSource(triggerSource)
+                    .guidance(runGuidance.map(AgentInsightsJobDAO.RunGuidance::guidance).orElse(null))
+                    .guidanceVersion(guidanceVersion)
+                    .build();
+
+            // DEBUG: the daily sweep enqueues one per enabled project, so keep INFO for lifecycle events only.
+            log.debug("Publishing Agent Insights report trigger: reportId='{}', project='{}', workspace='{}'",
+                    reportId, projectId, workspaceId);
+
             RStreamReactive<String, AgentInsightsReportMessage> stream = redisson.getStream(
                     config.getStreamName(), config.getCodec());
 
             return stream.add(RedisStreamUtils.buildAddArgs(
                     AgentInsightsReportConfig.PAYLOAD_FIELD, message, config))
-                    .map(streamMessageId -> reportId)
+                    .publishOn(Schedulers.boundedElastic())
+                    .map(streamMessageId -> {
+                        markEnqueued(workspaceId, projectId, guidanceVersion, reportId);
+                        return reportId;
+                    })
                     .doOnError(throwable -> log.error(
                             "Failed to publish Agent Insights report trigger: reportId='{}', project='{}'",
                             reportId, projectId, throwable));
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Best-effort: the run is already queued, so failing here would report a run that did start as one that did
+     * not. A missed stamp only leaves the "guidance changed" callout less precise.
+     */
+    private void markEnqueued(String workspaceId, UUID projectId, Integer guidanceVersion, String reportId) {
+        try {
+            runGuidanceService.markEnqueued(workspaceId, projectId, guidanceVersion);
+        } catch (RuntimeException e) {
+            log.warn("Failed to record the guidance version of a queued Agent Insights run, reportId '{}', "
+                    + "project '{}'", reportId, projectId, e);
+        }
     }
 }

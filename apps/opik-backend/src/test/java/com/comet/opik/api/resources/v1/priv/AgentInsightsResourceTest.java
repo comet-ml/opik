@@ -23,6 +23,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -31,6 +32,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.hc.core5.http.HttpStatus;
+import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -118,9 +120,11 @@ class AgentInsightsResourceTest {
 
     private AgentInsightsResourceClient agentInsightsResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private Jdbi jdbi;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, Jdbi jdbi) {
+        this.jdbi = jdbi;
         String baseUrl = TestUtils.getBaseUrl(client);
         this.agentInsightsResourceClient = new AgentInsightsResourceClient(client);
         this.projectResourceClient = new ProjectResourceClient(client, baseUrl, factory);
@@ -388,6 +392,52 @@ class AgentInsightsResourceTest {
                     OTHER_API_KEY, OTHER_WORKSPACE);
             agentInsightsResourceClient.getIssue(issueId, projectInOtherWorkspace, null, null,
                     OTHER_API_KEY, OTHER_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Upsert scope: re-reporting an issue id from another project or workspace leaves the issue untouched")
+        void reportIssuesWhenIdBelongsToAnotherScopeThenIssueUntouched() {
+            var issueId = UUID.randomUUID();
+            var name = rndName();
+            var projectX = createProject();
+            report(projectX, DAY_1, List.of(
+                    reportedIssue(issueId, name, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
+
+            var projectY = createProject();
+            var inScopeName = rndName();
+            var inScopeCount = rndOccurrences();
+            report(projectY, DAY_2, List.of(
+                    reportedIssue(issueId, rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount()),
+                    reportedIssue(inScopeName, inScopeCount, rndTotalCount(), rndUserCount(), rndUserCount())));
+            // The in-scope issue reported alongside it is still stored, with its own details.
+            var inScope = findIssues(projectY, DAY_2, DAY_2).content();
+            assertThat(inScope).singleElement().satisfies(stored -> {
+                assertThat(stored.name()).isEqualTo(inScopeName);
+                assertThat(stored.totalOccurrences()).isEqualTo(inScopeCount);
+            });
+            var projectInOtherWorkspace = projectResourceClient.createProject(UUID.randomUUID().toString(),
+                    OTHER_API_KEY, OTHER_WORKSPACE);
+            agentInsightsResourceClient.reportIssues(AgentInsightsReport.builder()
+                    .projectId(projectInOtherWorkspace)
+                    .reportDay(DAY_2)
+                    .issues(List.of(reportedIssue(issueId, rndName(), rndOccurrences(), rndTotalCount(),
+                            rndUserCount(), rndUserCount())))
+                    .build(), OTHER_API_KEY, OTHER_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var issue = agentInsightsResourceClient.getIssue(issueId, projectX, null, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(issue.name()).isEqualTo(name);
+            assertThat(issue.description()).isEqualTo("Description of " + name);
+            // Nor is a details row written for it anywhere.
+            long detailRows = jdbi.withHandle(handle -> handle.createQuery(
+                    "SELECT COUNT(*) FROM agent_insights_issues_details WHERE issue_id = :id AND report_day = :day")
+                    .bind("id", issueId.toString())
+                    .bind("day", DAY_2)
+                    .mapTo(Long.class)
+                    .one());
+            assertThat(detailRows).isZero();
         }
 
         @Test
@@ -909,16 +959,141 @@ class AgentInsightsResourceTest {
                     HttpStatus.SC_NOT_FOUND);
         }
 
+        @Test
+        @DisplayName("Close note: kept with closed and returned on reads with who changed the status; reopen clears it")
+        void updateIssueStatusWhenClosedWithNoteThenNoteKeptUntilReopened() {
+            var projectId = createProject();
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
+            var open = findIssues(projectId, DAY_1, DAY_1).content().getFirst();
+            var issueId = open.id();
+            var update = AgentInsightsIssueUpdate.builder()
+                    .projectId(projectId)
+                    .status(AgentInsightsIssueStatus.CLOSED)
+                    .closeNote("Expected: retries are by design")
+                    .build();
+
+            agentInsightsResourceClient.updateStatus(issueId, update, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            var listed = findIssues(projectId, DAY_1, DAY_1).content().getFirst();
+            assertThat(listed)
+                    .usingRecursiveComparison()
+                    .ignoringFields("statusChangedAt", "lastUpdatedAt")
+                    .isEqualTo(open.toBuilder()
+                            .status(AgentInsightsIssueStatus.CLOSED)
+                            .closeNote("Expected: retries are by design")
+                            .statusChangedBy(USER)
+                            .build());
+            assertThat(listed.statusChangedAt()).isNotNull();
+            var closed = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(closed)
+                    .usingRecursiveComparison()
+                    .comparingOnlyFields("status", "closeNote", "statusChangedBy", "statusChangedAt")
+                    .isEqualTo(listed);
+
+            // Closing again without a note replaces the previous one.
+            agentInsightsResourceClient.updateStatus(issueId, update.toBuilder().closeNote(null).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            assertThat(agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK).closeNote()).isNull();
+            agentInsightsResourceClient.updateStatus(issueId, update, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            agentInsightsResourceClient.updateStatus(issueId,
+                    update.toBuilder().status(AgentInsightsIssueStatus.OPEN).closeNote(null).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var reopened = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(reopened.closeNote()).isNull();
+            assertThat(reopened.statusChangedAt()).isAfter(closed.statusChangedAt());
+        }
+
+        @ParameterizedTest
+        @MethodSource("closeNotes")
+        @DisplayName("Close note: up to 500 characters is stored, whitespace-only is stored as none")
+        void updateIssueStatusWhenClosedThenNoteNormalised(String sent, String stored) {
+            var projectId = createProject();
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
+            var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
+
+            agentInsightsResourceClient.updateStatus(issueId,
+                    AgentInsightsIssueUpdate.builder()
+                            .projectId(projectId)
+                            .status(AgentInsightsIssueStatus.CLOSED)
+                            .closeNote(sent)
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK).closeNote()).isEqualTo(stored);
+        }
+
+        Stream<Arguments> closeNotes() {
+            var longest = "x".repeat(AgentInsightsIssueUpdate.CLOSE_NOTE_MAX_LENGTH);
+            return Stream.of(
+                    Arguments.of(longest, longest),
+                    Arguments.of("  \n ", null),
+                    Arguments.of("  Expected behaviour  ", "Expected behaviour"));
+        }
+
+        @Test
+        @DisplayName("Close note: not stored with any status other than closed")
+        void updateIssueStatusWhenNoteSentWithResolvedThenNotStored() {
+            var projectId = createProject();
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
+            var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
+
+            agentInsightsResourceClient.updateStatus(issueId,
+                    AgentInsightsIssueUpdate.builder()
+                            .projectId(projectId)
+                            .status(AgentInsightsIssueStatus.RESOLVED)
+                            .closeNote("Should not be kept")
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var resolved = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(resolved.status()).isEqualTo(AgentInsightsIssueStatus.RESOLVED);
+            assertThat(resolved.closeNote()).isNull();
+            assertThat(resolved.statusChangedBy()).isEqualTo(USER);
+        }
+
+        @Test
+        @DisplayName("A caller without workspace settings permission gets 403")
+        void updateIssueStatusWhenPermissionDeniedThenForbidden() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE.getValue());
+
+            agentInsightsResourceClient.updateStatus(UUID.randomUUID(),
+                    AgentInsightsIssueUpdate.builder()
+                            .projectId(UUID.randomUUID())
+                            .status(AgentInsightsIssueStatus.CLOSED)
+                            .build(),
+                    apiKey, workspaceName, HttpStatus.SC_FORBIDDEN);
+        }
+
         Stream<Arguments> invalidStatusUpdatePayloads() {
             return Stream.of(
                     Arguments.of("{\"project_id\":\"%s\",\"status\":\"unknown\"}".formatted(UUID.randomUUID()),
                             HttpStatus.SC_BAD_REQUEST),
-                    Arguments.of("{\"status\":\"resolved\"}", HttpStatus.SC_UNPROCESSABLE_ENTITY));
+                    Arguments.of("{\"status\":\"resolved\"}", HttpStatus.SC_UNPROCESSABLE_ENTITY),
+                    Arguments.of("{\"project_id\":\"%s\",\"status\":\"closed\",\"close_note\":\"%s\"}"
+                            .formatted(UUID.randomUUID(), "x".repeat(501)), HttpStatus.SC_UNPROCESSABLE_ENTITY));
         }
 
         @ParameterizedTest
         @MethodSource("invalidStatusUpdatePayloads")
-        @DisplayName("Invalid status value returns 400, missing project_id returns 422")
+        @DisplayName("Invalid status value returns 400, missing project_id or an over-long close note returns 422")
         void updateIssueStatusWhenPayloadIsInvalidThenClientError(String body, int expectedStatus) {
             try (var response = agentInsightsResourceClient.updateStatusWithResponse(UUID.randomUUID(), body,
                     API_KEY, TEST_WORKSPACE)) {

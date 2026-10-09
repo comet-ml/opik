@@ -125,7 +125,6 @@ class RequiredPermissionsCoverageArchTest {
             "AgentConfigsResource.setEnvByBlueprintName",
             "AgentConfigsResource.updateAgentConfig",
             "AgentInsightsResource.reportIssues",
-            "AgentInsightsResource.updateIssue",
             "AssertionResultsResource.storeAssertionsBatch",
             "AuthenticationResource.checkAccess", // now waived, see DELIBERATELY_UNGATED
             "AttachmentResource.completeMultiPartUpload",

@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Covers the seam between the trigger client and the run-failure record: which reason the subscriber
@@ -67,12 +68,12 @@ class AgentInsightsReportSubscriberTest {
     private static AgentInsightsReportMessage message(String triggerSource) {
         Instant periodEnd = Instant.now();
         return new AgentInsightsReportMessage("report-1", PROJECT_ID, WORKSPACE_ID,
-                periodEnd.minusSeconds(86_400), periodEnd, triggerSource);
+                periodEnd.minusSeconds(86_400), periodEnd, triggerSource, null, null);
     }
 
     private void failTriggerWith(RuntimeException failure) {
         doThrow(failure).when(reportClient)
-                .triggerAgentInsights(any(), any(), any(), any(), any(), any());
+                .triggerAgentInsights(any());
     }
 
     @Test
@@ -132,5 +133,41 @@ class AgentInsightsReportSubscriberTest {
         StepVerifier.create(subscriber.processEvent(message())).verifyComplete();
 
         verify(jobService, never()).markRunFailed(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("The guidance read at enqueue is passed on to the trigger")
+    void processEvent__messageWithGuidance__triggersWithIt() {
+        var message = message().toBuilder().guidance("Only report billing failures").guidanceVersion(3).build();
+
+        when(serviceToggles.isAgentInsightsGuidanceActive()).thenReturn(true);
+
+        StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
+
+        verify(reportClient).triggerAgentInsights(expectedTrigger(message, "Only report billing failures"));
+    }
+
+    @Test
+    @DisplayName("Guidance turned off after enqueue: the queued run is sent without it")
+    void processEvent__guidanceTurnedOffAfterEnqueue__triggersWithoutIt() {
+        var message = message().toBuilder().guidance("Only report billing failures").guidanceVersion(3).build();
+        when(serviceToggles.isAgentInsightsGuidanceActive()).thenReturn(false);
+
+        StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
+
+        verify(reportClient).triggerAgentInsights(expectedTrigger(message, null));
+    }
+
+    private static AgentInsightsReportClient.Trigger expectedTrigger(AgentInsightsReportMessage message,
+            String guidance) {
+        return AgentInsightsReportClient.Trigger.builder()
+                .reportId(message.reportId())
+                .projectId(PROJECT_ID)
+                .workspaceId(WORKSPACE_ID)
+                .periodStart(message.periodStart())
+                .periodEnd(message.periodEnd())
+                .triggerSource(AgentInsightsMetrics.MANUAL)
+                .guidance(guidance)
+                .build();
     }
 }

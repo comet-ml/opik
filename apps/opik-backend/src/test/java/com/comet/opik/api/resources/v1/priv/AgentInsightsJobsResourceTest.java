@@ -28,12 +28,16 @@ import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsTriggerException;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.inject.AbstractModule;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
+import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -57,6 +61,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -87,20 +92,20 @@ class AgentInsightsJobsResourceTest {
     private static final String USER_2 = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
     private record Trigger(UUID projectId, String workspaceId, Instant periodStart, Instant periodEnd,
-            String triggerSource) {
+            String triggerSource, String guidance) {
     }
 
     // Recording client bound in place of the platform default, to capture triggers fired via the queue.
     private static final List<Trigger> TRIGGERS = new CopyOnWriteArrayList<>();
     // Projects the platform should reject for a spent free-run budget, as the real 402 + error_code would.
     private static final Set<UUID> FREE_POOL_EXHAUSTED_PROJECTS = ConcurrentHashMap.newKeySet();
-    private static final AgentInsightsReportClient RECORDING_CLIENT = (reportId, projectId, workspaceId,
-            periodStart, periodEnd, triggerSource) -> {
-        if (FREE_POOL_EXHAUSTED_PROJECTS.contains(projectId)) {
+    private static final AgentInsightsReportClient RECORDING_CLIENT = trigger -> {
+        if (FREE_POOL_EXHAUSTED_PROJECTS.contains(trigger.projectId())) {
             throw new AgentInsightsTriggerException(AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED,
                     "Free diagnostics budget exhausted");
         }
-        TRIGGERS.add(new Trigger(projectId, workspaceId, periodStart, periodEnd, triggerSource));
+        TRIGGERS.add(new Trigger(trigger.projectId(), trigger.workspaceId(), trigger.periodStart(),
+                trigger.periodEnd(), trigger.triggerSource(), trigger.guidance()));
     };
 
     // Full stack: creating projects via the API exercises ClickHouse, so analytics containers are required.
@@ -139,7 +144,9 @@ class AgentInsightsJobsResourceTest {
                 // Enable the Agent Insights feature so the publisher publishes and the subscriber consumes.
                 .customConfigs(List.of(
                         new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.ollieEnabled",
-                                "true")))
+                                "true"),
+                        new TestDropwizardAppExtensionUtils.CustomConfig(
+                                "serviceToggles.agentInsightsGuidanceEnabled", "true")))
                 .modules(List.of(new AbstractModule() {
                     @Override
                     protected void configure() {
@@ -159,6 +166,8 @@ class AgentInsightsJobsResourceTest {
     private AgentInsightsReportJob reportJob;
     private AgentInsightsAutoFirstRunJob autoFirstRunJob;
     private AgentInsightsJobService jobService;
+    private ServiceTogglesConfig serviceToggles;
+    private Jdbi jdbi;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Injector injector) {
@@ -173,6 +182,8 @@ class AgentInsightsJobsResourceTest {
         this.reportJob = injector.getInstance(AgentInsightsReportJob.class);
         this.autoFirstRunJob = injector.getInstance(AgentInsightsAutoFirstRunJob.class);
         this.jobService = injector.getInstance(AgentInsightsJobService.class);
+        this.serviceToggles = injector.getInstance(OpikConfiguration.class).getServiceToggles();
+        this.jdbi = injector.getInstance(Jdbi.class);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_2, WORKSPACE_NAME_2, WORKSPACE_ID_2, USER_2);
@@ -796,5 +807,310 @@ class AgentInsightsJobsResourceTest {
         assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(withTraces)).findFirst().orElseThrow()
                 .workspaceId()).isEqualTo(WORKSPACE_ID);
         assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(withoutTraces)).toList()).isEmpty();
+    }
+
+    private AgentInsightsJob getJob(UUID projectId) {
+        try (var response = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(AgentInsightsJob.class);
+        }
+    }
+
+    private void assertNoJob(UUID projectId) {
+        try (var response = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    private AgentInsightsJob updateGuidance(UUID projectId, String guidance) {
+        try (var response = jobsClient.updateGuidance(projectId, guidance, API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(AgentInsightsJob.class);
+        }
+    }
+
+    private void reportAllClear(UUID projectId) {
+        insightsClient.reportIssues(
+                AgentInsightsReport.builder().projectId(projectId).reportDay(LocalDate.now()).issues(List.of())
+                        .build(),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+    }
+
+    private List<Trigger> awaitTriggers(UUID projectId, int count) {
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(
+                TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).hasSize(count));
+        return TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList();
+    }
+
+    /**
+     * The publisher stamps the run's guidance version after the message is on the queue, so the subscriber can deliver
+     * the trigger first. A report sent before the stamp would race it.
+     */
+    private void awaitRunGuidanceVersion(UUID projectId, Integer expected) {
+        await().atMost(10, SECONDS).untilAsserted(() -> {
+            Integer stamped = jdbi.withHandle(handle -> handle.createQuery(
+                    "SELECT run_guidance_version FROM agent_insights_jobs WHERE workspace_id = :ws AND project_id = :p")
+                    .bind("ws", WORKSPACE_ID)
+                    .bind("p", projectId.toString())
+                    .mapTo(Integer.class)
+                    .one());
+            assertThat(stamped).isEqualTo(expected);
+        });
+    }
+
+    private Trigger awaitSingleTrigger(UUID projectId) {
+        return awaitTriggers(projectId, 1).getFirst();
+    }
+
+    private void withGuidanceDisabled(Runnable test) {
+        serviceToggles.setAgentInsightsGuidanceEnabled(false);
+        try {
+            test.run();
+        } finally {
+            serviceToggles.setAgentInsightsGuidanceEnabled(true);
+        }
+    }
+
+    @Test
+    @DisplayName("Guidance: saving creates the job disabled and returns it with the guidance, who saved it and version 1")
+    void updateGuidance__noJob__createsDisabledJobWithGuidance() {
+        var projectId = createProject();
+
+        var saved = updateGuidance(projectId, "Only report billing failures");
+
+        assertThat(saved)
+                .usingRecursiveComparison()
+                .ignoringFields("id", "guidanceUpdatedAt", "createdAt", "lastUpdatedAt")
+                .isEqualTo(AgentInsightsJob.builder()
+                        .projectId(projectId)
+                        .status(AgentInsightsJob.Status.DISABLED)
+                        .guidance("Only report billing failures")
+                        .guidanceUpdatedBy(USER)
+                        .guidanceVersion(1)
+                        .createdBy(USER)
+                        .lastUpdatedBy(USER)
+                        .build());
+        assertThat(saved.guidanceUpdatedAt()).isNotNull();
+        assertThat(getJob(projectId)).usingRecursiveComparison().isEqualTo(saved);
+    }
+
+    @Test
+    @DisplayName("Guidance: the version is bumped only when the text changes, a case-only edit included; blank clears")
+    void updateGuidance__versionBumpsOnlyOnChange() {
+        var projectId = createProject();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+        assertThat(getJob(projectId).guidanceVersion()).isZero();
+
+        assertThat(updateGuidance(projectId, "Ignore retries").guidanceVersion()).isEqualTo(1);
+        assertThat(updateGuidance(projectId, "Ignore retries").guidanceVersion()).isEqualTo(1);
+        // Outer whitespace is trimmed, so it is the same text.
+        assertThat(updateGuidance(projectId, "  Ignore retries \n").guidanceVersion()).isEqualTo(1);
+        assertThat(updateGuidance(projectId, "ignore retries").guidanceVersion()).isEqualTo(2);
+
+        var cleared = updateGuidance(projectId, "  \n ");
+        assertThat(cleared.guidance()).isNull();
+        assertThat(cleared.guidanceVersion()).isEqualTo(3);
+        assertThat(updateGuidance(projectId, "").guidanceVersion()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("Guidance: 5000 characters is accepted; over the limit is rejected with 422 and creates no job")
+    void updateGuidance__overLimit__returns422AndCreatesNoJob() {
+        var projectId = createProject();
+
+        try (var response = jobsClient.updateGuidance(projectId, "x".repeat(5001), API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+        assertNoJob(projectId);
+
+        assertThat(updateGuidance(projectId, "x".repeat(5000)).guidance()).hasSize(5000);
+    }
+
+    @Test
+    @DisplayName("Guidance: a body without the guidance key is rejected with 422 rather than read as a clear")
+    void updateGuidance__missingKey__returns422AndCreatesNoJob() {
+        var projectId = createProject();
+
+        try (var response = jobsClient.updateGuidanceWithBody(projectId, Map.of(), API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+        assertNoJob(projectId);
+    }
+
+    @Test
+    @DisplayName("Guidance: a caller without workspace settings permission gets 403")
+    void updateGuidance__permissionDenied__returns403() {
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceName = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE.getValue());
+
+        try (var response = jobsClient.updateGuidance(UUID.randomUUID(), "guidance", apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+    }
+
+    @Test
+    @DisplayName("Guidance: a missing project, or another workspace's, is 404 and the owner's guidance is unchanged")
+    void updateGuidance__projectNotInWorkspace__returns404() {
+        try (var response = jobsClient.updateGuidance(UUID.randomUUID(), "guidance", API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+
+        var projectId = createProject();
+        var owners = updateGuidance(projectId, "Owner's guidance");
+
+        try (var response = jobsClient.updateGuidance(projectId, "Intruder's guidance", API_KEY_2,
+                WORKSPACE_NAME_2)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+        assertThat(getJob(projectId)).usingRecursiveComparison().isEqualTo(owners);
+    }
+
+    @Test
+    @DisplayName("Guidance: a run carries it, and its report records the version the run carried, not a later edit")
+    void trigger__withGuidance__carriesItAndReportRecordsItsVersion() {
+        var projectId = createProject();
+        updateGuidance(projectId, "Only report billing failures");
+
+        jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
+
+        assertThat(awaitSingleTrigger(projectId).guidance()).isEqualTo("Only report billing failures");
+        awaitRunGuidanceVersion(projectId, 1);
+        assertThat(getJob(projectId).resultsGuidanceVersion()).isNull();
+
+        // Guidance edited while the run is in flight: its report must record the version the run carried.
+        assertThat(updateGuidance(projectId, "Only report billing and auth failures").guidanceVersion())
+                .isEqualTo(2);
+        reportAllClear(projectId);
+
+        var job = getJob(projectId);
+        assertThat(job.guidanceVersion()).isEqualTo(2);
+        assertThat(job.resultsGuidanceVersion()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Guidance: results from a run after the guidance was cleared match the cleared version")
+    void trigger__afterGuidanceCleared__resultsMatchClearedVersion() {
+        var projectId = createProject();
+        updateGuidance(projectId, "Ignore retries");
+        var cleared = updateGuidance(projectId, "");
+
+        jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
+        assertThat(awaitSingleTrigger(projectId).guidance()).isNull();
+        awaitRunGuidanceVersion(projectId, cleared.guidanceVersion());
+        reportAllClear(projectId);
+
+        assertThat(getJob(projectId).resultsGuidanceVersion()).isEqualTo(cleared.guidanceVersion());
+    }
+
+    @Test
+    @DisplayName("Guidance: a report with no queued run behind it leaves the results version empty")
+    void report__withoutQueuedRun__leavesResultsVersionNull() {
+        var projectId = createProject();
+        updateGuidance(projectId, "Ignore retries");
+
+        reportAllClear(projectId);
+
+        var job = getJob(projectId);
+        assertThat(job.lastScanAt()).isNotNull();
+        assertThat(job.resultsGuidanceVersion()).isNull();
+    }
+
+    @Test
+    @DisplayName("Guidance: a run queued while guidance was off is not credited with the version of an earlier run")
+    void trigger__guidanceTurnedOffBetweenRuns__doesNotPromoteStaleVersion() {
+        var projectId = createProject();
+        updateGuidance(projectId, "Ignore retries");
+        jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
+        awaitSingleTrigger(projectId);
+        awaitRunGuidanceVersion(projectId, 1);
+
+        withGuidanceDisabled(() -> {
+            jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
+            assertThat(awaitTriggers(projectId, 2).get(1).guidance()).isNull();
+            awaitRunGuidanceVersion(projectId, null);
+        });
+        reportAllClear(projectId);
+
+        assertThat(getJob(projectId).resultsGuidanceVersion()).isNull();
+    }
+
+    @Test
+    @DisplayName("Guidance: the scheduled sweep sends it, and saving guidance keeps the schedule on")
+    void cronSweep__withGuidance__carriesIt() {
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.update(projectId, AgentInsightsJob.Status.ENABLED, API_KEY, WORKSPACE_NAME).close();
+        assertThat(updateGuidance(projectId, "Ignore retries").status()).isEqualTo(AgentInsightsJob.Status.ENABLED);
+        traceResourceClient.createTrace(
+                podamFactory.manufacturePojo(Trace.class).toBuilder().projectName(projectName).build(),
+                API_KEY, WORKSPACE_NAME);
+
+        Instant now = Instant.now();
+        reportJob.runSweep(now.minusSeconds(3600), now.plusSeconds(3600)).block();
+
+        assertThat(awaitSingleTrigger(projectId).guidance()).isEqualTo("Ignore retries");
+    }
+
+    @Test
+    @DisplayName("Guidance: the automatic first run sends it too")
+    void autoFirstRunSweep__withGuidance__carriesIt() {
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        jobsClient.enrolInAutoFirstRun(true, List.of(projectId)).close();
+        updateGuidance(projectId, "Ignore retries");
+        traceResourceClient.batchCreateTraces(IntStream.range(0, AgentInsightsAutoFirstRunJob.MIN_TRACES)
+                .mapToObj(__ -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .build())
+                .toList(), API_KEY, WORKSPACE_NAME);
+
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+
+        var trigger = awaitSingleTrigger(projectId);
+        assertThat(trigger.triggerSource()).isEqualTo("auto_first_run");
+        assertThat(trigger.guidance()).isEqualTo("Ignore retries");
+    }
+
+    @Test
+    @DisplayName("Guidance off: GET leaves the guidance fields out, PUT is 404 and writes nothing, runs carry none")
+    void guidanceDisabled__fieldsHiddenPutNotFoundRunsWithoutGuidance() {
+        var projectId = createProject();
+        var saved = updateGuidance(projectId, "Only report billing failures");
+
+        withGuidanceDisabled(() -> {
+            assertThat(getJob(projectId)).usingRecursiveComparison().isEqualTo(saved.toBuilder()
+                    .guidance(null)
+                    .guidanceUpdatedBy(null)
+                    .guidanceUpdatedAt(null)
+                    .guidanceVersion(null)
+                    .resultsGuidanceVersion(null)
+                    .build());
+
+            try (var response = jobsClient.updateGuidance(projectId, "other", API_KEY, WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+
+            jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
+            assertThat(awaitSingleTrigger(projectId).guidance()).isNull();
+        });
+
+        assertThat(getJob(projectId)).usingRecursiveComparison().isEqualTo(saved);
+    }
+
+    @Test
+    @DisplayName("Guidance off: PUT for a project without a job is 404 and creates none")
+    void guidanceDisabled__putForProjectWithoutJob__createsNoJob() {
+        var projectId = createProject();
+
+        withGuidanceDisabled(() -> {
+            try (var response = jobsClient.updateGuidance(projectId, "guidance", API_KEY, WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        });
+
+        assertNoJob(projectId);
     }
 }
