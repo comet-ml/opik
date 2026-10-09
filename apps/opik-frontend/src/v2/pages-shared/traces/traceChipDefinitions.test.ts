@@ -77,6 +77,17 @@ describe("buildTraceChipDefinitions", () => {
     });
   });
 
+  it("offers a comments chip that only filters on whether comments exist", () => {
+    const comments = build().find((d) => d.id === "comments");
+
+    expect(comments).toMatchObject({
+      field: "comments",
+      kind: "query-builder",
+      operators: ["is_not_empty", "is_empty"],
+      defaultOperator: "is_not_empty",
+    });
+  });
+
   it("keeps trace and span feedback scores as separate chips", () => {
     const definitions = build();
     const trace = definitions.find((d) => d.id === "feedback_scores");

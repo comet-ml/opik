@@ -460,7 +460,7 @@ class GetTracesByProjectResourceTest {
                                                         : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
-                                case ERROR_CONTAINER -> Stream.of();
+                                case ERROR_CONTAINER, COMMENTS -> Stream.of();
                                 case LIST, ENUM -> {
                                     // For LIST, ENUM fields, skip invalid value tests for NO_VALUE_OPERATORS
                                     // because these operators don't care about the value
@@ -4229,6 +4229,93 @@ class GetTracesByProjectResourceTest {
 
             var filters = List.of(TraceFilter.builder()
                     .field(TraceField.ERROR_INFO)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterCommentsIsNotEmpty__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var comment = traceResourceClient.generateAndCreateComment(traces.getFirst().id(), apiKey,
+                    workspaceName, HttpStatus.SC_CREATED);
+            traces.set(0, traces.getFirst().toBuilder()
+                    .comments(List.of(comment))
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectId(null)
+                    .build());
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.COMMENTS)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterCommentsIsEmpty__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var comment = traceResourceClient.generateAndCreateComment(traces.getFirst().id(), apiKey,
+                    workspaceName, HttpStatus.SC_CREATED);
+            traces.set(0, traces.getFirst().toBuilder()
+                    .comments(List.of(comment))
+                    .build());
+
+            var expectedTraces = traces.subList(1, traces.size()).reversed();
+            var unexpectedTraces = List.of(traces.getFirst());
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.COMMENTS)
                     .operator(Operator.IS_EMPTY)
                     .value("")
                     .build());
