@@ -66,6 +66,27 @@ const generateFullExpandedMap = (nodes: TreeNode[], ids: string[] = []) => {
   return ids;
 };
 
+const getAncestorIds = (nodes: TreeNode[], id: string) => {
+  const parentById = new Map<string, string>();
+  const stack = [...nodes];
+  while (stack.length) {
+    const node = stack.pop()!;
+    if (node.id === id) break;
+    node.children?.forEach((child) => {
+      parentById.set(child.id, node.id);
+      stack.push(child);
+    });
+  }
+
+  const ancestorIds: string[] = [];
+  let parentId = parentById.get(id);
+  while (parentId) {
+    ancestorIds.push(parentId);
+    parentId = parentById.get(parentId);
+  }
+  return ancestorIds;
+};
+
 interface FlattenedNode extends TreeNode {
   depth: number;
 }
@@ -79,6 +100,7 @@ type TreeDetailsStore = {
   setExpandedTreeRows: OnChangeFn<Set<string>>;
   toggleExpandAll: () => void;
   toggleExpand: (id: string) => void;
+  expandToRow: (id: string) => void;
 };
 
 const useTreeDetailsStore = create<TreeDetailsStore>((set, get) => ({
@@ -139,6 +161,17 @@ const useTreeDetailsStore = create<TreeDetailsStore>((set, get) => ({
       expanded.add(id);
     }
     state.setExpandedTreeRows(expanded);
+  },
+  expandToRow: (id: string) => {
+    const state = get();
+    const collapsedIds = getAncestorIds(state.tree, id).filter(
+      (ancestorId) => !state.expandedTreeRows.has(ancestorId),
+    );
+    if (!collapsedIds.length) return;
+
+    state.setExpandedTreeRows(
+      new Set([...state.expandedTreeRows, ...collapsedIds]),
+    );
   },
 }));
 
