@@ -444,7 +444,7 @@ describe("the finish reason a playground run reports", () => {
 
   const USAGE = { prompt_tokens: 58, completion_tokens: 60, total_tokens: 118 };
 
-  it.each<[string, string, string | null]>([
+  it.each<[string, string, string | null, typeof USAGE | null]>([
     [
       "keeps OpenAI's length although the usage chunk after it has no choices",
       sse(
@@ -453,6 +453,7 @@ describe("the finish reason a playground run reports", () => {
         { choices: [], usage: USAGE },
       ),
       "length",
+      USAGE,
     ],
     [
       "reads a finish reason sent together with the usage",
@@ -464,24 +465,33 @@ describe("the finish reason a playground run reports", () => {
         },
       ),
       "length",
+      USAGE,
     ],
     [
-      "reports stop for an answer that finished normally",
+      "reports stop for an answer that finished normally without usage",
       sse(
         { choices: [{ delta: { content: "hi" } }] },
         { choices: [{ delta: { content: "" }, finish_reason: "stop" }] },
       ),
       "stop",
+      null,
     ],
     [
       "reports none when the stream carries no finish reason",
       sse({ choices: [{ delta: { content: "" } }], usage: USAGE }),
       null,
+      USAGE,
     ],
-  ])("%s", async (_, body, expected) => {
+  ])("%s", async (_, body, expectedFinishReason, expectedUsage) => {
     const run = await runAgainst(body);
 
-    expect(run.finishReason).toBe(expected);
+    expect(run).toMatchObject({
+      finishReason: expectedFinishReason,
+      usage: expectedUsage,
+      providerError: null,
+      opikError: null,
+      pythonProxyError: null,
+    });
   });
 
   it("returns an empty result for a run that spent the limit on reasoning", async () => {
