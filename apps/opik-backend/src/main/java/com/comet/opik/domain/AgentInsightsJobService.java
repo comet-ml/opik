@@ -19,6 +19,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -200,33 +201,38 @@ public class AgentInsightsJobService {
                         .findTimedOutAutoFirstRuns(runTimeout.toSeconds()));
         for (var job : timedOut) {
             try {
-                ReapOutcome outcome = transactionTemplate.inTransaction(WRITE, handle -> {
-                    var failures = handle.attach(ReportFailureDAO.class);
-                    long earlier = failures.countByReason(job.workspaceId(), ReportFailureDAO.AGENT_INSIGHTS_TYPE,
-                            job.projectId(), AgentInsightsJob.FailureReason.TIMED_OUT);
-                    boolean retry = earlier < maxRetries;
-                    if (handle.attach(AgentInsightsJobDAO.class).reapTimedOutAutoFirstRun(job.workspaceId(),
-                            job.projectId(), runTimeout.toSeconds(), retry, RequestContext.SYSTEM_USER) == 0) {
-                        return null;
-                    }
-                    failures.insert(idGenerator.generateId(), job.workspaceId(),
-                            ReportFailureDAO.AGENT_INSIGHTS_TYPE, job.projectId(),
-                            AgentInsightsJob.FailureReason.TIMED_OUT, null, RequestContext.SYSTEM_USER);
-                    return new ReapOutcome(earlier, retry);
-                });
-                if (outcome == null) {
-                    log.info("Skipping reap of automatic Agent Insights run for project '{}': it reported back or "
-                            + "was unenrolled after being selected", job.projectId());
-                } else {
-                    log.warn("Automatic Agent Insights run for project '{}' timed out (retries so far: {} of {}), {}",
-                            job.projectId(), outcome.earlierTimeouts(), maxRetries,
-                            outcome.retry() ? "retrying" : "giving up");
-                }
+                reapTimedOutAutoFirstRun(job, runTimeout, maxRetries);
             } catch (Exception e) {
                 // Per-project isolation: one failed reap must not skip the rest.
                 log.error("Failed to reap timed-out automatic Agent Insights run for project '{}'",
                         job.projectId(), e);
             }
+        }
+    }
+
+    @VisibleForTesting
+    public void reapTimedOutAutoFirstRun(@NonNull EnabledJob job, @NonNull Duration runTimeout, int maxRetries) {
+        ReapOutcome outcome = transactionTemplate.inTransaction(WRITE, handle -> {
+            var failures = handle.attach(ReportFailureDAO.class);
+            long earlier = failures.countByReason(job.workspaceId(), ReportFailureDAO.AGENT_INSIGHTS_TYPE,
+                    job.projectId(), AgentInsightsJob.FailureReason.TIMED_OUT);
+            boolean retry = earlier < maxRetries;
+            if (handle.attach(AgentInsightsJobDAO.class).reapTimedOutAutoFirstRun(job.workspaceId(),
+                    job.projectId(), runTimeout.toSeconds(), retry, RequestContext.SYSTEM_USER) == 0) {
+                return null;
+            }
+            failures.insert(idGenerator.generateId(), job.workspaceId(),
+                    ReportFailureDAO.AGENT_INSIGHTS_TYPE, job.projectId(),
+                    AgentInsightsJob.FailureReason.TIMED_OUT, null, RequestContext.SYSTEM_USER);
+            return new ReapOutcome(earlier, retry);
+        });
+        if (outcome == null) {
+            log.info("Skipping reap of automatic Agent Insights run for project '{}': it reported back or "
+                    + "was unenrolled after being selected", job.projectId());
+        } else {
+            log.warn("Automatic Agent Insights run for project '{}' timed out (retries so far: {} of {}), {}",
+                    job.projectId(), outcome.earlierTimeouts(), maxRetries,
+                    outcome.retry() ? "retrying" : "giving up");
         }
     }
 
@@ -237,23 +243,22 @@ public class AgentInsightsJobService {
     // not restore spent retries: the reaper counts every timed_out row the project has had, so a project that
     // already used them up gets that single attempt, and another manual reset if it dies too.
     public AgentInsightsEnrollment.Response enrolInAutoFirstRun(boolean enrol, @NonNull List<UUID> projectIds) {
-        return enrolInAutoFirstRun(enrol, projectIds, reportConfig.getAutoFirstRunTimeout().toJavaDuration());
-    }
-
-    @VisibleForTesting
-    public AgentInsightsEnrollment.Response enrolInAutoFirstRun(boolean enrol, @NonNull List<UUID> projectIds,
-            @NonNull Duration runTimeout) {
+        long runTimeoutSeconds = reportConfig.getAutoFirstRunTimeout().toJavaDuration().toSeconds();
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AgentInsightsJobDAO.class);
 
             if (!enrol) {
-                // Clearing also forgets an automatic run that never finished and is no longer live
-                Set<UUID> reset = dao.findByProjectIds(projectIds).stream()
-                        .filter(job -> dao.clearUnfinishedAutoFirstRunClaim(job.workspaceId(), job.projectId(),
-                                runTimeout.toSeconds(), RequestContext.SYSTEM_USER) > 0)
-                        .map(EnabledJob::projectId)
-                        .collect(Collectors.toSet());
-                int cleared = dao.clearEnrolment(projectIds, RequestContext.SYSTEM_USER);
+                // Clearing also forgets an automatic run that never finished and is no longer live. Row by row in
+                // primary-key order (see findByProjectIds), so no other rows are locked and none in a deadlocking order.
+                Set<UUID> reset = new HashSet<>();
+                int cleared = 0;
+                for (var job : dao.findByProjectIds(projectIds)) {
+                    if (dao.clearUnfinishedAutoFirstRunClaim(job.workspaceId(), job.projectId(),
+                            runTimeoutSeconds, RequestContext.SYSTEM_USER) > 0) {
+                        reset.add(job.projectId());
+                    }
+                    cleared += dao.clearEnrolment(job.workspaceId(), job.projectId(), RequestContext.SYSTEM_USER);
+                }
                 log.info("Cleared Agent Insights enrolment for {} of {} projects (unfinished runs reset: {})",
                         cleared, projectIds.size(), reset);
                 return AgentInsightsEnrollment.Response.builder()
