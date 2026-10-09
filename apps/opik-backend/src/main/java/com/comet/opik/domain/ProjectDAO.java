@@ -139,19 +139,4 @@ interface ProjectDAO {
             @Define("project_ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "project_ids") Collection<UUID> projectIds,
             @Define("name") @Bind("name") String name,
             @Bind("limit") int limit);
-
-    record ProjectWorkspace(UUID id, String workspaceId) {
-    }
-
-    @SqlQuery("SELECT id, workspace_id FROM projects WHERE span_weeks_backfilled = FALSE AND id > :cursor"
-            + " ORDER BY id LIMIT :limit")
-    @RegisterConstructorMapper(ProjectWorkspace.class)
-    List<ProjectWorkspace> findNotSpanWeeksBackfilled(@Bind("cursor") String cursor, @Bind("limit") int limit);
-
-    // last_updated_at is kept as is: the column auto-updates on any write, and this is bookkeeping, not a user change.
-    @SqlUpdate("UPDATE projects SET span_weeks_backfilled = TRUE, last_updated_at = last_updated_at WHERE id IN (<ids>)")
-    void markSpanWeeksBackfilled(@BindList("ids") Collection<UUID> ids);
-
-    @SqlQuery("SELECT id FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId AND span_weeks_backfilled")
-    Set<UUID> findSpanWeeksBackfilled(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
 }

@@ -98,9 +98,6 @@ public interface ProjectService {
 
     Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
-    /** The given projects of the context workspace whose spans are backfilled into span_weeks. */
-    Mono<Set<UUID>> findSpanWeeksBackfilled(Collection<UUID> projectIds);
-
     Mono<Project> getOrCreate(String projectName);
 
     Project getOrCreate(String workspaceId, String projectName, String userName);
@@ -536,16 +533,6 @@ class ProjectServiceImpl implements ProjectService {
      * however many are passed. A day's active workspaces sit well inside one chunk, so this is a single query in
      * practice rather than a loop.
      */
-    @Override
-    public Mono<Set<UUID>> findSpanWeeksBackfilled(@NonNull Collection<UUID> projectIds) {
-        if (projectIds.isEmpty()) {
-            return Mono.just(Set.of());
-        }
-        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> template.inTransaction(
-                READ_ONLY, handle -> handle.attach(ProjectDAO.class).findSpanWeeksBackfilled(projectIds, workspaceId)))
-                .subscribeOn(Schedulers.boundedElastic()));
-    }
-
     @Override
     public Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds) {
         if (CollectionUtils.isEmpty(workspaceIds)) {
