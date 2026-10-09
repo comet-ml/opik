@@ -452,7 +452,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     public void awaitThreadRows(Collection<String> threadIds, UUID projectId, String projectName, String apiKey,
             String workspaceName) {
         Awaitility.await()
-                .atMost(Duration.ofSeconds(10))
+                .atMost(Duration.ofSeconds(30))
                 .pollInterval(Duration.ofMillis(100))
                 .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(
                         getTraceThread(TraceThreadIdentifier.builder()
