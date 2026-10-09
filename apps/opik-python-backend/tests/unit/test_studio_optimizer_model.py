@@ -185,6 +185,51 @@ def test_task_model_request_body_sent_to_the_gateway(
     assert body.get("temperature", "absent") == expected_temperature
 
 
+@pytest.mark.parametrize(
+    "stored_model",
+    [
+        pytest.param("gpt-4o-mini", id="openai-native"),
+        pytest.param("gpt-5-nano", id="openai-native-reasoning"),
+        pytest.param("openai/gpt-5-nano", id="openrouter-openai-reasoning"),
+        pytest.param("openai/gpt-4o-mini", id="openrouter-openai"),
+        pytest.param("openai/gpt-oss-20b", id="openrouter-openai-only"),
+        pytest.param("anthropic/claude-sonnet-4.6", id="openrouter-anthropic"),
+        pytest.param("google/gemini-3-flash-preview", id="openrouter-google"),
+        pytest.param(ANTHROPIC_CLAUDE_HAIKU, id="anthropic"),
+        pytest.param("vertex_ai/gemini-2.5-flash", id="vertex-ai"),
+        pytest.param(GEMINI_3_FLASH, id="gemini"),
+        pytest.param("custom-llm/acme/llama-3", id="custom-llm"),
+        pytest.param("opik-free-model", id="free-model"),
+    ],
+)
+def test_gateway_receives_the_stored_model_id(httpserver, stored_model):
+    httpserver.expect_request(
+        "/v1/private/chat/completions", method="POST"
+    ).respond_with_json(_GATEWAY_REPLY)
+    config = OptimizationConfig.from_dict(
+        _config(
+            task_model=stored_model,
+            optimizer_params={"seed": 42, "model": stored_model},
+        )
+    )
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    for model, params in (
+        (prompt.model, prompt.model_kwargs),
+        (optimizer.model, optimizer.model_parameters),
+    ):
+        litellm.completion(
+            model=model,
+            messages=[{"role": "user", "content": "hi"}],
+            api_base=httpserver.url_for("/v1/private"),
+            api_key="test",
+            **params,
+        )
+
+    sent_models = [request.get_json()["model"] for request, _ in httpserver.log]
+    assert sent_models == [stored_model, stored_model]
+
+
 def test_task_model_explicit_temperature_survives_the_pin():
     config = OptimizationConfig.from_dict(_config(task_params={"temperature": 0.4}))
 
